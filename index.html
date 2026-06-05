@@ -1,1 +1,835 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AUROSANAX Clinical ERP</title>
 
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --primary:#8b1e5a;
+      --primary-2:#c23b83;
+      --soft:#fdf2f8;
+      --bg:#f8fafc;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --card:#ffffff;
+      --line:#e5e7eb;
+      --success:#16a34a;
+      --warning:#f59e0b;
+      --danger:#dc2626;
+      --blue:#2563eb;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    .app{
+      display:flex;
+      min-height:100vh;
+    }
+
+    .sidebar{
+      width:280px;
+      background:linear-gradient(180deg, #7a174f, #a3256c);
+      color:white;
+      padding:22px 16px;
+      position:fixed;
+      inset:0 auto 0 0;
+      overflow-y:auto;
+      z-index:20;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:24px;
+    }
+
+    .brand-logo{
+      width:46px;
+      height:46px;
+      border-radius:16px;
+      background:white;
+      color:var(--primary);
+      display:grid;
+      place-items:center;
+      font-weight:800;
+      font-size:18px;
+      box-shadow:0 10px 30px rgba(0,0,0,.18);
+    }
+
+    .brand h1{
+      font-size:18px;
+      margin:0;
+      line-height:1.1;
+      font-weight:800;
+    }
+
+    .brand small{
+      opacity:.85;
+      font-size:12px;
+    }
+
+    .menu-title{
+      font-size:11px;
+      text-transform:uppercase;
+      opacity:.7;
+      font-weight:700;
+      margin:18px 10px 8px;
+      letter-spacing:.08em;
+    }
+
+    .menu button{
+      width:100%;
+      border:0;
+      background:transparent;
+      color:white;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:11px 12px;
+      border-radius:14px;
+      font-weight:650;
+      margin-bottom:4px;
+      text-align:left;
+      transition:.2s;
+    }
+
+    .menu button:hover,
+    .menu button.active{
+      background:rgba(255,255,255,.16);
+    }
+
+    .main{
+      margin-left:280px;
+      width:calc(100% - 280px);
+      min-height:100vh;
+      padding:22px;
+    }
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:14px;
+      margin-bottom:20px;
+    }
+
+    .topbar h2{
+      margin:0;
+      font-weight:850;
+      color:#111827;
+    }
+
+    .topbar p{
+      margin:3px 0 0;
+      color:var(--muted);
+    }
+
+    .doctor-pill{
+      background:white;
+      border:1px solid var(--line);
+      padding:10px 14px;
+      border-radius:18px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      box-shadow:0 8px 24px rgba(15,23,42,.06);
+      white-space:nowrap;
+    }
+
+    .doctor-avatar{
+      width:38px;
+      height:38px;
+      border-radius:50%;
+      background:var(--soft);
+      color:var(--primary);
+      display:grid;
+      place-items:center;
+      font-weight:800;
+    }
+
+    .cardx{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:22px;
+      box-shadow:0 10px 30px rgba(15,23,42,.06);
+    }
+
+    .stat{
+      padding:18px;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      min-height:110px;
+    }
+
+    .stat-icon{
+      width:48px;
+      height:48px;
+      border-radius:16px;
+      display:grid;
+      place-items:center;
+      background:var(--soft);
+      color:var(--primary);
+      font-size:22px;
+      flex:0 0 auto;
+    }
+
+    .stat small{
+      color:var(--muted);
+      font-weight:700;
+    }
+
+    .stat h3{
+      margin:3px 0 0;
+      font-weight:850;
+    }
+
+    .screen{display:none}
+    .screen.active{display:block}
+
+    .section-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .section-head h4{
+      margin:0;
+      font-weight:850;
+    }
+
+    .section-head p{
+      margin:3px 0 0;
+      color:var(--muted);
+    }
+
+    .btn-auro{
+      background:linear-gradient(135deg, var(--primary), var(--primary-2));
+      color:white;
+      border:0;
+      border-radius:14px;
+      padding:10px 14px;
+      font-weight:750;
+    }
+
+    .btn-soft{
+      background:var(--soft);
+      color:var(--primary);
+      border:1px solid #fbcfe8;
+      border-radius:14px;
+      padding:10px 14px;
+      font-weight:750;
+    }
+
+    .form-control,.form-select{
+      border-radius:14px;
+      padding:10px 12px;
+    }
+
+    .table-modern{
+      margin:0;
+    }
+
+    .table-modern th{
+      color:var(--muted);
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      border-bottom:1px solid var(--line);
+    }
+
+    .table-modern td{
+      vertical-align:middle;
+      border-bottom:1px solid #f1f5f9;
+    }
+
+    .badge-auro{
+      background:var(--soft);
+      color:var(--primary);
+      border-radius:999px;
+      padding:6px 10px;
+      font-weight:750;
+      font-size:12px;
+      display:inline-block;
+    }
+
+    .badge-ok{background:#dcfce7;color:#166534}
+    .badge-warn{background:#fef3c7;color:#92400e}
+    .badge-blue{background:#dbeafe;color:#1e40af}
+    .badge-danger{background:#fee2e2;color:#991b1b}
+
+    .mobile-cards{display:none}
+
+    .mobile-card{
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:14px;
+      background:white;
+      margin-bottom:12px;
+    }
+
+    .mobile-card-top{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+
+    .line{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      border-top:1px solid #f1f5f9;
+      padding:8px 0;
+      font-size:14px;
+    }
+
+    .line span:first-child{color:var(--muted)}
+    .line span:last-child{text-align:right;font-weight:650}
+
+    .hero{
+      background:linear-gradient(135deg, #831843, #be185d);
+      color:white;
+      border-radius:26px;
+      padding:24px;
+      margin-bottom:22px;
+      display:flex;
+      justify-content:space-between;
+      gap:20px;
+      align-items:center;
+      overflow:hidden;
+      position:relative;
+    }
+
+    .hero::after{
+      content:"";
+      position:absolute;
+      width:220px;
+      height:220px;
+      border-radius:50%;
+      background:rgba(255,255,255,.12);
+      right:-70px;
+      top:-60px;
+    }
+
+    .hero h3{
+      margin:0 0 6px;
+      font-weight:900;
+    }
+
+    .hero p{
+      margin:0;
+      opacity:.9;
+      max-width:650px;
+    }
+
+    .floating-action{
+      display:none;
+    }
+
+    .modal-backdropx{
+      position:fixed;
+      inset:0;
+      background:rgba(15,23,42,.5);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:50;
+      padding:18px;
+    }
+
+    .modal-backdropx.show{display:flex}
+
+    .modalx{
+      background:white;
+      width:min(920px,100%);
+      max-height:92vh;
+      overflow:auto;
+      border-radius:24px;
+      box-shadow:0 25px 60px rgba(0,0,0,.25);
+    }
+
+    .modalx-head{
+      padding:18px 20px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .modalx-head h5{
+      margin:0;
+      font-weight:850;
+    }
+
+    .modalx-body{padding:20px}
+    .modalx-foot{
+      padding:16px 20px;
+      border-top:1px solid var(--line);
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+    }
+
+    .closex{
+      border:0;
+      background:#f3f4f6;
+      width:38px;
+      height:38px;
+      border-radius:50%;
+    }
+
+    .sheet-note{
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#9a3412;
+      padding:12px 14px;
+      border-radius:16px;
+      font-size:14px;
+    }
+
+    @media(max-width: 980px){
+      .sidebar{
+        transform:translateX(-100%);
+        transition:.25s;
+      }
+      .sidebar.show{
+        transform:translateX(0);
+      }
+      .main{
+        margin-left:0;
+        width:100%;
+        padding:16px;
+      }
+      .topbar{
+        align-items:flex-start;
+      }
+      .doctor-pill{
+        display:none;
+      }
+      .mobile-menu{
+        display:inline-flex!important;
+      }
+      .hero{
+        display:block;
+      }
+      .table-responsive{
+        display:none;
+      }
+      .mobile-cards{
+        display:block;
+      }
+      .floating-action{
+        display:block;
+        position:fixed;
+        right:18px;
+        bottom:18px;
+        z-index:30;
+      }
+    }
+
+    @media(min-width:981px){
+      .mobile-menu{display:none!important}
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-logo">A</div>
+      <div>
+        <h1>AUROSANAX</h1>
+        <small>Clinical ERP v1.0</small>
+      </div>
+    </div>
+
+    <div class="menu">
+      <div class="menu-title">Principal</div>
+      <button class="active" onclick="showScreen('dashboard', this)"><i class="bi bi-speedometer2"></i> Dashboard</button>
+      <button onclick="showScreen('pacientes', this)"><i class="bi bi-people"></i> Pacientes</button>
+      <button onclick="showScreen('agenda', this)"><i class="bi bi-calendar-check"></i> Agenda médica</button>
+      <button onclick="showScreen('historia', this)"><i class="bi bi-file-medical"></i> Historia clínica</button>
+
+      <div class="menu-title">Especialidades</div>
+      <button onclick="showScreen('ginecologia', this)"><i class="bi bi-gender-female"></i> Ginecología</button>
+      <button onclick="showScreen('obstetricia', this)"><i class="bi bi-heart-pulse"></i> Obstetricia</button>
+      <button onclick="showScreen('estetica', this)"><i class="bi bi-stars"></i> Estética funcional</button>
+      <button onclick="showScreen('bioimpedancia', this)"><i class="bi bi-graph-up-arrow"></i> Bioimpedancia</button>
+
+      <div class="menu-title">Gestión</div>
+      <button onclick="showScreen('procedimientos', this)"><i class="bi bi-clipboard2-pulse"></i> Procedimientos</button>
+      <button onclick="showScreen('consentimientos', this)"><i class="bi bi-pen"></i> Consentimientos</button>
+      <button onclick="showScreen('recetas', this)"><i class="bi bi-capsule"></i> Recetas</button>
+      <button onclick="showScreen('seguimiento', this)"><i class="bi bi-whatsapp"></i> Seguimiento</button>
+
+      <div class="menu-title">Administración</div>
+      <button onclick="showScreen('medicos', this)"><i class="bi bi-person-badge"></i> Médicos</button>
+      <button onclick="showScreen('especialidades', this)"><i class="bi bi-grid"></i> Especialidades</button>
+      <button onclick="showScreen('configuracion', this)"><i class="bi bi-gear"></i> Configuración</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <button class="btn-soft mobile-menu mb-2" onclick="toggleSidebar()"><i class="bi bi-list"></i> Menú</button>
+        <h2 id="screenTitle">Dashboard</h2>
+        <p id="screenSubtitle">Resumen general del centro médico AUROSANAX</p>
+      </div>
+      <div class="doctor-pill">
+        <div class="doctor-avatar">DA</div>
+        <div>
+          <b>Dra. Aurora Andagoya</b><br>
+          <small class="text-muted">Administradora principal</small>
+        </div>
+      </div>
+    </div>
+
+    <section class="screen active" id="dashboard">
+      <div class="hero">
+        <div>
+          <h3>Bienvenida a AUROSANAX Clinical ERP</h3>
+          <p>Sistema base para pacientes, agenda, historia clínica, ginecología, obstetricia, estética funcional y seguimiento médico.</p>
+        </div>
+        <button class="btn btn-light fw-bold" onclick="openPatientModal()"><i class="bi bi-person-plus me-1"></i> Nuevo paciente</button>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-people"></i></div><div><small>Pacientes</small><h3 id="stPacientes">3</h3></div></div></div>
+        <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-calendar2-check"></i></div><div><small>Citas hoy</small><h3>8</h3></div></div></div>
+        <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-file-medical"></i></div><div><small>Historias</small><h3>3</h3></div></div></div>
+        <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-stars"></i></div><div><small>Procedimientos</small><h3>5</h3></div></div></div>
+      </div>
+
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div>
+            <h4>Agenda rápida del día</h4>
+            <p>Vista inicial de citas y pendientes.</p>
+          </div>
+          <button class="btn-auro" onclick="showScreen('agenda')"><i class="bi bi-calendar-plus me-1"></i> Ver agenda</button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-modern">
+            <thead><tr><th>Hora</th><th>Paciente</th><th>Médico</th><th>Servicio</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr><td>09:00</td><td>Paciente demo 1</td><td>Dra. Aurora</td><td>Consulta ginecológica</td><td><span class="badge-auro badge-ok">Confirmada</span></td></tr>
+              <tr><td>11:30</td><td>Paciente demo 2</td><td>Dra. Aurora</td><td>Control obstétrico</td><td><span class="badge-auro badge-warn">Pendiente</span></td></tr>
+              <tr><td>15:00</td><td>Paciente demo 3</td><td>Nutrición</td><td>Bioimpedancia</td><td><span class="badge-auro badge-blue">En espera</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mobile-cards">
+          <div class="mobile-card"><div class="mobile-card-top"><b>09:00 · Paciente demo 1</b><span class="badge-auro badge-ok">Confirmada</span></div><div class="line"><span>Médico</span><span>Dra. Aurora</span></div><div class="line"><span>Servicio</span><span>Consulta ginecológica</span></div></div>
+          <div class="mobile-card"><div class="mobile-card-top"><b>11:30 · Paciente demo 2</b><span class="badge-auro badge-warn">Pendiente</span></div><div class="line"><span>Médico</span><span>Dra. Aurora</span></div><div class="line"><span>Servicio</span><span>Control obstétrico</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="pacientes">
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div>
+            <h4>Pacientes</h4>
+            <p>Registro principal de pacientes del centro médico.</p>
+          </div>
+          <button class="btn-auro" onclick="openPatientModal()"><i class="bi bi-person-plus me-1"></i> Nuevo paciente</button>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-md-6"><input id="patientSearch" class="form-control" placeholder="Buscar por nombre, cédula, teléfono o servicio" oninput="renderPatients()"></div>
+          <div class="col-md-3"><select id="patientFilter" class="form-select" onchange="renderPatients()"><option value="">Todos</option><option>Ginecología</option><option>Obstetricia</option><option>Estética funcional</option><option>Nutrición</option></select></div>
+          <div class="col-md-3"><button class="btn-soft w-100" onclick="resetPatients()">Limpiar</button></div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-modern align-middle">
+            <thead><tr><th>Paciente</th><th>Cédula</th><th>Teléfono</th><th>Servicio</th><th>Última atención</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="patientsBody"></tbody>
+          </table>
+        </div>
+        <div id="patientsMobile" class="mobile-cards"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="agenda">
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div><h4>Agenda médica</h4><p>Citas por médico, especialidad y estado.</p></div>
+          <button class="btn-auro"><i class="bi bi-calendar-plus me-1"></i> Nueva cita</button>
+        </div>
+        <div class="sheet-note mb-3"><i class="bi bi-info-circle me-1"></i> Este módulo quedará conectado a la pestaña <b>citas</b> de Google Sheets.</div>
+        <div class="row g-3">
+          <div class="col-md-4"><div class="cardx p-3"><b>09:00</b><br>Consulta ginecológica<br><span class="badge-auro badge-ok mt-2">Dra. Aurora</span></div></div>
+          <div class="col-md-4"><div class="cardx p-3"><b>11:30</b><br>Control obstétrico<br><span class="badge-auro badge-warn mt-2">Pendiente</span></div></div>
+          <div class="col-md-4"><div class="cardx p-3"><b>15:00</b><br>Bioimpedancia<br><span class="badge-auro badge-blue mt-2">Nutrición</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="historia">
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div><h4>Historia clínica general</h4><p>Motivo de consulta, antecedentes, examen físico, diagnóstico y plan.</p></div>
+          <button class="btn-auro"><i class="bi bi-file-earmark-plus me-1"></i> Nueva historia</button>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label fw-bold">Paciente</label><input class="form-control" placeholder="Seleccionar paciente"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">Fecha</label><input type="date" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">Médico</label><select class="form-select"><option>Dra. Aurora Andagoya</option><option>Otro médico</option></select></div>
+          <div class="col-md-12"><label class="form-label fw-bold">Motivo de consulta</label><textarea class="form-control" rows="2"></textarea></div>
+          <div class="col-md-12"><label class="form-label fw-bold">Enfermedad actual</label><textarea class="form-control" rows="3"></textarea></div>
+          <div class="col-md-6"><label class="form-label fw-bold">Antecedentes personales</label><textarea class="form-control" rows="3"></textarea></div>
+          <div class="col-md-6"><label class="form-label fw-bold">Antecedentes familiares</label><textarea class="form-control" rows="3"></textarea></div>
+          <div class="col-md-12"><label class="form-label fw-bold">Diagnóstico / Plan</label><textarea class="form-control" rows="3"></textarea></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="ginecologia">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Ginecología</h4><p>Ficha ginecológica especializada.</p></div><button class="btn-auro">Guardar</button></div>
+        <div class="row g-3">
+          <div class="col-md-3"><label class="form-label fw-bold">Menarquia</label><input class="form-control"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">FUM</label><input type="date" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">Gestas</label><input class="form-control"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">Partos / Cesáreas / Abortos</label><input class="form-control"></div>
+          <div class="col-md-4"><label class="form-label fw-bold">Método anticonceptivo</label><input class="form-control"></div>
+          <div class="col-md-4"><label class="form-label fw-bold">Último PAP</label><input class="form-control"></div>
+          <div class="col-md-4"><label class="form-label fw-bold">Colposcopia</label><input class="form-control"></div>
+          <div class="col-md-12"><label class="form-label fw-bold">Observaciones ginecológicas</label><textarea class="form-control" rows="4"></textarea></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="obstetricia">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Obstetricia</h4><p>Control prenatal, ecografía, riesgo y seguimiento.</p></div><button class="btn-auro">Guardar control</button></div>
+        <div class="row g-3">
+          <div class="col-md-3"><label class="form-label fw-bold">Edad gestacional</label><input class="form-control"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">FPP</label><input type="date" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">Peso materno</label><input class="form-control"></div>
+          <div class="col-md-3"><label class="form-label fw-bold">Presión arterial</label><input class="form-control"></div>
+          <div class="col-md-6"><label class="form-label fw-bold">Ecografía / bienestar fetal</label><textarea class="form-control" rows="3"></textarea></div>
+          <div class="col-md-6"><label class="form-label fw-bold">Riesgo obstétrico</label><textarea class="form-control" rows="3"></textarea></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="estetica">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Estética funcional regenerativa</h4><p>Evaluación, protocolo, evolución y fotografía clínica.</p></div><button class="btn-auro">Nuevo protocolo</button></div>
+        <div class="row g-3">
+          <div class="col-md-4"><label class="form-label fw-bold">Tipo de evaluación</label><select class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div>
+          <div class="col-md-4"><label class="form-label fw-bold">Procedimiento</label><input class="form-control" placeholder="Láser, HIFU, PRP, etc."></div>
+          <div class="col-md-4"><label class="form-label fw-bold">Sesión</label><input class="form-control" placeholder="1 / 3"></div>
+          <div class="col-md-12"><label class="form-label fw-bold">Plan y observaciones</label><textarea class="form-control" rows="4"></textarea></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="bioimpedancia">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Bioimpedancia y evolución corporal</h4><p>Peso, IMC, grasa corporal, masa muscular y circunferencia abdominal.</p></div><button class="btn-auro">Guardar medición</button></div>
+        <div class="row g-3">
+          <div class="col-md-2"><label class="form-label fw-bold">Peso kg</label><input class="form-control"></div>
+          <div class="col-md-2"><label class="form-label fw-bold">IMC</label><input class="form-control"></div>
+          <div class="col-md-2"><label class="form-label fw-bold">% grasa</label><input class="form-control"></div>
+          <div class="col-md-2"><label class="form-label fw-bold">Masa muscular</label><input class="form-control"></div>
+          <div class="col-md-2"><label class="form-label fw-bold">Agua corporal</label><input class="form-control"></div>
+          <div class="col-md-2"><label class="form-label fw-bold">Cintura</label><input class="form-control"></div>
+          <div class="col-md-12"><div class="sheet-note">Aquí luego agregaremos gráficos automáticos de evolución.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="procedimientos"><div class="cardx p-4"><h4 class="fw-bold">Procedimientos</h4><p class="text-muted">Láser CO₂, HIFU, PRP, escleroterapia, toxina botulínica, ácido hialurónico y otros.</p></div></section>
+    <section class="screen" id="consentimientos"><div class="cardx p-4"><h4 class="fw-bold">Consentimientos informados</h4><p class="text-muted">Plantillas, firma y PDF por procedimiento.</p></div></section>
+    <section class="screen" id="recetas"><div class="cardx p-4"><h4 class="fw-bold">Recetas e indicaciones</h4><p class="text-muted">Generación de recetas, indicaciones y reportes PDF.</p></div></section>
+    <section class="screen" id="seguimiento"><div class="cardx p-4"><h4 class="fw-bold">Seguimiento por WhatsApp</h4><p class="text-muted">Recordatorios, controles, postprocedimientos y mensajes rápidos.</p></div></section>
+    <section class="screen" id="medicos"><div class="cardx p-4"><h4 class="fw-bold">Médicos y personal</h4><p class="text-muted">Dra. Aurora como administradora principal y otros médicos por especialidad.</p></div></section>
+    <section class="screen" id="especialidades"><div class="cardx p-4"><h4 class="fw-bold">Especialidades</h4><p class="text-muted">Ginecología, obstetricia, estética funcional, nutrición y futuras especialidades.</p></div></section>
+
+    <section class="screen" id="configuracion">
+      <div class="cardx p-4">
+        <h4 class="fw-bold">Configuración Google Sheets</h4>
+        <p class="text-muted">Aquí se colocará la URL de Apps Script para guardar y leer datos.</p>
+        <div class="sheet-note mb-3">
+          Pestañas sugeridas: usuarios, medicos, pacientes, citas, historias_clinicas, consultas, ginecologia, obstetricia, estetica_funcional, bioimpedancia, procedimientos, consentimientos, recetas, examenes, fotografias, seguimientos, especialidades.
+        </div>
+        <label class="form-label fw-bold">URL de Apps Script</label>
+        <input class="form-control" id="appsScriptUrl" placeholder="https://script.google.com/macros/s/XXXXX/exec">
+      </div>
+    </section>
+  </main>
+</div>
+
+<button class="btn-auro floating-action" onclick="openPatientModal()"><i class="bi bi-plus-lg"></i></button>
+
+<div class="modal-backdropx" id="patientModal">
+  <div class="modalx">
+    <div class="modalx-head">
+      <h5><i class="bi bi-person-plus me-2"></i>Nuevo paciente</h5>
+      <button class="closex" onclick="closePatientModal()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="modalx-body">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label fw-bold">Nombres y apellidos *</label><input id="pNombre" class="form-control"></div>
+        <div class="col-md-3"><label class="form-label fw-bold">Cédula</label><input id="pCedula" class="form-control"></div>
+        <div class="col-md-3"><label class="form-label fw-bold">Fecha nacimiento</label><input id="pNacimiento" type="date" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label fw-bold">Teléfono / WhatsApp</label><input id="pTelefono" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label fw-bold">Email</label><input id="pEmail" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label fw-bold">Servicio principal</label><select id="pServicio" class="form-select"><option>Ginecología</option><option>Obstetricia</option><option>Estética funcional</option><option>Nutrición</option><option>Medicina funcional</option></select></div>
+        <div class="col-md-8"><label class="form-label fw-bold">Dirección</label><input id="pDireccion" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label fw-bold">Ciudad</label><input id="pCiudad" class="form-control" value="Guayaquil"></div>
+        <div class="col-md-12"><label class="form-label fw-bold">Observaciones</label><textarea id="pNotas" class="form-control" rows="3"></textarea></div>
+      </div>
+    </div>
+    <div class="modalx-foot">
+      <button class="btn-soft" onclick="closePatientModal()">Cancelar</button>
+      <button class="btn-auro" onclick="savePatient()"><i class="bi bi-save me-1"></i> Guardar paciente</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let patients=[
+  {nombre:'Paciente demo 1',cedula:'0900000001',telefono:'0990000001',email:'demo1@mail.com',servicio:'Ginecología',ultima:'05/06/2026',estado:'Activa',ciudad:'Guayaquil'},
+  {nombre:'Paciente demo 2',cedula:'0900000002',telefono:'0990000002',email:'demo2@mail.com',servicio:'Obstetricia',ultima:'05/06/2026',estado:'Control',ciudad:'Guayaquil'},
+  {nombre:'Paciente demo 3',cedula:'0900000003',telefono:'0990000003',email:'demo3@mail.com',servicio:'Estética funcional',ultima:'04/06/2026',estado:'Seguimiento',ciudad:'Guayaquil'}
+];
+
+function showScreen(id, btn){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+
+  document.querySelectorAll('.menu button').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+
+  const titles={
+    dashboard:['Dashboard','Resumen general del centro médico AUROSANAX'],
+    pacientes:['Pacientes','Registro, búsqueda y seguimiento de pacientes'],
+    agenda:['Agenda médica','Citas por médico y especialidad'],
+    historia:['Historia clínica','Registro clínico general del paciente'],
+    ginecologia:['Ginecología','Ficha especializada ginecológica'],
+    obstetricia:['Obstetricia','Control prenatal y seguimiento obstétrico'],
+    estetica:['Estética funcional','Protocolos estéticos y regenerativos'],
+    bioimpedancia:['Bioimpedancia','Evolución corporal y gráficos'],
+    procedimientos:['Procedimientos','Registro de procedimientos médicos'],
+    consentimientos:['Consentimientos','Consentimientos informados y firma'],
+    recetas:['Recetas','Recetas, indicaciones y reportes'],
+    seguimiento:['Seguimiento','Mensajes y controles por WhatsApp'],
+    medicos:['Médicos','Equipo médico y roles'],
+    especialidades:['Especialidades','Servicios actuales y futuros'],
+    configuracion:['Configuración','Conexión con Google Sheets']
+  };
+  document.getElementById('screenTitle').textContent=titles[id]?.[0] || 'AUROSANAX';
+  document.getElementById('screenSubtitle').textContent=titles[id]?.[1] || '';
+  document.getElementById('sidebar').classList.remove('show');
+}
+
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('show');
+}
+
+function badgeEstado(e){
+  if(e==='Activa') return '<span class="badge-auro badge-ok">Activa</span>';
+  if(e==='Control') return '<span class="badge-auro badge-warn">Control</span>';
+  return '<span class="badge-auro badge-blue">Seguimiento</span>';
+}
+
+function renderPatients(){
+  const q=(document.getElementById('patientSearch')?.value||'').toLowerCase();
+  const f=document.getElementById('patientFilter')?.value||'';
+  const rows=patients.filter(p=>{
+    const txt=[p.nombre,p.cedula,p.telefono,p.email,p.servicio,p.ciudad].join(' ').toLowerCase();
+    return (!q || txt.includes(q)) && (!f || p.servicio===f);
+  });
+
+  document.getElementById('patientsBody').innerHTML = rows.map((p,i)=>`
+    <tr>
+      <td><b>${p.nombre}</b><br><small class="text-muted">${p.email}</small></td>
+      <td>${p.cedula}</td>
+      <td>${p.telefono}</td>
+      <td><span class="badge-auro">${p.servicio}</span></td>
+      <td>${p.ultima}</td>
+      <td>${badgeEstado(p.estado)}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" onclick="alert('Abrir historia clínica de ${p.nombre}')"><i class="bi bi-file-medical"></i></button>
+        <button class="btn btn-sm btn-outline-success" onclick="alert('WhatsApp a ${p.telefono}')"><i class="bi bi-whatsapp"></i></button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">Sin pacientes</td></tr>';
+
+  document.getElementById('patientsMobile').innerHTML = rows.map(p=>`
+    <div class="mobile-card">
+      <div class="mobile-card-top"><b>${p.nombre}</b>${badgeEstado(p.estado)}</div>
+      <div class="line"><span>Cédula</span><span>${p.cedula}</span></div>
+      <div class="line"><span>Teléfono</span><span>${p.telefono}</span></div>
+      <div class="line"><span>Servicio</span><span>${p.servicio}</span></div>
+      <div class="line"><span>Última atención</span><span>${p.ultima}</span></div>
+      <button class="btn-auro w-100 mt-2">Ver historia</button>
+    </div>
+  `).join('');
+  document.getElementById('stPacientes').textContent=patients.length;
+}
+
+function resetPatients(){
+  document.getElementById('patientSearch').value='';
+  document.getElementById('patientFilter').value='';
+  renderPatients();
+}
+
+function openPatientModal(){
+  document.getElementById('patientModal').classList.add('show');
+}
+
+function closePatientModal(){
+  document.getElementById('patientModal').classList.remove('show');
+}
+
+function savePatient(){
+  const nombre=document.getElementById('pNombre').value.trim();
+  if(!nombre){ alert('Ingrese nombres y apellidos del paciente'); return; }
+
+  patients.unshift({
+    nombre,
+    cedula:document.getElementById('pCedula').value.trim(),
+    telefono:document.getElementById('pTelefono').value.trim(),
+    email:document.getElementById('pEmail').value.trim(),
+    servicio:document.getElementById('pServicio').value,
+    ciudad:document.getElementById('pCiudad').value.trim(),
+    ultima:new Date().toLocaleDateString('es-EC'),
+    estado:'Activa'
+  });
+
+  ['pNombre','pCedula','pTelefono','pEmail','pDireccion','pNotas'].forEach(id=>document.getElementById(id).value='');
+  closePatientModal();
+  renderPatients();
+
+  // Aquí luego se conectará con Google Sheets usando Apps Script.
+  alert('Paciente guardado en demo local. Próximo paso: conexión con Google Sheets.');
+}
+
+renderPatients();
+</script>
+</body>
+</html>
