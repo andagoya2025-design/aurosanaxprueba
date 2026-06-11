@@ -576,6 +576,45 @@
           <button class="btn-auro"><i class="bi bi-calendar-plus me-1"></i> Nueva cita</button>
         </div>
         <div class="sheet-note mb-3"><i class="bi bi-info-circle me-1"></i> Este módulo quedará conectado a la pestaña <b>citas</b> de Google Sheets.</div>
+
+        <!-- AUROSANAX - Filtros visuales de agenda -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Buscar cita</label>
+            <input id="agendaSearch" class="form-control" placeholder="Buscar por paciente, WhatsApp o servicio">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold">Fecha</label>
+            <input id="agendaFecha" type="date" class="form-control">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold">Estado</label>
+            <select id="agendaEstado" class="form-select">
+              <option value="">Todos los estados</option>
+              <option value="confirmada">Confirmada</option>
+              <option value="atendida">Atendida</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="anulada">Anulada</option>
+              <option value="no_asistio">No asistió</option>
+              <option value="sin_estado">Sin estado</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold">Período</label>
+            <select id="agendaPeriodo" class="form-select">
+              <option value="">Todos los períodos</option>
+              <option value="hoy">Hoy</option>
+              <option value="manana">Mañana</option>
+              <option value="semana">Esta semana</option>
+              <option value="mes">Este mes</option>
+              <option value="30dias">Próximos 30 días</option>
+            </select>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn-soft w-100" type="button">Limpiar</button>
+          </div>
+        </div>
+
         <div class="row g-3">
           <div class="col-md-4"><div class="cardx p-3"><b>09:00</b><br>Consulta ginecológica<br><span class="badge-auro badge-ok mt-2">Dra. Aurora</span></div></div>
           <div class="col-md-4"><div class="cardx p-3"><b>11:30</b><br>Control obstétrico<br><span class="badge-auro badge-warn mt-2">Pendiente</span></div></div>
