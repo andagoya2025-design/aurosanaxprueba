@@ -1579,6 +1579,39 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-lungs"></i> Respiratorio</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Síntomas respiratorios superiores</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios superiores" data-label="Rinorrea"> Rinorrea</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios superiores" data-label="Obstrucción nasal"> Obstrucción nasal</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios superiores" data-label="Congestión"> Congestión</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios superiores" data-label="Dolor facial"> Dolor facial</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios superiores" data-label="Infecciones respiratorias a repetición"> Infecciones respiratorias a repetición</label>
+                </div>
+              </div>
+
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Síntomas respiratorios inferiores</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios inferiores" data-label="Disnea"> Disnea</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios inferiores" data-label="Tos"> Tos</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios inferiores" data-label="Dolor torácico"> Dolor torácico</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRespiratorioCheck" data-sistema="Síntomas respiratorios inferiores" data-label="Mareos"> Mareos</label>
+                </div>
+              </div>
+
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcRespiratorioNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcRespiratorioObservacion" class="form-control" rows="1" placeholder="Observaciones respiratorias"></textarea>
+                </div>
+              </div>
+            </div>
           </div><div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Estado general</label><textarea id="hcExamenGeneral" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cabeza y cuello</label><textarea id="hcCabezaCuello" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Tórax / respiratorio</label><textarea id="hcToraxRespiratorio" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cardiovascular</label><textarea id="hcCardiovascular" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Abdomen</label><textarea id="hcAbdomen" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Extremidades</label><textarea id="hcExtremidades" class="form-control" rows="2"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Examen ginecológico / especuloscopía</label><textarea id="hcExamenGinecologico" class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_gineco"><div class="clinical-subtitle"><i class="bi bi-gender-female"></i> Historia ginecológica avanzada</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">Menarquia</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FUM</label><input type="date" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Ciclos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">IVSA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Parejas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Anticoncepción</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Gestas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Partos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Cesáreas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Abortos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PAP</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">HPV</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Colposcopia</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Mamografía</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Eco transvaginal</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Flujo / dolor / sangrado</label><input class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Observaciones ginecológicas</label><textarea class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_obstetricia"><div class="clinical-subtitle"><i class="bi bi-heart-pulse"></i> Control obstétrico avanzado</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">FUR</label><input type="date" id="hcFUR" class="form-control" onchange="calcObstetricia()"></div><div class="col-md-2"><label class="form-label fw-bold">FPP</label><input id="hcFPP" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Edad gestacional</label><input id="hcEG" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Peso materno</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Altura uterina</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FCF</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Mov. fetales</label><select class="form-select"><option>Presentes</option><option>Disminuidos</option><option>Ausentes</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select class="form-select"><option>Bajo riesgo</option><option>Alto riesgo</option><option>Referir / seguimiento estrecho</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Ecografía</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Plan prenatal</label><textarea class="form-control" rows="3"></textarea></div></div></div>
@@ -2659,6 +2692,27 @@ function recopilarOrganosSentidosExamenFisico(){
 }
 
 
+function recopilarRespiratorioExamenFisico(){
+  const grupos = {};
+  document.querySelectorAll('.hcRespiratorioCheck').forEach(chk => {
+    if(!chk.checked) return;
+    const sistema = chk.dataset.sistema || 'Respiratorio';
+    const label = chk.dataset.label || '';
+    if(!grupos[sistema]) grupos[sistema] = [];
+    if(label) grupos[sistema].push(label);
+  });
+
+  const partes = Object.keys(grupos).map(sistema => `${sistema}: ${grupos[sistema].join(', ')}`);
+  const noValorado = document.getElementById('hcRespiratorioNoValorado')?.checked;
+  const observacion = getValueIfExists('hcRespiratorioObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -2684,6 +2738,7 @@ async function guardarHistoriaClinicaERP(){
 
   const examenFisico = unirLinea([
     recopilarOrganosSentidosExamenFisico() ? 'Órgano de los sentidos: ' + recopilarOrganosSentidosExamenFisico() : '',
+    recopilarRespiratorioExamenFisico() ? 'Respiratorio: ' + recopilarRespiratorioExamenFisico() : '',
     getValueIfExists('hcExamenGeneral') ? 'Estado general: ' + getValueIfExists('hcExamenGeneral') : '',
     getValueIfExists('hcCabezaCuello') ? 'Cabeza y cuello: ' + getValueIfExists('hcCabezaCuello') : '',
     getValueIfExists('hcToraxRespiratorio') ? 'Tórax/Respiratorio: ' + getValueIfExists('hcToraxRespiratorio') : '',
