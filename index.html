@@ -1235,6 +1235,10 @@
       justify-content:center;
       line-height:1.2;
     }
+
+    .regional-panel{display:none}
+    .regional-panel.active{display:block}
+    .regional-textarea{min-height:42px;resize:vertical}
     .regional-tab.active{
       background:#2f1f3a;
       color:#fff;
@@ -1787,49 +1791,30 @@
           </div>
 
           <div class="clinical-subtitle mt-4"><i class="bi bi-person-vcard"></i> Examen físico regional</div>
-          <div class="regional-tabs">
-            <div class="regional-tab active">Piel y faneras</div>
-            <div class="regional-tab">Cabeza</div>
-            <div class="regional-tab">Ojos</div>
-            <div class="regional-tab">Oídos</div>
-            <div class="regional-tab">Nariz</div>
-            <div class="regional-tab">Boca</div>
-            <div class="regional-tab">Orofaringe</div>
-            <div class="regional-tab">Cuello</div>
-            <div class="regional-tab">Axilas-mamas</div>
-            <div class="regional-tab">Tórax</div>
-            <div class="regional-tab">Abdomen</div>
-            <div class="regional-tab">Columna vertebral</div>
-            <div class="regional-tab">Ingle-periné</div>
-            <div class="regional-tab">Genitales</div>
-            <div class="regional-tab">Ano recto</div>
-            <div class="regional-tab">Canal vaginal</div>
-            <div class="regional-tab">Miembros superiores</div>
-            <div class="regional-tab">Miembros inferiores</div>
-            <div class="regional-tab">Neurológico</div>
-            <div class="regional-tab">Otros hallazgos</div>
+          <div class="regional-tabs" id="hcRegionalTabs">
+            <button type="button" class="regional-tab active" data-region="piel_faneras">Piel y faneras</button>
+            <button type="button" class="regional-tab" data-region="cabeza">Cabeza</button>
+            <button type="button" class="regional-tab" data-region="ojos">Ojos</button>
+            <button type="button" class="regional-tab" data-region="oidos">Oídos</button>
+            <button type="button" class="regional-tab" data-region="nariz">Nariz</button>
+            <button type="button" class="regional-tab" data-region="boca">Boca</button>
+            <button type="button" class="regional-tab" data-region="orofaringe">Orofaringe</button>
+            <button type="button" class="regional-tab" data-region="cuello">Cuello</button>
+            <button type="button" class="regional-tab" data-region="axilas_mamas">Axilas-mamas</button>
+            <button type="button" class="regional-tab" data-region="torax">Tórax</button>
+            <button type="button" class="regional-tab" data-region="abdomen_regional">Abdomen</button>
+            <button type="button" class="regional-tab" data-region="columna_vertebral">Columna vertebral</button>
+            <button type="button" class="regional-tab" data-region="ingle_perine">Ingle-periné</button>
+            <button type="button" class="regional-tab" data-region="genitales_regional">Genitales</button>
+            <button type="button" class="regional-tab" data-region="ano_recto">Ano recto</button>
+            <button type="button" class="regional-tab" data-region="canal_vaginal">Canal vaginal</button>
+            <button type="button" class="regional-tab" data-region="miembros_superiores">Miembros superiores</button>
+            <button type="button" class="regional-tab" data-region="miembros_inferiores">Miembros inferiores</button>
+            <button type="button" class="regional-tab" data-region="neurologico_regional">Neurológico</button>
+            <button type="button" class="regional-tab" data-region="otros_hallazgos">Otros hallazgos</button>
           </div>
-
-          <div class="sistemas-check-card">
-            <div class="sistemas-check-head"><i class="bi bi-person"></i> Piel y faneras</div>
-            <div class="sistemas-check-body">
-              <div class="sistemas-check-group">
-                <div class="sistemas-check-subhead">Hallazgos regionales</div>
-                <div class="sistemas-check-grid">
-                  <label class="sistemas-check-item"><input type="checkbox" class="hcRegionalPielFanerasCheck" data-sistema="Piel y faneras" data-label="Piel gruesa"> Piel gruesa</label>
-                  <label class="sistemas-check-item"><input type="checkbox" class="hcRegionalPielFanerasCheck" data-sistema="Piel y faneras" data-label="Piel fría"> Piel fría</label>
-                  <label class="sistemas-check-item"><input type="checkbox" class="hcRegionalPielFanerasCheck" data-sistema="Piel y faneras" data-label="Palidez cutánea"> Palidez cutánea</label>
-                </div>
-              </div>
-
-              <div class="sistemas-check-footer">
-                <label class="sistemas-check-no"><input id="hcRegionalPielFanerasNoValorado" type="checkbox"> No valorado</label>
-                <div class="sistemas-check-observacion">
-                  <textarea id="hcRegionalPielFanerasObservacion" class="form-control" rows="1" placeholder="Observaciones de piel y faneras"></textarea>
-                </div>
-              </div>
-            </div>
-          </div><div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Estado general</label><textarea id="hcExamenGeneral" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cabeza y cuello</label><textarea id="hcCabezaCuello" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Tórax / respiratorio</label><textarea id="hcToraxRespiratorio" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cardiovascular</label><textarea id="hcCardiovascular" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Abdomen</label><textarea id="hcAbdomen" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Extremidades</label><textarea id="hcExtremidades" class="form-control" rows="2"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Examen ginecológico / especuloscopía</label><textarea id="hcExamenGinecologico" class="form-control" rows="3"></textarea></div></div></div>
+          <div id="hcRegionalPanels"></div>
+          <div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Estado general</label><textarea id="hcExamenGeneral" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cabeza y cuello</label><textarea id="hcCabezaCuello" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Tórax / respiratorio</label><textarea id="hcToraxRespiratorio" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cardiovascular</label><textarea id="hcCardiovascular" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Abdomen</label><textarea id="hcAbdomen" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Extremidades</label><textarea id="hcExtremidades" class="form-control" rows="2"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Examen ginecológico / especuloscopía</label><textarea id="hcExamenGinecologico" class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_gineco"><div class="clinical-subtitle"><i class="bi bi-gender-female"></i> Historia ginecológica avanzada</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">Menarquia</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FUM</label><input type="date" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Ciclos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">IVSA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Parejas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Anticoncepción</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Gestas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Partos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Cesáreas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Abortos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PAP</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">HPV</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Colposcopia</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Mamografía</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Eco transvaginal</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Flujo / dolor / sangrado</label><input class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Observaciones ginecológicas</label><textarea class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_obstetricia"><div class="clinical-subtitle"><i class="bi bi-heart-pulse"></i> Control obstétrico avanzado</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">FUR</label><input type="date" id="hcFUR" class="form-control" onchange="calcObstetricia()"></div><div class="col-md-2"><label class="form-label fw-bold">FPP</label><input id="hcFPP" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Edad gestacional</label><input id="hcEG" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Peso materno</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Altura uterina</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FCF</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Mov. fetales</label><select class="form-select"><option>Presentes</option><option>Disminuidos</option><option>Ausentes</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select class="form-select"><option>Bajo riesgo</option><option>Alto riesgo</option><option>Referir / seguimiento estrecho</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Ecografía</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Plan prenatal</label><textarea class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_estetica"><div class="clinical-subtitle"><i class="bi bi-stars"></i> Evaluación estética funcional</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Área</label><select class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Procedimiento sugerido</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Sesión</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Consentimiento</label><select class="form-select"><option>Pendiente</option><option>Firmado</option><option>No aplica</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación facial</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación corporal</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación íntima</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Evolución fotográfica / observaciones</label><textarea class="form-control" rows="3"></textarea></div></div></div>
@@ -3038,24 +3023,122 @@ function recopilarHemoLinfaticoExamenFisico(){
 }
 
 
-function recopilarRegionalPielFanerasExamenFisico(){
-  const grupos = {};
-  document.querySelectorAll('.hcRegionalPielFanerasCheck').forEach(chk => {
-    if(!chk.checked) return;
-    const sistema = chk.dataset.sistema || 'Piel y faneras';
-    const label = chk.dataset.label || '';
-    if(!grupos[sistema]) grupos[sistema] = [];
-    if(label) grupos[sistema].push(label);
+
+const hcRegionalConfig = {
+  piel_faneras: {titulo:'Piel y faneras', grupos:[{titulo:'Hallazgos regionales', items:['Piel gruesa','Piel fría','Palidez cutánea']}]},
+  cabeza: {titulo:'Cabeza', grupos:[]},
+  ojos: {titulo:'Ojos', grupos:[{titulo:'Hallazgos regionales', items:['Hinchazón periorbitaria']}]},
+  oidos: {titulo:'Oídos', grupos:[]},
+  nariz: {titulo:'Nariz', grupos:[]},
+  boca: {titulo:'Boca', grupos:[]},
+  orofaringe: {titulo:'Orofaringe', grupos:[]},
+  cuello: {titulo:'Cuello', grupos:[]},
+  axilas_mamas: {titulo:'Axilas-mamas', grupos:[{titulo:'Hallazgos regionales', items:['Mamas bilateralmente dolorosas','Nódulo palpable en mama derecha','Nódulo palpable en mama izquierda','Secreción por el pezón','Dolor mamario']}]},
+  torax: {titulo:'Tórax', grupos:[{titulo:'Hallazgos regionales', items:['Asimetría de tórax presente','Dolor a la digitopresión intercostal','Roncus presentes','Sibilancias presentes','Tiraje intercostal presente','Ruidos respiratorios presentes','Estertores presentes','No se evidencia soplos cardíacos','Ruidos cardíacos rítmicos regulares']}]},
+  abdomen_regional: {titulo:'Abdomen', grupos:[{titulo:'Hallazgos regionales', items:['Distensión abdominal presente','Blumberg positivo','Rovsing positivo','Maniobra de psoas positiva','Puntos ureterales dolorosos medios','Puntos ureterales dolorosos inferiores','Dolor en punto cístico positivo','Signo de Murphy positivo']}]},
+  columna_vertebral: {titulo:'Columna vertebral', grupos:[{titulo:'Hallazgos regionales', items:['Lasègue positivo','Bragard positivo','Valleix positivo','Spurling positivo','Descompresión cervical positiva','Contractura muscular paravertebral presente']}]},
+  ingle_perine: {titulo:'Ingle-periné', grupos:[]},
+  genitales_regional: {titulo:'Genitales', grupos:[]},
+  ano_recto: {titulo:'Ano recto', grupos:[]},
+  canal_vaginal: {titulo:'Canal vaginal', grupos:[{titulo:'Hallazgos regionales', items:['Cérvix inflamatorio presente','Flujo vaginal abundante','Cambios macroscópicos en cérvix','Irritación vaginal presente','Lesiones blanquecinas en cuello']}]},
+  miembros_superiores: {titulo:'Miembros superiores', grupos:[
+    {titulo:'Hombro', items:['Jobe positivo','Hawkins positivo','Drop Arm positivo','Neer positivo','Speed positivo']},
+    {titulo:'Muñeca', items:['Durkan positivo','Tinel positivo','Finkelstein positivo','Phalen positivo']}
+  ]},
+  miembros_inferiores: {titulo:'Miembros inferiores', grupos:[
+    {titulo:'Rodilla', items:['Test de cepillo positivo','Zohlen positivo','McMurray positivo','Apley positivo','Cajón anterior positivo','Cajón posterior positivo','Bostezo medial positivo','Bostezo lateral positivo']},
+    {titulo:'Cadera', items:['Fader positivo','Fadir positivo','Test de Thomas positivo']},
+    {titulo:'Tobillo', items:['Cotton positivo','Tobillo inestable positivo','Thompson positivo']}
+  ]},
+  neurologico_regional: {titulo:'Neurológico', grupos:[{titulo:'Hallazgos regionales', items:['Reflejo de tobillo lento']}]},
+  otros_hallazgos: {titulo:'Otros hallazgos', grupos:[{titulo:'Hallazgos regionales', items:['Movimientos lentos']}]}
+};
+
+function hcRegionalInputId(region){
+  return 'hcRegional_' + region + '_obs';
+}
+
+function renderHcRegionalPanels(){
+  const cont = document.getElementById('hcRegionalPanels');
+  if(!cont || cont.dataset.rendered === '1') return;
+
+  const html = Object.keys(hcRegionalConfig).map((key, index) => {
+    const cfg = hcRegionalConfig[key];
+    const grupos = (cfg.grupos || []).map(grupo => `
+      <div class="sistemas-check-group">
+        <div class="sistemas-check-subhead">${grupo.titulo}</div>
+        <div class="sistemas-check-grid">
+          ${(grupo.items || []).map(item => `
+            <label class="sistemas-check-item">
+              <input type="checkbox" class="hcRegionalCheck" data-region="${key}" data-grupo="${grupo.titulo}" data-label="${item}"> ${item}
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="sistemas-check-card regional-panel ${index === 0 ? 'active' : ''}" data-region-panel="${key}">
+        <div class="sistemas-check-head"><i class="bi bi-person-vcard"></i> ${cfg.titulo}</div>
+        <div class="sistemas-check-body">
+          ${grupos}
+          <div class="sistemas-check-observacion mt-2">
+            <textarea id="${hcRegionalInputId(key)}" class="form-control regional-textarea" rows="1">NO VALORADO</textarea>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  cont.innerHTML = html;
+  cont.dataset.rendered = '1';
+}
+
+function activarHcRegional(region){
+  renderHcRegionalPanels();
+  document.querySelectorAll('#hcRegionalTabs .regional-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.region === region);
+  });
+  document.querySelectorAll('#hcRegionalPanels .regional-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.regionPanel === region);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderHcRegionalPanels();
+  document.querySelectorAll('#hcRegionalTabs .regional-tab').forEach(btn => {
+    btn.addEventListener('click', () => activarHcRegional(btn.dataset.region));
+  });
+});
+
+function recopilarRegionalExamenFisico(){
+  renderHcRegionalPanels();
+  const regiones = [];
+
+  Object.keys(hcRegionalConfig).forEach(region => {
+    const cfg = hcRegionalConfig[region];
+    const partes = [];
+    const grupos = {};
+
+    document.querySelectorAll(`.hcRegionalCheck[data-region="${region}"]`).forEach(chk => {
+      if(!chk.checked) return;
+      const grupo = chk.dataset.grupo || 'Hallazgos regionales';
+      const label = chk.dataset.label || '';
+      if(!grupos[grupo]) grupos[grupo] = [];
+      if(label) grupos[grupo].push(label);
+    });
+
+    Object.keys(grupos).forEach(grupo => {
+      partes.push(`${grupo}: ${grupos[grupo].join(', ')}`);
+    });
+
+    const observacion = getValueIfExists(hcRegionalInputId(region));
+    if(observacion) partes.push(observacion === 'NO VALORADO' ? 'No valorado' : 'Observación: ' + observacion);
+
+    if(partes.length) regiones.push(`${cfg.titulo}: ${partes.join(' | ')}`);
   });
 
-  const partes = Object.keys(grupos).map(sistema => `${sistema}: ${grupos[sistema].join(', ')}`);
-  const noValorado = document.getElementById('hcRegionalPielFanerasNoValorado')?.checked;
-  const observacion = getValueIfExists('hcRegionalPielFanerasObservacion');
-
-  if(noValorado) partes.push('No valorado');
-  if(observacion) partes.push('Observación: ' + observacion);
-
-  return partes.join(' | ');
+  return regiones.join(' || ');
 }
 
 async function guardarHistoriaClinicaERP(){
@@ -3090,7 +3173,7 @@ async function guardarHistoriaClinicaERP(){
     recopilarMusculoEsqueleticoExamenFisico() ? 'Músculo Esquelético: ' + recopilarMusculoEsqueleticoExamenFisico() : '',
     recopilarEndocrinoExamenFisico() ? 'Endócrino: ' + recopilarEndocrinoExamenFisico() : '',
     recopilarHemoLinfaticoExamenFisico() ? 'Hemo-linfático: ' + recopilarHemoLinfaticoExamenFisico() : '',
-    recopilarRegionalPielFanerasExamenFisico() ? 'Examen físico regional - Piel y faneras: ' + recopilarRegionalPielFanerasExamenFisico() : '',
+    recopilarRegionalExamenFisico() ? 'Examen físico regional: ' + recopilarRegionalExamenFisico() : '',
     getValueIfExists('hcExamenGeneral') ? 'Estado general: ' + getValueIfExists('hcExamenGeneral') : '',
     getValueIfExists('hcCabezaCuello') ? 'Cabeza y cuello: ' + getValueIfExists('hcCabezaCuello') : '',
     getValueIfExists('hcToraxRespiratorio') ? 'Tórax/Respiratorio: ' + getValueIfExists('hcToraxRespiratorio') : '',
