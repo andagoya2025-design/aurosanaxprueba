@@ -330,6 +330,10 @@
         email: document.getElementById('email').value.trim(),
         id_medico: document.getElementById('id_medico').value,
         fecha_cita: document.getElementById('fecha_cita').value,
+        // Referencia exacta del bloque seleccionado en disponibilidad.
+        // Esto permite identificar la fila concreta del horario elegido.
+        id_disponibilidad: selectedSlot.id_disponibilidad || '',
+        fecha: document.getElementById('fecha_cita').value,
         hora_inicio: document.getElementById('hora_inicio').value,
         hora_fin: document.getElementById('hora_fin').value,
         servicio: document.getElementById('servicio').value,
@@ -348,7 +352,7 @@
         const r = await apiPost('guardarSolicitudCita', data);
         if(!r.success) throw new Error(r.message || 'No se pudo guardar la cita');
 
-        setStatus('ok','<i class="bi bi-check-circle me-1"></i> Cita solicitada correctamente. Estado: <b>' + (r.estado_cita || 'Pendiente') + '</b>. Médico: <b>' + medicoNombre(data.id_medico) + '</b>. Hora: <b>' + data.hora_inicio + '</b>.');
+        setStatus('ok','<i class="bi bi-check-circle me-1"></i> Cita solicitada correctamente. Estado: <b>' + (r.estado_cita || 'Pendiente') + '</b>. Médico: <b>' + medicoNombre(data.id_medico) + '</b>. Hora: <b>' + data.hora_inicio + '</b>. Bloque: <b>' + (data.id_disponibilidad || 'sin referencia') + '</b>.');
         this.reset();
         const hoy = new Date();
         document.getElementById('fecha_cita').value = fechaISO(hoy);
