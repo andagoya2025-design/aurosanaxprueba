@@ -4494,18 +4494,51 @@ const ORDENES_MEDICAS_BASE = [
 ];
 let ordenesMedicasSeleccionadas = [];
 function normalizarOrdenTexto(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
-function renderOrdenesSugerencias(){
-  const input=document.getElementById('hcOrdenBusqueda'); const box=document.getElementById('hcOrdenSugerencias'); const tipo=document.getElementById('hcOrdenTipo')?.value||'';
+function renderOrdenesSugerencias(forzarListado=false){
+  const input=document.getElementById('hcOrdenBusqueda');
+  const box=document.getElementById('hcOrdenSugerencias');
+  const tipo=document.getElementById('hcOrdenTipo')?.value||'';
   if(!input||!box) return;
-  const q=normalizarOrdenTexto(input.value); if(q.length<2){box.classList.add('d-none'); box.innerHTML=''; return;}
-  const res=ORDENES_MEDICAS_BASE.filter(o=>(!tipo||o.categoria===tipo) && normalizarOrdenTexto(o.nombre+' '+o.categoria).includes(q)).slice(0,12);
-  if(!res.length){box.innerHTML='<div class="orden-sug-item text-muted">Sin coincidencias. Puede escribirlo manualmente y agregar.</div>'; box.classList.remove('d-none'); return;}
-  box.innerHTML=res.map((o,i)=>`<div class="orden-sug-item" onclick="seleccionarOrdenSugerida('${o.categoria.replace(/'/g,'\'')}','${o.nombre.replace(/'/g,'\'')}')"><div>${o.nombre}</div><div class="orden-sug-cat">${o.categoria}</div></div>`).join('');
+
+  const q=normalizarOrdenTexto(input.value);
+
+  // Si el campo está vacío, igual se muestran opciones frecuentes para escoger,
+  // especialmente cuando ya se seleccionó un tipo de orden.
+  let res=ORDENES_MEDICAS_BASE.filter(o=>{
+    const coincideTipo=!tipo || o.categoria===tipo;
+    const coincideTexto=!q || normalizarOrdenTexto(o.nombre+' '+o.categoria).includes(q);
+    return coincideTipo && coincideTexto;
+  });
+
+  // Si no seleccionó categoría y tampoco escribió, se muestran frecuentes generales.
+  if(!tipo && !q){
+    res=ORDENES_MEDICAS_BASE.filter(o=>['LABORATORIOS','IMÁGENES','GINECOLOGÍA','OBSTETRICIA','MATERNO FETAL','ENDOCRINOLOGÍA','METABÓLICO'].includes(o.categoria));
+  }
+
+  res=res.slice(0,40);
+
+  if(!res.length){
+    box.innerHTML='<div class="orden-sug-item text-muted">Sin coincidencias. Puede escribirlo manualmente y agregar.</div>';
+    box.classList.remove('d-none');
+    return;
+  }
+
+  box.innerHTML=res.map(o=>`
+    <div class="orden-sug-item" data-categoria="${escapeHtmlOrden(o.categoria)}" data-nombre="${escapeHtmlOrden(o.nombre)}">
+      <div>• ${escapeHtmlOrden(o.nombre)}</div>
+      <div class="orden-sug-cat">${escapeHtmlOrden(o.categoria)}</div>
+    </div>`).join('');
+
   box.classList.remove('d-none');
 }
+function escapeHtmlOrden(txt){
+  return String(txt||'').replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
 function seleccionarOrdenSugerida(categoria,nombre){
-  setValueIfExists('hcOrdenTipo', categoria); setValueIfExists('hcOrdenBusqueda', nombre);
-  const box=document.getElementById('hcOrdenSugerencias'); if(box) box.classList.add('d-none');
+  setValueIfExists('hcOrdenTipo', categoria);
+  setValueIfExists('hcOrdenBusqueda', nombre);
+  const box=document.getElementById('hcOrdenSugerencias');
+  if(box) box.classList.add('d-none');
 }
 function agregarOrdenMedicaDesdeFormulario(){
   const tipo=getValueIfExists('hcOrdenTipo')||'OTROS'; const nombre=(getValueIfExists('hcOrdenBusqueda')||'').trim(); const obs=(getValueIfExists('hcOrdenObservacion')||'').trim();
@@ -4519,13 +4552,23 @@ function renderOrdenesMedicasTabla(){
   if(!ordenesMedicasSeleccionadas.length){tbody.innerHTML='<tr id="hcOrdenesEmpty"><td colspan="4" class="text-center text-muted py-3"><i class="bi bi-file-earmark-medical me-1"></i> Sin registros</td></tr>';} else {
     tbody.innerHTML=ordenesMedicasSeleccionadas.map((o,i)=>`<tr><td>${o.nombre}</td><td><span class="badge bg-light text-dark border">${o.categoria}</span></td><td>${o.observacion||''}</td><td><button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarOrdenMedica(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');
   }
-  if(hidden) hidden.value=ordenesMedicasSeleccionadas.map(o=>`${o.categoria}: ${o.nombre}${o.observacion?' | '+o.observacion:''}`).join('
-');
+  if(hidden) hidden.value=ordenesMedicasSeleccionadas.map(o=>`${o.categoria}: ${o.nombre}${o.observacion?' | '+o.observacion:''}`).join('\n');
   if(typeof updateClinicalSummary==='function') updateClinicalSummary();
 }
 document.addEventListener('input',e=>{ if(e.target && e.target.id==='hcOrdenBusqueda') renderOrdenesSugerencias(); });
-document.addEventListener('change',e=>{ if(e.target && e.target.id==='hcOrdenTipo') renderOrdenesSugerencias(); });
-document.addEventListener('click',e=>{ const box=document.getElementById('hcOrdenSugerencias'); if(box && !e.target.closest('#hcOrdenSugerencias') && e.target.id!=='hcOrdenBusqueda') box.classList.add('d-none'); });
+document.addEventListener('focusin',e=>{ if(e.target && e.target.id==='hcOrdenBusqueda') renderOrdenesSugerencias(true); });
+document.addEventListener('change',e=>{
+  if(e.target && e.target.id==='hcOrdenTipo'){
+    setValueIfExists('hcOrdenBusqueda','');
+    renderOrdenesSugerencias(true);
+  }
+});
+document.addEventListener('click',e=>{
+  const item=e.target.closest('.orden-sug-item[data-categoria]');
+  if(item){ seleccionarOrdenSugerida(item.dataset.categoria, item.dataset.nombre); return; }
+  const box=document.getElementById('hcOrdenSugerencias');
+  if(box && !e.target.closest('#hcOrdenSugerencias') && e.target.id!=='hcOrdenBusqueda') box.classList.add('d-none');
+});
 </script>
 </body>
 </html>
