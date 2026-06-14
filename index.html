@@ -1254,6 +1254,26 @@
     }
 
 
+    /* AUROSANAX - Diagnóstico(s) CIE-10 dentro de Examen físico */
+    .diagnostico-cie-card{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#fff;width:100%;max-width:none;box-shadow:0 8px 24px rgba(15,23,42,.04);margin-bottom:18px}
+    .diagnostico-cie-head{background:#2f1f3a;color:#fff;padding:10px 14px;font-weight:850;font-size:13px;display:flex;align-items:center;gap:8px}
+    .diagnostico-cie-body{padding:14px;background:linear-gradient(180deg,#ffffff,#fff7fb)}
+    .diagnostico-cie-subtitle{font-weight:850;color:#111827;font-size:13px;margin-bottom:10px}
+    .diagnostico-cie-search-grid{display:grid;grid-template-columns:160px 1fr auto;gap:10px;align-items:end;margin-bottom:12px}
+    .diagnostico-table-wrap{border:1px solid #f1f5f9;border-radius:16px;overflow:auto;background:#fff;margin-bottom:12px}
+    .diagnostico-table{width:100%;min-width:720px;border-collapse:separate;border-spacing:0;margin:0}
+    .diagnostico-table th{background:#fdf2f8;color:#8b1e5a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid #fbcfe8;white-space:nowrap}
+    .diagnostico-table td{padding:8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle;font-size:13px}
+    .diagnostico-table tr:last-child td{border-bottom:0}
+    .diagnostico-cie-code{font-weight:900;color:#111827;white-space:nowrap}
+    .diagnostico-empty{color:#6b7280;text-align:center;padding:14px!important;font-weight:700}
+    .diagnostico-delete{border:0;background:#fee2e2;color:#991b1b;border-radius:10px;padding:6px 9px;font-weight:800}
+    .diagnostico-add{border:1px solid #fbcfe8;background:var(--soft);color:var(--primary);border-radius:12px;padding:7px 10px;font-weight:800;white-space:nowrap}
+    .diagnostico-radio{width:17px;height:17px;accent-color:var(--primary);cursor:pointer}
+    .diagnostico-tipo-select{min-width:140px;border-radius:12px!important;font-size:13px;padding:6px 10px!important}
+    @media(max-width:760px){.diagnostico-cie-search-grid{grid-template-columns:1fr}.diagnostico-table{min-width:680px}.diagnostico-cie-body{padding:12px}}
+
+
   </style>
 </head>
 
@@ -1814,6 +1834,21 @@
             <button type="button" class="regional-tab" data-region="otros_hallazgos">Otros hallazgos</button>
           </div>
           <div id="hcRegionalPanels"></div>
+          <div class="clinical-subtitle mt-4"><i class="bi bi-clipboard2-check"></i> Diagnóstico(s)</div>
+          <div class="diagnostico-cie-card" id="hcDiagnosticoCieGrupo">
+            <div class="diagnostico-cie-head"><i class="bi bi-clipboard2-check"></i> Diagnóstico(s)</div>
+            <div class="diagnostico-cie-body">
+              <div class="diagnostico-cie-subtitle">Ingreso de diagnósticos CIE-10</div>
+              <div class="diagnostico-cie-search-grid">
+                <div><label class="form-label fw-bold">Código</label><input id="hcDxCodigoBuscar" class="form-control" placeholder="Ej. N760" oninput="buscarDiagnosticoCie10()"></div>
+                <div><label class="form-label fw-bold">Nombre de Diagnóstico</label><input id="hcDxNombreBuscar" class="form-control" placeholder="Buscar por nombre" oninput="buscarDiagnosticoCie10()"></div>
+                <div><button type="button" class="btn-auro w-100" onclick="agregarDiagnosticoCie10Manual()"><i class="bi bi-plus-circle me-1"></i> Agregar</button></div>
+              </div>
+              <div class="diagnostico-table-wrap"><table class="diagnostico-table"><thead><tr><th style="width:120px">CIE</th><th>Nombre Diagnóstico</th><th style="width:110px">Acción</th></tr></thead><tbody id="hcDxResultadosBody"><tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr></tbody></table></div>
+              <div class="diagnostico-table-wrap"><table class="diagnostico-table"><thead><tr><th>Cod./Nombre Diagnóstico</th><th style="width:100px">Principal</th><th style="width:160px">Tipo</th><th style="width:80px">Eliminar</th></tr></thead><tbody id="hcDxSeleccionadosBody"><tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr></tbody></table></div>
+            </div>
+          </div>
+
           <div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Estado general</label><textarea id="hcExamenGeneral" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cabeza y cuello</label><textarea id="hcCabezaCuello" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Tórax / respiratorio</label><textarea id="hcToraxRespiratorio" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cardiovascular</label><textarea id="hcCardiovascular" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Abdomen</label><textarea id="hcAbdomen" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Extremidades</label><textarea id="hcExtremidades" class="form-control" rows="2"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Examen ginecológico / especuloscopía</label><textarea id="hcExamenGinecologico" class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_gineco"><div class="clinical-subtitle"><i class="bi bi-gender-female"></i> Historia ginecológica avanzada</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">Menarquia</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FUM</label><input type="date" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Ciclos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">IVSA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Parejas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Anticoncepción</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Gestas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Partos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Cesáreas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Abortos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PAP</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">HPV</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Colposcopia</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Mamografía</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Eco transvaginal</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Flujo / dolor / sangrado</label><input class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Observaciones ginecológicas</label><textarea class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_obstetricia"><div class="clinical-subtitle"><i class="bi bi-heart-pulse"></i> Control obstétrico avanzado</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">FUR</label><input type="date" id="hcFUR" class="form-control" onchange="calcObstetricia()"></div><div class="col-md-2"><label class="form-label fw-bold">FPP</label><input id="hcFPP" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Edad gestacional</label><input id="hcEG" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Peso materno</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Altura uterina</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FCF</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Mov. fetales</label><select class="form-select"><option>Presentes</option><option>Disminuidos</option><option>Ausentes</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select class="form-select"><option>Bajo riesgo</option><option>Alto riesgo</option><option>Referir / seguimiento estrecho</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Ecografía</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Plan prenatal</label><textarea class="form-control" rows="3"></textarea></div></div></div>
@@ -3141,6 +3176,32 @@ function recopilarRegionalExamenFisico(){
   return regiones.join(' || ');
 }
 
+
+const hcCie10CatalogoBase = [
+  {codigo:'N760', nombre:'Vaginitis aguda'},
+  {codigo:'B977', nombre:'Papilomavirus como causa de enfermedades clasificadas en otros capítulos'},
+  {codigo:'N871', nombre:'Displasia cervical moderada'},
+  {codigo:'N872', nombre:'Displasia cervical severa, no clasificada en otra parte'},
+  {codigo:'N879', nombre:'Displasia del cuello uterino, no especificada'},
+  {codigo:'Z014', nombre:'Examen ginecológico general'},
+  {codigo:'Z124', nombre:'Examen de pesquisa especial para tumor del cuello uterino'},
+  {codigo:'R102', nombre:'Dolor pélvico y perineal'},
+  {codigo:'N939', nombre:'Hemorragia uterina y vaginal anormal, no especificada'},
+  {codigo:'N946', nombre:'Dismenorrea, no especificada'},
+  {codigo:'N390', nombre:'Infección de vías urinarias, sitio no especificado'}
+];
+let hcDiagnosticosSeleccionados = [];
+function normalizarDxTexto(valor){return String(valor||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();}
+function buscarDiagnosticoCie10(){const codigo=normalizarDxTexto(getValueIfExists('hcDxCodigoBuscar'));const nombre=normalizarDxTexto(getValueIfExists('hcDxNombreBuscar'));const body=document.getElementById('hcDxResultadosBody');if(!body)return;if(!codigo&&!nombre){body.innerHTML='<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';return;}const resultados=hcCie10CatalogoBase.filter(d=>(!codigo||normalizarDxTexto(d.codigo).includes(codigo))&&(!nombre||normalizarDxTexto(d.nombre).includes(nombre))).slice(0,10);body.innerHTML=resultados.map(d=>`<tr><td class="diagnostico-cie-code">${d.codigo}</td><td>${d.nombre.toUpperCase()}</td><td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoCie10('${d.codigo}','${d.nombre.replace(/'/g,"\'")}')">Agregar</button></td></tr>`).join('')||'<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';}
+function agregarDiagnosticoCie10Manual(){const codigo=getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase();const nombre=getValueIfExists('hcDxNombreBuscar').trim();if(!codigo||!nombre){alert('Ingrese código CIE-10 y nombre de diagnóstico.');return;}agregarDiagnosticoCie10(codigo,nombre);}
+function agregarDiagnosticoCie10(codigo,nombre){codigo=String(codigo||'').trim().toUpperCase();nombre=String(nombre||'').trim();if(!codigo||!nombre)return;if(hcDiagnosticosSeleccionados.some(d=>d.codigo===codigo)){alert('Este diagnóstico ya fue agregado.');return;}hcDiagnosticosSeleccionados.push({codigo,nombre,principal:hcDiagnosticosSeleccionados.length===0,tipo:'Presuntivo'});renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function eliminarDiagnosticoCie10(index){hcDiagnosticosSeleccionados.splice(index,1);if(hcDiagnosticosSeleccionados.length&&!hcDiagnosticosSeleccionados.some(d=>d.principal)){hcDiagnosticosSeleccionados[0].principal=true;}renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function marcarDiagnosticoPrincipal(index){hcDiagnosticosSeleccionados.forEach((d,i)=>d.principal=i===index);renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function cambiarTipoDiagnostico(index,valor){if(hcDiagnosticosSeleccionados[index])hcDiagnosticosSeleccionados[index].tipo=valor;sincronizarDiagnosticosConCamposHistoria();}
+function renderDiagnosticosSeleccionados(){const body=document.getElementById('hcDxSeleccionadosBody');if(!body)return;if(!hcDiagnosticosSeleccionados.length){body.innerHTML='<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';return;}body.innerHTML=hcDiagnosticosSeleccionados.map((d,i)=>`<tr><td><span class="diagnostico-cie-code">${d.codigo}</span> &nbsp; ${String(d.nombre||'').toUpperCase()}</td><td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal?'checked':''} onchange="marcarDiagnosticoPrincipal(${i})"></td><td><select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)"><option ${d.tipo==='Presuntivo'?'selected':''}>Presuntivo</option><option ${d.tipo==='Definitivo'?'selected':''}>Definitivo</option></select></td><td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');}
+function sincronizarDiagnosticosConCamposHistoria(){const principal=hcDiagnosticosSeleccionados.find(d=>d.principal)||hcDiagnosticosSeleccionados[0];const secundarios=hcDiagnosticosSeleccionados.filter(d=>!principal||d.codigo!==principal.codigo);if(principal){setValueIfExists('hcCie10Principal',principal.codigo);setValueIfExists('hcDiagnosticoPrincipal',principal.nombre);}else{setValueIfExists('hcCie10Principal','');setValueIfExists('hcDiagnosticoPrincipal','');}setValueIfExists('hcCie10Secundario',secundarios.map(d=>d.codigo).join('; '));setValueIfExists('hcDiagnosticoSecundario',secundarios.map(d=>`${d.codigo} ${d.nombre} (${d.tipo})`).join('; '));}
+function recopilarDiagnosticosCie10(){sincronizarDiagnosticosConCamposHistoria();return hcDiagnosticosSeleccionados.map(d=>`${d.principal?'Principal':'Secundario'}: ${d.codigo} ${d.nombre} (${d.tipo})`).join(' || ');}
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -3168,6 +3229,7 @@ async function guardarHistoriaClinicaERP(){
     recopilarOrganosSentidosExamenFisico() ? 'Órgano de los sentidos: ' + recopilarOrganosSentidosExamenFisico() : '',
     recopilarRespiratorioExamenFisico() ? 'Respiratorio: ' + recopilarRespiratorioExamenFisico() : '',
     recopilarCardiovascularExamenFisico() ? 'Cardiovascular: ' + recopilarCardiovascularExamenFisico() : '',
+    recopilarDiagnosticosCie10() ? 'Diagnóstico(s): ' + recopilarDiagnosticosCie10() : '',
     recopilarDigestivoExamenFisico() ? 'Digestivo: ' + recopilarDigestivoExamenFisico() : '',
     recopilarUrinarioExamenFisico() ? 'Urinario: ' + recopilarUrinarioExamenFisico() : '',
     recopilarMusculoEsqueleticoExamenFisico() ? 'Músculo Esquelético: ' + recopilarMusculoEsqueleticoExamenFisico() : '',
@@ -3211,6 +3273,7 @@ async function guardarHistoriaClinicaERP(){
     diagnostico_principal: getValueIfExists('hcDiagnosticoPrincipal'),
     diagnostico_secundario: getValueIfExists('hcDiagnosticoSecundario'),
     cie10_secundario: getValueIfExists('hcCie10Secundario'),
+    diagnosticos_cie10: recopilarDiagnosticosCie10(),
     plan_tratamiento: getValueIfExists('hcPlanTratamiento'),
     receta_medicamentos: getValueIfExists('hcRecetaMedicamentos'),
     examenes_solicitados: getValueIfExists('hcExamenesSolicitados'),
