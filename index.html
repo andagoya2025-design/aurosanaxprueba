@@ -1254,6 +1254,7 @@
     }
 
 
+
     /* AUROSANAX - Diagnóstico(s) CIE-10 dentro de Examen físico */
     .diagnostico-cie-card{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#fff;width:100%;max-width:none;box-shadow:0 8px 24px rgba(15,23,42,.04);margin-bottom:18px}
     .diagnostico-cie-head{background:#2f1f3a;color:#fff;padding:10px 14px;font-weight:850;font-size:13px;display:flex;align-items:center;gap:8px}
@@ -1264,7 +1265,6 @@
     .diagnostico-table{width:100%;min-width:720px;border-collapse:separate;border-spacing:0;margin:0}
     .diagnostico-table th{background:#fdf2f8;color:#8b1e5a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid #fbcfe8;white-space:nowrap}
     .diagnostico-table td{padding:8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle;font-size:13px}
-    .diagnostico-table tr:last-child td{border-bottom:0}
     .diagnostico-cie-code{font-weight:900;color:#111827;white-space:nowrap}
     .diagnostico-empty{color:#6b7280;text-align:center;padding:14px!important;font-weight:700}
     .diagnostico-delete{border:0;background:#fee2e2;color:#991b1b;border-radius:10px;padding:6px 9px;font-weight:800}
@@ -1272,7 +1272,6 @@
     .diagnostico-radio{width:17px;height:17px;accent-color:var(--primary);cursor:pointer}
     .diagnostico-tipo-select{min-width:140px;border-radius:12px!important;font-size:13px;padding:6px 10px!important}
     @media(max-width:760px){.diagnostico-cie-search-grid{grid-template-columns:1fr}.diagnostico-table{min-width:680px}.diagnostico-cie-body{padding:12px}}
-
 
   </style>
 </head>
@@ -1840,7 +1839,7 @@
             <div class="diagnostico-cie-body">
               <div class="diagnostico-cie-subtitle">Ingreso de diagnósticos CIE-10</div>
               <div class="diagnostico-cie-search-grid">
-                <div><label class="form-label fw-bold">Código</label><input id="hcDxCodigoBuscar" class="form-control" placeholder="Ej. N760" oninput="buscarDiagnosticoCie10()"></div>
+                <div><label class="form-label fw-bold">Código</label><input id="hcDxCodigoBuscar" class="form-control" placeholder="Ej. I10 / N760" oninput="buscarDiagnosticoCie10()"></div>
                 <div><label class="form-label fw-bold">Nombre de Diagnóstico</label><input id="hcDxNombreBuscar" class="form-control" placeholder="Buscar por nombre" oninput="buscarDiagnosticoCie10()"></div>
                 <div><button type="button" class="btn-auro w-100" onclick="agregarDiagnosticoCie10Manual()"><i class="bi bi-plus-circle me-1"></i> Agregar</button></div>
               </div>
@@ -3178,24 +3177,738 @@ function recopilarRegionalExamenFisico(){
 
 
 const hcCie10CatalogoBase = [
-  {codigo:'N760', nombre:'Vaginitis aguda'},
-  {codigo:'B977', nombre:'Papilomavirus como causa de enfermedades clasificadas en otros capítulos'},
-  {codigo:'N871', nombre:'Displasia cervical moderada'},
-  {codigo:'N872', nombre:'Displasia cervical severa, no clasificada en otra parte'},
-  {codigo:'N879', nombre:'Displasia del cuello uterino, no especificada'},
-  {codigo:'Z014', nombre:'Examen ginecológico general'},
-  {codigo:'Z124', nombre:'Examen de pesquisa especial para tumor del cuello uterino'},
-  {codigo:'R102', nombre:'Dolor pélvico y perineal'},
-  {codigo:'N939', nombre:'Hemorragia uterina y vaginal anormal, no especificada'},
-  {codigo:'N946', nombre:'Dismenorrea, no especificada'},
-  {codigo:'N390', nombre:'Infección de vías urinarias, sitio no especificado'}
+  {
+    "codigo": "N760",
+    "nombre": "Vaginitis aguda"
+  },
+  {
+    "codigo": "N761",
+    "nombre": "Vaginitis subaguda y crónica"
+  },
+  {
+    "codigo": "N720",
+    "nombre": "Cervicitis"
+  },
+  {
+    "codigo": "N870",
+    "nombre": "Displasia cervical leve"
+  },
+  {
+    "codigo": "N871",
+    "nombre": "Displasia cervical moderada"
+  },
+  {
+    "codigo": "N872",
+    "nombre": "Displasia cervical severa"
+  },
+  {
+    "codigo": "N879",
+    "nombre": "Displasia del cuello uterino no especificada"
+  },
+  {
+    "codigo": "B977",
+    "nombre": "Papilomavirus como causa de enfermedades clasificadas en otros capítulos"
+  },
+  {
+    "codigo": "A630",
+    "nombre": "Verrugas anogenitales"
+  },
+  {
+    "codigo": "B373",
+    "nombre": "Candidiasis de vulva y vagina"
+  },
+  {
+    "codigo": "A590",
+    "nombre": "Tricomoniasis urogenital"
+  },
+  {
+    "codigo": "A600",
+    "nombre": "Herpes genital"
+  },
+  {
+    "codigo": "A560",
+    "nombre": "Infección urogenital por clamidia"
+  },
+  {
+    "codigo": "A549",
+    "nombre": "Infección gonocócica no especificada"
+  },
+  {
+    "codigo": "A539",
+    "nombre": "Sífilis no especificada"
+  },
+  {
+    "codigo": "D250",
+    "nombre": "Mioma uterino submucoso"
+  },
+  {
+    "codigo": "D251",
+    "nombre": "Mioma uterino intramural"
+  },
+  {
+    "codigo": "D252",
+    "nombre": "Mioma uterino subseroso"
+  },
+  {
+    "codigo": "D259",
+    "nombre": "Mioma uterino no especificado"
+  },
+  {
+    "codigo": "N800",
+    "nombre": "Endometriosis del útero"
+  },
+  {
+    "codigo": "N801",
+    "nombre": "Endometriosis del ovario"
+  },
+  {
+    "codigo": "N809",
+    "nombre": "Endometriosis no especificada"
+  },
+  {
+    "codigo": "N920",
+    "nombre": "Menstruación excesiva y frecuente con ciclo regular"
+  },
+  {
+    "codigo": "N921",
+    "nombre": "Menstruación excesiva y frecuente con ciclo irregular"
+  },
+  {
+    "codigo": "N939",
+    "nombre": "Hemorragia uterina y vaginal anormal no especificada"
+  },
+  {
+    "codigo": "N944",
+    "nombre": "Dismenorrea primaria"
+  },
+  {
+    "codigo": "N945",
+    "nombre": "Dismenorrea secundaria"
+  },
+  {
+    "codigo": "N946",
+    "nombre": "Dismenorrea no especificada"
+  },
+  {
+    "codigo": "R102",
+    "nombre": "Dolor pélvico y perineal"
+  },
+  {
+    "codigo": "N941",
+    "nombre": "Dispareunia"
+  },
+  {
+    "codigo": "N952",
+    "nombre": "Vaginitis atrófica postmenopáusica"
+  },
+  {
+    "codigo": "N951",
+    "nombre": "Estado menopáusico y climatérico femenino"
+  },
+  {
+    "codigo": "N979",
+    "nombre": "Infertilidad femenina no especificada"
+  },
+  {
+    "codigo": "Z014",
+    "nombre": "Examen ginecológico general"
+  },
+  {
+    "codigo": "Z124",
+    "nombre": "Pesquisa especial para tumor del cuello uterino"
+  },
+  {
+    "codigo": "Z300",
+    "nombre": "Consejo anticonceptivo"
+  },
+  {
+    "codigo": "Z321",
+    "nombre": "Embarazo confirmado"
+  },
+  {
+    "codigo": "Z340",
+    "nombre": "Supervisión de primer embarazo normal"
+  },
+  {
+    "codigo": "Z348",
+    "nombre": "Supervisión de otros embarazos normales"
+  },
+  {
+    "codigo": "Z349",
+    "nombre": "Supervisión de embarazo normal no especificado"
+  },
+  {
+    "codigo": "O099",
+    "nombre": "Supervisión de embarazo de alto riesgo no especificado"
+  },
+  {
+    "codigo": "O200",
+    "nombre": "Amenaza de aborto"
+  },
+  {
+    "codigo": "O209",
+    "nombre": "Hemorragia precoz del embarazo no especificada"
+  },
+  {
+    "codigo": "O210",
+    "nombre": "Hiperémesis gravídica leve"
+  },
+  {
+    "codigo": "O230",
+    "nombre": "Infección del riñón en el embarazo"
+  },
+  {
+    "codigo": "O231",
+    "nombre": "Infección de vejiga en el embarazo"
+  },
+  {
+    "codigo": "O234",
+    "nombre": "Infección urinaria en embarazo no especificada"
+  },
+  {
+    "codigo": "O235",
+    "nombre": "Infección genital en el embarazo"
+  },
+  {
+    "codigo": "O244",
+    "nombre": "Diabetes gestacional"
+  },
+  {
+    "codigo": "O249",
+    "nombre": "Diabetes mellitus en embarazo no especificada"
+  },
+  {
+    "codigo": "O13",
+    "nombre": "Hipertensión gestacional sin proteinuria significativa"
+  },
+  {
+    "codigo": "O140",
+    "nombre": "Preeclampsia moderada"
+  },
+  {
+    "codigo": "O141",
+    "nombre": "Preeclampsia severa"
+  },
+  {
+    "codigo": "O149",
+    "nombre": "Preeclampsia no especificada"
+  },
+  {
+    "codigo": "O410",
+    "nombre": "Oligohidramnios"
+  },
+  {
+    "codigo": "O420",
+    "nombre": "Ruptura prematura de membranas"
+  },
+  {
+    "codigo": "O470",
+    "nombre": "Falso trabajo de parto antes de las 37 semanas"
+  },
+  {
+    "codigo": "O600",
+    "nombre": "Trabajo de parto prematuro sin parto"
+  },
+  {
+    "codigo": "O820",
+    "nombre": "Parto por cesárea electiva"
+  },
+  {
+    "codigo": "O821",
+    "nombre": "Parto por cesárea de emergencia"
+  },
+  {
+    "codigo": "O809",
+    "nombre": "Parto único espontáneo no especificado"
+  },
+  {
+    "codigo": "E039",
+    "nombre": "Hipotiroidismo no especificado"
+  },
+  {
+    "codigo": "E050",
+    "nombre": "Hipertiroidismo con bocio difuso"
+  },
+  {
+    "codigo": "E059",
+    "nombre": "Hipertiroidismo no especificado"
+  },
+  {
+    "codigo": "E069",
+    "nombre": "Tiroiditis no especificada"
+  },
+  {
+    "codigo": "E079",
+    "nombre": "Trastorno de tiroides no especificado"
+  },
+  {
+    "codigo": "E119",
+    "nombre": "Diabetes mellitus tipo 2 sin complicaciones"
+  },
+  {
+    "codigo": "E112",
+    "nombre": "Diabetes mellitus tipo 2 con complicaciones renales"
+  },
+  {
+    "codigo": "E113",
+    "nombre": "Diabetes mellitus tipo 2 con complicaciones oftálmicas"
+  },
+  {
+    "codigo": "E114",
+    "nombre": "Diabetes mellitus tipo 2 con complicaciones neurológicas"
+  },
+  {
+    "codigo": "E115",
+    "nombre": "Diabetes mellitus tipo 2 con complicaciones circulatorias periféricas"
+  },
+  {
+    "codigo": "E117",
+    "nombre": "Diabetes mellitus tipo 2 con complicaciones múltiples"
+  },
+  {
+    "codigo": "E149",
+    "nombre": "Diabetes mellitus no especificada sin complicaciones"
+  },
+  {
+    "codigo": "R730",
+    "nombre": "Prueba de tolerancia a la glucosa anormal"
+  },
+  {
+    "codigo": "R739",
+    "nombre": "Hiperglucemia no especificada"
+  },
+  {
+    "codigo": "E162",
+    "nombre": "Hipoglucemia no especificada"
+  },
+  {
+    "codigo": "E660",
+    "nombre": "Obesidad por exceso de calorías"
+  },
+  {
+    "codigo": "E669",
+    "nombre": "Obesidad no especificada"
+  },
+  {
+    "codigo": "E780",
+    "nombre": "Hipercolesterolemia pura"
+  },
+  {
+    "codigo": "E781",
+    "nombre": "Hipergliceridemia pura"
+  },
+  {
+    "codigo": "E782",
+    "nombre": "Hiperlipidemia mixta"
+  },
+  {
+    "codigo": "E785",
+    "nombre": "Hiperlipidemia no especificada"
+  },
+  {
+    "codigo": "E559",
+    "nombre": "Deficiencia de vitamina D no especificada"
+  },
+  {
+    "codigo": "E611",
+    "nombre": "Deficiencia de hierro"
+  },
+  {
+    "codigo": "E282",
+    "nombre": "Síndrome de ovario poliquístico"
+  },
+  {
+    "codigo": "E281",
+    "nombre": "Exceso de andrógenos"
+  },
+  {
+    "codigo": "E221",
+    "nombre": "Hiperprolactinemia"
+  },
+  {
+    "codigo": "E349",
+    "nombre": "Trastorno endocrino no especificado"
+  },
+  {
+    "codigo": "I10",
+    "nombre": "Hipertensión esencial primaria"
+  },
+  {
+    "codigo": "I110",
+    "nombre": "Enfermedad cardíaca hipertensiva con insuficiencia cardíaca"
+  },
+  {
+    "codigo": "I119",
+    "nombre": "Enfermedad cardíaca hipertensiva sin insuficiencia cardíaca"
+  },
+  {
+    "codigo": "I120",
+    "nombre": "Enfermedad renal hipertensiva con insuficiencia renal"
+  },
+  {
+    "codigo": "I129",
+    "nombre": "Enfermedad renal hipertensiva sin insuficiencia renal"
+  },
+  {
+    "codigo": "I150",
+    "nombre": "Hipertensión renovascular"
+  },
+  {
+    "codigo": "I159",
+    "nombre": "Hipertensión secundaria no especificada"
+  },
+  {
+    "codigo": "I200",
+    "nombre": "Angina inestable"
+  },
+  {
+    "codigo": "I209",
+    "nombre": "Angina de pecho no especificada"
+  },
+  {
+    "codigo": "I219",
+    "nombre": "Infarto agudo de miocardio no especificado"
+  },
+  {
+    "codigo": "I250",
+    "nombre": "Enfermedad cardiovascular aterosclerótica"
+  },
+  {
+    "codigo": "I251",
+    "nombre": "Enfermedad aterosclerótica del corazón"
+  },
+  {
+    "codigo": "I259",
+    "nombre": "Enfermedad isquémica crónica del corazón no especificada"
+  },
+  {
+    "codigo": "I269",
+    "nombre": "Embolia pulmonar"
+  },
+  {
+    "codigo": "I272",
+    "nombre": "Hipertensión pulmonar secundaria"
+  },
+  {
+    "codigo": "I350",
+    "nombre": "Estenosis aórtica no reumática"
+  },
+  {
+    "codigo": "I359",
+    "nombre": "Trastorno de la válvula aórtica no especificado"
+  },
+  {
+    "codigo": "I420",
+    "nombre": "Cardiomiopatía dilatada"
+  },
+  {
+    "codigo": "I429",
+    "nombre": "Cardiomiopatía no especificada"
+  },
+  {
+    "codigo": "I471",
+    "nombre": "Taquicardia supraventricular"
+  },
+  {
+    "codigo": "I472",
+    "nombre": "Taquicardia ventricular"
+  },
+  {
+    "codigo": "I48",
+    "nombre": "Fibrilación y aleteo auricular"
+  },
+  {
+    "codigo": "I499",
+    "nombre": "Arritmia cardíaca no especificada"
+  },
+  {
+    "codigo": "I500",
+    "nombre": "Insuficiencia cardíaca congestiva"
+  },
+  {
+    "codigo": "I501",
+    "nombre": "Insuficiencia ventricular izquierda"
+  },
+  {
+    "codigo": "I509",
+    "nombre": "Insuficiencia cardíaca no especificada"
+  },
+  {
+    "codigo": "I519",
+    "nombre": "Enfermedad cardíaca no especificada"
+  },
+  {
+    "codigo": "I64",
+    "nombre": "Accidente vascular encefálico no especificado"
+  },
+  {
+    "codigo": "I679",
+    "nombre": "Enfermedad cerebrovascular no especificada"
+  },
+  {
+    "codigo": "I700",
+    "nombre": "Aterosclerosis de la aorta"
+  },
+  {
+    "codigo": "I709",
+    "nombre": "Aterosclerosis generalizada y no especificada"
+  },
+  {
+    "codigo": "I739",
+    "nombre": "Enfermedad vascular periférica no especificada"
+  },
+  {
+    "codigo": "I800",
+    "nombre": "Flebitis y tromboflebitis superficial de miembros inferiores"
+  },
+  {
+    "codigo": "I802",
+    "nombre": "Flebitis y tromboflebitis profunda de miembros inferiores"
+  },
+  {
+    "codigo": "I803",
+    "nombre": "Flebitis y tromboflebitis de miembros inferiores no especificada"
+  },
+  {
+    "codigo": "I830",
+    "nombre": "Várices de miembros inferiores con úlcera"
+  },
+  {
+    "codigo": "I831",
+    "nombre": "Várices de miembros inferiores con inflamación"
+  },
+  {
+    "codigo": "I832",
+    "nombre": "Várices de miembros inferiores con úlcera e inflamación"
+  },
+  {
+    "codigo": "I839",
+    "nombre": "Várices de miembros inferiores sin úlcera ni inflamación"
+  },
+  {
+    "codigo": "I872",
+    "nombre": "Insuficiencia venosa crónica periférica"
+  },
+  {
+    "codigo": "I879",
+    "nombre": "Trastorno venoso no especificado"
+  },
+  {
+    "codigo": "I890",
+    "nombre": "Linfedema"
+  },
+  {
+    "codigo": "I959",
+    "nombre": "Hipotensión no especificada"
+  },
+  {
+    "codigo": "N300",
+    "nombre": "Cistitis aguda"
+  },
+  {
+    "codigo": "N309",
+    "nombre": "Cistitis no especificada"
+  },
+  {
+    "codigo": "N390",
+    "nombre": "Infección de vías urinarias sitio no especificado"
+  },
+  {
+    "codigo": "J00",
+    "nombre": "Rinofaringitis aguda resfriado común"
+  },
+  {
+    "codigo": "J029",
+    "nombre": "Faringitis aguda no especificada"
+  },
+  {
+    "codigo": "J039",
+    "nombre": "Amigdalitis aguda no especificada"
+  },
+  {
+    "codigo": "J069",
+    "nombre": "Infección respiratoria superior no especificada"
+  },
+  {
+    "codigo": "J209",
+    "nombre": "Bronquitis aguda no especificada"
+  },
+  {
+    "codigo": "J459",
+    "nombre": "Asma no especificada"
+  },
+  {
+    "codigo": "J309",
+    "nombre": "Rinitis alérgica no especificada"
+  },
+  {
+    "codigo": "K219",
+    "nombre": "Reflujo gastroesofágico sin esofagitis"
+  },
+  {
+    "codigo": "K297",
+    "nombre": "Gastritis no especificada"
+  },
+  {
+    "codigo": "K590",
+    "nombre": "Constipación"
+  },
+  {
+    "codigo": "K529",
+    "nombre": "Gastroenteritis y colitis no infecciosa no especificada"
+  },
+  {
+    "codigo": "D509",
+    "nombre": "Anemia por deficiencia de hierro no especificada"
+  },
+  {
+    "codigo": "D649",
+    "nombre": "Anemia no especificada"
+  },
+  {
+    "codigo": "R51",
+    "nombre": "Cefalea"
+  },
+  {
+    "codigo": "R42",
+    "nombre": "Mareo y desvanecimiento"
+  },
+  {
+    "codigo": "R53",
+    "nombre": "Malestar y fatiga"
+  },
+  {
+    "codigo": "R104",
+    "nombre": "Dolor abdominal no especificado"
+  },
+  {
+    "codigo": "R11",
+    "nombre": "Náusea y vómito"
+  },
+  {
+    "codigo": "R50",
+    "nombre": "Fiebre de origen desconocido"
+  },
+  {
+    "codigo": "R600",
+    "nombre": "Edema localizado"
+  },
+  {
+    "codigo": "R609",
+    "nombre": "Edema no especificado"
+  },
+  {
+    "codigo": "R634",
+    "nombre": "Pérdida anormal de peso"
+  },
+  {
+    "codigo": "R635",
+    "nombre": "Aumento anormal de peso"
+  },
+  {
+    "codigo": "M545",
+    "nombre": "Lumbago no especificado"
+  },
+  {
+    "codigo": "M549",
+    "nombre": "Dorsalgia no especificada"
+  },
+  {
+    "codigo": "M255",
+    "nombre": "Dolor en articulación"
+  },
+  {
+    "codigo": "M796",
+    "nombre": "Dolor en miembro"
+  },
+  {
+    "codigo": "M791",
+    "nombre": "Mialgia"
+  },
+  {
+    "codigo": "M819",
+    "nombre": "Osteoporosis no especificada"
+  },
+  {
+    "codigo": "F419",
+    "nombre": "Trastorno de ansiedad no especificado"
+  },
+  {
+    "codigo": "F329",
+    "nombre": "Episodio depresivo no especificado"
+  },
+  {
+    "codigo": "G439",
+    "nombre": "Migraña no especificada"
+  },
+  {
+    "codigo": "G470",
+    "nombre": "Insomnio"
+  },
+  {
+    "codigo": "L700",
+    "nombre": "Acné vulgar"
+  },
+  {
+    "codigo": "L709",
+    "nombre": "Acné no especificado"
+  },
+  {
+    "codigo": "L650",
+    "nombre": "Efluvio telógeno"
+  },
+  {
+    "codigo": "L659",
+    "nombre": "Pérdida de cabello no cicatricial no especificada"
+  },
+  {
+    "codigo": "L639",
+    "nombre": "Alopecia areata no especificada"
+  },
+  {
+    "codigo": "L680",
+    "nombre": "Hirsutismo"
+  },
+  {
+    "codigo": "L681",
+    "nombre": "Hirsutismo adquirido"
+  },
+  {
+    "codigo": "L810",
+    "nombre": "Hiperpigmentación postinflamatoria"
+  },
+  {
+    "codigo": "L819",
+    "nombre": "Trastorno de pigmentación no especificado"
+  },
+  {
+    "codigo": "L905",
+    "nombre": "Cicatrices y fibrosis de la piel"
+  },
+  {
+    "codigo": "L989",
+    "nombre": "Trastorno de piel y tejido subcutáneo no especificado"
+  }
 ];
+let hcDxResultadosActuales = [];
 let hcDiagnosticosSeleccionados = [];
-function normalizarDxTexto(valor){return String(valor||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();}
-function buscarDiagnosticoCie10(){const codigo=normalizarDxTexto(getValueIfExists('hcDxCodigoBuscar'));const nombre=normalizarDxTexto(getValueIfExists('hcDxNombreBuscar'));const body=document.getElementById('hcDxResultadosBody');if(!body)return;if(!codigo&&!nombre){body.innerHTML='<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';return;}const resultados=hcCie10CatalogoBase.filter(d=>(!codigo||normalizarDxTexto(d.codigo).includes(codigo))&&(!nombre||normalizarDxTexto(d.nombre).includes(nombre))).slice(0,10);body.innerHTML=resultados.map(d=>`<tr><td class="diagnostico-cie-code">${d.codigo}</td><td>${d.nombre.toUpperCase()}</td><td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoCie10('${d.codigo}','${d.nombre.replace(/'/g,"\'")}')">Agregar</button></td></tr>`).join('')||'<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';}
-function agregarDiagnosticoCie10Manual(){const codigo=getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase();const nombre=getValueIfExists('hcDxNombreBuscar').trim();if(!codigo||!nombre){alert('Ingrese código CIE-10 y nombre de diagnóstico.');return;}agregarDiagnosticoCie10(codigo,nombre);}
-function agregarDiagnosticoCie10(codigo,nombre){codigo=String(codigo||'').trim().toUpperCase();nombre=String(nombre||'').trim();if(!codigo||!nombre)return;if(hcDiagnosticosSeleccionados.some(d=>d.codigo===codigo)){alert('Este diagnóstico ya fue agregado.');return;}hcDiagnosticosSeleccionados.push({codigo,nombre,principal:hcDiagnosticosSeleccionados.length===0,tipo:'Presuntivo'});renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
-function eliminarDiagnosticoCie10(index){hcDiagnosticosSeleccionados.splice(index,1);if(hcDiagnosticosSeleccionados.length&&!hcDiagnosticosSeleccionados.some(d=>d.principal)){hcDiagnosticosSeleccionados[0].principal=true;}renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+
+function normalizarDxTexto(valor){
+  return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+}
+function buscarDiagnosticoCie10(){
+  const codigo = normalizarDxTexto(getValueIfExists('hcDxCodigoBuscar'));
+  const nombre = normalizarDxTexto(getValueIfExists('hcDxNombreBuscar'));
+  const body = document.getElementById('hcDxResultadosBody');
+  if(!body) return;
+  if(!codigo && !nombre){hcDxResultadosActuales=[];body.innerHTML='<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';return;}
+  hcDxResultadosActuales = hcCie10CatalogoBase.filter(d => (!codigo || normalizarDxTexto(d.codigo).includes(codigo)) && (!nombre || normalizarDxTexto(d.nombre).includes(nombre))).slice(0,12);
+  body.innerHTML = hcDxResultadosActuales.map((d,i)=>`<tr><td class="diagnostico-cie-code">${d.codigo}</td><td>${String(d.nombre||'').toUpperCase()}</td><td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoCie10DesdeResultado(${i})">Agregar</button></td></tr>`).join('') || '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
+}
+function agregarDiagnosticoCie10DesdeResultado(index){const d=hcDxResultadosActuales[index];if(d)agregarDiagnosticoCie10(d.codigo,d.nombre);}
+function agregarDiagnosticoCie10Manual(){const codigo=getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');const nombre=getValueIfExists('hcDxNombreBuscar').trim();if(!codigo||!nombre){alert('Ingrese código CIE-10 y nombre de diagnóstico, o seleccione un resultado de la búsqueda.');return;}agregarDiagnosticoCie10(codigo,nombre);}
+function agregarDiagnosticoCie10(codigo,nombre){codigo=String(codigo||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');nombre=String(nombre||'').trim();if(!codigo||!nombre)return;if(hcDiagnosticosSeleccionados.some(d=>d.codigo===codigo)){alert('Este diagnóstico ya fue agregado.');return;}hcDiagnosticosSeleccionados.push({codigo,nombre,principal:hcDiagnosticosSeleccionados.length===0,tipo:'Presuntivo'});renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function eliminarDiagnosticoCie10(index){hcDiagnosticosSeleccionados.splice(index,1);if(hcDiagnosticosSeleccionados.length&&!hcDiagnosticosSeleccionados.some(d=>d.principal))hcDiagnosticosSeleccionados[0].principal=true;renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
 function marcarDiagnosticoPrincipal(index){hcDiagnosticosSeleccionados.forEach((d,i)=>d.principal=i===index);renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
 function cambiarTipoDiagnostico(index,valor){if(hcDiagnosticosSeleccionados[index])hcDiagnosticosSeleccionados[index].tipo=valor;sincronizarDiagnosticosConCamposHistoria();}
 function renderDiagnosticosSeleccionados(){const body=document.getElementById('hcDxSeleccionadosBody');if(!body)return;if(!hcDiagnosticosSeleccionados.length){body.innerHTML='<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';return;}body.innerHTML=hcDiagnosticosSeleccionados.map((d,i)=>`<tr><td><span class="diagnostico-cie-code">${d.codigo}</span> &nbsp; ${String(d.nombre||'').toUpperCase()}</td><td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal?'checked':''} onchange="marcarDiagnosticoPrincipal(${i})"></td><td><select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)"><option ${d.tipo==='Presuntivo'?'selected':''}>Presuntivo</option><option ${d.tipo==='Definitivo'?'selected':''}>Definitivo</option></select></td><td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');}
@@ -3229,7 +3942,6 @@ async function guardarHistoriaClinicaERP(){
     recopilarOrganosSentidosExamenFisico() ? 'Órgano de los sentidos: ' + recopilarOrganosSentidosExamenFisico() : '',
     recopilarRespiratorioExamenFisico() ? 'Respiratorio: ' + recopilarRespiratorioExamenFisico() : '',
     recopilarCardiovascularExamenFisico() ? 'Cardiovascular: ' + recopilarCardiovascularExamenFisico() : '',
-    recopilarDiagnosticosCie10() ? 'Diagnóstico(s): ' + recopilarDiagnosticosCie10() : '',
     recopilarDigestivoExamenFisico() ? 'Digestivo: ' + recopilarDigestivoExamenFisico() : '',
     recopilarUrinarioExamenFisico() ? 'Urinario: ' + recopilarUrinarioExamenFisico() : '',
     recopilarMusculoEsqueleticoExamenFisico() ? 'Músculo Esquelético: ' + recopilarMusculoEsqueleticoExamenFisico() : '',
