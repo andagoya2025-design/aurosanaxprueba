@@ -1213,6 +1213,43 @@
     }
 
 
+    /* AUROSANAX - Examen físico regional */
+    .regional-tabs{
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:8px;
+      margin-bottom:14px;
+    }
+    .regional-tab{
+      border:1px solid #fbcfe8;
+      background:#fff;
+      color:#8b1e5a;
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      font-weight:800;
+      text-align:center;
+      min-height:38px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      line-height:1.2;
+    }
+    .regional-tab.active{
+      background:#2f1f3a;
+      color:#fff;
+      border-color:#2f1f3a;
+      box-shadow:0 6px 16px rgba(47,31,58,.12);
+    }
+    @media(max-width:980px){
+      .regional-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+    }
+    @media(max-width:560px){
+      .regional-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+      .regional-tab{font-size:11px;padding:7px 8px}
+    }
+
+
   </style>
 </head>
 
@@ -1744,6 +1781,51 @@
                 <label class="sistemas-check-no"><input id="hcHemoLinfaticoNoValorado" type="checkbox"> No valorado</label>
                 <div class="sistemas-check-observacion">
                   <textarea id="hcHemoLinfaticoObservacion" class="form-control" rows="1" placeholder="Observaciones hemo-linfáticas"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="clinical-subtitle mt-4"><i class="bi bi-person-vcard"></i> Examen físico regional</div>
+          <div class="regional-tabs">
+            <div class="regional-tab active">Piel y faneras</div>
+            <div class="regional-tab">Cabeza</div>
+            <div class="regional-tab">Ojos</div>
+            <div class="regional-tab">Oídos</div>
+            <div class="regional-tab">Nariz</div>
+            <div class="regional-tab">Boca</div>
+            <div class="regional-tab">Orofaringe</div>
+            <div class="regional-tab">Cuello</div>
+            <div class="regional-tab">Axilas-mamas</div>
+            <div class="regional-tab">Tórax</div>
+            <div class="regional-tab">Abdomen</div>
+            <div class="regional-tab">Columna vertebral</div>
+            <div class="regional-tab">Ingle-periné</div>
+            <div class="regional-tab">Genitales</div>
+            <div class="regional-tab">Ano recto</div>
+            <div class="regional-tab">Canal vaginal</div>
+            <div class="regional-tab">Miembros superiores</div>
+            <div class="regional-tab">Miembros inferiores</div>
+            <div class="regional-tab">Neurológico</div>
+            <div class="regional-tab">Otros hallazgos</div>
+          </div>
+
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-person"></i> Piel y faneras</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Hallazgos regionales</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRegionalPielFanerasCheck" data-sistema="Piel y faneras" data-label="Piel gruesa"> Piel gruesa</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRegionalPielFanerasCheck" data-sistema="Piel y faneras" data-label="Piel fría"> Piel fría</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcRegionalPielFanerasCheck" data-sistema="Piel y faneras" data-label="Palidez cutánea"> Palidez cutánea</label>
+                </div>
+              </div>
+
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcRegionalPielFanerasNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcRegionalPielFanerasObservacion" class="form-control" rows="1" placeholder="Observaciones de piel y faneras"></textarea>
                 </div>
               </div>
             </div>
@@ -2955,6 +3037,27 @@ function recopilarHemoLinfaticoExamenFisico(){
   return partes.join(' | ');
 }
 
+
+function recopilarRegionalPielFanerasExamenFisico(){
+  const grupos = {};
+  document.querySelectorAll('.hcRegionalPielFanerasCheck').forEach(chk => {
+    if(!chk.checked) return;
+    const sistema = chk.dataset.sistema || 'Piel y faneras';
+    const label = chk.dataset.label || '';
+    if(!grupos[sistema]) grupos[sistema] = [];
+    if(label) grupos[sistema].push(label);
+  });
+
+  const partes = Object.keys(grupos).map(sistema => `${sistema}: ${grupos[sistema].join(', ')}`);
+  const noValorado = document.getElementById('hcRegionalPielFanerasNoValorado')?.checked;
+  const observacion = getValueIfExists('hcRegionalPielFanerasObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -2987,6 +3090,7 @@ async function guardarHistoriaClinicaERP(){
     recopilarMusculoEsqueleticoExamenFisico() ? 'Músculo Esquelético: ' + recopilarMusculoEsqueleticoExamenFisico() : '',
     recopilarEndocrinoExamenFisico() ? 'Endócrino: ' + recopilarEndocrinoExamenFisico() : '',
     recopilarHemoLinfaticoExamenFisico() ? 'Hemo-linfático: ' + recopilarHemoLinfaticoExamenFisico() : '',
+    recopilarRegionalPielFanerasExamenFisico() ? 'Examen físico regional - Piel y faneras: ' + recopilarRegionalPielFanerasExamenFisico() : '',
     getValueIfExists('hcExamenGeneral') ? 'Estado general: ' + getValueIfExists('hcExamenGeneral') : '',
     getValueIfExists('hcCabezaCuello') ? 'Cabeza y cuello: ' + getValueIfExists('hcCabezaCuello') : '',
     getValueIfExists('hcToraxRespiratorio') ? 'Tórax/Respiratorio: ' + getValueIfExists('hcToraxRespiratorio') : '',
