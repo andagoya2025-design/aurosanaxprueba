@@ -1213,120 +1213,65 @@
     }
 
 
-    /* AUROSANAX - Diagnóstico(s) CIE-10 dentro de Examen físico */
-    .diagnostico-cie-card{
-      border:1px solid var(--line);
-      border-radius:18px;
-      overflow:hidden;
-      background:#fff;
-      width:100%;
-      max-width:none;
-      box-shadow:0 8px 24px rgba(15,23,42,.04);
-      margin-bottom:18px;
+    /* AUROSANAX - Examen físico regional */
+    .regional-tabs{
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:8px;
+      margin-bottom:14px;
     }
-    .diagnostico-cie-head{
-      background:#2f1f3a;
-      color:#fff;
-      padding:10px 14px;
-      font-weight:850;
-      font-size:13px;
+    .regional-tab{
+      border:1px solid #fbcfe8;
+      background:#fff;
+      color:#8b1e5a;
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      font-weight:800;
+      text-align:center;
+      min-height:38px;
       display:flex;
       align-items:center;
-      gap:8px;
+      justify-content:center;
+      line-height:1.2;
     }
-    .diagnostico-cie-body{
-      padding:14px;
-      background:linear-gradient(180deg,#ffffff,#fff7fb);
+
+    .regional-panel{display:none}
+    .regional-panel.active{display:block}
+    .regional-textarea{min-height:42px;resize:vertical}
+    .regional-tab.active{
+      background:#2f1f3a;
+      color:#fff;
+      border-color:#2f1f3a;
+      box-shadow:0 6px 16px rgba(47,31,58,.12);
     }
-    .diagnostico-cie-subtitle{
-      font-weight:850;
-      color:#111827;
-      font-size:13px;
-      margin-bottom:10px;
+    @media(max-width:980px){
+      .regional-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
     }
-    .diagnostico-cie-search-grid{
-      display:grid;
-      grid-template-columns:160px 1fr auto;
-      gap:10px;
-      align-items:end;
-      margin-bottom:12px;
+    @media(max-width:560px){
+      .regional-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+      .regional-tab{font-size:11px;padding:7px 8px}
     }
-    .diagnostico-table-wrap{
-      border:1px solid #f1f5f9;
-      border-radius:16px;
-      overflow:auto;
-      background:#fff;
-      margin-bottom:12px;
-    }
-    .diagnostico-table{
-      width:100%;
-      min-width:720px;
-      border-collapse:separate;
-      border-spacing:0;
-      margin:0;
-    }
-    .diagnostico-table th{
-      background:#fdf2f8;
-      color:#8b1e5a;
-      font-size:11px;
-      text-transform:uppercase;
-      letter-spacing:.04em;
-      padding:8px 10px;
-      border-bottom:1px solid #fbcfe8;
-      white-space:nowrap;
-    }
-    .diagnostico-table td{
-      padding:8px 10px;
-      border-bottom:1px solid #f1f5f9;
-      vertical-align:middle;
-      font-size:13px;
-    }
+
+
+    /* AUROSANAX - Diagnóstico(s) CIE-10 dentro de Examen físico */
+    .diagnostico-cie-card{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#fff;width:100%;max-width:none;box-shadow:0 8px 24px rgba(15,23,42,.04);margin-bottom:18px}
+    .diagnostico-cie-head{background:#2f1f3a;color:#fff;padding:10px 14px;font-weight:850;font-size:13px;display:flex;align-items:center;gap:8px}
+    .diagnostico-cie-body{padding:14px;background:linear-gradient(180deg,#ffffff,#fff7fb)}
+    .diagnostico-cie-subtitle{font-weight:850;color:#111827;font-size:13px;margin-bottom:10px}
+    .diagnostico-cie-search-grid{display:grid;grid-template-columns:160px 1fr auto;gap:10px;align-items:end;margin-bottom:12px}
+    .diagnostico-table-wrap{border:1px solid #f1f5f9;border-radius:16px;overflow:auto;background:#fff;margin-bottom:12px}
+    .diagnostico-table{width:100%;min-width:720px;border-collapse:separate;border-spacing:0;margin:0}
+    .diagnostico-table th{background:#fdf2f8;color:#8b1e5a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid #fbcfe8;white-space:nowrap}
+    .diagnostico-table td{padding:8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle;font-size:13px}
     .diagnostico-table tr:last-child td{border-bottom:0}
-    .diagnostico-cie-code{
-      font-weight:900;
-      color:#111827;
-      white-space:nowrap;
-    }
-    .diagnostico-empty{
-      color:#6b7280;
-      text-align:center;
-      padding:14px!important;
-      font-weight:700;
-    }
-    .diagnostico-delete{
-      border:0;
-      background:#fee2e2;
-      color:#991b1b;
-      border-radius:10px;
-      padding:6px 9px;
-      font-weight:800;
-    }
-    .diagnostico-add{
-      border:1px solid #fbcfe8;
-      background:var(--soft);
-      color:var(--primary);
-      border-radius:12px;
-      padding:7px 10px;
-      font-weight:800;
-      white-space:nowrap;
-    }
-    .diagnostico-radio{
-      width:17px;
-      height:17px;
-      accent-color:var(--primary);
-      cursor:pointer;
-    }
-    .diagnostico-tipo-select{
-      min-width:140px;
-      border-radius:12px!important;
-      font-size:13px;
-      padding:6px 10px!important;
-    }
-    @media(max-width:760px){
-      .diagnostico-cie-search-grid{grid-template-columns:1fr}
-      .diagnostico-table{min-width:680px}
-      .diagnostico-cie-body{padding:12px}
-    }
+    .diagnostico-cie-code{font-weight:900;color:#111827;white-space:nowrap}
+    .diagnostico-empty{color:#6b7280;text-align:center;padding:14px!important;font-weight:700}
+    .diagnostico-delete{border:0;background:#fee2e2;color:#991b1b;border-radius:10px;padding:6px 9px;font-weight:800}
+    .diagnostico-add{border:1px solid #fbcfe8;background:var(--soft);color:var(--primary);border-radius:12px;padding:7px 10px;font-weight:800;white-space:nowrap}
+    .diagnostico-radio{width:17px;height:17px;accent-color:var(--primary);cursor:pointer}
+    .diagnostico-tipo-select{min-width:140px;border-radius:12px!important;font-size:13px;padding:6px 10px!important}
+    @media(max-width:760px){.diagnostico-cie-search-grid{grid-template-columns:1fr}.diagnostico-table{min-width:680px}.diagnostico-cie-body{padding:12px}}
 
 
   </style>
@@ -1728,56 +1673,187 @@
                 </div>
               </div>
             </div>
-          </div><div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Estado general</label><textarea id="hcExamenGeneral" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cabeza y cuello</label><textarea id="hcCabezaCuello" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Tórax / respiratorio</label><textarea id="hcToraxRespiratorio" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cardiovascular</label><textarea id="hcCardiovascular" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Abdomen</label><textarea id="hcAbdomen" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Extremidades</label><textarea id="hcExtremidades" class="form-control" rows="2"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Examen ginecológico / especuloscopía</label><textarea id="hcExamenGinecologico" class="form-control" rows="3"></textarea></div></div></div>
-        <div class="clinical-panel" id="hc_gineco"><div class="clinical-subtitle"><i class="bi bi-gender-female"></i> Historia ginecológica avanzada</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">Menarquia</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FUM</label><input type="date" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Ciclos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">IVSA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Parejas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Anticoncepción</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Gestas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Partos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Cesáreas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Abortos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PAP</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">HPV</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Colposcopia</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Mamografía</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Eco transvaginal</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Flujo / dolor / sangrado</label><input class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Observaciones ginecológicas</label><textarea class="form-control" rows="3"></textarea></div></div></div>
-        <div class="clinical-panel" id="hc_obstetricia"><div class="clinical-subtitle"><i class="bi bi-heart-pulse"></i> Control obstétrico avanzado</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">FUR</label><input type="date" id="hcFUR" class="form-control" onchange="calcObstetricia()"></div><div class="col-md-2"><label class="form-label fw-bold">FPP</label><input id="hcFPP" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Edad gestacional</label><input id="hcEG" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Peso materno</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Altura uterina</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FCF</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Mov. fetales</label><select class="form-select"><option>Presentes</option><option>Disminuidos</option><option>Ausentes</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select class="form-select"><option>Bajo riesgo</option><option>Alto riesgo</option><option>Referir / seguimiento estrecho</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Ecografía</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Plan prenatal</label><textarea class="form-control" rows="3"></textarea></div></div></div>
-        <div class="clinical-panel" id="hc_estetica"><div class="clinical-subtitle"><i class="bi bi-stars"></i> Evaluación estética funcional</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Área</label><select class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Procedimiento sugerido</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Sesión</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Consentimiento</label><select class="form-select"><option>Pendiente</option><option>Firmado</option><option>No aplica</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación facial</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación corporal</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación íntima</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Evolución fotográfica / observaciones</label><textarea class="form-control" rows="3"></textarea></div></div></div>
-        <div class="clinical-panel" id="hc_diagnostico">
-          <div class="clinical-subtitle"><i class="bi bi-clipboard2-check"></i> Diagnóstico(s)</div>
+          </div>
 
-          <div class="diagnostico-cie-card">
-            <div class="diagnostico-cie-head"><i class="bi bi-search-heart"></i> Ingreso de diagnósticos CIE-10</div>
-            <div class="diagnostico-cie-body">
-              <div class="diagnostico-cie-search-grid">
-                <div>
-                  <label class="form-label fw-bold">Código</label>
-                  <input id="hcDxCodigoBuscar" class="form-control" placeholder="Ej. N76.0 / E11 / I10" oninput="buscarDiagnosticoCie10()">
-                </div>
-                <div>
-                  <label class="form-label fw-bold">Nombre de diagnóstico</label>
-                  <input id="hcDxNombreBuscar" class="form-control" placeholder="Ej. diabetes, vaginitis, hipertensión" oninput="buscarDiagnosticoCie10()">
-                </div>
-                <div class="d-flex align-items-end">
-                  <button type="button" class="btn-auro w-100" onclick="agregarDiagnosticoCie10Manual()"><i class="bi bi-plus-circle me-1"></i> Agregar</button>
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-heart-pulse"></i> Cardiovascular</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Síntomas cardiovasculares</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcCardiovascularCheck" data-sistema="Síntomas cardiovasculares" data-label="Disnea"> Disnea</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcCardiovascularCheck" data-sistema="Síntomas cardiovasculares" data-label="Mareos"> Mareos</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcCardiovascularCheck" data-sistema="Síntomas cardiovasculares" data-label="Claudicaciones intermitentes"> Claudicaciones intermitentes</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcCardiovascularCheck" data-sistema="Síntomas cardiovasculares" data-label="Palpitaciones torácicas"> Palpitaciones torácicas</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcCardiovascularCheck" data-sistema="Síntomas cardiovasculares" data-label="Dolor en pecho"> Dolor en pecho</label>
                 </div>
               </div>
 
-              <div class="diagnostico-cie-subtitle mt-3">Resultados de búsqueda</div>
-              <div class="diagnostico-table-wrap">
-                <table class="diagnostico-table">
-                  <thead><tr><th>CIE</th><th>Nombre Diagnóstico</th><th>Acción</th></tr></thead>
-                  <tbody id="hcDxResultadosBody"><tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr></tbody>
-                </table>
-              </div>
-
-              <div class="diagnostico-cie-subtitle mt-3">Diagnósticos agregados</div>
-              <div class="diagnostico-table-wrap">
-                <table class="diagnostico-table">
-                  <thead><tr><th>Cod./Nombre Diagnóstico</th><th>Principal</th><th>Tipo</th><th>Eliminar</th></tr></thead>
-                  <tbody id="hcDxSeleccionadosBody"><tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr></tbody>
-                </table>
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcCardiovascularNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcCardiovascularObservacion" class="form-control" rows="1" placeholder="Observaciones cardiovasculares"></textarea>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="row g-3 mt-1">
-            <div class="col-md-3"><label class="form-label fw-bold">CIE-10 principal</label><input id="hcCie10Principal" class="form-control" placeholder="Ej. N87.1" readonly></div>
-            <div class="col-md-9"><label class="form-label fw-bold">Diagnóstico principal</label><input id="hcDiagnosticoPrincipal" class="form-control" readonly></div>
-            <div class="col-md-3"><label class="form-label fw-bold">CIE-10 secundario</label><input id="hcCie10Secundario" class="form-control" readonly></div>
-            <div class="col-md-9"><label class="form-label fw-bold">Diagnóstico secundario</label><input id="hcDiagnosticoSecundario" class="form-control" readonly></div>
-            <div class="col-md-12"><label class="form-label fw-bold">Análisis clínico</label><textarea id="hcAnalisisClinico" class="form-control" rows="4"></textarea></div>
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-capsule"></i> Digestivo</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Síntomas digestivos superiores</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos superiores" data-label="Halitosis"> Halitosis</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos superiores" data-label="Reflujo gastroesofágico"> Reflujo gastroesofágico</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos superiores" data-label="Distensión abdominal presente"> Distensión abdominal presente</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos superiores" data-label="Eructos"> Eructos</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos superiores" data-label="Regurgitaciones"> Regurgitaciones</label>
+                </div>
+              </div>
+
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Síntomas digestivos inferiores</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos inferiores" data-label="Distensión abdominal presente"> Distensión abdominal presente</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos inferiores" data-label="Constipación"> Constipación</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos inferiores" data-label="Diarreas"> Diarreas</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos inferiores" data-label="Tenesmo rectal"> Tenesmo rectal</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcDigestivoCheck" data-sistema="Síntomas digestivos inferiores" data-label="Dolor abdominal"> Dolor abdominal</label>
+                </div>
+              </div>
+
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcDigestivoNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcDigestivoObservacion" class="form-control" rows="1" placeholder="Observaciones digestivas"></textarea>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-droplet"></i> Urinario</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Síntomas urinarios / ginecológicos</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Disuria"> Disuria</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Nicturia"> Nicturia</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Dispareunia"> Dispareunia</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Metrorragia"> Metrorragia</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Dismenorrea"> Dismenorrea</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Sangrado genital irregular"> Sangrado Genital Irregular</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Poliuria"> Poliuria</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Polaquiuria"> Polaquiuria</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Disminución de apetito sexual"> Disminución De Apetito Sexual</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Resequedad vaginal"> Resequedad Vaginal</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Secreción vaginal"> Secreción Vaginal</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcUrinarioCheck" data-sistema="Síntomas urinarios / ginecológicos" data-label="Dolor pélvico"> Dolor Pélvico</label>
+                </div>
+              </div>
+
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcUrinarioNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcUrinarioObservacion" class="form-control" rows="1" placeholder="Observaciones urinarias"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-person-standing"></i> Músculo Esquelético</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-group">
+                <div class="sistemas-check-subhead">Síntomas músculo esqueléticos</div>
+                <div class="sistemas-check-grid">
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcMusculoEsqueleticoCheck" data-sistema="Síntomas músculo esqueléticos" data-label="Parestesias"> Parestesias</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcMusculoEsqueleticoCheck" data-sistema="Síntomas músculo esqueléticos" data-label="Espasmos"> Espasmos</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcMusculoEsqueleticoCheck" data-sistema="Síntomas músculo esqueléticos" data-label="Calambres"> Calambres</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcMusculoEsqueleticoCheck" data-sistema="Síntomas músculo esqueléticos" data-label="Dolor en más de dos articulaciones (inferior)"> Dolor En Más De Dos Articulaciones (Inferior)</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcMusculoEsqueleticoCheck" data-sistema="Síntomas músculo esqueléticos" data-label="Dolor en más de dos articulaciones (superior)"> Dolor En Más De Dos Articulaciones (Superior)</label>
+                  <label class="sistemas-check-item"><input type="checkbox" class="hcMusculoEsqueleticoCheck" data-sistema="Síntomas músculo esqueléticos" data-label="Frialdad"> Frialdad</label>
+                </div>
+              </div>
+
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcMusculoEsqueleticoNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcMusculoEsqueleticoObservacion" class="form-control" rows="1" placeholder="Observaciones músculo esqueléticas"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-droplet-half"></i> Endócrino</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcEndocrinoNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcEndocrinoObservacion" class="form-control" rows="1" placeholder="Observaciones endocrinas"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sistemas-check-card">
+            <div class="sistemas-check-head"><i class="bi bi-droplet"></i> Hemo-linfático</div>
+            <div class="sistemas-check-body">
+              <div class="sistemas-check-footer">
+                <label class="sistemas-check-no"><input id="hcHemoLinfaticoNoValorado" type="checkbox"> No valorado</label>
+                <div class="sistemas-check-observacion">
+                  <textarea id="hcHemoLinfaticoObservacion" class="form-control" rows="1" placeholder="Observaciones hemo-linfáticas"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="clinical-subtitle mt-4"><i class="bi bi-person-vcard"></i> Examen físico regional</div>
+          <div class="regional-tabs" id="hcRegionalTabs">
+            <button type="button" class="regional-tab active" data-region="piel_faneras">Piel y faneras</button>
+            <button type="button" class="regional-tab" data-region="cabeza">Cabeza</button>
+            <button type="button" class="regional-tab" data-region="ojos">Ojos</button>
+            <button type="button" class="regional-tab" data-region="oidos">Oídos</button>
+            <button type="button" class="regional-tab" data-region="nariz">Nariz</button>
+            <button type="button" class="regional-tab" data-region="boca">Boca</button>
+            <button type="button" class="regional-tab" data-region="orofaringe">Orofaringe</button>
+            <button type="button" class="regional-tab" data-region="cuello">Cuello</button>
+            <button type="button" class="regional-tab" data-region="axilas_mamas">Axilas-mamas</button>
+            <button type="button" class="regional-tab" data-region="torax">Tórax</button>
+            <button type="button" class="regional-tab" data-region="abdomen_regional">Abdomen</button>
+            <button type="button" class="regional-tab" data-region="columna_vertebral">Columna vertebral</button>
+            <button type="button" class="regional-tab" data-region="ingle_perine">Ingle-periné</button>
+            <button type="button" class="regional-tab" data-region="genitales_regional">Genitales</button>
+            <button type="button" class="regional-tab" data-region="ano_recto">Ano recto</button>
+            <button type="button" class="regional-tab" data-region="canal_vaginal">Canal vaginal</button>
+            <button type="button" class="regional-tab" data-region="miembros_superiores">Miembros superiores</button>
+            <button type="button" class="regional-tab" data-region="miembros_inferiores">Miembros inferiores</button>
+            <button type="button" class="regional-tab" data-region="neurologico_regional">Neurológico</button>
+            <button type="button" class="regional-tab" data-region="otros_hallazgos">Otros hallazgos</button>
+          </div>
+          <div id="hcRegionalPanels"></div>
+          <div class="clinical-subtitle mt-4"><i class="bi bi-clipboard2-check"></i> Diagnóstico(s)</div>
+          <div class="diagnostico-cie-card" id="hcDiagnosticoCieGrupo">
+            <div class="diagnostico-cie-head"><i class="bi bi-clipboard2-check"></i> Diagnóstico(s)</div>
+            <div class="diagnostico-cie-body">
+              <div class="diagnostico-cie-subtitle">Ingreso de diagnósticos CIE-10</div>
+              <div class="diagnostico-cie-search-grid">
+                <div><label class="form-label fw-bold">Código</label><input id="hcDxCodigoBuscar" class="form-control" placeholder="Ej. N760" oninput="buscarDiagnosticoCie10()"></div>
+                <div><label class="form-label fw-bold">Nombre de Diagnóstico</label><input id="hcDxNombreBuscar" class="form-control" placeholder="Buscar por nombre" oninput="buscarDiagnosticoCie10()"></div>
+                <div><button type="button" class="btn-auro w-100" onclick="agregarDiagnosticoCie10Manual()"><i class="bi bi-plus-circle me-1"></i> Agregar</button></div>
+              </div>
+              <div class="diagnostico-table-wrap"><table class="diagnostico-table"><thead><tr><th style="width:120px">CIE</th><th>Nombre Diagnóstico</th><th style="width:110px">Acción</th></tr></thead><tbody id="hcDxResultadosBody"><tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr></tbody></table></div>
+              <div class="diagnostico-table-wrap"><table class="diagnostico-table"><thead><tr><th>Cod./Nombre Diagnóstico</th><th style="width:100px">Principal</th><th style="width:160px">Tipo</th><th style="width:80px">Eliminar</th></tr></thead><tbody id="hcDxSeleccionadosBody"><tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr></tbody></table></div>
+            </div>
+          </div>
+
+          <div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Estado general</label><textarea id="hcExamenGeneral" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cabeza y cuello</label><textarea id="hcCabezaCuello" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Tórax / respiratorio</label><textarea id="hcToraxRespiratorio" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Cardiovascular</label><textarea id="hcCardiovascular" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Abdomen</label><textarea id="hcAbdomen" class="form-control" rows="2"></textarea></div><div class="col-md-6"><label class="form-label fw-bold">Extremidades</label><textarea id="hcExtremidades" class="form-control" rows="2"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Examen ginecológico / especuloscopía</label><textarea id="hcExamenGinecologico" class="form-control" rows="3"></textarea></div></div></div>
+        <div class="clinical-panel" id="hc_gineco"><div class="clinical-subtitle"><i class="bi bi-gender-female"></i> Historia ginecológica avanzada</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">Menarquia</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FUM</label><input type="date" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Ciclos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">IVSA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Parejas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Anticoncepción</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Gestas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Partos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Cesáreas</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Abortos</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PAP</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">HPV</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Colposcopia</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Mamografía</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Eco transvaginal</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Flujo / dolor / sangrado</label><input class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Observaciones ginecológicas</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+        <div class="clinical-panel" id="hc_obstetricia"><div class="clinical-subtitle"><i class="bi bi-heart-pulse"></i> Control obstétrico avanzado</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">FUR</label><input type="date" id="hcFUR" class="form-control" onchange="calcObstetricia()"></div><div class="col-md-2"><label class="form-label fw-bold">FPP</label><input id="hcFPP" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Edad gestacional</label><input id="hcEG" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Peso materno</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Altura uterina</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FCF</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Mov. fetales</label><select class="form-select"><option>Presentes</option><option>Disminuidos</option><option>Ausentes</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select class="form-select"><option>Bajo riesgo</option><option>Alto riesgo</option><option>Referir / seguimiento estrecho</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Ecografía</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Plan prenatal</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+        <div class="clinical-panel" id="hc_estetica"><div class="clinical-subtitle"><i class="bi bi-stars"></i> Evaluación estética funcional</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Área</label><select class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Procedimiento sugerido</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Sesión</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Consentimiento</label><select class="form-select"><option>Pendiente</option><option>Firmado</option><option>No aplica</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación facial</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación corporal</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación íntima</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Evolución fotográfica / observaciones</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+        <div class="clinical-panel" id="hc_diagnostico"><div class="clinical-subtitle"><i class="bi bi-clipboard2-check"></i> Diagnósticos</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">CIE-10 principal</label><input id="hcCie10Principal" class="form-control" placeholder="Ej. N87.1"></div><div class="col-md-9"><label class="form-label fw-bold">Diagnóstico principal</label><input id="hcDiagnosticoPrincipal" class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">CIE-10 secundario</label><input id="hcCie10Secundario" class="form-control"></div><div class="col-md-9"><label class="form-label fw-bold">Diagnóstico secundario</label><input id="hcDiagnosticoSecundario" class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Análisis clínico</label><textarea id="hcAnalisisClinico" class="form-control" rows="4"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_plan"><div class="clinical-subtitle"><i class="bi bi-list-check"></i> Plan médico e indicaciones</div><div class="row g-3"><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Receta / medicamentos</label><textarea id="hcRecetaMedicamentos" class="form-control" rows="10" placeholder="Medicamento, dosis, vía, frecuencia y duración."></textarea></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Plan terapéutico</label><textarea id="hcPlanTratamiento" class="form-control" rows="5" placeholder="Conducta médica, manejo, control o procedimiento indicado."></textarea></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Exámenes solicitados</label><textarea id="hcExamenesSolicitados" class="form-control" rows="5" placeholder="Laboratorios, imágenes o estudios complementarios."></textarea></div></div><div class="col-12"><div class="hc-plan-row-small row g-3"><div class="col-md-6"><label class="form-label fw-bold">Próximo control</label><input id="hcControl" type="date" class="form-control" onchange="updateClinicalSummary()"></div><div class="col-md-6"><label class="form-label fw-bold">Estado</label><select id="hcEstadoHistoria" class="form-select"><option>Control</option><option>Alta</option><option>Seguimiento</option><option>Referencia</option></select></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Indicaciones para paciente</label><textarea id="hcIndicacionesPaciente" class="form-control" rows="5" placeholder="Indicaciones finales, signos de alarma, cuidados en casa y recomendaciones."></textarea></div></div></div></div>
         <div class="clinical-panel" id="hc_docs"><div class="clinical-subtitle"><i class="bi bi-folder2-open"></i> Documentos, resultados y archivos</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Ecografías / imágenes</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Fotografías clínicas</label><input type="file" class="form-control" multiple></div><div class="col-md-12"><div class="clinical-note"><i class="bi bi-info-circle me-1"></i> En la conexión final, estos archivos se guardarán en Google Drive y el enlace quedará registrado en Google Sheets.</div></div></div></div>
         <div class="clinical-actions"><button class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
@@ -2229,7 +2305,7 @@ function actualizarTarjetaPacienteHistoria(paciente){
 
 function calcAge(){const v=document.getElementById('hcNacimiento')?.value;if(!v)return;const n=new Date(v);const h=new Date();let e=h.getFullYear()-n.getFullYear();const m=h.getMonth()-n.getMonth();if(m<0||(m===0&&h.getDate()<n.getDate()))e--;document.getElementById('hcEdad').value=e>=0?e:''}
 function calcIMC(){const p=parseFloat((document.getElementById('hcPeso')?.value||'').replace(',','.'));const tc=parseFloat((document.getElementById('hcTalla')?.value||'').replace(',','.'));if(!p||!tc)return;const t=tc/100;const imc=(p/(t*t)).toFixed(1);document.getElementById('hcIMC').value=imc;document.getElementById('hcImcResumen').textContent=imc;setTextIfExists('hcCardIMC', imc)}
-function calcObstetricia(){const fur=document.getElementById('hcFUR')?.value;if(!fur)return;const d=new Date(fur+'T00:00:00');const f=new Date(d);f.setDate(f.getDate()+280);document.getElementById('hcFPP').value=f.toISOString().slice(0,25);const h=new Date();const diff=Math.floor((h-d)/(1000*60*60*24));if(diff>=0){document.getElementById('hcEG').value=Math.floor(diff/7)+' sem + '+(diff%7)+' días'}}
+function calcObstetricia(){const fur=document.getElementById('hcFUR')?.value;if(!fur)return;const d=new Date(fur+'T00:00:00');const f=new Date(d);f.setDate(f.getDate()+280);document.getElementById('hcFPP').value=f.toISOString().slice(0,10);const h=new Date();const diff=Math.floor((h-d)/(1000*60*60*24));if(diff>=0){document.getElementById('hcEG').value=Math.floor(diff/7)+' sem + '+(diff%7)+' días'}}
 
 function showScreen(id, btn){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -2874,732 +2950,257 @@ function recopilarRespiratorioExamenFisico(){
 }
 
 
+function recopilarCardiovascularExamenFisico(){
+  const grupos = {};
+  document.querySelectorAll('.hcCardiovascularCheck').forEach(chk => {
+    if(!chk.checked) return;
+    const sistema = chk.dataset.sistema || 'Cardiovascular';
+    const label = chk.dataset.label || '';
+    if(!grupos[sistema]) grupos[sistema] = [];
+    if(label) grupos[sistema].push(label);
+  });
+
+  const partes = Object.keys(grupos).map(sistema => `${sistema}: ${grupos[sistema].join(', ')}`);
+  const noValorado = document.getElementById('hcCardiovascularNoValorado')?.checked;
+  const observacion = getValueIfExists('hcCardiovascularObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
+
+function recopilarDigestivoExamenFisico(){
+  const grupos = {};
+  document.querySelectorAll('.hcDigestivoCheck').forEach(chk => {
+    if(!chk.checked) return;
+    const sistema = chk.dataset.sistema || 'Digestivo';
+    const label = chk.dataset.label || '';
+    if(!grupos[sistema]) grupos[sistema] = [];
+    if(label) grupos[sistema].push(label);
+  });
+
+  const partes = Object.keys(grupos).map(sistema => `${sistema}: ${grupos[sistema].join(', ')}`);
+  const noValorado = document.getElementById('hcDigestivoNoValorado')?.checked;
+  const observacion = getValueIfExists('hcDigestivoObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
+
+function recopilarUrinarioExamenFisico(){
+  const grupos = {};
+  document.querySelectorAll('.hcUrinarioCheck').forEach(chk => {
+    if(!chk.checked) return;
+    const sistema = chk.dataset.sistema || 'Urinario';
+    const label = chk.dataset.label || '';
+    if(!grupos[sistema]) grupos[sistema] = [];
+    if(label) grupos[sistema].push(label);
+  });
+
+  const partes = Object.keys(grupos).map(sistema => `${sistema}: ${grupos[sistema].join(', ')}`);
+  const noValorado = document.getElementById('hcUrinarioNoValorado')?.checked;
+  const observacion = getValueIfExists('hcUrinarioObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
+
+function recopilarMusculoEsqueleticoExamenFisico(){
+  const grupos = {};
+  document.querySelectorAll('.hcMusculoEsqueleticoCheck').forEach(chk => {
+    if(!chk.checked) return;
+    const sistema = chk.dataset.sistema || 'Músculo Esquelético';
+    const label = chk.dataset.label || '';
+    if(!grupos[sistema]) grupos[sistema] = [];
+    if(label) grupos[sistema].push(label);
+  });
+
+  const partes = Object.keys(grupos).map(sistema => `${sistema}: ${grupos[sistema].join(', ')}`);
+  const noValorado = document.getElementById('hcMusculoEsqueleticoNoValorado')?.checked;
+  const observacion = getValueIfExists('hcMusculoEsqueleticoObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
+
+function recopilarEndocrinoExamenFisico(){
+  const partes = [];
+  const noValorado = document.getElementById('hcEndocrinoNoValorado')?.checked;
+  const observacion = getValueIfExists('hcEndocrinoObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
+
+function recopilarHemoLinfaticoExamenFisico(){
+  const partes = [];
+  const noValorado = document.getElementById('hcHemoLinfaticoNoValorado')?.checked;
+  const observacion = getValueIfExists('hcHemoLinfaticoObservacion');
+
+  if(noValorado) partes.push('No valorado');
+  if(observacion) partes.push('Observación: ' + observacion);
+
+  return partes.join(' | ');
+}
+
+
+
+const hcRegionalConfig = {
+  piel_faneras: {titulo:'Piel y faneras', grupos:[{titulo:'Hallazgos regionales', items:['Piel gruesa','Piel fría','Palidez cutánea']}]},
+  cabeza: {titulo:'Cabeza', grupos:[]},
+  ojos: {titulo:'Ojos', grupos:[{titulo:'Hallazgos regionales', items:['Hinchazón periorbitaria']}]},
+  oidos: {titulo:'Oídos', grupos:[]},
+  nariz: {titulo:'Nariz', grupos:[]},
+  boca: {titulo:'Boca', grupos:[]},
+  orofaringe: {titulo:'Orofaringe', grupos:[]},
+  cuello: {titulo:'Cuello', grupos:[]},
+  axilas_mamas: {titulo:'Axilas-mamas', grupos:[{titulo:'Hallazgos regionales', items:['Mamas bilateralmente dolorosas','Nódulo palpable en mama derecha','Nódulo palpable en mama izquierda','Secreción por el pezón','Dolor mamario']}]},
+  torax: {titulo:'Tórax', grupos:[{titulo:'Hallazgos regionales', items:['Asimetría de tórax presente','Dolor a la digitopresión intercostal','Roncus presentes','Sibilancias presentes','Tiraje intercostal presente','Ruidos respiratorios presentes','Estertores presentes','No se evidencia soplos cardíacos','Ruidos cardíacos rítmicos regulares']}]},
+  abdomen_regional: {titulo:'Abdomen', grupos:[{titulo:'Hallazgos regionales', items:['Distensión abdominal presente','Blumberg positivo','Rovsing positivo','Maniobra de psoas positiva','Puntos ureterales dolorosos medios','Puntos ureterales dolorosos inferiores','Dolor en punto cístico positivo','Signo de Murphy positivo']}]},
+  columna_vertebral: {titulo:'Columna vertebral', grupos:[{titulo:'Hallazgos regionales', items:['Lasègue positivo','Bragard positivo','Valleix positivo','Spurling positivo','Descompresión cervical positiva','Contractura muscular paravertebral presente']}]},
+  ingle_perine: {titulo:'Ingle-periné', grupos:[]},
+  genitales_regional: {titulo:'Genitales', grupos:[]},
+  ano_recto: {titulo:'Ano recto', grupos:[]},
+  canal_vaginal: {titulo:'Canal vaginal', grupos:[{titulo:'Hallazgos regionales', items:['Cérvix inflamatorio presente','Flujo vaginal abundante','Cambios macroscópicos en cérvix','Irritación vaginal presente','Lesiones blanquecinas en cuello']}]},
+  miembros_superiores: {titulo:'Miembros superiores', grupos:[
+    {titulo:'Hombro', items:['Jobe positivo','Hawkins positivo','Drop Arm positivo','Neer positivo','Speed positivo']},
+    {titulo:'Muñeca', items:['Durkan positivo','Tinel positivo','Finkelstein positivo','Phalen positivo']}
+  ]},
+  miembros_inferiores: {titulo:'Miembros inferiores', grupos:[
+    {titulo:'Rodilla', items:['Test de cepillo positivo','Zohlen positivo','McMurray positivo','Apley positivo','Cajón anterior positivo','Cajón posterior positivo','Bostezo medial positivo','Bostezo lateral positivo']},
+    {titulo:'Cadera', items:['Fader positivo','Fadir positivo','Test de Thomas positivo']},
+    {titulo:'Tobillo', items:['Cotton positivo','Tobillo inestable positivo','Thompson positivo']}
+  ]},
+  neurologico_regional: {titulo:'Neurológico', grupos:[{titulo:'Hallazgos regionales', items:['Reflejo de tobillo lento']}]},
+  otros_hallazgos: {titulo:'Otros hallazgos', grupos:[{titulo:'Hallazgos regionales', items:['Movimientos lentos']}]}
+};
+
+function hcRegionalInputId(region){
+  return 'hcRegional_' + region + '_obs';
+}
+
+function renderHcRegionalPanels(){
+  const cont = document.getElementById('hcRegionalPanels');
+  if(!cont || cont.dataset.rendered === '1') return;
+
+  const html = Object.keys(hcRegionalConfig).map((key, index) => {
+    const cfg = hcRegionalConfig[key];
+    const grupos = (cfg.grupos || []).map(grupo => `
+      <div class="sistemas-check-group">
+        <div class="sistemas-check-subhead">${grupo.titulo}</div>
+        <div class="sistemas-check-grid">
+          ${(grupo.items || []).map(item => `
+            <label class="sistemas-check-item">
+              <input type="checkbox" class="hcRegionalCheck" data-region="${key}" data-grupo="${grupo.titulo}" data-label="${item}"> ${item}
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="sistemas-check-card regional-panel ${index === 0 ? 'active' : ''}" data-region-panel="${key}">
+        <div class="sistemas-check-head"><i class="bi bi-person-vcard"></i> ${cfg.titulo}</div>
+        <div class="sistemas-check-body">
+          ${grupos}
+          <div class="sistemas-check-observacion mt-2">
+            <textarea id="${hcRegionalInputId(key)}" class="form-control regional-textarea" rows="1">NO VALORADO</textarea>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  cont.innerHTML = html;
+  cont.dataset.rendered = '1';
+}
+
+function activarHcRegional(region){
+  renderHcRegionalPanels();
+  document.querySelectorAll('#hcRegionalTabs .regional-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.region === region);
+  });
+  document.querySelectorAll('#hcRegionalPanels .regional-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.regionPanel === region);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderHcRegionalPanels();
+  document.querySelectorAll('#hcRegionalTabs .regional-tab').forEach(btn => {
+    btn.addEventListener('click', () => activarHcRegional(btn.dataset.region));
+  });
+});
+
+function recopilarRegionalExamenFisico(){
+  renderHcRegionalPanels();
+  const regiones = [];
+
+  Object.keys(hcRegionalConfig).forEach(region => {
+    const cfg = hcRegionalConfig[region];
+    const partes = [];
+    const grupos = {};
+
+    document.querySelectorAll(`.hcRegionalCheck[data-region="${region}"]`).forEach(chk => {
+      if(!chk.checked) return;
+      const grupo = chk.dataset.grupo || 'Hallazgos regionales';
+      const label = chk.dataset.label || '';
+      if(!grupos[grupo]) grupos[grupo] = [];
+      if(label) grupos[grupo].push(label);
+    });
+
+    Object.keys(grupos).forEach(grupo => {
+      partes.push(`${grupo}: ${grupos[grupo].join(', ')}`);
+    });
+
+    const observacion = getValueIfExists(hcRegionalInputId(region));
+    if(observacion) partes.push(observacion === 'NO VALORADO' ? 'No valorado' : 'Observación: ' + observacion);
+
+    if(partes.length) regiones.push(`${cfg.titulo}: ${partes.join(' | ')}`);
+  });
+
+  return regiones.join(' || ');
+}
+
 
 const hcCie10CatalogoBase = [
-  {codigo:"A09", nombre:"Diarrea y gastroenteritis de presunto origen infeccioso"},
-  {codigo:"A15", nombre:"Tuberculosis respiratoria confirmada"},
-  {codigo:"A16", nombre:"Tuberculosis respiratoria no confirmada"},
-  {codigo:"A46", nombre:"Erisipela"},
-  {codigo:"A49", nombre:"Infección bacteriana de sitio no especificado"},
-  {codigo:"A499", nombre:"Infección bacteriana no especificada"},
-  {codigo:"A50", nombre:"Sífilis congénita"},
-  {codigo:"A51", nombre:"Sífilis precoz"},
-  {codigo:"A52", nombre:"Sífilis tardía"},
-  {codigo:"A53", nombre:"Sífilis no especificada"},
-  {codigo:"A54", nombre:"Infección gonocócica"},
-  {codigo:"A55", nombre:"Linfogranuloma venéreo"},
-  {codigo:"A56", nombre:"Otras infecciones de transmisión sexual por clamidias"},
-  {codigo:"A560", nombre:"Infección clamidial del tracto genital inferior"},
-  {codigo:"A561", nombre:"Infección clamidial del tracto pelviperitoneal"},
-  {codigo:"A59", nombre:"Tricomoniasis"},
-  {codigo:"A590", nombre:"Tricomoniasis urogenital"},
-  {codigo:"A60", nombre:"Infección anogenital por virus herpes"},
-  {codigo:"A600", nombre:"Infección de genitales y trayecto urogenital por herpes"},
-  {codigo:"A630", nombre:"Verrugas anogenitales"},
-  {codigo:"A64", nombre:"Enfermedad de transmisión sexual no especificada"},
-  {codigo:"B00", nombre:"Infecciones por virus herpes simple"},
-  {codigo:"B009", nombre:"Infección por herpes simple no especificada"},
-  {codigo:"B01", nombre:"Varicela"},
-  {codigo:"B02", nombre:"Herpes zóster"},
-  {codigo:"B07", nombre:"Verrugas virales"},
-  {codigo:"B081", nombre:"Molusco contagioso"},
-  {codigo:"B15", nombre:"Hepatitis aguda A"},
-  {codigo:"B16", nombre:"Hepatitis aguda B"},
-  {codigo:"B17", nombre:"Otras hepatitis virales agudas"},
-  {codigo:"B18", nombre:"Hepatitis viral crónica"},
-  {codigo:"B19", nombre:"Hepatitis viral no especificada"},
-  {codigo:"B20", nombre:"Enfermedad por VIH resultante en enfermedades infecciosas"},
-  {codigo:"B24", nombre:"Enfermedad por VIH no especificada"},
-  {codigo:"B34", nombre:"Infección viral de sitio no especificado"},
-  {codigo:"B35", nombre:"Dermatofitosis"},
-  {codigo:"B354", nombre:"Tiña del cuerpo"},
-  {codigo:"B356", nombre:"Tiña inguinal"},
-  {codigo:"B36", nombre:"Otras micosis superficiales"},
-  {codigo:"B37", nombre:"Candidiasis"},
-  {codigo:"B370", nombre:"Estomatitis candidiásica"},
-  {codigo:"B373", nombre:"Candidiasis de vulva y vagina"},
-  {codigo:"B379", nombre:"Candidiasis no especificada"},
-  {codigo:"B96", nombre:"Otros agentes bacterianos como causa de enfermedades"},
-  {codigo:"B962", nombre:"Escherichia coli como causa de enfermedades"},
-  {codigo:"B968", nombre:"Otros agentes bacterianos especificados"},
-  {codigo:"B977", nombre:"Papilomavirus como causa de enfermedades clasificadas en otros capítulos"},
-  {codigo:"C50", nombre:"Tumor maligno de mama"},
-  {codigo:"C51", nombre:"Tumor maligno de vulva"},
-  {codigo:"C52", nombre:"Tumor maligno de vagina"},
-  {codigo:"C53", nombre:"Tumor maligno del cuello del útero"},
-  {codigo:"C54", nombre:"Tumor maligno del cuerpo del útero"},
-  {codigo:"C55", nombre:"Tumor maligno del útero, parte no especificada"},
-  {codigo:"C56", nombre:"Tumor maligno del ovario"},
-  {codigo:"C57", nombre:"Tumor maligno de otros órganos genitales femeninos"},
-  {codigo:"C58", nombre:"Tumor maligno de la placenta"},
-  {codigo:"C73", nombre:"Tumor maligno de la glándula tiroides"},
-  {codigo:"D05", nombre:"Carcinoma in situ de mama"},
-  {codigo:"D06", nombre:"Carcinoma in situ del cuello del útero"},
-  {codigo:"D07", nombre:"Carcinoma in situ de otros órganos genitales"},
-  {codigo:"D24", nombre:"Tumor benigno de mama"},
-  {codigo:"D25", nombre:"Leiomioma del útero"},
-  {codigo:"D250", nombre:"Leiomioma submucoso del útero"},
-  {codigo:"D251", nombre:"Leiomioma intramural del útero"},
-  {codigo:"D252", nombre:"Leiomioma subseroso del útero"},
-  {codigo:"D259", nombre:"Leiomioma del útero no especificado"},
-  {codigo:"D26", nombre:"Otros tumores benignos del útero"},
-  {codigo:"D27", nombre:"Tumor benigno del ovario"},
-  {codigo:"D28", nombre:"Tumor benigno de otros órganos genitales femeninos"},
-  {codigo:"D50", nombre:"Anemia por deficiencia de hierro"},
-  {codigo:"D509", nombre:"Anemia ferropénica no especificada"},
-  {codigo:"D51", nombre:"Anemia por deficiencia de vitamina B12"},
-  {codigo:"D52", nombre:"Anemia por deficiencia de folatos"},
-  {codigo:"D53", nombre:"Otras anemias nutricionales"},
-  {codigo:"D55", nombre:"Anemia por trastornos enzimáticos"},
-  {codigo:"D56", nombre:"Talasemia"},
-  {codigo:"D57", nombre:"Trastornos falciformes"},
-  {codigo:"D64", nombre:"Otras anemias"},
-  {codigo:"D649", nombre:"Anemia no especificada"},
-  {codigo:"D69", nombre:"Púrpura y otras afecciones hemorrágicas"},
-  {codigo:"D72", nombre:"Otros trastornos de glóbulos blancos"},
-  {codigo:"D75", nombre:"Otras enfermedades de la sangre"},
-  {codigo:"D80", nombre:"Inmunodeficiencia con predominio de defectos de anticuerpos"},
-  {codigo:"E01", nombre:"Trastornos tiroideos relacionados con deficiencia de yodo"},
-  {codigo:"E02", nombre:"Hipotiroidismo subclínico por deficiencia de yodo"},
-  {codigo:"E03", nombre:"Otros hipotiroidismos"},
-  {codigo:"E038", nombre:"Otros hipotiroidismos especificados"},
-  {codigo:"E039", nombre:"Hipotiroidismo no especificado"},
-  {codigo:"E04", nombre:"Otros bocios no tóxicos"},
-  {codigo:"E041", nombre:"Nódulo tiroideo no tóxico único"},
-  {codigo:"E042", nombre:"Bocio multinodular no tóxico"},
-  {codigo:"E05", nombre:"Tirotoxicosis hipertiroidismo"},
-  {codigo:"E050", nombre:"Tirotoxicosis con bocio difuso"},
-  {codigo:"E059", nombre:"Tirotoxicosis no especificada"},
-  {codigo:"E06", nombre:"Tiroiditis"},
-  {codigo:"E063", nombre:"Tiroiditis autoinmune"},
-  {codigo:"E07", nombre:"Otros trastornos tiroideos"},
-  {codigo:"E10", nombre:"Diabetes mellitus tipo 1"},
-  {codigo:"E11", nombre:"Diabetes mellitus tipo 2"},
-  {codigo:"E119", nombre:"Diabetes mellitus tipo 2 sin complicaciones"},
-  {codigo:"E12", nombre:"Diabetes mellitus relacionada con desnutrición"},
-  {codigo:"E13", nombre:"Otras diabetes mellitus especificadas"},
-  {codigo:"E14", nombre:"Diabetes mellitus no especificada"},
-  {codigo:"E16", nombre:"Otros trastornos de la secreción interna del páncreas"},
-  {codigo:"E162", nombre:"Hipoglucemia no especificada"},
-  {codigo:"E22", nombre:"Hiperfunción de la hipófisis"},
-  {codigo:"E221", nombre:"Hiperprolactinemia"},
-  {codigo:"E23", nombre:"Hipofunción y otros trastornos de la hipófisis"},
-  {codigo:"E24", nombre:"Síndrome de Cushing"},
-  {codigo:"E25", nombre:"Trastornos adrenogenitales"},
-  {codigo:"E26", nombre:"Hiperaldosteronismo"},
-  {codigo:"E27", nombre:"Otros trastornos de glándula suprarrenal"},
-  {codigo:"E28", nombre:"Disfunción ovárica"},
-  {codigo:"E280", nombre:"Exceso de estrógenos"},
-  {codigo:"E281", nombre:"Exceso de andrógenos"},
-  {codigo:"E282", nombre:"Síndrome de ovario poliquístico"},
-  {codigo:"E283", nombre:"Insuficiencia ovárica primaria"},
-  {codigo:"E288", nombre:"Otras disfunciones ováricas"},
-  {codigo:"E289", nombre:"Disfunción ovárica no especificada"},
-  {codigo:"E34", nombre:"Otros trastornos endocrinos"},
-  {codigo:"E55", nombre:"Deficiencia de vitamina D"},
-  {codigo:"E56", nombre:"Otras deficiencias vitamínicas"},
-  {codigo:"E61", nombre:"Deficiencia de otros elementos nutricionales"},
-  {codigo:"E63", nombre:"Otras deficiencias nutricionales"},
-  {codigo:"E65", nombre:"Adiposidad localizada"},
-  {codigo:"E66", nombre:"Obesidad"},
-  {codigo:"E660", nombre:"Obesidad por exceso de calorías"},
-  {codigo:"E668", nombre:"Otra obesidad"},
-  {codigo:"E669", nombre:"Obesidad no especificada"},
-  {codigo:"E67", nombre:"Hiperalimentación"},
-  {codigo:"E78", nombre:"Trastornos del metabolismo de las lipoproteínas y otras lipidemias"},
-  {codigo:"E780", nombre:"Hipercolesterolemia pura"},
-  {codigo:"E781", nombre:"Hipertrigliceridemia pura"},
-  {codigo:"E782", nombre:"Hiperlipidemia mixta"},
-  {codigo:"E785", nombre:"Hiperlipidemia no especificada"},
-  {codigo:"E79", nombre:"Trastornos del metabolismo de las purinas y pirimidinas"},
-  {codigo:"E790", nombre:"Hiperuricemia sin signos de artritis gotosa"},
-  {codigo:"E83", nombre:"Trastornos del metabolismo mineral"},
-  {codigo:"E835", nombre:"Trastornos del metabolismo del calcio"},
-  {codigo:"E87", nombre:"Otros trastornos de líquidos, electrolitos y equilibrio ácido-base"},
-  {codigo:"E88", nombre:"Otros trastornos metabólicos"},
-  {codigo:"E888", nombre:"Otros trastornos especificados del metabolismo"},
-  {codigo:"F32", nombre:"Episodio depresivo"},
-  {codigo:"F329", nombre:"Episodio depresivo no especificado"},
-  {codigo:"F33", nombre:"Trastorno depresivo recurrente"},
-  {codigo:"F41", nombre:"Otros trastornos de ansiedad"},
-  {codigo:"F410", nombre:"Trastorno de pánico"},
-  {codigo:"F411", nombre:"Trastorno de ansiedad generalizada"},
-  {codigo:"F412", nombre:"Trastorno mixto ansioso depresivo"},
-  {codigo:"F43", nombre:"Reacción al estrés grave y trastornos de adaptación"},
-  {codigo:"F45", nombre:"Trastornos somatomorfos"},
-  {codigo:"F51", nombre:"Trastornos no orgánicos del sueño"},
-  {codigo:"G43", nombre:"Migraña"},
-  {codigo:"G44", nombre:"Otros síndromes de cefalea"},
-  {codigo:"G47", nombre:"Trastornos del sueño"},
-  {codigo:"G50", nombre:"Trastornos del nervio trigémino"},
-  {codigo:"G54", nombre:"Trastornos de raíces y plexos nerviosos"},
-  {codigo:"G56", nombre:"Mononeuropatías del miembro superior"},
-  {codigo:"G560", nombre:"Síndrome del túnel carpiano"},
-  {codigo:"G57", nombre:"Mononeuropatías del miembro inferior"},
-  {codigo:"G62", nombre:"Otras polineuropatías"},
-  {codigo:"G63", nombre:"Polineuropatía en enfermedades clasificadas en otra parte"},
-  {codigo:"G90", nombre:"Trastornos del sistema nervioso autónomo"},
-  {codigo:"H10", nombre:"Conjuntivitis"},
-  {codigo:"H11", nombre:"Otros trastornos de la conjuntiva"},
-  {codigo:"H52", nombre:"Trastornos de la acomodación y refracción"},
-  {codigo:"H53", nombre:"Trastornos visuales"},
-  {codigo:"H60", nombre:"Otitis externa"},
-  {codigo:"H65", nombre:"Otitis media no supurativa"},
-  {codigo:"H66", nombre:"Otitis media supurativa y no especificada"},
-  {codigo:"H81", nombre:"Trastornos de la función vestibular"},
-  {codigo:"H811", nombre:"Vértigo paroxístico benigno"},
-  {codigo:"H90", nombre:"Hipoacusia conductiva y neurosensorial"},
-  {codigo:"H93", nombre:"Otros trastornos del oído"},
-  {codigo:"I10", nombre:"Hipertensión esencial primaria"},
-  {codigo:"I11", nombre:"Enfermedad cardíaca hipertensiva"},
-  {codigo:"I12", nombre:"Enfermedad renal hipertensiva"},
-  {codigo:"I15", nombre:"Hipertensión secundaria"},
-  {codigo:"I20", nombre:"Angina de pecho"},
-  {codigo:"I21", nombre:"Infarto agudo de miocardio"},
-  {codigo:"I25", nombre:"Enfermedad isquémica crónica del corazón"},
-  {codigo:"I26", nombre:"Embolia pulmonar"},
-  {codigo:"I34", nombre:"Trastornos no reumáticos de la válvula mitral"},
-  {codigo:"I35", nombre:"Trastornos no reumáticos de la válvula aórtica"},
-  {codigo:"I42", nombre:"Cardiomiopatía"},
-  {codigo:"I48", nombre:"Fibrilación y aleteo auricular"},
-  {codigo:"I49", nombre:"Otras arritmias cardíacas"},
-  {codigo:"I50", nombre:"Insuficiencia cardíaca"},
-  {codigo:"I51", nombre:"Complicaciones y enfermedades cardíacas mal definidas"},
-  {codigo:"I70", nombre:"Aterosclerosis"},
-  {codigo:"I73", nombre:"Otras enfermedades vasculares periféricas"},
-  {codigo:"I80", nombre:"Flebitis y tromboflebitis"},
-  {codigo:"I83", nombre:"Venas varicosas de miembros inferiores"},
-  {codigo:"I84", nombre:"Hemorroides"},
-  {codigo:"I87", nombre:"Otros trastornos de las venas"},
-  {codigo:"I95", nombre:"Hipotensión"},
-  {codigo:"J00", nombre:"Rinofaringitis aguda resfriado común"},
-  {codigo:"J01", nombre:"Sinusitis aguda"},
-  {codigo:"J02", nombre:"Faringitis aguda"},
-  {codigo:"J03", nombre:"Amigdalitis aguda"},
-  {codigo:"J04", nombre:"Laringitis y traqueítis agudas"},
-  {codigo:"J06", nombre:"Infecciones agudas de vías respiratorias superiores"},
-  {codigo:"J069", nombre:"Infección aguda de vías respiratorias superiores no especificada"},
-  {codigo:"J10", nombre:"Influenza debida a virus identificado"},
-  {codigo:"J11", nombre:"Influenza virus no identificado"},
-  {codigo:"J12", nombre:"Neumonía viral"},
-  {codigo:"J15", nombre:"Neumonía bacteriana"},
-  {codigo:"J18", nombre:"Neumonía organismo no especificado"},
-  {codigo:"J20", nombre:"Bronquitis aguda"},
-  {codigo:"J30", nombre:"Rinitis alérgica y vasomotora"},
-  {codigo:"J32", nombre:"Sinusitis crónica"},
-  {codigo:"J35", nombre:"Enfermedades crónicas de amígdalas y adenoides"},
-  {codigo:"J40", nombre:"Bronquitis no especificada"},
-  {codigo:"J44", nombre:"Enfermedad pulmonar obstructiva crónica"},
-  {codigo:"J45", nombre:"Asma"},
-  {codigo:"J459", nombre:"Asma no especificada"},
-  {codigo:"J46", nombre:"Estado asmático"},
-  {codigo:"J98", nombre:"Otros trastornos respiratorios"},
-  {codigo:"K02", nombre:"Caries dental"},
-  {codigo:"K05", nombre:"Gingivitis y enfermedades periodontales"},
-  {codigo:"K12", nombre:"Estomatitis y lesiones relacionadas"},
-  {codigo:"K21", nombre:"Enfermedad por reflujo gastroesofágico"},
-  {codigo:"K25", nombre:"Úlcera gástrica"},
-  {codigo:"K26", nombre:"Úlcera duodenal"},
-  {codigo:"K29", nombre:"Gastritis y duodenitis"},
-  {codigo:"K297", nombre:"Gastritis no especificada"},
-  {codigo:"K30", nombre:"Dispepsia funcional"},
-  {codigo:"K35", nombre:"Apendicitis aguda"},
-  {codigo:"K36", nombre:"Otras apendicitis"},
-  {codigo:"K40", nombre:"Hernia inguinal"},
-  {codigo:"K42", nombre:"Hernia umbilical"},
-  {codigo:"K52", nombre:"Otras gastroenteritis y colitis no infecciosas"},
-  {codigo:"K57", nombre:"Enfermedad diverticular del intestino"},
-  {codigo:"K58", nombre:"Síndrome del intestino irritable"},
-  {codigo:"K59", nombre:"Otros trastornos funcionales del intestino"},
-  {codigo:"K590", nombre:"Constipación"},
-  {codigo:"K60", nombre:"Fisura y fístula de regiones anal y rectal"},
-  {codigo:"K61", nombre:"Absceso de regiones anal y rectal"},
-  {codigo:"K62", nombre:"Otras enfermedades del ano y recto"},
-  {codigo:"K64", nombre:"Hemorroides y trombosis venosa perianal"},
-  {codigo:"K76", nombre:"Otras enfermedades del hígado"},
-  {codigo:"K80", nombre:"Colelitiasis"},
-  {codigo:"K81", nombre:"Colecistitis"},
-  {codigo:"K82", nombre:"Otras enfermedades de vesícula biliar"},
-  {codigo:"K85", nombre:"Pancreatitis aguda"},
-  {codigo:"K90", nombre:"Malabsorción intestinal"},
-  {codigo:"L02", nombre:"Absceso cutáneo, furúnculo y ántrax"},
-  {codigo:"L03", nombre:"Celulitis"},
-  {codigo:"L08", nombre:"Otras infecciones locales de la piel"},
-  {codigo:"L20", nombre:"Dermatitis atópica"},
-  {codigo:"L21", nombre:"Dermatitis seborreica"},
-  {codigo:"L23", nombre:"Dermatitis alérgica de contacto"},
-  {codigo:"L24", nombre:"Dermatitis irritante de contacto"},
-  {codigo:"L25", nombre:"Dermatitis de contacto no especificada"},
-  {codigo:"L28", nombre:"Liquen simple crónico y prurigo"},
-  {codigo:"L29", nombre:"Prurito"},
-  {codigo:"L30", nombre:"Otras dermatitis"},
-  {codigo:"L40", nombre:"Psoriasis"},
-  {codigo:"L50", nombre:"Urticaria"},
-  {codigo:"L60", nombre:"Trastornos de las uñas"},
-  {codigo:"L63", nombre:"Alopecia areata"},
-  {codigo:"L64", nombre:"Alopecia androgenética"},
-  {codigo:"L65", nombre:"Otra pérdida no cicatricial del pelo"},
-  {codigo:"L659", nombre:"Alopecia no especificada"},
-  {codigo:"L68", nombre:"Hipertricosis"},
-  {codigo:"L680", nombre:"Hirsutismo"},
-  {codigo:"L70", nombre:"Acné"},
-  {codigo:"L700", nombre:"Acné vulgar"},
-  {codigo:"L709", nombre:"Acné no especificado"},
-  {codigo:"L71", nombre:"Rosácea"},
-  {codigo:"L72", nombre:"Quiste folicular de la piel y tejido subcutáneo"},
-  {codigo:"L73", nombre:"Otros trastornos foliculares"},
-  {codigo:"L81", nombre:"Otros trastornos de la pigmentación"},
-  {codigo:"L811", nombre:"Cloasma"},
-  {codigo:"L814", nombre:"Otra hiperpigmentación por melanina"},
-  {codigo:"L82", nombre:"Queratosis seborreica"},
-  {codigo:"L83", nombre:"Acantosis nigricans"},
-  {codigo:"L90", nombre:"Trastornos atróficos de la piel"},
-  {codigo:"L905", nombre:"Cicatriz y fibrosis de la piel"},
-  {codigo:"L91", nombre:"Trastornos hipertróficos de la piel"},
-  {codigo:"L910", nombre:"Cicatriz queloide"},
-  {codigo:"L92", nombre:"Trastornos granulomatosos de la piel"},
-  {codigo:"L98", nombre:"Otros trastornos de la piel y tejido subcutáneo"},
-  {codigo:"M05", nombre:"Artritis reumatoide seropositiva"},
-  {codigo:"M06", nombre:"Otras artritis reumatoides"},
-  {codigo:"M10", nombre:"Gota"},
-  {codigo:"M13", nombre:"Otras artritis"},
-  {codigo:"M15", nombre:"Poliartrosis"},
-  {codigo:"M16", nombre:"Coxartrosis artrosis de cadera"},
-  {codigo:"M17", nombre:"Gonartrosis artrosis de rodilla"},
-  {codigo:"M19", nombre:"Otras artrosis"},
-  {codigo:"M20", nombre:"Deformidades adquiridas de dedos de manos y pies"},
-  {codigo:"M22", nombre:"Trastornos de la rótula"},
-  {codigo:"M23", nombre:"Trastornos internos de la rodilla"},
-  {codigo:"M25", nombre:"Otros trastornos articulares"},
-  {codigo:"M255", nombre:"Dolor articular"},
-  {codigo:"M32", nombre:"Lupus eritematoso sistémico"},
-  {codigo:"M35", nombre:"Otro compromiso sistémico del tejido conjuntivo"},
-  {codigo:"M40", nombre:"Cifosis y lordosis"},
-  {codigo:"M41", nombre:"Escoliosis"},
-  {codigo:"M43", nombre:"Otras dorsopatías deformantes"},
-  {codigo:"M47", nombre:"Espondilosis"},
-  {codigo:"M50", nombre:"Trastornos de discos cervicales"},
-  {codigo:"M51", nombre:"Otros trastornos de discos intervertebrales"},
-  {codigo:"M54", nombre:"Dorsalgia"},
-  {codigo:"M542", nombre:"Cervicalgia"},
-  {codigo:"M544", nombre:"Lumbago con ciática"},
-  {codigo:"M545", nombre:"Lumbalgia"},
-  {codigo:"M60", nombre:"Miositis"},
-  {codigo:"M62", nombre:"Otros trastornos musculares"},
-  {codigo:"M628", nombre:"Otros trastornos musculares especificados"},
-  {codigo:"M65", nombre:"Sinovitis y tenosinovitis"},
-  {codigo:"M67", nombre:"Otros trastornos de sinovia y tendón"},
-  {codigo:"M72", nombre:"Trastornos fibroblásticos"},
-  {codigo:"M75", nombre:"Lesiones del hombro"},
-  {codigo:"M77", nombre:"Otras entesopatías"},
-  {codigo:"M79", nombre:"Otros trastornos de tejidos blandos"},
-  {codigo:"M791", nombre:"Mialgia"},
-  {codigo:"M796", nombre:"Dolor en miembro"},
-  {codigo:"M81", nombre:"Osteoporosis sin fractura patológica"},
-  {codigo:"M85", nombre:"Otros trastornos de densidad y estructura ósea"},
-  {codigo:"N10", nombre:"Nefritis tubulointersticial aguda"},
-  {codigo:"N11", nombre:"Nefritis tubulointersticial crónica"},
-  {codigo:"N12", nombre:"Nefritis tubulointersticial no especificada"},
-  {codigo:"N20", nombre:"Cálculo del riñón y uréter"},
-  {codigo:"N23", nombre:"Cólico renal no especificado"},
-  {codigo:"N30", nombre:"Cistitis"},
-  {codigo:"N300", nombre:"Cistitis aguda"},
-  {codigo:"N309", nombre:"Cistitis no especificada"},
-  {codigo:"N31", nombre:"Disfunción neuromuscular de la vejiga"},
-  {codigo:"N32", nombre:"Otros trastornos de la vejiga"},
-  {codigo:"N34", nombre:"Uretritis y síndrome uretral"},
-  {codigo:"N39", nombre:"Otros trastornos del sistema urinario"},
-  {codigo:"N390", nombre:"Infección de vías urinarias sitio no especificado"},
-  {codigo:"N393", nombre:"Incontinencia urinaria de esfuerzo"},
-  {codigo:"N394", nombre:"Otras incontinencias urinarias"},
-  {codigo:"N60", nombre:"Displasia mamaria benigna"},
-  {codigo:"N61", nombre:"Trastornos inflamatorios de la mama"},
-  {codigo:"N62", nombre:"Hipertrofia de la mama"},
-  {codigo:"N63", nombre:"Masa no especificada en la mama"},
-  {codigo:"N64", nombre:"Otros trastornos de la mama"},
-  {codigo:"N644", nombre:"Mastodinia dolor mamario"},
-  {codigo:"N70", nombre:"Salpingitis y ooforitis"},
-  {codigo:"N71", nombre:"Enfermedad inflamatoria del útero excepto cuello"},
-  {codigo:"N72", nombre:"Enfermedad inflamatoria del cuello uterino cervicitis"},
-  {codigo:"N73", nombre:"Otras enfermedades inflamatorias pélvicas femeninas"},
-  {codigo:"N730", nombre:"Parametritis y celulitis pélvica aguda"},
-  {codigo:"N739", nombre:"Enfermedad inflamatoria pélvica femenina no especificada"},
-  {codigo:"N75", nombre:"Enfermedades de la glándula de Bartholin"},
-  {codigo:"N750", nombre:"Quiste de la glándula de Bartholin"},
-  {codigo:"N751", nombre:"Absceso de la glándula de Bartholin"},
-  {codigo:"N76", nombre:"Otras inflamaciones de vagina y vulva"},
-  {codigo:"N760", nombre:"Vaginitis aguda"},
-  {codigo:"N761", nombre:"Vaginitis subaguda y crónica"},
-  {codigo:"N762", nombre:"Vulvitis aguda"},
-  {codigo:"N763", nombre:"Vulvitis subaguda y crónica"},
-  {codigo:"N764", nombre:"Absceso vulvar"},
-  {codigo:"N77", nombre:"Ulceración e inflamación vulvovaginal en enfermedades clasificadas en otra parte"},
-  {codigo:"N80", nombre:"Endometriosis"},
-  {codigo:"N800", nombre:"Endometriosis del útero"},
-  {codigo:"N801", nombre:"Endometriosis del ovario"},
-  {codigo:"N802", nombre:"Endometriosis de trompa de Falopio"},
-  {codigo:"N803", nombre:"Endometriosis del peritoneo pélvico"},
-  {codigo:"N81", nombre:"Prolapso genital femenino"},
-  {codigo:"N811", nombre:"Cistocele"},
-  {codigo:"N812", nombre:"Prolapso uterovaginal incompleto"},
-  {codigo:"N813", nombre:"Prolapso uterovaginal completo"},
-  {codigo:"N82", nombre:"Fístulas del tracto genital femenino"},
-  {codigo:"N83", nombre:"Trastornos no inflamatorios del ovario, trompa y ligamento ancho"},
-  {codigo:"N830", nombre:"Quiste folicular del ovario"},
-  {codigo:"N831", nombre:"Quiste del cuerpo lúteo"},
-  {codigo:"N832", nombre:"Otros quistes ováricos y los no especificados"},
-  {codigo:"N838", nombre:"Otros trastornos no inflamatorios del ovario"},
-  {codigo:"N84", nombre:"Pólipo del tracto genital femenino"},
-  {codigo:"N840", nombre:"Pólipo del cuerpo del útero"},
-  {codigo:"N841", nombre:"Pólipo del cuello del útero"},
-  {codigo:"N85", nombre:"Otros trastornos no inflamatorios del útero excepto cuello"},
-  {codigo:"N850", nombre:"Hiperplasia glandular endometrial"},
-  {codigo:"N852", nombre:"Hipertrofia del útero"},
-  {codigo:"N86", nombre:"Erosión y ectropión del cuello uterino"},
-  {codigo:"N87", nombre:"Displasia del cuello uterino"},
-  {codigo:"N870", nombre:"Displasia cervical leve NIC I"},
-  {codigo:"N871", nombre:"Displasia cervical moderada NIC II"},
-  {codigo:"N872", nombre:"Displasia cervical severa NIC III"},
-  {codigo:"N879", nombre:"Displasia cervical no especificada"},
-  {codigo:"N88", nombre:"Otros trastornos no inflamatorios del cuello uterino"},
-  {codigo:"N880", nombre:"Leucoplasia del cuello uterino"},
-  {codigo:"N882", nombre:"Estenosis y estrechez del cuello uterino"},
-  {codigo:"N888", nombre:"Otros trastornos especificados del cuello uterino"},
-  {codigo:"N89", nombre:"Otros trastornos no inflamatorios de vagina"},
-  {codigo:"N898", nombre:"Otros trastornos especificados de vagina"},
-  {codigo:"N90", nombre:"Otros trastornos no inflamatorios de vulva y periné"},
-  {codigo:"N900", nombre:"Displasia vulvar leve"},
-  {codigo:"N901", nombre:"Displasia vulvar moderada"},
-  {codigo:"N902", nombre:"Displasia vulvar severa"},
-  {codigo:"N904", nombre:"Leucoplasia de vulva"},
-  {codigo:"N91", nombre:"Menstruación ausente, escasa o rara"},
-  {codigo:"N910", nombre:"Amenorrea primaria"},
-  {codigo:"N911", nombre:"Amenorrea secundaria"},
-  {codigo:"N912", nombre:"Amenorrea no especificada"},
-  {codigo:"N92", nombre:"Menstruación excesiva, frecuente e irregular"},
-  {codigo:"N920", nombre:"Menstruación excesiva y frecuente con ciclo regular"},
-  {codigo:"N921", nombre:"Menstruación excesiva y frecuente con ciclo irregular"},
-  {codigo:"N926", nombre:"Menstruación irregular no especificada"},
-  {codigo:"N93", nombre:"Otras hemorragias uterinas y vaginales anormales"},
-  {codigo:"N938", nombre:"Otras hemorragias uterinas y vaginales anormales especificadas"},
-  {codigo:"N939", nombre:"Hemorragia uterina y vaginal anormal no especificada"},
-  {codigo:"N94", nombre:"Dolor y otras condiciones asociadas con órganos genitales femeninos"},
-  {codigo:"N940", nombre:"Dolor intermenstrual"},
-  {codigo:"N941", nombre:"Dispareunia"},
-  {codigo:"N943", nombre:"Síndrome de tensión premenstrual"},
-  {codigo:"N944", nombre:"Dismenorrea primaria"},
-  {codigo:"N945", nombre:"Dismenorrea secundaria"},
-  {codigo:"N946", nombre:"Dismenorrea no especificada"},
-  {codigo:"N948", nombre:"Otras afecciones especificadas asociadas con órganos genitales femeninos"},
-  {codigo:"N95", nombre:"Trastornos menopáusicos y perimenopáusicos"},
-  {codigo:"N950", nombre:"Hemorragia posmenopáusica"},
-  {codigo:"N951", nombre:"Estados menopáusicos y climatéricos femeninos"},
-  {codigo:"N952", nombre:"Vaginitis atrófica posmenopáusica"},
-  {codigo:"N97", nombre:"Infertilidad femenina"},
-  {codigo:"N98", nombre:"Complicaciones asociadas con fecundación artificial"},
-  {codigo:"N99", nombre:"Trastornos del sistema genitourinario posteriores a procedimientos"},
-  {codigo:"O00", nombre:"Embarazo ectópico"},
-  {codigo:"O001", nombre:"Embarazo tubárico"},
-  {codigo:"O01", nombre:"Mola hidatiforme"},
-  {codigo:"O02", nombre:"Otros productos anormales de la concepción"},
-  {codigo:"O03", nombre:"Aborto espontáneo"},
-  {codigo:"O04", nombre:"Aborto médico"},
-  {codigo:"O05", nombre:"Otro aborto"},
-  {codigo:"O06", nombre:"Aborto no especificado"},
-  {codigo:"O08", nombre:"Complicaciones después de aborto y embarazo ectópico o molar"},
-  {codigo:"O10", nombre:"Hipertensión preexistente que complica embarazo, parto y puerperio"},
-  {codigo:"O11", nombre:"Trastorno hipertensivo preexistente con proteinuria agregada"},
-  {codigo:"O12", nombre:"Edema y proteinuria gestacionales sin hipertensión"},
-  {codigo:"O13", nombre:"Hipertensión gestacional sin proteinuria significativa"},
-  {codigo:"O14", nombre:"Preeclampsia"},
-  {codigo:"O140", nombre:"Preeclampsia moderada"},
-  {codigo:"O141", nombre:"Preeclampsia severa"},
-  {codigo:"O149", nombre:"Preeclampsia no especificada"},
-  {codigo:"O15", nombre:"Eclampsia"},
-  {codigo:"O16", nombre:"Hipertensión materna no especificada"},
-  {codigo:"O20", nombre:"Hemorragia en el embarazo temprano"},
-  {codigo:"O200", nombre:"Amenaza de aborto"},
-  {codigo:"O209", nombre:"Hemorragia en embarazo temprano no especificada"},
-  {codigo:"O21", nombre:"Vómitos excesivos en el embarazo"},
-  {codigo:"O22", nombre:"Complicaciones venosas en el embarazo"},
-  {codigo:"O23", nombre:"Infecciones de las vías genitourinarias en el embarazo"},
-  {codigo:"O234", nombre:"Infección no especificada de vías urinarias en embarazo"},
-  {codigo:"O24", nombre:"Diabetes mellitus en embarazo"},
-  {codigo:"O244", nombre:"Diabetes mellitus que se origina en el embarazo"},
-  {codigo:"O249", nombre:"Diabetes mellitus en embarazo no especificada"},
-  {codigo:"O26", nombre:"Atención materna por otras condiciones relacionadas con embarazo"},
-  {codigo:"O268", nombre:"Otras condiciones especificadas relacionadas con embarazo"},
-  {codigo:"O269", nombre:"Condición relacionada con embarazo no especificada"},
-  {codigo:"O28", nombre:"Hallazgos anormales en tamizaje prenatal de la madre"},
-  {codigo:"O30", nombre:"Embarazo múltiple"},
-  {codigo:"O32", nombre:"Atención materna por presentación anormal del feto"},
-  {codigo:"O34", nombre:"Atención materna por anormalidad de órganos pélvicos"},
-  {codigo:"O343", nombre:"Atención materna por incompetencia cervical"},
-  {codigo:"O36", nombre:"Atención materna por otros problemas fetales conocidos o sospechados"},
-  {codigo:"O365", nombre:"Atención materna por crecimiento fetal deficiente"},
-  {codigo:"O40", nombre:"Polihidramnios"},
-  {codigo:"O41", nombre:"Otros trastornos del líquido amniótico y membranas"},
-  {codigo:"O410", nombre:"Oligohidramnios"},
-  {codigo:"O42", nombre:"Ruptura prematura de membranas"},
-  {codigo:"O44", nombre:"Placenta previa"},
-  {codigo:"O45", nombre:"Desprendimiento prematuro de placenta"},
-  {codigo:"O46", nombre:"Hemorragia anteparto no clasificada en otra parte"},
-  {codigo:"O47", nombre:"Falso trabajo de parto"},
-  {codigo:"O470", nombre:"Falso trabajo de parto antes de 37 semanas"},
-  {codigo:"O479", nombre:"Falso trabajo de parto no especificado"},
-  {codigo:"O60", nombre:"Trabajo de parto y parto pretérmino"},
-  {codigo:"O62", nombre:"Anormalidades de fuerzas del trabajo de parto"},
-  {codigo:"O63", nombre:"Trabajo de parto prolongado"},
-  {codigo:"O68", nombre:"Trabajo de parto y parto complicados por sufrimiento fetal"},
-  {codigo:"O70", nombre:"Desgarro perineal durante el parto"},
-  {codigo:"O71", nombre:"Otro trauma obstétrico"},
-  {codigo:"O72", nombre:"Hemorragia posparto"},
-  {codigo:"O75", nombre:"Otras complicaciones del trabajo de parto y parto"},
-  {codigo:"O80", nombre:"Parto único espontáneo"},
-  {codigo:"O82", nombre:"Parto único por cesárea"},
-  {codigo:"O85", nombre:"Sepsis puerperal"},
-  {codigo:"O86", nombre:"Otras infecciones puerperales"},
-  {codigo:"O87", nombre:"Complicaciones venosas en puerperio"},
-  {codigo:"O90", nombre:"Complicaciones del puerperio no clasificadas en otra parte"},
-  {codigo:"O91", nombre:"Infecciones de mama asociadas al parto"},
-  {codigo:"O92", nombre:"Otros trastornos de mama y lactancia asociados al parto"},
-  {codigo:"O99", nombre:"Otras enfermedades maternas que complican embarazo, parto y puerperio"},
-  {codigo:"R00", nombre:"Anormalidades del latido cardíaco"},
-  {codigo:"R002", nombre:"Palpitaciones"},
-  {codigo:"R03", nombre:"Lectura elevada de presión arterial sin diagnóstico de hipertensión"},
-  {codigo:"R05", nombre:"Tos"},
-  {codigo:"R06", nombre:"Anormalidades de la respiración"},
-  {codigo:"R060", nombre:"Disnea"},
-  {codigo:"R07", nombre:"Dolor de garganta y en el pecho"},
-  {codigo:"R074", nombre:"Dolor en el pecho no especificado"},
-  {codigo:"R10", nombre:"Dolor abdominal y pélvico"},
-  {codigo:"R102", nombre:"Dolor pélvico y perineal"},
-  {codigo:"R103", nombre:"Dolor localizado en otras partes inferiores del abdomen"},
-  {codigo:"R104", nombre:"Otros dolores abdominales y los no especificados"},
-  {codigo:"R11", nombre:"Náusea y vómito"},
-  {codigo:"R12", nombre:"Pirosis"},
-  {codigo:"R14", nombre:"Flatulencia y condiciones afines"},
-  {codigo:"R19", nombre:"Otros síntomas y signos que involucran el sistema digestivo"},
-  {codigo:"R21", nombre:"Erupción cutánea y otras erupciones no especificadas"},
-  {codigo:"R22", nombre:"Tumefacción masa o prominencia localizada de piel y tejido subcutáneo"},
-  {codigo:"R23", nombre:"Otros cambios en la piel"},
-  {codigo:"R30", nombre:"Dolor asociado con micción"},
-  {codigo:"R300", nombre:"Disuria"},
-  {codigo:"R31", nombre:"Hematuria"},
-  {codigo:"R32", nombre:"Incontinencia urinaria no especificada"},
-  {codigo:"R35", nombre:"Poliuria"},
-  {codigo:"R42", nombre:"Mareo y desvanecimiento"},
-  {codigo:"R50", nombre:"Fiebre de otro origen y origen desconocido"},
-  {codigo:"R51", nombre:"Cefalea"},
-  {codigo:"R52", nombre:"Dolor no clasificado en otra parte"},
-  {codigo:"R53", nombre:"Malestar y fatiga"},
-  {codigo:"R59", nombre:"Adenomegalia"},
-  {codigo:"R60", nombre:"Edema no clasificado en otra parte"},
-  {codigo:"R63", nombre:"Síntomas y signos relacionados con alimentación e ingestión"},
-  {codigo:"R634", nombre:"Pérdida anormal de peso"},
-  {codigo:"R635", nombre:"Aumento anormal de peso"},
-  {codigo:"R73", nombre:"Glucosa sanguínea elevada"},
-  {codigo:"R730", nombre:"Anormalidad de la prueba de tolerancia a la glucosa"},
-  {codigo:"R739", nombre:"Hiperglucemia no especificada"},
-  {codigo:"R87", nombre:"Hallazgos anormales en muestras de órganos genitales femeninos"},
-  {codigo:"R876", nombre:"Hallazgos citológicos anormales en muestras de órganos genitales femeninos"},
-  {codigo:"Z00", nombre:"Examen general e investigación de personas sin quejas"},
-  {codigo:"Z000", nombre:"Examen médico general"},
-  {codigo:"Z01", nombre:"Otros exámenes especiales de personas sin quejas"},
-  {codigo:"Z014", nombre:"Examen ginecológico general"},
-  {codigo:"Z03", nombre:"Observación médica y evaluación por sospecha de enfermedad"},
-  {codigo:"Z11", nombre:"Examen de pesquisa especial para enfermedades infecciosas"},
-  {codigo:"Z113", nombre:"Examen de pesquisa especial para infecciones de transmisión sexual"},
-  {codigo:"Z12", nombre:"Examen de pesquisa especial para tumores"},
-  {codigo:"Z123", nombre:"Examen de pesquisa especial para tumor de mama"},
-  {codigo:"Z124", nombre:"Examen de pesquisa especial para tumor del cuello uterino"},
-  {codigo:"Z13", nombre:"Examen de pesquisa especial para otras enfermedades"},
-  {codigo:"Z131", nombre:"Examen de pesquisa especial para diabetes mellitus"},
-  {codigo:"Z132", nombre:"Examen de pesquisa especial para trastornos de sangre"},
-  {codigo:"Z138", nombre:"Examen de pesquisa para otras enfermedades especificadas"},
-  {codigo:"Z20", nombre:"Contacto y exposición a enfermedades transmisibles"},
-  {codigo:"Z202", nombre:"Contacto y exposición a infecciones de transmisión sexual"},
-  {codigo:"Z21", nombre:"Estado de infección asintomática por VIH"},
-  {codigo:"Z22", nombre:"Portador de enfermedad infecciosa"},
-  {codigo:"Z224", nombre:"Portador de infecciones de transmisión sexual"},
-  {codigo:"Z30", nombre:"Atención para la anticoncepción"},
-  {codigo:"Z300", nombre:"Consejo y asesoramiento general sobre anticoncepción"},
-  {codigo:"Z304", nombre:"Vigilancia de drogas anticonceptivas"},
-  {codigo:"Z305", nombre:"Vigilancia de dispositivo anticonceptivo intrauterino"},
-  {codigo:"Z31", nombre:"Atención para la procreación"},
-  {codigo:"Z314", nombre:"Investigación y prueba de fertilidad"},
-  {codigo:"Z32", nombre:"Examen y prueba del embarazo"},
-  {codigo:"Z320", nombre:"Embarazo no confirmado"},
-  {codigo:"Z321", nombre:"Embarazo confirmado"},
-  {codigo:"Z33", nombre:"Estado de embarazo incidental"},
-  {codigo:"Z34", nombre:"Supervisión de embarazo normal"},
-  {codigo:"Z340", nombre:"Supervisión de primer embarazo normal"},
-  {codigo:"Z348", nombre:"Supervisión de otros embarazos normales"},
-  {codigo:"Z349", nombre:"Supervisión de embarazo normal no especificado"},
-  {codigo:"Z35", nombre:"Supervisión de embarazo de alto riesgo"},
-  {codigo:"Z350", nombre:"Supervisión de embarazo con historia de infertilidad"},
-  {codigo:"Z351", nombre:"Supervisión de embarazo con historia de aborto"},
-  {codigo:"Z352", nombre:"Supervisión de embarazo con otros antecedentes de reproducción deficiente"},
-  {codigo:"Z353", nombre:"Supervisión de embarazo con atención prenatal insuficiente"},
-  {codigo:"Z355", nombre:"Supervisión de primigesta añosa"},
-  {codigo:"Z358", nombre:"Supervisión de otros embarazos de alto riesgo"},
-  {codigo:"Z359", nombre:"Supervisión de embarazo de alto riesgo no especificado"},
-  {codigo:"Z36", nombre:"Pesquisa prenatal"},
-  {codigo:"Z360", nombre:"Pesquisa prenatal de anomalías cromosómicas"},
-  {codigo:"Z363", nombre:"Pesquisa prenatal de malformaciones por ultrasonido"},
-  {codigo:"Z37", nombre:"Producto del parto"},
-  {codigo:"Z39", nombre:"Atención y examen posparto"},
-  {codigo:"Z392", nombre:"Control posparto rutinario"},
-  {codigo:"Z40", nombre:"Cirugía profiláctica"},
-  {codigo:"Z41", nombre:"Procedimientos para otros fines que no son mejorar salud"},
-  {codigo:"Z411", nombre:"Otros procedimientos estéticos"},
-  {codigo:"Z42", nombre:"Cuidados posteriores a cirugía plástica"},
-  {codigo:"Z48", nombre:"Otros cuidados posteriores quirúrgicos"},
-  {codigo:"Z51", nombre:"Otra atención médica"},
-  {codigo:"Z71", nombre:"Personas en contacto con servicios por consejería médica"},
-  {codigo:"Z713", nombre:"Consejería dietética y vigilancia"},
-  {codigo:"Z718", nombre:"Otras consultas especificadas"},
-  {codigo:"Z72", nombre:"Problemas relacionados con el estilo de vida"},
-  {codigo:"Z723", nombre:"Falta de ejercicio físico"},
-  {codigo:"Z724", nombre:"Dieta y hábitos alimentarios inapropiados"},
-  {codigo:"Z76", nombre:"Personas en contacto con servicios de salud por otras circunstancias"},
-  {codigo:"Z760", nombre:"Emisión de receta repetida"},
-  {codigo:"Z80", nombre:"Historia familiar de tumor maligno"},
-  {codigo:"Z83", nombre:"Historia familiar de otros trastornos específicos"},
-  {codigo:"Z833", nombre:"Historia familiar de diabetes mellitus"},
-  {codigo:"Z82", nombre:"Historia familiar de ciertas discapacidades y enfermedades crónicas"},
-  {codigo:"Z86", nombre:"Historia personal de ciertas enfermedades"},
-  {codigo:"Z87", nombre:"Historia personal de otras enfermedades y afecciones"}
+  {codigo:'N760', nombre:'Vaginitis aguda'},
+  {codigo:'B977', nombre:'Papilomavirus como causa de enfermedades clasificadas en otros capítulos'},
+  {codigo:'N871', nombre:'Displasia cervical moderada'},
+  {codigo:'N872', nombre:'Displasia cervical severa, no clasificada en otra parte'},
+  {codigo:'N879', nombre:'Displasia del cuello uterino, no especificada'},
+  {codigo:'Z014', nombre:'Examen ginecológico general'},
+  {codigo:'Z124', nombre:'Examen de pesquisa especial para tumor del cuello uterino'},
+  {codigo:'R102', nombre:'Dolor pélvico y perineal'},
+  {codigo:'N939', nombre:'Hemorragia uterina y vaginal anormal, no especificada'},
+  {codigo:'N946', nombre:'Dismenorrea, no especificada'},
+  {codigo:'N390', nombre:'Infección de vías urinarias, sitio no especificado'}
 ];
 let hcDiagnosticosSeleccionados = [];
-
-function normalizarDxTexto(valor){
-  return String(valor || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-zA-Z0-9ñÑ\s]/g,'')
-    .toLowerCase()
-    .trim();
-}
-
-function buscarDiagnosticoCie10(){
-  const codigo = normalizarDxTexto(getValueIfExists('hcDxCodigoBuscar'));
-  const nombre = normalizarDxTexto(getValueIfExists('hcDxNombreBuscar'));
-  const body = document.getElementById('hcDxResultadosBody');
-  if(!body) return;
-
-  if(!codigo && !nombre){
-    body.innerHTML = '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
-    return;
-  }
-
-  const resultados = hcCie10CatalogoBase.filter(d => {
-    return (!codigo || normalizarDxTexto(d.codigo).includes(codigo)) && (!nombre || normalizarDxTexto(d.nombre).includes(nombre));
-  }).slice(0,10);
-
-  body.innerHTML = resultados.map(d => `
-    <tr>
-      <td class="diagnostico-cie-code">${d.codigo}</td>
-      <td>${d.nombre.toUpperCase()}</td>
-      <td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoDesdeCatalogo('${d.codigo}')">Agregar</button></td>
-    </tr>
-  `).join('') || '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
-}
-
-function agregarDiagnosticoDesdeCatalogo(codigo){
-  const dx = hcCie10CatalogoBase.find(d => d.codigo === String(codigo || '').toUpperCase());
-  if(!dx) return;
-  agregarDiagnosticoCie10(dx.codigo, dx.nombre);
-}
-
-function agregarDiagnosticoCie10Manual(){
-  const codigo = getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase();
-  const nombre = getValueIfExists('hcDxNombreBuscar').trim();
-  if(!codigo || !nombre){
-    alert('Ingrese código CIE-10 y nombre de diagnóstico.');
-    return;
-  }
-  agregarDiagnosticoCie10(codigo, nombre);
-}
-
-function agregarDiagnosticoCie10(codigo, nombre){
-  codigo = String(codigo || '').trim().toUpperCase();
-  nombre = String(nombre || '').trim();
-  if(!codigo || !nombre) return;
-  if(hcDiagnosticosSeleccionados.some(d => d.codigo === codigo)){
-    alert('Este diagnóstico ya fue agregado.');
-    return;
-  }
-  hcDiagnosticosSeleccionados.push({
-    codigo,
-    nombre,
-    principal: hcDiagnosticosSeleccionados.length === 0,
-    tipo:'Presuntivo'
-  });
-  renderDiagnosticosSeleccionados();
-  sincronizarDiagnosticosConCamposHistoria();
-}
-
-function eliminarDiagnosticoCie10(index){
-  hcDiagnosticosSeleccionados.splice(index,1);
-  if(hcDiagnosticosSeleccionados.length && !hcDiagnosticosSeleccionados.some(d => d.principal)){
-    hcDiagnosticosSeleccionados[0].principal = true;
-  }
-  renderDiagnosticosSeleccionados();
-  sincronizarDiagnosticosConCamposHistoria();
-}
-
-function marcarDiagnosticoPrincipal(index){
-  hcDiagnosticosSeleccionados.forEach((d,i) => d.principal = i === index);
-  renderDiagnosticosSeleccionados();
-  sincronizarDiagnosticosConCamposHistoria();
-}
-
-function cambiarTipoDiagnostico(index, valor){
-  if(hcDiagnosticosSeleccionados[index]) hcDiagnosticosSeleccionados[index].tipo = valor;
-  sincronizarDiagnosticosConCamposHistoria();
-}
-
-function renderDiagnosticosSeleccionados(){
-  const body = document.getElementById('hcDxSeleccionadosBody');
-  if(!body) return;
-  if(!hcDiagnosticosSeleccionados.length){
-    body.innerHTML = '<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';
-    return;
-  }
-  body.innerHTML = hcDiagnosticosSeleccionados.map((d,i) => `
-    <tr>
-      <td><span class="diagnostico-cie-code">${d.codigo}</span> &nbsp; ${String(d.nombre || '').toUpperCase()}</td>
-      <td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal ? 'checked' : ''} onchange="marcarDiagnosticoPrincipal(${i})"></td>
-      <td>
-        <select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)">
-          <option ${d.tipo === 'Presuntivo' ? 'selected' : ''}>Presuntivo</option>
-          <option ${d.tipo === 'Definitivo' ? 'selected' : ''}>Definitivo</option>
-        </select>
-      </td>
-      <td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td>
-    </tr>
-  `).join('');
-}
-
-function sincronizarDiagnosticosConCamposHistoria(){
-  const principal = hcDiagnosticosSeleccionados.find(d => d.principal) || hcDiagnosticosSeleccionados[0];
-  const secundarios = hcDiagnosticosSeleccionados.filter(d => !principal || d.codigo !== principal.codigo);
-  if(principal){
-    setValueIfExists('hcCie10Principal', principal.codigo);
-    setValueIfExists('hcDiagnosticoPrincipal', principal.nombre);
-  }else{
-    setValueIfExists('hcCie10Principal', '');
-    setValueIfExists('hcDiagnosticoPrincipal', '');
-  }
-  setValueIfExists('hcCie10Secundario', secundarios.map(d => d.codigo).join('; '));
-  setValueIfExists('hcDiagnosticoSecundario', secundarios.map(d => `${d.codigo} ${d.nombre} (${d.tipo})`).join('; '));
-}
-
-function recopilarDiagnosticosCie10(){
-  sincronizarDiagnosticosConCamposHistoria();
-  return hcDiagnosticosSeleccionados.map(d => `${d.principal ? 'Principal' : 'Secundario'}: ${d.codigo} ${d.nombre} (${d.tipo})`).join(' || ');
-}
+function normalizarDxTexto(valor){return String(valor||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();}
+function buscarDiagnosticoCie10(){const codigo=normalizarDxTexto(getValueIfExists('hcDxCodigoBuscar'));const nombre=normalizarDxTexto(getValueIfExists('hcDxNombreBuscar'));const body=document.getElementById('hcDxResultadosBody');if(!body)return;if(!codigo&&!nombre){body.innerHTML='<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';return;}const resultados=hcCie10CatalogoBase.filter(d=>(!codigo||normalizarDxTexto(d.codigo).includes(codigo))&&(!nombre||normalizarDxTexto(d.nombre).includes(nombre))).slice(0,10);body.innerHTML=resultados.map(d=>`<tr><td class="diagnostico-cie-code">${d.codigo}</td><td>${d.nombre.toUpperCase()}</td><td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoCie10('${d.codigo}','${d.nombre.replace(/'/g,"\'")}')">Agregar</button></td></tr>`).join('')||'<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';}
+function agregarDiagnosticoCie10Manual(){const codigo=getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase();const nombre=getValueIfExists('hcDxNombreBuscar').trim();if(!codigo||!nombre){alert('Ingrese código CIE-10 y nombre de diagnóstico.');return;}agregarDiagnosticoCie10(codigo,nombre);}
+function agregarDiagnosticoCie10(codigo,nombre){codigo=String(codigo||'').trim().toUpperCase();nombre=String(nombre||'').trim();if(!codigo||!nombre)return;if(hcDiagnosticosSeleccionados.some(d=>d.codigo===codigo)){alert('Este diagnóstico ya fue agregado.');return;}hcDiagnosticosSeleccionados.push({codigo,nombre,principal:hcDiagnosticosSeleccionados.length===0,tipo:'Presuntivo'});renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function eliminarDiagnosticoCie10(index){hcDiagnosticosSeleccionados.splice(index,1);if(hcDiagnosticosSeleccionados.length&&!hcDiagnosticosSeleccionados.some(d=>d.principal)){hcDiagnosticosSeleccionados[0].principal=true;}renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function marcarDiagnosticoPrincipal(index){hcDiagnosticosSeleccionados.forEach((d,i)=>d.principal=i===index);renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function cambiarTipoDiagnostico(index,valor){if(hcDiagnosticosSeleccionados[index])hcDiagnosticosSeleccionados[index].tipo=valor;sincronizarDiagnosticosConCamposHistoria();}
+function renderDiagnosticosSeleccionados(){const body=document.getElementById('hcDxSeleccionadosBody');if(!body)return;if(!hcDiagnosticosSeleccionados.length){body.innerHTML='<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';return;}body.innerHTML=hcDiagnosticosSeleccionados.map((d,i)=>`<tr><td><span class="diagnostico-cie-code">${d.codigo}</span> &nbsp; ${String(d.nombre||'').toUpperCase()}</td><td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal?'checked':''} onchange="marcarDiagnosticoPrincipal(${i})"></td><td><select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)"><option ${d.tipo==='Presuntivo'?'selected':''}>Presuntivo</option><option ${d.tipo==='Definitivo'?'selected':''}>Definitivo</option></select></td><td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');}
+function sincronizarDiagnosticosConCamposHistoria(){const principal=hcDiagnosticosSeleccionados.find(d=>d.principal)||hcDiagnosticosSeleccionados[0];const secundarios=hcDiagnosticosSeleccionados.filter(d=>!principal||d.codigo!==principal.codigo);if(principal){setValueIfExists('hcCie10Principal',principal.codigo);setValueIfExists('hcDiagnosticoPrincipal',principal.nombre);}else{setValueIfExists('hcCie10Principal','');setValueIfExists('hcDiagnosticoPrincipal','');}setValueIfExists('hcCie10Secundario',secundarios.map(d=>d.codigo).join('; '));setValueIfExists('hcDiagnosticoSecundario',secundarios.map(d=>`${d.codigo} ${d.nombre} (${d.tipo})`).join('; '));}
+function recopilarDiagnosticosCie10(){sincronizarDiagnosticosConCamposHistoria();return hcDiagnosticosSeleccionados.map(d=>`${d.principal?'Principal':'Secundario'}: ${d.codigo} ${d.nombre} (${d.tipo})`).join(' || ');}
 
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
@@ -3627,7 +3228,14 @@ async function guardarHistoriaClinicaERP(){
   const examenFisico = unirLinea([
     recopilarOrganosSentidosExamenFisico() ? 'Órgano de los sentidos: ' + recopilarOrganosSentidosExamenFisico() : '',
     recopilarRespiratorioExamenFisico() ? 'Respiratorio: ' + recopilarRespiratorioExamenFisico() : '',
+    recopilarCardiovascularExamenFisico() ? 'Cardiovascular: ' + recopilarCardiovascularExamenFisico() : '',
     recopilarDiagnosticosCie10() ? 'Diagnóstico(s): ' + recopilarDiagnosticosCie10() : '',
+    recopilarDigestivoExamenFisico() ? 'Digestivo: ' + recopilarDigestivoExamenFisico() : '',
+    recopilarUrinarioExamenFisico() ? 'Urinario: ' + recopilarUrinarioExamenFisico() : '',
+    recopilarMusculoEsqueleticoExamenFisico() ? 'Músculo Esquelético: ' + recopilarMusculoEsqueleticoExamenFisico() : '',
+    recopilarEndocrinoExamenFisico() ? 'Endócrino: ' + recopilarEndocrinoExamenFisico() : '',
+    recopilarHemoLinfaticoExamenFisico() ? 'Hemo-linfático: ' + recopilarHemoLinfaticoExamenFisico() : '',
+    recopilarRegionalExamenFisico() ? 'Examen físico regional: ' + recopilarRegionalExamenFisico() : '',
     getValueIfExists('hcExamenGeneral') ? 'Estado general: ' + getValueIfExists('hcExamenGeneral') : '',
     getValueIfExists('hcCabezaCuello') ? 'Cabeza y cuello: ' + getValueIfExists('hcCabezaCuello') : '',
     getValueIfExists('hcToraxRespiratorio') ? 'Tórax/Respiratorio: ' + getValueIfExists('hcToraxRespiratorio') : '',
@@ -4152,17 +3760,6 @@ async function inicializarERP(){
 }
 
 inicializarERP();
-
-// AUROSANAX - Inicialización visual de diagnóstico CIE-10
-if (typeof document !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', function(){
-    try{
-      if (typeof renderDiagnosticosSeleccionados === 'function') renderDiagnosticosSeleccionados();
-      if (typeof buscarDiagnosticoCie10 === 'function') buscarDiagnosticoCie10();
-    }catch(e){ console.warn('Inicialización Diagnóstico CIE-10:', e); }
-  });
-}
-
 </script>
 </body>
 </html>
