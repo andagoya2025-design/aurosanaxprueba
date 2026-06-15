@@ -175,6 +175,7 @@
             <div class="col-md-6">
               <label class="form-label">Servicio / motivo *</label>
               <select id="servicio" class="form-select" required>
+                <option value="">Seleccione servicio</option>
                 <option value="Consulta">Consulta</option>
                 <option value="Control">Control</option>
                 <option value="Procedimiento">Procedimiento</option>
@@ -482,20 +483,95 @@
       return !['anulada','atendida','no asistió','no asistio','cancelada','cancelado'].includes(e);
     }
 
+    function validarCedulaEcuador(cedula){
+      const c = soloDigitos(cedula);
+      if(!/^\d{10}$/.test(c)) return false;
+
+      const provincia = parseInt(c.substring(0, 2), 10);
+      const tercerDigito = parseInt(c[2], 10);
+      if(provincia < 1 || provincia > 24 || tercerDigito >= 6) return false;
+
+      let suma = 0;
+      for(let i = 0; i < 9; i++){
+        let valor = parseInt(c[i], 10);
+        if(i % 2 === 0){
+          valor *= 2;
+          if(valor > 9) valor -= 9;
+        }
+        suma += valor;
+      }
+
+      const verificador = suma % 10 === 0 ? 0 : 10 - (suma % 10);
+      return verificador === parseInt(c[9], 10);
+    }
+
+    function nombreCompletoValido(nombre){
+      const limpio = String(nombre || '').trim().replace(/\s+/g, ' ');
+      const partes = limpio.split(' ').filter(Boolean);
+      return limpio.length >= 8 && partes.length >= 2;
+    }
+
+    function whatsappValido(numero){
+      const n = soloDigitos(numero);
+      return /^09\d{8}$/.test(n);
+    }
+
+    function extraerDocumentoCita(c){
+      return soloDigitos(
+        c.numero_documento ||
+        c.documento ||
+        c.cedula ||
+        c.identificacion ||
+        c.identificacion_paciente ||
+        c.numero_documento_paciente ||
+        c.doc_paciente ||
+        ''
+      );
+    }
+
+    function extraerTelefonoCita(c){
+      return soloDigitos(
+        c.whatsapp ||
+        c.telefono ||
+        c.celular ||
+        c.telefono_paciente ||
+        c.whatsapp_paciente ||
+        ''
+      );
+    }
+
     function validarFormularioAntesDeEnviar(data){
       limpiarErroresCampos();
       const errores = [];
       const doc = soloDigitos(data.numero_documento);
       const wa = soloDigitos(data.whatsapp);
 
-      if(!data.numero_documento){ errores.push('Ingrese la cédula o documento.'); marcarCampoError('numero_documento'); }
-      else if(doc.length < 8 || doc.length > 13){ errores.push('Revise la cédula/documento. Debe tener entre 8 y 13 dígitos.'); marcarCampoError('numero_documento'); }
+      if(!data.numero_documento){
+        errores.push('Ingrese la cédula del paciente.');
+        marcarCampoError('numero_documento');
+      } else if(!/^\d{10}$/.test(doc)){
+        errores.push('La cédula debe tener exactamente 10 dígitos.');
+        marcarCampoError('numero_documento');
+      } else if(!validarCedulaEcuador(doc)){
+        errores.push('La cédula ingresada no es válida. Revise el número.');
+        marcarCampoError('numero_documento');
+      }
 
-      if(!data.nombre_completo){ errores.push('Ingrese nombres completos.'); marcarCampoError('nombre_completo'); }
-      else if(data.nombre_completo.length < 5){ errores.push('Ingrese nombres completos válidos.'); marcarCampoError('nombre_completo'); }
+      if(!data.nombre_completo){
+        errores.push('Ingrese nombres completos.');
+        marcarCampoError('nombre_completo');
+      } else if(!nombreCompletoValido(data.nombre_completo)){
+        errores.push('Ingrese nombre y apellido. Mínimo 2 palabras y 8 caracteres.');
+        marcarCampoError('nombre_completo');
+      }
 
-      if(!data.whatsapp){ errores.push('Ingrese WhatsApp o teléfono.'); marcarCampoError('whatsapp'); }
-      else if(wa.length < 9 || wa.length > 13){ errores.push('Revise el WhatsApp/teléfono. Debe tener entre 9 y 13 dígitos.'); marcarCampoError('whatsapp'); }
+      if(!data.whatsapp){
+        errores.push('Ingrese WhatsApp o teléfono.');
+        marcarCampoError('whatsapp');
+      } else if(!whatsappValido(wa)){
+        errores.push('El WhatsApp/teléfono debe tener 10 dígitos y empezar con 09.');
+        marcarCampoError('whatsapp');
+      }
 
       if(!data.id_medico){ errores.push('Seleccione un médico.'); marcarCampoError('id_medico'); }
       if(!data.fecha_cita){ errores.push('Seleccione una fecha.'); marcarCampoError('fecha_cita'); }
@@ -519,17 +595,23 @@
       const fecha = normalizarFecha(data.fecha_cita);
       const hora = formatearHoraVista(data.hora_inicio);
       const doc = soloDigitos(data.numero_documento);
+      const wa = soloDigitos(data.whatsapp);
 
       return citas.find(c => {
         if(!estadoCitaActiva(c)) return false;
+
         const cIdDisp = String(c.id_disponibilidad || '').trim();
         const cFecha = normalizarFecha(c.fecha_cita || c.fecha);
         const cHora = formatearHoraVista(c.hora_inicio);
-        const cTexto = JSON.stringify(c || {}).replace(/\D/g,'');
+        const cMedico = String(c.id_medico || '').trim();
+        const cDoc = extraerDocumentoCita(c);
+        const cTel = extraerTelefonoCita(c);
 
         if(idDisp && cIdDisp && idDisp === cIdDisp) return true;
-        if(cFecha === fecha && cHora === hora && String(c.id_medico || '') === String(data.id_medico || '')) return true;
-        if(doc && cFecha === fecha && cTexto.includes(doc)) return true;
+        if(cFecha === fecha && cHora === hora && cMedico === String(data.id_medico || '').trim()) return true;
+        if(doc && cDoc && cDoc === doc && cFecha === fecha) return true;
+        if(wa && cTel && cTel === wa && cFecha === fecha) return true;
+
         return false;
       }) || null;
     }
