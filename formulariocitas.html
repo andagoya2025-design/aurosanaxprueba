@@ -82,6 +82,7 @@
     .success-item{background:#fff;border:1px solid #dcfce7;border-radius:14px;padding:9px}.success-item small{display:block;color:#64748b;font-size:11px;font-weight:900;text-transform:uppercase}.success-item b{display:block;color:#111827;margin-top:2px}
     .btn-wa{background:#16a34a;color:#fff;border:0;border-radius:15px;padding:11px 14px;font-weight:950;display:inline-flex;align-items:center;gap:7px;text-decoration:none}.btn-wa:hover{color:#fff;filter:saturate(1.08)}
     .success-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}
+    .success-note{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:14px;padding:10px 12px;margin-top:12px;font-size:13px;font-weight:800}
 
     .ux-guide{border:1px solid #f1d4e5;background:linear-gradient(180deg,#fff,#fff7fb);border-radius:22px;padding:14px;margin-bottom:16px;box-shadow:0 12px 28px rgba(139,30,90,.055)}
     .ux-guide-title{font-weight:950;color:#7a174f;margin-bottom:9px;display:flex;align-items:center;gap:7px}
@@ -777,13 +778,15 @@
         if(!r.success) throw new Error(r.message || 'No se pudo guardar la cita');
 
         const estadoCita = r.estado_cita || 'Pendiente';
-        const idCita = r.id_cita || r?.cita?.id || '';
+        const idCita = r.id_cita || r?.cita?.id_cita || r?.cita?.id || '';
         const pacienteNombre = data.nombre_completo || 'Paciente';
+        const whatsappPaciente = data.whatsapp || data.telefono || '';
+        const codigoReserva = idCita || 'Pendiente de asignar';
         const resumenWhatsApp =
           'Hola, soy ' + pacienteNombre + '. Acabo de reservar un horario en AUROSANAX DEMO para el ' +
           formatearFechaBonita(data.fecha_cita) + ' a las ' + data.hora_inicio +
           ' con ' + medicoNombre(data.id_medico) + '. Estado: ' + estadoCita +
-          (idCita ? '. Código: ' + idCita : '') + '.';
+          (idCita ? '. Código de reserva: ' + idCita : '') + '. Secretaría confirmará los detalles por WhatsApp.';
         const wa = normalizarWhatsApp(data.whatsapp);
         const waLink = wa ? 'https://wa.me/' + wa + '?text=' + encodeURIComponent(resumenWhatsApp) : '';
 
@@ -797,8 +800,10 @@
               <div class="success-item"><small>Fecha</small><b>${formatearFechaBonita(data.fecha_cita)}</b></div>
               <div class="success-item"><small>Hora</small><b>${data.hora_inicio} - ${data.hora_fin}</b></div>
               <div class="success-item"><small>Médico</small><b>${medicoNombre(data.id_medico)}</b></div>
-              <div class="success-item"><small>Código</small><b>${idCita || 'Pendiente'}</b></div>
+              <div class="success-item"><small>WhatsApp</small><b>${whatsappPaciente}</b></div>
+              <div class="success-item"><small>Código de reserva</small><b>${codigoReserva}</b></div>
             </div>
+            <div class="success-note"><i class="bi bi-info-circle me-1"></i> El código de reserva sirve para ubicar su cita en Secretaría. El horario ya quedó apartado, pero la confirmación final será realizada por nuestro equipo vía WhatsApp.</div>
             <div class="success-actions">
               ${waLink ? `<a class="btn-wa" target="_blank" href="${waLink}"><i class="bi bi-whatsapp"></i> Enviar resumen por WhatsApp</a>` : ''}
               <button type="button" class="btn-line" onclick="cargarDatosIniciales(true)"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
