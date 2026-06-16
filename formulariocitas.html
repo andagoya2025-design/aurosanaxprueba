@@ -722,11 +722,15 @@
       const medico = medicoNombre(c.id_medico || '');
       const motivo = c.motivo || c.tipo_cita || c.servicio || '';
       const codigo = c.id_cita || '';
+      const cedula = extraerDocumentoCita(c);
+      const whatsapp = extraerTelefonoCita(c);
 
       let detalle = '<div class="mt-2"><b>Motivo:</b> ' + (duplicada?.mensaje || 'No se puede duplicar la reserva.') + '</div>';
       detalle += '<div class="mt-2 small">';
       if(codigo) detalle += '<div><b>Código:</b> ' + codigo + '</div>';
       if(paciente) detalle += '<div><b>Paciente:</b> ' + paciente + '</div>';
+      if(cedula) detalle += '<div><b>Cédula:</b> ' + cedula + '</div>';
+      if(whatsapp) detalle += '<div><b>WhatsApp:</b> ' + whatsapp + '</div>';
       if(fecha) detalle += '<div><b>Fecha:</b> ' + fecha + '</div>';
       if(hora) detalle += '<div><b>Hora registrada:</b> ' + hora + (fin ? ' - ' + fin : '') + '</div>';
       if(medico) detalle += '<div><b>Médico:</b> ' + medico + '</div>';
@@ -818,10 +822,11 @@
         const estadoCita = r.estado_cita || 'Pendiente';
         const idCita = r.id_cita || r?.cita?.id_cita || r?.cita?.id || '';
         const pacienteNombre = data.nombre_completo || 'Paciente';
+        const cedulaPaciente = data.numero_documento || '';
         const whatsappPaciente = data.whatsapp || data.telefono || '';
         const codigoReserva = idCita || 'Pendiente de asignar';
         const resumenWhatsApp =
-          'Hola, soy ' + pacienteNombre + '. Acabo de reservar un horario en AUROSANAX DEMO para el ' +
+          'Hola, soy ' + pacienteNombre + (cedulaPaciente ? ' con cédula ' + cedulaPaciente : '') + '. Acabo de reservar un horario en AUROSANAX DEMO para el ' +
           formatearFechaBonita(data.fecha_cita) + ' a las ' + data.hora_inicio +
           ' con ' + medicoNombre(data.id_medico) + '. Estado: ' + estadoCita +
           (idCita ? '. Código de reserva: ' + idCita : '') + '. Secretaría confirmará los detalles por WhatsApp.';
@@ -834,6 +839,7 @@
             <div>Su horario ha quedado reservado y ya no estará disponible para otros pacientes. Secretaría revisará la información y se comunicará por WhatsApp para confirmar los detalles de la cita.</div>
             <div class="success-grid">
               <div class="success-item"><small>Paciente</small><b>${pacienteNombre}</b></div>
+              <div class="success-item"><small>Cédula</small><b>${cedulaPaciente}</b></div>
               <div class="success-item"><small>Estado</small><b>${estadoCita}</b></div>
               <div class="success-item"><small>Fecha</small><b>${formatearFechaBonita(data.fecha_cita)}</b></div>
               <div class="success-item"><small>Hora</small><b>${data.hora_inicio} - ${data.hora_fin}</b></div>
