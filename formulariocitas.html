@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AUROSANAX DEMO - Formulario de Citas v2.1</title>
+  <title>AUROSANAX DEMO - Formulario de Citas v2.2</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -57,11 +57,6 @@
     .loading{display:none;color:var(--muted);font-weight:800}.loading.show{display:block}
     .demo{font-size:12px;color:#64748b;font-weight:800;margin-top:14px;text-align:center}
 
-
-    /* =========================================================
-       V2.0 - Mini calendario visual + confirmación profesional
-       Mantiene las tarjetas grandes de horarios existentes.
-       ========================================================= */
     .calendar-card{border:1px solid #f1d4e5;background:linear-gradient(180deg,#fff,#fff8fc);border-radius:22px;padding:14px;margin-bottom:12px;box-shadow:0 12px 28px rgba(139,30,90,.06)}
     .calendar-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
     .calendar-top b{font-size:15px;color:#7a174f;font-weight:950}
@@ -100,11 +95,11 @@
           <div><h1>AUROSANAX</h1><small>Formulario de citas DEMO</small></div>
         </div>
         <h2>Solicita tu cita médica</h2>
-        <p>Formulario de prueba conectado a la disponibilidad registrada por Secretaría. Solo muestra horarios disponibles.</p>
+        <p>Formulario de prueba conectado a la disponibilidad registrada por Secretaría. Solo muestra horarios disponibles y vigentes.</p>
         <div class="pill"><i class="bi bi-shield-check"></i> Entorno DEMO · No usar con pacientes reales</div>
         <div class="steps">
-          <div class="step"><i class="bi bi-calendar2-check"></i><div><b>1. Selecciona fecha</b><span>El sistema revisa disponibilidad guardada.</span></div></div>
-          <div class="step"><i class="bi bi-clock"></i><div><b>2. Elige hora disponible</b><span>Las horas reservadas o anuladas no aparecen.</span></div></div>
+          <div class="step"><i class="bi bi-calendar2-check"></i><div><b>1. Selecciona fecha</b><span>El sistema revisa disponibilidad guardada según médico.</span></div></div>
+          <div class="step"><i class="bi bi-clock"></i><div><b>2. Elige hora disponible</b><span>Las horas pasadas, reservadas o anuladas no aparecen.</span></div></div>
           <div class="step"><i class="bi bi-send-check"></i><div><b>3. Envía la solicitud</b><span>Se crea la cita y el horario pasa a reservado.</span></div></div>
         </div>
       </aside>
@@ -157,7 +152,7 @@
                 </div>
                 <div id="miniCalendarGrid" class="calendar-grid-mini"></div>
                 <div class="calendar-legend">
-                  <span><i class="legend-dot dot-ok"></i>Con horarios</span>
+                  <span><i class="legend-dot dot-ok"></i>Con horarios para el médico seleccionado</span>
                   <span><i class="legend-dot dot-off"></i>Sin horarios</span>
                   <span><i class="legend-dot dot-sel"></i>Seleccionado</span>
                 </div>
@@ -190,7 +185,7 @@
 
           <div class="mini-note mt-3">
             <i class="bi bi-info-circle me-1"></i>
-            Si la cita se guarda correctamente, el horario seleccionado debe cambiar de <b>Disponible</b> a <b>Reservado</b> en Secretaría.
+            Los horarios dependen del médico seleccionado. Si la cita se guarda correctamente, el horario seleccionado debe cambiar de <b>Disponible</b> a <b>Reservado</b> en Secretaría.
           </div>
 
           <div id="statusBox" class="status"></div>
@@ -237,7 +232,6 @@
       return y + '-' + m + '-' + d;
     }
 
-
     function formatearFechaBonita(iso){
       if(!iso) return '';
       const partes = String(iso).substring(0,10).split('-');
@@ -254,12 +248,68 @@
       return n;
     }
 
+    function normalizarFecha(valor){
+      if(!valor) return '';
+      const s = String(valor);
+      if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+      return s.substring(0,10);
+    }
+
+    function formatearHoraVista(valor){
+      if(valor === null || valor === undefined) return '';
+      if(typeof valor === 'number'){
+        const total = Math.round(valor * 24 * 60);
+        const hh = String(Math.floor(total / 60) % 24).padStart(2,'0');
+        const mm = String(total % 60).padStart(2,'0');
+        return hh + ':' + mm;
+      }
+      let s = String(valor).trim();
+      if(!s) return '';
+      if(s.includes('T')){
+        const d = new Date(s);
+        if(!isNaN(d)) return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0');
+      }
+      if(/^\d{1}:\d{2}$/.test(s)) return '0' + s;
+      if(/^\d{1,2}:\d{2}/.test(s)){
+        const p = s.split(':');
+        return String(p[0]).padStart(2,'0') + ':' + p[1].substring(0,2);
+      }
+      return s;
+    }
+
+    function horaValida(h){
+      if(!/^\d{2}:\d{2}$/.test(String(h || ''))) return false;
+      const [hh, mm] = h.split(':').map(Number);
+      return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59;
+    }
+
+    function horaToMin(h){
+      const [hh, mm] = String(h || '00:00').split(':').map(Number);
+      return (hh * 60) + (mm || 0);
+    }
+
+    function minutosActuales(){
+      const ahora = new Date();
+      return (ahora.getHours() * 60) + ahora.getMinutes();
+    }
+
+    function horarioVigenteParaFormulario(fecha, horaInicio){
+      const iso = normalizarFecha(fecha);
+      const hoy = fechaISO(new Date());
+      if(!iso || iso < hoy) return false;
+      if(iso > hoy) return true;
+      const hora = formatearHoraVista(horaInicio);
+      if(!horaValida(hora)) return false;
+      return horaToMin(hora) > minutosActuales();
+    }
+
     function horariosDisponiblesPorFecha(fecha){
       const idMedico = document.getElementById('id_medico')?.value || '';
       return disponibilidad.filter(d =>
         normalizarFecha(d.fecha) === fecha &&
         String(d.id_medico || '') === String(idMedico || '') &&
-        String(d.estado || '').trim().toLowerCase() === 'disponible'
+        String(d.estado || '').trim().toLowerCase() === 'disponible' &&
+        horarioVigenteParaFormulario(fecha, d.hora_inicio)
       );
     }
 
@@ -326,35 +376,6 @@
         html += `<div class="${css}" ${click}><span class="num">${day}</span><span class="qty">${texto}</span></div>`;
       }
       grid.innerHTML = html;
-    }
-
-    function normalizarFecha(valor){
-      if(!valor) return '';
-      const s = String(valor);
-      if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
-      return s.substring(0,10);
-    }
-
-    function formatearHoraVista(valor){
-      if(valor === null || valor === undefined) return '';
-      if(typeof valor === 'number'){
-        const total = Math.round(valor * 24 * 60);
-        const hh = String(Math.floor(total / 60) % 24).padStart(2,'0');
-        const mm = String(total % 60).padStart(2,'0');
-        return hh + ':' + mm;
-      }
-      let s = String(valor).trim();
-      if(!s) return '';
-      if(s.includes('T')){
-        const d = new Date(s);
-        if(!isNaN(d)) return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0');
-      }
-      if(/^\d{1}:\d{2}$/.test(s)) return '0' + s;
-      if(/^\d{1,2}:\d{2}/.test(s)){
-        const p = s.split(':');
-        return String(p[0]).padStart(2,'0') + ':' + p[1].substring(0,2);
-      }
-      return s;
     }
 
     function medicoNombre(id){
@@ -427,7 +448,6 @@
 
       const cont = document.getElementById('slots');
       const fecha = document.getElementById('fecha_cita').value;
-      const idMedico = document.getElementById('id_medico').value;
 
       if(!fecha){
         cont.innerHTML = '<div class="mini-note" style="grid-column:1/-1">Seleccione una fecha para ver horarios.</div>';
@@ -438,7 +458,7 @@
         .sort((a,b) => formatearHoraVista(a.hora_inicio).localeCompare(formatearHoraVista(b.hora_inicio)));
 
       if(!disponibles.length){
-        cont.innerHTML = '<div class="mini-note" style="grid-column:1/-1"><i class="bi bi-calendar-x me-1"></i> No hay horarios disponibles para esta fecha y médico.</div>';
+        cont.innerHTML = '<div class="mini-note" style="grid-column:1/-1"><i class="bi bi-calendar-x me-1"></i> No hay horarios disponibles vigentes para esta fecha y médico. Cambie de médico o seleccione otro día marcado con horarios.</div>';
         return;
       }
 
@@ -455,6 +475,12 @@
       const lista = window.__slotsDisponibles || [];
       const slot = lista[idx];
       if(!slot) return;
+      if(!horarioVigenteParaFormulario(normalizarFecha(slot.fecha), slot.hora_inicio)){
+        setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> Este horario ya expiró. Actualice horarios y seleccione otro.');
+        renderCalendarioDisponibilidad();
+        renderHorasDisponibles();
+        return;
+      }
       selectedSlot = slot;
       document.getElementById('hora_inicio').value = formatearHoraVista(slot.hora_inicio);
       document.getElementById('hora_fin').value = formatearHoraVista(slot.hora_fin);
@@ -576,6 +602,9 @@
       if(!data.id_medico){ errores.push('Seleccione un médico.'); marcarCampoError('id_medico'); }
       if(!data.fecha_cita){ errores.push('Seleccione una fecha.'); marcarCampoError('fecha_cita'); }
       if(!selectedSlot){ errores.push('Seleccione un horario disponible.'); }
+      if(selectedSlot && !horarioVigenteParaFormulario(data.fecha_cita, data.hora_inicio)){
+        errores.push('El horario seleccionado ya expiró. Actualice horarios y elija otro.');
+      }
       if(!data.servicio){ errores.push('Seleccione el servicio o motivo.'); marcarCampoError('servicio'); }
 
       if(data.email && !/^\S+@\S+\.\S+$/.test(data.email)){
@@ -626,13 +655,13 @@
       return disponibilidad.find(d => {
         const estado = String(d.estado || '').trim().toLowerCase();
         if(estado !== 'disponible') return false;
+        if(!horarioVigenteParaFormulario(normalizarFecha(d.fecha), d.hora_inicio)) return false;
         if(idDisp && String(d.id_disponibilidad || '').trim() === idDisp) return true;
         return normalizarFecha(d.fecha) === fecha &&
           formatearHoraVista(d.hora_inicio) === hora &&
           String(d.id_medico || '') === String(medico || '');
       }) || null;
     }
-
 
     document.getElementById('citaForm').addEventListener('submit', async function(e){
       e.preventDefault();
@@ -675,14 +704,13 @@
       setStatus('info','Verificando disponibilidad actual y procesando solicitud...');
 
       try{
-        // Reconsulta rápida para evitar duplicidad si otro paciente tomó el horario segundos antes.
         const refresco = await Promise.allSettled([apiGet('listarDisponibilidad'), apiGet('listarCitas')]);
         if(refresco[0].status === 'fulfilled' && Array.isArray(refresco[0].value)) disponibilidad = refresco[0].value;
         if(refresco[1].status === 'fulfilled' && Array.isArray(refresco[1].value)) citas = refresco[1].value;
 
         const disponibleAhora = disponibilidadActualDisponible();
         if(!disponibleAhora){
-          throw new Error('Este horario ya no está disponible. Por favor seleccione otro horario.');
+          throw new Error('Este horario ya no está disponible o ya expiró. Por favor seleccione otro horario.');
         }
         data.id_disponibilidad = disponibleAhora.id_disponibilidad || data.id_disponibilidad || '';
 
