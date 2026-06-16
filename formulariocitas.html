@@ -231,6 +231,7 @@
     let disponibilidad = [];
     let medicos = [];
     let citas = [];
+    let pacientes = [];
     let selectedSlot = null;
     let enviandoCita = false;
     let miniCalendarDate = new Date();
@@ -455,12 +456,14 @@
         const resultados = await Promise.allSettled([
           apiGet('listarDisponibilidad'),
           apiGet('listarMedicosActivos'),
-          apiGet('listarCitas')
+          apiGet('listarCitas'),
+          apiGet('listarPacientes')
         ]);
 
         disponibilidad = resultados[0].status === 'fulfilled' && Array.isArray(resultados[0].value) ? resultados[0].value : [];
         medicos = resultados[1].status === 'fulfilled' && Array.isArray(resultados[1].value) ? resultados[1].value : [];
         citas = resultados[2].status === 'fulfilled' && Array.isArray(resultados[2].value) ? resultados[2].value : [];
+        pacientes = resultados[3].status === 'fulfilled' && Array.isArray(resultados[3].value) ? resultados[3].value : [];
 
         renderMedicos();
         sincronizarMiniDesdeInput();
@@ -631,8 +634,50 @@
       return /^09\d{8}$/.test(n);
     }
 
+    function buscarPacientePorId(idPaciente){
+      const id = String(idPaciente || '').trim();
+      if(!id || !Array.isArray(pacientes)) return null;
+      return pacientes.find(p => String(p.id_paciente || '').trim() === id) || null;
+    }
+
+    function documentoPacienteLocal(p){
+      return soloDigitos(p?.numero_documento || p?.documento || p?.cedula || p?.identificacion || '');
+    }
+
+    function telefonoPacienteLocal(p){
+      return soloDigitos(p?.whatsapp || p?.telefono || p?.celular || '');
+    }
+
+    function buscarPacientesRelacionadosLocal(data){
+      const doc = soloDigitos(data?.numero_documento || data?.cedula || data?.documento || '');
+      const wa = soloDigitos(data?.whatsapp || data?.telefono || '');
+      const lista = Array.isArray(pacientes) ? pacientes : [];
+      return lista.filter(p => {
+        const pDoc = documentoPacienteLocal(p);
+        const pTel = telefonoPacienteLocal(p);
+        return (doc && pDoc && pDoc === doc) || (wa && pTel && pTel === wa);
+      });
+    }
+
+    function idsPacientesRelacionadosLocal(data){
+      const ids = new Set();
+      buscarPacientesRelacionadosLocal(data).forEach(p => {
+        const id = String(p.id_paciente || '').trim();
+        if(id) ids.add(id);
+      });
+      return ids;
+    }
+
+    function extraerNombrePacienteCita(c){
+      const directo = (c.nombre_completo || c.paciente || c.nombre_paciente || '').trim();
+      if(directo) return directo;
+      const p = buscarPacientePorId(c.id_paciente);
+      if(!p) return '';
+      return ((p.nombres || '') + ' ' + (p.apellidos || '')).trim();
+    }
+
     function extraerDocumentoCita(c){
-      return soloDigitos(
+      const directo = soloDigitos(
         c.numero_documento ||
         c.documento ||
         c.cedula ||
@@ -642,10 +687,14 @@
         c.doc_paciente ||
         ''
       );
+      if(directo) return directo;
+
+      const p = buscarPacientePorId(c.id_paciente);
+      return p ? soloDigitos(p.numero_documento || p.documento || p.cedula || p.identificacion || '') : '';
     }
 
     function extraerTelefonoCita(c){
-      return soloDigitos(
+      const directo = soloDigitos(
         c.whatsapp ||
         c.telefono ||
         c.celular ||
@@ -653,6 +702,10 @@
         c.whatsapp_paciente ||
         ''
       );
+      if(directo) return directo;
+
+      const p = buscarPacientePorId(c.id_paciente);
+      return p ? soloDigitos(p.whatsapp || p.telefono || p.celular || '') : '';
     }
 
     function validarFormularioAntesDeEnviar(data){
@@ -715,6 +768,7 @@
       const medico = String(data.id_medico || '').trim();
       const doc = soloDigitos(data.numero_documento);
       const wa = soloDigitos(data.whatsapp);
+      const idsPaciente = idsPacientesRelacionadosLocal(data);
 
       for(const c of citas){
         if(!estadoCitaActiva(c)) continue;
@@ -725,6 +779,7 @@
         const cMedico = String(c.id_medico || '').trim();
         const cDoc = extraerDocumentoCita(c);
         const cTel = extraerTelefonoCita(c);
+        const cIdPaciente = String(c.id_paciente || '').trim();
 
         // Regla 1: jamás permitir duplicar el mismo horario o la misma disponibilidad activa.
         if(idDisp && cIdDisp && idDisp === cIdDisp){
@@ -734,13 +789,19 @@
           return {tipo:'horario', cita:c, mensaje:'Este horario ya tiene una cita activa para el médico seleccionado.'};
         }
 
-        // Regla 2 AUROSANAX: un paciente no puede tener más de una cita activa el mismo día.
-        // Se valida por cédula y, como respaldo, por WhatsApp. No se bloquea por nombre solo.
-        if(doc && cDoc && cDoc === doc && cFecha === fecha){
-          return {tipo:'paciente_dia', cita:c, mensaje:'Ya existe una cita activa para esta cédula en la fecha seleccionada.'};
-        }
-        if(wa && cTel && cTel === wa && cFecha === fecha){
-          return {tipo:'paciente_dia', cita:c, mensaje:'Ya existe una cita activa para este WhatsApp en la fecha seleccionada.'};
+        // Regla 2 AUROSANAX: una sola cita activa por paciente el mismo día.
+        // Se valida por cédula, WhatsApp y también por id_paciente cuando la hoja citas
+        // solo trae el ID del paciente y los datos personales están en la hoja pacientes.
+        if(cFecha === fecha){
+          if(doc && cDoc && cDoc === doc){
+            return {tipo:'paciente_dia', cita:c, mensaje:'Ya existe una cita activa para esta cédula en la fecha seleccionada.'};
+          }
+          if(wa && cTel && cTel === wa){
+            return {tipo:'paciente_dia', cita:c, mensaje:'Ya existe una cita activa para este WhatsApp en la fecha seleccionada.'};
+          }
+          if(cIdPaciente && idsPaciente.has(cIdPaciente)){
+            return {tipo:'paciente_dia', cita:c, mensaje:'Ya existe una cita activa para este paciente en la fecha seleccionada.'};
+          }
         }
       }
 
@@ -749,7 +810,7 @@
 
     function mensajeDuplicidadReserva(duplicada){
       const c = duplicada && duplicada.cita ? duplicada.cita : {};
-      const paciente = (c.nombre_completo || c.paciente || c.nombre_paciente || '').trim();
+      const paciente = extraerNombrePacienteCita(c);
       const fecha = formatearFechaBonita(normalizarFecha(c.fecha_cita || c.fecha || ''));
       const hora = formatearHoraVista(c.hora_inicio);
       const fin = formatearHoraVista(c.hora_fin);
@@ -834,9 +895,10 @@
       setStatus('info','Verificando disponibilidad actual y reservando el horario seleccionado...');
 
       try{
-        const refresco = await Promise.allSettled([apiGet('listarDisponibilidad'), apiGet('listarCitas')]);
+        const refresco = await Promise.allSettled([apiGet('listarDisponibilidad'), apiGet('listarCitas'), apiGet('listarPacientes')]);
         if(refresco[0].status === 'fulfilled' && Array.isArray(refresco[0].value)) disponibilidad = refresco[0].value;
         if(refresco[1].status === 'fulfilled' && Array.isArray(refresco[1].value)) citas = refresco[1].value;
+        if(refresco[2].status === 'fulfilled' && Array.isArray(refresco[2].value)) pacientes = refresco[2].value;
 
         const disponibleAhora = disponibilidadActualDisponible();
         if(!disponibleAhora){
