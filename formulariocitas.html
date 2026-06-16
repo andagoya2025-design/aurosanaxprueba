@@ -678,11 +678,12 @@
       const idDisp = String(data.id_disponibilidad || '').trim();
       const fecha = normalizarFecha(data.fecha_cita);
       const hora = formatearHoraVista(data.hora_inicio);
+      const medico = String(data.id_medico || '').trim();
       const doc = soloDigitos(data.numero_documento);
       const wa = soloDigitos(data.whatsapp);
 
-      return citas.find(c => {
-        if(!estadoCitaActiva(c)) return false;
+      for(const c of citas){
+        if(!estadoCitaActiva(c)) continue;
 
         const cIdDisp = String(c.id_disponibilidad || '').trim();
         const cFecha = normalizarFecha(c.fecha_cita || c.fecha);
@@ -691,13 +692,49 @@
         const cDoc = extraerDocumentoCita(c);
         const cTel = extraerTelefonoCita(c);
 
-        if(idDisp && cIdDisp && idDisp === cIdDisp) return true;
-        if(cFecha === fecha && cHora === hora && cMedico === String(data.id_medico || '').trim()) return true;
-        if(doc && cDoc && cDoc === doc && cFecha === fecha) return true;
-        if(wa && cTel && cTel === wa && cFecha === fecha) return true;
+        // Regla 1: jamás permitir duplicar el mismo horario o la misma disponibilidad activa.
+        if(idDisp && cIdDisp && idDisp === cIdDisp){
+          return {tipo:'horario', cita:c, mensaje:'Este horario ya fue reservado por otra cita activa.'};
+        }
+        if(cFecha === fecha && cHora === hora && cMedico === medico){
+          return {tipo:'horario', cita:c, mensaje:'Este horario ya tiene una cita activa para el médico seleccionado.'};
+        }
 
-        return false;
-      }) || null;
+        // Regla 2 AUROSANAX: un paciente no puede tener más de una cita activa el mismo día.
+        // Se valida por cédula y, como respaldo, por WhatsApp. No se bloquea por nombre solo.
+        if(doc && cDoc && cDoc === doc && cFecha === fecha){
+          return {tipo:'paciente_dia', cita:c, mensaje:'Ya existe una cita activa para esta cédula en la fecha seleccionada.'};
+        }
+        if(wa && cTel && cTel === wa && cFecha === fecha){
+          return {tipo:'paciente_dia', cita:c, mensaje:'Ya existe una cita activa para este WhatsApp en la fecha seleccionada.'};
+        }
+      }
+
+      return null;
+    }
+
+    function mensajeDuplicidadReserva(duplicada){
+      const c = duplicada && duplicada.cita ? duplicada.cita : {};
+      const paciente = (c.nombre_completo || c.paciente || c.nombre_paciente || '').trim();
+      const fecha = formatearFechaBonita(normalizarFecha(c.fecha_cita || c.fecha || ''));
+      const hora = formatearHoraVista(c.hora_inicio);
+      const fin = formatearHoraVista(c.hora_fin);
+      const medico = medicoNombre(c.id_medico || '');
+      const motivo = c.motivo || c.tipo_cita || c.servicio || '';
+      const codigo = c.id_cita || '';
+
+      let detalle = '<div class="mt-2"><b>Motivo:</b> ' + (duplicada?.mensaje || 'No se puede duplicar la reserva.') + '</div>';
+      detalle += '<div class="mt-2 small">';
+      if(codigo) detalle += '<div><b>Código:</b> ' + codigo + '</div>';
+      if(paciente) detalle += '<div><b>Paciente:</b> ' + paciente + '</div>';
+      if(fecha) detalle += '<div><b>Fecha:</b> ' + fecha + '</div>';
+      if(hora) detalle += '<div><b>Hora registrada:</b> ' + hora + (fin ? ' - ' + fin : '') + '</div>';
+      if(medico) detalle += '<div><b>Médico:</b> ' + medico + '</div>';
+      if(motivo) detalle += '<div><b>Servicio/motivo:</b> ' + motivo + '</div>';
+      detalle += '</div>';
+
+      return '<i class="bi bi-exclamation-triangle me-1"></i> No se pudo reservar la cita.' + detalle +
+        '<div class="mt-2">Para modificar o reagendar una cita del mismo día, comuníquese con Secretaría.</div>';
     }
 
     function disponibilidadActualDisponible(){
@@ -748,7 +785,7 @@
 
       const duplicada = citaDuplicadaLocal(data);
       if(duplicada){
-        setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> Ya existe una cita activa relacionada con este paciente, fecha u horario. Revise con Secretaría antes de enviar otra solicitud.');
+        setStatus('err', mensajeDuplicidadReserva(duplicada));
         return;
       }
 
@@ -771,7 +808,8 @@
 
         const duplicadaActual = citaDuplicadaLocal(data);
         if(duplicadaActual){
-          throw new Error('Ya existe una cita activa relacionada con este horario o paciente. No se duplicó la solicitud.');
+          setStatus('err', mensajeDuplicidadReserva(duplicadaActual));
+          return;
         }
 
         const r = await apiPost('guardarSolicitudCita', data);
