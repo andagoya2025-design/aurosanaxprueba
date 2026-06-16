@@ -475,18 +475,52 @@
 
     function renderMedicos(){
       const sel = document.getElementById('id_medico');
+      if(!sel) return;
+
       const actual = sel.value || 'MED-001';
-      let lista = medicos.filter(m => String(m.estado || 'Activo').toLowerCase() === 'activo' || !m.estado);
-      if(!lista.length){
-        sel.innerHTML = '<option value="MED-001">Dra. Aurora</option>';
-        return;
+
+      // Modo seguro: el selector debe mostrar médicos activos desde la hoja Médicos,
+      // pero si esa hoja está vacía o incompleta, también toma los id_medico que existan
+      // en disponibilidad. Esto evita que se oculten horarios reales de MED-002/MED-003.
+      const fallback = [
+        {id_medico:'MED-001', nombres:'Dra.', apellidos:'Aurora', estado:'Activo'},
+        {id_medico:'MED-002', nombres:'Médico/a', apellidos:'2', estado:'Activo'},
+        {id_medico:'MED-003', nombres:'Médico/a', apellidos:'especialista', estado:'Activo'}
+      ];
+
+      const activosHoja = Array.isArray(medicos)
+        ? medicos.filter(m => String(m.estado || 'Activo').trim().toLowerCase() === 'activo' || !m.estado)
+        : [];
+
+      const porId = new Map();
+      function agregarMedico(m){
+        const id = String(m?.id_medico || '').trim();
+        if(!id || porId.has(id)) return;
+        porId.set(id, m);
       }
+
+      activosHoja.forEach(agregarMedico);
+
+      // Agrega cualquier médico usado en disponibilidad aunque no haya venido de la hoja Médicos.
+      (Array.isArray(disponibilidad) ? disponibilidad : []).forEach(d => {
+        const id = String(d.id_medico || '').trim();
+        if(!id || porId.has(id)) return;
+        const fb = fallback.find(x => x.id_medico === id);
+        agregarMedico(fb || {id_medico:id, nombres:id, apellidos:'', estado:'Activo'});
+      });
+
+      // Respaldo mínimo para DEMO si no vino nada o solo vino incompleto.
+      fallback.forEach(agregarMedico);
+
+      const lista = Array.from(porId.values());
       sel.innerHTML = lista.map(m => {
-        const id = m.id_medico || '';
+        const id = String(m.id_medico || '').trim();
         const nombre = (((m.nombres || '') + ' ' + (m.apellidos || '')).trim() || id);
         return '<option value="' + id + '">' + nombre + '</option>';
       }).join('');
+
       if([...sel.options].some(o => o.value === actual)) sel.value = actual;
+      else if([...sel.options].some(o => o.value === 'MED-001')) sel.value = 'MED-001';
     }
 
     function renderHorasDisponibles(){
