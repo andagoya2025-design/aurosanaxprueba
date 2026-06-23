@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AUROSANAX DEMO - Configuración v1</title>
+  <title>AUROSANAX DEMO - Configuración v2 Servicios</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -63,13 +63,13 @@
 
     <div class="premium-hero">
       <h4><i class="bi bi-gear-fill me-2"></i> Panel de configuración inicial</h4>
-      <p>Módulo conectado para guardar médicos en Google Sheets. Servicios, horarios y datos del centro quedan para la siguiente fase.</p>
-      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos conectado a Apps Script</span></div>
+      <p>Módulo conectado para guardar médicos y servicios en Google Sheets. Horarios y datos del centro quedan para la siguiente fase.</p>
+      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos y Servicios conectados a Apps Script</span></div>
     </div>
 
     <div class="row g-3 mb-4">
       <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-person-badge"></i></div><div><small>Médicos</small><h3 id="stMedicos">3</h3></div></div></div>
-      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-heart-pulse"></i></div><div><small>Servicios</small><h3 id="stServicios">5</h3></div></div></div>
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-heart-pulse"></i></div><div><small>Servicios</small><h3 id="stServicios">0</h3></div></div></div>
       <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-clock-history"></i></div><div><small>Plantillas</small><h3 id="stPlantillas">7</h3></div></div></div>
       <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-building"></i></div><div><small>Centro</small><h3>DEMO</h3></div></div></div>
     </div>
@@ -93,6 +93,7 @@
     <section class="screen" id="servicios">
       <div class="cardx p-4">
         <div class="section-head"><div><h4>Servicios de agendamiento</h4><p>Servicios que puede seleccionar el paciente o secretaría.</p></div><button class="btn-auro" onclick="abrirModal('servicio')"><i class="bi bi-plus-circle me-1"></i> Nuevo servicio</button></div>
+        <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Servicios conectado a Apps Script. Puede crear y editar servicios en la hoja <b>servicios</b>.</div>
         <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Servicio</th><th>Especialidad</th><th>Duración</th><th>Precio</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="serviciosBody"></tbody></table></div>
         <div id="serviciosMobile" class="mobile-cards"></div>
       </div>
@@ -129,14 +130,34 @@
   const API_URL = 'https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec';
 
   let medicos = [];
-  const servicios=[{nombre:'Consulta',especialidad:'General',duracion:'60 min',precio:'—',estado:'Activo'},{nombre:'Procedimiento',especialidad:'General',duracion:'60 min',precio:'—',estado:'Activo'},{nombre:'Ecografía',especialidad:'Ginecología',duracion:'30 min',precio:'—',estado:'Activo'},{nombre:'Control prenatal',especialidad:'Obstetricia',duracion:'45 min',precio:'—',estado:'Activo'},{nombre:'Colposcopía',especialidad:'Ginecología',duracion:'45 min',precio:'—',estado:'Activo'}];
-  const horarios=[{nombre:'Consultorio completo',horario:'08:00 - 17:00',intervalo:'30 min',tipo:'Consulta',dias:'Todos',estado:'Activo'},{nombre:'Tarde normal',horario:'16:00 - 20:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Vie',estado:'Activo'},{nombre:'Tarde sucursal',horario:'16:00 - 21:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},{nombre:'Mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},{nombre:'Domingo mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},{nombre:'Domingo tarde',horario:'15:00 - 19:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},{nombre:'Procedimientos',horario:'16:00 - 18:00',intervalo:'60 min',tipo:'Procedimiento',dias:'Lun-Dom',estado:'Activo'}];
+  let servicios = [];
+  const horarios=[
+    {nombre:'Consultorio completo',horario:'08:00 - 17:00',intervalo:'30 min',tipo:'Consulta',dias:'Todos',estado:'Activo'},
+    {nombre:'Tarde normal',horario:'16:00 - 20:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Vie',estado:'Activo'},
+    {nombre:'Tarde sucursal',horario:'16:00 - 21:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},
+    {nombre:'Mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},
+    {nombre:'Domingo mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},
+    {nombre:'Domingo tarde',horario:'15:00 - 19:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},
+    {nombre:'Procedimientos',horario:'16:00 - 18:00',intervalo:'60 min',tipo:'Procedimiento',dias:'Lun-Dom',estado:'Activo'}
+  ];
 
-  function toggleSidebar(){document.getElementById('sidebar').classList.toggle('show')}
+  function toggleSidebar(){
+    document.getElementById('sidebar').classList.toggle('show');
+  }
+
   function badge(e){
     const estado = e || 'Activo';
     const cls = String(estado).toLowerCase()==='activo' ? 'badge-ok' : 'badge-warn';
     return '<span class="badgex '+cls+'">'+estado+'</span>';
+  }
+
+  function safeText(value){
+    return String(value ?? '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
   }
 
   function showConfig(id,btn){
@@ -170,6 +191,24 @@
     return m.especialidad_principal || m.especialidad || '—';
   }
 
+  function textoServicioNombre(s){
+    return s.nombre_servicio || s.nombre || 'Sin nombre';
+  }
+
+  function textoServicioEspecialidad(s){
+    return s.id_especialidad || s.especialidad || '—';
+  }
+
+  function textoServicioDuracion(s){
+    const d = s.duracion_minutos || s.duracion || '';
+    return d ? String(d).replace(' min','') + ' min' : '—';
+  }
+
+  function textoServicioPrecio(s){
+    const p = s.precio || '';
+    return p ? '$' + String(p).replace('$','') : '—';
+  }
+
   async function cargarMedicos(){
     try{
       medicos = await apiGet('listarMedicos');
@@ -183,54 +222,93 @@
     }
   }
 
+  async function cargarServicios(){
+    try{
+      servicios = await apiGet('listarServicios');
+      if(!Array.isArray(servicios)) servicios = [];
+      renderServicios();
+      document.getElementById('stServicios').textContent = servicios.length;
+    }catch(e){
+      console.error(e);
+      serviciosBody.innerHTML = '<tr><td colspan="6" class="text-danger fw-bold">Error cargando servicios. Revise Apps Script o la implementación.</td></tr>';
+      serviciosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando servicios.</div>';
+    }
+  }
+
   async function refrescarDemo(){
     await cargarMedicos();
+    await cargarServicios();
     alert('Vista actualizada.');
   }
 
   function renderMedicos(){
     medicosBody.innerHTML = medicos.map(m=>`
       <tr>
-        <td><b>${m.id_medico || '—'}</b></td>
-        <td>${textoMedicoNombre(m)}</td>
-        <td>${textoMedicoEspecialidad(m)}</td>
-        <td>${m.telefono || '—'}</td>
+        <td><b>${safeText(m.id_medico || '—')}</b></td>
+        <td>${safeText(textoMedicoNombre(m))}</td>
+        <td>${safeText(textoMedicoEspecialidad(m))}</td>
+        <td>${safeText(m.telefono || '—')}</td>
         <td>${badge(m.estado || 'Activo')}</td>
-        <td><button class="btn-soft btn-sm" onclick="abrirModalMedico('${m.id_medico || ''}')">Editar</button></td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalMedico('${safeText(m.id_medico || '')}')">Editar</button></td>
       </tr>
     `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay médicos registrados.</td></tr>';
 
     medicosMobile.innerHTML = medicos.map(m=>`
       <div class="mobile-card">
-        <b>${textoMedicoNombre(m)}</b>
-        <div class="line"><span>Código</span><span>${m.id_medico || '—'}</span></div>
-        <div class="line"><span>Especialidad</span><span>${textoMedicoEspecialidad(m)}</span></div>
-        <div class="line"><span>Teléfono</span><span>${m.telefono || '—'}</span></div>
+        <b>${safeText(textoMedicoNombre(m))}</b>
+        <div class="line"><span>Código</span><span>${safeText(m.id_medico || '—')}</span></div>
+        <div class="line"><span>Especialidad</span><span>${safeText(textoMedicoEspecialidad(m))}</span></div>
+        <div class="line"><span>Teléfono</span><span>${safeText(m.telefono || '—')}</span></div>
         <div class="line"><span>Estado</span><span>${badge(m.estado || 'Activo')}</span></div>
-        <button class="btn-soft w-100 mt-2" onclick="abrirModalMedico('${m.id_medico || ''}')">Editar</button>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalMedico('${safeText(m.id_medico || '')}')">Editar</button>
       </div>
     `).join('') || '<div class="mobile-card text-center text-muted">No hay médicos registrados.</div>';
   }
 
+  function renderServicios(){
+    serviciosBody.innerHTML = servicios.map(s=>`
+      <tr>
+        <td><b>${safeText(textoServicioNombre(s))}</b></td>
+        <td>${safeText(textoServicioEspecialidad(s))}</td>
+        <td>${safeText(textoServicioDuracion(s))}</td>
+        <td>${safeText(textoServicioPrecio(s))}</td>
+        <td>${badge(s.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalServicio('${safeText(s.id_servicio || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay servicios registrados.</td></tr>';
+
+    serviciosMobile.innerHTML = servicios.map(s=>`
+      <div class="mobile-card">
+        <b>${safeText(textoServicioNombre(s))}</b>
+        <div class="line"><span>Especialidad</span><span>${safeText(textoServicioEspecialidad(s))}</span></div>
+        <div class="line"><span>Duración</span><span>${safeText(textoServicioDuracion(s))}</span></div>
+        <div class="line"><span>Precio</span><span>${safeText(textoServicioPrecio(s))}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(s.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalServicio('${safeText(s.id_servicio || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay servicios registrados.</div>';
+  }
+
+  function renderHorarios(){
+    document.getElementById('stPlantillas').textContent = horarios.length;
+    horariosBody.innerHTML=horarios.map(h=>`<tr><td><b>${safeText(h.nombre)}</b></td><td>${safeText(h.horario)}</td><td>${safeText(h.intervalo)}</td><td>${safeText(h.tipo)}</td><td>${safeText(h.dias)}</td><td>${badge(h.estado)}</td><td><button class="btn-soft btn-sm" onclick="abrirModal('horario')">Editar</button></td></tr>`).join('');
+    horariosMobile.innerHTML=horarios.map(h=>`<div class="mobile-card"><b>${safeText(h.nombre)}</b><div class="line"><span>Horario</span><span>${safeText(h.horario)}</span></div><div class="line"><span>Tipo</span><span>${safeText(h.tipo)}</span></div><div class="line"><span>Días</span><span>${safeText(h.dias)}</span></div><button class="btn-soft w-100 mt-2" onclick="abrirModal('horario')">Editar</button></div>`).join('');
+  }
+
   function render(){
     renderMedicos();
-    document.getElementById('stServicios').textContent = servicios.length;
-    document.getElementById('stPlantillas').textContent = horarios.length;
-
-    serviciosBody.innerHTML=servicios.map(s=>`<tr><td><b>${s.nombre}</b></td><td>${s.especialidad}</td><td>${s.duracion}</td><td>${s.precio}</td><td>${badge(s.estado)}</td><td><button class="btn-soft btn-sm" onclick="abrirModal('servicio')">Editar</button></td></tr>`).join('');
-    serviciosMobile.innerHTML=servicios.map(s=>`<div class="mobile-card"><b>${s.nombre}</b><div class="line"><span>Especialidad</span><span>${s.especialidad}</span></div><div class="line"><span>Duración</span><span>${s.duracion}</span></div><div class="line"><span>Estado</span><span>${badge(s.estado)}</span></div><button class="btn-soft w-100 mt-2" onclick="abrirModal('servicio')">Editar</button></div>`).join('');
-    horariosBody.innerHTML=horarios.map(h=>`<tr><td><b>${h.nombre}</b></td><td>${h.horario}</td><td>${h.intervalo}</td><td>${h.tipo}</td><td>${h.dias}</td><td>${badge(h.estado)}</td><td><button class="btn-soft btn-sm" onclick="abrirModal('horario')">Editar</button></td></tr>`).join('');
-    horariosMobile.innerHTML=horarios.map(h=>`<div class="mobile-card"><b>${h.nombre}</b><div class="line"><span>Horario</span><span>${h.horario}</span></div><div class="line"><span>Tipo</span><span>${h.tipo}</span></div><div class="line"><span>Días</span><span>${h.dias}</span></div><button class="btn-soft w-100 mt-2" onclick="abrirModal('horario')">Editar</button></div>`).join('');
+    renderServicios();
+    renderHorarios();
   }
 
   function abrirModal(tipo){
     if(tipo === 'medico') return abrirModalMedico('');
+    if(tipo === 'servicio') return abrirModalServicio('');
 
-    const title={servicio:'Servicio',horario:'Plantilla de horario'}[tipo]||'Registro';
+    const title={horario:'Plantilla de horario'}[tipo]||'Registro';
     modalTitle.textContent='Nuevo / editar '+title;
     let body='';
 
-    if(tipo==='servicio') body=`<div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Servicio</label><input class="form-control" placeholder="Consulta ginecológica"></div><div class="col-md-6"><label class="form-label fw-bold">Duración</label><select class="form-select"><option>30 min</option><option>45 min</option><option>60 min</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Precio</label><input class="form-control" placeholder="Opcional"></div><div class="col-md-6"><label class="form-label fw-bold">Estado</label><select class="form-select"><option>Activo</option><option>Inactivo</option></select></div></div>`;
     if(tipo==='horario') body=`<div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Nombre plantilla</label><input class="form-control" placeholder="Tarde normal"></div><div class="col-md-3"><label class="form-label fw-bold">Inicio</label><input class="form-control" placeholder="16:00"></div><div class="col-md-3"><label class="form-label fw-bold">Fin</label><input class="form-control" placeholder="20:00"></div><div class="col-md-6"><label class="form-label fw-bold">Intervalo</label><select class="form-select"><option>30 min</option><option>45 min</option><option>60 min</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Tipo</label><select class="form-select"><option>Consulta</option><option>Procedimiento</option><option>Ecografía</option></select></div></div>`;
 
     modalBody.innerHTML=body+`<div class="notice mt-3">Este módulo sigue visual por ahora. La conexión real será en la siguiente fase.</div><div class="d-flex justify-content-end gap-2 mt-3"><button class="btn-line" onclick="cerrarModal()">Cancelar</button><button class="btn-auro" onclick="alert('Guardado visual. Pendiente conectar este módulo.')">Guardar</button></div>`;
@@ -245,15 +323,15 @@
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label fw-bold">Nombres</label>
-          <input id="medNombres" class="form-control" value="${m.nombres || ''}" placeholder="Ej. Aurora">
+          <input id="medNombres" class="form-control" value="${safeText(m.nombres || '')}" placeholder="Ej. Aurora">
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Apellidos</label>
-          <input id="medApellidos" class="form-control" value="${m.apellidos || ''}" placeholder="Ej. Andagoya">
+          <input id="medApellidos" class="form-control" value="${safeText(m.apellidos || '')}" placeholder="Ej. Andagoya">
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Especialidad principal</label>
-          <input id="medEspecialidad" class="form-control" value="${m.especialidad_principal || ''}" placeholder="Ej. Ginecología">
+          <input id="medEspecialidad" class="form-control" value="${safeText(m.especialidad_principal || '')}" placeholder="Ej. Ginecología">
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Estado</label>
@@ -264,26 +342,92 @@
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Registro SENESCYT</label>
-          <input id="medSenescyt" class="form-control" value="${m.registro_senescyt || ''}" placeholder="Opcional">
+          <input id="medSenescyt" class="form-control" value="${safeText(m.registro_senescyt || '')}" placeholder="Opcional">
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Registro MSP</label>
-          <input id="medMsp" class="form-control" value="${m.registro_msp || ''}" placeholder="Opcional">
+          <input id="medMsp" class="form-control" value="${safeText(m.registro_msp || '')}" placeholder="Opcional">
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Teléfono</label>
-          <input id="medTelefono" class="form-control" value="${m.telefono || ''}" placeholder="0999999999">
+          <input id="medTelefono" class="form-control" value="${safeText(m.telefono || '')}" placeholder="0999999999">
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Email</label>
-          <input id="medEmail" class="form-control" value="${m.email || ''}" placeholder="correo@ejemplo.com">
+          <input id="medEmail" class="form-control" value="${safeText(m.email || '')}" placeholder="correo@ejemplo.com">
         </div>
       </div>
       <div id="medMsg" class="notice mt-3">Este formulario ya guarda en la hoja <b>medicos</b>.</div>
       <div class="d-flex justify-content-end gap-2 mt-3">
         <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
-        <button id="btnGuardarMedico" class="btn-auro" onclick="guardarMedicoReal('${id_medico || ''}')">
+        <button id="btnGuardarMedico" class="btn-auro" onclick="guardarMedicoReal('${safeText(id_medico || '')}')">
           <i class="bi bi-save me-1"></i> Guardar médico
+        </button>
+      </div>
+    `;
+    modalConfig.classList.add('show');
+  }
+
+  function abrirModalServicio(id_servicio){
+    const s = servicios.find(x => String(x.id_servicio || '') === String(id_servicio || '')) || {};
+    modalTitle.textContent = id_servicio ? 'Editar servicio' : 'Nuevo servicio';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombre del servicio</label>
+          <input id="servNombre" class="form-control" value="${safeText(s.nombre_servicio || '')}" placeholder="Ej. Consulta ginecológica">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Especialidad / Área</label>
+          <input id="servEspecialidad" class="form-control" value="${safeText(s.id_especialidad || '')}" placeholder="Ej. Ginecología">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Duración</label>
+          <select id="servDuracion" class="form-select">
+            <option value="30" ${String(s.duracion_minutos || '') === '30' ? 'selected' : ''}>30 min</option>
+            <option value="45" ${String(s.duracion_minutos || '') === '45' ? 'selected' : ''}>45 min</option>
+            <option value="60" ${String(s.duracion_minutos || '') === '60' || !s.duracion_minutos ? 'selected' : ''}>60 min</option>
+            <option value="90" ${String(s.duracion_minutos || '') === '90' ? 'selected' : ''}>90 min</option>
+            <option value="120" ${String(s.duracion_minutos || '') === '120' ? 'selected' : ''}>120 min</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Precio</label>
+          <input id="servPrecio" class="form-control" value="${safeText(s.precio || '')}" placeholder="Opcional">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="servEstado" class="form-select">
+            <option ${String(s.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(s.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Orden</label>
+          <input id="servOrden" type="number" class="form-control" value="${safeText(s.orden || '')}" placeholder="Ej. 1">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Requiere consentimiento</label>
+          <select id="servConsentimiento" class="form-select">
+            <option value="No" ${String(s.requiere_consentimiento || 'No') === 'No' ? 'selected' : ''}>No</option>
+            <option value="Sí" ${String(s.requiere_consentimiento || '') === 'Sí' ? 'selected' : ''}>Sí</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Descripción</label>
+          <textarea id="servDescripcion" class="form-control" rows="2" placeholder="Descripción breve del servicio">${safeText(s.descripcion || '')}</textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Observación interna</label>
+          <textarea id="servObservacion" class="form-control" rows="2" placeholder="Opcional">${safeText(s.observacion || '')}</textarea>
+        </div>
+      </div>
+      <div id="servMsg" class="notice mt-3">Este formulario ya guarda en la hoja <b>servicios</b>.</div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarServicio" class="btn-auro" onclick="guardarServicioReal('${safeText(id_servicio || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar servicio
         </button>
       </div>
     `;
@@ -334,6 +478,51 @@
     }
   }
 
+  async function guardarServicioReal(id_servicio){
+    const data = {
+      nombre_servicio: document.getElementById('servNombre').value.trim(),
+      id_especialidad: document.getElementById('servEspecialidad').value.trim(),
+      descripcion: document.getElementById('servDescripcion').value.trim(),
+      duracion_minutos: document.getElementById('servDuracion').value,
+      precio: document.getElementById('servPrecio').value.trim(),
+      estado: document.getElementById('servEstado').value || 'Activo',
+      orden: document.getElementById('servOrden').value.trim(),
+      requiere_consentimiento: document.getElementById('servConsentimiento').value || 'No',
+      observacion: document.getElementById('servObservacion').value.trim()
+    };
+
+    if(id_servicio) data.id_servicio = id_servicio;
+
+    if(!data.nombre_servicio){
+      document.getElementById('servMsg').innerHTML = 'Ingrese el nombre del servicio.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarServicio');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_servicio ? 'editarServicio' : 'guardarServicio';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar el servicio');
+
+      document.getElementById('servMsg').innerHTML = 'Servicio guardado correctamente.';
+      await cargarServicios();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('servMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar servicio: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
   function cerrarModal(event){
     if(event && event.target!==event.currentTarget)return;
     modalConfig.classList.remove('show');
@@ -342,6 +531,7 @@
   document.addEventListener('DOMContentLoaded', async () => {
     render();
     await cargarMedicos();
+    await cargarServicios();
   });
 
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
