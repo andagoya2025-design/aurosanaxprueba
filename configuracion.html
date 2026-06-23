@@ -63,8 +63,8 @@
 
     <div class="premium-hero">
       <h4><i class="bi bi-gear-fill me-2"></i> Panel de configuración inicial</h4>
-      <p>Primera versión visual. No guarda cambios todavía; está preparada para conectar después con Apps Script y las hojas: médicos, servicios, plantillas_horario y configuración.</p>
-      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Modo seguro: solo interfaz visual</span></div>
+      <p>Módulo conectado para guardar médicos en Google Sheets. Servicios, horarios y datos del centro quedan para la siguiente fase.</p>
+      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos conectado a Apps Script</span></div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -84,7 +84,7 @@
     <section class="screen active" id="medicos">
       <div class="cardx p-4">
         <div class="section-head"><div><h4>Gestión de médicos</h4><p>Profesionales que aparecerán en disponibilidad y formulario de citas.</p></div><button class="btn-auro" onclick="abrirModal('medico')"><i class="bi bi-plus-circle me-1"></i> Nuevo médico</button></div>
-        <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> En esta fase los botones son visuales. Para guardar médicos se conectará luego con Apps Script.</div>
+        <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Médicos ya conectado a Apps Script. Puede crear y editar profesionales en la hoja medicos.</div>
         <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Código</th><th>Médico</th><th>Especialidad</th><th>Teléfono</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="medicosBody"></tbody></table></div>
         <div id="medicosMobile" class="mobile-cards"></div>
       </div>
@@ -126,33 +126,224 @@
 <div class="modalx" id="modalConfig" onclick="cerrarModal(event)"><div class="modal-panel" onclick="event.stopPropagation()"><div class="modal-head"><h5 id="modalTitle">Nuevo registro</h5><button class="modal-close" onclick="cerrarModal()"><i class="bi bi-x-lg"></i></button></div><div class="modal-bodyx" id="modalBody"></div></div></div>
 
 <script>
-  const medicos=[{codigo:'MED-001',nombre:'Dra. Aurora Andagoya',especialidad:'Ginecología',telefono:'',estado:'Activo'},{codigo:'MED-002',nombre:'Médico/a 2',especialidad:'Consulta general',telefono:'',estado:'Activo'},{codigo:'MED-003',nombre:'Médico/a especialista',especialidad:'Especialidad médica',telefono:'',estado:'Activo'}];
+  const API_URL = 'https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec';
+
+  let medicos = [];
   const servicios=[{nombre:'Consulta',especialidad:'General',duracion:'60 min',precio:'—',estado:'Activo'},{nombre:'Procedimiento',especialidad:'General',duracion:'60 min',precio:'—',estado:'Activo'},{nombre:'Ecografía',especialidad:'Ginecología',duracion:'30 min',precio:'—',estado:'Activo'},{nombre:'Control prenatal',especialidad:'Obstetricia',duracion:'45 min',precio:'—',estado:'Activo'},{nombre:'Colposcopía',especialidad:'Ginecología',duracion:'45 min',precio:'—',estado:'Activo'}];
   const horarios=[{nombre:'Consultorio completo',horario:'08:00 - 17:00',intervalo:'30 min',tipo:'Consulta',dias:'Todos',estado:'Activo'},{nombre:'Tarde normal',horario:'16:00 - 20:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Vie',estado:'Activo'},{nombre:'Tarde sucursal',horario:'16:00 - 21:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},{nombre:'Mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},{nombre:'Domingo mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},{nombre:'Domingo tarde',horario:'15:00 - 19:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},{nombre:'Procedimientos',horario:'16:00 - 18:00',intervalo:'60 min',tipo:'Procedimiento',dias:'Lun-Dom',estado:'Activo'}];
+
   function toggleSidebar(){document.getElementById('sidebar').classList.toggle('show')}
-  function badge(e){return '<span class="badgex badge-ok">'+(e||'Activo')+'</span>'}
-  function showConfig(id,btn){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.config-tab').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active')}
-  function refrescarDemo(){alert('Vista actualizada. Esta versión todavía no consulta Apps Script.')}
+  function badge(e){
+    const estado = e || 'Activo';
+    const cls = String(estado).toLowerCase()==='activo' ? 'badge-ok' : 'badge-warn';
+    return '<span class="badgex '+cls+'">'+estado+'</span>';
+  }
+
+  function showConfig(id,btn){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.config-tab').forEach(b=>b.classList.remove('active'));
+    if(btn)btn.classList.add('active');
+  }
+
+  async function apiGet(accion){
+    const url = API_URL + '?accion=' + encodeURIComponent(accion) + '&t=' + Date.now();
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    return await res.json();
+  }
+
+  async function apiPost(accion, data){
+    const res = await fetch(API_URL, {
+      method:'POST',
+      body: JSON.stringify({accion, data})
+    });
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    return await res.json();
+  }
+
+  function textoMedicoNombre(m){
+    return ((m.nombres || '') + ' ' + (m.apellidos || '')).trim() || m.nombre || m.nombre_completo || 'Sin nombre';
+  }
+
+  function textoMedicoEspecialidad(m){
+    return m.especialidad_principal || m.especialidad || '—';
+  }
+
+  async function cargarMedicos(){
+    try{
+      medicos = await apiGet('listarMedicos');
+      if(!Array.isArray(medicos)) medicos = [];
+      renderMedicos();
+      document.getElementById('stMedicos').textContent = medicos.length;
+    }catch(e){
+      console.error(e);
+      medicosBody.innerHTML = '<tr><td colspan="6" class="text-danger fw-bold">Error cargando médicos. Revise Apps Script o la implementación.</td></tr>';
+      medicosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando médicos.</div>';
+    }
+  }
+
+  async function refrescarDemo(){
+    await cargarMedicos();
+    alert('Vista actualizada.');
+  }
+
+  function renderMedicos(){
+    medicosBody.innerHTML = medicos.map(m=>`
+      <tr>
+        <td><b>${m.id_medico || '—'}</b></td>
+        <td>${textoMedicoNombre(m)}</td>
+        <td>${textoMedicoEspecialidad(m)}</td>
+        <td>${m.telefono || '—'}</td>
+        <td>${badge(m.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalMedico('${m.id_medico || ''}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay médicos registrados.</td></tr>';
+
+    medicosMobile.innerHTML = medicos.map(m=>`
+      <div class="mobile-card">
+        <b>${textoMedicoNombre(m)}</b>
+        <div class="line"><span>Código</span><span>${m.id_medico || '—'}</span></div>
+        <div class="line"><span>Especialidad</span><span>${textoMedicoEspecialidad(m)}</span></div>
+        <div class="line"><span>Teléfono</span><span>${m.telefono || '—'}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(m.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalMedico('${m.id_medico || ''}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay médicos registrados.</div>';
+  }
+
   function render(){
-    medicosBody.innerHTML=medicos.map(m=>`<tr><td><b>${m.codigo}</b></td><td>${m.nombre}</td><td>${m.especialidad}</td><td>${m.telefono||'—'}</td><td>${badge(m.estado)}</td><td><button class="btn-soft btn-sm" onclick="abrirModal('medico')">Editar</button></td></tr>`).join('');
-    medicosMobile.innerHTML=medicos.map(m=>`<div class="mobile-card"><b>${m.nombre}</b><div class="line"><span>Código</span><span>${m.codigo}</span></div><div class="line"><span>Especialidad</span><span>${m.especialidad}</span></div><div class="line"><span>Estado</span><span>${badge(m.estado)}</span></div><button class="btn-soft w-100 mt-2" onclick="abrirModal('medico')">Editar</button></div>`).join('');
+    renderMedicos();
+    document.getElementById('stServicios').textContent = servicios.length;
+    document.getElementById('stPlantillas').textContent = horarios.length;
+
     serviciosBody.innerHTML=servicios.map(s=>`<tr><td><b>${s.nombre}</b></td><td>${s.especialidad}</td><td>${s.duracion}</td><td>${s.precio}</td><td>${badge(s.estado)}</td><td><button class="btn-soft btn-sm" onclick="abrirModal('servicio')">Editar</button></td></tr>`).join('');
     serviciosMobile.innerHTML=servicios.map(s=>`<div class="mobile-card"><b>${s.nombre}</b><div class="line"><span>Especialidad</span><span>${s.especialidad}</span></div><div class="line"><span>Duración</span><span>${s.duracion}</span></div><div class="line"><span>Estado</span><span>${badge(s.estado)}</span></div><button class="btn-soft w-100 mt-2" onclick="abrirModal('servicio')">Editar</button></div>`).join('');
     horariosBody.innerHTML=horarios.map(h=>`<tr><td><b>${h.nombre}</b></td><td>${h.horario}</td><td>${h.intervalo}</td><td>${h.tipo}</td><td>${h.dias}</td><td>${badge(h.estado)}</td><td><button class="btn-soft btn-sm" onclick="abrirModal('horario')">Editar</button></td></tr>`).join('');
     horariosMobile.innerHTML=horarios.map(h=>`<div class="mobile-card"><b>${h.nombre}</b><div class="line"><span>Horario</span><span>${h.horario}</span></div><div class="line"><span>Tipo</span><span>${h.tipo}</span></div><div class="line"><span>Días</span><span>${h.dias}</span></div><button class="btn-soft w-100 mt-2" onclick="abrirModal('horario')">Editar</button></div>`).join('');
   }
+
   function abrirModal(tipo){
-    const title={medico:'Médico',servicio:'Servicio',horario:'Plantilla de horario'}[tipo]||'Registro';
+    if(tipo === 'medico') return abrirModalMedico('');
+
+    const title={servicio:'Servicio',horario:'Plantilla de horario'}[tipo]||'Registro';
     modalTitle.textContent='Nuevo / editar '+title;
     let body='';
-    if(tipo==='medico') body=`<div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Nombre completo</label><input class="form-control" placeholder="Nombre del médico"></div><div class="col-md-6"><label class="form-label fw-bold">Código</label><input class="form-control" placeholder="MED-004"></div><div class="col-md-6"><label class="form-label fw-bold">Especialidad</label><input class="form-control" placeholder="Especialidad"></div><div class="col-md-6"><label class="form-label fw-bold">Estado</label><select class="form-select"><option>Activo</option><option>Inactivo</option></select></div></div>`;
+
     if(tipo==='servicio') body=`<div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Servicio</label><input class="form-control" placeholder="Consulta ginecológica"></div><div class="col-md-6"><label class="form-label fw-bold">Duración</label><select class="form-select"><option>30 min</option><option>45 min</option><option>60 min</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Precio</label><input class="form-control" placeholder="Opcional"></div><div class="col-md-6"><label class="form-label fw-bold">Estado</label><select class="form-select"><option>Activo</option><option>Inactivo</option></select></div></div>`;
     if(tipo==='horario') body=`<div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Nombre plantilla</label><input class="form-control" placeholder="Tarde normal"></div><div class="col-md-3"><label class="form-label fw-bold">Inicio</label><input class="form-control" placeholder="16:00"></div><div class="col-md-3"><label class="form-label fw-bold">Fin</label><input class="form-control" placeholder="20:00"></div><div class="col-md-6"><label class="form-label fw-bold">Intervalo</label><select class="form-select"><option>30 min</option><option>45 min</option><option>60 min</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Tipo</label><select class="form-select"><option>Consulta</option><option>Procedimiento</option><option>Ecografía</option></select></div></div>`;
-    modalBody.innerHTML=body+`<div class="notice mt-3">Este formulario es visual. El guardado se conectará en la siguiente fase.</div><div class="d-flex justify-content-end gap-2 mt-3"><button class="btn-line" onclick="cerrarModal()">Cancelar</button><button class="btn-auro" onclick="alert('Guardado visual. Falta Apps Script.')">Guardar</button></div>`;
+
+    modalBody.innerHTML=body+`<div class="notice mt-3">Este módulo sigue visual por ahora. La conexión real será en la siguiente fase.</div><div class="d-flex justify-content-end gap-2 mt-3"><button class="btn-line" onclick="cerrarModal()">Cancelar</button><button class="btn-auro" onclick="alert('Guardado visual. Pendiente conectar este módulo.')">Guardar</button></div>`;
     modalConfig.classList.add('show');
   }
-  function cerrarModal(event){if(event && event.target!==event.currentTarget)return;modalConfig.classList.remove('show')}
-  document.addEventListener('DOMContentLoaded',render);
+
+  function abrirModalMedico(id_medico){
+    const m = medicos.find(x => String(x.id_medico || '') === String(id_medico || '')) || {};
+    modalTitle.textContent = id_medico ? 'Editar médico' : 'Nuevo médico';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombres</label>
+          <input id="medNombres" class="form-control" value="${m.nombres || ''}" placeholder="Ej. Aurora">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Apellidos</label>
+          <input id="medApellidos" class="form-control" value="${m.apellidos || ''}" placeholder="Ej. Andagoya">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Especialidad principal</label>
+          <input id="medEspecialidad" class="form-control" value="${m.especialidad_principal || ''}" placeholder="Ej. Ginecología">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="medEstado" class="form-select">
+            <option ${String(m.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(m.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Registro SENESCYT</label>
+          <input id="medSenescyt" class="form-control" value="${m.registro_senescyt || ''}" placeholder="Opcional">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Registro MSP</label>
+          <input id="medMsp" class="form-control" value="${m.registro_msp || ''}" placeholder="Opcional">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Teléfono</label>
+          <input id="medTelefono" class="form-control" value="${m.telefono || ''}" placeholder="0999999999">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Email</label>
+          <input id="medEmail" class="form-control" value="${m.email || ''}" placeholder="correo@ejemplo.com">
+        </div>
+      </div>
+      <div id="medMsg" class="notice mt-3">Este formulario ya guarda en la hoja <b>medicos</b>.</div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarMedico" class="btn-auro" onclick="guardarMedicoReal('${id_medico || ''}')">
+          <i class="bi bi-save me-1"></i> Guardar médico
+        </button>
+      </div>
+    `;
+    modalConfig.classList.add('show');
+  }
+
+  async function guardarMedicoReal(id_medico){
+    const data = {
+      nombres: document.getElementById('medNombres').value.trim(),
+      apellidos: document.getElementById('medApellidos').value.trim(),
+      especialidad_principal: document.getElementById('medEspecialidad').value.trim(),
+      registro_senescyt: document.getElementById('medSenescyt').value.trim(),
+      registro_msp: document.getElementById('medMsp').value.trim(),
+      telefono: document.getElementById('medTelefono').value.trim(),
+      email: document.getElementById('medEmail').value.trim(),
+      estado: document.getElementById('medEstado').value || 'Activo'
+    };
+
+    if(id_medico) data.id_medico = id_medico;
+
+    if(!data.nombres || !data.apellidos){
+      document.getElementById('medMsg').innerHTML = 'Ingrese nombres y apellidos.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarMedico');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_medico ? 'editarMedico' : 'guardarMedico';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar el médico');
+
+      document.getElementById('medMsg').innerHTML = 'Médico guardado correctamente.';
+      await cargarMedicos();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('medMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar médico: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+  function cerrarModal(event){
+    if(event && event.target!==event.currentTarget)return;
+    modalConfig.classList.remove('show');
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    render();
+    await cargarMedicos();
+  });
+
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
 </script>
 </body>
