@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AUROSANAX DEMO - Formulario de Citas v2.15 Original Limpio</title>
+  <title>AUROSANAX DEMO - Formulario de Citas v2.11 Médicos y Servicios</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -97,45 +97,6 @@
 
     @media(max-width:920px){.shell{grid-template-columns:1fr}.hero h2{font-size:28px}.slots{grid-template-columns:repeat(2,1fr)}.ux-steps{grid-template-columns:1fr}}
     @media(max-width:520px){.page{padding:12px}.hero,.cardx{border-radius:22px;padding:18px}.slots{grid-template-columns:1fr}.hero h2{font-size:25px}.calendar-grid-mini{gap:4px}.calendar-day-mini{min-height:44px;border-radius:12px;padding:5px 2px}.calendar-day-mini .num{font-size:14px}.calendar-day-mini .qty{font-size:8px}.calendar-top{align-items:flex-start}.success-grid{grid-template-columns:1fr}.success-actions .btn-wa,.success-actions .btn-line{width:100%;justify-content:center}}
-  
-    /* ===== AJUSTES MÍNIMOS SEGUROS - ORIGINAL LIMPIO ===== */
-    #id_medico,
-    #servicio{
-      padding-right:52px!important;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-      overflow:hidden;
-    }
-
-    .medico-mini-info{
-      display:none;
-      margin-top:8px;
-      background:linear-gradient(180deg,#fff,#fff8fc);
-      border:1px solid #f1d4e5;
-      border-radius:16px;
-      padding:10px 12px;
-      color:#334155;
-      font-size:13px;
-      font-weight:800;
-    }
-
-    .medico-mini-info.show{
-      display:block;
-    }
-
-    .medico-mini-info b{
-      color:#7a174f;
-      font-weight:950;
-    }
-
-    @media(max-width:520px){
-      #id_medico,
-      #servicio{
-        padding-right:56px!important;
-        font-size:15px;
-      }
-    }
-
   </style>
 </head>
 <body>
@@ -161,39 +122,43 @@
           <h3><i class="bi bi-calendar-heart me-2" style="color:var(--primary)"></i>Formulario de cita</h3>
           <p>Reserve un horario disponible. Secretaría revisará la información y confirmará los detalles de la atención.</p>
         </div>
-<div class="ux-step"><span class="n">2</span><div><b>Elija día y hora</b><span>Use los días resaltados y luego seleccione una hora.</span></div></div>
+
+        <div class="ux-guide">
+          <div class="ux-guide-title"><i class="bi bi-compass"></i> ¿Cómo reservar?</div>
+          <div class="ux-steps">
+            <div class="ux-step"><span class="n">1</span><div><b>Seleccione médico</b><span>El calendario cambia según el médico elegido.</span></div></div>
+            <div class="ux-step"><span class="n">2</span><div><b>Elija día y hora</b><span>Use los días resaltados y luego seleccione una hora.</span></div></div>
             <div class="ux-step"><span class="n">3</span><div><b>Reserve la cita</b><span>El horario queda apartado y pendiente de confirmación.</span></div></div>
           </div>
         </div>
 
-        <form id="citaForm" autocomplete="off">
+        <form id="citaForm">
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Cédula / documento *</label>
-              <input id="numero_documento" autocomplete="off" class="form-control" required placeholder="Ej. 0912345678">
+              <input id="numero_documento" class="form-control" required placeholder="Ej. 0912345678">
             </div>
             <div class="col-md-6">
               <label class="form-label">Nombres completos *</label>
-              <input id="nombre_completo" autocomplete="off" class="form-control" required placeholder="Nombre y apellido">
+              <input id="nombre_completo" class="form-control" required placeholder="Nombre y apellido">
             </div>
             <div class="col-md-6">
               <label class="form-label">WhatsApp / teléfono *</label>
-              <input id="whatsapp" autocomplete="off" class="form-control" required placeholder="Ej. 0999999999">
+              <input id="whatsapp" class="form-control" required placeholder="Ej. 0999999999">
             </div>
             <div class="col-md-6">
               <label class="form-label">Correo opcional</label>
-              <input id="email" type="email" autocomplete="off" class="form-control" placeholder="correo@ejemplo.com">
+              <input id="email" type="email" class="form-control" placeholder="correo@ejemplo.com">
             </div>
             <div class="col-md-6">
               <label class="form-label">Paso 1: Médico *</label>
-              <select id="id_medico" class="form-select" required autocomplete="off" onchange="cargarServiciosMedico(); actualizarInfoMedico(); renderCalendarioDisponibilidad(); renderHorasDisponibles(); actualizarResumenSeleccion()">
+              <select id="id_medico" class="form-select" required onchange="cargarServiciosMedico(); renderCalendarioDisponibilidad(); renderHorasDisponibles(); actualizarResumenSeleccion()">
                 <option value="">Cargando médicos...</option>
               </select>
-              <div id="medicoInfo" class="medico-mini-info"></div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Fecha seleccionada *</label>
-              <input id="fecha_cita" type="date" autocomplete="off" class="form-control" required onchange="sincronizarMiniDesdeInput(); renderHorasDisponibles(); actualizarResumenSeleccion()">
+              <input id="fecha_cita" type="date" class="form-control" required onchange="sincronizarMiniDesdeInput(); renderHorasDisponibles(); actualizarResumenSeleccion()">
               <div class="micro-help">Puede elegir la fecha aquí o tocar directamente un día resaltado en el calendario.</div>
             </div>
 
@@ -223,19 +188,19 @@
               <div id="selectedSummary" class="selected-summary"></div>
               <div id="loadingSlots" class="loading"><i class="bi bi-arrow-clockwise me-1"></i> Buscando horarios disponibles...</div>
               <div id="slots" class="slots"></div>
-              <input id="hora_inicio" autocomplete="off" type="hidden" required>
-              <input id="hora_fin" autocomplete="off" type="hidden">
+              <input id="hora_inicio" type="hidden" required>
+              <input id="hora_fin" type="hidden">
             </div>
 
             <div class="col-md-6">
               <label class="form-label">Paso 4: Servicio / motivo *</label>
-              <select id="servicio" class="form-select" required autocomplete="off" onchange="actualizarResumenSeleccion()">
+              <select id="servicio" class="form-select" required onchange="actualizarResumenSeleccion()">
                 <option value="">Seleccione primero un médico</option>
               </select>
             </div>
             <div class="col-md-6">
               <label class="form-label">Observación</label>
-              <input id="observaciones" autocomplete="off" class="form-control" placeholder="Opcional">
+              <input id="observaciones" class="form-control" placeholder="Opcional">
             </div>
           </div>
 
@@ -515,55 +480,6 @@
       }
     }
 
-
-    function obtenerEspecialidadMedico(m){
-      if(!m) return '';
-      return String(
-        m.especialidad ||
-        m.nombre_especialidad ||
-        m.profesion ||
-        m.titulo ||
-        m.area ||
-        ''
-      ).trim();
-    }
-
-    function actualizarInfoMedico(){
-      const box = document.getElementById('medicoInfo');
-      const idMedico = document.getElementById('id_medico')?.value || '';
-      if(!box) return;
-
-      const m = medicos.find(x => String(x.id_medico || '') === String(idMedico || ''));
-      if(!m){
-        box.classList.remove('show');
-        box.innerHTML = '';
-        return;
-      }
-
-      const nombre = medicoNombre(idMedico);
-      const especialidad = obtenerEspecialidadMedico(m);
-
-      box.innerHTML = '<i class="bi bi-person-badge me-1"></i> <b>Profesional seleccionado:</b> ' + nombre +
-        (especialidad ? '<br><i class="bi bi-heart-pulse me-1"></i> <b>Especialidad:</b> ' + especialidad : '');
-      box.classList.add('show');
-    }
-
-    function limpiarFormularioPublico(){
-      const form = document.getElementById('citaForm');
-      if(form) form.reset();
-
-      ['numero_documento','nombre_completo','whatsapp','email','observaciones','hora_inicio','hora_fin'].forEach(id => {
-        const el = document.getElementById(id);
-        if(el) el.value = '';
-      });
-
-      selectedSlot = null;
-      window.__slotsDisponibles = [];
-      limpiarStatus();
-      limpiarErroresCampos();
-    }
-
-
     function renderMedicos(){
       const sel = document.getElementById('id_medico');
       if(!sel) return;
@@ -611,8 +527,6 @@
       } else {
         sel.value = lista[0].id_medico || '';
       }
-
-      actualizarInfoMedico();
     }
 
     function nombreServicioVista(s){
@@ -1097,10 +1011,12 @@
           </div>
         `);
 
-        limpiarFormularioPublico();
+        this.reset();
         const hoy = new Date();
         document.getElementById('fecha_cita').value = fechaISO(hoy);
-        miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        selectedSlot = null;
+        document.getElementById('hora_inicio').value = '';
+        document.getElementById('hora_fin').value = '';
         actualizarResumenSeleccion();
         await cargarDatosIniciales(true);
       }catch(err){
@@ -1115,7 +1031,6 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
-      limpiarFormularioPublico();
       const hoy = new Date();
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
