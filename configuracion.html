@@ -754,17 +754,67 @@
         </div>
       </div>
       <div id="horMsg" class="notice mt-3">
-        Fase 1 segura: las plantillas se leen desde la hoja <b>plantillas_horario</b>. El guardado real queda para la siguiente fase.
+        Plantillas conectadas a la hoja <b>plantillas_horario</b>. Puede crear y editar plantillas sin afectar otras áreas.
       </div>
       <div class="d-flex justify-content-end gap-2 mt-3">
         <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
-        <button class="btn-auro" onclick="alert('Lectura conectada correctamente. El guardado real de plantillas se activará en la siguiente fase.')">
-          <i class="bi bi-eye me-1"></i> Vista conectada
+        <button id="btnGuardarHorario" class="btn-auro" onclick="guardarPlantillaHorarioReal('${safeText(id_plantilla_horario || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar plantilla
         </button>
       </div>
     `;
 
     modalConfig.classList.add('show');
+  }
+
+
+  async function guardarPlantillaHorarioReal(id_plantilla_horario){
+    const data = {
+      nombre_plantilla: document.getElementById('horNombre').value.trim(),
+      hora_inicio: document.getElementById('horInicio').value.trim(),
+      hora_fin: document.getElementById('horFin').value.trim(),
+      intervalo_minutos: document.getElementById('horIntervalo').value,
+      tipo_bloque: document.getElementById('horTipo').value,
+      aplica_dia: document.getElementById('horDias').value.trim(),
+      estado: document.getElementById('horEstado').value || 'Activo',
+      observacion: document.getElementById('horObservacion').value.trim()
+    };
+
+    if(id_plantilla_horario) data.id_plantilla_horario = id_plantilla_horario;
+
+    if(!data.nombre_plantilla){
+      document.getElementById('horMsg').innerHTML = 'Ingrese el nombre de la plantilla.';
+      return;
+    }
+
+    if(!data.hora_inicio || !data.hora_fin){
+      document.getElementById('horMsg').innerHTML = 'Ingrese hora de inicio y hora de fin.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarHorario');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_plantilla_horario ? 'editarPlantillaHorario' : 'guardarPlantillaHorario';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar la plantilla de horario');
+
+      document.getElementById('horMsg').innerHTML = 'Plantilla de horario guardada correctamente en <b>plantillas_horario</b>.';
+      await cargarPlantillasHorario();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('horMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar plantilla: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
   }
 
   function abrirModal(tipo){
