@@ -385,7 +385,7 @@
 
     <div class="premium-hero">
       <h4><i class="bi bi-gear-fill me-2"></i> Panel de configuración inicial</h4>
-      <p>Módulo conectado para guardar médicos, servicios, asignación de servicios por médico y lectura real de plantillas de horario desde Google Sheets. Datos del centro quedan para una siguiente fase.</p>
+      <p>Módulo conectado para médicos, servicios, plantillas de horario y datos institucionales seguros desde Google Sheets.</p>
       <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos, Servicios, Médico-Servicios y Plantillas de horario conectados a Apps Script</span></div>
     </div>
 
@@ -431,15 +431,67 @@
 
     <section class="screen" id="centro">
       <div class="cardx p-4">
-        <div class="section-head"><div><h4>Datos del centro médico</h4><p>Información que permitirá vender el sistema con marca personalizada.</p></div><button class="btn-auro" onclick="alert('Guardado visual. Falta conectar Apps Script.')"><i class="bi bi-save me-1"></i> Guardar configuración</button></div>
+        <div class="section-head">
+          <div>
+            <h4>Datos del centro médico</h4>
+            <p>Información institucional segura para personalizar el ERP sin tocar citas, disponibilidad ni pacientes.</p>
+          </div>
+          <button id="btnGuardarCentro" class="btn-auro" onclick="guardarConfiguracionCentro()"><i class="bi bi-save me-1"></i> Guardar configuración</button>
+        </div>
+
+        <div id="centroMsg" class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Cargando datos institucionales...</div>
+
         <div class="row g-3">
-          <div class="col-md-6"><label class="form-label fw-bold">Nombre del centro</label><input class="form-control" value="AUROSANAX DEMO"></div>
-          <div class="col-md-6"><label class="form-label fw-bold">WhatsApp principal</label><input class="form-control" placeholder="Ej. 0999999999"></div>
-          <div class="col-md-6"><label class="form-label fw-bold">Correo institucional</label><input class="form-control" placeholder="correo@centro.com"></div>
-          <div class="col-md-6"><label class="form-label fw-bold">Dirección</label><input class="form-control" placeholder="Dirección del consultorio"></div>
-          <div class="col-md-4"><label class="form-label fw-bold">Color principal</label><input type="color" class="form-control form-control-color" value="#8b1e5a"></div>
-          <div class="col-md-8"><label class="form-label fw-bold">Logo URL</label><input class="form-control" placeholder="URL del logo"></div>
-          <div class="col-12"><div class="notice"><b>Sugerencia:</b> esta sección debe leer y escribir en la hoja <b>configuracion</b>. No se conecta todavía para proteger lo actual.</div></div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Nombre del centro</label>
+            <input id="cfgNombreClinica" class="form-control" placeholder="Ej. AUROSANAX">
+            <div class="text-muted small mt-1">Se usa como nombre visible institucional del sistema.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">WhatsApp principal</label>
+            <input id="cfgWhatsappClinica" class="form-control" placeholder="Ej. 0999999999">
+            <div class="text-muted small mt-1">Número oficial del centro. No reemplaza los WhatsApp de pacientes.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Correo institucional</label>
+            <input id="cfgEmailClinica" class="form-control" placeholder="correo@centro.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Dirección</label>
+            <input id="cfgDireccionClinica" class="form-control" placeholder="Dirección del consultorio">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label fw-bold">Logo URL</label>
+            <input id="cfgLogoUrl" class="form-control" placeholder="Pegue aquí el enlace público del logo en Drive" oninput="actualizarPreviewLogoCentro()">
+            <div class="text-muted small mt-1">Recomendado: PNG transparente 600 × 600 px, compartido como “cualquier persona con el enlace puede ver”.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Vista previa</label>
+            <div style="height:112px;border:1px solid #f1d4e5;border-radius:18px;background:#fff7fb;display:grid;place-items:center;overflow:hidden">
+              <img id="cfgLogoPreview" alt="Logo" style="max-width:92px;max-height:92px;display:none;border-radius:16px">
+              <div id="cfgLogoFallback" style="width:72px;height:72px;border-radius:22px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;display:grid;place-items:center;font-weight:950;font-size:28px">A</div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Color principal</label>
+            <input id="cfgColorPrincipal" type="color" class="form-control form-control-color" value="#8b1e5a" disabled>
+            <div class="text-muted small mt-1">Bloqueado por seguridad visual.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Color secundario</label>
+            <input id="cfgColorSecundario" type="color" class="form-control form-control-color" value="#c23b83" disabled>
+            <div class="text-muted small mt-1">Bloqueado por seguridad visual.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Modo sistema</label>
+            <input id="cfgModoSistema" class="form-control" value="DEMO" disabled>
+            <div class="text-muted small mt-1">No editable para proteger el entorno.</div>
+          </div>
+
+          <div class="col-12">
+            <div class="notice"><b>Modo seguro:</b> solo se guardan nombre, WhatsApp, correo, dirección y logo URL. Colores y modo del sistema quedan bloqueados para no afectar el diseño premium ni el ERP global.</div>
+          </div>
         </div>
       </div>
     </section>
@@ -455,6 +507,7 @@
   let servicios = [];
   let medicoServicios = [];
   let horarios = [];
+  let configuracionCentro = {};
 
   function toggleSidebar(){
     document.getElementById('sidebar').classList.toggle('show');
@@ -610,11 +663,118 @@
     }
   }
 
+
+  function valorConfigCentro(clave, valorDefault){
+    const v = configuracionCentro && configuracionCentro[clave] !== undefined ? configuracionCentro[clave] : '';
+    return v !== '' && v !== null && v !== undefined ? v : (valorDefault || '');
+  }
+
+  function normalizarDriveImageUrl(url){
+    const raw = String(url || '').trim();
+    if(!raw) return '';
+
+    let m = raw.match(/\/file\/d\/([^/]+)/);
+    if(m && m[1]) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(m[1]);
+
+    m = raw.match(/[?&]id=([^&]+)/);
+    if(m && m[1]) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(m[1]);
+
+    return raw;
+  }
+
+  function actualizarPreviewLogoCentro(){
+    const input = document.getElementById('cfgLogoUrl');
+    const img = document.getElementById('cfgLogoPreview');
+    const fallback = document.getElementById('cfgLogoFallback');
+    if(!input || !img || !fallback) return;
+
+    const url = normalizarDriveImageUrl(input.value);
+    if(!url){
+      img.style.display = 'none';
+      fallback.style.display = 'grid';
+      img.removeAttribute('src');
+      return;
+    }
+
+    img.onload = () => { img.style.display = 'block'; fallback.style.display = 'none'; };
+    img.onerror = () => { img.style.display = 'none'; fallback.style.display = 'grid'; };
+    img.src = url;
+  }
+
+  async function cargarConfiguracionCentro(){
+    const msg = document.getElementById('centroMsg');
+    try{
+      configuracionCentro = await apiGet('obtenerConfiguracion');
+      if(!configuracionCentro || typeof configuracionCentro !== 'object' || Array.isArray(configuracionCentro)) configuracionCentro = {};
+
+      document.getElementById('cfgNombreClinica').value = valorConfigCentro('nombre_clinica', 'AUROSANAX DEMO');
+      document.getElementById('cfgWhatsappClinica').value = valorConfigCentro('whatsapp_clinica', '');
+      document.getElementById('cfgEmailClinica').value = valorConfigCentro('email_clinica', '');
+      document.getElementById('cfgDireccionClinica').value = valorConfigCentro('direccion_clinica', '');
+      document.getElementById('cfgLogoUrl').value = valorConfigCentro('logo_url', '');
+      document.getElementById('cfgColorPrincipal').value = valorConfigCentro('color_principal', '#8b1e5a');
+      document.getElementById('cfgColorSecundario').value = valorConfigCentro('color_secundario', '#c23b83');
+      document.getElementById('cfgModoSistema').value = valorConfigCentro('modo_sistema', 'DEMO');
+      actualizarPreviewLogoCentro();
+
+      if(msg) msg.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Datos institucionales cargados desde la hoja <b>configuracion</b>. Colores y modo sistema están bloqueados por seguridad.';
+    }catch(e){
+      console.error(e);
+      if(msg) msg.innerHTML = '<span class="text-danger fw-bold">Error cargando datos del centro. Revise conexión o Apps Script.</span>';
+    }
+  }
+
+  async function guardarConfiguracionCentro(){
+    const msg = document.getElementById('centroMsg');
+    const btn = document.getElementById('btnGuardarCentro');
+
+    const datosSeguros = {
+      nombre_clinica: document.getElementById('cfgNombreClinica').value.trim(),
+      whatsapp_clinica: document.getElementById('cfgWhatsappClinica').value.trim(),
+      email_clinica: document.getElementById('cfgEmailClinica').value.trim(),
+      direccion_clinica: document.getElementById('cfgDireccionClinica').value.trim(),
+      logo_url: document.getElementById('cfgLogoUrl').value.trim()
+    };
+
+    if(!datosSeguros.nombre_clinica){
+      alert('Ingrese el nombre del centro médico.');
+      return;
+    }
+
+    const old = btn ? btn.innerHTML : '';
+    if(btn){
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+    }
+    if(msg) msg.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Guardando datos institucionales...';
+
+    try{
+      for(const [clave, valor] of Object.entries(datosSeguros)){
+        const r = await apiPost('editarConfiguracion', {clave, valor});
+        if(!r.success) throw new Error(r.message || 'No se pudo guardar ' + clave);
+      }
+
+      await cargarConfiguracionCentro();
+      if(msg) msg.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Configuración institucional guardada correctamente.';
+      alert('Datos del centro guardados correctamente.');
+    }catch(e){
+      console.error(e);
+      if(msg) msg.innerHTML = '<span class="text-danger fw-bold">Error: ' + safeText(e.message || e) + '</span>';
+      alert('Error al guardar configuración: ' + (e.message || e));
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.innerHTML = old;
+      }
+    }
+  }
+
   async function refrescarDemo(){
     await cargarMedicos();
     await cargarServicios();
     await cargarMedicoServicios();
     await cargarPlantillasHorario();
+    await cargarConfiguracionCentro();
     alert('Vista actualizada.');
   }
 
@@ -1170,6 +1330,7 @@
     await cargarServicios();
     await cargarMedicoServicios();
     await cargarPlantillasHorario();
+    await cargarConfiguracionCentro();
   });
 
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
