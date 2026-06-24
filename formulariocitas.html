@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AUROSANAX DEMO - Formulario de Citas v2.12 Premium</title>
+  <title>AUROSANAX DEMO - Formulario de Citas v2.12 Flujo Ordenado</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -95,59 +95,121 @@
     .selected-summary b{color:#111827}.selected-summary .muted{color:#64748b;font-weight:750}
     .reserve-note{background:#f8fafc;border:1px solid #e2e8f0;color:#334155;border-radius:18px;padding:12px 14px;font-size:14px;font-weight:750;margin-top:10px}
 
-
-    /* =========================================================
-       V2.12 PREMIUM - Experiencia guiada de reserva
-       Solo reorganiza interfaz; conserva IDs y lógica funcional.
-       ========================================================= */
-    .premium-flow{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:16px;align-items:start}
-    .step-section{border:1px solid #f1d4e5;background:linear-gradient(180deg,#fff,#fff9fc);border-radius:24px;padding:16px;margin-bottom:14px;box-shadow:0 14px 32px rgba(139,30,90,.06)}
-    .step-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
-    .step-num{width:36px;height:36px;border-radius:14px;background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;display:grid;place-items:center;font-weight:950;box-shadow:0 10px 22px rgba(139,30,90,.18);flex:0 0 auto}
-    .step-head h4{font-size:16px;margin:0;font-weight:950;color:#111827}
-    .step-head p{font-size:13px;margin:2px 0 0;color:#64748b;font-weight:700}
-    .premium-summary{position:sticky;top:18px;border:1px solid #f1d4e5;background:radial-gradient(circle at top right,rgba(194,59,131,.12),transparent 38%),linear-gradient(180deg,#fff,#fff7fb);border-radius:24px;padding:16px;box-shadow:0 18px 42px rgba(139,30,90,.09)}
-    .premium-summary-title{display:flex;align-items:center;gap:8px;color:#7a174f;font-weight:950;margin-bottom:12px}
-    .summary-row{border-top:1px solid #f3d5e5;padding:10px 0}
-    .summary-row:first-of-type{border-top:0}
-    .summary-row small{display:block;color:#64748b;font-weight:900;text-transform:uppercase;font-size:10px;letter-spacing:.04em}
-    .summary-row b{display:block;color:#111827;margin-top:2px;font-size:14px;line-height:1.25}
-    .summary-status{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:14px;padding:10px 12px;font-size:12px;font-weight:850;margin-top:10px}
-    .doctor-helper{margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:10px 12px;color:#475569;font-size:13px;font-weight:750}
-    .patient-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-    .final-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-    .final-actions .btn-auro{flex:1}
-    .form-kicker{display:inline-flex;align-items:center;gap:7px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;border-radius:999px;padding:7px 10px;font-size:12px;font-weight:950;margin-bottom:10px}
-
-    @media(max-width:980px){
-      .premium-flow{grid-template-columns:1fr}
-      .premium-summary{position:relative;top:auto;order:-1}
-      .patient-grid{grid-template-columns:1fr}
-    }
-
     @media(max-width:920px){.shell{grid-template-columns:1fr}.hero h2{font-size:28px}.slots{grid-template-columns:repeat(2,1fr)}.ux-steps{grid-template-columns:1fr}}
     @media(max-width:520px){.page{padding:12px}.hero,.cardx{border-radius:22px;padding:18px}.slots{grid-template-columns:1fr}.hero h2{font-size:25px}.calendar-grid-mini{gap:4px}.calendar-day-mini{min-height:44px;border-radius:12px;padding:5px 2px}.calendar-day-mini .num{font-size:14px}.calendar-day-mini .qty{font-size:8px}.calendar-top{align-items:flex-start}.success-grid{grid-template-columns:1fr}.success-actions .btn-wa,.success-actions .btn-line{width:100%;justify-content:center}}
   
-/* AJUSTE PREMIUM AMPLIO */
-.container,.container-lg,.container-xl{max-width:1400px!important}
-.main-card,.card,.glass-card{border-radius:22px!important}
-body{background:#faf7fb!important}
-.premium-summary,.resumen-cita{display:none!important}
-.how-steps,.steps-grid{display:flex!important;gap:12px;flex-wrap:wrap}
-.how-steps>*,.steps-grid>*{flex:1;min-width:180px}
-.form-section{background:#fff;border:1px solid #f0d8e8;border-radius:18px;padding:24px;margin-bottom:20px}
-.form-control,.form-select{min-height:54px;border-radius:14px}
-@media (min-width:992px){
-  .main-grid,.contenido-principal{grid-template-columns:42% 58%!important}
-}
+    /* ===== AJUSTES SEGUROS UX PREMIUM - SIN TOCAR LÓGICA ===== */
+    #id_medico,
+    #servicio{
+      padding-right:48px!important;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      overflow:hidden;
+    }
 
+    .flow-banner{
+      background:linear-gradient(135deg,#fff7fb,#ffffff);
+      border:1px solid #f1d4e5;
+      border-radius:22px;
+      padding:14px;
+      margin-bottom:16px;
+      box-shadow:0 12px 28px rgba(139,30,90,.05);
+    }
 
-/* AJUSTES UX AUROSANAX */
-.form-select{padding-right:3.5rem!important;}
-.aviso-calendario{background:#fff7fb;border:1px solid #f3c7df;border-radius:16px;padding:14px 18px;margin:18px 0;color:#8a3a6b;font-weight:600}
-.aviso-fecha{background:#f8ecf6;border-radius:14px;padding:10px 14px;margin-bottom:12px;color:#a02c79;font-weight:700;text-align:center}
+    .flow-banner-title{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-weight:950;
+      color:#7a174f;
+      margin-bottom:10px;
+    }
 
-</style>
+    .flow-steps{
+      display:grid;
+      grid-template-columns:repeat(6,1fr);
+      gap:7px;
+    }
+
+    .flow-step{
+      border:1px solid #f4d5e5;
+      background:#fff;
+      border-radius:14px;
+      padding:9px 7px;
+      text-align:center;
+      font-size:11px;
+      font-weight:900;
+      color:#334155;
+      line-height:1.25;
+    }
+
+    .flow-step span{
+      display:inline-grid;
+      place-items:center;
+      width:22px;
+      height:22px;
+      border-radius:999px;
+      background:linear-gradient(135deg,var(--primary),var(--primary2));
+      color:#fff;
+      font-size:11px;
+      margin-bottom:4px;
+    }
+
+    .patient-block{
+      background:linear-gradient(180deg,#ffffff,#fff8fc);
+      border:1px solid #f1d4e5;
+      border-radius:22px;
+      padding:16px;
+      margin-top:6px;
+    }
+
+    .patient-block-title{
+      font-weight:950;
+      color:#7a174f;
+      margin-bottom:12px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .date-highlight{
+      background:#fdf2f8;
+      border:1px solid #f1d4e5;
+      color:#7a174f;
+      border-radius:16px;
+      padding:10px 12px;
+      font-weight:900;
+      font-size:13px;
+      margin-bottom:8px;
+    }
+
+    .calendar-warning{
+      background:#eff6ff;
+      border:1px solid #bfdbfe;
+      color:#1e40af;
+      border-radius:18px;
+      padding:12px 14px;
+      font-weight:800;
+      font-size:14px;
+      margin-bottom:10px;
+    }
+
+    @media(max-width:920px){
+      .flow-steps{grid-template-columns:repeat(3,1fr)}
+    }
+
+    @media(max-width:520px){
+      #id_medico,
+      #servicio{
+        padding-right:54px!important;
+        font-size:15px;
+      }
+      .flow-steps{grid-template-columns:repeat(2,1fr)}
+      .flow-step{font-size:10px;padding:8px 6px}
+      .patient-block{padding:14px}
+    }
+
+  </style>
 </head>
 <body>
   <div class="page">
@@ -157,8 +219,8 @@ body{background:#faf7fb!important}
           <div class="logo">A</div>
           <div><h1>AUROSANAX</h1><small>Formulario de citas DEMO</small></div>
         </div>
-        <h2>Agenda tu cita en AUROSANAX</h2>
-        <p>Seleccione profesional, servicio, fecha y horario disponible en una experiencia guiada, clara y segura.</p>
+        <h2>Reserva tu cita médica</h2>
+        <p>Formulario de prueba conectado a la disponibilidad registrada por Secretaría. Elija médico, día y hora para reservar un horario pendiente de confirmación administrativa.</p>
         <div class="pill"><i class="bi bi-shield-check"></i> Entorno DEMO · No usar con pacientes reales</div>
         <div class="steps">
           <div class="step"><i class="bi bi-person-badge"></i><div><b>1. Profesional y servicio</b><span>Primero elija el médico y el tipo de atención.</span></div></div>
@@ -169,160 +231,132 @@ body{background:#faf7fb!important}
 
       <main class="cardx">
         <div class="section-title mb-4">
-          <h3><i class="bi bi-calendar-heart me-2" style="color:var(--primary)"></i>Reserva de cita premium</h3>
-          <p>Complete los pasos en orden. El sistema le mostrará solo opciones reales disponibles.</p>
+          <h3><i class="bi bi-calendar-heart me-2" style="color:var(--primary)"></i>Formulario de cita</h3>
+          <p>Reserve un horario disponible. Secretaría revisará la información y confirmará los detalles de la atención.</p>
         </div>
 
         <div class="ux-guide">
           <div class="ux-guide-title"><i class="bi bi-compass"></i> ¿Cómo reservar?</div>
           <div class="ux-steps">
-            <div class="ux-step"><span class="n">1</span><div><b>Médico y servicio</b><span>Primero elija el profesional y el servicio.</span></div></div>
-            <div class="ux-step"><span class="n">2</span><div><b>Fecha y hora</b><span>Use los días resaltados y seleccione una hora.</span></div></div>
+            <div class="ux-step"><span class="n">1</span><div><b>Profesional y servicio</b><span>Elija médico y tipo de atención.</span></div></div>
+            <div class="ux-step"><span class="n">2</span><div><b>Fecha y hora</b><span>Use el calendario y seleccione un horario.</span></div></div>
             <div class="ux-step"><span class="n">3</span><div><b>Datos del paciente</b><span>Complete sus datos y reserve.</span></div></div>
           </div>
         </div>
 
-        <form id="citaForm">
-          <div class="premium-flow">
-            <div>
-              <section class="step-section">
-                <div class="form-kicker"><i class="bi bi-stars"></i> Reserva guiada AUROSANAX</div>
-                <div class="step-head">
-                  <div class="step-num">1</div>
-                  <div>
-                    
-<div class="aviso-calendario">📅 IMPORTANTE: El calendario es solo informativo. Seleccione una fecha disponible y luego un horario para reservar. La cita será confirmada posteriormente por Secretaría.</div>
-<div class="aviso-fecha">👇 Seleccione aquí la fecha deseada para visualizar horarios disponibles.</div>
-<h4>Seleccione el profesional</h4>
-                    <p>El calendario y los servicios se ajustan automáticamente al médico elegido.</p>
-                  </div>
-                </div>
-                <label class="form-label">Profesional médico *</label>
-                <select id="id_medico" class="form-select" required onchange="cargarServiciosMedico(); renderCalendarioDisponibilidad(); renderHorasDisponibles(); actualizarResumenSeleccion()">
-                  <option value="">Cargando médicos...</option>
-                </select>
-                <div id="medicoHelp" class="doctor-helper">
-                  <i class="bi bi-info-circle me-1"></i> Seleccione el profesional para cargar sus servicios disponibles.
-                </div>
-              </section>
+        <form id="citaForm" autocomplete="off">
+          <div class="flow-banner">
+            <div class="flow-banner-title"><i class="bi bi-stars"></i> Reserva guiada AUROSANAX</div>
+            <div class="flow-steps">
+              <div class="flow-step"><span>1</span><br>Profesional</div>
+              <div class="flow-step"><span>2</span><br>Servicio</div>
+              <div class="flow-step"><span>3</span><br>Fecha</div>
+              <div class="flow-step"><span>4</span><br>Horario</div>
+              <div class="flow-step"><span>5</span><br>Datos</div>
+              <div class="flow-step"><span>6</span><br>Reservar</div>
+            </div>
+          </div>
 
-              <section class="step-section">
-                <div class="step-head">
-                  <div class="step-num">2</div>
-                  <div>
-                    <h4>Seleccione el servicio</h4>
-                    <p>Solo se muestran los servicios configurados para el profesional seleccionado.</p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">👩‍⚕️ Paso 1: Seleccione el profesional *</label>
+              <select id="id_medico" class="form-select" required autocomplete="off" onchange="cargarServiciosMedico(); renderCalendarioDisponibilidad(); renderHorasDisponibles(); actualizarResumenSeleccion()">
+                <option value="">Cargando médicos...</option>
+              </select>
+              <div class="micro-help">El calendario y los servicios se ajustan automáticamente al médico elegido.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">🩺 Paso 2: Seleccione el servicio *</label>
+              <select id="servicio" class="form-select" required autocomplete="off" onchange="actualizarResumenSeleccion()">
+                <option value="">Seleccione primero un médico</option>
+              </select>
+              <div class="micro-help">Solo se muestran los servicios configurados para el profesional seleccionado.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">📅 Paso 3: Fecha seleccionada *</label>
+              <div class="date-highlight"><i class="bi bi-hand-index-thumb me-1"></i> Seleccione aquí la fecha deseada para visualizar horarios disponibles.</div>
+              <input id="fecha_cita" type="date" class="form-control" required autocomplete="off" onchange="sincronizarMiniDesdeInput(); renderHorasDisponibles(); actualizarResumenSeleccion()">
+              <div class="micro-help">También puede tocar directamente un día resaltado en el calendario.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">📌 Estado de selección</label>
+              <div id="selectedSummary" class="selected-summary" style="margin-top:0"></div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">📅 Calendario de disponibilidad</label>
+              <div class="calendar-card">
+                <div class="calendar-warning">
+                  <i class="bi bi-info-circle me-1"></i>
+                  <strong>Importante:</strong> este calendario es informativo. Los días en verde tienen horarios disponibles. Para reservar, seleccione fecha, luego horario y finalmente complete sus datos.
+                </div>
+                <div class="reserve-note"><i class="bi bi-info-circle me-1"></i> Los días en verde tienen horarios vigentes para el médico seleccionado. Toque un día para ver sus horas disponibles.</div>
+                <div class="calendar-top mt-2">
+                  <b id="miniCalendarTitle">Mes</b>
+                  <div class="calendar-nav">
+                    <button type="button" onclick="cambiarMesMini(-1)" title="Mes anterior"><i class="bi bi-chevron-left"></i></button>
+                    <button type="button" onclick="irHoyMini()" title="Ir a hoy"><i class="bi bi-calendar-event"></i></button>
+                    <button type="button" onclick="cambiarMesMini(1)" title="Mes siguiente"><i class="bi bi-chevron-right"></i></button>
                   </div>
                 </div>
-                <label class="form-label">Servicio / motivo *</label>
-                <select id="servicio" class="form-select" required onchange="actualizarResumenSeleccion()">
-                  <option value="">Seleccione primero un médico</option>
-                </select>
-              </section>
-
-              <section class="step-section">
-                <div class="step-head">
-                  <div class="step-num">3</div>
-                  <div>
-                    <h4>Seleccione la fecha</h4>
-                    <p>Los días en verde tienen horarios vigentes para el médico seleccionado.</p>
-                  </div>
+                <div id="miniCalendarGrid" class="calendar-grid-mini"></div>
+                <div class="calendar-legend">
+                  <span><i class="legend-dot dot-ok"></i>Con horarios para el médico seleccionado</span>
+                  <span><i class="legend-dot dot-off"></i>Sin horarios</span>
+                  <span><i class="legend-dot dot-sel"></i>Seleccionado</span>
                 </div>
-                <div class="row g-3">
-                  <div class="col-md-6">
-                    <label class="form-label">Fecha seleccionada *</label>
-                    <input id="fecha_cita" type="date" class="form-control" required onchange="sincronizarMiniDesdeInput(); renderHorasDisponibles(); actualizarResumenSeleccion()">
-                    <div class="micro-help">Puede elegir la fecha aquí o tocar directamente un día resaltado en el calendario.</div>
-                  </div>
-                </div>
-
-                <div class="calendar-card mt-3">
-                  <div class="reserve-note"><i class="bi bi-info-circle me-1"></i> Toque un día resaltado para ver sus horas disponibles.</div>
-                  <div class="calendar-top mt-2">
-                    <b id="miniCalendarTitle">Mes</b>
-                    <div class="calendar-nav">
-                      <button type="button" onclick="cambiarMesMini(-1)" title="Mes anterior"><i class="bi bi-chevron-left"></i></button>
-                      <button type="button" onclick="irHoyMini()" title="Ir a hoy"><i class="bi bi-calendar-event"></i></button>
-                      <button type="button" onclick="cambiarMesMini(1)" title="Mes siguiente"><i class="bi bi-chevron-right"></i></button>
-                    </div>
-                  </div>
-                  <div id="miniCalendarGrid" class="calendar-grid-mini"></div>
-                  <div class="calendar-legend">
-                    <span><i class="legend-dot dot-ok"></i>Con horarios</span>
-                    <span><i class="legend-dot dot-off"></i>Sin horarios</span>
-                    <span><i class="legend-dot dot-sel"></i>Seleccionado</span>
-                  </div>
-                </div>
-              </section>
-
-              <section class="step-section">
-                <div class="step-head">
-                  <div class="step-num">4</div>
-                  <div>
-                    <h4>Seleccione el horario</h4>
-                    <p>El horario quedará apartado al finalizar la reserva.</p>
-                  </div>
-                </div>
-                <div id="selectedSummary" class="selected-summary"></div>
-                <div id="loadingSlots" class="loading"><i class="bi bi-arrow-clockwise me-1"></i> Buscando horarios disponibles...</div>
-                <div id="slots" class="slots"></div>
-                <input id="hora_inicio" type="hidden" required>
-                <input id="hora_fin" type="hidden">
-              </section>
-
-              <section class="step-section">
-                <div class="step-head">
-                  <div class="step-num">5</div>
-                  <div>
-                    <h4>Complete sus datos</h4>
-                    <p>Usaremos esta información para confirmar la cita por WhatsApp.</p>
-                  </div>
-                </div>
-                <div class="patient-grid">
-                  <div>
-                    <label class="form-label">Cédula / documento *</label>
-                    <input id="numero_documento" class="form-control" required placeholder="Ej. 0912345678">
-                  </div>
-                  <div>
-                    <label class="form-label">Nombres completos *</label>
-                    <input id="nombre_completo" class="form-control" required placeholder="Nombre y apellido">
-                  </div>
-                  <div>
-                    <label class="form-label">WhatsApp / teléfono *</label>
-                    <input id="whatsapp" class="form-control" required placeholder="Ej. 0999999999">
-                  </div>
-                  <div>
-                    <label class="form-label">Correo opcional</label>
-                    <input id="email" type="email" class="form-control" placeholder="correo@ejemplo.com">
-                  </div>
-                  <div style="grid-column:1/-1">
-                    <label class="form-label">Observación</label>
-                    <input id="observaciones" class="form-control" placeholder="Opcional">
-                  </div>
-                </div>
-              </section>
-
-              <div class="mini-note mt-3">
-                <i class="bi bi-info-circle me-1"></i>
-                Al reservar, el horario queda apartado y deja de estar disponible para otros pacientes. Secretaría revisará los datos y confirmará los detalles por WhatsApp.
-              </div>
-
-              <div id="statusBox" class="status"></div>
-
-              <div class="final-actions">
-                <button type="submit" class="btn-auro"><i class="bi bi-calendar-check me-1"></i> Reservar cita</button>
-                <button type="button" class="btn-line" onclick="cargarDatosIniciales()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
               </div>
             </div>
 
-            <aside class="premium-summary" id="resumenPremium">
-              <div class="premium-summary-title"><i class="bi bi-clipboard2-heart"></i> Resumen de su cita</div>
-              <div class="summary-row"><small>Profesional</small><b>Seleccione médico</b></div>
-              <div class="summary-row"><small>Servicio</small><b>Seleccione servicio</b></div>
-              <div class="summary-row"><small>Fecha</small><b>Seleccione fecha</b></div>
-              <div class="summary-row"><small>Hora</small><b>Seleccione hora</b></div>
-              <div class="summary-status"><i class="bi bi-clock-history me-1"></i> Pendiente de confirmación por Secretaría.</div>
-            </aside>
+            <div class="col-12">
+              <label class="form-label">🕒 Paso 4: Seleccione horario disponible *</label>
+              <div id="loadingSlots" class="loading"><i class="bi bi-arrow-clockwise me-1"></i> Buscando horarios disponibles...</div>
+              <div id="slots" class="slots"></div>
+              <input id="hora_inicio" type="hidden" required autocomplete="off">
+              <input id="hora_fin" type="hidden" autocomplete="off">
+            </div>
+
+            <div class="col-12">
+              <div class="patient-block">
+                <div class="patient-block-title"><i class="bi bi-person-lines-fill"></i> Paso 5: Complete los datos del paciente</div>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Cédula / documento *</label>
+                    <input id="numero_documento" class="form-control" required autocomplete="off" inputmode="numeric" placeholder="Ej. 0912345678">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Nombres completos *</label>
+                    <input id="nombre_completo" class="form-control" required autocomplete="off" placeholder="Nombre y apellido">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">WhatsApp / teléfono *</label>
+                    <input id="whatsapp" class="form-control" required autocomplete="off" inputmode="tel" placeholder="Ej. 0999999999">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Correo opcional</label>
+                    <input id="email" type="email" class="form-control" autocomplete="off" placeholder="correo@ejemplo.com">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">Observación</label>
+                    <input id="observaciones" class="form-control" autocomplete="off" placeholder="Opcional">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mini-note mt-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Al reservar, el horario queda apartado y deja de estar disponible para otros pacientes. Secretaría revisará los datos y confirmará los detalles por WhatsApp.
+          </div>
+
+          <div id="statusBox" class="status"></div>
+
+          <div class="d-flex gap-2 flex-wrap mt-4">
+            <button type="submit" class="btn-auro flex-fill"><i class="bi bi-calendar-check me-1"></i> Reservar cita</button>
+            <button type="button" class="btn-line" onclick="cargarDatosIniciales()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
           </div>
         </form>
         <div class="demo">AUROSANAX DEMO · Prueba de formulario web</div>
@@ -533,50 +567,20 @@ body{background:#faf7fb!important}
       return fecha.toLocaleDateString('es-EC', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
     }
 
-    function especialidadMedicoVista(m){
-      return m?.especialidad_principal || m?.especialidad || m?.id_especialidad || '';
-    }
-
     function actualizarResumenSeleccion(mensajeExtra){
       const box = document.getElementById('selectedSummary');
+      if(!box) return;
       const fecha = document.getElementById('fecha_cita')?.value || '';
       const idMedico = document.getElementById('id_medico')?.value || '';
       const horaInicio = document.getElementById('hora_inicio')?.value || '';
       const horaFin = document.getElementById('hora_fin')?.value || '';
-      const servicio = document.getElementById('servicio')?.value || '';
       const medico = medicoNombre(idMedico);
       const fechaTxt = fecha ? resumenFechaLarga(fecha) : 'Seleccione un día en el calendario';
       const horaTxt = horaInicio ? (horaInicio + (horaFin ? ' - ' + horaFin : '')) : 'Seleccione una hora disponible';
-      const servicioTxt = servicio || 'Seleccione servicio';
-
-      if(box){
-        box.innerHTML = '<div><span class="muted">Profesional:</span> <b>' + medico + '</b></div>' +
-          '<div><span class="muted">Servicio:</span> <b>' + servicioTxt + '</b></div>' +
-          '<div><span class="muted">Fecha:</span> <b>' + fechaTxt + '</b></div>' +
-          '<div><span class="muted">Hora:</span> <b>' + horaTxt + '</b></div>' +
-          (mensajeExtra ? '<div class="mt-1">' + mensajeExtra + '</div>' : '');
-      }
-
-      const resumen = document.getElementById('resumenPremium');
-      if(resumen){
-        resumen.innerHTML = `
-          <div class="premium-summary-title"><i class="bi bi-clipboard2-heart"></i> Resumen de su cita</div>
-          <div class="summary-row"><small>Profesional</small><b>${medico || 'Seleccione médico'}</b></div>
-          <div class="summary-row"><small>Servicio</small><b>${servicioTxt}</b></div>
-          <div class="summary-row"><small>Fecha</small><b>${fecha ? formatearFechaBonita(fecha) : 'Seleccione fecha'}</b></div>
-          <div class="summary-row"><small>Hora</small><b>${horaInicio ? horaTxt : 'Seleccione hora'}</b></div>
-          <div class="summary-status"><i class="bi bi-clock-history me-1"></i> Pendiente de confirmación por Secretaría.</div>
-        `;
-      }
-
-      const medicoHelp = document.getElementById('medicoHelp');
-      if(medicoHelp){
-        const m = medicos.find(x => String(x.id_medico || '') === String(idMedico || ''));
-        const esp = especialidadMedicoVista(m);
-        medicoHelp.innerHTML = idMedico
-          ? '<i class="bi bi-person-badge me-1"></i> Profesional seleccionado: <b>' + medico + '</b>' + (esp ? ' · ' + esp : '')
-          : '<i class="bi bi-info-circle me-1"></i> Seleccione el profesional para cargar sus servicios disponibles.';
-      }
+      box.innerHTML = '<div><span class="muted">Mostrando disponibilidad para:</span> <b>' + medico + '</b></div>' +
+        '<div><span class="muted">Fecha:</span> <b>' + fechaTxt + '</b></div>' +
+        '<div><span class="muted">Hora:</span> <b>' + horaTxt + '</b></div>' +
+        (mensajeExtra ? '<div class="mt-1">' + mensajeExtra + '</div>' : '');
     }
 
     function setStatus(tipo, msg){
@@ -658,9 +662,7 @@ body{background:#faf7fb!important}
       sel.innerHTML = '<option value="">Seleccione médico</option>' + lista.map(m => {
         const id = String(m.id_medico || '').trim();
         const nombre = (((m.nombres || '') + ' ' + (m.apellidos || '')).trim() || m.nombre_completo || m.nombre || id);
-        const esp = especialidadMedicoVista(m);
-        const label = esp ? (nombre + ' — ' + esp) : nombre;
-        return '<option value="' + id + '">' + label + '</option>';
+        return '<option value="' + id + '">' + nombre + '</option>';
       }).join('');
 
       if(actual && [...sel.options].some(o => o.value === actual)){
@@ -1152,12 +1154,10 @@ body{background:#faf7fb!important}
           </div>
         `);
 
-        this.reset();
+        limpiarFormularioPublico();
         const hoy = new Date();
         document.getElementById('fecha_cita').value = fechaISO(hoy);
-        selectedSlot = null;
-        document.getElementById('hora_inicio').value = '';
-        document.getElementById('hora_fin').value = '';
+        miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
         actualizarResumenSeleccion();
         await cargarDatosIniciales(true);
       }catch(err){
@@ -1171,7 +1171,27 @@ body{background:#faf7fb!important}
       }
     });
 
+
+    function limpiarFormularioPublico(){
+      const form = document.getElementById('citaForm');
+      if(form) form.reset();
+
+      ['numero_documento','nombre_completo','whatsapp','email','observaciones','hora_inicio','hora_fin'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.value = '';
+      });
+
+      selectedSlot = null;
+      window.__slotsDisponibles = [];
+      limpiarStatus();
+      limpiarErroresCampos();
+
+      const slots = document.getElementById('slots');
+      if(slots) slots.innerHTML = '<div class="mini-note" style="grid-column:1/-1">Seleccione fecha y médico para ver horarios disponibles.</div>';
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+      limpiarFormularioPublico();
       const hoy = new Date();
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
