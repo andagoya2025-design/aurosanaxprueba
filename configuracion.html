@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AUROSANAX DEMO - Configuración v3 Médico Servicios</title>
+  <title>AUROSANAX DEMO - Configuración v5.1 Plantillas Horario</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -385,8 +385,8 @@
 
     <div class="premium-hero">
       <h4><i class="bi bi-gear-fill me-2"></i> Panel de configuración inicial</h4>
-      <p>Módulo conectado para guardar médicos, servicios y asignación de servicios por médico en Google Sheets. Horarios y datos del centro quedan para la siguiente fase.</p>
-      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos, Servicios y Médico-Servicios conectados a Apps Script</span></div>
+      <p>Módulo conectado para guardar médicos, servicios, asignación de servicios por médico y lectura real de plantillas de horario desde Google Sheets. Datos del centro quedan para una siguiente fase.</p>
+      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos, Servicios, Médico-Servicios y Plantillas de horario conectados a Apps Script</span></div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -423,7 +423,7 @@
 
     <section class="screen" id="horarios">
       <div class="cardx p-4">
-        <div class="section-head"><div><h4>Plantillas de horario rápido</h4><p>Bloques reutilizables para crear disponibilidad sin escribir todo manualmente.</p></div><button class="btn-auro" onclick="abrirModal('horario')"><i class="bi bi-plus-circle me-1"></i> Nueva plantilla</button></div>
+        <div class="section-head"><div><h4>Plantillas de horario rápido</h4><p>Bloques reutilizables para crear disponibilidad sin escribir todo manualmente.</p></div><button class="btn-auro" onclick="abrirModalHorario('')"><i class="bi bi-plus-circle me-1"></i> Nueva plantilla</button></div>
         <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Plantilla</th><th>Horario</th><th>Intervalo</th><th>Tipo</th><th>Días</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="horariosBody"></tbody></table></div>
         <div id="horariosMobile" class="mobile-cards"></div>
       </div>
@@ -454,15 +454,7 @@
   let medicos = [];
   let servicios = [];
   let medicoServicios = [];
-  const horarios=[
-    {nombre:'Consultorio completo',horario:'08:00 - 17:00',intervalo:'30 min',tipo:'Consulta',dias:'Todos',estado:'Activo'},
-    {nombre:'Tarde normal',horario:'16:00 - 20:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Vie',estado:'Activo'},
-    {nombre:'Tarde sucursal',horario:'16:00 - 21:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},
-    {nombre:'Mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Lun-Dom',estado:'Activo'},
-    {nombre:'Domingo mañana',horario:'09:00 - 13:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},
-    {nombre:'Domingo tarde',horario:'15:00 - 19:00',intervalo:'30 min',tipo:'Consulta',dias:'Domingo',estado:'Activo'},
-    {nombre:'Procedimientos',horario:'16:00 - 18:00',intervalo:'60 min',tipo:'Procedimiento',dias:'Lun-Dom',estado:'Activo'}
-  ];
+  let horarios = [];
 
   function toggleSidebar(){
     document.getElementById('sidebar').classList.toggle('show');
@@ -540,6 +532,32 @@
     return p ? '$' + String(p).replace('$','') : '—';
   }
 
+
+  function textoPlantillaNombre(h){
+    return h.nombre_plantilla || h.nombre || 'Sin nombre';
+  }
+
+  function textoPlantillaHorario(h){
+    const inicio = h.hora_inicio || h.inicio || '';
+    const fin = h.hora_fin || h.fin || '';
+    if(inicio && fin) return inicio + ' - ' + fin;
+    return h.horario || '—';
+  }
+
+  function textoPlantillaIntervalo(h){
+    const i = h.intervalo_minutos || h.intervalo || '';
+    if(!i) return '—';
+    return String(i).replace(' min','') + ' min';
+  }
+
+  function textoPlantillaTipo(h){
+    return h.tipo_bloque || h.tipo || '—';
+  }
+
+  function textoPlantillaDias(h){
+    return h.aplica_dia || h.dias || '—';
+  }
+
   async function cargarMedicos(){
     try{
       medicos = await apiGet('listarMedicos');
@@ -576,10 +594,27 @@
     }
   }
 
+
+  async function cargarPlantillasHorario(){
+    try{
+      horarios = await apiGet('listarPlantillasHorario');
+      if(!Array.isArray(horarios)) horarios = [];
+      renderHorarios();
+      document.getElementById('stPlantillas').textContent = horarios.length;
+    }catch(e){
+      console.error(e);
+      horarios = [];
+      horariosBody.innerHTML = '<tr><td colspan="7" class="text-danger fw-bold">Error cargando plantillas de horario. Revise Apps Script o la implementación.</td></tr>';
+      horariosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando plantillas de horario.</div>';
+      document.getElementById('stPlantillas').textContent = '0';
+    }
+  }
+
   async function refrescarDemo(){
     await cargarMedicos();
     await cargarServicios();
     await cargarMedicoServicios();
+    await cargarPlantillasHorario();
     alert('Vista actualizada.');
   }
 
@@ -633,8 +668,31 @@
 
   function renderHorarios(){
     document.getElementById('stPlantillas').textContent = horarios.length;
-    horariosBody.innerHTML=horarios.map(h=>`<tr><td><b>${safeText(h.nombre)}</b></td><td>${safeText(h.horario)}</td><td>${safeText(h.intervalo)}</td><td>${safeText(h.tipo)}</td><td>${safeText(h.dias)}</td><td>${badge(h.estado)}</td><td><button class="btn-soft btn-sm" onclick="abrirModal('horario')">Editar</button></td></tr>`).join('');
-    horariosMobile.innerHTML=horarios.map(h=>`<div class="mobile-card"><b>${safeText(h.nombre)}</b><div class="line"><span>Horario</span><span>${safeText(h.horario)}</span></div><div class="line"><span>Tipo</span><span>${safeText(h.tipo)}</span></div><div class="line"><span>Días</span><span>${safeText(h.dias)}</span></div><button class="btn-soft w-100 mt-2" onclick="abrirModal('horario')">Editar</button></div>`).join('');
+
+    horariosBody.innerHTML = horarios.map(h => `
+      <tr>
+        <td><b>${safeText(textoPlantillaNombre(h))}</b><br><small class="text-muted fw-bold">${safeText(h.id_plantilla_horario || '—')}</small></td>
+        <td>${safeText(textoPlantillaHorario(h))}</td>
+        <td>${safeText(textoPlantillaIntervalo(h))}</td>
+        <td>${safeText(textoPlantillaTipo(h))}</td>
+        <td>${safeText(textoPlantillaDias(h))}</td>
+        <td>${badge(h.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalHorario('${safeText(h.id_plantilla_horario || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">No hay plantillas de horario registradas.</td></tr>';
+
+    horariosMobile.innerHTML = horarios.map(h => `
+      <div class="mobile-card">
+        <b>${safeText(textoPlantillaNombre(h))}</b>
+        <div class="line"><span>Código</span><span>${safeText(h.id_plantilla_horario || '—')}</span></div>
+        <div class="line"><span>Horario</span><span>${safeText(textoPlantillaHorario(h))}</span></div>
+        <div class="line"><span>Intervalo</span><span>${safeText(textoPlantillaIntervalo(h))}</span></div>
+        <div class="line"><span>Tipo</span><span>${safeText(textoPlantillaTipo(h))}</span></div>
+        <div class="line"><span>Días</span><span>${safeText(textoPlantillaDias(h))}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(h.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalHorario('${safeText(h.id_plantilla_horario || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay plantillas de horario registradas.</div>';
   }
 
   function render(){
@@ -643,9 +701,76 @@
     renderHorarios();
   }
 
+
+  function abrirModalHorario(id_plantilla_horario){
+    const h = horarios.find(x => String(x.id_plantilla_horario || '') === String(id_plantilla_horario || '')) || {};
+    modalTitle.textContent = id_plantilla_horario ? 'Editar plantilla de horario' : 'Nueva plantilla de horario';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombre plantilla</label>
+          <input id="horNombre" class="form-control" value="${safeText(h.nombre_plantilla || '')}" placeholder="Ej. Tarde normal">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Inicio</label>
+          <input id="horInicio" class="form-control" value="${safeText(h.hora_inicio || '')}" placeholder="16:00">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Fin</label>
+          <input id="horFin" class="form-control" value="${safeText(h.hora_fin || '')}" placeholder="20:00">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Intervalo</label>
+          <select id="horIntervalo" class="form-select">
+            <option value="30" ${String(h.intervalo_minutos || '') === '30' || !h.intervalo_minutos ? 'selected' : ''}>30 min</option>
+            <option value="45" ${String(h.intervalo_minutos || '') === '45' ? 'selected' : ''}>45 min</option>
+            <option value="60" ${String(h.intervalo_minutos || '') === '60' ? 'selected' : ''}>60 min</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo</label>
+          <select id="horTipo" class="form-select">
+            <option ${String(h.tipo_bloque || 'Consulta') === 'Consulta' ? 'selected' : ''}>Consulta</option>
+            <option ${String(h.tipo_bloque || '') === 'Procedimiento' ? 'selected' : ''}>Procedimiento</option>
+            <option ${String(h.tipo_bloque || '') === 'Ecografía' ? 'selected' : ''}>Ecografía</option>
+            <option ${String(h.tipo_bloque || '') === 'Bloque administrativo' ? 'selected' : ''}>Bloque administrativo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Días que aplica</label>
+          <input id="horDias" class="form-control" value="${safeText(h.aplica_dia || '')}" placeholder="Ej. Lun-Vie / Domingo / Todos">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="horEstado" class="form-select">
+            <option ${String(h.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(h.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Observación</label>
+          <textarea id="horObservacion" class="form-control" rows="2" placeholder="Observación interna">${safeText(h.observacion || '')}</textarea>
+        </div>
+      </div>
+      <div id="horMsg" class="notice mt-3">
+        Fase 1 segura: las plantillas se leen desde la hoja <b>plantillas_horario</b>. El guardado real queda para la siguiente fase.
+      </div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn-auro" onclick="alert('Lectura conectada correctamente. El guardado real de plantillas se activará en la siguiente fase.')">
+          <i class="bi bi-eye me-1"></i> Vista conectada
+        </button>
+      </div>
+    `;
+
+    modalConfig.classList.add('show');
+  }
+
   function abrirModal(tipo){
     if(tipo === 'medico') return abrirModalMedico('');
     if(tipo === 'servicio') return abrirModalServicio('');
+    if(tipo === 'horario') return abrirModalHorario('');
 
     const title={horario:'Plantilla de horario'}[tipo]||'Registro';
     modalTitle.textContent='Nuevo / editar '+title;
@@ -991,10 +1116,10 @@
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
-    render();
     await cargarMedicos();
     await cargarServicios();
     await cargarMedicoServicios();
+    await cargarPlantillasHorario();
   });
 
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
