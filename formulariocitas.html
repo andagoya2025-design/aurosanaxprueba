@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AUROSANAX DEMO - Formulario de Citas v2.13 Limpio Desplegable</title>
+  <title>AUROSANAX DEMO - Formulario de Citas v2.14 Clásico Seguro</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -98,82 +98,32 @@
     @media(max-width:920px){.shell{grid-template-columns:1fr}.hero h2{font-size:28px}.slots{grid-template-columns:repeat(2,1fr)}.ux-steps{grid-template-columns:1fr}}
     @media(max-width:520px){.page{padding:12px}.hero,.cardx{border-radius:22px;padding:18px}.slots{grid-template-columns:1fr}.hero h2{font-size:25px}.calendar-grid-mini{gap:4px}.calendar-day-mini{min-height:44px;border-radius:12px;padding:5px 2px}.calendar-day-mini .num{font-size:14px}.calendar-day-mini .qty{font-size:8px}.calendar-top{align-items:flex-start}.success-grid{grid-template-columns:1fr}.success-actions .btn-wa,.success-actions .btn-line{width:100%;justify-content:center}}
   
-    /* ===== AJUSTES SEGUROS UX PREMIUM - SIN TOCAR LÓGICA ===== */
+    /* ===== AJUSTE CLÁSICO SEGURO AUROSANAX ===== */
     #id_medico,
     #servicio{
-      padding-right:48px!important;
+      padding-right:52px!important;
       text-overflow:ellipsis;
       white-space:nowrap;
       overflow:hidden;
     }
 
-    .flow-banner{
-      background:linear-gradient(135deg,#fff7fb,#ffffff);
+    .medico-info-card{
+      margin-top:8px;
       border:1px solid #f1d4e5;
-      border-radius:22px;
-      padding:14px;
-      margin-bottom:16px;
-      box-shadow:0 12px 28px rgba(139,30,90,.05);
-    }
-
-    .flow-banner-title{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      font-weight:950;
-      color:#7a174f;
-      margin-bottom:10px;
-    }
-
-    .flow-steps{
-      display:grid;
-      grid-template-columns:repeat(6,1fr);
-      gap:7px;
-    }
-
-    .flow-step{
-      border:1px solid #f4d5e5;
-      background:#fff;
-      border-radius:14px;
-      padding:9px 7px;
-      text-align:center;
-      font-size:11px;
-      font-weight:900;
+      background:linear-gradient(180deg,#fff,#fff8fc);
+      border-radius:16px;
+      padding:10px 12px;
       color:#334155;
-      line-height:1.25;
+      font-size:13px;
+      font-weight:800;
+      display:none;
     }
 
-    .flow-step span{
-      display:inline-grid;
-      place-items:center;
-      width:22px;
-      height:22px;
-      border-radius:999px;
-      background:linear-gradient(135deg,var(--primary),var(--primary2));
-      color:#fff;
-      font-size:11px;
-      margin-bottom:4px;
-    }
-
-    .patient-block{
-      background:linear-gradient(180deg,#ffffff,#fff8fc);
-      border:1px solid #f1d4e5;
-      border-radius:22px;
-      padding:16px;
-      margin-top:6px;
-    }
-
-    .patient-block-title{
-      font-weight:950;
-      color:#7a174f;
-      margin-bottom:12px;
-      display:flex;
-      align-items:center;
-      gap:8px;
-    }
+    .medico-info-card.show{display:block}
+    .medico-info-card b{color:#7a174f;font-weight:950}
 
     .date-highlight{
-      background:#fdf2f8;
+      background:#fff7fb;
       border:1px solid #f1d4e5;
       color:#7a174f;
       border-radius:16px;
@@ -183,103 +133,65 @@
       margin-bottom:8px;
     }
 
-    .calendar-warning{
-      background:#eff6ff;
-      border:1px solid #bfdbfe;
-      color:#1e40af;
-      border-radius:18px;
-      padding:12px 14px;
-      font-weight:800;
-      font-size:14px;
-      margin-bottom:10px;
-    }
-
-    @media(max-width:920px){
-      .flow-steps{grid-template-columns:repeat(3,1fr)}
-    }
-
-    @media(max-width:520px){
-      #id_medico,
-      #servicio{
-        padding-right:54px!important;
-        font-size:15px;
-      }
-      .flow-steps{grid-template-columns:repeat(2,1fr)}
-      .flow-step{font-size:10px;padding:8px 6px}
-      .patient-block{padding:14px}
-    }
-
-  
-    /* ===== AJUSTE LIMPIO: SIN PASOS REPETIDOS + CALENDARIO DESPLEGABLE ===== */
-    .flow-banner,
-    .ux-guide{
-      display:none!important;
-    }
-
-    .medico-info-card{
-      display:none;
-      margin-top:8px;
+    .calendar-details{
       border:1px solid #f1d4e5;
-      background:linear-gradient(180deg,#fff,#fff8fc);
-      border-radius:16px;
-      padding:10px 12px;
-      color:#334155;
-      font-size:13px;
-      font-weight:800;
+      background:#fff;
+      border-radius:20px;
+      padding:0;
+      margin-top:4px;
+      box-shadow:0 12px 28px rgba(139,30,90,.05);
+      overflow:hidden;
     }
 
-    .medico-info-card.show{
-      display:block;
-    }
-
-    .medico-info-card b{
+    .calendar-details summary{
+      cursor:pointer;
+      list-style:none;
+      padding:14px 16px;
       color:#7a174f;
-      font-weight:950;
-    }
-
-    .calendar-toggle{
-      width:100%;
-      border:1px solid #f1d4e5;
-      background:linear-gradient(135deg,#fff7fb,#ffffff);
-      color:#7a174f;
-      border-radius:18px;
-      padding:13px 14px;
       font-weight:950;
       display:flex;
-      justify-content:space-between;
       align-items:center;
+      justify-content:space-between;
       gap:12px;
-      box-shadow:0 10px 24px rgba(139,30,90,.06);
+      background:linear-gradient(135deg,#fff7fb,#ffffff);
     }
 
-    .calendar-toggle small{
+    .calendar-details summary::-webkit-details-marker{display:none}
+
+    .calendar-details summary small{
       display:block;
       color:#64748b;
       font-weight:750;
-      margin-top:2px;
-      text-align:left;
+      margin-top:3px;
     }
 
-    .calendar-collapsible{
-      display:none;
-      margin-top:10px;
+    .calendar-details[open] summary{
+      border-bottom:1px solid #f1d4e5;
     }
 
-    .calendar-collapsible.show{
-      display:block;
+    .calendar-details .calendar-inner{
+      padding:14px;
     }
 
-    .selected-summary{
-      margin-top:0!important;
+    .patient-box{
+      background:linear-gradient(180deg,#ffffff,#fff8fc);
+      border:1px solid #f1d4e5;
+      border-radius:22px;
+      padding:16px;
+    }
+
+    .patient-title{
+      color:#7a174f;
+      font-weight:950;
+      margin-bottom:12px;
+      display:flex;
+      align-items:center;
+      gap:8px;
     }
 
     @media(max-width:520px){
-      .calendar-toggle{
-        align-items:flex-start;
-      }
-      .calendar-toggle i{
-        margin-top:4px;
-      }
+      #id_medico,#servicio{padding-right:56px!important;font-size:15px}
+      .calendar-details summary{align-items:flex-start}
     }
 
   </style>
@@ -296,9 +208,9 @@
         <p>Formulario de prueba conectado a la disponibilidad registrada por Secretaría. Elija médico, día y hora para reservar un horario pendiente de confirmación administrativa.</p>
         <div class="pill"><i class="bi bi-shield-check"></i> Entorno DEMO · No usar con pacientes reales</div>
         <div class="steps">
-          <div class="step"><i class="bi bi-person-badge"></i><div><b>1. Profesional y servicio</b><span>Primero elija el médico y el tipo de atención.</span></div></div>
-          <div class="step"><i class="bi bi-calendar2-check"></i><div><b>2. Fecha y horario</b><span>Solo verá horarios vigentes y disponibles.</span></div></div>
-          <div class="step"><i class="bi bi-send-check"></i><div><b>3. Datos y confirmación</b><span>Complete sus datos para apartar el horario.</span></div></div>
+          <div class="step"><i class="bi bi-person-badge"></i><div><b>1. Seleccione médico</b><span>El calendario mostrará solo horarios disponibles para ese médico.</span></div></div>
+          <div class="step"><i class="bi bi-calendar2-check"></i><div><b>2. Elija día y hora</b><span>Los horarios vencidos, reservados o anulados no aparecen.</span></div></div>
+          <div class="step"><i class="bi bi-send-check"></i><div><b>3. Reserve su horario</b><span>El horario queda apartado y Secretaría confirmará los detalles.</span></div></div>
         </div>
       </aside>
 
@@ -307,14 +219,12 @@
           <h3><i class="bi bi-calendar-heart me-2" style="color:var(--primary)"></i>Formulario de cita</h3>
           <p>Reserve un horario disponible. Secretaría revisará la información y confirmará los detalles de la atención.</p>
         </div>
-<div class="ux-step"><span class="n">2</span><div><b>Fecha y hora</b><span>Use el calendario y seleccione un horario.</span></div></div>
-            <div class="ux-step"><span class="n">3</span><div><b>Datos del paciente</b><span>Complete sus datos y reserve.</span></div></div>
+<div class="ux-step"><span class="n">2</span><div><b>Elija día y hora</b><span>Use los días resaltados y luego seleccione una hora.</span></div></div>
+            <div class="ux-step"><span class="n">3</span><div><b>Reserve la cita</b><span>El horario queda apartado y pendiente de confirmación.</span></div></div>
           </div>
         </div>
 
         <form id="citaForm" autocomplete="off">
-</div>
-
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">👩‍⚕️ Paso 1: Seleccione el profesional *</label>
@@ -333,55 +243,55 @@
               <div class="micro-help">Solo se muestran los servicios configurados para el profesional seleccionado.</div>
             </div>
 
-            <div class="col-12">
+            <div class="col-md-6">
               <label class="form-label">📅 Paso 3: Fecha seleccionada *</label>
-              <div class="date-highlight"><i class="bi bi-hand-index-thumb me-1"></i> Seleccione aquí la fecha deseada para visualizar horarios disponibles.</div>
+              <div class="date-highlight"><i class="bi bi-hand-index-thumb me-1"></i> Seleccione aquí la fecha deseada para ver horarios disponibles.</div>
               <input id="fecha_cita" type="date" class="form-control" required autocomplete="off" onchange="sincronizarMiniDesdeInput(); renderHorasDisponibles(); actualizarResumenSeleccion()">
-              <div class="micro-help">También puede tocar directamente un día resaltado en el calendario.</div>
+              <div class="micro-help">También puede tocar un día resaltado en el calendario opcional.</div>
             </div>
 
-            <div class="col-12">
+            <div class="col-md-6">
               <label class="form-label">📌 Estado de selección</label>
               <div id="selectedSummary" class="selected-summary" style="margin-top:0"></div>
             </div>
 
             <div class="col-12">
-              <button type="button" class="calendar-toggle" onclick="toggleCalendarioVisual()">
-                <span>
-                  📅 Ver calendario visual de disponibilidad
-                  <small>Opcional: sirve para visualizar el mes. Para reservar, seleccione fecha y luego horario.</small>
-                </span>
-                <i id="calendarToggleIcon" class="bi bi-chevron-down"></i>
-              </button>
+              <details class="calendar-details">
+                <summary>
+                  <span>
+                    📅 Ver calendario visual de disponibilidad
+                    <small>Opcional: sirve para visualizar el mes. Para reservar, seleccione fecha y luego horario.</small>
+                  </span>
+                  <i class="bi bi-chevron-down"></i>
+                </summary>
 
-              <div id="calendarCollapsible" class="calendar-collapsible">
-                <label class="form-label mt-3">📅 Calendario de disponibilidad</label>
-                <div class="calendar-card">
-                  <div class="calendar-warning">
-                    <i class="bi bi-info-circle me-1"></i>
-                    <strong>Importante:</strong> este calendario es informativo. Los días en verde tienen horarios disponibles. Para reservar, seleccione fecha, luego horario y finalmente complete sus datos.
-                  </div>
-                  <div class="reserve-note"><i class="bi bi-info-circle me-1"></i> Los días en verde tienen horarios vigentes para el médico seleccionado. Toque un día para ver sus horas disponibles.</div>
-                  <div class="calendar-top mt-2">
-                    <b id="miniCalendarTitle">Mes</b>
-                    <div class="calendar-nav">
-                      <button type="button" onclick="cambiarMesMini(-1)" title="Mes anterior"><i class="bi bi-chevron-left"></i></button>
-                      <button type="button" onclick="irHoyMini()" title="Ir a hoy"><i class="bi bi-calendar-event"></i></button>
-                      <button type="button" onclick="cambiarMesMini(1)" title="Mes siguiente"><i class="bi bi-chevron-right"></i></button>
+                <div class="calendar-inner">
+                  <div class="calendar-card">
+                    <div class="reserve-note">
+                      <i class="bi bi-info-circle me-1"></i>
+                      Este calendario es informativo. Los días en verde tienen horarios vigentes para el médico seleccionado. Toque un día para ver sus horas disponibles.
+                    </div>
+                    <div class="calendar-top mt-2">
+                      <b id="miniCalendarTitle">Mes</b>
+                      <div class="calendar-nav">
+                        <button type="button" onclick="cambiarMesMini(-1)" title="Mes anterior"><i class="bi bi-chevron-left"></i></button>
+                        <button type="button" onclick="irHoyMini()" title="Ir a hoy"><i class="bi bi-calendar-event"></i></button>
+                        <button type="button" onclick="cambiarMesMini(1)" title="Mes siguiente"><i class="bi bi-chevron-right"></i></button>
+                      </div>
+                    </div>
+                    <div id="miniCalendarGrid" class="calendar-grid-mini"></div>
+                    <div class="calendar-legend">
+                      <span><i class="legend-dot dot-ok"></i>Con horarios para el médico seleccionado</span>
+                      <span><i class="legend-dot dot-off"></i>Sin horarios</span>
+                      <span><i class="legend-dot dot-sel"></i>Seleccionado</span>
                     </div>
                   </div>
-                  <div id="miniCalendarGrid" class="calendar-grid-mini"></div>
-                  <div class="calendar-legend">
-                    <span><i class="legend-dot dot-ok"></i>Con horarios para el médico seleccionado</span>
-                    <span><i class="legend-dot dot-off"></i>Sin horarios</span>
-                    <span><i class="legend-dot dot-sel"></i>Seleccionado</span>
-                  </div>
                 </div>
-              </div>
+              </details>
             </div>
 
             <div class="col-12">
-              <label class="form-label">🕒 Paso 4: Seleccione horario disponible *</label>
+              <label class="form-label">🕒 Paso 4: Horarios disponibles *</label>
               <div id="loadingSlots" class="loading"><i class="bi bi-arrow-clockwise me-1"></i> Buscando horarios disponibles...</div>
               <div id="slots" class="slots"></div>
               <input id="hora_inicio" type="hidden" required autocomplete="off">
@@ -389,8 +299,8 @@
             </div>
 
             <div class="col-12">
-              <div class="patient-block">
-                <div class="patient-block-title"><i class="bi bi-person-lines-fill"></i> Paso 5: Complete los datos del paciente</div>
+              <div class="patient-box">
+                <div class="patient-title"><i class="bi bi-person-lines-fill"></i> Paso 5: Complete los datos del paciente</div>
                 <div class="row g-3">
                   <div class="col-md-6">
                     <label class="form-label">Cédula / documento *</label>
@@ -416,6 +326,7 @@
               </div>
             </div>
           </div>
+
           <div class="mini-note mt-3">
             <i class="bi bi-info-circle me-1"></i>
             Al reservar, el horario queda apartado y deja de estar disponible para otros pacientes. Secretaría revisará los datos y confirmará los detalles por WhatsApp.
@@ -723,21 +634,6 @@
       box.innerHTML = '<i class="bi bi-person-badge me-1"></i> <b>Profesional seleccionado:</b> ' + nombre +
         (especialidad ? '<br><i class="bi bi-heart-pulse me-1"></i> <b>Especialidad:</b> ' + especialidad : '');
       box.classList.add('show');
-    }
-
-    function toggleCalendarioVisual(){
-      const box = document.getElementById('calendarCollapsible');
-      const icon = document.getElementById('calendarToggleIcon');
-      if(!box) return;
-
-      const abierto = box.classList.toggle('show');
-      if(icon){
-        icon.className = abierto ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
-      }
-
-      if(abierto){
-        renderCalendarioDisponibilidad();
-      }
     }
 
 
@@ -1308,11 +1204,6 @@
 
       const slots = document.getElementById('slots');
       if(slots) slots.innerHTML = '<div class="mini-note" style="grid-column:1/-1">Seleccione fecha y médico para ver horarios disponibles.</div>';
-
-      const cal = document.getElementById('calendarCollapsible');
-      const icon = document.getElementById('calendarToggleIcon');
-      if(cal) cal.classList.remove('show');
-      if(icon) icon.className = 'bi bi-chevron-down';
     }
 
     document.addEventListener('DOMContentLoaded', () => {
