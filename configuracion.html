@@ -528,6 +528,34 @@
       .replace(/'/g,'&#039;');
   }
 
+
+  function normalizarHoraVisual(valor){
+    if(valor === null || valor === undefined) return '';
+
+    if(typeof valor === 'number' && isFinite(valor)){
+      const total = Math.round((valor % 1) * 24 * 60);
+      const hh = Math.floor(total / 60) % 24;
+      const mm = total % 60;
+      return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+    }
+
+    let txt = String(valor).trim();
+    if(!txt) return '';
+
+    const iso = txt.match(/T(\d{2}):(\d{2})/);
+    if(iso) return iso[1] + ':' + iso[2];
+
+    if(/^\d{1}:\d{2}$/.test(txt)) return '0' + txt;
+    if(/^\d{1,2}:\d{2}/.test(txt)){
+      const p = txt.split(':');
+      return String(p[0]).padStart(2,'0') + ':' + String(p[1]).substring(0,2);
+    }
+
+    if(/^\d{4}$/.test(txt)) return txt.substring(0,2) + ':' + txt.substring(2,4);
+
+    return txt;
+  }
+
   function showConfig(id,btn){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
@@ -591,8 +619,8 @@
   }
 
   function textoPlantillaHorario(h){
-    const inicio = h.hora_inicio || h.inicio || '';
-    const fin = h.hora_fin || h.fin || '';
+    const inicio = normalizarHoraVisual(h.hora_inicio || h.inicio || '');
+    const fin = normalizarHoraVisual(h.hora_fin || h.fin || '');
     if(inicio && fin) return inicio + ' - ' + fin;
     return h.horario || '—';
   }
@@ -874,11 +902,11 @@
         </div>
         <div class="col-md-3">
           <label class="form-label fw-bold">Inicio</label>
-          <input id="horInicio" class="form-control" value="${safeText(h.hora_inicio || '')}" placeholder="16:00">
+          <input id="horInicio" class="form-control" value="${safeText(normalizarHoraVisual(h.hora_inicio || ''))}" placeholder="16:00">
         </div>
         <div class="col-md-3">
           <label class="form-label fw-bold">Fin</label>
-          <input id="horFin" class="form-control" value="${safeText(h.hora_fin || '')}" placeholder="20:00">
+          <input id="horFin" class="form-control" value="${safeText(normalizarHoraVisual(h.hora_fin || ''))}" placeholder="20:00">
         </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Intervalo</label>
@@ -931,8 +959,8 @@
   async function guardarPlantillaHorarioReal(id_plantilla_horario){
     const data = {
       nombre_plantilla: document.getElementById('horNombre').value.trim(),
-      hora_inicio: document.getElementById('horInicio').value.trim(),
-      hora_fin: document.getElementById('horFin').value.trim(),
+      hora_inicio: normalizarHoraVisual(document.getElementById('horInicio').value.trim()),
+      hora_fin: normalizarHoraVisual(document.getElementById('horFin').value.trim()),
       intervalo_minutos: document.getElementById('horIntervalo').value,
       tipo_bloque: document.getElementById('horTipo').value,
       aplica_dia: document.getElementById('horDias').value.trim(),
