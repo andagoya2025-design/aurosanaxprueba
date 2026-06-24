@@ -107,6 +107,11 @@
     .ux-step .n{width:24px;height:24px;border-radius:50%;background:#fdf2f8;color:#8b1e5a;display:grid;place-items:center;font-weight:950;flex:0 0 auto}
     .ux-step b{display:block;font-size:13px;color:#111827}.ux-step span{display:block;font-size:12px;color:#64748b;font-weight:750;margin-top:1px}
     .micro-help{font-size:12px;color:#64748b;font-weight:750;margin-top:6px}
+    .doctor-specialty-card{display:none;margin-top:8px;border:1px solid #f1d4e5;background:linear-gradient(180deg,#fff7fb,#ffffff);border-radius:15px;padding:10px 12px;color:#7a174f;font-size:13px;font-weight:850}
+    .doctor-specialty-card.show{display:flex;align-items:flex-start;gap:8px}
+    .doctor-specialty-card i{font-size:16px;color:var(--primary2);margin-top:1px}
+    .doctor-specialty-card small{display:block;color:#64748b;font-weight:850;text-transform:uppercase;font-size:10px;letter-spacing:.04em}
+    .doctor-specialty-card b{display:block;color:#111827;font-weight:950;margin-top:1px}
     .selected-summary{border:1px solid #bfdbfe;background:#eff6ff;color:#1e40af;border-radius:18px;padding:12px 14px;font-size:14px;font-weight:800;margin:10px 0}
     .selected-summary b{color:#111827}.selected-summary .muted{color:#64748b;font-weight:750}
     .reserve-note{background:#f8fafc;border:1px solid #e2e8f0;color:#334155;border-radius:18px;padding:12px 14px;font-size:14px;font-weight:750;margin-top:10px}
@@ -181,9 +186,10 @@
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Médico *</label>
-                <select id="id_medico" class="form-select" required onchange="cargarServiciosMedico(); renderCalendarioDisponibilidad(); renderHorasDisponibles(); actualizarResumenSeleccion()">
+                <select id="id_medico" class="form-select" required onchange="actualizarEspecialidadMedico(); cargarServiciosMedico(); renderCalendarioDisponibilidad(); renderHorasDisponibles(); actualizarResumenSeleccion()">
                   <option value="">Cargando médicos...</option>
                 </select>
+                <div id="medicoEspecialidadBox" class="doctor-specialty-card"></div>
                 <div class="micro-help">La disponibilidad depende del médico seleccionado.</div>
               </div>
 
@@ -515,6 +521,33 @@
       return id || 'Médico';
     }
 
+    function medicoSeleccionado(){
+      const id = document.getElementById('id_medico')?.value || '';
+      if(!id) return null;
+      return medicos.find(x => String(x.id_medico || '') === String(id || '')) || null;
+    }
+
+    function medicoEspecialidad(m){
+      return String(m?.especialidad_principal || m?.especialidad || '').trim();
+    }
+
+    function actualizarEspecialidadMedico(){
+      const box = document.getElementById('medicoEspecialidadBox');
+      if(!box) return;
+
+      const medico = medicoSeleccionado();
+      const especialidad = medicoEspecialidad(medico);
+
+      if(!especialidad){
+        box.className = 'doctor-specialty-card';
+        box.innerHTML = '';
+        return;
+      }
+
+      box.className = 'doctor-specialty-card show';
+      box.innerHTML = '<i class="bi bi-heart-pulse"></i><div><small>Especialidad</small><b>' + especialidad.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</b></div>';
+    }
+
     function resumenFechaLarga(iso){
       if(!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return 'Fecha no seleccionada';
       const [y,m,d] = iso.split('-').map(Number);
@@ -609,6 +642,7 @@
       if(!lista.length){
         sel.innerHTML = '<option value="">No hay médicos activos configurados</option>';
         sel.value = '';
+        actualizarEspecialidadMedico();
         return;
       }
 
@@ -623,6 +657,8 @@
       } else {
         sel.value = lista[0].id_medico || '';
       }
+
+      actualizarEspecialidadMedico();
     }
 
     function nombreServicioVista(s){
@@ -1127,6 +1163,7 @@
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
       actualizarResumenSeleccion();
+      actualizarEspecialidadMedico();
       cargarDatosIniciales();
     });
   </script>
