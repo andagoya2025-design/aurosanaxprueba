@@ -1327,6 +1327,71 @@
       .auro-v21-help-actions{justify-content:flex-start;margin-top:10px}
       .auro-v21-unit-wrap{grid-template-columns:1fr}
     }
+
+    /* AUROSANAX - Caja de antecedentes previos v2.2 */
+    .auro-previos-box{
+      border:1px solid #bfdbfe;
+      background:linear-gradient(135deg,#eff6ff,#ffffff);
+      border-radius:18px;
+      padding:12px 14px;
+      margin:10px 0 16px;
+      box-shadow:0 8px 24px rgba(37,99,235,.06);
+    }
+    .auro-previos-head{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+      margin-bottom:10px;
+    }
+    .auro-previos-head b{
+      color:#1e3a8a;
+      font-weight:900;
+      display:block;
+      margin-bottom:2px;
+    }
+    .auro-previos-head small{
+      color:#475569;
+      font-weight:650;
+    }
+    .auro-previos-content{
+      display:grid;
+      gap:8px;
+    }
+    .auro-previos-line{
+      border:1px solid #dbeafe;
+      background:#fff;
+      border-radius:14px;
+      padding:9px 10px;
+    }
+    .auro-previos-line span{
+      display:block;
+      color:#1d4ed8;
+      font-size:12px;
+      font-weight:900;
+      margin-bottom:3px;
+      text-transform:uppercase;
+      letter-spacing:.03em;
+    }
+    .auro-previos-line p{
+      margin:0;
+      color:#111827;
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-size:13px;
+      line-height:1.35;
+    }
+    .auro-previos-hide{
+      padding:7px 10px;
+      border-radius:12px;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    @media(max-width:760px){
+      .auro-previos-head{display:block}
+      .auro-previos-hide{margin-top:8px}
+    }
+
 </style>
 
 
@@ -2794,6 +2859,208 @@ function limpiarObjetoParaSheets(obj){
   return limpio;
 }
 
+
+/* ==========================================================
+   AUROSANAX v2.2 - Compatibilidad de antecedentes previos
+   Objetivo:
+   - Leer antecedentes ya guardados en Google Sheets.
+   - Mostrar antecedentes previos al seleccionar paciente.
+   - No sobrescribir antecedentes previos con vacío.
+   - Mantener ayudas clínicas v2.1 sin romper módulos existentes.
+   ========================================================== */
+
+function auroNormalizarClaveClinica(valor){
+  return String(valor || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[^a-z0-9ñ\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function auroBuscarControlPorData(selector, dataKey, valor){
+  const normal = auroNormalizarClaveClinica(valor);
+  const controles = [...document.querySelectorAll(selector)];
+
+  return controles.find(x => String(x.dataset[dataKey] || '') === String(valor || '')) ||
+         controles.find(x => auroNormalizarClaveClinica(x.dataset[dataKey] || '') === normal) ||
+         controles.find(x => {
+           const item = auroNormalizarClaveClinica(x.dataset[dataKey] || '');
+           return normal && item && (item.includes(normal) || normal.includes(item));
+         }) ||
+         null;
+}
+
+function auroHistoriaTieneAntecedentes(h){
+  if(!h) return false;
+  return [
+    h.antecedentes_personales,
+    h.antecedentes_quirurgicos,
+    h.antecedentes_gineco_obstetricos,
+    h.antecedentes_familiares,
+    h.medicacion_actual,
+    h.alergias
+  ].some(v => String(v || '').trim());
+}
+
+function auroFechaHistoriaValor(h){
+  const raw = h?.fecha_registro || h?.fecha_apertura || h?.creado_en || h?.actualizado_en || '';
+  const t = raw ? new Date(raw).getTime() : 0;
+  return isNaN(t) ? 0 : t;
+}
+
+function auroHistoriasPacienteOrdenadas(idPaciente){
+  return (historiasClinicas || [])
+    .filter(h => String(h.id_paciente || '') === String(idPaciente || ''))
+    .sort((a,b) => auroFechaHistoriaValor(b) - auroFechaHistoriaValor(a));
+}
+
+function auroUltimaHistoriaConAntecedentes(idPaciente){
+  return auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneAntecedentes) || null;
+}
+
+function auroAsegurarCajaAntecedentesPrevios(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return null;
+
+  let box = document.getElementById('auroAntecedentesPreviosBox');
+  if(box) return box;
+
+  box = document.createElement('div');
+  box.id = 'auroAntecedentesPreviosBox';
+  box.className = 'auro-previos-box';
+  box.style.display = 'none';
+  box.innerHTML = `
+    <div class="auro-previos-head">
+      <div>
+        <b><i class="bi bi-database-check me-1"></i> Antecedentes previos guardados</b>
+        <small>Información leída desde Google Sheets. Se conserva para evitar pérdida de datos.</small>
+      </div>
+      <button type="button" class="btn-soft auro-previos-hide" onclick="document.getElementById('auroAntecedentesPreviosBox').style.display='none'">Ocultar</button>
+    </div>
+    <div class="auro-previos-content" id="auroAntecedentesPreviosContent"></div>
+  `;
+
+  const titulo = panel.querySelector('.clinical-subtitle');
+  if(titulo && titulo.nextSibling){
+    titulo.parentNode.insertBefore(box, titulo.nextSibling);
+  }else{
+    panel.insertBefore(box, panel.firstChild);
+  }
+  return box;
+}
+
+function auroMostrarAntecedentesPrevios(h, modo){
+  const box = auroAsegurarCajaAntecedentesPrevios();
+  const content = document.getElementById('auroAntecedentesPreviosContent');
+  if(!box || !content) return;
+
+  if(!auroHistoriaTieneAntecedentes(h)){
+    box.style.display = 'none';
+    content.innerHTML = '';
+    return;
+  }
+
+  const lineas = [
+    ['Patológicos personales', h.antecedentes_personales],
+    ['Quirúrgicos', h.antecedentes_quirurgicos],
+    ['Gineco-obstétricos', h.antecedentes_gineco_obstetricos],
+    ['Alergias', h.alergias],
+    ['Medicación actual', h.medicacion_actual],
+    ['Familiares', h.antecedentes_familiares]
+  ].filter(x => String(x[1] || '').trim());
+
+  content.innerHTML = lineas.map(([label, value]) => `
+    <div class="auro-previos-line">
+      <span>${label}</span>
+      <p>${String(value || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+    </div>
+  `).join('');
+
+  box.dataset.idHistoriaOrigen = h.id_historia || '';
+  box.dataset.modo = modo || '';
+  box.style.display = lineas.length ? 'block' : 'none';
+}
+
+function auroCargarAntecedentesDesdeHistoria(h, modo){
+  if(!h) return;
+
+  setValueIfExists('hcAntecedentesPersonales', h.antecedentes_personales || '');
+  cargarAntecedentesPersonalesCompletos(h.antecedentes_personales || '');
+
+  setValueIfExists('hcAntecedentesQuirurgicos', h.antecedentes_quirurgicos || '');
+  cargarAntecedentesQuirurgicosEstructurados(h.antecedentes_quirurgicos || '');
+
+  cargarAntecedentesGinecoObstetricosCompletos(h.antecedentes_gineco_obstetricos || '');
+
+  setValueIfExists('hcAntecedentesFamiliares', h.antecedentes_familiares || '');
+  setValueIfExists('hcMedicacionActual', h.medicacion_actual || '');
+  cargarAlergiasEstructuradas(h.alergias || '');
+
+  auroMostrarAntecedentesPrevios(h, modo || 'lectura');
+  updateClinicalSummary();
+}
+
+function auroCargarAntecedentesPreviosPaciente(idPaciente){
+  if(editingHistoryId) return;
+  const h = auroUltimaHistoriaConAntecedentes(idPaciente);
+  if(!h){
+    auroMostrarAntecedentesPrevios(null);
+    return;
+  }
+
+  auroCargarAntecedentesDesdeHistoria(h, 'lectura-paciente');
+
+  const box = document.getElementById('auroAntecedentesPreviosBox');
+  if(box){
+    const nota = box.querySelector('.auro-previos-head small');
+    if(nota){
+      nota.textContent = 'Leído desde la última historia del paciente. Para modificarlo, use Buscar / editar historias.';
+    }
+  }
+}
+
+function auroValorAntecedenteVacio(valor){
+  return !String(valor || '').trim();
+}
+
+function auroPreservarAntecedenteSiVacio(data, campo, historiaPrevia){
+  if(!data || !campo || !historiaPrevia) return;
+  const nuevo = data[campo];
+  const previo = historiaPrevia[campo];
+
+  if(auroValorAntecedenteVacio(nuevo) && !auroValorAntecedenteVacio(previo)){
+    data[campo] = previo;
+  }
+}
+
+function auroHistoriaActualEdicion(){
+  if(!editingHistoryId) return null;
+  return (historiasClinicas || []).find((h, idx) =>
+    String(h.id_historia || h.id || idx) === String(editingHistoryId)
+  ) || null;
+}
+
+function auroAplicarProteccionAntecedentesEdicion(data){
+  const h = auroHistoriaActualEdicion();
+  if(!h) return data;
+
+  [
+    'antecedentes_personales',
+    'antecedentes_quirurgicos',
+    'antecedentes_gineco_obstetricos',
+    'antecedentes_familiares',
+    'medicacion_actual',
+    'alergias'
+  ].forEach(campo => auroPreservarAntecedenteSiVacio(data, campo, h));
+
+  return data;
+}
+
+
 function seleccionarPacienteHistoria(){
   const select = document.getElementById('hcPacienteSelect');
   const paciente = patients.find(p => p.id_paciente === select.value);
@@ -2801,6 +3068,9 @@ function seleccionarPacienteHistoria(){
 
   if(!paciente){
     ['hcCedula','hcNacimiento','hcEdad','hcSexo','hcEstadoCivil','hcOcupacion','hcTelefono','hcCorreo','hcDireccion','hcSeguro','hcContactoEmergencia'].forEach(id => setValueIfExists(id,''));
+    auroMostrarAntecedentesPrevios(null);
+    auroMostrarExamenFisicoPrevio(null);
+    auroMostrarDiagnosticosPrevios(null);
     updateClinicalSummary();
     renderModulePatientCards();
     return;
@@ -2822,6 +3092,11 @@ function seleccionarPacienteHistoria(){
   if(paciente.alergias && document.getElementById('hcAlergias') && !document.getElementById('hcAlergias').value){
     cargarAlergiasEstructuradas(paciente.alergias);
   }
+
+  // v2.2: al seleccionar paciente, leer antecedentes ya guardados en historias_clinicas.
+  // No entra en modo edición automáticamente; solo muestra la información previa para referencia segura.
+  auroCargarAntecedentesPreviosPaciente(paciente.id_paciente);
+  auroCargarExamenFisicoPrevioPaciente(paciente.id_paciente);
 
   updateClinicalSummary();
   renderModulePatientCards();
@@ -2864,15 +3139,16 @@ function cargarAntecedentesPersonalesEstructurados(valor){
   texto.split(';').map(x => x.trim()).filter(Boolean).forEach(item => {
     const partes = item.split('|').map(x => x.trim());
     const patologia = partes[0] || '';
-    const tiempo = partes[1] || '';
-    const medicamento = partes.slice(2).join(' | ') || '';
+    const tiempo = (partes[1] || '').replace(/^Tiempo:\s*/i,'').trim();
+    const medicamento = partes.slice(2).join(' | ').replace(/^Medicación:\s*/i,'').trim() || '';
 
-    const chk = [...document.querySelectorAll('.hcPatologicoCheck')].find(x => x.dataset.patologia === patologia);
+    const chk = auroBuscarControlPorData('.hcPatologicoCheck', 'patologia', patologia);
     if(!chk) return;
 
+    const patologiaReal = chk.dataset.patologia || patologia;
     chk.checked = true;
-    const tiempoInput = document.querySelector(`.hcPatologicoTiempo[data-patologia="${CSS.escape(patologia)}"]`);
-    const medicamentoInput = document.querySelector(`.hcPatologicoMedicamento[data-patologia="${CSS.escape(patologia)}"]`);
+    const tiempoInput = document.querySelector(`.hcPatologicoTiempo[data-patologia="${CSS.escape(patologiaReal)}"]`);
+    const medicamentoInput = document.querySelector(`.hcPatologicoMedicamento[data-patologia="${CSS.escape(patologiaReal)}"]`);
 
     if(tiempoInput) tiempoInput.value = tiempo;
     if(medicamentoInput) medicamentoInput.value = medicamento;
@@ -2922,7 +3198,7 @@ function cargarAntecedentesQuirurgicosEstructurados(valor){
   texto.split(';').map(x => x.trim()).filter(Boolean).forEach(item => {
     const partes = item.split('|').map(x => x.trim());
     const cirugiaTexto = partes[0] || '';
-    const fecha = partes[1] || '';
+    const fecha = (partes[1] || '').replace(/^Fecha:\s*/i,'').replace(/^Año:\s*/i,'').trim();
     let cirugiaBase = cirugiaTexto;
 
     if(cirugiaTexto.startsWith('Otros:')){
@@ -2931,11 +3207,12 @@ function cargarAntecedentesQuirurgicosEstructurados(valor){
       if(otro) otro.value = cirugiaTexto.replace(/^Otros:\s*/,'').trim();
     }
 
-    const chk = [...document.querySelectorAll('.hcQuirurgicoCheck')].find(x => x.dataset.cirugia === cirugiaBase);
+    const chk = auroBuscarControlPorData('.hcQuirurgicoCheck', 'cirugia', cirugiaBase);
     if(!chk) return;
 
+    const cirugiaReal = chk.dataset.cirugia || cirugiaBase;
     chk.checked = true;
-    const fechaInput = document.querySelector(`.hcQuirurgicoFecha[data-cirugia="${CSS.escape(cirugiaBase)}"]`);
+    const fechaInput = document.querySelector(`.hcQuirurgicoFecha[data-cirugia="${CSS.escape(cirugiaReal)}"]`);
     if(fechaInput) fechaInput.value = fecha;
   });
 }
@@ -2982,13 +3259,14 @@ function cargarAlergiasEstructuradas(valor){
   texto.split(';').map(x => x.trim()).filter(Boolean).forEach(item => {
     const partes = item.split('|').map(x => x.trim());
     const alergia = partes[0] || '';
-    const detalle = partes.slice(1).join(' | ') || '';
+    const detalle = partes.slice(1).join(' | ').replace(/^Reacción:\s*/i,'').trim() || '';
 
-    const chk = [...document.querySelectorAll('.hcAlergiaCheck')].find(x => x.dataset.alergia === alergia);
+    const chk = auroBuscarControlPorData('.hcAlergiaCheck', 'alergia', alergia);
     if(!chk) return;
 
+    const alergiaReal = chk.dataset.alergia || alergia;
     chk.checked = true;
-    const detalleInput = document.querySelector(`.hcAlergiaDetalle[data-alergia="${CSS.escape(alergia)}"]`);
+    const detalleInput = document.querySelector(`.hcAlergiaDetalle[data-alergia="${CSS.escape(alergiaReal)}"]`);
     if(detalleInput) detalleInput.value = detalle;
   });
 
@@ -3377,6 +3655,8 @@ function cargarAntecedentesGinecoObstetricosCompletos(valor){
   const data = auroParsear(AURO_ANT_GINECO_OBS_MARKER, valor);
 
   if(!data){
+    // Compatibilidad v2.2: si viene texto antiguo desde Google Sheets,
+    // se conserva visible sin intentar convertirlo a campos nuevos.
     setValueIfExists('hcRevisionSistemas', valor || '');
     return;
   }
@@ -4938,6 +5218,568 @@ function recopilarEvaluacionesPlan(){
   return resumen;
 }
 
+
+
+/* ==========================================================
+   AUROSANAX - Examen físico v3.2
+   Conexión completa, ayudas clínicas y compatibilidad con datos previos.
+   No modifica base de datos ni Code.gs.
+   ========================================================== */
+
+function auroNormalizarExamenTexto(valor){
+  return String(valor || '')
+    .replace(/\r\n|\r|\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function auroEscapeHtml(valor){
+  return String(valor || '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
+}
+
+function auroHistoriaTieneExamenFisico(h){
+  if(!h) return false;
+  return [
+    h.peso_kg,
+    h.talla_cm,
+    h.imc,
+    h.presion_arterial,
+    h.frecuencia_cardiaca,
+    h.temperatura,
+    h.saturacion,
+    h.examen_fisico
+  ].some(v => String(v || '').trim());
+}
+
+function auroHistoriaTieneDiagnosticos(h){
+  if(!h) return false;
+  return [
+    h.diagnostico_cie10,
+    h.diagnostico_principal,
+    h.diagnostico_secundario,
+    h.cie10_secundario,
+    h.diagnosticos_cie10
+  ].some(v => String(v || '').trim());
+}
+
+function auroAsegurarCajaExamenFisicoPrevio(){
+  const panel = document.getElementById('hc_examen');
+  if(!panel) return null;
+
+  let box = document.getElementById('auroExamenFisicoPrevioBox');
+  if(box) return box;
+
+  box = document.createElement('div');
+  box.id = 'auroExamenFisicoPrevioBox';
+  box.className = 'auro-previos-box';
+  box.style.display = 'none';
+  box.innerHTML = `
+    <div class="auro-previos-head">
+      <div>
+        <b><i class="bi bi-database-check me-1"></i> Examen físico previo guardado</b>
+        <small>Información leída desde Google Sheets. Se conserva para evitar pérdida de datos.</small>
+      </div>
+      <button type="button" class="btn-soft auro-previos-hide" onclick="document.getElementById('auroExamenFisicoPrevioBox').style.display='none'">Ocultar</button>
+    </div>
+    <div class="auro-previos-content" id="auroExamenFisicoPrevioContent"></div>
+  `;
+
+  const titulo = panel.querySelector('.clinical-subtitle');
+  if(titulo && titulo.nextSibling){
+    titulo.parentNode.insertBefore(box, titulo.nextSibling);
+  }else{
+    panel.insertBefore(box, panel.firstChild);
+  }
+  return box;
+}
+
+function auroMostrarExamenFisicoPrevio(h){
+  const box = auroAsegurarCajaExamenFisicoPrevio();
+  const content = document.getElementById('auroExamenFisicoPrevioContent');
+  if(!box || !content) return;
+
+  if(!auroHistoriaTieneExamenFisico(h)){
+    box.style.display = 'none';
+    content.innerHTML = '';
+    return;
+  }
+
+  const signos = [
+    h.peso_kg ? 'Peso: ' + h.peso_kg + ' kg' : '',
+    h.talla_cm ? 'Talla: ' + h.talla_cm + ' cm' : '',
+    h.imc ? 'IMC: ' + h.imc : '',
+    h.presion_arterial ? 'PA: ' + h.presion_arterial : '',
+    h.frecuencia_cardiaca ? 'FC: ' + h.frecuencia_cardiaca : '',
+    h.temperatura ? 'Temperatura: ' + h.temperatura : '',
+    h.saturacion ? 'SatO₂: ' + h.saturacion : ''
+  ].filter(Boolean).join(' | ');
+
+  const lineas = [
+    ['Signos vitales', signos],
+    ['Examen físico', h.examen_fisico]
+  ].filter(x => String(x[1] || '').trim());
+
+  content.innerHTML = lineas.map(([label, value]) => `
+    <div class="auro-previos-line">
+      <span>${auroEscapeHtml(label)}</span>
+      <p>${auroEscapeHtml(value)}</p>
+    </div>
+  `).join('');
+
+  box.style.display = 'block';
+}
+
+function auroAsegurarCajaDiagnosticosPrevios(){
+  const grupo = document.getElementById('hcDiagnosticoCieGrupo') || document.getElementById('hc_examen');
+  if(!grupo) return null;
+
+  let box = document.getElementById('auroDiagnosticosPreviosBox');
+  if(box) return box;
+
+  box = document.createElement('div');
+  box.id = 'auroDiagnosticosPreviosBox';
+  box.className = 'auro-previos-box';
+  box.style.display = 'none';
+  box.innerHTML = `
+    <div class="auro-previos-head">
+      <div>
+        <b><i class="bi bi-clipboard2-pulse me-1"></i> Diagnósticos CIE-10 previos guardados</b>
+        <small>Información leída desde Google Sheets. El bloque CIE-10 se conserva intacto.</small>
+      </div>
+      <button type="button" class="btn-soft auro-previos-hide" onclick="document.getElementById('auroDiagnosticosPreviosBox').style.display='none'">Ocultar</button>
+    </div>
+    <div class="auro-previos-content" id="auroDiagnosticosPreviosContent"></div>
+  `;
+
+  grupo.parentNode.insertBefore(box, grupo);
+  return box;
+}
+
+function auroMostrarDiagnosticosPrevios(h){
+  const box = auroAsegurarCajaDiagnosticosPrevios();
+  const content = document.getElementById('auroDiagnosticosPreviosContent');
+  if(!box || !content) return;
+
+  if(!auroHistoriaTieneDiagnosticos(h)){
+    box.style.display = 'none';
+    content.innerHTML = '';
+    return;
+  }
+
+  const lineas = [
+    ['Diagnóstico principal', [h.diagnostico_cie10, h.diagnostico_principal].filter(Boolean).join(' - ')],
+    ['Diagnósticos secundarios', [h.cie10_secundario, h.diagnostico_secundario].filter(Boolean).join(' - ')],
+    ['Listado CIE-10 estructurado', h.diagnosticos_cie10]
+  ].filter(x => String(x[1] || '').trim());
+
+  content.innerHTML = lineas.map(([label, value]) => `
+    <div class="auro-previos-line">
+      <span>${auroEscapeHtml(label)}</span>
+      <p>${auroEscapeHtml(value)}</p>
+    </div>
+  `).join('');
+
+  box.style.display = 'block';
+}
+
+function auroCargarExamenFisicoPrevioPaciente(idPaciente){
+  const h = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneExamenFisico) || null;
+  auroMostrarExamenFisicoPrevio(h);
+  const dx = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneDiagnosticos) || null;
+  auroMostrarDiagnosticosPrevios(dx);
+}
+
+function auroExtraerSeccionExamen(texto, etiqueta){
+  texto = auroNormalizarExamenTexto(texto);
+  if(!texto || !etiqueta) return '';
+  const etiquetas = [
+    'Frecuencia respiratoria','Perímetro de cadera','Porcentaje de grasa','Masa muscular',
+    'Perímetro cefálico','Perímetro torácico','Perímetro abdominal',
+    'Órgano de los sentidos','Respiratorio','Cardiovascular','Digestivo','Urinario',
+    'Músculo Esquelético','Endócrino','Hemo-linfático','Examen físico regional',
+    'Estado general','Cabeza y cuello','Tórax/Respiratorio','Abdomen','Extremidades','Ginecológico'
+  ];
+  const inicio = texto.indexOf(etiqueta + ':');
+  if(inicio === -1) return '';
+  let desde = inicio + etiqueta.length + 1;
+  let fin = texto.length;
+  etiquetas.forEach(et => {
+    if(et === etiqueta) return;
+    const idx = texto.indexOf(' | ' + et + ':', desde);
+    if(idx !== -1 && idx < fin) fin = idx;
+  });
+  return texto.substring(desde, fin).replace(/^\s*\|\s*/, '').trim();
+}
+
+function auroSetCheckboxesPorTexto(selector, texto){
+  const base = auroNormalizarExamenTexto(texto).toLowerCase();
+  if(!base) return;
+  document.querySelectorAll(selector).forEach(chk => {
+    const label = String(chk.dataset.label || '').trim();
+    if(label && base.includes(label.toLowerCase())){
+      chk.checked = true;
+    }
+  });
+}
+
+function auroCargarExamenFisicoDesdeHistoria(h, modo){
+  if(!h) return;
+  auroMostrarExamenFisicoPrevio(h);
+
+  setValueIfExists('hcPeso', h.peso_kg || '');
+  setValueIfExists('hcTalla', h.talla_cm || '');
+  setValueIfExists('hcIMC', h.imc || '');
+  setValueIfExists('hcPA', h.presion_arterial || '');
+  setValueIfExists('hcFC', h.frecuencia_cardiaca || '');
+  setValueIfExists('hcTemperatura', h.temperatura || '');
+  setValueIfExists('hcSaturacion', h.saturacion || '');
+
+  const ex = h.examen_fisico || '';
+  setValueIfExists('hcFR', auroExtraerSeccionExamen(ex, 'Frecuencia respiratoria'));
+  setValueIfExists('hcCadera', auroExtraerSeccionExamen(ex, 'Perímetro de cadera'));
+  setValueIfExists('hcPorcentajeGrasa', auroExtraerSeccionExamen(ex, 'Porcentaje de grasa'));
+  setValueIfExists('hcMasaMuscular', auroExtraerSeccionExamen(ex, 'Masa muscular'));
+  setValueIfExists('hcPerimetroCefalico', auroExtraerSeccionExamen(ex, 'Perímetro cefálico'));
+  setValueIfExists('hcPerimetroToracico', auroExtraerSeccionExamen(ex, 'Perímetro torácico'));
+  setValueIfExists('hcPerimetroAbdominal', auroExtraerSeccionExamen(ex, 'Perímetro abdominal'));
+
+  const sentidos = auroExtraerSeccionExamen(ex, 'Órgano de los sentidos');
+  const respiratorio = auroExtraerSeccionExamen(ex, 'Respiratorio');
+  const cardiovascular = auroExtraerSeccionExamen(ex, 'Cardiovascular');
+  const digestivo = auroExtraerSeccionExamen(ex, 'Digestivo');
+  const urinario = auroExtraerSeccionExamen(ex, 'Urinario');
+  const musculo = auroExtraerSeccionExamen(ex, 'Músculo Esquelético');
+  const endocrino = auroExtraerSeccionExamen(ex, 'Endócrino');
+  const hemo = auroExtraerSeccionExamen(ex, 'Hemo-linfático');
+  const regional = auroExtraerSeccionExamen(ex, 'Examen físico regional');
+
+  auroSetCheckboxesPorTexto('.hcSentidosCheck', sentidos);
+  auroSetCheckboxesPorTexto('.hcRespiratorioCheck', respiratorio);
+  auroSetCheckboxesPorTexto('.hcCardiovascularCheck', cardiovascular);
+  auroSetCheckboxesPorTexto('.hcDigestivoCheck', digestivo);
+  auroSetCheckboxesPorTexto('.hcUrinarioCheck', urinario);
+  auroSetCheckboxesPorTexto('.hcMusculoEsqueleticoCheck', musculo);
+  auroSetCheckboxesPorTexto('.hcRegionalCheck', regional);
+
+  if(sentidos.includes('No valorado')) document.getElementById('hcSentidosNoValorado') && (document.getElementById('hcSentidosNoValorado').checked = true);
+  if(respiratorio.includes('No valorado')) document.getElementById('hcRespiratorioNoValorado') && (document.getElementById('hcRespiratorioNoValorado').checked = true);
+  if(cardiovascular.includes('No valorado')) document.getElementById('hcCardiovascularNoValorado') && (document.getElementById('hcCardiovascularNoValorado').checked = true);
+  if(digestivo.includes('No valorado')) document.getElementById('hcDigestivoNoValorado') && (document.getElementById('hcDigestivoNoValorado').checked = true);
+  if(urinario.includes('No valorado')) document.getElementById('hcUrinarioNoValorado') && (document.getElementById('hcUrinarioNoValorado').checked = true);
+  if(musculo.includes('No valorado')) document.getElementById('hcMusculoEsqueleticoNoValorado') && (document.getElementById('hcMusculoEsqueleticoNoValorado').checked = true);
+  if(endocrino.includes('No valorado')) document.getElementById('hcEndocrinoNoValorado') && (document.getElementById('hcEndocrinoNoValorado').checked = true);
+  if(hemo.includes('No valorado')) document.getElementById('hcHemoLinfaticoNoValorado') && (document.getElementById('hcHemoLinfaticoNoValorado').checked = true);
+
+  setValueIfExists('hcSentidosObservacion', auroExtraerObservacionSistema(sentidos));
+  setValueIfExists('hcRespiratorioObservacion', auroExtraerObservacionSistema(respiratorio));
+  setValueIfExists('hcCardiovascularObservacion', auroExtraerObservacionSistema(cardiovascular));
+  setValueIfExists('hcDigestivoObservacion', auroExtraerObservacionSistema(digestivo));
+  setValueIfExists('hcUrinarioObservacion', auroExtraerObservacionSistema(urinario));
+  setValueIfExists('hcMusculoEsqueleticoObservacion', auroExtraerObservacionSistema(musculo));
+  setValueIfExists('hcEndocrinoObservacion', auroExtraerObservacionSistema(endocrino));
+  setValueIfExists('hcHemoLinfaticoObservacion', auroExtraerObservacionSistema(hemo));
+
+  setValueIfExists('hcExamenGeneral', auroExtraerSeccionExamen(ex, 'Estado general'));
+  setValueIfExists('hcCabezaCuello', auroExtraerSeccionExamen(ex, 'Cabeza y cuello'));
+  setValueIfExists('hcToraxRespiratorio', auroExtraerSeccionExamen(ex, 'Tórax/Respiratorio'));
+  setValueIfExists('hcCardiovascular', auroExtraerSeccionExamen(ex, 'Cardiovascular') || getValueIfExists('hcCardiovascular'));
+  setValueIfExists('hcAbdomen', auroExtraerSeccionExamen(ex, 'Abdomen'));
+  setValueIfExists('hcExtremidades', auroExtraerSeccionExamen(ex, 'Extremidades'));
+  setValueIfExists('hcExamenGinecologico', auroExtraerSeccionExamen(ex, 'Ginecológico'));
+
+  auroActualizarAyudaIMC();
+}
+
+function auroExtraerObservacionSistema(texto){
+  const m = String(texto || '').match(/Observación(?:es)?:\s*(.+)$/i);
+  return m ? m[1].trim() : '';
+}
+
+function auroConstruirExamenFisicoCompleto(){
+  const unirLinea = arr => arr.filter(Boolean).join(' | ');
+
+  const sentidos = recopilarOrganosSentidosExamenFisico();
+  const respiratorio = recopilarRespiratorioExamenFisico();
+  const cardiovascularSistemas = recopilarCardiovascularExamenFisico();
+  const digestivo = recopilarDigestivoExamenFisico();
+  const urinario = recopilarUrinarioExamenFisico();
+  const musculo = recopilarMusculoEsqueleticoExamenFisico();
+  const endocrino = recopilarEndocrinoExamenFisico();
+  const hemo = recopilarHemoLinfaticoExamenFisico();
+  const regional = recopilarRegionalExamenFisico();
+
+  return unirLinea([
+    getValueIfExists('hcFR') ? 'Frecuencia respiratoria: ' + getValueIfExists('hcFR') : '',
+    getValueIfExists('hcCadera') ? 'Perímetro de cadera: ' + getValueIfExists('hcCadera') : '',
+    getValueIfExists('hcPorcentajeGrasa') ? 'Porcentaje de grasa: ' + getValueIfExists('hcPorcentajeGrasa') : '',
+    getValueIfExists('hcMasaMuscular') ? 'Masa muscular: ' + getValueIfExists('hcMasaMuscular') : '',
+    getValueIfExists('hcPerimetroCefalico') ? 'Perímetro cefálico: ' + getValueIfExists('hcPerimetroCefalico') : '',
+    getValueIfExists('hcPerimetroToracico') ? 'Perímetro torácico: ' + getValueIfExists('hcPerimetroToracico') : '',
+    getValueIfExists('hcPerimetroAbdominal') ? 'Perímetro abdominal: ' + getValueIfExists('hcPerimetroAbdominal') : '',
+    sentidos ? 'Órgano de los sentidos: ' + sentidos : '',
+    respiratorio ? 'Respiratorio: ' + respiratorio : '',
+    cardiovascularSistemas ? 'Cardiovascular: ' + cardiovascularSistemas : '',
+    digestivo ? 'Digestivo: ' + digestivo : '',
+    urinario ? 'Urinario: ' + urinario : '',
+    musculo ? 'Músculo Esquelético: ' + musculo : '',
+    endocrino ? 'Endócrino: ' + endocrino : '',
+    hemo ? 'Hemo-linfático: ' + hemo : '',
+    regional ? 'Examen físico regional: ' + regional : '',
+    getValueIfExists('hcExamenGeneral') ? 'Estado general: ' + getValueIfExists('hcExamenGeneral') : '',
+    getValueIfExists('hcCabezaCuello') ? 'Cabeza y cuello: ' + getValueIfExists('hcCabezaCuello') : '',
+    getValueIfExists('hcToraxRespiratorio') ? 'Tórax/Respiratorio: ' + getValueIfExists('hcToraxRespiratorio') : '',
+    getValueIfExists('hcCardiovascular') ? 'Cardiovascular clínico: ' + getValueIfExists('hcCardiovascular') : '',
+    getValueIfExists('hcAbdomen') ? 'Abdomen: ' + getValueIfExists('hcAbdomen') : '',
+    getValueIfExists('hcExtremidades') ? 'Extremidades: ' + getValueIfExists('hcExtremidades') : '',
+    getValueIfExists('hcExamenGinecologico') ? 'Ginecológico: ' + getValueIfExists('hcExamenGinecologico') : ''
+  ]);
+}
+
+function auroAplicarProteccionExamenFisicoEdicion(data){
+  const h = auroHistoriaActualEdicion();
+  if(!h) return data;
+
+  [
+    'peso_kg',
+    'talla_cm',
+    'imc',
+    'presion_arterial',
+    'frecuencia_cardiaca',
+    'temperatura',
+    'saturacion',
+    'examen_fisico'
+  ].forEach(campo => {
+    if(!String(data[campo] || '').trim() && String(h[campo] || '').trim()){
+      data[campo] = h[campo];
+    }
+  });
+
+  return data;
+}
+
+function auroAplicarProteccionDiagnosticosEdicion(data){
+  const h = auroHistoriaActualEdicion();
+  if(!h) return data;
+
+  [
+    'diagnostico_cie10',
+    'diagnostico_principal',
+    'diagnostico_secundario',
+    'cie10_secundario',
+    'diagnosticos_cie10'
+  ].forEach(campo => {
+    if(!String(data[campo] || '').trim() && String(h[campo] || '').trim()){
+      data[campo] = h[campo];
+    }
+  });
+
+  return data;
+}
+
+function auroCargarDiagnosticosDesdeHistoria(h){
+  if(!h) return;
+  auroMostrarDiagnosticosPrevios(h);
+
+  const lista = [];
+  const texto = String(h.diagnosticos_cie10 || '').trim();
+  if(texto){
+    texto.split(/\s*\|\|\s*/).forEach(item => {
+      const m = item.match(/^(Principal|Secundario):\s*([A-Z0-9\.]+)\s+(.+?)(?:\s*\((Presuntivo|Definitivo)\))?$/i);
+      if(m){
+        lista.push({
+          codigo: String(m[2] || '').replace(/\./g,'').toUpperCase(),
+          nombre: String(m[3] || '').trim(),
+          principal: String(m[1] || '').toLowerCase() === 'principal',
+          tipo: m[4] || 'Presuntivo'
+        });
+      }
+    });
+  }
+
+  if(!lista.length && (h.diagnostico_cie10 || h.diagnostico_principal)){
+    lista.push({
+      codigo: String(h.diagnostico_cie10 || '').replace(/\./g,'').toUpperCase(),
+      nombre: String(h.diagnostico_principal || '').trim() || 'Diagnóstico principal',
+      principal: true,
+      tipo: 'Presuntivo'
+    });
+  }
+
+  if(h.cie10_secundario || h.diagnostico_secundario){
+    const codigos = String(h.cie10_secundario || '').split(/[;,]/).map(x => x.trim()).filter(Boolean);
+    const nombres = String(h.diagnostico_secundario || '').split(/[;,]/).map(x => x.trim()).filter(Boolean);
+    codigos.forEach((codigo, i) => {
+      const c = codigo.replace(/\./g,'').toUpperCase();
+      if(c && !lista.some(d => d.codigo === c)){
+        lista.push({
+          codigo: c,
+          nombre: nombres[i] || 'Diagnóstico secundario',
+          principal: false,
+          tipo: 'Presuntivo'
+        });
+      }
+    });
+  }
+
+  if(lista.length){
+    hcDiagnosticosSeleccionados = lista.map((d, i) => ({
+      codigo: d.codigo,
+      nombre: d.nombre,
+      principal: d.principal || (i === 0 && !lista.some(x => x.principal)),
+      tipo: d.tipo === 'Definitivo' ? 'Definitivo' : 'Presuntivo'
+    }));
+    renderDiagnosticosSeleccionados();
+    sincronizarDiagnosticosConCamposHistoria();
+  }else{
+    setValueIfExists('hcCie10Principal', h.diagnostico_cie10 || '');
+    setValueIfExists('hcDiagnosticoPrincipal', h.diagnostico_principal || '');
+    setValueIfExists('hcCie10Secundario', h.cie10_secundario || '');
+    setValueIfExists('hcDiagnosticoSecundario', h.diagnostico_secundario || '');
+  }
+}
+
+function auroInterpretarIMC(valor){
+  const imc = parseFloat(String(valor || '').replace(',','.'));
+  if(!imc) return '';
+  if(imc < 18.5) return 'Bajo peso';
+  if(imc < 25) return 'Normopeso';
+  if(imc < 30) return 'Sobrepeso';
+  if(imc < 35) return 'Obesidad grado I';
+  if(imc < 40) return 'Obesidad grado II';
+  return 'Obesidad grado III';
+}
+
+function auroActualizarAyudaIMC(){
+  const imc = getValueIfExists('hcIMC');
+  const box = document.getElementById('auroImcAyuda');
+  if(box) box.textContent = imc ? ('Interpretación IMC: ' + auroInterpretarIMC(imc)) : 'Interpretación IMC pendiente';
+}
+
+function auroNormalizarVitalesExamen(){
+  const pa = getValueIfExists('hcPA').trim();
+  if(pa && /^\d{2,3}\s*[-]\s*\d{2,3}$/.test(pa)){
+    setValueIfExists('hcPA', pa.replace(/\s*-\s*/, '/'));
+  }
+
+  [
+    ['hcFC','lpm'],
+    ['hcFR','rpm'],
+    ['hcTemperatura','°C'],
+    ['hcSaturacion','%'],
+    ['hcCadera','cm'],
+    ['hcPorcentajeGrasa','%'],
+    ['hcMasaMuscular','kg'],
+    ['hcPerimetroCefalico','cm'],
+    ['hcPerimetroToracico','cm'],
+    ['hcPerimetroAbdominal','cm']
+  ].forEach(([id, unidad]) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const v = String(el.value || '').trim();
+    if(/^\d+([.,]\d+)?$/.test(v)){
+      el.value = v + ' ' + unidad;
+    }
+  });
+}
+
+function auroAplicarExamenFisicoSinHallazgos(){
+  setValueIfExists('hcExamenGeneral', 'Paciente en buen estado general aparente, consciente, orientada, hidratada, afebril, sin signos de dificultad respiratoria al momento de la valoración.');
+  setValueIfExists('hcCabezaCuello', 'Normocéfala. Cuello móvil, sin adenopatías aparentes, sin ingurgitación yugular.');
+  setValueIfExists('hcToraxRespiratorio', 'Tórax simétrico. Murmullo vesicular conservado, sin ruidos agregados evidentes.');
+  setValueIfExists('hcCardiovascular', 'Ruidos cardíacos rítmicos, sin soplos evidentes al examen clínico.');
+  setValueIfExists('hcAbdomen', 'Abdomen blando, depresible, no doloroso a la palpación superficial, sin signos de irritación peritoneal.');
+  setValueIfExists('hcExtremidades', 'Extremidades sin edema aparente, pulsos periféricos conservados, movilidad conservada.');
+}
+
+function auroMarcarSistemasNoValorados(){
+  [
+    'hcSentidosNoValorado',
+    'hcRespiratorioNoValorado',
+    'hcCardiovascularNoValorado',
+    'hcDigestivoNoValorado',
+    'hcUrinarioNoValorado',
+    'hcMusculoEsqueleticoNoValorado',
+    'hcEndocrinoNoValorado',
+    'hcHemoLinfaticoNoValorado'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.checked = true;
+  });
+}
+
+function auroInicializarAyudasExamenFisicoV32(){
+  const panel = document.getElementById('hc_examen');
+  if(!panel || document.getElementById('auroExamenHelpBox')) return;
+
+  const box = document.createElement('div');
+  box.id = 'auroExamenHelpBox';
+  box.className = 'auro-examen-help-box';
+  box.innerHTML = `
+    <div>
+      <b><i class="bi bi-magic me-1"></i> Ayudas clínicas de examen físico</b>
+      <small>Formato rápido para signos vitales, IMC y examen general. No reemplaza el criterio médico.</small>
+    </div>
+    <div class="auro-examen-help-actions">
+      <button type="button" class="btn-soft auro-examen-helper-btn" onclick="auroAplicarExamenFisicoSinHallazgos()">Examen general sin hallazgos aparentes</button>
+      <button type="button" class="btn-soft auro-examen-helper-btn" onclick="auroMarcarSistemasNoValorados()">Sistemas no valorados</button>
+      <button type="button" class="btn-soft auro-examen-helper-btn" onclick="auroNormalizarVitalesExamen(); auroActualizarAyudaIMC()">Normalizar unidades</button>
+    </div>
+  `;
+
+  const titulo = panel.querySelector('.clinical-subtitle');
+  if(titulo && titulo.nextSibling){
+    titulo.parentNode.insertBefore(box, titulo.nextSibling);
+  }else{
+    panel.insertBefore(box, panel.firstChild);
+  }
+
+  const imc = document.getElementById('hcIMC');
+  if(imc && !document.getElementById('auroImcAyuda')){
+    const ayuda = document.createElement('div');
+    ayuda.id = 'auroImcAyuda';
+    ayuda.className = 'auro-imc-ayuda';
+    ayuda.textContent = 'Interpretación IMC pendiente';
+    imc.parentNode.appendChild(ayuda);
+  }
+
+  [
+    ['hcPA','Formato sugerido: 120/80'],
+    ['hcFC','Ej. 80 lpm'],
+    ['hcFR','Ej. 16 rpm'],
+    ['hcTemperatura','Ej. 36.5 °C'],
+    ['hcSaturacion','Ej. 98 %']
+  ].forEach(([id, texto]) => {
+    const el = document.getElementById(id);
+    if(el && !document.getElementById(id + 'Hint')){
+      const hint = document.createElement('small');
+      hint.id = id + 'Hint';
+      hint.className = 'auro-vital-hint';
+      hint.textContent = texto;
+      el.parentNode.appendChild(hint);
+    }
+  });
+
+  ['hcPeso','hcTalla'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el){
+      el.addEventListener('input', () => setTimeout(auroActualizarAyudaIMC, 0));
+      el.addEventListener('blur', auroActualizarAyudaIMC);
+    }
+  });
+
+  ['hcPA','hcFC','hcFR','hcTemperatura','hcSaturacion','hcCadera','hcPorcentajeGrasa','hcMasaMuscular','hcPerimetroCefalico','hcPerimetroToracico','hcPerimetroAbdominal'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('blur', auroNormalizarVitalesExamen);
+  });
+
+  auroActualizarAyudaIMC();
+}
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -4961,24 +5803,7 @@ async function guardarHistoriaClinicaERP(){
 
   const unirLinea = arr => arr.filter(Boolean).join(' | ');
 
-  const examenFisico = unirLinea([
-    recopilarOrganosSentidosExamenFisico() ? 'Órgano de los sentidos: ' + recopilarOrganosSentidosExamenFisico() : '',
-    recopilarRespiratorioExamenFisico() ? 'Respiratorio: ' + recopilarRespiratorioExamenFisico() : '',
-    recopilarCardiovascularExamenFisico() ? 'Cardiovascular: ' + recopilarCardiovascularExamenFisico() : '',
-    recopilarDigestivoExamenFisico() ? 'Digestivo: ' + recopilarDigestivoExamenFisico() : '',
-    recopilarUrinarioExamenFisico() ? 'Urinario: ' + recopilarUrinarioExamenFisico() : '',
-    recopilarMusculoEsqueleticoExamenFisico() ? 'Músculo Esquelético: ' + recopilarMusculoEsqueleticoExamenFisico() : '',
-    recopilarEndocrinoExamenFisico() ? 'Endócrino: ' + recopilarEndocrinoExamenFisico() : '',
-    recopilarHemoLinfaticoExamenFisico() ? 'Hemo-linfático: ' + recopilarHemoLinfaticoExamenFisico() : '',
-    recopilarRegionalExamenFisico() ? 'Examen físico regional: ' + recopilarRegionalExamenFisico() : '',
-    getValueIfExists('hcExamenGeneral') ? 'Estado general: ' + getValueIfExists('hcExamenGeneral') : '',
-    getValueIfExists('hcCabezaCuello') ? 'Cabeza y cuello: ' + getValueIfExists('hcCabezaCuello') : '',
-    getValueIfExists('hcToraxRespiratorio') ? 'Tórax/Respiratorio: ' + getValueIfExists('hcToraxRespiratorio') : '',
-    getValueIfExists('hcCardiovascular') ? 'Cardiovascular: ' + getValueIfExists('hcCardiovascular') : '',
-    getValueIfExists('hcAbdomen') ? 'Abdomen: ' + getValueIfExists('hcAbdomen') : '',
-    getValueIfExists('hcExtremidades') ? 'Extremidades: ' + getValueIfExists('hcExtremidades') : '',
-    getValueIfExists('hcExamenGinecologico') ? 'Ginecológico: ' + getValueIfExists('hcExamenGinecologico') : ''
-  ]);
+  const examenFisico = auroConstruirExamenFisicoCompleto();
 
   const interconsultaPlan = recopilarInterconsultaPlan();
   const evaluacionesPlan = recopilarEvaluacionesPlan();
@@ -5024,6 +5849,10 @@ async function guardarHistoriaClinicaERP(){
     estado: getValueIfExists('hcEstadoHistoria') || 'Activo',
     id_medico: 'MED-001'
   };
+
+  auroAplicarProteccionAntecedentesEdicion(data);
+  auroAplicarProteccionExamenFisicoEdicion(data);
+  auroAplicarProteccionDiagnosticosEdicion(data);
 
   Object.keys(data).forEach(k => data[k] === undefined && delete data[k]);
 
@@ -5449,14 +6278,7 @@ function editarHistoriaClinicaModal(idHistoria){
   setTimeout(() => {
     setValueIfExists('hcMotivoConsulta', h.motivo_consulta || '');
     setValueIfExists('hcEnfermedadActual', h.enfermedad_actual || '');
-    setValueIfExists('hcAntecedentesPersonales', h.antecedentes_personales || '');
-    cargarAntecedentesPersonalesCompletos(h.antecedentes_personales || '');
-    setValueIfExists('hcAntecedentesQuirurgicos', h.antecedentes_quirurgicos || '');
-    cargarAntecedentesQuirurgicosEstructurados(h.antecedentes_quirurgicos || '');
-    cargarAntecedentesGinecoObstetricosCompletos(h.antecedentes_gineco_obstetricos || '');
-    setValueIfExists('hcAntecedentesFamiliares', h.antecedentes_familiares || '');
-    setValueIfExists('hcMedicacionActual', h.medicacion_actual || '');
-    cargarAlergiasEstructuradas(h.alergias || '');
+    auroCargarAntecedentesDesdeHistoria(h, 'edicion');
     setValueIfExists('hcPeso', h.peso_kg || '');
     setValueIfExists('hcTalla', h.talla_cm || '');
     setValueIfExists('hcIMC', h.imc || '');
@@ -5464,7 +6286,9 @@ function editarHistoriaClinicaModal(idHistoria){
     setValueIfExists('hcFC', h.frecuencia_cardiaca || '');
     setValueIfExists('hcTemperatura', h.temperatura || '');
     setValueIfExists('hcSaturacion', h.saturacion || '');
-    setValueIfExists('hcCie10Principal', h.diagnostico_cie10 || '');
+    auroCargarExamenFisicoDesdeHistoria(h, 'edicion');
+    auroCargarDiagnosticosDesdeHistoria(h);
+    setValueIfExists('hcCie10Principal', h.diagnostico_cie10 || getValueIfExists('hcCie10Principal'));
     setValueIfExists('hcPlanTratamiento', h.plan_tratamiento || '');
     setValueIfExists('hcIndicacionesPaciente', h.observaciones || '');
     setValueIfExists('hcEstadoHistoria', h.estado || 'Control');
@@ -5496,10 +6320,12 @@ function limpiarFiltrosHistorias(){
 }
 
 async function inicializarERP(){
+  auroInicializarAyudasExamenFisicoV32();
   await cargarPacientesDesdeSheets();
   await cargarHistoriasClinicasDesdeSheets();
   await cargarCitasAgendaWeb();
   actualizarDashboard();
+  auroInicializarAyudasExamenFisicoV32();
 }
 
 inicializarERP();
@@ -5701,4 +6527,64 @@ document.addEventListener('click',e=>{
 });
 </script>
 </body>
-</html>
+</html
+    /* AUROSANAX - Examen físico v3.2 ayudas clínicas */
+    .auro-examen-help-box{
+      border:1px solid #bbf7d0;
+      background:linear-gradient(135deg,#f0fdf4,#ffffff);
+      border-radius:18px;
+      padding:12px 14px;
+      margin:10px 0 16px;
+      box-shadow:0 8px 24px rgba(22,163,74,.06);
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+    }
+    .auro-examen-help-box b{
+      color:#166534;
+      font-weight:900;
+      display:block;
+      margin-bottom:2px;
+    }
+    .auro-examen-help-box small{
+      color:#475569;
+      font-weight:650;
+    }
+    .auro-examen-help-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .auro-examen-helper-btn{
+      padding:8px 10px;
+      border-radius:12px;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .auro-imc-ayuda{
+      margin-top:6px;
+      font-size:12px;
+      font-weight:850;
+      color:#475569;
+      background:#f8fafc;
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      padding:6px 8px;
+      min-height:32px;
+      display:flex;
+      align-items:center;
+    }
+    .auro-vital-hint{
+      display:block;
+      margin-top:4px;
+      font-size:11px;
+      color:#64748b;
+      font-weight:750;
+    }
+    @media(max-width:760px){
+      .auro-examen-help-box{display:block}
+      .auro-examen-help-actions{justify-content:flex-start;margin-top:10px}
+    }
+>
