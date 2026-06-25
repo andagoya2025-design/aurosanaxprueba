@@ -5713,71 +5713,38 @@ function auroMarcarSistemasNoValorados(){
 }
 
 function auroInicializarAyudasExamenFisicoV32(){
+  /*
+    AUROSANAX v3.2.1
+    Corrección visual solicitada:
+    - No inserta barra superior de ayudas clínicas.
+    - No agrega botones "Examen general sin hallazgos aparentes", "Sistemas no valorados" ni "Normalizar unidades".
+    - No agrega textos guía debajo de los signos vitales.
+    - Conserva la estructura original del bloque Signos vitales.
+    - Mantiene solo lógica invisible necesaria: cálculo/actualización de IMC y normalización técnica al perder foco.
+  */
+
   const panel = document.getElementById('hc_examen');
-  if(!panel || document.getElementById('auroExamenHelpBox')) return;
+  if(!panel) return;
 
-  const box = document.createElement('div');
-  box.id = 'auroExamenHelpBox';
-  box.className = 'auro-examen-help-box';
-  box.innerHTML = `
-    <div>
-      <b><i class="bi bi-magic me-1"></i> Ayudas clínicas de examen físico</b>
-      <small>Formato rápido para signos vitales, IMC y examen general. No reemplaza el criterio médico.</small>
-    </div>
-    <div class="auro-examen-help-actions">
-      <button type="button" class="btn-soft auro-examen-helper-btn" onclick="auroAplicarExamenFisicoSinHallazgos()">Examen general sin hallazgos aparentes</button>
-      <button type="button" class="btn-soft auro-examen-helper-btn" onclick="auroMarcarSistemasNoValorados()">Sistemas no valorados</button>
-      <button type="button" class="btn-soft auro-examen-helper-btn" onclick="auroNormalizarVitalesExamen(); auroActualizarAyudaIMC()">Normalizar unidades</button>
-    </div>
-  `;
+  const ayudaAnterior = document.getElementById('auroExamenHelpBox');
+  if(ayudaAnterior) ayudaAnterior.remove();
 
-  const titulo = panel.querySelector('.clinical-subtitle');
-  if(titulo && titulo.nextSibling){
-    titulo.parentNode.insertBefore(box, titulo.nextSibling);
-  }else{
-    panel.insertBefore(box, panel.firstChild);
-  }
+  const imcAyudaAnterior = document.getElementById('auroImcAyuda');
+  if(imcAyudaAnterior) imcAyudaAnterior.remove();
 
-  const imc = document.getElementById('hcIMC');
-  if(imc && !document.getElementById('auroImcAyuda')){
-    const ayuda = document.createElement('div');
-    ayuda.id = 'auroImcAyuda';
-    ayuda.className = 'auro-imc-ayuda';
-    ayuda.textContent = 'Interpretación IMC pendiente';
-    imc.parentNode.appendChild(ayuda);
-  }
-
-  [
-    ['hcPA','Formato sugerido: 120/80'],
-    ['hcFC','Ej. 80 lpm'],
-    ['hcFR','Ej. 16 rpm'],
-    ['hcTemperatura','Ej. 36.5 °C'],
-    ['hcSaturacion','Ej. 98 %']
-  ].forEach(([id, texto]) => {
-    const el = document.getElementById(id);
-    if(el && !document.getElementById(id + 'Hint')){
-      const hint = document.createElement('small');
-      hint.id = id + 'Hint';
-      hint.className = 'auro-vital-hint';
-      hint.textContent = texto;
-      el.parentNode.appendChild(hint);
-    }
+  ['hcPA','hcFC','hcFR','hcTemperatura','hcSaturacion'].forEach(id => {
+    const hint = document.getElementById(id + 'Hint');
+    if(hint) hint.remove();
   });
 
   ['hcPeso','hcTalla'].forEach(id => {
     const el = document.getElementById(id);
-    if(el){
-      el.addEventListener('input', () => setTimeout(auroActualizarAyudaIMC, 0));
-      el.addEventListener('blur', auroActualizarAyudaIMC);
+    if(el && !el.dataset.auroImcListenerV321){
+      el.addEventListener('input', () => setTimeout(calcIMC, 0));
+      el.addEventListener('blur', () => setTimeout(calcIMC, 0));
+      el.dataset.auroImcListenerV321 = '1';
     }
   });
-
-  ['hcPA','hcFC','hcFR','hcTemperatura','hcSaturacion','hcCadera','hcPorcentajeGrasa','hcMasaMuscular','hcPerimetroCefalico','hcPerimetroToracico','hcPerimetroAbdominal'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('blur', auroNormalizarVitalesExamen);
-  });
-
-  auroActualizarAyudaIMC();
 }
 
 async function guardarHistoriaClinicaERP(){
