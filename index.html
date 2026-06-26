@@ -4101,9 +4101,70 @@ function auroNormalizarTextoExamenPrevio(valor){
     .trim();
 }
 
+function auroValorBaseNoValoradoExamen(valor){
+  const t = String(valor || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, '')
+    .trim();
+
+  return (
+    !t ||
+    t === 'no valorado' ||
+    t === 'no valorada' ||
+    t === 'sin valorar' ||
+    t === 'n/v' ||
+    t === 'nv' ||
+    t === 'no aplica' ||
+    t === 'n/a'
+  );
+}
+
+function auroLimpiarValorExamenPrevio(valor){
+  const texto = String(valor || '').trim();
+  if(!texto) return '';
+
+  return texto
+    .split(/\s*\|\s*/g)
+    .map(parte => String(parte || '').trim())
+    .filter(Boolean)
+    .filter(parte => {
+      let evaluable = parte
+        .replace(/^Examen físico regional\s*:\s*/i, '')
+        .replace(/^Examen fisico regional\s*:\s*/i, '')
+        .replace(/^Examen físico por sistemas\s*:\s*/i, '')
+        .replace(/^Examen fisico por sistemas\s*:\s*/i, '')
+        .trim();
+
+      const idx = evaluable.lastIndexOf(':');
+      if(idx !== -1){
+        evaluable = evaluable.substring(idx + 1).trim();
+      }
+
+      return !auroValorBaseNoValoradoExamen(evaluable);
+    })
+    .join(' | ')
+    .trim();
+}
+
 function auroEsNoValoradoExamen(valor){
-  const t = String(valor || '').trim().toLowerCase();
-  return !t || t === 'no valorado' || t === 'no valorada' || t === 'sin valorar' || t === 'n/v';
+  return !auroLimpiarValorExamenPrevio(valor);
+}
+
+function auroLimpiarParesExamenPrevio(pares){
+  const vistos = new Set();
+  return (pares || [])
+    .map(p => ({
+      etiqueta: String(p?.etiqueta || '').trim(),
+      valor: auroLimpiarValorExamenPrevio(p?.valor || '')
+    }))
+    .filter(p => p.etiqueta && p.valor)
+    .filter(p => {
+      const clave = (p.etiqueta + '|' + p.valor).toLowerCase();
+      if(vistos.has(clave)) return false;
+      vistos.add(clave);
+      return true;
+    });
 }
 
 function auroPartirExamenFisicoPrevio(texto){
@@ -4217,14 +4278,9 @@ function auroMostrarExamenFisicoPrevio(h){
     }
   });
 
-  const regionalHallazgos = tokensRegional.filter(t => !auroEsNoValoradoExamen(t.valor));
-  const regionalNoValorados = tokensRegional.filter(t => auroEsNoValoradoExamen(t.valor));
-
-  const sistemasHallazgos = tokensSistemas.filter(t => !auroEsNoValoradoExamen(t.valor));
-  const sistemasNoValorados = tokensSistemas.filter(t => auroEsNoValoradoExamen(t.valor));
-
-  const generalesLimpios = tokensGenerales.filter(t => !auroEsNoValoradoExamen(t.valor));
-  const generalesNoValorados = tokensGenerales.filter(t => auroEsNoValoradoExamen(t.valor));
+  const regionalHallazgos = auroLimpiarParesExamenPrevio(tokensRegional);
+  const sistemasHallazgos = auroLimpiarParesExamenPrevio(tokensSistemas);
+  const generalesLimpios = auroLimpiarParesExamenPrevio(tokensGenerales);
 
   const diagnosticos = [
     h.diagnostico_cie10 ? 'Principal CIE-10: ' + h.diagnostico_cie10 : '',
@@ -4239,23 +4295,14 @@ function auroMostrarExamenFisicoPrevio(h){
 
   if(generalesLimpios.length){
     html += auroRenderPrevioTabla('Examen general / medidas complementarias', generalesLimpios);
-  }else if(generalesNoValorados.length){
-    html += auroRenderPrevioLinea('Examen general / medidas complementarias', 'Registrado como no valorado.');
   }
 
   if(sistemasHallazgos.length){
     html += auroRenderPrevioTabla('Examen físico por sistemas', sistemasHallazgos);
-  }else if(sistemasNoValorados.length){
-    html += auroRenderPrevioLinea('Examen físico por sistemas', 'Sistemas registrados como no valorados.');
   }
 
   if(regionalHallazgos.length){
     html += auroRenderPrevioTabla('Examen físico regional', regionalHallazgos);
-    if(regionalNoValorados.length){
-      html += auroRenderPrevioLinea('Regiones no valoradas', regionalNoValorados.length + ' región(es) registradas como no valoradas.');
-    }
-  }else if(regionalNoValorados.length){
-    html += auroRenderPrevioLinea('Examen físico regional', 'Regiones registradas como no valoradas.');
   }
 
   html += auroRenderPrevioChips('Diagnóstico CIE-10 guardado', diagnosticos);
