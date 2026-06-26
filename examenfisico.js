@@ -1,5 +1,6 @@
 /* ==========================================================
    AUROSANAX - examenfisico.js
+   Versión corregida: evita repetición de 'Otros hallazgos' y regiones no valoradas
    Módulo extraído desde index.html para Examen Físico.
    Fase segura: puede conectarse sin borrar todavía el código del index.
    Incluye:
@@ -115,13 +116,26 @@ function recopilarRegionalExamenFisico(){
     });
 
     Object.keys(grupos).forEach(grupo => {
-      partes.push(`${grupo}: ${grupos[grupo].join(', ')}`);
+      if(grupos[grupo] && grupos[grupo].length){
+        partes.push(`${grupo}: ${grupos[grupo].join(', ')}`);
+      }
     });
 
-    const observacion = getValueIfExists(hcRegionalInputId(region));
-    if(observacion) partes.push(observacion === 'NO VALORADO' ? 'No valorado' : 'Observación: ' + observacion);
+    const observacion = getValueIfExists(hcRegionalInputId(region)).trim();
 
-    if(partes.length) regiones.push(`${cfg.titulo}: ${partes.join(' | ')}`);
+    /*
+      CORRECCIÓN AUROSANAX:
+      Antes el sistema guardaba "NO VALORADO" por cada región.
+      Eso generaba múltiples tarjetas repetidas de "Otros hallazgos" al cargar la historia previa.
+      Ahora solo se guarda la región cuando existe un hallazgo real o una observación real.
+    */
+    if(observacion && !auroEsNoValoradoExamen(observacion)){
+      partes.push('Observación: ' + observacion);
+    }
+
+    if(partes.length){
+      regiones.push(`${cfg.titulo}: ${partes.join(' | ')}`);
+    }
   });
 
   return regiones.join(' || ');
@@ -1000,8 +1014,39 @@ function auroEsNoValoradoExamen(valor){
 }
 
 function auroPartirExamenFisicoPrevio(texto){
-  const raw = auroNormalizarTextoExamenPrevio(texto);
+  let raw = auroNormalizarTextoExamenPrevio(texto);
   if(!raw) return [];
+
+  const etiquetasConocidas = [
+    'Piel y faneras','Cabeza','Ojos','Oídos','Nariz','Boca','Orofaringe','Cuello',
+    'Tórax','Axilas-mamas','Abdomen','Columna vertebral','Ingle-periné',
+    'Genitales','Ano recto','Canal vaginal','Miembros superiores','Miembros inferiores',
+    'Neurológico','Otros hallazgos',
+    'Órgano de los sentidos','Organo de los sentidos','Respiratorio','Cardiovascular',
+    'Digestivo','Urinario','Músculo Esquelético','Musculo Esqueletico','Endócrino',
+    'Endocrino','Hemo-linfático','Hemo-linfatico',
+    'Frecuencia respiratoria','Perímetro de cadera','Porcentaje de grasa','Masa muscular',
+    'Perímetro cefálico','Perímetro torácico','Perímetro abdominal',
+    'Estado general','Cabeza y cuello','Tórax/Respiratorio','Cardiovascular clínico',
+    'Extremidades','Ginecológico'
+  ];
+
+  const escapeRegex = txt => String(txt).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patronEtiquetas = etiquetasConocidas.map(escapeRegex).join('|');
+
+  /*
+    CORRECCIÓN AUROSANAX:
+    Algunas historias antiguas quedaron guardadas así:
+    "Otros hallazgos: No valorado | Abdomen: No valorado".
+    Eso hacía que el visor interpretara todo como "Otros hallazgos" repetido.
+    Esta normalización separa correctamente las etiquetas internas antes de renderizar.
+  */
+  raw = raw
+    .replace(/^Examen físico regional\s*:\s*/i, '')
+    .replace(/^Examen fisico regional\s*:\s*/i, '')
+    .replace(/^Examen físico por sistemas\s*:\s*/i, '')
+    .replace(/^Examen fisico por sistemas\s*:\s*/i, '')
+    .replace(new RegExp('\\s+\\|\\s+(' + patronEtiquetas + ')\\s*:', 'gi'), ' || $1:');
 
   return raw.split(/\s*\|\|\s*/).map(item => {
     let t = String(item || '').trim();
@@ -1023,6 +1068,59 @@ function auroPartirExamenFisicoPrevio(texto){
       valor: t.substring(idx + 1).trim()
     };
   }).filter(Boolean);
+}
+
+function auroEsValorPrevioSoloNoValorado(valor){
+  const normalizar = v => String(v || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const partes = String(valor || '')
+    .split(/\s*\|\s*/)
+    .map(x => x.trim())
+    .filter(Boolean);
+
+  if(!partes.length) return true;
+
+  return partes.every(parte => {
+    let v = parte;
+    const idx = v.indexOf(':');
+    if(idx !== -1) v = v.substring(idx + 1).trim();
+
+    const n = normalizar(v);
+    return !n || n === 'no valorado' || n === 'no valorada' || n === 'sin valorar' || n === 'n/v';
+  });
+}
+
+function auroTokensUnicosConHallazgoReal(tokens){
+  const vistos = new Set();
+  return (tokens || []).filter(t => {
+    const etiqueta = String(t.etiqueta || '').trim();
+    const valor = String(t.valor || '').trim();
+    if(!etiqueta || auroEsValorPrevioSoloNoValorado(valor)) return false;
+
+    const clave = (etiqueta + '|' + valor).toLowerCase();
+    if(vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
+}
+
+function auroTokensUnicosNoValorados(tokens){
+  const vistos = new Set();
+  return (tokens || []).filter(t => {
+    const etiqueta = String(t.etiqueta || '').trim();
+    const valor = String(t.valor || '').trim();
+    if(!etiqueta || !auroEsValorPrevioSoloNoValorado(valor)) return false;
+
+    const clave = etiqueta.toLowerCase();
+    if(vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
 }
 
 function auroRenderPrevioLinea(label, value){
@@ -1110,14 +1208,14 @@ function auroMostrarExamenFisicoPrevio(h){
     }
   });
 
-  const regionalHallazgos = tokensRegional.filter(t => !auroEsNoValoradoExamen(t.valor));
-  const regionalNoValorados = tokensRegional.filter(t => auroEsNoValoradoExamen(t.valor));
+  const regionalHallazgos = auroTokensUnicosConHallazgoReal(tokensRegional);
+  const regionalNoValorados = auroTokensUnicosNoValorados(tokensRegional);
 
-  const sistemasHallazgos = tokensSistemas.filter(t => !auroEsNoValoradoExamen(t.valor));
-  const sistemasNoValorados = tokensSistemas.filter(t => auroEsNoValoradoExamen(t.valor));
+  const sistemasHallazgos = auroTokensUnicosConHallazgoReal(tokensSistemas);
+  const sistemasNoValorados = auroTokensUnicosNoValorados(tokensSistemas);
 
-  const generalesLimpios = tokensGenerales.filter(t => !auroEsNoValoradoExamen(t.valor));
-  const generalesNoValorados = tokensGenerales.filter(t => auroEsNoValoradoExamen(t.valor));
+  const generalesLimpios = auroTokensUnicosConHallazgoReal(tokensGenerales);
+  const generalesNoValorados = auroTokensUnicosNoValorados(tokensGenerales);
 
   const diagnosticos = [
     h.diagnostico_cie10 ? 'Principal CIE-10: ' + h.diagnostico_cie10 : '',
