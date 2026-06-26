@@ -3029,88 +3029,25 @@ function auroPrevioUnicos(lista){
   });
 }
 
-function auroPrevioHumanizarClave(clave){
-  const mapa = {
-    key:'', numero:'', no_aplica:'No aplica', aplicado:'Aplicado', aplicada:'Aplicada',
-    fecha:'Fecha', tiempo:'Tiempo', detalle:'Detalle', resultado:'Resultado', observacion:'Observación', observaciones:'Observaciones',
-    medicamento:'Medicamento', medicacion:'Medicación', tratamiento:'Tratamiento', biologico:'Biológico', vacuna:'Vacuna', nombre_comercial:'Nombre comercial',
-    programada:'Fecha programada', administracion:'Fecha administración', dosis:'Dosis',
-    presento:'Presentó', clasificacion:'Clasificación', hospitalizacion:'Hospitalización', vacunado:'Vacunado', vacuna_tipo:'Tipo de vacuna',
-    anio_referencia:'Año de referencia', tiempo_hospitalizado:'Tiempo hospitalizado', observacion_presento:'Observación', detalle_clasificacion:'Detalle clasificación',
-    habito:'Hábito', actual:'Ex consumidor', abstinencia:'Tiempo de abstinencia',
-    actividad:'Actividad', distancia_km:'Distancia', frecuencia_dia:'Frecuencia', tiempo_horas:'Tiempo',
-    agua_diaria_litros:'Agua diaria', comidas_dia:'Comidas al día', frutas_verduras:'Frutas / verduras', comida_rapida:'Comida rápida', azucar:'Azúcar', sal:'Sal', suplementos:'Suplementos',
-    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa', planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales', ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
-  };
-  if(mapa[clave] !== undefined) return mapa[clave];
-  return String(clave || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function auroPrevioEsValorUtil(valor){
-  if(valor === null || valor === undefined) return false;
-  if(typeof valor === 'boolean') return valor === true;
-  const t = String(valor).trim();
-  if(!t) return false;
-  return !/^(no valorado|no aplica|n\/a|na|undefined|null|\[object object\])$/i.test(t);
-}
-
 function auroPrevioTextoItemBasico(item){
-  if(!auroPrevioEsValorUtil(item)) return '';
-  if(typeof item !== 'object') return String(item).trim();
+  if(!item || typeof item !== 'object') return '';
 
-  const titulo = item.descripcion || item.biologico || item.vacuna || item.habito || item.actividad || item.nombre || item.key || '';
+  const nombre = item.key || item.nombre || item.descripcion || item.biologico || item.vacuna || '';
   const partes = [];
-  if(auroPrevioEsValorUtil(titulo)) partes.push(String(titulo));
 
-  Object.keys(item).forEach(k => {
-    if(['key','descripcion','biologico','vacuna','habito','actividad','nombre'].includes(k)) return;
-    const v = item[k];
-    if(!auroPrevioEsValorUtil(v)) return;
+  if(nombre) partes.push(String(nombre));
 
-    if(Array.isArray(v)){
-      const sub = v.map(auroPrevioTextoItemBasico).filter(Boolean);
-      if(sub.length){
-        const etiqueta = auroPrevioHumanizarClave(k);
-        if(etiqueta) partes.push(etiqueta + ': ' + sub.join('; '));
-      }
-      return;
-    }
+  const tiempo = item.tiempo || item.fecha || item.fecha_aplicacion || item.anio || item.año || '';
+  const medicamento = item.medicamento || item.medicacion || item.tratamiento || '';
+  const reaccion = item.reaccion || item.detalle || item.observacion || item.observaciones || '';
+  const valor = item.valor || item.resultado || '';
 
-    if(typeof v === 'object'){
-      const sub = auroPrevioTextoItemBasico(v);
-      if(sub){
-        const etiqueta = auroPrevioHumanizarClave(k);
-        partes.push((etiqueta ? etiqueta + ': ' : '') + sub);
-      }
-      return;
-    }
+  if(tiempo) partes.push('Tiempo/fecha: ' + tiempo);
+  if(medicamento) partes.push('Medicación: ' + medicamento);
+  if(reaccion) partes.push('Detalle: ' + reaccion);
+  if(valor && !nombre) partes.push(String(valor));
 
-    const etiqueta = auroPrevioHumanizarClave(k);
-    if(etiqueta) partes.push(etiqueta + ': ' + v);
-    else if(String(v).trim()) partes.push(String(v).trim());
-  });
-
-  return partes.filter(Boolean).join(' | ');
-}
-
-function auroPrevioResumenObjetoGenerico(obj, prefijo){
-  if(!obj || typeof obj !== 'object') return '';
-  const partes = [];
-  Object.keys(obj).forEach(k => {
-    const v = obj[k];
-    if(!auroPrevioEsValorUtil(v)) return;
-    const etiqueta = auroPrevioHumanizarClave(k);
-    if(Array.isArray(v)){
-      const sub = v.map(auroPrevioTextoItemBasico).filter(Boolean);
-      if(sub.length) partes.push((etiqueta ? etiqueta + ': ' : '') + sub.join('; '));
-    }else if(typeof v === 'object'){
-      const sub = auroPrevioTextoItemBasico(v);
-      if(sub) partes.push((etiqueta ? etiqueta + ': ' : '') + sub);
-    }else{
-      partes.push((etiqueta ? etiqueta + ': ' : '') + v);
-    }
-  });
-  return partes.length ? (prefijo ? prefijo + ': ' : '') + partes.join('; ') : '';
+  return partes.join(' | ');
 }
 
 function auroPrevioResumenJsonAntecedentes(obj){
@@ -3127,32 +3064,32 @@ function auroPrevioResumenJsonAntecedentes(obj){
   const alergias = Array.isArray(obj.alergias) ? obj.alergias.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
   if(alergias.length) bloques.push('Alergias: ' + auroPrevioUnicos(alergias).join('; '));
 
-  const covid = auroPrevioResumenObjetoGenerico(obj.covid || obj.COVID, 'COVID-19');
-  if(covid) bloques.push(covid);
+  const gineco = [];
+  ['fum','menarquia','ciclos','gesta','partos','cesareas','abortos','hijos_vivos','pap','ivsa','anticoncepcion','otros'].forEach(k => {
+    if(obj[k]) gineco.push(k.replace(/_/g,' ') + ': ' + obj[k]);
+  });
+  if(gineco.length) bloques.push('Gineco-obstétricos: ' + auroPrevioUnicos(gineco).join('; '));
+
+  const covid = obj.covid || obj.COVID || null;
+  if(covid && typeof covid === 'object'){
+    const c = [];
+    ['presento','fecha','clasificacion','hospitalizacion','vacunado','dosis'].forEach(k => {
+      if(covid[k]) c.push(k + ': ' + covid[k]);
+    });
+    if(c.length) bloques.push('COVID-19: ' + c.join('; '));
+  }
 
   const vacunas = Array.isArray(obj.vacunas) ? obj.vacunas.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(vacunas.length) bloques.push('Vacunas: ' + auroPrevioUnicos(vacunas).join('; '));
+  if(vacunas.length){
+    const principales = auroPrevioUnicos(vacunas).slice(0, 6);
+    bloques.push('Vacunas: ' + principales.join('; ') + (vacunas.length > 6 ? '; otras registradas' : ''));
+  }
 
   const habitos = Array.isArray(obj.habitos) ? obj.habitos.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(habitos.length) bloques.push('Hábitos: ' + auroPrevioUnicos(habitos).join('; '));
+  if(habitos.length) bloques.push('Hábitos: información estructurada registrada.');
 
-  const estilo = Array.isArray(obj.estilo_vida || obj.estiloVida) ? (obj.estilo_vida || obj.estiloVida).map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(estilo.length) bloques.push('Estilo de vida: ' + auroPrevioUnicos(estilo).join('; '));
-
-  const alimentacion = auroPrevioResumenObjetoGenerico(obj.alimentacion, 'Alimentación');
-  if(alimentacion) bloques.push(alimentacion);
-
-  const obstetricos = Array.isArray(obj.obstetricos) ? obj.obstetricos.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(obstetricos.length) bloques.push('Obstétricos: ' + auroPrevioUnicos(obstetricos).join('; '));
-
-  const ginecologicos = auroPrevioResumenObjetoGenerico(obj.ginecologicos, 'Ginecológicos');
-  if(ginecologicos) bloques.push(ginecologicos);
-
-  const ginecoDirecto = [];
-  ['fum','menarquia','ciclos','gesta','partos','cesareas','abortos','hijos_vivos','pap','ivsa','anticoncepcion','otros'].forEach(k => {
-    if(auroPrevioEsValorUtil(obj[k])) ginecoDirecto.push(auroPrevioHumanizarClave(k) + ': ' + obj[k]);
-  });
-  if(ginecoDirecto.length) bloques.push('Gineco-obstétricos: ' + auroPrevioUnicos(ginecoDirecto).join('; '));
+  if(obj.estiloVida || obj.estilo_vida) bloques.push('Estilo de vida: información estructurada registrada.');
+  if(obj.alimentacion) bloques.push('Alimentación: información estructurada registrada.');
 
   return bloques.join(' || ');
 }
@@ -3169,7 +3106,6 @@ function auroLimpiarTextoPrevioClinico(valor){
 
   raw = raw
     .replace(/AUROSANAX_ANT_PERSONALES\s*v?[\d.]*\s*\|\|?/gi, '')
-    .replace(/AUROSANAX_ANT_GINECO_OBS_V?\d*::?/gi, '')
     .replace(/AUROSANAX_ANT_GINECO_OBSTETRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
     .replace(/AUROSANAX_ANT_GINECO_OBSTÉTRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
     .replace(/"key"\s*:\s*"([^"]*)"/gi, '$1')
@@ -3186,13 +3122,7 @@ function auroLimpiarTextoPrevioClinico(valor){
     .replace(/\s{2,}/g, ' ')
     .trim();
 
-  raw = raw.replace(/(<br>\s*){2,}/g, '<br>')
-    .replace(/\[object Object\]/gi, '')
-    .replace(/(?:^|<br>|;\s*)\s*(Número|Numero)\s*:?\s*\d*\s*(?=<br>|;|$)/gi, '')
-    .replace(/(?:^|<br>|;\s*)\s*No valorado\s*(?=<br>|;|$)/gi, '')
-    .replace(/(<br>\s*){2,}/g, '<br>')
-    .replace(/^<br>|<br>$/g, '')
-    .trim();
+  raw = raw.replace(/(<br>\s*){2,}/g, '<br>');
   return raw;
 }
 
@@ -7103,5 +7033,4 @@ document.addEventListener('click',e=>{
 </script>
 </body>
 </html>
-
 
