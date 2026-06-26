@@ -3167,33 +3167,63 @@ function auroLimpiarTextoPrevioClinico(valor){
     if(resumen) raw = resumen;
   }
 
-  raw = raw
-    .replace(/AUROSANAX_ANT_PERSONALES\s*v?[\d.]*\s*\|\|?/gi, '')
-    .replace(/AUROSANAX_ANT_GINECO_OBS_V?\d*::?/gi, '')
-    .replace(/AUROSANAX_ANT_GINECO_OBSTETRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
-    .replace(/AUROSANAX_ANT_GINECO_OBSTÉTRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
-    .replace(/"key"\s*:\s*"([^"]*)"/gi, '$1')
-    .replace(/"descripcion"\s*:\s*"([^"]*)"/gi, '$1')
-    .replace(/"tiempo"\s*:\s*"([^"]*)"/gi, 'Tiempo: $1')
-    .replace(/"medicamento"\s*:\s*"([^"]*)"/gi, 'Medicación: $1')
-    .replace(/"reaccion"\s*:\s*"([^"]*)"/gi, 'Reacción: $1')
-    .replace(/"numero"\s*:\s*"[^"]*"/gi, '')
-    .replace(/"[^"]*"\s*:\s*(\{|\[)/g, '')
-    .replace(/[{}\[\]"]/g, '')
-    .replace(/\s*\|\|\s*/g, '<br>')
-    .replace(/\s*;\s*/g, '; ')
-    .replace(/\s*,\s*,+/g, ', ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  const limpiarLinea = (linea) => {
+    let x = String(linea || '').trim();
+    if(!x) return '';
 
-  raw = raw.replace(/(<br>\s*){2,}/g, '<br>')
-    .replace(/\[object Object\]/gi, '')
-    .replace(/(?:^|<br>|;\s*)\s*(Número|Numero)\s*:?\s*\d*\s*(?=<br>|;|$)/gi, '')
-    .replace(/(?:^|<br>|;\s*)\s*No valorado\s*(?=<br>|;|$)/gi, '')
+    x = x
+      .replace(/AUROSANAX_ANT_[A-ZÁÉÍÓÚÑ_\d\.:-]*\s*\|?\|?/gi, '')
+      .replace(/\[object Object\]/gi, '')
+      .replace(/[{}\[\]"]/g, '')
+      .replace(/\b(key|descripcion|numero|número)\s*:\s*/gi, '')
+      .replace(/\b(tiempo)\s*:\s*/gi, '')
+      .replace(/\b(medicamento)\s*:\s*/gi, 'Medicación: ')
+      .replace(/\b(reaccion|reacción)\s*:\s*/gi, 'Reacción: ')
+      .replace(/\bpatologico\s*:\s*/gi, '• ')
+      .replace(/\bquirurgico\s*:\s*/gi, '• ')
+      .replace(/\balergia\s*:\s*/gi, '⚠ ')
+      .replace(/\bbiologico\s*:\s*/gi, '💉 ')
+      .replace(/\bhabito\s*:\s*/gi, '• ')
+      .replace(/\bactividad\s*:\s*/gi, '🏃 ')
+      .replace(/\bfum\s*:\s*/gi, 'FUM: ')
+      .replace(/\bfup\s*:\s*/gi, 'FUP: ')
+      .replace(/\bpap\s*:\s*/gi, 'PAP: ')
+      .replace(/\bgestas?\s*:\s*/gi, 'Gestas: ')
+      .replace(/\bpartos?\s*:\s*/gi, 'Partos: ')
+      .replace(/\bcesareas?\s*:\s*/gi, 'Cesáreas: ')
+      .replace(/\babortos?\s*:\s*/gi, 'Abortos: ')
+      .replace(/\bhijos\s+vivos\s*:\s*/gi, 'Hijos vivos: ')
+      .replace(/\bhijos\s+muertos\s*:\s*/gi, 'Hijos muertos: ')
+      .replace(/\blactancia\s*:\s*/gi, 'Lactancia: ')
+      .replace(/\bectopicos\s*:\s*/gi, 'Ectópicos: ')
+      .replace(/\botros\s*:\s*/gi, 'Otros: ')
+      .replace(/\s+/g, ' ')
+      .replace(/^[:\-–—|,;\s]+|[:\-–—|,;\s]+$/g, '')
+      .trim();
+
+    if(!x) return '';
+    if(/^(años?|meses?|días?|dias?|semanas?|no valorado|sin dato|sin datos|no aplica|n\/a|na)$/i.test(x)) return '';
+    if(/^\d+$/.test(x)) return '';
+    if(/^(Número|Numero)\s*:?\s*\d*$/i.test(x)) return '';
+    return x;
+  };
+
+  raw = raw
+    .replace(/\s*\|\|\s*/g, '<br>')
+    .replace(/\s*\|\s*/g, '<br>')
+    .replace(/\s*;\s*/g, '<br>')
+    .replace(/\s*,\s*/g, '<br>')
+    .replace(/\n+/g, '<br>')
     .replace(/(<br>\s*){2,}/g, '<br>')
     .replace(/^<br>|<br>$/g, '')
     .trim();
-  return raw;
+
+  const vistas = raw.split(/<br>/i)
+    .map(limpiarLinea)
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
+
+  return vistas.join('<br>');
 }
 
 function auroRenderPrevioLineaLimpia(label, value){
@@ -6545,20 +6575,91 @@ function auroInformeBloque(titulo, icono, contenido, claseExtra=''){
 }
 
 function auroInformeParrafo(texto){
-  const t = String(texto || '').trim();
+  let t = String(texto || '').trim();
   if(!t) return '';
+  if(typeof auroLimpiarTextoPrevioClinico === 'function'){
+    t = auroLimpiarTextoPrevioClinico(t).replace(/<br\s*\/?>/gi, '\n');
+  }
+  if(!t.trim()) return '';
   return `<div class="auro-clinical-text">${auroInformeEscape(t).replace(/\n/g,'<br>')}</div>`;
 }
 
 function auroInformeChipsDesdeTexto(texto, tipo='normal'){
-  const t = String(texto || '').trim();
+  let t = String(texto || '').trim();
   if(!t) return '';
-  const partes = t.split(/\n|;|,/).map(x=>x.trim()).filter(Boolean).slice(0,80);
-  if(!partes.length) return auroInformeParrafo(t);
+
+  if(typeof auroLimpiarTextoPrevioClinico === 'function'){
+    t = auroLimpiarTextoPrevioClinico(t).replace(/<br\s*\/?>/gi, '\n');
+  }
+
+  const partes = t
+    .split(/\n|;|,/)
+    .map(x => String(x || '').trim())
+    .filter(Boolean)
+    .filter(x => !/^(años?|meses?|d[ií]as?|semanas?|no valorado|sin dato|sin datos|no aplica|n\/a|na)$/i.test(x))
+    .filter(x => !/^AUROSANAX_/i.test(x))
+    .filter((x, i, arr) => arr.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i)
+    .slice(0,80);
+
+  if(!partes.length) return '';
   return `<div class="auro-chip-grid ${tipo === 'danger' ? 'danger' : ''}">${partes.map(x=>`<span>${auroInformeEscape(x)}</span>`).join('')}</div>`;
 }
 
 function auroInformeExtraerTabla(selector, opciones={}){
+  const tabla = document.querySelector(selector);
+  if(!tabla) return '';
+  const filas = Array.from(tabla.querySelectorAll('tbody tr, tr')).filter(tr => tr.querySelector('td'));
+  const items = [];
+
+  const esValorVacio = (v) => {
+    const x = String(v || '').trim();
+    if(!x) return true;
+    return /^(años?|meses?|d[ií]as?|semanas?|seleccione|no valorado|sin dato|sin datos|no aplica|n\/a|na|sí|si)$/i.test(x);
+  };
+
+  filas.forEach(tr => {
+    const celdas = Array.from(tr.querySelectorAll('td'));
+    if(!celdas.length) return;
+    const nombre = (celdas[0]?.innerText || '').trim();
+    const checked = !!tr.querySelector('input[type="checkbox"]:checked');
+    const radios = Array.from(tr.querySelectorAll('input[type="radio"]:checked'))
+      .map(r => r.value || r.parentElement?.innerText || '')
+      .map(x => String(x).trim())
+      .filter(x => !esValorVacio(x));
+
+    if(opciones.soloMarcados && !checked && !radios.length) return;
+
+    const valoresTexto = Array.from(tr.querySelectorAll('input, select, textarea'))
+      .filter(el => {
+        if(el.type === 'checkbox') return false;
+        if(el.type === 'radio') return false;
+        const value = el.tagName === 'SELECT' ? (el.options[el.selectedIndex]?.text || el.value || '') : (el.value || '');
+        return !esValorVacio(value);
+      })
+      .map(el => el.tagName === 'SELECT' ? (el.options[el.selectedIndex]?.text || el.value || '') : (el.value || ''))
+      .map(x => String(x).trim())
+      .filter(Boolean);
+
+    const tieneDato = checked || radios.length || valoresTexto.length;
+    if(!tieneDato && !opciones.incluirSinMarcar) return;
+
+    const detallePartes = [...radios, ...valoresTexto]
+      .map(x => String(x || '').trim())
+      .filter(x => !esValorVacio(x));
+
+    const detalle = detallePartes.join(' · ');
+    const titulo = nombre || celdas.map(td => (td.innerText || '').trim()).filter(Boolean).join(' ') || 'Registro';
+
+    items.push(`
+      <div class="auro-list-item">
+        <strong>${auroInformeEscape(titulo)}</strong>
+        ${detalle ? `<small>${auroInformeEscape(detalle)}</small>` : ''}
+      </div>`);
+  });
+
+  if(!items.length) return '';
+  return `<div class="auro-list-premium">${items.join('')}</div>`;
+}){
   const tabla = document.querySelector(selector);
   if(!tabla) return '';
   const filas = Array.from(tabla.querySelectorAll('tbody tr, tr')).filter(tr => tr.querySelector('td'));
@@ -6661,7 +6762,8 @@ function imprimirHistoriaClinica(){
     ${auroInformeBloque('Enfermedad actual', '02', auroInformeParrafo(auroInformeValue('hcEnfermedadActual')))}
   `;
 
-  const antPersonales = auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesPersonales')) + auroInformeExtraerTabla('.antecedentes-table', {soloMarcados:true});
+  const antPersonalesTabla = auroInformeExtraerTabla('.antecedentes-table', {soloMarcados:true});
+  const antPersonales = antPersonalesTabla || auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesPersonales'));
   const antQuirurgicos = auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesQuirurgicos'));
   const alergias = auroInformeChipsDesdeTexto(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'danger');
   const familiares = auroInformeParrafo(auroInformeValue('hcAntecedentesFamiliares'));
