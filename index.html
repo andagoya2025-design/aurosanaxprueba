@@ -2430,11 +2430,6 @@ function renderModulePatientCards(){
     }
     card.classList.remove('empty');
     const edad = paciente.edad || calcularEdadDesdeFecha(paciente.fecha_nacimiento) || '—';
-    const historia = auroObtenerHistoriaActivaPaciente(paciente.id_paciente || activePatientId || '');
-    const historiaId = historia?.id_historia || historia?.id || '';
-    const accionHistoria = (modulo === 'Recetas' && historiaId)
-      ? `editarHistoriaClinicaModal('${historiaId}')`
-      : `abrirHistoriaPaciente('${paciente.id_paciente || ''}')`;
     card.innerHTML = `
       <div>
         <div class="module-patient-title"><i class="bi bi-person-check me-1"></i> ${modulo} de ${paciente.nombre || 'Paciente'}</div>
@@ -2443,11 +2438,10 @@ function renderModulePatientCards(){
           <span>Edad: ${edad}</span>
           <span>WhatsApp: ${paciente.telefono || '—'}</span>
           <span>ID: ${paciente.id_paciente || '—'}</span>
-          ${historiaId ? `<span>Historia: ${historiaId}</span>` : ''}
         </div>
       </div>
       <div class="module-patient-actions">
-        <button class="btn-action primary" onclick="${accionHistoria}"><i class="bi bi-file-medical me-1"></i> Ver historia</button>
+        <button class="btn-action primary" onclick="abrirHistoriaPaciente('${paciente.id_paciente || ''}')"><i class="bi bi-file-medical me-1"></i> Ver historia</button>
         <button class="btn-action success" onclick="abrirWhatsAppPaciente('${paciente.id_paciente || ''}')"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
       </div>`;
   });
@@ -2915,144 +2909,6 @@ function limpiarObjetoParaSheets(obj){
 }
 
 
-
-/* ==========================================================
-   AUROSANAX - Motor clínico único de presentación limpia
-   ========================================================== */
-function auroEsValorClinicoUtil(valor){
-  if(valor === null || valor === undefined) return false;
-  if(typeof valor === 'boolean') return valor === true;
-  if(typeof valor === 'number') return true;
-  if(Array.isArray(valor)) return valor.some(auroEsValorClinicoUtil);
-  if(typeof valor === 'object') return Object.values(valor).some(auroEsValorClinicoUtil);
-  const t = String(valor).trim();
-  if(!t) return false;
-  if(/^no valorad[oa]$/i.test(t)) return false;
-  if(/^sin valorar$/i.test(t)) return false;
-  if(/^n\/?v$/i.test(t)) return false;
-  if(/^no aplica$/i.test(t)) return false;
-  if(/^object Object$/i.test(t)) return false;
-  if(/^\[object Object\]$/i.test(t)) return false;
-  if(/^AUROSANAX_/i.test(t) && t.indexOf('{') === -1) return false;
-  return true;
-}
-
-function auroEtiquetaClinica(key){
-  const mapa = {
-    key:'Registro', nombre:'Nombre', descripcion:'Descripción', biologico:'Biológico', vacuna:'Vacuna',
-    tiempo:'Tiempo', fecha:'Fecha', fecha_aplicacion:'Fecha aplicación', anio:'Año', año:'Año',
-    medicamento:'Medicamento', medicacion:'Medicación', tratamiento:'Tratamiento', reaccion:'Reacción',
-    detalle:'Detalle', observacion:'Observación', observaciones:'Observaciones', valor:'Valor', resultado:'Resultado',
-    no_aplica:'No aplica', aplicada:'Aplicada', programada:'Fecha programada', administracion:'Fecha administración',
-    presento:'Presentó', clasificacion:'Clasificación', hospitalizacion:'Hospitalización', vacunado:'Vacunado',
-    vacuna_tipo:'Tipo de vacuna', dosis:'Dosis', actual:'Actual', abstinencia:'Abstinencia', habito:'Hábito',
-    actividad:'Actividad', distancia_km:'Distancia', frecuencia_dia:'Frecuencia', tiempo_horas:'Tiempo',
-    agua_diaria_litros:'Agua diaria', comidas_dia:'Comidas al día', frutas_verduras:'Frutas/verduras',
-    comida_rapida:'Comida rápida', azucar:'Azúcar', sal:'Sal', suplementos:'Suplementos',
-    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa',
-    planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal',
-    infecciones_vulvovaginales:'Infecciones vulvovaginales', ets:'ETS', mamografia:'Mamografía',
-    eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
-  };
-  return mapa[key] || String(key || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function auroTextoClinicoValor(valor){
-  if(!auroEsValorClinicoUtil(valor)) return '';
-  if(typeof valor === 'boolean') return valor ? 'Sí' : '';
-  if(typeof valor === 'number') return String(valor);
-  if(Array.isArray(valor)){
-    return valor.map(auroTextoClinicoValor).filter(Boolean).join('; ');
-  }
-  if(typeof valor === 'object'){
-    const nombre = valor.nombre || valor.descripcion || valor.biologico || valor.habito || valor.actividad || valor.key || '';
-    const partes = [];
-    if(auroEsValorClinicoUtil(nombre)) partes.push(String(nombre));
-    Object.keys(valor).forEach(k => {
-      if(['key','nombre','descripcion','biologico','habito','actividad'].includes(k)) return;
-      const v = valor[k];
-      if(!auroEsValorClinicoUtil(v)) return;
-      const txt = auroTextoClinicoValor(v);
-      if(txt) partes.push(auroEtiquetaClinica(k) + ': ' + txt);
-    });
-    return partes.filter(Boolean).join(' | ');
-  }
-  let t = String(valor || '').trim();
-  const obj = auroExtraerObjetoClinico(t);
-  if(obj) return auroTextoClinicoValor(obj);
-  t = t
-    .replace(/AUROSANAX_[A-Z0-9_]+(::)?/gi,'')
-    .replace(/\[object Object\]/gi,'')
-    .replace(/object Object/gi,'')
-    .replace(/#\s*/g,'')
-    .replace(/\s*\|\|\s*/g,'; ')
-    .replace(/\s*\|\s*/g,' | ')
-    .replace(/\s*;\s*/g,'; ')
-    .replace(/\s{2,}/g,' ')
-    .trim();
-  return auroEsValorClinicoUtil(t) ? t : '';
-}
-
-function auroExtraerObjetoClinico(valor){
-  const raw = String(valor || '').trim();
-  const ini = raw.indexOf('{');
-  const fin = raw.lastIndexOf('}');
-  if(ini === -1 || fin === -1 || fin <= ini) return null;
-  try{ return JSON.parse(raw.substring(ini, fin + 1)); }catch(e){ return null; }
-}
-
-function auroLineasClinicas(valor){
-  const texto = auroTextoClinicoValor(valor);
-  if(!texto) return [];
-  return texto.split(/\n|\s*\|\|\s*|\s*;\s*/g).map(x => x.trim()).filter(auroEsValorClinicoUtil);
-}
-
-function auroRenderClinicoLinea(label, value){
-  const lineas = auroLineasClinicas(value);
-  if(!lineas.length) return '';
-  return `
-    <div class="auro-previos-line">
-      <span>${auroEscapeHtml(label)}</span>
-      <p>${lineas.map(x => auroEscapeHtml(x)).join('<br>')}</p>
-    </div>
-  `;
-}
-
-function auroRenderClinicoChips(titulo, items){
-  const lista = (items || []).map(auroTextoClinicoValor).filter(auroEsValorClinicoUtil);
-  if(!lista.length) return '';
-  return `
-    <div class="auro-previos-line auro-previos-compact">
-      <span>${auroEscapeHtml(titulo)}</span>
-      <div class="auro-previos-chip-grid">
-        ${lista.map(item => `<div class="auro-previos-chip">${auroEscapeHtml(item)}</div>`).join('')}
-      </div>
-    </div>
-  `;
-}
-
-function auroObtenerHistoriaActivaPaciente(idPaciente){
-  const id = String(idPaciente || activePatientId || document.getElementById('hcPacienteSelect')?.value || '');
-  if(editingHistoryId){
-    const edit = historiasClinicas.find((x, idx) => String(x.id_historia || x.id || idx) === String(editingHistoryId));
-    if(edit) return edit;
-  }
-  return auroHistoriasPacienteOrdenadas(id)[0] || null;
-}
-
-function auroObtenerIdHistoriaActualParaReceta(){
-  const h = auroObtenerHistoriaActivaPaciente();
-  return String(editingHistoryId || h?.id_historia || h?.id || '');
-}
-
-function abrirHistoriaDesdeReceta(idHistoria, idPaciente){
-  if(idHistoria){
-    editarHistoriaClinicaModal(idHistoria);
-    return;
-  }
-  abrirHistoriaPaciente(idPaciente || activePatientId || document.getElementById('hcPacienteSelect')?.value || '');
-}
-
 /* ==========================================================
    AUROSANAX v2.2 - Compatibilidad de antecedentes previos
    Objetivo:
@@ -3173,25 +3029,88 @@ function auroPrevioUnicos(lista){
   });
 }
 
+function auroPrevioHumanizarClave(clave){
+  const mapa = {
+    key:'', numero:'', no_aplica:'No aplica', aplicado:'Aplicado', aplicada:'Aplicada',
+    fecha:'Fecha', tiempo:'Tiempo', detalle:'Detalle', resultado:'Resultado', observacion:'Observación', observaciones:'Observaciones',
+    medicamento:'Medicamento', medicacion:'Medicación', tratamiento:'Tratamiento', biologico:'Biológico', vacuna:'Vacuna', nombre_comercial:'Nombre comercial',
+    programada:'Fecha programada', administracion:'Fecha administración', dosis:'Dosis',
+    presento:'Presentó', clasificacion:'Clasificación', hospitalizacion:'Hospitalización', vacunado:'Vacunado', vacuna_tipo:'Tipo de vacuna',
+    anio_referencia:'Año de referencia', tiempo_hospitalizado:'Tiempo hospitalizado', observacion_presento:'Observación', detalle_clasificacion:'Detalle clasificación',
+    habito:'Hábito', actual:'Ex consumidor', abstinencia:'Tiempo de abstinencia',
+    actividad:'Actividad', distancia_km:'Distancia', frecuencia_dia:'Frecuencia', tiempo_horas:'Tiempo',
+    agua_diaria_litros:'Agua diaria', comidas_dia:'Comidas al día', frutas_verduras:'Frutas / verduras', comida_rapida:'Comida rápida', azucar:'Azúcar', sal:'Sal', suplementos:'Suplementos',
+    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa', planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales', ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
+  };
+  if(mapa[clave] !== undefined) return mapa[clave];
+  return String(clave || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function auroPrevioEsValorUtil(valor){
+  if(valor === null || valor === undefined) return false;
+  if(typeof valor === 'boolean') return valor === true;
+  const t = String(valor).trim();
+  if(!t) return false;
+  return !/^(no valorado|no aplica|n\/a|na|undefined|null|\[object object\])$/i.test(t);
+}
+
 function auroPrevioTextoItemBasico(item){
-  if(!item || typeof item !== 'object') return '';
+  if(!auroPrevioEsValorUtil(item)) return '';
+  if(typeof item !== 'object') return String(item).trim();
 
-  const nombre = item.key || item.nombre || item.descripcion || item.biologico || item.vacuna || '';
+  const titulo = item.descripcion || item.biologico || item.vacuna || item.habito || item.actividad || item.nombre || item.key || '';
   const partes = [];
+  if(auroPrevioEsValorUtil(titulo)) partes.push(String(titulo));
 
-  if(nombre) partes.push(String(nombre));
+  Object.keys(item).forEach(k => {
+    if(['key','descripcion','biologico','vacuna','habito','actividad','nombre'].includes(k)) return;
+    const v = item[k];
+    if(!auroPrevioEsValorUtil(v)) return;
 
-  const tiempo = item.tiempo || item.fecha || item.fecha_aplicacion || item.anio || item.año || '';
-  const medicamento = item.medicamento || item.medicacion || item.tratamiento || '';
-  const reaccion = item.reaccion || item.detalle || item.observacion || item.observaciones || '';
-  const valor = item.valor || item.resultado || '';
+    if(Array.isArray(v)){
+      const sub = v.map(auroPrevioTextoItemBasico).filter(Boolean);
+      if(sub.length){
+        const etiqueta = auroPrevioHumanizarClave(k);
+        if(etiqueta) partes.push(etiqueta + ': ' + sub.join('; '));
+      }
+      return;
+    }
 
-  if(tiempo) partes.push('Tiempo/fecha: ' + tiempo);
-  if(medicamento) partes.push('Medicación: ' + medicamento);
-  if(reaccion) partes.push('Detalle: ' + reaccion);
-  if(valor && !nombre) partes.push(String(valor));
+    if(typeof v === 'object'){
+      const sub = auroPrevioTextoItemBasico(v);
+      if(sub){
+        const etiqueta = auroPrevioHumanizarClave(k);
+        partes.push((etiqueta ? etiqueta + ': ' : '') + sub);
+      }
+      return;
+    }
 
-  return partes.join(' | ');
+    const etiqueta = auroPrevioHumanizarClave(k);
+    if(etiqueta) partes.push(etiqueta + ': ' + v);
+    else if(String(v).trim()) partes.push(String(v).trim());
+  });
+
+  return partes.filter(Boolean).join(' | ');
+}
+
+function auroPrevioResumenObjetoGenerico(obj, prefijo){
+  if(!obj || typeof obj !== 'object') return '';
+  const partes = [];
+  Object.keys(obj).forEach(k => {
+    const v = obj[k];
+    if(!auroPrevioEsValorUtil(v)) return;
+    const etiqueta = auroPrevioHumanizarClave(k);
+    if(Array.isArray(v)){
+      const sub = v.map(auroPrevioTextoItemBasico).filter(Boolean);
+      if(sub.length) partes.push((etiqueta ? etiqueta + ': ' : '') + sub.join('; '));
+    }else if(typeof v === 'object'){
+      const sub = auroPrevioTextoItemBasico(v);
+      if(sub) partes.push((etiqueta ? etiqueta + ': ' : '') + sub);
+    }else{
+      partes.push((etiqueta ? etiqueta + ': ' : '') + v);
+    }
+  });
+  return partes.length ? (prefijo ? prefijo + ': ' : '') + partes.join('; ') : '';
 }
 
 function auroPrevioResumenJsonAntecedentes(obj){
@@ -3208,42 +3127,85 @@ function auroPrevioResumenJsonAntecedentes(obj){
   const alergias = Array.isArray(obj.alergias) ? obj.alergias.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
   if(alergias.length) bloques.push('Alergias: ' + auroPrevioUnicos(alergias).join('; '));
 
-  const gineco = [];
-  ['fum','menarquia','ciclos','gesta','partos','cesareas','abortos','hijos_vivos','pap','ivsa','anticoncepcion','otros'].forEach(k => {
-    if(obj[k]) gineco.push(k.replace(/_/g,' ') + ': ' + obj[k]);
-  });
-  if(gineco.length) bloques.push('Gineco-obstétricos: ' + auroPrevioUnicos(gineco).join('; '));
-
-  const covid = obj.covid || obj.COVID || null;
-  if(covid && typeof covid === 'object'){
-    const c = [];
-    ['presento','fecha','clasificacion','hospitalizacion','vacunado','dosis'].forEach(k => {
-      if(covid[k]) c.push(k + ': ' + covid[k]);
-    });
-    if(c.length) bloques.push('COVID-19: ' + c.join('; '));
-  }
+  const covid = auroPrevioResumenObjetoGenerico(obj.covid || obj.COVID, 'COVID-19');
+  if(covid) bloques.push(covid);
 
   const vacunas = Array.isArray(obj.vacunas) ? obj.vacunas.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(vacunas.length){
-    const principales = auroPrevioUnicos(vacunas).slice(0, 6);
-    bloques.push('Vacunas: ' + principales.join('; ') + (vacunas.length > 6 ? '; otras registradas' : ''));
-  }
+  if(vacunas.length) bloques.push('Vacunas: ' + auroPrevioUnicos(vacunas).join('; '));
 
   const habitos = Array.isArray(obj.habitos) ? obj.habitos.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(habitos.length) bloques.push('Hábitos: información estructurada registrada.');
+  if(habitos.length) bloques.push('Hábitos: ' + auroPrevioUnicos(habitos).join('; '));
 
-  if(obj.estiloVida || obj.estilo_vida) bloques.push('Estilo de vida: información estructurada registrada.');
-  if(obj.alimentacion) bloques.push('Alimentación: información estructurada registrada.');
+  const estilo = Array.isArray(obj.estilo_vida || obj.estiloVida) ? (obj.estilo_vida || obj.estiloVida).map(auroPrevioTextoItemBasico).filter(Boolean) : [];
+  if(estilo.length) bloques.push('Estilo de vida: ' + auroPrevioUnicos(estilo).join('; '));
+
+  const alimentacion = auroPrevioResumenObjetoGenerico(obj.alimentacion, 'Alimentación');
+  if(alimentacion) bloques.push(alimentacion);
+
+  const obstetricos = Array.isArray(obj.obstetricos) ? obj.obstetricos.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
+  if(obstetricos.length) bloques.push('Obstétricos: ' + auroPrevioUnicos(obstetricos).join('; '));
+
+  const ginecologicos = auroPrevioResumenObjetoGenerico(obj.ginecologicos, 'Ginecológicos');
+  if(ginecologicos) bloques.push(ginecologicos);
+
+  const ginecoDirecto = [];
+  ['fum','menarquia','ciclos','gesta','partos','cesareas','abortos','hijos_vivos','pap','ivsa','anticoncepcion','otros'].forEach(k => {
+    if(auroPrevioEsValorUtil(obj[k])) ginecoDirecto.push(auroPrevioHumanizarClave(k) + ': ' + obj[k]);
+  });
+  if(ginecoDirecto.length) bloques.push('Gineco-obstétricos: ' + auroPrevioUnicos(ginecoDirecto).join('; '));
 
   return bloques.join(' || ');
 }
 
 function auroLimpiarTextoPrevioClinico(valor){
-  return auroTextoClinicoValor(valor);
+  let raw = String(valor || '').trim();
+  if(!raw) return '';
+
+  const obj = auroPrevioTryParseJsonInterno(raw);
+  if(obj){
+    const resumen = auroPrevioResumenJsonAntecedentes(obj);
+    if(resumen) raw = resumen;
+  }
+
+  raw = raw
+    .replace(/AUROSANAX_ANT_PERSONALES\s*v?[\d.]*\s*\|\|?/gi, '')
+    .replace(/AUROSANAX_ANT_GINECO_OBS_V?\d*::?/gi, '')
+    .replace(/AUROSANAX_ANT_GINECO_OBSTETRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
+    .replace(/AUROSANAX_ANT_GINECO_OBSTÉTRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
+    .replace(/"key"\s*:\s*"([^"]*)"/gi, '$1')
+    .replace(/"descripcion"\s*:\s*"([^"]*)"/gi, '$1')
+    .replace(/"tiempo"\s*:\s*"([^"]*)"/gi, 'Tiempo: $1')
+    .replace(/"medicamento"\s*:\s*"([^"]*)"/gi, 'Medicación: $1')
+    .replace(/"reaccion"\s*:\s*"([^"]*)"/gi, 'Reacción: $1')
+    .replace(/"numero"\s*:\s*"[^"]*"/gi, '')
+    .replace(/"[^"]*"\s*:\s*(\{|\[)/g, '')
+    .replace(/[{}\[\]"]/g, '')
+    .replace(/\s*\|\|\s*/g, '<br>')
+    .replace(/\s*;\s*/g, '; ')
+    .replace(/\s*,\s*,+/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  raw = raw.replace(/(<br>\s*){2,}/g, '<br>')
+    .replace(/\[object Object\]/gi, '')
+    .replace(/(?:^|<br>|;\s*)\s*(Número|Numero)\s*:?\s*\d*\s*(?=<br>|;|$)/gi, '')
+    .replace(/(?:^|<br>|;\s*)\s*No valorado\s*(?=<br>|;|$)/gi, '')
+    .replace(/(<br>\s*){2,}/g, '<br>')
+    .replace(/^<br>|<br>$/g, '')
+    .trim();
+  return raw;
 }
 
 function auroRenderPrevioLineaLimpia(label, value){
-  return auroRenderClinicoLinea(label, value);
+  const limpio = auroLimpiarTextoPrevioClinico(value);
+  if(!limpio) return '';
+
+  return `
+    <div class="auro-previos-line">
+      <span>${auroEscapeHtml(label)}</span>
+      <p>${limpio.split('<br>').map(x => auroEscapeHtml(x)).join('<br>')}</p>
+    </div>
+  `;
 }
 
 function auroMostrarAntecedentesPrevios(h, modo){
@@ -5685,9 +5647,9 @@ function auroMostrarExamenFisicoPrevio(h){
     h.frecuencia_cardiaca ? 'FC: ' + h.frecuencia_cardiaca : '',
     h.temperatura ? 'Temperatura: ' + h.temperatura + ' °C' : '',
     h.saturacion ? 'SatO₂: ' + h.saturacion + ' %' : ''
-  ].filter(auroEsValorClinicoUtil);
+  ].filter(Boolean);
 
-  const tokens = auroPartirExamenFisicoPrevio(h.examen_fisico || '').filter(t => t && auroEsValorClinicoUtil(t.valor));
+  const tokens = auroPartirExamenFisicoPrevio(h.examen_fisico || '');
   const regionales = [
     'Piel y faneras','Cabeza','Ojos','Oídos','Nariz','Boca','Orofaringe','Cuello',
     'Tórax','Axilas-mamas','Abdomen','Columna vertebral','Ingle-periné',
@@ -5701,38 +5663,64 @@ function auroMostrarExamenFisicoPrevio(h){
 
   tokens.forEach(t => {
     const etiqueta = String(t.etiqueta || '').trim();
-    const valor = auroTextoClinicoValor(t.valor);
-    if(!valor) return;
-    const item = { etiqueta, valor };
     if(regionales.some(r => r.toLowerCase() === etiqueta.toLowerCase())){
-      tokensRegional.push(item);
+      tokensRegional.push(t);
     }else if(/sentidos|ocular|respiratorio|cardiovascular|digestivo|urinario|músculo|musculo|endocrino|hemo|linfático|linfatico/i.test(etiqueta)){
-      tokensSistemas.push(item);
+      tokensSistemas.push(t);
     }else{
-      tokensGenerales.push(item);
+      tokensGenerales.push(t);
     }
   });
+
+  const regionalHallazgos = tokensRegional.filter(t => !auroEsNoValoradoExamen(t.valor));
+  const regionalNoValorados = tokensRegional.filter(t => auroEsNoValoradoExamen(t.valor));
+
+  const sistemasHallazgos = tokensSistemas.filter(t => !auroEsNoValoradoExamen(t.valor));
+  const sistemasNoValorados = tokensSistemas.filter(t => auroEsNoValoradoExamen(t.valor));
+
+  const generalesLimpios = tokensGenerales.filter(t => !auroEsNoValoradoExamen(t.valor));
+  const generalesNoValorados = tokensGenerales.filter(t => auroEsNoValoradoExamen(t.valor));
 
   const diagnosticos = [
     h.diagnostico_cie10 ? 'Principal CIE-10: ' + h.diagnostico_cie10 : '',
     h.diagnostico_principal ? 'Dx principal: ' + h.diagnostico_principal : '',
     h.cie10_secundario ? 'Secundario CIE-10: ' + h.cie10_secundario : '',
     h.diagnostico_secundario ? 'Dx secundario: ' + h.diagnostico_secundario : ''
-  ].filter(auroEsValorClinicoUtil);
+  ].filter(Boolean);
 
   let html = '';
-  html += auroRenderClinicoChips('Signos vitales registrados', signos);
-  html += auroRenderPrevioTabla('Examen general / medidas complementarias', tokensGenerales);
-  html += auroRenderPrevioTabla('Examen físico por sistemas', tokensSistemas);
-  html += auroRenderPrevioTabla('Examen físico regional', tokensRegional);
-  html += auroRenderClinicoChips('Diagnóstico CIE-10 guardado', diagnosticos);
+
+  html += auroRenderPrevioChips('Signos vitales registrados', signos);
+
+  if(generalesLimpios.length){
+    html += auroRenderPrevioTabla('Examen general / medidas complementarias', generalesLimpios);
+  }else if(generalesNoValorados.length){
+    html += auroRenderPrevioLinea('Examen general / medidas complementarias', 'Registrado como no valorado.');
+  }
+
+  if(sistemasHallazgos.length){
+    html += auroRenderPrevioTabla('Examen físico por sistemas', sistemasHallazgos);
+  }else if(sistemasNoValorados.length){
+    html += auroRenderPrevioLinea('Examen físico por sistemas', 'Sistemas registrados como no valorados.');
+  }
+
+  if(regionalHallazgos.length){
+    html += auroRenderPrevioTabla('Examen físico regional', regionalHallazgos);
+    if(regionalNoValorados.length){
+      html += auroRenderPrevioLinea('Regiones no valoradas', regionalNoValorados.length + ' región(es) registradas como no valoradas.');
+    }
+  }else if(regionalNoValorados.length){
+    html += auroRenderPrevioLinea('Examen físico regional', 'Regiones registradas como no valoradas.');
+  }
+
+  html += auroRenderPrevioChips('Diagnóstico CIE-10 guardado', diagnosticos);
 
   if(!html){
-    html = auroRenderClinicoLinea('Examen físico', h.examen_fisico || '');
+    html = auroRenderPrevioLinea('Examen físico', auroNormalizarTextoExamenPrevio(h.examen_fisico || ''));
   }
 
   content.innerHTML = html;
-  box.style.display = html ? 'block' : 'none';
+  box.style.display = 'block';
 }
 
 
@@ -6205,22 +6193,14 @@ function auroRenderPlanPrevio(h, modo){
     return;
   }
 
-  const bloques = [
-    ['Plan terapéutico', h.plan_tratamiento],
-    ['Evaluaciones', h.evaluaciones_plan],
-    ['Indicaciones para paciente', h.indicaciones_paciente],
-    ['Próximo control', h.proximo_control],
-    ['Estado del plan terapéutico', h.plan_terapeutico_estado],
-    ['Fecha inicio plan', h.fecha_inicio_plan],
-    ['Fecha fin estimada plan', h.fecha_fin_estimada_plan],
-    ['Estado historia', h.estado]
-  ].map(([label, value]) => auroRenderClinicoLinea(label, value)).filter(Boolean).join('');
-
-  if(!bloques){
-    box.style.display = 'none';
-    box.innerHTML = '';
-    return;
-  }
+  const plan = auroPlanValorSeguro(h.plan_tratamiento);
+  const evaluaciones = auroPlanValorSeguro(h.evaluaciones_plan);
+  const indicaciones = auroPlanValorSeguro(h.indicaciones_paciente);
+  const control = auroPlanValorSeguro(h.proximo_control);
+  const estadoPlan = auroPlanValorSeguro(h.plan_terapeutico_estado);
+  const inicioPlan = auroPlanValorSeguro(h.fecha_inicio_plan);
+  const finPlan = auroPlanValorSeguro(h.fecha_fin_estimada_plan);
+  const estadoHistoria = auroPlanValorSeguro(h.estado);
 
   box.style.display = '';
   box.innerHTML = `
@@ -6231,7 +6211,16 @@ function auroRenderPlanPrevio(h, modo){
       </div>
       <button type="button" class="btn-soft auro-previos-hide" onclick="this.closest('.auro-previos-box').style.display='none'">Ocultar</button>
     </div>
-    <div class="auro-previos-content">${bloques}</div>
+    <div class="auro-previos-content">
+      ${plan ? `<div class="auro-previos-line"><span>Plan terapéutico</span><p>${auroPlanEscape(plan)}</p></div>` : ''}
+      ${evaluaciones ? `<div class="auro-previos-line"><span>Evaluaciones</span>${auroPlanRenderLista(evaluaciones)}</div>` : ''}
+      ${indicaciones ? `<div class="auro-previos-line"><span>Indicaciones para paciente</span><p>${auroPlanEscape(indicaciones)}</p></div>` : ''}
+      ${control ? `<div class="auro-previos-line"><span>Próximo control</span><p>${auroPlanEscape(control)}</p></div>` : ''}
+      ${estadoPlan ? `<div class="auro-previos-line"><span>Estado del plan terapéutico</span><p>${auroPlanEscape(estadoPlan)}</p></div>` : ''}
+      ${inicioPlan ? `<div class="auro-previos-line"><span>Fecha inicio plan</span><p>${auroPlanEscape(inicioPlan)}</p></div>` : ''}
+      ${finPlan ? `<div class="auro-previos-line"><span>Fecha fin estimada plan</span><p>${auroPlanEscape(finPlan)}</p></div>` : ''}
+      ${estadoHistoria ? `<div class="auro-previos-line"><span>Estado historia</span><p>${auroPlanEscape(estadoHistoria)}</p></div>` : ''}
+    </div>
   `;
 }
 
@@ -6398,7 +6387,7 @@ async function guardarHistoriaClinicaERP(){
     getValueIfExists('hcSintomasAlarma') ? 'Síntomas/observaciones: ' + getValueIfExists('hcSintomasAlarma') : '',
     getValueIfExists('hcAnalisisClinico') ? 'Análisis clínico: ' + getValueIfExists('hcAnalisisClinico') : '',
     interconsultaPlan ? 'Interconsulta: ' + interconsultaPlan : '',
-    ''
+    evaluacionesPlan ? 'Evaluaciones: ' + evaluacionesPlan : ''
   ]);
 
   const data = {
@@ -6544,7 +6533,7 @@ async function guardarRecetaERP(){
 
   const data = {
     id_paciente: paciente.id_paciente || activePatientId,
-    id_historia: auroObtenerIdHistoriaActualParaReceta(),
+    id_historia: getValueIfExists('hcIdHistoria') || '',
     id_medico: 'MED-001',
     fecha_receta: getValueIfExists('recFecha') || fechaHoyISO(),
     diagnostico_cie10: getValueIfExists('recCie10') || getValueIfExists('hcCie10Principal'),
@@ -7114,3 +7103,4 @@ document.addEventListener('click',e=>{
 </script>
 </body>
 </html>
+
