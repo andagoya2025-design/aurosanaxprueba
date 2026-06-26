@@ -1754,3 +1754,11 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(auroV21InicializarAyudasAntecedentes, 250);
 });
 
+/* ==========================================================
+   AUROSANAX - PRUEBA DE CONEXIÓN MODULAR
+   Si este mensaje aparece en Console, el index.html está leyendo
+   correctamente antecedentes.js.
+   ========================================================== */
+window.AURO_ANTECEDENTES_JS_ACTIVO = true;
+console.log("✅ antecedentes.js cargado correctamente - prueba AUROSANAX");
+
