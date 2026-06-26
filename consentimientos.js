@@ -1,7 +1,8 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO DE CONSENTIMIENTOS
    Archivo: consentimientos.js
-   Versión: 1.0
+   Versión: 1.1
+   Actualización: Consentimiento ginecológico profesional
 ===================================================== */
 
 window.auroConsentimientos = {
@@ -11,11 +12,11 @@ window.auroConsentimientos = {
         consultaGinecologica: `
             <div class="consentimiento-documento">
 
-                <h2 style="text-align:center;">
+                <h2 style="text-align:center; margin-bottom:4px;">
                     CONSENTIMIENTO INFORMADO
                 </h2>
 
-                <h3 style="text-align:center;">
+                <h3 style="text-align:center; margin-top:0;">
                     CONSULTA GINECOLÓGICA
                 </h3>
 
@@ -25,41 +26,87 @@ window.auroConsentimientos = {
                     Yo, <strong>{{PACIENTE}}</strong>,
                     con documento de identidad N.°
                     <strong>{{CEDULA}}</strong>,
-                    declaro haber recibido información clara,
-                    suficiente y comprensible sobre la consulta
-                    ginecológica que se realizará.
+                    manifiesto que he recibido información clara,
+                    suficiente y comprensible sobre la atención médica
+                    ginecológica que se realizará en el Centro Médico AUROSANAX.
                 </p>
 
-                <p>Comprendo que durante la atención médica podrán efectuarse procedimientos propios de la especialidad.</p>
+                <p>
+                    Comprendo que la consulta podrá incluir, según criterio médico
+                    y previa explicación, procedimientos propios de la especialidad,
+                    tales como:
+                </p>
 
                 <ul>
-                    <li>Anamnesis médica.</li>
+                    <li>Anamnesis médica y revisión de antecedentes.</li>
                     <li>Examen físico general.</li>
-                    <li>Examen ginecológico.</li>
-                    <li>Evaluación mamaria.</li>
-                    <li>Solicitud de exámenes complementarios.</li>
-                    <li>Orientación diagnóstica y terapéutica.</li>
+                    <li>Examen ginecológico, cuando esté indicado.</li>
+                    <li>Evaluación mamaria, cuando corresponda.</li>
+                    <li>Solicitud, revisión e interpretación de exámenes complementarios.</li>
+                    <li>Orientación diagnóstica, terapéutica y preventiva.</li>
                 </ul>
 
-                <p>Otorgo mi consentimiento libre y voluntario para la realización de la presente consulta.</p>
+                <p><strong>Declaro que:</strong></p>
 
-                <br><br><br>
+                <ol>
+                    <li>
+                        He tenido la oportunidad de realizar preguntas, las cuales
+                        han sido respondidas de forma satisfactoria.
+                    </li>
+                    <li>
+                        Comprendo los objetivos, beneficios, limitaciones y posibles
+                        molestias derivadas de la valoración médica.
+                    </li>
+                    <li>
+                        Entiendo que puedo aceptar o rechazar procedimientos no urgentes
+                        y retirar mi consentimiento antes de su realización.
+                    </li>
+                    <li>
+                        Autorizo el registro de mi información clínica en la historia
+                        clínica institucional, bajo estricta confidencialidad y conforme
+                        a la normativa sanitaria vigente.
+                    </li>
+                    <li>
+                        Reconozco que la práctica médica no garantiza resultados
+                        específicos y que las decisiones diagnósticas y terapéuticas
+                        se fundamentan en criterios científicos y clínicos.
+                    </li>
+                </ol>
 
-                <table style="width:100%;">
+                <p>
+                    En forma libre, voluntaria y consciente, otorgo mi consentimiento
+                    para la realización de la presente consulta médica.
+                </p>
+
+                <br><br>
+
+                <table style="width:100%; margin-top:40px;">
                     <tr>
-                        <td style="text-align:center; width:50%;">
-                            ___________________________<br>Firma del Paciente
+                        <td style="text-align:center; width:33%;">
+                            ___________________________<br>
+                            Firma del Paciente
                         </td>
 
-                        <td style="text-align:center; width:50%;">
-                            ___________________________<br>Médico Tratante
+                        <td style="text-align:center; width:33%;">
+                            ___________________________<br>
+                            Firma del Representante Legal<br>
+                            <span style="font-size:12px;">Si aplica</span>
+                        </td>
+
+                        <td style="text-align:center; width:33%;">
+                            ___________________________<br>
+                            Médico Tratante<br>
+                            Dra. Aurora Andagoya Murillo<br>
+                            <span style="font-size:12px;">Ginecología y Obstetricia</span>
                         </td>
                     </tr>
                 </table>
 
                 <br><br>
 
-                <p>Fecha: <strong>{{FECHA}}</strong></p>
+                <p>
+                    <strong>Fecha:</strong> {{FECHA}}
+                </p>
 
             </div>
         `
