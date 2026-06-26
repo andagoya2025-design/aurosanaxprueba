@@ -1643,11 +1643,14 @@
     <section class="screen" id="agenda">
       <div class="cardx p-4">
         <div class="section-head">
-          <div><h4>Agenda médica</h4><p>Citas reales recibidas desde la agenda web AUROSANAX en modo solo lectura.</p></div>
-          <button class="btn-auro" onclick="cargarCitasAgendaWeb()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar agenda</button>
+          <div><h4>Agenda médica</h4><p>Vista médica rápida conectada a Secretaría AUROSANAX.</p></div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn-soft" onclick="abrirSecretaria()"><i class="bi bi-building me-1"></i> Secretaría</button>
+            <button class="btn-auro" onclick="cargarCitasAgendaWeb()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar agenda</button>
+          </div>
         </div>
 
-        <div class="sheet-note mb-3"><i class="bi bi-shield-check me-1"></i> Vista espejo de la agenda web. Este módulo solo lee información: no modifica disponibilidad, no borra citas y no cambia horarios.</div>
+        <div class="sheet-note mb-3"><i class="bi bi-shield-check me-1"></i> Vista médica rápida conectada a Secretaría. La gestión completa de citas, disponibilidad, confirmaciones, anulaciones y horarios se realiza desde el módulo Secretaría.</div>
 
         <div class="row g-2 mb-3">
           <div class="col-md-4"><input id="agendaSearch" class="form-control" placeholder="Buscar por paciente, WhatsApp o servicio" oninput="agendaPage=1; renderAgendaWeb()"></div>
@@ -5474,31 +5477,141 @@ function formatearFechaVisual(fecha){
   return fecha;
 }
 
+
+function abrirSecretaria(){
+  window.location.href = 'secretaria.html?from=erp';
+}
+
+function auroPacienteAgendaPorId(idPaciente){
+  const id = String(idPaciente || '').trim();
+  if(!id || !Array.isArray(patients)) return null;
+  return patients.find(p => String(p.id_paciente || '').trim() === id) || null;
+}
+
+function auroNombrePacienteAgenda(c){
+  const directo = String(
+    c?.paciente ||
+    c?.nombre_paciente ||
+    c?.nombre_completo ||
+    c?.paciente_nombre ||
+    c?.nombre ||
+    ''
+  ).trim();
+
+  if(directo) return directo;
+
+  const p = auroPacienteAgendaPorId(c?.id_paciente);
+  if(p){
+    return String(
+      p.nombre ||
+      ((p.nombres || '') + ' ' + (p.apellidos || '')).trim() ||
+      ''
+    ).trim();
+  }
+
+  return c?.id_paciente || '';
+}
+
+function auroWhatsappPacienteAgenda(c){
+  const directo = String(
+    c?.whatsapp ||
+    c?.telefono ||
+    c?.celular ||
+    c?.telefono_paciente ||
+    c?.whatsapp_paciente ||
+    ''
+  ).trim();
+
+  if(directo) return directo;
+
+  const p = auroPacienteAgendaPorId(c?.id_paciente);
+  return p ? String(p.telefono || p.whatsapp || p.celular || '').trim() : '';
+}
+
+function auroServicioAgenda(c){
+  return String(c?.servicio || c?.tipo_cita || c?.motivo || '').trim();
+}
+
+function auroFechaAgenda(c){
+  return String(c?.fecha_cita || c?.fecha || c?.fecha_deseada || '').substring(0,10);
+}
+
+function auroHoraVisualAgenda(valor){
+  if(valor === null || valor === undefined) return '';
+
+  if(typeof valor === 'number' && isFinite(valor)){
+    const total = Math.round((valor % 1) * 24 * 60);
+    const hh = Math.floor(total / 60) % 24;
+    const mm = total % 60;
+    return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  }
+
+  let txt = String(valor || '').trim();
+  if(!txt) return '';
+
+  const iso = txt.match(/T(\d{2}):(\d{2})/);
+  if(iso) return iso[1] + ':' + iso[2];
+
+  if(/^\d{1}:\d{2}$/.test(txt)) return '0' + txt;
+  if(/^\d{1,2}:\d{2}/.test(txt)){
+    const p = txt.split(':');
+    return String(p[0]).padStart(2,'0') + ':' + String(p[1]).substring(0,2);
+  }
+
+  return txt;
+}
+
+function auroHoraAgenda(c){
+  const inicio = auroHoraVisualAgenda(c?.hora_inicio || c?.hora_deseada || c?.hora || '');
+  const fin = auroHoraVisualAgenda(c?.hora_fin || '');
+  if(inicio && fin) return inicio + ' - ' + fin;
+  return inicio || fin || '';
+}
+
+function auroEstadoAgenda(c){
+  return String(c?.estado_cita || c?.estado || '').trim();
+}
+
+function auroNormalizarCitaSecretariaParaERP(c, index){
+  return {
+    ...c,
+    originalIndex: index,
+    id_cita: c?.id_cita || c?.id || '',
+    nombre: auroNombrePacienteAgenda(c),
+    whatsapp: auroWhatsappPacienteAgenda(c),
+    servicio: auroServicioAgenda(c),
+    fecha_deseada: auroFechaAgenda(c),
+    hora_deseada: auroHoraAgenda(c),
+    estado: auroEstadoAgenda(c),
+    origen: 'Secretaría'
+  };
+}
+
 async function cargarCitasAgendaWeb(){
   const body = document.getElementById('agendaBody');
   if(body){
-    body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Cargando agenda web...</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Cargando citas desde Secretaría...</td></tr>';
   }
 
   try{
-    const res = await fetch(API_URL + '?accion=listarCitasAgendaWeb');
+    const res = await fetch(API_URL + '?accion=listarCitas&t=' + Date.now());
     const data = await res.json();
 
     if(!Array.isArray(data)){
-      throw new Error(data.message || 'La agenda no devolvió una lista válida.');
+      throw new Error(data.message || 'Secretaría no devolvió una lista válida de citas.');
     }
 
-    citasAgendaWeb = data;
+    citasAgendaWeb = data.map((c, index) => auroNormalizarCitaSecretariaParaERP(c, index));
     renderAgendaWeb();
 
   }catch(error){
     console.error(error);
     if(body){
-      body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">No se pudo cargar la agenda web.</td></tr>';
+      body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">No se pudo cargar la agenda desde Secretaría.</td></tr>';
     }
     const mobile = document.getElementById('agendaMobile');
     if(mobile){
-      mobile.innerHTML = '<div class="mobile-card text-danger">No se pudo cargar la agenda web.</div>';
+      mobile.innerHTML = '<div class="mobile-card text-danger">No se pudo cargar la agenda desde Secretaría.</div>';
     }
   }
 }
