@@ -4194,12 +4194,33 @@ function auroMostrarExamenFisicoPrevio(h){
     h.saturacion ? 'SatO₂: ' + h.saturacion + ' %' : ''
   ].filter(Boolean);
 
-  const tokens = auroPartirExamenFisicoPrevio(h.examen_fisico || '');
+  let tokens = auroPartirExamenFisicoPrevio(h.examen_fisico || '');
+
+  /* AUROSANAX FIX DEFINITIVO v3.4
+     Alcance quirúrgico: solo vista previa de examen físico.
+     No toca pacientes, agenda, antecedentes, plan, recetas, consentimientos,
+     guardarHistoriaClinicaERP, guardarRecetaERP, Google Sheets ni Apps Script.
+     Objetivo: impedir duplicados y evitar que "No valorado" o registros vacíos se impriman.
+  */
+  const auroExamenTokensVistos = new Set();
+  tokens = tokens.filter(t => {
+    const etiqueta = String(t?.etiqueta || '').trim();
+    const valor = String(t?.valor || '').trim();
+
+    if(!etiqueta || !valor) return false;
+    if(typeof auroEsNoValoradoExamen === 'function' && auroEsNoValoradoExamen(valor)) return false;
+
+    const clave = `${etiqueta.toLowerCase()}|${valor.toLowerCase()}`;
+    if(auroExamenTokensVistos.has(clave)) return false;
+    auroExamenTokensVistos.add(clave);
+    return true;
+  });
+
   const regionales = [
     'Piel y faneras','Cabeza','Ojos','Oídos','Nariz','Boca','Orofaringe','Cuello',
     'Tórax','Axilas-mamas','Abdomen','Columna vertebral','Ingle-periné',
     'Genitales','Ano recto','Canal vaginal','Miembros superiores','Miembros inferiores',
-    'Neurológico','Otros hallazgos'
+    'Neurológico'
   ];
 
   const tokensRegional = [];
