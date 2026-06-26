@@ -2179,9 +2179,54 @@
     <section class="screen" id="procedimientos"><div class="cardx p-4"><h4 class="fw-bold">Procedimientos</h4><p class="text-muted">Láser CO₂, HIFU, PRP, escleroterapia, toxina botulínica, ácido hialurónico y otros.</p>
         <div class="module-patient-card" data-module-patient="Procedimientos"></div>
 </div></section>
-    <section class="screen" id="consentimientos"><div class="cardx p-4"><h4 class="fw-bold">Consentimientos informados</h4><p class="text-muted">Plantillas, firma y PDF por procedimiento.</p>
+    <section class="screen" id="consentimientos">
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div>
+            <h4 class="fw-bold">Consentimientos informados</h4>
+            <p class="text-muted">Plantillas, firma y PDF por procedimiento.</p>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn-soft" onclick="renderConsentimientoConsulta()"><i class="bi bi-file-earmark-text me-1"></i> Generar</button>
+            <button class="btn-auro" onclick="imprimirConsentimientoConsulta()"><i class="bi bi-printer me-1"></i> Imprimir / PDF</button>
+          </div>
+        </div>
+
         <div class="module-patient-card" data-module-patient="Consentimientos"></div>
-</div></section>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Tipo de consentimiento</label>
+            <select id="consTipo" class="form-select" onchange="renderConsentimientoConsulta()">
+              <option value="consultaGinecologica">Consulta ginecológica</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold">Fecha</label>
+            <input id="consFecha" type="date" class="form-control" onchange="renderConsentimientoConsulta()">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold">Estado</label>
+            <select id="consEstado" class="form-select">
+              <option>Pendiente de firma</option>
+              <option>Firmado</option>
+              <option>Anulado</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sheet-note mb-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Esta versión genera la vista previa usando el paciente activo del ERP. No modifica Pacientes, Agenda, Historia Clínica ni Apps Script.
+        </div>
+
+        <div id="consentimientoPreview" class="cardx p-4 bg-white">
+          <div class="text-muted text-center py-4">
+            Seleccione un paciente y presione <b>Generar</b> para ver el consentimiento.
+          </div>
+        </div>
+      </div>
+    </section>
     <section class="screen" id="recetas">
       <div class="cardx p-4">
         <div class="section-head">
@@ -6071,5 +6116,95 @@ document.addEventListener('click',e=>{
   <script src="antecedentes.js"></script>
   <script src="examenfisico.js"></script>
   <script src="consentimientos.js"></script>
+
+<script>
+/* =====================================================
+   AUROSANAX - Conexión visual segura de Consentimientos
+   No modifica pacientes, agenda, historias ni Apps Script.
+===================================================== */
+(function(){
+  function fechaConsentimientoISO(){
+    const input = document.getElementById('consFecha');
+    if(input && !input.value && typeof fechaHoyISO === 'function'){
+      input.value = fechaHoyISO();
+    }
+    return input?.value || new Date().toLocaleDateString();
+  }
+
+  window.renderConsentimientoConsulta = function(){
+    const contenedor = document.getElementById('consentimientoPreview');
+    if(!contenedor) return;
+
+    const paciente = (typeof getPacienteActivo === 'function') ? getPacienteActivo() : null;
+
+    if(!paciente){
+      contenedor.innerHTML = `
+        <div class="sheet-note">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          Primero seleccione o abra un paciente desde Pacientes o Historia Clínica.
+        </div>`;
+      return;
+    }
+
+    if(!window.auroConsentimientos || typeof window.auroConsentimientos.generar !== 'function'){
+      contenedor.innerHTML = `
+        <div class="sheet-note">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          El archivo consentimientos.js no está cargado correctamente.
+        </div>`;
+      return;
+    }
+
+    const tipo = document.getElementById('consTipo')?.value || 'consultaGinecologica';
+    const fecha = fechaConsentimientoISO();
+
+    contenedor.innerHTML = window.auroConsentimientos.generar(tipo, {
+      PACIENTE: paciente.nombre || '',
+      CEDULA: paciente.cedula || '',
+      FECHA: fecha
+    });
+  };
+
+  window.imprimirConsentimientoConsulta = function(){
+    const html = document.getElementById('consentimientoPreview')?.innerHTML || '';
+    if(!html || html.includes('Seleccione un paciente')){
+      alert('Primero genere el consentimiento.');
+      return;
+    }
+
+    const ventana = window.open('', '_blank');
+    if(!ventana){
+      alert('El navegador bloqueó la ventana de impresión.');
+      return;
+    }
+
+    ventana.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Consentimiento informado AUROSANAX</title>
+        <style>
+          body{font-family:Arial,sans-serif;margin:40px;color:#111827;line-height:1.55}
+          h2,h3{text-align:center}
+          .consentimiento-documento{max-width:850px;margin:auto}
+        </style>
+      </head>
+      <body>${html}</body>
+      </html>
+    `);
+    ventana.document.close();
+    ventana.focus();
+    setTimeout(() => ventana.print(), 300);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    if(typeof fechaHoyISO === 'function'){
+      const input = document.getElementById('consFecha');
+      if(input && !input.value) input.value = fechaHoyISO();
+    }
+  });
+})();
+</script>
 </body>
 </html>
