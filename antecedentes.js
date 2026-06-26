@@ -68,109 +68,173 @@ function auroInyectarEstilosAntecedentesPremium(){
     .auro-previos-box{
       background:linear-gradient(135deg,#ffffff 0%,#fff7fb 100%)!important;
       border:1px solid rgba(139,30,90,.16)!important;
-      border-radius:22px!important;
-      padding:18px!important;
-      margin:12px 0 18px!important;
-      box-shadow:0 14px 36px rgba(15,23,42,.08)!important;
+      border-radius:16px!important;
+      padding:12px!important;
+      margin:8px 0 12px!important;
+      box-shadow:0 8px 22px rgba(15,23,42,.06)!important;
     }
     .auro-previos-head{
       display:flex!important;
       justify-content:space-between!important;
       align-items:flex-start!important;
-      gap:14px!important;
-      padding-bottom:14px!important;
-      margin-bottom:14px!important;
+      gap:10px!important;
+      padding-bottom:10px!important;
+      margin-bottom:10px!important;
       border-bottom:1px solid rgba(139,30,90,.12)!important;
     }
     .auro-previos-head b{
       color:#7a174f!important;
-      font-size:17px!important;
-      font-weight:950!important;
+      font-size:15px!important;
+      font-weight:900!important;
       letter-spacing:-.01em!important;
     }
     .auro-previos-head small{
       display:block!important;
       color:#64748b!important;
-      font-weight:650!important;
-      margin-top:4px!important;
+      font-size:12px!important;
+      font-weight:600!important;
+      margin-top:2px!important;
     }
     .auro-previos-hide{
-      padding:8px 12px!important;
-      border-radius:12px!important;
-      font-size:12px!important;
+      padding:6px 10px!important;
+      border-radius:10px!important;
+      font-size:11px!important;
       white-space:nowrap!important;
     }
     .auro-previos-content{
       display:grid!important;
-      gap:12px!important;
+      gap:8px!important;
     }
     .auro-previos-content.auro-previos-collapsed{
       display:none!important;
     }
     .auro-previos-line{
       background:#ffffff!important;
-      border:1px solid rgba(139,30,90,.12)!important;
-      border-radius:18px!important;
-      padding:14px!important;
-      box-shadow:0 8px 22px rgba(15,23,42,.045)!important;
+      border:1px solid rgba(139,30,90,.10)!important;
+      border-radius:14px!important;
+      padding:10px!important;
+      box-shadow:0 4px 12px rgba(15,23,42,.035)!important;
     }
     .auro-previos-line span{
       display:flex!important;
       align-items:center!important;
-      gap:8px!important;
+      gap:6px!important;
       color:#8b1e5a!important;
-      font-size:12px!important;
-      font-weight:950!important;
+      font-size:11px!important;
+      font-weight:900!important;
       text-transform:uppercase!important;
-      letter-spacing:.04em!important;
-      margin-bottom:12px!important;
+      letter-spacing:.035em!important;
+      margin-bottom:7px!important;
     }
     .auro-previos-mini-table{
       display:grid!important;
-      grid-template-columns:repeat(auto-fit,minmax(250px,1fr))!important;
-      gap:12px!important;
+      grid-template-columns:repeat(auto-fit,minmax(260px,1fr))!important;
+      gap:8px!important;
     }
     .auro-previos-mini-row{
       position:relative!important;
-      background:linear-gradient(180deg,#ffffff 0%,#fdf2f8 100%)!important;
-      border:1px solid rgba(139,30,90,.14)!important;
-      border-left:4px solid #c23b83!important;
-      border-radius:16px!important;
-      padding:13px 14px!important;
-      min-height:92px!important;
-      box-shadow:0 6px 16px rgba(139,30,90,.055)!important;
+      background:#fff!important;
+      border:1px solid rgba(139,30,90,.12)!important;
+      border-left:3px solid #c23b83!important;
+      border-radius:12px!important;
+      padding:10px 12px!important;
+      min-height:auto!important;
+      box-shadow:0 3px 10px rgba(139,30,90,.04)!important;
+      break-inside:avoid!important;
+      page-break-inside:avoid!important;
     }
     .auro-previos-mini-row b{
       display:block!important;
       color:#111827!important;
-      font-size:13.5px!important;
-      font-weight:950!important;
-      margin-bottom:8px!important;
-      line-height:1.25!important;
+      font-size:13px!important;
+      font-weight:800!important;
+      margin-bottom:5px!important;
+      line-height:1.2!important;
     }
     .auro-previos-mini-row em{
       display:grid!important;
-      gap:5px!important;
-      color:#374151!important;
-      font-size:12.5px!important;
+      gap:4px!important;
+      color:#475569!important;
+      font-size:11.5px!important;
       font-style:normal!important;
-      line-height:1.35!important;
+      line-height:1.25!important;
     }
     .auro-previos-detail-pill{
       display:flex!important;
       align-items:flex-start!important;
-      gap:6px!important;
-      background:rgba(255,255,255,.76)!important;
-      border:1px solid rgba(226,232,240,.9)!important;
-      border-radius:10px!important;
-      padding:6px 8px!important;
+      gap:5px!important;
+      background:rgba(255,255,255,.82)!important;
+      border:1px solid rgba(226,232,240,.85)!important;
+      border-radius:8px!important;
+      padding:4px 7px!important;
       color:#334155!important;
+      font-size:11px!important;
       font-weight:700!important;
     }
     .auro-previos-detail-pill i{
       color:#8b1e5a!important;
       margin-top:1px!important;
       flex:0 0 auto!important;
+    }
+
+    @media print{
+      .auro-previos-box{
+        background:#fff!important;
+        padding:8px!important;
+        margin:4px 0!important;
+        box-shadow:none!important;
+        border-radius:10px!important;
+        border:1px solid rgba(139,30,90,.16)!important;
+        break-inside:avoid!important;
+        page-break-inside:avoid!important;
+      }
+      .auro-previos-head{
+        padding-bottom:6px!important;
+        margin-bottom:6px!important;
+      }
+      .auro-previos-head b{font-size:13px!important;}
+      .auro-previos-head small{font-size:10px!important;}
+      .auro-previos-hide{display:none!important;}
+      .auro-previos-content{gap:5px!important;}
+      .auro-previos-line{
+        margin-bottom:5px!important;
+        padding:7px!important;
+        box-shadow:none!important;
+        border-radius:8px!important;
+        break-inside:avoid!important;
+        page-break-inside:avoid!important;
+      }
+      .auro-previos-line span{
+        font-size:9.5px!important;
+        margin-bottom:4px!important;
+      }
+      .auro-previos-mini-table{
+        grid-template-columns:repeat(2,minmax(0,1fr))!important;
+        gap:5px!important;
+      }
+      .auro-previos-mini-row{
+        padding:5px 7px!important;
+        border-radius:7px!important;
+        min-height:auto!important;
+        box-shadow:none!important;
+        page-break-inside:avoid!important;
+        break-inside:avoid!important;
+      }
+      .auro-previos-mini-row b{
+        font-size:10.5px!important;
+        margin-bottom:3px!important;
+        line-height:1.15!important;
+      }
+      .auro-previos-mini-row em{
+        gap:2px!important;
+        font-size:10px!important;
+        line-height:1.15!important;
+      }
+      .auro-previos-detail-pill{
+        padding:2px 5px!important;
+        font-size:9.5px!important;
+        border-radius:6px!important;
+      }
     }
     @media(max-width:760px){
       .auro-previos-head{display:block!important;}
