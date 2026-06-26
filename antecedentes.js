@@ -371,24 +371,72 @@ function auroExtraerPatologiasPipePremium(valor){
   const items = [];
   const seen = new Set();
 
-  String(fuente || '')
+  let texto = String(fuente || '')
     .replace(/^patologicos?\s*:\s*/i, '')
+    .replace(/^patológicos?\s*:\s*/i, '')
+    .trim();
+
+  if(!texto) return items;
+
+  // Soporta formato compacto:
+  // Hipertensión arterial (HTA) | 5 años | Losartán; Diabetes mellitus (DM) | 3 años
+  // y también casos donde Google Sheets / el navegador elimina o rompe los separadores.
+  texto = texto
+    .replace(/\r\n|\r/g, '\n')
+    .replace(/\n+/g, '; ')
+    .replace(/\s*;\s*/g, '; ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const patologiasBase = [
+    'Hipertensión arterial (HTA)',
+    'Infarto agudo de miocardio (IAM)',
+    'Diabetes mellitus (DM)',
+    'Asma bronquial',
+    'Gastritis',
+    'Hipotiroidismo',
+    'Obesidad',
+    'Osteoporosis',
+    'Otros'
+  ];
+
+  // Si falta punto y coma antes de una patología conocida, lo inserta para poder separar filas.
+  patologiasBase.forEach(nombre => {
+    const esc = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('([^;])\\s+(' + esc + '\\s*\\|)', 'gi');
+    texto = texto.replace(re, '$1; $2');
+  });
+
+  texto
     .split(';')
     .map(x => String(x || '').trim())
     .filter(Boolean)
     .forEach(row => {
       const partes = row.split('|').map(x => String(x || '').trim()).filter(Boolean);
       const titulo = auroLimpiarTituloClinico(partes[0] || '');
-      if(!titulo || !auroEsPatologiaConocida(titulo)) return;
+
+      if(!titulo) return;
+      if(auroEsTokenTecnicoAntecedente(titulo)) return;
+      if(auroEsCatalogoNoClinico(titulo)) return;
 
       const detallePartes = [];
-      if(partes[1]) detallePartes.push(partes[1]);
-      if(partes.slice(2).join(' | ')) detallePartes.push('Tratamiento: ' + partes.slice(2).join(' | '));
+      if(partes[1]){
+        const tiempo = partes[1].replace(/^Tiempo:\s*/i, '').trim();
+        if(tiempo) detallePartes.push('Tiempo: ' + tiempo);
+      }
+
+      const tratamiento = partes.slice(2).join(' | ').replace(/^(Medicación|Medicamento|Tratamiento):\s*/i, '').trim();
+      if(tratamiento) detallePartes.push('Tratamiento: ' + tratamiento);
+
       const detalle = detallePartes.join(' · ');
       const key = auroNormalizarClaveClinica(titulo + ' ' + detalle);
       if(!key || seen.has(key)) return;
       seen.add(key);
-      items.push({ titulo: auroCapitalizarClinico(titulo), detalle });
+
+      items.push({
+        titulo: auroCapitalizarClinico(titulo),
+        detalle
+      });
     });
 
   return items;
