@@ -6643,58 +6643,13 @@ function auroInformeExtraerTabla(selector, opciones={}){
     const tieneDato = checked || radios.length || valoresTexto.length;
     if(!tieneDato && !opciones.incluirSinMarcar) return;
 
-    const detallePartes = [...radios, ...valoresTexto]
-      .map(x => String(x || '').trim())
-      .filter(x => !esValorVacio(x));
-
+    const detallePartes = [...radios, ...valoresTexto].filter(x => !esValorVacio(x));
     const detalle = detallePartes.join(' · ');
     const titulo = nombre || celdas.map(td => (td.innerText || '').trim()).filter(Boolean).join(' ') || 'Registro';
 
     items.push(`
       <div class="auro-list-item">
         <strong>${auroInformeEscape(titulo)}</strong>
-        ${detalle ? `<small>${auroInformeEscape(detalle)}</small>` : ''}
-      </div>`);
-  });
-
-  if(!items.length) return '';
-  return `<div class="auro-list-premium">${items.join('')}</div>`;
-}){
-  const tabla = document.querySelector(selector);
-  if(!tabla) return '';
-  const filas = Array.from(tabla.querySelectorAll('tbody tr, tr')).filter(tr => tr.querySelector('td'));
-  const items = [];
-
-  filas.forEach(tr => {
-    const celdas = Array.from(tr.querySelectorAll('td'));
-    if(!celdas.length) return;
-    const nombre = (celdas[0]?.innerText || '').trim();
-    const checked = tr.querySelector('input[type="checkbox"]:checked');
-    const radios = Array.from(tr.querySelectorAll('input[type="radio"]:checked')).map(r => r.value || r.nextSibling?.textContent || '').filter(Boolean);
-    const valores = Array.from(tr.querySelectorAll('input, select, textarea'))
-      .filter(el => {
-        if(el.type === 'checkbox') return el.checked;
-        if(el.type === 'radio') return el.checked;
-        return String(el.value || '').trim();
-      })
-      .map(el => {
-        if(el.tagName === 'SELECT') return el.options[el.selectedIndex]?.text || el.value || '';
-        if(el.type === 'checkbox') return 'Sí';
-        if(el.type === 'radio') return el.value || 'Sí';
-        return el.value || '';
-      })
-      .map(x => String(x).trim())
-      .filter(Boolean);
-
-    const textoFila = celdas.map(td => (td.innerText || '').trim()).filter(Boolean).join(' ');
-    const tieneDato = checked || radios.length || valores.length;
-    if(!tieneDato && opciones.soloMarcados) return;
-    if(!tieneDato && !opciones.incluirSinMarcar) return;
-
-    const detalle = valores.filter(v => v.toLowerCase() !== 'sí').join(' · ');
-    items.push(`
-      <div class="auro-list-item">
-        <strong>${auroInformeEscape(nombre || textoFila || 'Registro')}</strong>
         ${detalle ? `<small>${auroInformeEscape(detalle)}</small>` : ''}
       </div>`);
   });
