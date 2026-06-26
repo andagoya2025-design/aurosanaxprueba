@@ -3167,63 +3167,109 @@ function auroLimpiarTextoPrevioClinico(valor){
     if(resumen) raw = resumen;
   }
 
-  const limpiarLinea = (linea) => {
-    let x = String(linea || '').trim();
-    if(!x) return '';
-
-    x = x
-      .replace(/AUROSANAX_ANT_[A-ZÁÉÍÓÚÑ_\d\.:-]*\s*\|?\|?/gi, '')
-      .replace(/\[object Object\]/gi, '')
-      .replace(/[{}\[\]"]/g, '')
-      .replace(/\b(key|descripcion|numero|número)\s*:\s*/gi, '')
-      .replace(/\b(tiempo)\s*:\s*/gi, '')
-      .replace(/\b(medicamento)\s*:\s*/gi, 'Medicación: ')
-      .replace(/\b(reaccion|reacción)\s*:\s*/gi, 'Reacción: ')
-      .replace(/\bpatologico\s*:\s*/gi, '• ')
-      .replace(/\bquirurgico\s*:\s*/gi, '• ')
-      .replace(/\balergia\s*:\s*/gi, '⚠ ')
-      .replace(/\bbiologico\s*:\s*/gi, '💉 ')
-      .replace(/\bhabito\s*:\s*/gi, '• ')
-      .replace(/\bactividad\s*:\s*/gi, '🏃 ')
-      .replace(/\bfum\s*:\s*/gi, 'FUM: ')
-      .replace(/\bfup\s*:\s*/gi, 'FUP: ')
-      .replace(/\bpap\s*:\s*/gi, 'PAP: ')
-      .replace(/\bgestas?\s*:\s*/gi, 'Gestas: ')
-      .replace(/\bpartos?\s*:\s*/gi, 'Partos: ')
-      .replace(/\bcesareas?\s*:\s*/gi, 'Cesáreas: ')
-      .replace(/\babortos?\s*:\s*/gi, 'Abortos: ')
-      .replace(/\bhijos\s+vivos\s*:\s*/gi, 'Hijos vivos: ')
-      .replace(/\bhijos\s+muertos\s*:\s*/gi, 'Hijos muertos: ')
-      .replace(/\blactancia\s*:\s*/gi, 'Lactancia: ')
-      .replace(/\bectopicos\s*:\s*/gi, 'Ectópicos: ')
-      .replace(/\botros\s*:\s*/gi, 'Otros: ')
-      .replace(/\s+/g, ' ')
-      .replace(/^[:\-–—|,;\s]+|[:\-–—|,;\s]+$/g, '')
-      .trim();
-
-    if(!x) return '';
-    if(/^(años?|meses?|días?|dias?|semanas?|no valorado|sin dato|sin datos|no aplica|n\/a|na)$/i.test(x)) return '';
-    if(/^\d+$/.test(x)) return '';
-    if(/^(Número|Numero)\s*:?\s*\d*$/i.test(x)) return '';
-    return x;
-  };
-
   raw = raw
-    .replace(/\s*\|\|\s*/g, '<br>')
-    .replace(/\s*\|\s*/g, '<br>')
-    .replace(/\s*;\s*/g, '<br>')
-    .replace(/\s*,\s*/g, '<br>')
-    .replace(/\n+/g, '<br>')
-    .replace(/(<br>\s*){2,}/g, '<br>')
-    .replace(/^<br>|<br>$/g, '')
+    .replace(/AUROSANAX_ANT_[A-ZÁÉÍÓÚÑ_\s\.0-9:-]*\|\|?/gi, ' ')
+    .replace(/AUROSANAX_[A-ZÁÉÍÓÚÑ_\s\.0-9:-]*/gi, ' ')
+    .replace(/\[object Object\]/gi, ' ')
+    .replace(/[{}\[\]"]/g, ' ')
+    .replace(/"?key"?\s*:\s*/gi, '')
+    .replace(/"?descripcion"?\s*:\s*/gi, '')
+    .replace(/"?tiempo"?\s*:\s*/gi, 'Tiempo: ')
+    .replace(/"?medicamento"?\s*:\s*/gi, 'Tratamiento: ')
+    .replace(/"?reaccion"?\s*:\s*/gi, 'Reacción: ')
+    .replace(/\s*\|\|\s*/g, '\n')
+    .replace(/\s*\|\s*/g, '\n')
+    .replace(/\s*;\s*/g, '\n')
+    .replace(/\r\n|\r/g, '\n')
+    .replace(/\n{2,}/g, '\n')
     .trim();
 
-  const vistas = raw.split(/<br>/i)
-    .map(limpiarLinea)
-    .filter(Boolean)
-    .filter((v, i, arr) => arr.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
+  const tokens = raw
+    .split(/\n|,(?=\s*(?:patolog|biologico|vacuna|covid|habito|actividad|estilo_vida|fum|fup|pap|gestas?|partos?|cesareas?|abortos?|hijos|lactancia|ectopicos|otros)\s*:|\s*[A-Za-zÁÉÍÓÚÑáéíóúñ])/gi)
+    .map(x => String(x || '').trim())
+    .map(x => x.replace(/^[-•\s]+/, '').replace(/\s{2,}/g, ' ').trim())
+    .filter(Boolean);
 
-  return vistas.join('<br>');
+  const items = [];
+  let lastPathology = -1;
+  const seen = new Set();
+
+  function limpioBasico(x){
+    return String(x || '')
+      .replace(/^(patologicos?|patológicos?)\s*:\s*/i, '')
+      .replace(/^(numero|número)\s*:?\s*\d*$/i, '')
+      .replace(/^no valorado$/i, '')
+      .replace(/^dosis\s*:?\s*$/i, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  function add(text, tipo){
+    text = limpioBasico(text);
+    if(!text) return;
+    if(/^\d+$/.test(text)) return;
+    if(/^(años?|meses?|días?)$/i.test(text)) return;
+    if(/^dosis\s*:?\s*\d*$/i.test(text)) return;
+    const key = auroNormalizarClaveClinica(text.replace(/^[•\-]\s*/, ''));
+    if(!key || seen.has(key)) return;
+    seen.add(key);
+    items.push({text, tipo: tipo || 'general'});
+    if((tipo || '').toLowerCase() === 'patologia') lastPathology = items.length - 1;
+  }
+
+  function appendToLast(extra){
+    extra = limpioBasico(extra);
+    if(!extra || lastPathology < 0 || !items[lastPathology]) return false;
+    if(items[lastPathology].text.toLowerCase().includes(extra.toLowerCase())) return true;
+    items[lastPathology].text += (items[lastPathology].text.includes(' — ') ? ' · ' : ' — ') + extra;
+    return true;
+  }
+
+  tokens.forEach(t0 => {
+    let t = limpioBasico(t0);
+    if(!t) return;
+
+    let m;
+    if((m = t.match(/^patolog(?:ico|icos|ica|icas|ógico|ógicos|ógica|ógicas)?\s*:\s*(.+)$/i))){ add(m[1], 'patologia'); return; }
+    if((m = t.match(/^biologico\s*:\s*(.+)$/i))){ add('Vacuna: ' + m[1], 'vacuna'); return; }
+    if((m = t.match(/^vacunas?\s*:\s*(.+)$/i))){ add('Vacuna: ' + m[1], 'vacuna'); return; }
+    if((m = t.match(/^covid\s*:\s*dosis\s*:?\s*(\d*)/i))){ add('COVID-19' + (m[1] ? ' — ' + m[1] + ' dosis' : ''), 'vacuna'); return; }
+    if((m = t.match(/^habitos?\s*:\s*(.+)$/i))){ add('Hábito: ' + m[1], 'habito'); return; }
+    if((m = t.match(/^habito\s*:\s*(.+)$/i))){ add('Hábito: ' + m[1], 'habito'); return; }
+    if((m = t.match(/^actividad\s*:\s*(.+)$/i))){ add('Actividad física: ' + m[1], 'actividad'); return; }
+    if((m = t.match(/^estilo[_\s-]*vida\s*:\s*(.+)$/i))){ add('Actividad física: ' + m[1], 'actividad'); return; }
+    if((m = t.match(/^(fum|fup|fur|pap|gestas?|partos?|cesareas?|cesáreas?|abortos?|hijos vivos|hijos muertos|lactancia|ectopicos|ectópicos|otros)\s*:\s*(.+)$/i))){
+      const etiqueta = m[1].replace(/_/g,' ').replace(/^\w/, c => c.toUpperCase());
+      add(etiqueta + ': ' + m[2], 'gineco'); return;
+    }
+
+    if(/^\d+\s*(años?|meses?|d[ií]as?)\b/i.test(t) || /^(Tratamiento|Medicación|Medicacion|Reacción|Reaccion)\s*:/i.test(t)){
+      if(appendToLast(t)) return;
+    }
+    if(/^[a-záéíóúñ]+$/i.test(t) && lastPathology >= 0 && !/^(obesidad|covid|hpv|hepb|influenza|td|tdap|neumococo|srp|varicela|fiebre|tabaco|alcohol|drogas|cafe|café|correr|caminar|nadar|ciclismo)$/i.test(t)){
+      if(appendToLast('Tratamiento: ' + t)) return;
+    }
+
+    add(t, 'general');
+  });
+
+  const salida = items.map(it => {
+    let texto = it.text
+      .replace(/\bHpv\b/gi, 'Virus Papiloma Humano (HPV)')
+      .replace(/\bHepB\b/gi, 'Hepatitis B')
+      .replace(/\bSrp\b/gi, 'SRP')
+      .replace(/\bTdap\b/gi, 'Td/Tdap')
+      .replace(/\bFiebreAmarilla\b/gi, 'Fiebre amarilla')
+      .replace(/Vacuna:\s*Covid\b/gi, 'Vacuna: COVID-19')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    if(!/^([•✓⚠]|Vacuna:|Hábito:|Actividad física:|FUM:|FUP:|FUR:|PAP:|Gesta|Parto|Cesárea|Aborto|Hijos|Lactancia|Ectópico|Otros)/i.test(texto)){
+      texto = '• ' + texto;
+    }
+    return texto;
+  }).filter(Boolean);
+
+  return salida.join('<br>');
 }
 
 function auroRenderPrevioLineaLimpia(label, value){
@@ -6575,33 +6621,21 @@ function auroInformeBloque(titulo, icono, contenido, claseExtra=''){
 }
 
 function auroInformeParrafo(texto){
-  let t = String(texto || '').trim();
+  const t = String(texto || '').trim();
   if(!t) return '';
-  if(typeof auroLimpiarTextoPrevioClinico === 'function'){
-    t = auroLimpiarTextoPrevioClinico(t).replace(/<br\s*\/?>/gi, '\n');
-  }
-  if(!t.trim()) return '';
   return `<div class="auro-clinical-text">${auroInformeEscape(t).replace(/\n/g,'<br>')}</div>`;
 }
 
 function auroInformeChipsDesdeTexto(texto, tipo='normal'){
-  let t = String(texto || '').trim();
+  let t = auroLimpiarTextoPrevioClinico(texto);
   if(!t) return '';
-
-  if(typeof auroLimpiarTextoPrevioClinico === 'function'){
-    t = auroLimpiarTextoPrevioClinico(t).replace(/<br\s*\/?>/gi, '\n');
-  }
-
   const partes = t
-    .split(/\n|;|,/)
-    .map(x => String(x || '').trim())
+    .split(/<br>|\n|;|,(?=\s*[A-Za-zÁÉÍÓÚÑáéíóúñ])/gi)
+    .map(x=>x.replace(/^[•\-]\s*/, '').trim())
     .filter(Boolean)
-    .filter(x => !/^(años?|meses?|d[ií]as?|semanas?|no valorado|sin dato|sin datos|no aplica|n\/a|na)$/i.test(x))
-    .filter(x => !/^AUROSANAX_/i.test(x))
-    .filter((x, i, arr) => arr.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i)
+    .filter(x => !/^(años?|meses?|días?|dias|dosis\s*:?\s*\d*)$/i.test(x))
     .slice(0,80);
-
-  if(!partes.length) return '';
+  if(!partes.length) return auroInformeParrafo(t.replace(/<br>/g, '\n'));
   return `<div class="auro-chip-grid ${tipo === 'danger' ? 'danger' : ''}">${partes.map(x=>`<span>${auroInformeEscape(x)}</span>`).join('')}</div>`;
 }
 
@@ -6611,45 +6645,36 @@ function auroInformeExtraerTabla(selector, opciones={}){
   const filas = Array.from(tabla.querySelectorAll('tbody tr, tr')).filter(tr => tr.querySelector('td'));
   const items = [];
 
-  const esValorVacio = (v) => {
-    const x = String(v || '').trim();
-    if(!x) return true;
-    return /^(años?|meses?|d[ií]as?|semanas?|seleccione|no valorado|sin dato|sin datos|no aplica|n\/a|na|sí|si)$/i.test(x);
-  };
-
   filas.forEach(tr => {
     const celdas = Array.from(tr.querySelectorAll('td'));
     if(!celdas.length) return;
     const nombre = (celdas[0]?.innerText || '').trim();
-    const checked = !!tr.querySelector('input[type="checkbox"]:checked');
-    const radios = Array.from(tr.querySelectorAll('input[type="radio"]:checked'))
-      .map(r => r.value || r.parentElement?.innerText || '')
-      .map(x => String(x).trim())
-      .filter(x => !esValorVacio(x));
-
-    if(opciones.soloMarcados && !checked && !radios.length) return;
-
-    const valoresTexto = Array.from(tr.querySelectorAll('input, select, textarea'))
+    const checked = tr.querySelector('input[type="checkbox"]:checked');
+    const radios = Array.from(tr.querySelectorAll('input[type="radio"]:checked')).map(r => r.value || r.nextSibling?.textContent || '').filter(Boolean);
+    const valores = Array.from(tr.querySelectorAll('input, select, textarea'))
       .filter(el => {
-        if(el.type === 'checkbox') return false;
-        if(el.type === 'radio') return false;
-        const value = el.tagName === 'SELECT' ? (el.options[el.selectedIndex]?.text || el.value || '') : (el.value || '');
-        return !esValorVacio(value);
+        if(el.type === 'checkbox') return el.checked;
+        if(el.type === 'radio') return el.checked;
+        return String(el.value || '').trim();
       })
-      .map(el => el.tagName === 'SELECT' ? (el.options[el.selectedIndex]?.text || el.value || '') : (el.value || ''))
+      .map(el => {
+        if(el.tagName === 'SELECT') return el.options[el.selectedIndex]?.text || el.value || '';
+        if(el.type === 'checkbox') return 'Sí';
+        if(el.type === 'radio') return el.value || 'Sí';
+        return el.value || '';
+      })
       .map(x => String(x).trim())
       .filter(Boolean);
 
-    const tieneDato = checked || radios.length || valoresTexto.length;
+    const textoFila = celdas.map(td => (td.innerText || '').trim()).filter(Boolean).join(' ');
+    const tieneDato = checked || radios.length || valores.length;
+    if(!tieneDato && opciones.soloMarcados) return;
     if(!tieneDato && !opciones.incluirSinMarcar) return;
 
-    const detallePartes = [...radios, ...valoresTexto].filter(x => !esValorVacio(x));
-    const detalle = detallePartes.join(' · ');
-    const titulo = nombre || celdas.map(td => (td.innerText || '').trim()).filter(Boolean).join(' ') || 'Registro';
-
+    const detalle = valores.filter(v => v.toLowerCase() !== 'sí').join(' · ');
     items.push(`
       <div class="auro-list-item">
-        <strong>${auroInformeEscape(titulo)}</strong>
+        <strong>${auroInformeEscape(nombre || textoFila || 'Registro')}</strong>
         ${detalle ? `<small>${auroInformeEscape(detalle)}</small>` : ''}
       </div>`);
   });
@@ -6717,8 +6742,7 @@ function imprimirHistoriaClinica(){
     ${auroInformeBloque('Enfermedad actual', '02', auroInformeParrafo(auroInformeValue('hcEnfermedadActual')))}
   `;
 
-  const antPersonalesTabla = auroInformeExtraerTabla('.antecedentes-table', {soloMarcados:true});
-  const antPersonales = antPersonalesTabla || auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesPersonales'));
+  const antPersonales = auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesPersonales')) + auroInformeExtraerTabla('.antecedentes-table', {soloMarcados:true});
   const antQuirurgicos = auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesQuirurgicos'));
   const alergias = auroInformeChipsDesdeTexto(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'danger');
   const familiares = auroInformeParrafo(auroInformeValue('hcAntecedentesFamiliares'));
