@@ -5104,6 +5104,85 @@ function auroInformeExtraerTabla(selector, opciones={}){
   return `<div class="auro-list-premium">${items.join('')}</div>`;
 }
 
+
+/* AUROSANAX FIX PDF ANTECEDENTES v3.2
+   Usa los campos ocultos/serializados ya guardados, no la tabla visual.
+   Evita que los selectores de unidad vacíos impriman "años" o filas no marcadas.
+*/
+function auroInformeRenderItemsCompactos(items){
+  items = (items || []).filter(x => x && String(x.titulo || '').trim());
+  if(!items.length) return '';
+
+  return `<div class="auro-report-grid">${items.map(it => {
+    const titulo = auroInformeEscape(it.titulo || 'Registro');
+    const detalle = auroInformeDetalleCompacto(it.detalle || '');
+    return `<div class="auro-report-item"><strong>${titulo}</strong>${detalle}</div>`;
+  }).join('')}</div>`;
+}
+
+function auroInformeDetalleCompacto(detalle){
+  const raw = String(detalle || '').trim();
+  if(!raw) return '';
+
+  const partes = raw
+    .split(/\s*·\s*/)
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(x => {
+      let texto = x
+        .replace(/^Tiempo:\s*/i, 'Evolución: ')
+        .replace(/^(Tratamiento|Medicamento|Medicación):\s*/i, 'Tratamiento: ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      return texto ? `<small>${auroInformeEscape(texto)}</small>` : '';
+    })
+    .filter(Boolean);
+
+  return partes.length ? `<div class="auro-report-detail">${partes.join('')}</div>` : '';
+}
+
+function auroInformeAntecedentesDesdeCampos(){
+  const fuentePersonales = auroInformeValue('hcAntecedentesPersonales') || '';
+  const fuentePatologicos = (typeof auroExtraerFuentePatologicosPersonales === 'function')
+    ? auroExtraerFuentePatologicosPersonales(fuentePersonales)
+    : fuentePersonales;
+
+  const bloques = [];
+
+  function add(titulo, icono, html, clase){
+    if(html && String(html).trim()) bloques.push(auroInformeBloque(titulo, icono, html, clase || ''));
+  }
+
+  if(typeof auroExtraerItemsAntecedentePremium === 'function'){
+    add('Antecedentes personales', 'AP', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(fuentePatologicos, 'patologia')));
+    add('Antecedentes quirúrgicos', 'AQ', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAntecedentesQuirurgicos'), 'quirurgico')));
+    add('Alergias', '⚠', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'alergia')), 'danger');
+    add('Antecedentes ginecológicos', 'G', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAntecedentesGinecoObstetricos') || auroInformeValue('hcRevisionSistemas'), 'gineco')));
+    add('Medicación actual', 'M', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcMedicacionActual'), 'medicacion')));
+    add('Antecedentes familiares', 'AF', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAntecedentesFamiliares'), 'familiares')));
+  }else{
+    add('Antecedentes personales', 'AP', auroInformeChipsDesdeTexto(fuentePatologicos));
+    add('Antecedentes quirúrgicos', 'AQ', auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesQuirurgicos')));
+    add('Alergias', '⚠', auroInformeChipsDesdeTexto(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'danger'), 'danger');
+    add('Antecedentes familiares', 'AF', auroInformeParrafo(auroInformeValue('hcAntecedentesFamiliares')));
+  }
+
+  if(typeof auroExtraerHabitosRegistrados === 'function'){
+    add('Hábitos psicobiológicos', 'H', auroInformeRenderItemsCompactos(auroExtraerHabitosRegistrados(fuentePersonales)));
+  }
+  if(typeof auroExtraerActividadRegistrada === 'function'){
+    add('Estilo de vida', 'EV', auroInformeRenderItemsCompactos(auroExtraerActividadRegistrada(fuentePersonales)));
+  }
+  if(typeof auroExtraerVacunasRegistradas === 'function'){
+    add('Vacunas / COVID', 'V', auroInformeRenderItemsCompactos(auroExtraerVacunasRegistradas(fuentePersonales)));
+  }
+
+  const alimentacion = auroInformeValue('hcAlimentacion') || auroInformeValue('hcAlimentacionDetalle');
+  add('Alimentación', 'N', auroInformeParrafo(alimentacion));
+
+  return bloques.join('');
+}
+
 function auroInformeObtenerPaciente(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || '';
   if(typeof patients !== 'undefined' && Array.isArray(patients)){
@@ -5163,29 +5242,9 @@ function imprimirHistoriaClinica(){
     ${auroInformeBloque('Enfermedad actual', '02', auroInformeParrafo(auroInformeValue('hcEnfermedadActual')))}
   `;
 
-  const antPersonales = auroInformeExtraerTabla('.antecedentes-table', {soloMarcados:true});
-  const antQuirurgicos = auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesQuirurgicos'));
-  const alergias = auroInformeChipsDesdeTexto(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'danger');
-  const familiares = auroInformeParrafo(auroInformeValue('hcAntecedentesFamiliares'));
-  const gineco = auroInformeParrafo(auroInformeValue('hcAntecedentesGinecoObstetricos')) + auroInformeExtraerTabla('.ginecologicos-table', {incluirSinMarcar:false});
-  const obst = auroInformeExtraerTabla('.obstetricos-table', {incluirSinMarcar:false});
-  const habitos = auroInformeExtraerTabla('.habitos-table', {incluirSinMarcar:false});
-  const estiloVida = auroInformeExtraerTabla('.estilo-vida-table', {incluirSinMarcar:false});
-  const alimentacion = auroInformeParrafo(auroInformeValue('hcAlimentacion') || auroInformeValue('hcAlimentacionDetalle'));
-  const vacunas = auroInformeExtraerTabla('.vacunas-table', {soloMarcados:true});
-
-  const antecedentesHTML = `
-    ${auroInformeBloque('Antecedentes personales', 'AP', antPersonales)}
-    ${auroInformeBloque('Antecedentes quirúrgicos', 'AQ', antQuirurgicos)}
-    ${auroInformeBloque('Alergias', '⚠', alergias, 'danger')}
-    ${auroInformeBloque('Antecedentes familiares', 'AF', familiares)}
-    ${auroInformeBloque('Antecedentes ginecológicos', 'G', gineco)}
-    ${auroInformeBloque('Antecedentes obstétricos', 'O', obst)}
-    ${auroInformeBloque('Hábitos psicobiológicos', 'H', habitos)}
-    ${auroInformeBloque('Estilo de vida', 'EV', estiloVida)}
-    ${auroInformeBloque('Alimentación', 'N', alimentacion)}
-    ${auroInformeBloque('Vacunas / COVID', 'V', vacunas)}
-  `;
+  // PDF v3.2: antecedentes desde campos ocultos/serializados, no desde la tabla visual.
+  // Esto evita imprimir filas no marcadas y detalles duplicados como "5 años - años".
+  const antecedentesHTML = auroInformeAntecedentesDesdeCampos();
 
   const signos = `
     <div class="auro-info-grid compact">
@@ -5215,40 +5274,46 @@ function imprimirHistoriaClinica(){
 <title>Historia Clínica AUROSANAX</title>
 <style>
   *{box-sizing:border-box}
-  body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45}
-  .auro-report{max-width:980px;margin:0 auto;background:white;min-height:100vh;padding:34px 38px 42px}
-  .auro-header{border-radius:24px;background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff;padding:24px 28px;margin-bottom:22px;position:relative;overflow:hidden}
+  body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.35}
+  .auro-report{max-width:920px;margin:0 auto;background:white;min-height:100vh;padding:24px 30px 30px}
+  .auro-header{border-radius:20px;background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff;padding:18px 22px;margin-bottom:14px;position:relative;overflow:hidden}
   .auro-header:after{content:"";position:absolute;width:210px;height:210px;border-radius:50%;background:rgba(255,255,255,.12);right:-70px;top:-80px}
   .auro-header small{display:block;opacity:.9;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
-  .auro-header h1{margin:0;font-size:28px;font-weight:900;letter-spacing:.02em}
+  .auro-header h1{margin:0;font-size:24px;font-weight:900;letter-spacing:.02em}
   .auro-header p{margin:5px 0 0;opacity:.95;font-size:13px}
-  .auro-section-title{margin:24px 0 12px;display:flex;align-items:center;gap:10px;color:#7a174f;font-size:17px;font-weight:900;border-bottom:2px solid #fbcfe8;padding-bottom:8px}
+  .auro-section-title{margin:14px 0 8px;display:flex;align-items:center;gap:8px;color:#7a174f;font-size:15px;font-weight:900;border-bottom:1px solid #fbcfe8;padding-bottom:6px}
   .auro-section-title span{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;border-radius:999px;padding:5px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
-  .auro-patient-band{display:flex;align-items:center;gap:16px;border:1px solid #fbcfe8;background:linear-gradient(135deg,#fff,#fff7fb);border-radius:22px;padding:16px;margin-bottom:14px}
-  .auro-patient-avatar{width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;display:grid;place-items:center;font-size:24px;font-weight:900;flex:0 0 auto}
+  .auro-patient-band{display:flex;align-items:center;gap:12px;border:1px solid #fbcfe8;background:linear-gradient(135deg,#fff,#fff7fb);border-radius:18px;padding:10px 12px;margin-bottom:10px}
+  .auro-patient-avatar{width:46px;height:46px;border-radius:15px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;display:grid;place-items:center;font-size:20px;font-weight:900;flex:0 0 auto}
   .auro-patient-band h2{margin:0;font-size:21px;font-weight:900;color:#111827}
   .auro-patient-band p{margin:3px 0 0;color:#6b7280;font-weight:700}
-  .auro-info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .auro-info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:8px}
   .auro-info-grid.compact{grid-template-columns:repeat(4,1fr)}
-  .auro-info-row{border:1px solid #e5e7eb;background:#fff;border-radius:15px;padding:10px 12px;min-height:56px}
+  .auro-info-row{border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:7px 9px;min-height:auto}
   .auro-info-row span{display:block;color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:800;margin-bottom:3px}
   .auro-info-row b{display:block;color:#111827;font-size:13px;word-break:break-word}
-  .auro-report-card{border:1px solid #e5e7eb;border-radius:20px;background:#fff;margin-bottom:14px;overflow:hidden;box-shadow:0 8px 24px rgba(15,23,42,.05);break-inside:avoid}
-  .auro-report-card-head{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#fff7fb,#ffffff);border-bottom:1px solid #f1f5f9;padding:12px 14px}
+  .auro-report-card{border:1px solid #e5e7eb;border-radius:15px;background:#fff;margin-bottom:8px;overflow:hidden;box-shadow:0 4px 12px rgba(15,23,42,.035);break-inside:avoid}
+  .auro-report-card-head{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#fff7fb,#ffffff);border-bottom:1px solid #f1f5f9;padding:8px 10px}
   .auro-report-card-head h3{margin:0;color:#111827;font-size:14px;font-weight:900}
   .auro-report-icon{width:32px;height:32px;border-radius:12px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;display:grid;place-items:center;font-size:12px;font-weight:900;flex:0 0 auto}
   .auro-report-card.danger .auro-report-icon{background:#fee2e2;color:#991b1b;border-color:#fecaca}
-  .auro-report-card-body{padding:14px}
-  .auro-clinical-text{white-space:normal;color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:16px;padding:12px 14px;min-height:42px}
+  .auro-report-card-body{padding:9px 10px}
+  .auro-clinical-text{white-space:normal;color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:8px 10px;min-height:auto}
   .auro-chip-grid{display:flex;flex-wrap:wrap;gap:7px}
   .auro-chip-grid span{border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:7px 10px;font-weight:750;color:#374151}
   .auro-chip-grid.danger span{border-color:#fecaca;background:#fef2f2;color:#991b1b}
-  .auro-list-premium{display:grid;gap:8px}
-  .auro-list-item{border:1px solid #edf2f7;background:#fbfdff;border-radius:14px;padding:9px 11px;display:block}
+  .auro-list-premium{display:grid;gap:6px}
+  .auro-list-item{border:1px solid #edf2f7;background:#fbfdff;border-radius:11px;padding:6px 8px;display:block}
   .auro-list-item strong{display:block;color:#111827;font-size:13px}
   .auro-list-item small{display:block;color:#64748b;font-weight:700;margin-top:3px}
+  .auro-report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .auro-report-item{border:1px solid #edf2f7;border-left:3px solid #c23b83;background:#fff;border-radius:12px;padding:7px 9px;min-width:0}
+  .auro-report-item strong{display:block;color:#111827;font-size:12.5px;font-weight:900;line-height:1.2;margin-bottom:3px}
+  .auro-report-detail{display:grid;gap:3px}
+  .auro-report-detail small{display:block;color:#475569;font-size:11px;font-weight:700;line-height:1.2}
   .auro-footer{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:14px;color:#6b7280;font-size:11px;display:flex;justify-content:space-between;gap:12px}
-  @media print{body{background:white}.auro-report{max-width:none;padding:18mm;box-shadow:none}.no-print{display:none!important}.auro-report-card{box-shadow:none}.auro-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}.auro-report-card,.auro-patient-band{break-inside:avoid}.auro-section-title{break-after:avoid}}
+  @page{size:A4;margin:8mm} @media print{body{background:white;font-size:10.5px;line-height:1.25}.auro-report{max-width:none;padding:0;box-shadow:none;min-height:auto}.no-print{display:none!important}.auro-header{padding:12px 16px;margin-bottom:8px;border-radius:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.auro-header h1{font-size:20px}.auro-section-title{margin:9px 0 5px;font-size:13px;padding-bottom:4px}.auro-patient-band{padding:7px 9px;margin-bottom:6px}.auro-info-grid{gap:5px;margin-bottom:5px}.auro-info-row{padding:5px 7px;border-radius:9px}.auro-report-card{box-shadow:none;margin-bottom:5px;border-radius:10px}.auro-report-card-head{padding:5px 7px}.auro-report-card-body{padding:6px 7px}.auro-report-card,.auro-patient-band,.auro-report-item{break-inside:avoid;page-break-inside:avoid}.auro-section-title{break-after:avoid}.auro-footer{margin-top:10px;padding-top:6px}}
+  @media print{.auro-report-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.auro-report-item{padding:4px 6px;border-radius:8px}.auro-report-item strong{font-size:10.5px}.auro-report-detail small{font-size:9.5px}.auro-clinical-text{padding:5px 7px}.auro-chip-grid{gap:4px}.auro-chip-grid span{padding:4px 6px;font-size:10px}.auro-list-item{padding:4px 6px}}
   @media(max-width:700px){.auro-report{padding:20px}.auro-info-grid,.auro-info-grid.compact{grid-template-columns:1fr}.auro-header h1{font-size:22px}}
 </style>
 </head>
@@ -5893,4 +5958,3 @@ document.addEventListener('click',e=>{
   <script src="antecedentes.js"></script>
 </body>
 </html>
-
