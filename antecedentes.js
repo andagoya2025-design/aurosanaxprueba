@@ -60,7 +60,140 @@ function auroUltimaHistoriaConAntecedentes(idPaciente){
   return auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneAntecedentes) || null;
 }
 
+function auroInyectarEstilosAntecedentesPremium(){
+  if(document.getElementById('auroAntecedentesPremiumStyle')) return;
+  const style = document.createElement('style');
+  style.id = 'auroAntecedentesPremiumStyle';
+  style.textContent = `
+    .auro-previos-box{
+      background:linear-gradient(135deg,#ffffff 0%,#fff7fb 100%)!important;
+      border:1px solid rgba(139,30,90,.16)!important;
+      border-radius:22px!important;
+      padding:18px!important;
+      margin:12px 0 18px!important;
+      box-shadow:0 14px 36px rgba(15,23,42,.08)!important;
+    }
+    .auro-previos-head{
+      display:flex!important;
+      justify-content:space-between!important;
+      align-items:flex-start!important;
+      gap:14px!important;
+      padding-bottom:14px!important;
+      margin-bottom:14px!important;
+      border-bottom:1px solid rgba(139,30,90,.12)!important;
+    }
+    .auro-previos-head b{
+      color:#7a174f!important;
+      font-size:17px!important;
+      font-weight:950!important;
+      letter-spacing:-.01em!important;
+    }
+    .auro-previos-head small{
+      display:block!important;
+      color:#64748b!important;
+      font-weight:650!important;
+      margin-top:4px!important;
+    }
+    .auro-previos-hide{
+      padding:8px 12px!important;
+      border-radius:12px!important;
+      font-size:12px!important;
+      white-space:nowrap!important;
+    }
+    .auro-previos-content{
+      display:grid!important;
+      gap:12px!important;
+    }
+    .auro-previos-content.auro-previos-collapsed{
+      display:none!important;
+    }
+    .auro-previos-line{
+      background:#ffffff!important;
+      border:1px solid rgba(139,30,90,.12)!important;
+      border-radius:18px!important;
+      padding:14px!important;
+      box-shadow:0 8px 22px rgba(15,23,42,.045)!important;
+    }
+    .auro-previos-line span{
+      display:flex!important;
+      align-items:center!important;
+      gap:8px!important;
+      color:#8b1e5a!important;
+      font-size:12px!important;
+      font-weight:950!important;
+      text-transform:uppercase!important;
+      letter-spacing:.04em!important;
+      margin-bottom:12px!important;
+    }
+    .auro-previos-mini-table{
+      display:grid!important;
+      grid-template-columns:repeat(auto-fit,minmax(250px,1fr))!important;
+      gap:12px!important;
+    }
+    .auro-previos-mini-row{
+      position:relative!important;
+      background:linear-gradient(180deg,#ffffff 0%,#fdf2f8 100%)!important;
+      border:1px solid rgba(139,30,90,.14)!important;
+      border-left:4px solid #c23b83!important;
+      border-radius:16px!important;
+      padding:13px 14px!important;
+      min-height:92px!important;
+      box-shadow:0 6px 16px rgba(139,30,90,.055)!important;
+    }
+    .auro-previos-mini-row b{
+      display:block!important;
+      color:#111827!important;
+      font-size:13.5px!important;
+      font-weight:950!important;
+      margin-bottom:8px!important;
+      line-height:1.25!important;
+    }
+    .auro-previos-mini-row em{
+      display:grid!important;
+      gap:5px!important;
+      color:#374151!important;
+      font-size:12.5px!important;
+      font-style:normal!important;
+      line-height:1.35!important;
+    }
+    .auro-previos-detail-pill{
+      display:flex!important;
+      align-items:flex-start!important;
+      gap:6px!important;
+      background:rgba(255,255,255,.76)!important;
+      border:1px solid rgba(226,232,240,.9)!important;
+      border-radius:10px!important;
+      padding:6px 8px!important;
+      color:#334155!important;
+      font-weight:700!important;
+    }
+    .auro-previos-detail-pill i{
+      color:#8b1e5a!important;
+      margin-top:1px!important;
+      flex:0 0 auto!important;
+    }
+    @media(max-width:760px){
+      .auro-previos-head{display:block!important;}
+      .auro-previos-hide{margin-top:10px!important;}
+      .auro-previos-mini-table{grid-template-columns:1fr!important;}
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function auroToggleAntecedentesPrevios(){
+  const content = document.getElementById('auroAntecedentesPreviosContent');
+  const btn = document.querySelector('#auroAntecedentesPreviosBox .auro-previos-hide');
+  if(!content || !btn) return;
+
+  const collapsed = content.classList.toggle('auro-previos-collapsed');
+  btn.innerHTML = collapsed
+    ? '<i class="bi bi-eye me-1"></i>Mostrar'
+    : '<i class="bi bi-eye-slash me-1"></i>Ocultar';
+}
+
 function auroAsegurarCajaAntecedentesPrevios(){
+  auroInyectarEstilosAntecedentesPremium();
   const panel = document.getElementById('hc_antecedentes');
   if(!panel) return null;
 
@@ -77,7 +210,7 @@ function auroAsegurarCajaAntecedentesPrevios(){
         <b><i class="bi bi-database-check me-1"></i> Antecedentes previos guardados</b>
         <small>Información leída desde Google Sheets. Se conserva para evitar pérdida de datos.</small>
       </div>
-      <button type="button" class="btn-soft auro-previos-hide" onclick="document.getElementById('auroAntecedentesPreviosBox').style.display='none'">Ocultar</button>
+      <button type="button" class="btn-soft auro-previos-hide" onclick="auroToggleAntecedentesPrevios()"><i class="bi bi-eye-slash me-1"></i>Ocultar</button>
     </div>
     <div class="auro-previos-content" id="auroAntecedentesPreviosContent"></div>
   `;
@@ -615,17 +748,63 @@ function auroExtraerActividadRegistrada(valor){
   return items;
 }
 
+function auroIconoSeccionAntecedente(label){
+  const n = auroNormalizarClaveClinica(label);
+  if(n.includes('patolog')) return 'bi-heart-pulse';
+  if(n.includes('quir')) return 'bi-scissors';
+  if(n.includes('alerg')) return 'bi-exclamation-triangle';
+  if(n.includes('vacuna')) return 'bi-shield-check';
+  if(n.includes('habito')) return 'bi-person-lines-fill';
+  if(n.includes('actividad')) return 'bi-activity';
+  if(n.includes('gineco')) return 'bi-gender-female';
+  if(n.includes('medicacion')) return 'bi-capsule-pill';
+  if(n.includes('familia')) return 'bi-people';
+  return 'bi-journal-medical';
+}
+
+function auroRenderDetallePremium(detalle){
+  const raw = String(detalle || '').trim();
+  if(!raw) return '';
+
+  const partes = raw
+    .split(/\s*·\s*/)
+    .map(x => x.trim())
+    .filter(Boolean);
+
+  return partes.map(p => {
+    let icon = 'bi-dot';
+    let texto = p;
+
+    if(/^Tiempo:/i.test(p)){
+      icon = 'bi-hourglass-split';
+      texto = p.replace(/^Tiempo:\s*/i, 'Evolución: ');
+    }else if(/^(Tratamiento|Medicamento|Medicación):/i.test(p)){
+      icon = 'bi-capsule-pill';
+      texto = p.replace(/^(Tratamiento|Medicamento|Medicación):\s*/i, 'Tratamiento: ');
+    }else if(/^(Fecha|Año):/i.test(p)){
+      icon = 'bi-calendar-check';
+    }else if(/^(Reacción|Reaccion):/i.test(p)){
+      icon = 'bi-exclamation-circle';
+    }
+
+    return `<span class="auro-previos-detail-pill"><i class="bi ${icon}"></i>${auroEscapeHtml(texto)}</span>`;
+  }).join('');
+}
+
 function auroRenderPrevioItemsPremium(label, items){
   items = (items || []).filter(x => x && auroEsValorPrevioUtil(x.titulo) && !auroEsTokenTecnicoAntecedente(x.titulo));
   if(!items.length) return '';
+
+  const icono = auroIconoSeccionAntecedente(label);
+
   return `
     <div class="auro-previos-line auro-previos-compact">
-      <span>${auroEscapeHtml(label)}</span>
+      <span><i class="bi ${icono}"></i>${auroEscapeHtml(label)}</span>
       <div class="auro-previos-mini-table">
         ${items.map(it => `
           <div class="auro-previos-mini-row">
             <b>${auroEscapeHtml(it.titulo)}</b>
-            ${it.detalle ? `<em>${auroEscapeHtml(it.detalle)}</em>` : ''}
+            ${it.detalle ? `<em>${auroRenderDetallePremium(it.detalle)}</em>` : ''}
           </div>
         `).join('')}
       </div>
@@ -666,6 +845,9 @@ function auroMostrarAntecedentesPrevios(h, modo){
   html += auroRenderPrevioItemsPremium('Familiares', auroExtraerItemsAntecedentePremium(h.antecedentes_familiares || '', 'familiares'));
 
   content.innerHTML = html;
+  content.classList.remove('auro-previos-collapsed');
+  const btn = box.querySelector('.auro-previos-hide');
+  if(btn) btn.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Ocultar';
   box.dataset.idHistoriaOrigen = h.id_historia || '';
   box.dataset.modo = modo || '';
   box.style.display = content.innerHTML.trim() ? 'block' : 'none';
