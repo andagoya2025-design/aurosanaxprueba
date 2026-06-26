@@ -2179,9 +2179,54 @@
     <section class="screen" id="procedimientos"><div class="cardx p-4"><h4 class="fw-bold">Procedimientos</h4><p class="text-muted">Láser CO₂, HIFU, PRP, escleroterapia, toxina botulínica, ácido hialurónico y otros.</p>
         <div class="module-patient-card" data-module-patient="Procedimientos"></div>
 </div></section>
-    <section class="screen" id="consentimientos"><div class="cardx p-4"><h4 class="fw-bold">Consentimientos informados</h4><p class="text-muted">Plantillas, firma y PDF por procedimiento.</p>
+    <section class="screen" id="consentimientos">
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div>
+            <h4 class="fw-bold">Consentimientos informados</h4>
+            <p class="text-muted">Plantillas, vista previa, firma e impresión PDF por procedimiento.</p>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn-soft" onclick="auroConsentimientosUI.generarConsultaGinecologica()"><i class="bi bi-file-earmark-text me-1"></i> Generar</button>
+            <button type="button" class="btn-auro" onclick="auroConsentimientosUI.imprimirConsentimiento()"><i class="bi bi-printer me-1"></i> Imprimir / PDF</button>
+          </div>
+        </div>
+
         <div class="module-patient-card" data-module-patient="Consentimientos"></div>
-</div></section>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-5">
+            <label class="form-label fw-bold">Tipo de consentimiento</label>
+            <select id="consTipo" class="form-select" onchange="auroConsentimientosUI.generarConsultaGinecologica()">
+              <option value="consultaGinecologica">Consulta ginecológica</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold">Fecha</label>
+            <input id="consFecha" type="date" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Estado</label>
+            <select id="consEstado" class="form-select">
+              <option>Pendiente de firma</option>
+              <option>Firmado</option>
+              <option>Impreso / PDF</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sheet-note mb-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Esta primera versión genera el consentimiento en pantalla. Luego se podrá guardar el enlace PDF en la pestaña consentimientos de Google Sheets.
+        </div>
+
+        <div id="vistaConsentimiento" class="cardx p-4 bg-white">
+          <div class="text-center text-muted py-4">
+            Seleccione un paciente y presione <b>Generar</b> para ver el consentimiento.
+          </div>
+        </div>
+      </div>
+    </section>
     <section class="screen" id="recetas">
       <div class="cardx p-4">
         <div class="section-head">
@@ -6069,7 +6114,106 @@ document.addEventListener('click',e=>{
 });
 </script>
   <script src="antecedentes.js"></script>
-  <script src="examenfisico.js"></script>
   <script src="consentimientos.js"></script>
+  <script src="examenfisico.js"></script>
+
+<script>
+/* =====================================================
+   AUROSANAX ERP - CONECTOR VISUAL CONSENTIMIENTOS
+   Seguro: no toca Google Sheets ni Apps Script.
+===================================================== */
+(function(){
+  function fechaHoy(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function asegurarMotorConsentimientos(){
+    if(window.auroConsentimientos && typeof window.auroConsentimientos.generar === 'function') return;
+
+    window.auroConsentimientos = {
+      plantillas:{
+        consultaGinecologica:`
+          <div class="consentimiento-documento" style="font-family:Arial, sans-serif; color:#111827; line-height:1.55;">
+            <h2 style="text-align:center; margin-bottom:4px;">CONSENTIMIENTO INFORMADO</h2>
+            <h3 style="text-align:center; margin-top:0; color:#8b1e5a;">CONSULTA GINECOLÓGICA</h3>
+            <hr>
+            <p>Yo, <strong>{{PACIENTE}}</strong>, con documento de identidad N.° <strong>{{CEDULA}}</strong>, declaro haber recibido información clara, suficiente y comprensible sobre la consulta ginecológica que se realizará.</p>
+            <p>Comprendo que durante la atención médica podrán efectuarse procedimientos propios de la especialidad, incluyendo anamnesis médica, examen físico general, examen ginecológico, evaluación mamaria cuando corresponda, solicitud de exámenes complementarios y orientación diagnóstica o terapéutica.</p>
+            <p>He tenido oportunidad de realizar preguntas, las cuales han sido respondidas satisfactoriamente.</p>
+            <p>Otorgo mi consentimiento libre y voluntario para la realización de la presente consulta.</p>
+            <br><br>
+            <table style="width:100%; margin-top:40px;">
+              <tr>
+                <td style="text-align:center; width:50%;">___________________________<br>Firma del Paciente</td>
+                <td style="text-align:center; width:50%;">___________________________<br>Médico Tratante</td>
+              </tr>
+            </table>
+            <br>
+            <p><strong>Fecha:</strong> {{FECHA}}</p>
+          </div>`
+      },
+      generar(tipo, datos = {}){
+        let plantilla = this.plantillas[tipo] || '';
+        Object.keys(datos).forEach(k => {
+          plantilla = plantilla.replaceAll(`{{${k}}}`, datos[k] || '');
+        });
+        return plantilla;
+      }
+    };
+  }
+
+  function pacienteActivoConsentimiento(){
+    if(typeof getPacienteActivo === 'function'){
+      const p = getPacienteActivo();
+      if(p) return p;
+    }
+    const id = window.activePatientId || document.getElementById('hcPacienteSelect')?.value || '';
+    if(Array.isArray(window.patients)){
+      return window.patients.find(p => p.id_paciente === id) || window.patients[0] || null;
+    }
+    if(typeof patients !== 'undefined' && Array.isArray(patients)){
+      return patients.find(p => p.id_paciente === id) || patients[0] || null;
+    }
+    return null;
+  }
+
+  window.auroConsentimientosUI = {
+    generarConsultaGinecologica(){
+      asegurarMotorConsentimientos();
+      const cont = document.getElementById('vistaConsentimiento');
+      if(!cont) return;
+
+      const fechaInput = document.getElementById('consFecha');
+      if(fechaInput && !fechaInput.value) fechaInput.value = fechaHoy();
+
+      const paciente = pacienteActivoConsentimiento();
+      if(!paciente){
+        cont.innerHTML = '<div class="text-center text-muted py-4">Seleccione un paciente antes de generar el consentimiento.</div>';
+        return;
+      }
+
+      cont.innerHTML = window.auroConsentimientos.generar('consultaGinecologica', {
+        PACIENTE: paciente.nombre || 'Paciente',
+        CEDULA: paciente.cedula || 'No registrada',
+        FECHA: fechaInput?.value || fechaHoy()
+      });
+    },
+
+    imprimirConsentimiento(){
+      const cont = document.getElementById('vistaConsentimiento');
+      if(!cont || !cont.innerHTML.trim()){
+        this.generarConsultaGinecologica();
+      }
+      window.print();
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    const fechaInput = document.getElementById('consFecha');
+    if(fechaInput && !fechaInput.value) fechaInput.value = fechaHoy();
+  });
+})();
+</script>
 </body>
 </html>
