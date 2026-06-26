@@ -346,7 +346,59 @@ function auroLimpiarTituloClinico(txt){
     .trim();
 }
 
+
+
+/* AUROSANAX FIX HTA - extrae patológicos desde texto compacto o JSON modular */
+function auroExtraerFuentePatologicosPersonales(valor){
+  const texto = String(valor || '').trim();
+  if(!texto) return '';
+
+  try{
+    if(typeof AURO_ANT_PERSONALES_MARKER !== 'undefined' && texto.startsWith(AURO_ANT_PERSONALES_MARKER)){
+      const data = JSON.parse(texto.substring(AURO_ANT_PERSONALES_MARKER.length));
+      if(typeof data?.patologicos === 'string') return data.patologicos;
+      if(Array.isArray(data?.patologicos)) return data.patologicos.map(auroPrevioTextoItemBasico).filter(Boolean).join('; ');
+    }
+  }catch(e){
+    console.warn('AUROSANAX: no se pudo leer patológicos personales desde JSON.', e);
+  }
+
+  return texto;
+}
+
+function auroExtraerPatologiasPipePremium(valor){
+  const fuente = auroExtraerFuentePatologicosPersonales(valor);
+  const items = [];
+  const seen = new Set();
+
+  String(fuente || '')
+    .replace(/^patologicos?\s*:\s*/i, '')
+    .split(';')
+    .map(x => String(x || '').trim())
+    .filter(Boolean)
+    .forEach(row => {
+      const partes = row.split('|').map(x => String(x || '').trim()).filter(Boolean);
+      const titulo = auroLimpiarTituloClinico(partes[0] || '');
+      if(!titulo || !auroEsPatologiaConocida(titulo)) return;
+
+      const detallePartes = [];
+      if(partes[1]) detallePartes.push(partes[1]);
+      if(partes.slice(2).join(' | ')) detallePartes.push('Tratamiento: ' + partes.slice(2).join(' | '));
+      const detalle = detallePartes.join(' · ');
+      const key = auroNormalizarClaveClinica(titulo + ' ' + detalle);
+      if(!key || seen.has(key)) return;
+      seen.add(key);
+      items.push({ titulo: auroCapitalizarClinico(titulo), detalle });
+    });
+
+  return items;
+}
+
 function auroExtraerItemsAntecedentePremium(valor, tipo){
+  if(tipo === 'patologia'){
+    const directas = auroExtraerPatologiasPipePremium(valor);
+    if(directas.length) return directas;
+  }
   const tokens = auroTokenizarPrevioClinico(valor);
   const items = [];
   const seen = new Set();
@@ -552,9 +604,10 @@ function auroMostrarAntecedentesPrevios(h, modo){
   }
 
   const fuentePersonales = h.antecedentes_personales || '';
+  const fuentePatologicos = auroExtraerFuentePatologicosPersonales(fuentePersonales);
   let html = '';
 
-  html += auroRenderPrevioItemsPremium('Patológicos personales', auroExtraerItemsAntecedentePremium(fuentePersonales, 'patologia'));
+  html += auroRenderPrevioItemsPremium('Patológicos personales', auroExtraerItemsAntecedentePremium(fuentePatologicos, 'patologia'));
   html += auroRenderPrevioItemsPremium('Quirúrgicos', auroExtraerItemsAntecedentePremium(h.antecedentes_quirurgicos || '', 'quirurgico'));
   html += auroRenderPrevioItemsPremium('Alergias', auroExtraerItemsAntecedentePremium(h.alergias || '', 'alergia'));
   html += auroRenderPrevioItemsPremium('Vacunas registradas', auroExtraerVacunasRegistradas(fuentePersonales));
@@ -1753,12 +1806,3 @@ function recopilarAlimentacionEstructurada(){
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(auroV21InicializarAyudasAntecedentes, 250);
 });
-
-/* ==========================================================
-   AUROSANAX - PRUEBA DE CONEXIÓN MODULAR
-   Si este mensaje aparece en Console, el index.html está leyendo
-   correctamente antecedentes.js.
-   ========================================================== */
-window.AURO_ANTECEDENTES_JS_ACTIVO = true;
-console.log("✅ antecedentes.js cargado correctamente - prueba AUROSANAX");
-
