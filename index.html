@@ -6913,7 +6913,7 @@ function imprimirHistoriaClinica(){
     ${auroInformeBloque('Enfermedad actual', '02', auroInformeParrafo(auroInformeValue('hcEnfermedadActual')))}
   `;
 
-  const antPersonales = auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesPersonales')) + auroInformeExtraerTabla('.antecedentes-table', {soloMarcados:true});
+  const antPersonales = auroInformeExtraerTabla('.antecedentes-table', {soloMarcados:true});
   const antQuirurgicos = auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesQuirurgicos'));
   const alergias = auroInformeChipsDesdeTexto(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'danger');
   const familiares = auroInformeParrafo(auroInformeValue('hcAntecedentesFamiliares'));
