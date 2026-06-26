@@ -3157,43 +3157,179 @@ function auroPrevioResumenJsonAntecedentes(obj){
   return bloques.join(' || ');
 }
 
+function auroPrevioFormatearFechaCorta(valor){
+  const txt = String(valor || '').trim();
+  if(!txt) return '';
+  const m = txt.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return txt;
+}
+
+function auroPrevioLimpiarValor(valor){
+  let t = String(valor || '').trim();
+  if(!t) return '';
+  t = auroPrevioFormatearFechaCorta(t)
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if(!auroPrevioEsValorUtil(t)) return '';
+  if(/^no\s*$/i.test(t)) return '';
+  return t;
+}
+
+function auroPrevioTituloDesdeObjeto(item){
+  if(!item || typeof item !== 'object') return '';
+  return item.descripcion || item.patologia || item.cirugia || item.alergia || item.biologico || item.vacuna || item.habito || item.actividad || item.nombre || item.key || '';
+}
+
+function auroPrevioLineaObjeto(item){
+  if(!item || typeof item !== 'object') return auroPrevioLimpiarValor(item);
+
+  const titulo = auroPrevioLimpiarValor(auroPrevioTituloDesdeObjeto(item));
+  const detalles = [];
+
+  Object.keys(item).forEach(k => {
+    if(['key','descripcion','patologia','cirugia','alergia','biologico','vacuna','habito','actividad','nombre'].includes(k)) return;
+    const v = item[k];
+    if(!auroPrevioEsValorUtil(v)) return;
+
+    if(Array.isArray(v)){
+      const sub = v.map(auroPrevioLineaObjeto).filter(Boolean);
+      if(sub.length){
+        const etiqueta = auroPrevioHumanizarClave(k);
+        detalles.push((etiqueta ? etiqueta + ': ' : '') + sub.join('; '));
+      }
+      return;
+    }
+
+    if(typeof v === 'object'){
+      const sub = auroPrevioLineaObjeto(v);
+      if(sub){
+        const etiqueta = auroPrevioHumanizarClave(k);
+        detalles.push((etiqueta ? etiqueta + ': ' : '') + sub);
+      }
+      return;
+    }
+
+    const limpio = auroPrevioLimpiarValor(v);
+    if(!limpio) return;
+    const etiqueta = auroPrevioHumanizarClave(k);
+    if(etiqueta) detalles.push(etiqueta + ': ' + limpio);
+    else detalles.push(limpio);
+  });
+
+  return [titulo, ...detalles].filter(Boolean).join(' — ');
+}
+
+function auroPrevioAgregarLineasDesdeArray(destino, titulo, lista){
+  if(!Array.isArray(lista)) return;
+  const lineas = lista.map(auroPrevioLineaObjeto).filter(Boolean);
+  if(lineas.length){
+    destino.push(titulo);
+    auroPrevioUnicos(lineas).forEach(x => destino.push('• ' + x));
+  }
+}
+
+function auroPrevioResumenJsonClinico(obj){
+  if(!obj || typeof obj !== 'object') return '';
+  const out = [];
+
+  auroPrevioAgregarLineasDesdeArray(out, 'Patológicos personales', obj.patologicos || obj.patologicos_personales);
+  auroPrevioAgregarLineasDesdeArray(out, 'Quirúrgicos', obj.quirurgicos);
+  auroPrevioAgregarLineasDesdeArray(out, 'Alergias', obj.alergias);
+
+  if(obj.covid || obj.COVID){
+    const covid = auroPrevioLineaObjeto(obj.covid || obj.COVID);
+    if(covid){ out.push('COVID-19'); out.push('• ' + covid); }
+  }
+
+  auroPrevioAgregarLineasDesdeArray(out, 'Vacunas', obj.vacunas);
+  auroPrevioAgregarLineasDesdeArray(out, 'Hábitos', obj.habitos);
+  auroPrevioAgregarLineasDesdeArray(out, 'Estilo de vida', obj.estilo_vida || obj.estiloVida || obj.actividades);
+
+  if(obj.alimentacion){
+    const ali = auroPrevioLineaObjeto(obj.alimentacion);
+    if(ali){ out.push('Alimentación'); out.push('• ' + ali); }
+  }
+
+  auroPrevioAgregarLineasDesdeArray(out, 'Gineco-obstétricos', obj.obstetricos || obj.gineco_obstetricos);
+  if(obj.ginecologicos){
+    const gin = auroPrevioLineaObjeto(obj.ginecologicos);
+    if(gin){ out.push('Ginecológicos'); out.push('• ' + gin); }
+  }
+
+  const directos = [];
+  ['fum','menarquia','ciclos','gesta','partos','cesareas','abortos','hijos_vivos','hijos_muertos','pap','ivsa','anticoncepcion','lactancia','ectopicos','otros'].forEach(k => {
+    const v = auroPrevioLimpiarValor(obj[k]);
+    if(v) directos.push(auroPrevioHumanizarClave(k) + ': ' + v);
+  });
+  if(directos.length){ out.push('Gineco-obstétricos'); directos.forEach(x => out.push('• ' + x)); }
+
+  return out.join('<br>');
+}
+
+function auroPrevioSepararCompactoPorSecciones(raw){
+  let texto = String(raw || '').trim();
+  if(!texto) return '';
+
+  texto = texto
+    .replace(/AUROSANAX_ANT_PERSONALES_V1::?/gi, '')
+    .replace(/AUROSANAX_ANT_GINECO_OBS_V1::?/gi, '')
+    .replace(/AUROSANAX_ANT_PERSONALES[^:;|\n]*/gi, '')
+    .replace(/AUROSANAX_ANT_GINECO_OBS[^:;|\n]*/gi, '')
+    .replace(/\[object Object\]/gi, '')
+    .replace(/[{}\[\]"]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const grupos = [
+    ['Patológicos personales', /(?:^|[;,|])\s*(?:patologicos|patológicos|patologia|patología)\s*:\s*/gi],
+    ['Vacunas', /(?:^|[;,|])\s*(?:biologico|biológico|vacuna)\s*:\s*/gi],
+    ['Hábitos', /(?:^|[;,|])\s*habito\s*:\s*/gi],
+    ['Actividad física', /(?:^|[;,|])\s*actividad\s*:\s*/gi],
+    ['Alimentación', /(?:^|[;,|])\s*alimentacion\s*:\s*/gi],
+    ['Gineco-obstétricos', /(?:^|[;,|])\s*(?:gineco|obstetricos|obstétricos)\s*:\s*/gi]
+  ];
+
+  grupos.forEach(([titulo, re]) => {
+    texto = texto.replace(re, '<br>' + titulo + '<br>• ');
+  });
+
+  texto = texto
+    .replace(/\s*;\s*/g, '<br>• ')
+    .replace(/\s*\|\s*/g, ' — ')
+    .replace(/\s*,\s*(?=[A-ZÁÉÍÓÚÑ])/g, '<br>• ')
+    .replace(/\b(numero|número|key|no_aplica)\s*:\s*[^<;|,]*/gi, '')
+    .replace(/\b(tiempo|detalle|resultado|observacion|observación|medicamento)\s*:\s*/gi, m => auroPrevioHumanizarClave(m.replace(':','').trim().toLowerCase()) + ': ')
+    .replace(/(<br>\s*){2,}/g, '<br>')
+    .replace(/^<br>|<br>$/g, '')
+    .trim();
+
+  return texto;
+}
+
 function auroLimpiarTextoPrevioClinico(valor){
   let raw = String(valor || '').trim();
   if(!raw) return '';
 
   const obj = auroPrevioTryParseJsonInterno(raw);
   if(obj){
-    const resumen = auroPrevioResumenJsonAntecedentes(obj);
-    if(resumen) raw = resumen;
+    const resumenJson = auroPrevioResumenJsonClinico(obj);
+    if(resumenJson) return resumenJson;
   }
 
-  raw = raw
-    .replace(/AUROSANAX_ANT_PERSONALES\s*v?[\d.]*\s*\|\|?/gi, '')
-    .replace(/AUROSANAX_ANT_GINECO_OBS_V?\d*::?/gi, '')
-    .replace(/AUROSANAX_ANT_GINECO_OBSTETRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
-    .replace(/AUROSANAX_ANT_GINECO_OBSTÉTRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
-    .replace(/"key"\s*:\s*"([^"]*)"/gi, '$1')
-    .replace(/"descripcion"\s*:\s*"([^"]*)"/gi, '$1')
-    .replace(/"tiempo"\s*:\s*"([^"]*)"/gi, 'Tiempo: $1')
-    .replace(/"medicamento"\s*:\s*"([^"]*)"/gi, 'Medicación: $1')
-    .replace(/"reaccion"\s*:\s*"([^"]*)"/gi, 'Reacción: $1')
-    .replace(/"numero"\s*:\s*"[^"]*"/gi, '')
-    .replace(/"[^"]*"\s*:\s*(\{|\[)/g, '')
-    .replace(/[{}\[\]"]/g, '')
-    .replace(/\s*\|\|\s*/g, '<br>')
-    .replace(/\s*;\s*/g, '; ')
-    .replace(/\s*,\s*,+/g, ', ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  let limpio = auroPrevioSepararCompactoPorSecciones(raw);
 
-  raw = raw.replace(/(<br>\s*){2,}/g, '<br>')
-    .replace(/\[object Object\]/gi, '')
-    .replace(/(?:^|<br>|;\s*)\s*(Número|Numero)\s*:?\s*\d*\s*(?=<br>|;|$)/gi, '')
-    .replace(/(?:^|<br>|;\s*)\s*No valorado\s*(?=<br>|;|$)/gi, '')
+  limpio = limpio
+    .replace(/No valorado/gi, '')
+    .replace(/undefined|null/gi, '')
+    .replace(/•\s*(?=<br>|$)/g, '')
+    .replace(/<br>\s*•\s*<br>/g, '<br>')
     .replace(/(<br>\s*){2,}/g, '<br>')
     .replace(/^<br>|<br>$/g, '')
     .trim();
-  return raw;
+
+  return limpio;
 }
 
 function auroRenderPrevioLineaLimpia(label, value){
@@ -3203,10 +3339,11 @@ function auroRenderPrevioLineaLimpia(label, value){
   return `
     <div class="auro-previos-line">
       <span>${auroEscapeHtml(label)}</span>
-      <p>${limpio.split('<br>').map(x => auroEscapeHtml(x)).join('<br>')}</p>
+      <p>${limpio.split('<br>').map(x => auroEscapeHtml(x).trim()).filter(Boolean).join('<br>')}</p>
     </div>
   `;
 }
+
 
 function auroMostrarAntecedentesPrevios(h, modo){
   const box = auroAsegurarCajaAntecedentesPrevios();
@@ -7103,5 +7240,4 @@ document.addEventListener('click',e=>{
 </script>
 </body>
 </html>
-
 
