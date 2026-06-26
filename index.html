@@ -2056,7 +2056,7 @@
         <div class="clinical-panel" id="hc_obstetricia"><div class="clinical-subtitle"><i class="bi bi-heart-pulse"></i> Control obstétrico avanzado</div><div class="row g-3"><div class="col-md-2"><label class="form-label fw-bold">FUR</label><input type="date" id="hcFUR" class="form-control" onchange="calcObstetricia()"></div><div class="col-md-2"><label class="form-label fw-bold">FPP</label><input id="hcFPP" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Edad gestacional</label><input id="hcEG" class="form-control" readonly></div><div class="col-md-2"><label class="form-label fw-bold">Peso materno</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">PA</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Altura uterina</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">FCF</label><input class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Mov. fetales</label><select class="form-select"><option>Presentes</option><option>Disminuidos</option><option>Ausentes</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select class="form-select"><option>Bajo riesgo</option><option>Alto riesgo</option><option>Referir / seguimiento estrecho</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Ecografía</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Plan prenatal</label><textarea class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_estetica"><div class="clinical-subtitle"><i class="bi bi-stars"></i> Evaluación estética funcional</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Área</label><select class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Procedimiento sugerido</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Sesión</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Consentimiento</label><select class="form-select"><option>Pendiente</option><option>Firmado</option><option>No aplica</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación facial</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación corporal</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación íntima</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Evolución fotográfica / observaciones</label><textarea class="form-control" rows="3"></textarea></div></div></div>
         <div class="clinical-panel" id="hc_diagnostico"><div class="clinical-subtitle"><i class="bi bi-clipboard2-check"></i> Diagnósticos</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">CIE-10 principal</label><input id="hcCie10Principal" class="form-control" placeholder="Ej. N87.1"></div><div class="col-md-9"><label class="form-label fw-bold">Diagnóstico principal</label><input id="hcDiagnosticoPrincipal" class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">CIE-10 secundario</label><input id="hcCie10Secundario" class="form-control"></div><div class="col-md-9"><label class="form-label fw-bold">Diagnóstico secundario</label><input id="hcDiagnosticoSecundario" class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Análisis clínico</label><textarea id="hcAnalisisClinico" class="form-control" rows="4"></textarea></div></div></div>
-        <div class="clinical-panel" id="hc_plan"><div class="clinical-subtitle"><i class="bi bi-list-check"></i> Plan médico e indicaciones</div><div id="auroPlanPreviosBox" class="auro-previos-box" style="display:none;"></div><div class="row g-3"><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-capsule-pill me-1"></i> Receta / medicamentos</label><div class="receta-medicamentos-box"><div class="row g-3 align-items-end"><div class="col-md-5 position-relative"><label class="form-label small fw-bold">Medicamento</label><input id="hcMedBusqueda" class="form-control" placeholder="Buscar medicamento..." autocomplete="off"><div id="hcMedSugerencias" class="med-sugerencias d-none"></div></div><div class="col-md-3"><label class="form-label small fw-bold">Presentación</label><input id="hcMedPresentacion" class="form-control" placeholder="Ej. 500 mg tableta"></div><div class="col-md-2"><label class="form-label small fw-bold">Vía</label><select id="hcMedVia" class="form-select"><option value="">Seleccione</option><option>VO</option><option>Vaginal</option><option>Tópica</option><option>IM</option><option>IV</option><option>SC</option><option>Sublingual</option><option>Oftálmica</option><option>Ótica</option><option>Inhalatoria</option></select></div><div class="col-md-2"><label class="form-label small fw-bold">Cantidad</label><input id="hcMedCantidad" class="form-control" placeholder="Ej. 30"></div><div class="col-md-3"><label class="form-label small fw-bold">Frecuencia</label><input id="hcMedFrecuencia" class="form-control" placeholder="Ej. cada 12 horas"></div><div class="col-md-3"><label class="form-label small fw-bold">Duración</label><input id="hcMedDuracion" class="form-control" placeholder="Ej. 7 días"></div><div class="col-md-4"><label class="form-label small fw-bold">Indicaciones</label><input id="hcMedIndicaciones" class="form-control" placeholder="Ej. después de alimentos"></div><div class="col-md-2"><label class="form-label small fw-bold">Tto. continuo</label><select id="hcMedContinuo" class="form-select"><option>No</option><option>Sí</option></select></div><div class="col-md-12 d-flex gap-2 flex-wrap"><button type="button" class="btn btn-primary" onclick="agregarMedicamentoDesdeFormulario()"><i class="bi bi-plus-circle me-1"></i> Agregar medicamento</button><button type="button" class="btn btn-outline-secondary" onclick="limpiarFormularioMedicamento()">Limpiar</button></div></div><div class="table-responsive mt-3"><table class="table table-sm align-middle receta-table mb-0"><thead><tr><th>Medicamento</th><th>Presentación</th><th>Vía</th><th>Cantidad</th><th>Frecuencia</th><th>Duración</th><th>Indicaciones</th><th>Tto.</th><th style="width:90px;">Acción</th></tr></thead><tbody id="hcMedicamentosTableBody"><tr id="hcMedicamentosEmpty"><td colspan="9" class="text-center text-muted py-3"><i class="bi bi-capsule me-1"></i> Sin medicamentos agregados</td></tr></tbody></table></div><textarea id="hcRecetaMedicamentos" class="d-none"></textarea><div class="form-text text-muted mt-2">Los medicamentos agregados aquí se pasan automáticamente al módulo <b>Recetas e indicaciones</b> para imprimir, PDF o WhatsApp.</div></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Plan terapéutico</label><textarea id="hcPlanTratamiento" class="form-control" rows="5" placeholder="Conducta médica, manejo, control o procedimiento indicado."></textarea></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-clipboard2-pulse me-1"></i> Órdenes médicas</label><div class="ordenes-medicas-box"><div class="row g-3 align-items-end"><div class="col-md-4"><label class="form-label small fw-bold">Tipo de orden</label><select id="hcOrdenTipo" class="form-select"><option value="">Seleccione...</option><option>LABORATORIOS</option><option>IMÁGENES</option><option>GINECOLOGÍA</option><option>OBSTETRICIA</option><option>MATERNO FETAL</option><option>ENDOCRINOLOGÍA</option><option>METABÓLICO</option><option>NUTRICIÓN</option><option>CARDIOLOGÍA</option><option>MEDICINA GENERAL</option><option>MEDICINA INTERNA</option><option>UROLOGÍA</option><option>DERMATOLOGÍA</option><option>VACUNACIÓN</option><option>PROCEDIMIENTOS</option><option>OTROS</option></select></div><div class="col-md-6 position-relative"><label class="form-label small fw-bold">Procedimiento / examen</label><input id="hcOrdenBusqueda" class="form-control" placeholder="Buscar examen, estudio o procedimiento..." autocomplete="off"><div id="hcOrdenSugerencias" class="ordenes-sugerencias d-none"></div></div><div class="col-md-2 d-grid"><button type="button" class="btn btn-primary" onclick="agregarOrdenMedicaDesdeFormulario()"><i class="bi bi-plus-circle me-1"></i> Agregar</button></div><div class="col-md-12"><label class="form-label small fw-bold">Observación</label><input id="hcOrdenObservacion" class="form-control" placeholder="Detalle opcional: prioridad, indicación clínica, fecha o preparación."></div></div><div class="table-responsive mt-3"><table class="table table-sm align-middle ordenes-table mb-0"><thead><tr><th>Orden</th><th>Categoría</th><th>Observación</th><th style="width:90px;">Acción</th></tr></thead><tbody id="hcOrdenesTableBody"><tr id="hcOrdenesEmpty"><td colspan="4" class="text-center text-muted py-3"><i class="bi bi-file-earmark-medical me-1"></i> Sin registros</td></tr></tbody></table></div><textarea id="hcExamenesSolicitados" class="d-none"></textarea></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-person-lines-fill me-1"></i> Interconsulta</label><div class="interconsulta-box"><div class="row g-3"><div class="col-md-4"><label class="form-label small fw-bold">Tipo de interconsulta</label><select id="hcInterconsultaTipo" class="form-select"><option value="">Seleccione...</option><option>Interna</option><option>Externa</option></select></div><div class="col-md-4"><label class="form-label small fw-bold">Especialidad</label><select id="hcInterconsultaEspecialidad" class="form-select"><option value="">Seleccione...</option><option>Endocrinología</option><option>Nutrición</option><option>Medicina Interna</option><option>Cardiología</option><option>Dermatología</option><option>Psicología</option><option>Psiquiatría</option><option>Urología</option><option>Cirugía General</option><option>Cirugía Plástica</option><option>Reumatología</option><option>Gastroenterología</option><option>Neurología</option><option>Oncología</option><option>Materno Fetal</option><option>Fertilidad</option><option>Otra</option></select></div><div class="col-md-4"><label class="form-label small fw-bold">Prioridad</label><select id="hcInterconsultaPrioridad" class="form-select"><option>Normal</option><option>Preferente</option><option>Urgente</option></select></div><div class="col-md-6"><label class="form-label small fw-bold">Profesional</label><input id="hcInterconsultaProfesional" class="form-control" placeholder="Dr(a). / especialista / centro de referencia"></div><div class="col-md-6"><label class="form-label small fw-bold">Estado</label><select id="hcInterconsultaEstado" class="form-select"><option>Pendiente</option><option>Solicitada</option><option>Realizada</option><option>No aplica</option></select></div><div class="col-md-12"><label class="form-label small fw-bold">Motivo de interconsulta</label><textarea id="hcInterconsultaMotivo" class="form-control" rows="3" placeholder="Motivo clínico de la interconsulta."></textarea></div><div class="col-md-12"><label class="form-label small fw-bold">Observaciones clínicas</label><textarea id="hcInterconsultaObservaciones" class="form-control" rows="3" placeholder="Hallazgos relevantes, resumen clínico o recomendaciones para el especialista."></textarea></div></div><textarea id="hcInterconsultaResumen" class="d-none"></textarea></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-clipboard-check me-1"></i> Evaluaciones</label><div class="evaluaciones-box"><div class="evaluacion-subtitle">Evaluación psicológica</div><div class="evaluaciones-grid"><label class="evaluaciones-check"><input type="checkbox" id="hcEvalMalaActitud" onchange="recopilarEvaluacionesPlan()"> Denota mala actitud ante el examinador.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalAnimo" onchange="recopilarEvaluacionesPlan()"> Alteraciones del estado de ánimo.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalAbusoNegligencia" onchange="recopilarEvaluacionesPlan()"> Sospecha psicológica: paciente víctima de abuso o negligencia.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalAnomaliasMotoras" onchange="recopilarEvaluacionesPlan()"> Evidencia actividades y anomalías motoras.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalOdontologica" onchange="recopilarEvaluacionesPlan()"> Requiere evaluación odontológica.</label></div><textarea id="hcEvaluacionesResumen" class="d-none"></textarea></div></div></div><div class="col-12"><div class="hc-plan-row-small row g-3"><div class="col-md-6"><label class="form-label fw-bold">Próximo control</label><input id="hcControl" type="date" class="form-control" onchange="updateClinicalSummary()"></div><div class="col-md-6"><label class="form-label fw-bold">Estado</label><select id="hcEstadoHistoria" class="form-select"><option>Control</option><option>Alta</option><option>Seguimiento</option><option>Referencia</option></select></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Indicaciones para paciente</label><textarea id="hcIndicacionesPaciente" class="form-control" rows="5" placeholder="Indicaciones finales, signos de alarma, cuidados en casa y recomendaciones."></textarea></div></div></div></div>
+        <div class="clinical-panel" id="hc_plan"><div class="clinical-subtitle"><i class="bi bi-list-check"></i> Plan médico e indicaciones</div><div id="auroPlanPreviosBox" class="auro-previos-box" style="display:none;"></div><div class="row g-3"><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-capsule-pill me-1"></i> Receta / medicamentos</label><div class="receta-medicamentos-box"><div class="row g-3 align-items-end"><div class="col-md-5 position-relative"><label class="form-label small fw-bold">Medicamento</label><input id="hcMedBusqueda" class="form-control" placeholder="Buscar medicamento..." autocomplete="off"><div id="hcMedSugerencias" class="med-sugerencias d-none"></div></div><div class="col-md-3"><label class="form-label small fw-bold">Presentación</label><input id="hcMedPresentacion" class="form-control" placeholder="Ej. 500 mg tableta"></div><div class="col-md-2"><label class="form-label small fw-bold">Vía</label><select id="hcMedVia" class="form-select"><option value="">Seleccione</option><option>VO</option><option>Vaginal</option><option>Tópica</option><option>IM</option><option>IV</option><option>SC</option><option>Sublingual</option><option>Oftálmica</option><option>Ótica</option><option>Inhalatoria</option></select></div><div class="col-md-2"><label class="form-label small fw-bold">Cantidad</label><input id="hcMedCantidad" class="form-control" placeholder="Ej. 30"></div><div class="col-md-3"><label class="form-label small fw-bold">Frecuencia</label><input id="hcMedFrecuencia" class="form-control" placeholder="Ej. cada 12 horas"></div><div class="col-md-3"><label class="form-label small fw-bold">Duración</label><input id="hcMedDuracion" class="form-control" placeholder="Ej. 7 días"></div><div class="col-md-4"><label class="form-label small fw-bold">Indicaciones</label><input id="hcMedIndicaciones" class="form-control" placeholder="Ej. después de alimentos"></div><div class="col-md-2"><label class="form-label small fw-bold">Tto. continuo</label><select id="hcMedContinuo" class="form-select"><option>No</option><option>Sí</option></select></div><div class="col-md-12 d-flex gap-2 flex-wrap"><button type="button" class="btn btn-primary" onclick="agregarMedicamentoDesdeFormulario()"><i class="bi bi-plus-circle me-1"></i> Agregar medicamento</button><button type="button" class="btn btn-outline-secondary" onclick="limpiarFormularioMedicamento()">Limpiar</button></div></div><div class="table-responsive mt-3"><table class="table table-sm align-middle receta-table mb-0"><thead><tr><th>Medicamento</th><th>Presentación</th><th>Vía</th><th>Cantidad</th><th>Frecuencia</th><th>Duración</th><th>Indicaciones</th><th>Tto.</th><th style="width:90px;">Acción</th></tr></thead><tbody id="hcMedicamentosTableBody"><tr id="hcMedicamentosEmpty"><td colspan="9" class="text-center text-muted py-3"><i class="bi bi-capsule me-1"></i> Sin medicamentos agregados</td></tr></tbody></table></div><textarea id="hcRecetaMedicamentos" class="d-none"></textarea><div class="form-text text-muted mt-2">Los medicamentos agregados aquí se pasan automáticamente al módulo <b>Recetas e indicaciones</b> para imprimir, PDF o WhatsApp.</div></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Plan terapéutico</label><textarea id="hcPlanTratamiento" class="form-control" rows="5" placeholder="Conducta médica, manejo, control o procedimiento indicado."></textarea></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-clipboard2-pulse me-1"></i> Órdenes médicas</label><div class="ordenes-medicas-box"><div class="row g-3 align-items-end"><div class="col-md-4"><label class="form-label small fw-bold">Tipo de orden</label><select id="hcOrdenTipo" class="form-select"><option value="">Seleccione...</option><option>LABORATORIOS</option><option>IMÁGENES</option><option>GINECOLOGÍA</option><option>OBSTETRICIA</option><option>MATERNO FETAL</option><option>ENDOCRINOLOGÍA</option><option>METABÓLICO</option><option>NUTRICIÓN</option><option>CARDIOLOGÍA</option><option>MEDICINA GENERAL</option><option>MEDICINA INTERNA</option><option>UROLOGÍA</option><option>DERMATOLOGÍA</option><option>VACUNACIÓN</option><option>PROCEDIMIENTOS</option><option>OTROS</option></select></div><div class="col-md-6 position-relative"><label class="form-label small fw-bold">Procedimiento / examen</label><input id="hcOrdenBusqueda" class="form-control" placeholder="Buscar examen, estudio o procedimiento..." autocomplete="off"><div id="hcOrdenSugerencias" class="ordenes-sugerencias d-none"></div></div><div class="col-md-2 d-grid"><button type="button" class="btn btn-primary" onclick="agregarOrdenMedicaDesdeFormulario()"><i class="bi bi-plus-circle me-1"></i> Agregar</button></div><div class="col-md-12"><label class="form-label small fw-bold">Observación</label><input id="hcOrdenObservacion" class="form-control" placeholder="Detalle opcional: prioridad, indicación clínica, fecha o preparación."></div></div><div class="table-responsive mt-3"><table class="table table-sm align-middle ordenes-table mb-0"><thead><tr><th>Orden</th><th>Categoría</th><th>Observación</th><th style="width:90px;">Acción</th></tr></thead><tbody id="hcOrdenesTableBody"><tr id="hcOrdenesEmpty"><td colspan="4" class="text-center text-muted py-3"><i class="bi bi-file-earmark-medical me-1"></i> Sin registros</td></tr></tbody></table></div><textarea id="hcExamenesSolicitados" class="d-none"></textarea></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-person-lines-fill me-1"></i> Interconsulta</label><div class="interconsulta-box"><div class="row g-3"><div class="col-md-4"><label class="form-label small fw-bold">Tipo de interconsulta</label><select id="hcInterconsultaTipo" class="form-select"><option value="">Seleccione...</option><option>Interna</option><option>Externa</option></select></div><div class="col-md-4"><label class="form-label small fw-bold">Especialidad</label><select id="hcInterconsultaEspecialidad" class="form-select"><option value="">Seleccione...</option><option>Endocrinología</option><option>Nutrición</option><option>Medicina Interna</option><option>Cardiología</option><option>Dermatología</option><option>Psicología</option><option>Psiquiatría</option><option>Urología</option><option>Cirugía General</option><option>Cirugía Plástica</option><option>Reumatología</option><option>Gastroenterología</option><option>Neurología</option><option>Oncología</option><option>Materno Fetal</option><option>Fertilidad</option><option>Otra</option></select></div><div class="col-md-4"><label class="form-label small fw-bold">Prioridad</label><select id="hcInterconsultaPrioridad" class="form-select"><option>Normal</option><option>Preferente</option><option>Urgente</option></select></div><div class="col-md-6"><label class="form-label small fw-bold">Profesional</label><input id="hcInterconsultaProfesional" class="form-control" placeholder="Dr(a). / especialista / centro de referencia"></div><div class="col-md-6"><label class="form-label small fw-bold">Estado</label><select id="hcInterconsultaEstado" class="form-select"><option>Pendiente</option><option>Solicitada</option><option>Realizada</option><option>No aplica</option></select></div><div class="col-md-12"><label class="form-label small fw-bold">Motivo de interconsulta</label><textarea id="hcInterconsultaMotivo" class="form-control" rows="3" placeholder="Motivo clínico de la interconsulta."></textarea></div><div class="col-md-12"><label class="form-label small fw-bold">Observaciones clínicas</label><textarea id="hcInterconsultaObservaciones" class="form-control" rows="3" placeholder="Hallazgos relevantes, resumen clínico o recomendaciones para el especialista."></textarea></div></div><textarea id="hcInterconsultaResumen" class="d-none"></textarea></div></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold"><i class="bi bi-clipboard-check me-1"></i> Evaluaciones</label><div class="evaluaciones-box"><div class="evaluacion-subtitle">Evaluación psicológica</div><div class="evaluaciones-grid"><label class="evaluaciones-check"><input type="checkbox" id="hcEvalMalaActitud" onchange="recopilarEvaluacionesPlan()"> Denota mala actitud ante el examinador.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalAnimo" onchange="recopilarEvaluacionesPlan()"> Alteraciones del estado de ánimo.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalAbusoNegligencia" onchange="recopilarEvaluacionesPlan()"> Sospecha psicológica: paciente víctima de abuso o negligencia.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalAnomaliasMotoras" onchange="recopilarEvaluacionesPlan()"> Evidencia actividades y anomalías motoras.</label><label class="evaluaciones-check"><input type="checkbox" id="hcEvalOdontologica" onchange="recopilarEvaluacionesPlan()"> Requiere evaluación odontológica.</label></div><textarea id="hcEvaluacionesResumen" class="d-none"></textarea></div></div></div><div class="col-12"><div class="hc-plan-row-small row g-3"><div class="col-md-6"><label class="form-label fw-bold">Próximo control</label><input id="hcControl" type="date" class="form-control" onchange="updateClinicalSummary()"></div><div class="col-md-6"><label class="form-label fw-bold">Estado</label><select id="hcEstadoHistoria" class="form-select"><option>Control</option><option>Alta</option><option>Seguimiento</option><option>Referencia</option></select></div><input id="hcPlanTerapeuticoEstado" type="hidden"><input id="hcFechaInicioPlan" type="hidden"><input id="hcFechaFinEstimadaPlan" type="hidden"></div></div><div class="col-12"><div class="hc-plan-narrow"><label class="form-label fw-bold">Indicaciones para paciente</label><textarea id="hcIndicacionesPaciente" class="form-control" rows="5" placeholder="Indicaciones finales, signos de alarma, cuidados en casa y recomendaciones."></textarea></div></div></div></div>
         <div class="clinical-panel" id="hc_docs"><div class="clinical-subtitle"><i class="bi bi-folder2-open"></i> Documentos, resultados y archivos</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Ecografías / imágenes</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Fotografías clínicas</label><input type="file" class="form-control" multiple></div><div class="col-md-12"><div class="clinical-note"><i class="bi bi-info-circle me-1"></i> En la conexión final, estos archivos se guardarán en Google Drive y el enlace quedará registrado en Google Sheets.</div></div></div></div>
         <div class="clinical-actions"><button class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
       </div>
@@ -3029,25 +3029,88 @@ function auroPrevioUnicos(lista){
   });
 }
 
+function auroPrevioHumanizarClave(clave){
+  const mapa = {
+    key:'', numero:'', no_aplica:'No aplica', aplicado:'Aplicado', aplicada:'Aplicada',
+    fecha:'Fecha', tiempo:'Tiempo', detalle:'Detalle', resultado:'Resultado', observacion:'Observación', observaciones:'Observaciones',
+    medicamento:'Medicamento', medicacion:'Medicación', tratamiento:'Tratamiento', biologico:'Biológico', vacuna:'Vacuna', nombre_comercial:'Nombre comercial',
+    programada:'Fecha programada', administracion:'Fecha administración', dosis:'Dosis',
+    presento:'Presentó', clasificacion:'Clasificación', hospitalizacion:'Hospitalización', vacunado:'Vacunado', vacuna_tipo:'Tipo de vacuna',
+    anio_referencia:'Año de referencia', tiempo_hospitalizado:'Tiempo hospitalizado', observacion_presento:'Observación', detalle_clasificacion:'Detalle clasificación',
+    habito:'Hábito', actual:'Ex consumidor', abstinencia:'Tiempo de abstinencia',
+    actividad:'Actividad', distancia_km:'Distancia', frecuencia_dia:'Frecuencia', tiempo_horas:'Tiempo',
+    agua_diaria_litros:'Agua diaria', comidas_dia:'Comidas al día', frutas_verduras:'Frutas / verduras', comida_rapida:'Comida rápida', azucar:'Azúcar', sal:'Sal', suplementos:'Suplementos',
+    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa', planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales', ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
+  };
+  if(mapa[clave] !== undefined) return mapa[clave];
+  return String(clave || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function auroPrevioEsValorUtil(valor){
+  if(valor === null || valor === undefined) return false;
+  if(typeof valor === 'boolean') return valor === true;
+  const t = String(valor).trim();
+  if(!t) return false;
+  return !/^(no valorado|no aplica|n\/a|na|undefined|null|\[object object\])$/i.test(t);
+}
+
 function auroPrevioTextoItemBasico(item){
-  if(!item || typeof item !== 'object') return '';
+  if(!auroPrevioEsValorUtil(item)) return '';
+  if(typeof item !== 'object') return String(item).trim();
 
-  const nombre = item.key || item.nombre || item.descripcion || item.biologico || item.vacuna || '';
+  const titulo = item.descripcion || item.biologico || item.vacuna || item.habito || item.actividad || item.nombre || item.key || '';
   const partes = [];
+  if(auroPrevioEsValorUtil(titulo)) partes.push(String(titulo));
 
-  if(nombre) partes.push(String(nombre));
+  Object.keys(item).forEach(k => {
+    if(['key','descripcion','biologico','vacuna','habito','actividad','nombre'].includes(k)) return;
+    const v = item[k];
+    if(!auroPrevioEsValorUtil(v)) return;
 
-  const tiempo = item.tiempo || item.fecha || item.fecha_aplicacion || item.anio || item.año || '';
-  const medicamento = item.medicamento || item.medicacion || item.tratamiento || '';
-  const reaccion = item.reaccion || item.detalle || item.observacion || item.observaciones || '';
-  const valor = item.valor || item.resultado || '';
+    if(Array.isArray(v)){
+      const sub = v.map(auroPrevioTextoItemBasico).filter(Boolean);
+      if(sub.length){
+        const etiqueta = auroPrevioHumanizarClave(k);
+        if(etiqueta) partes.push(etiqueta + ': ' + sub.join('; '));
+      }
+      return;
+    }
 
-  if(tiempo) partes.push('Tiempo/fecha: ' + tiempo);
-  if(medicamento) partes.push('Medicación: ' + medicamento);
-  if(reaccion) partes.push('Detalle: ' + reaccion);
-  if(valor && !nombre) partes.push(String(valor));
+    if(typeof v === 'object'){
+      const sub = auroPrevioTextoItemBasico(v);
+      if(sub){
+        const etiqueta = auroPrevioHumanizarClave(k);
+        partes.push((etiqueta ? etiqueta + ': ' : '') + sub);
+      }
+      return;
+    }
 
-  return partes.join(' | ');
+    const etiqueta = auroPrevioHumanizarClave(k);
+    if(etiqueta) partes.push(etiqueta + ': ' + v);
+    else if(String(v).trim()) partes.push(String(v).trim());
+  });
+
+  return partes.filter(Boolean).join(' | ');
+}
+
+function auroPrevioResumenObjetoGenerico(obj, prefijo){
+  if(!obj || typeof obj !== 'object') return '';
+  const partes = [];
+  Object.keys(obj).forEach(k => {
+    const v = obj[k];
+    if(!auroPrevioEsValorUtil(v)) return;
+    const etiqueta = auroPrevioHumanizarClave(k);
+    if(Array.isArray(v)){
+      const sub = v.map(auroPrevioTextoItemBasico).filter(Boolean);
+      if(sub.length) partes.push((etiqueta ? etiqueta + ': ' : '') + sub.join('; '));
+    }else if(typeof v === 'object'){
+      const sub = auroPrevioTextoItemBasico(v);
+      if(sub) partes.push((etiqueta ? etiqueta + ': ' : '') + sub);
+    }else{
+      partes.push((etiqueta ? etiqueta + ': ' : '') + v);
+    }
+  });
+  return partes.length ? (prefijo ? prefijo + ': ' : '') + partes.join('; ') : '';
 }
 
 function auroPrevioResumenJsonAntecedentes(obj){
@@ -3064,32 +3127,32 @@ function auroPrevioResumenJsonAntecedentes(obj){
   const alergias = Array.isArray(obj.alergias) ? obj.alergias.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
   if(alergias.length) bloques.push('Alergias: ' + auroPrevioUnicos(alergias).join('; '));
 
-  const gineco = [];
-  ['fum','menarquia','ciclos','gesta','partos','cesareas','abortos','hijos_vivos','pap','ivsa','anticoncepcion','otros'].forEach(k => {
-    if(obj[k]) gineco.push(k.replace(/_/g,' ') + ': ' + obj[k]);
-  });
-  if(gineco.length) bloques.push('Gineco-obstétricos: ' + auroPrevioUnicos(gineco).join('; '));
-
-  const covid = obj.covid || obj.COVID || null;
-  if(covid && typeof covid === 'object'){
-    const c = [];
-    ['presento','fecha','clasificacion','hospitalizacion','vacunado','dosis'].forEach(k => {
-      if(covid[k]) c.push(k + ': ' + covid[k]);
-    });
-    if(c.length) bloques.push('COVID-19: ' + c.join('; '));
-  }
+  const covid = auroPrevioResumenObjetoGenerico(obj.covid || obj.COVID, 'COVID-19');
+  if(covid) bloques.push(covid);
 
   const vacunas = Array.isArray(obj.vacunas) ? obj.vacunas.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(vacunas.length){
-    const principales = auroPrevioUnicos(vacunas).slice(0, 6);
-    bloques.push('Vacunas: ' + principales.join('; ') + (vacunas.length > 6 ? '; otras registradas' : ''));
-  }
+  if(vacunas.length) bloques.push('Vacunas: ' + auroPrevioUnicos(vacunas).join('; '));
 
   const habitos = Array.isArray(obj.habitos) ? obj.habitos.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
-  if(habitos.length) bloques.push('Hábitos: información estructurada registrada.');
+  if(habitos.length) bloques.push('Hábitos: ' + auroPrevioUnicos(habitos).join('; '));
 
-  if(obj.estiloVida || obj.estilo_vida) bloques.push('Estilo de vida: información estructurada registrada.');
-  if(obj.alimentacion) bloques.push('Alimentación: información estructurada registrada.');
+  const estilo = Array.isArray(obj.estilo_vida || obj.estiloVida) ? (obj.estilo_vida || obj.estiloVida).map(auroPrevioTextoItemBasico).filter(Boolean) : [];
+  if(estilo.length) bloques.push('Estilo de vida: ' + auroPrevioUnicos(estilo).join('; '));
+
+  const alimentacion = auroPrevioResumenObjetoGenerico(obj.alimentacion, 'Alimentación');
+  if(alimentacion) bloques.push(alimentacion);
+
+  const obstetricos = Array.isArray(obj.obstetricos) ? obj.obstetricos.map(auroPrevioTextoItemBasico).filter(Boolean) : [];
+  if(obstetricos.length) bloques.push('Obstétricos: ' + auroPrevioUnicos(obstetricos).join('; '));
+
+  const ginecologicos = auroPrevioResumenObjetoGenerico(obj.ginecologicos, 'Ginecológicos');
+  if(ginecologicos) bloques.push(ginecologicos);
+
+  const ginecoDirecto = [];
+  ['fum','menarquia','ciclos','gesta','partos','cesareas','abortos','hijos_vivos','pap','ivsa','anticoncepcion','otros'].forEach(k => {
+    if(auroPrevioEsValorUtil(obj[k])) ginecoDirecto.push(auroPrevioHumanizarClave(k) + ': ' + obj[k]);
+  });
+  if(ginecoDirecto.length) bloques.push('Gineco-obstétricos: ' + auroPrevioUnicos(ginecoDirecto).join('; '));
 
   return bloques.join(' || ');
 }
@@ -3106,6 +3169,7 @@ function auroLimpiarTextoPrevioClinico(valor){
 
   raw = raw
     .replace(/AUROSANAX_ANT_PERSONALES\s*v?[\d.]*\s*\|\|?/gi, '')
+    .replace(/AUROSANAX_ANT_GINECO_OBS_V?\d*::?/gi, '')
     .replace(/AUROSANAX_ANT_GINECO_OBSTETRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
     .replace(/AUROSANAX_ANT_GINECO_OBSTÉTRICOS\s*v?[\d.]*\s*\|\|?/gi, '')
     .replace(/"key"\s*:\s*"([^"]*)"/gi, '$1')
@@ -3122,7 +3186,13 @@ function auroLimpiarTextoPrevioClinico(valor){
     .replace(/\s{2,}/g, ' ')
     .trim();
 
-  raw = raw.replace(/(<br>\s*){2,}/g, '<br>');
+  raw = raw.replace(/(<br>\s*){2,}/g, '<br>')
+    .replace(/\[object Object\]/gi, '')
+    .replace(/(?:^|<br>|;\s*)\s*(Número|Numero)\s*:?\s*\d*\s*(?=<br>|;|$)/gi, '')
+    .replace(/(?:^|<br>|;\s*)\s*No valorado\s*(?=<br>|;|$)/gi, '')
+    .replace(/(<br>\s*){2,}/g, '<br>')
+    .replace(/^<br>|<br>$/g, '')
+    .trim();
   return raw;
 }
 
@@ -6072,7 +6142,7 @@ function auroInicializarAyudasExamenFisicoV32(){
    AUROSANAX - Plan v3.3.1
    Conexión completa del Plan sin tocar otros módulos.
    - Carga previa limpia
-   - Medicamentos / órdenes / interconsulta / evaluaciones
+   - Plan terapéutico / evaluaciones / indicaciones / control
    - Protección anti-sobrescritura en edición
    ========================================================== */
 
@@ -6080,11 +6150,13 @@ function auroHistoriaTienePlan(h){
   if(!h) return false;
   return [
     h.plan_tratamiento,
-    h.receta_medicamentos,
-    h.examenes_solicitados,
     h.evaluaciones_plan,
     h.indicaciones_paciente,
-    h.proximo_control
+    h.proximo_control,
+    h.plan_terapeutico_estado,
+    h.fecha_inicio_plan,
+    h.fecha_fin_estimada_plan,
+    h.estado
   ].some(v => String(v || '').trim());
 }
 
@@ -6122,11 +6194,13 @@ function auroRenderPlanPrevio(h, modo){
   }
 
   const plan = auroPlanValorSeguro(h.plan_tratamiento);
-  const meds = auroPlanValorSeguro(h.receta_medicamentos);
-  const ordenes = auroPlanValorSeguro(h.examenes_solicitados);
   const evaluaciones = auroPlanValorSeguro(h.evaluaciones_plan);
   const indicaciones = auroPlanValorSeguro(h.indicaciones_paciente);
   const control = auroPlanValorSeguro(h.proximo_control);
+  const estadoPlan = auroPlanValorSeguro(h.plan_terapeutico_estado);
+  const inicioPlan = auroPlanValorSeguro(h.fecha_inicio_plan);
+  const finPlan = auroPlanValorSeguro(h.fecha_fin_estimada_plan);
+  const estadoHistoria = auroPlanValorSeguro(h.estado);
 
   box.style.display = '';
   box.innerHTML = `
@@ -6139,11 +6213,13 @@ function auroRenderPlanPrevio(h, modo){
     </div>
     <div class="auro-previos-content">
       ${plan ? `<div class="auro-previos-line"><span>Plan terapéutico</span><p>${auroPlanEscape(plan)}</p></div>` : ''}
-      ${meds ? `<div class="auro-previos-line"><span>Medicamentos / receta</span>${auroPlanRenderLista(meds)}</div>` : ''}
-      ${ordenes ? `<div class="auro-previos-line"><span>Órdenes médicas / exámenes</span>${auroPlanRenderLista(ordenes)}</div>` : ''}
-      ${evaluaciones ? `<div class="auro-previos-line"><span>Evaluaciones / interconsulta</span>${auroPlanRenderLista(evaluaciones)}</div>` : ''}
+      ${evaluaciones ? `<div class="auro-previos-line"><span>Evaluaciones</span>${auroPlanRenderLista(evaluaciones)}</div>` : ''}
       ${indicaciones ? `<div class="auro-previos-line"><span>Indicaciones para paciente</span><p>${auroPlanEscape(indicaciones)}</p></div>` : ''}
       ${control ? `<div class="auro-previos-line"><span>Próximo control</span><p>${auroPlanEscape(control)}</p></div>` : ''}
+      ${estadoPlan ? `<div class="auro-previos-line"><span>Estado del plan terapéutico</span><p>${auroPlanEscape(estadoPlan)}</p></div>` : ''}
+      ${inicioPlan ? `<div class="auro-previos-line"><span>Fecha inicio plan</span><p>${auroPlanEscape(inicioPlan)}</p></div>` : ''}
+      ${finPlan ? `<div class="auro-previos-line"><span>Fecha fin estimada plan</span><p>${auroPlanEscape(finPlan)}</p></div>` : ''}
+      ${estadoHistoria ? `<div class="auro-previos-line"><span>Estado historia</span><p>${auroPlanEscape(estadoHistoria)}</p></div>` : ''}
     </div>
   `;
 }
@@ -6227,17 +6303,16 @@ function auroCargarPlanDesdeHistoria(h, modo){
   if(!h) return;
 
   setValueIfExists('hcPlanTratamiento', h.plan_tratamiento || '');
-  setValueIfExists('hcRecetaMedicamentos', h.receta_medicamentos || '');
-  setValueIfExists('hcExamenesSolicitados', h.examenes_solicitados || '');
   setValueIfExists('hcEvaluacionesResumen', h.evaluaciones_plan || '');
   setValueIfExists('hcIndicacionesPaciente', h.indicaciones_paciente || '');
   setValueIfExists('hcControl', h.proximo_control || '');
   setValueIfExists('hcEstadoHistoria', h.estado || getValueIfExists('hcEstadoHistoria') || 'Control');
+  setValueIfExists('hcPlanTerapeuticoEstado', h.plan_terapeutico_estado || h.estado || 'Control');
+  setValueIfExists('hcFechaInicioPlan', h.fecha_inicio_plan || '');
+  setValueIfExists('hcFechaFinEstimadaPlan', h.fecha_fin_estimada_plan || h.proximo_control || '');
 
-  auroPlanCargarMedicamentosDesdeTexto(h.receta_medicamentos || '');
-  auroPlanCargarOrdenesDesdeTexto(h.examenes_solicitados || '');
   auroPlanCargarEvaluacionesDesdeTexto(h.evaluaciones_plan || '');
-  auroPlanCargarInterconsultaDesdeTexto(h.evaluaciones_plan || h.observaciones || '');
+  auroPlanCargarInterconsultaDesdeTexto(h.plan_tratamiento || h.observaciones || '');
 
   auroRenderPlanPrevio(h, modo || 'edicion');
   if(typeof updateClinicalSummary === 'function') updateClinicalSummary();
@@ -6258,11 +6333,13 @@ function auroAplicarProteccionPlanEdicion(data){
 
   const campos = [
     'plan_tratamiento',
-    'receta_medicamentos',
-    'examenes_solicitados',
     'evaluaciones_plan',
     'indicaciones_paciente',
-    'proximo_control'
+    'proximo_control',
+    'plan_terapeutico_estado',
+    'fecha_inicio_plan',
+    'fecha_fin_estimada_plan',
+    'estado'
   ];
 
   campos.forEach(campo => {
@@ -6305,10 +6382,6 @@ async function guardarHistoriaClinicaERP(){
 
   const interconsultaPlan = recopilarInterconsultaPlan();
   const evaluacionesPlan = recopilarEvaluacionesPlan();
-  const planEvaluacionesConInterconsulta = unirLinea([
-    evaluacionesPlan ? 'Evaluaciones: ' + evaluacionesPlan : '',
-    interconsultaPlan ? 'Interconsulta: ' + interconsultaPlan : ''
-  ]);
 
   const observaciones = unirLinea([
     getValueIfExists('hcSintomasAlarma') ? 'Síntomas/observaciones: ' + getValueIfExists('hcSintomasAlarma') : '',
@@ -6342,11 +6415,12 @@ async function guardarHistoriaClinicaERP(){
     cie10_secundario: getValueIfExists('hcCie10Secundario'),
     diagnosticos_cie10: recopilarDiagnosticosCie10(),
     plan_tratamiento: getValueIfExists('hcPlanTratamiento'),
-    receta_medicamentos: getValueIfExists('hcRecetaMedicamentos'),
-    examenes_solicitados: getValueIfExists('hcExamenesSolicitados'),
-    evaluaciones_plan: planEvaluacionesConInterconsulta || getValueIfExists('hcEvaluacionesResumen'),
+    evaluaciones_plan: evaluacionesPlan || getValueIfExists('hcEvaluacionesResumen'),
     indicaciones_paciente: getValueIfExists('hcIndicacionesPaciente'),
     proximo_control: getValueIfExists('hcControl'),
+    plan_terapeutico_estado: getValueIfExists('hcPlanTerapeuticoEstado') || getValueIfExists('hcEstadoHistoria') || 'Activo',
+    fecha_inicio_plan: getValueIfExists('hcFechaInicioPlan') || (esEdicion ? '' : fechaHoyISO()),
+    fecha_fin_estimada_plan: getValueIfExists('hcFechaFinEstimadaPlan') || getValueIfExists('hcControl'),
     observaciones: observaciones,
     estado: getValueIfExists('hcEstadoHistoria') || 'Activo',
     id_medico: 'MED-001'
@@ -7029,3 +7103,5 @@ document.addEventListener('click',e=>{
 </script>
 </body>
 </html>
+
+
