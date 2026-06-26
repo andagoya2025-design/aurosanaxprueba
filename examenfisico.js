@@ -70,7 +70,7 @@ function renderHcRegionalPanels(){
         <div class="sistemas-check-body">
           ${grupos}
           <div class="sistemas-check-observacion mt-2">
-            <textarea id="${hcRegionalInputId(key)}" class="form-control regional-textarea" rows="1">NO VALORADO</textarea>
+            <textarea id="${hcRegionalInputId(key)}" class="form-control regional-textarea" rows="1" placeholder="Escriba hallazgos solo si fueron valorados"></textarea>
           </div>
         </div>
       </div>
@@ -142,7 +142,7 @@ function recopilarRegionalExamenFisico(){
 }
 
 
-const hcCie10CatalogoBase = [
+window.hcCie10CatalogoBase = window.hcCie10CatalogoBase || [
   {
     "codigo": "N760",
     "nombre": "Vaginitis aguda"
@@ -868,7 +868,7 @@ function buscarDiagnosticoCie10(){
   const body = document.getElementById('hcDxResultadosBody');
   if(!body) return;
   if(!codigo && !nombre){hcDxResultadosActuales=[];body.innerHTML='<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';return;}
-  hcDxResultadosActuales = hcCie10CatalogoBase.filter(d => (!codigo || normalizarDxTexto(d.codigo).includes(codigo)) && (!nombre || normalizarDxTexto(d.nombre).includes(nombre))).slice(0,12);
+  hcDxResultadosActuales = window.hcCie10CatalogoBase.filter(d => (!codigo || normalizarDxTexto(d.codigo).includes(codigo)) && (!nombre || normalizarDxTexto(d.nombre).includes(nombre))).slice(0,12);
   body.innerHTML = hcDxResultadosActuales.map((d,i)=>`<tr><td class="diagnostico-cie-code">${d.codigo}</td><td>${String(d.nombre||'').toUpperCase()}</td><td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoCie10DesdeResultado(${i})">Agregar</button></td></tr>`).join('') || '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
 }
 function agregarDiagnosticoCie10DesdeResultado(index){const d=hcDxResultadosActuales[index];if(d)agregarDiagnosticoCie10(d.codigo,d.nombre);}
@@ -1242,11 +1242,9 @@ function auroMostrarExamenFisicoPrevio(h){
 
   if(regionalHallazgos.length){
     html += auroRenderPrevioTabla('Examen físico regional', regionalHallazgos);
-    if(regionalNoValorados.length){
-      html += auroRenderPrevioLinea('Regiones no valoradas', regionalNoValorados.length + ' región(es) registradas como no valoradas.');
-    }
+    /* AUROSANAX: no se imprime resumen de regiones no valoradas para evitar ruido visual. */
   }else if(regionalNoValorados.length){
-    html += auroRenderPrevioLinea('Examen físico regional', 'Regiones registradas como no valoradas.');
+    /* AUROSANAX: si todo está no valorado, no se muestra el bloque regional. */
   }
 
   html += auroRenderPrevioChips('Diagnóstico CIE-10 guardado', diagnosticos);
