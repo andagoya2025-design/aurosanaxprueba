@@ -182,14 +182,21 @@ function auroInyectarEstilosAntecedentesPremium(){
 }
 
 function auroToggleAntecedentesPrevios(){
+  const box = document.getElementById('auroAntecedentesPreviosBox');
   const content = document.getElementById('auroAntecedentesPreviosContent');
-  const btn = document.querySelector('#auroAntecedentesPreviosBox .auro-previos-hide');
-  if(!content || !btn) return;
 
-  const collapsed = content.classList.toggle('auro-previos-collapsed');
-  btn.innerHTML = collapsed
-    ? '<i class="bi bi-eye me-1"></i>Mostrar'
-    : '<i class="bi bi-eye-slash me-1"></i>Ocultar';
+  if(!box || !content) return;
+
+  const btn = box.querySelector('.auro-previos-hide');
+  const oculto = content.classList.toggle('auro-previos-collapsed');
+
+  if(btn){
+    btn.innerHTML = oculto
+      ? '<i class="bi bi-eye me-1"></i> Mostrar'
+      : '<i class="bi bi-eye-slash me-1"></i> Ocultar';
+  }
+
+  box.dataset.estado = oculto ? 'oculto' : 'visible';
 }
 
 function auroAsegurarCajaAntecedentesPrevios(){
@@ -210,7 +217,7 @@ function auroAsegurarCajaAntecedentesPrevios(){
         <b><i class="bi bi-database-check me-1"></i> Antecedentes previos guardados</b>
         <small>Información leída desde Google Sheets. Se conserva para evitar pérdida de datos.</small>
       </div>
-      <button type="button" class="btn-soft auro-previos-hide" onclick="auroToggleAntecedentesPrevios()"><i class="bi bi-eye-slash me-1"></i>Ocultar</button>
+      <button type="button" class="btn-soft auro-previos-hide" onclick="auroToggleAntecedentesPrevios()"><i class="bi bi-eye-slash me-1"></i> Ocultar</button>
     </div>
     <div class="auro-previos-content" id="auroAntecedentesPreviosContent"></div>
   `;
@@ -845,9 +852,22 @@ function auroMostrarAntecedentesPrevios(h, modo){
   html += auroRenderPrevioItemsPremium('Familiares', auroExtraerItemsAntecedentePremium(h.antecedentes_familiares || '', 'familiares'));
 
   content.innerHTML = html;
-  content.classList.remove('auro-previos-collapsed');
+
+  const estadoPrevio = box.dataset.estado || 'visible';
+
+  if(estadoPrevio === 'oculto'){
+    content.classList.add('auro-previos-collapsed');
+  }else{
+    content.classList.remove('auro-previos-collapsed');
+  }
+
   const btn = box.querySelector('.auro-previos-hide');
-  if(btn) btn.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Ocultar';
+  if(btn){
+    btn.innerHTML = estadoPrevio === 'oculto'
+      ? '<i class="bi bi-eye me-1"></i> Mostrar'
+      : '<i class="bi bi-eye-slash me-1"></i> Ocultar';
+  }
+
   box.dataset.idHistoriaOrigen = h.id_historia || '';
   box.dataset.modo = modo || '';
   box.style.display = content.innerHTML.trim() ? 'block' : 'none';
