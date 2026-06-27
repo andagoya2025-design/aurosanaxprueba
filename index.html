@@ -5761,7 +5761,8 @@ async function cargarCitasAgendaWeb(){
 function renderAgendaWeb(){
   const q = (document.getElementById('agendaSearch')?.value || '').toLowerCase();
   const fecha = document.getElementById('agendaFecha')?.value || '';
-  const estado = (document.getElementById('agendaEstado')?.value || '').toLowerCase();
+  const estadoRaw = (document.getElementById('agendaEstado')?.value || '').trim();
+  const estadoFiltro = estadoRaw ? normalizarEstadoAgenda(estadoRaw) : '';
   const sizeSelect = document.getElementById('agendaPageSize');
   if(sizeSelect) agendaPageSize = parseInt(sizeSelect.value,10) || 25;
 
@@ -5769,7 +5770,6 @@ function renderAgendaWeb(){
 
   const rows = citasAgendaWeb.map((c, originalIndex) => ({...c, originalIndex})).filter(c => {
     const estadoCita = normalizarEstadoAgenda(c.estado);
-    const estadoFiltro = normalizarEstadoAgenda(estado);
     const txt = [c.nombre, c.whatsapp, c.servicio, c.fecha_deseada, c.hora_deseada, estadoCita].join(' ').toLowerCase();
 
     return (!q || txt.includes(q)) &&
