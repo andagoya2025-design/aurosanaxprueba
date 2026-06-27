@@ -1659,7 +1659,7 @@
             <select id="agendaEstado" class="form-select" onchange="agendaPage=1; renderAgendaWeb()">
               <option value="">Todos los estados</option>
               <option value="confirmada">Confirmada</option>
-              <option value="atendidas">Atendida</option>
+              <option value="atendida">Atendida</option>
               <option value="pendiente">Pendiente</option>
               <option value="anulada">Anulada</option>
               <option value="no asistio">No asistió</option>
@@ -5765,13 +5765,34 @@ function renderAgendaWeb(){
   const sizeSelect = document.getElementById('agendaPageSize');
   if(sizeSelect) agendaPageSize = parseInt(sizeSelect.value,10) || 25;
 
+  const hoy = fechaHoyISO();
+
   const rows = citasAgendaWeb.map((c, originalIndex) => ({...c, originalIndex})).filter(c => {
     const estadoCita = normalizarEstadoAgenda(c.estado);
+    const estadoFiltro = normalizarEstadoAgenda(estado);
     const txt = [c.nombre, c.whatsapp, c.servicio, c.fecha_deseada, c.hora_deseada, estadoCita].join(' ').toLowerCase();
 
     return (!q || txt.includes(q)) &&
            (!fecha || c.fecha_deseada === fecha) &&
-           (!estado || estadoCita === estado);
+           (!estadoFiltro || estadoCita === estadoFiltro);
+  }).sort((a, b) => {
+    const fechaA = String(a.fecha_deseada || '');
+    const fechaB = String(b.fecha_deseada || '');
+    const horaA = String(a.hora_deseada || '');
+    const horaB = String(b.hora_deseada || '');
+
+    const grupoA = fechaA >= hoy ? 0 : 1; // 0 = hoy/futuras, 1 = pasadas
+    const grupoB = fechaB >= hoy ? 0 : 1;
+
+    if(grupoA !== grupoB) return grupoA - grupoB;
+
+    const valorA = `${fechaA} ${horaA}`;
+    const valorB = `${fechaB} ${horaB}`;
+
+    // Hoy y futuras: de menor a mayor. Pasadas: de más reciente a más antigua.
+    return grupoA === 0
+      ? valorA.localeCompare(valorB)
+      : valorB.localeCompare(valorA);
   });
 
   const totalPages = Math.max(1, Math.ceil(rows.length / agendaPageSize));
