@@ -1037,7 +1037,8 @@ function auroPartirExamenFisicoPrevio(texto){
     'Frecuencia respiratoria','Perímetro de cadera','Porcentaje de grasa','Masa muscular',
     'Perímetro cefálico','Perímetro torácico','Perímetro abdominal',
     'Estado general','Cabeza y cuello','Tórax/Respiratorio','Cardiovascular clínico',
-    'Extremidades','Ginecológico'
+    'Extremidades','Ginecológico','Examen físico regional','Examen fisico regional',
+    'Examen físico por sistemas','Examen fisico por sistemas'
   ];
 
   const escapeRegex = txt => String(txt).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1079,37 +1080,85 @@ function auroPartirExamenFisicoPrevio(texto){
   }).filter(Boolean);
 }
 
-function auroEsValorPrevioSoloNoValorado(valor){
-  const normalizar = v => String(v || '')
+function auroNormalizarClaveExamen(valor){
+  return String(valor || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
 
-  const partes = String(valor || '')
+function auroEsTextoNoValoradoSimple(valor){
+  const n = auroNormalizarClaveExamen(valor)
+    .replace(/[.;,]+$/g, '')
+    .trim();
+  return !n || n === 'no valorado' || n === 'no valorada' || n === 'sin valorar' || n === 'n/v';
+}
+
+function auroLimpiarValorPrevioClinico(valor){
+  let texto = String(valor || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\|\|\s*/g, ' | ')
+    .trim();
+
+  if(!texto) return '';
+
+  const etiquetasBasura = [
+    'Examen físico regional','Examen fisico regional','Examen físico por sistemas','Examen fisico por sistemas',
+    'Piel y faneras','Cabeza','Ojos','Oídos','Nariz','Boca','Orofaringe','Cuello','Tórax','Axilas-mamas',
+    'Abdomen','Columna vertebral','Ingle-periné','Genitales','Ano recto','Canal vaginal',
+    'Miembros superiores','Miembros inferiores','Neurológico','Otros hallazgos'
+  ];
+
+  const partes = texto
     .split(/\s*\|\s*/)
     .map(x => x.trim())
     .filter(Boolean);
 
-  if(!partes.length) return true;
+  const limpias = [];
 
-  return partes.every(parte => {
-    let v = parte;
-    const idx = v.indexOf(':');
-    if(idx !== -1) v = v.substring(idx + 1).trim();
+  partes.forEach(parte => {
+    let p = parte.trim();
+    if(!p) return;
 
-    const n = normalizar(v);
-    return !n || n === 'no valorado' || n === 'no valorada' || n === 'sin valorar' || n === 'n/v';
+    // Caso: "Examen físico regional: Piel y faneras: No valorado"
+    p = p.replace(/^Examen\s+f[ií]sico\s+regional\s*:\s*/i, '').trim();
+    p = p.replace(/^Examen\s+f[ií]sico\s+por\s+sistemas\s*:\s*/i, '').trim();
+
+    const idx = p.indexOf(':');
+    if(idx !== -1){
+      const etiqueta = p.substring(0, idx).trim();
+      const valorInterno = p.substring(idx + 1).trim();
+      const etiquetaEsBasura = etiquetasBasura.some(e => auroNormalizarClaveExamen(e) === auroNormalizarClaveExamen(etiqueta));
+
+      if(auroEsTextoNoValoradoSimple(valorInterno)) return;
+      if(etiquetaEsBasura && auroEsTextoNoValoradoSimple(valorInterno)) return;
+    }
+
+    if(auroEsTextoNoValoradoSimple(p)) return;
+    if(/:\s*(no valorado|no valorada|sin valorar|n\/v)\s*$/i.test(p)) return;
+
+    limpias.push(p);
   });
+
+  return limpias.join(' | ').trim();
+}
+
+function auroEsValorPrevioSoloNoValorado(valor){
+  return !auroLimpiarValorPrevioClinico(valor);
 }
 
 function auroTokensUnicosConHallazgoReal(tokens){
   const vistos = new Set();
-  return (tokens || []).filter(t => {
+  return (tokens || []).map(t => {
+    const etiqueta = String(t.etiqueta || '').trim();
+    const valor = auroLimpiarValorPrevioClinico(t.valor || '');
+    return { etiqueta, valor };
+  }).filter(t => {
     const etiqueta = String(t.etiqueta || '').trim();
     const valor = String(t.valor || '').trim();
-    if(!etiqueta || auroEsValorPrevioSoloNoValorado(valor)) return false;
+    if(!etiqueta || !valor) return false;
 
     const clave = (etiqueta + '|' + valor).toLowerCase();
     if(vistos.has(clave)) return false;
