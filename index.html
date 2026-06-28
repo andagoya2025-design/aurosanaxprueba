@@ -2448,67 +2448,20 @@ function actualizarDashboard(){
   }
 }
 
-function setTextIfExists(id, value){
-  const el = document.getElementById(id);
-  if(el) el.textContent = value;
-}
 
-function getPacienteActivo(){
-  const selectId = document.getElementById('hcPacienteSelect')?.value || '';
-  const id = activePatientId || selectId;
-  return patients.find(p => p.id_paciente === id) || null;
-}
+/* AUROSANAX: función setTextIfExists movida a pacientes.js */
 
-function inicialesPaciente(nombre){
-  const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
-  if(!partes.length) return 'A';
-  return partes.slice(0,2).map(x => x[0]).join('').toUpperCase();
-}
 
-function renderModulePatientCards(){
-  const paciente = getPacienteActivo();
-  document.querySelectorAll('[data-module-patient]').forEach(card => {
-    const modulo = card.getAttribute('data-module-patient') || 'Módulo';
-    if(!paciente){
-      card.classList.add('empty');
-      card.innerHTML = `
-        <div>
-          <div class="module-patient-title"><i class="bi bi-exclamation-triangle me-1"></i> ${modulo}: paciente no seleccionado</div>
-          <div class="module-patient-meta"><span>Seleccione o abra un paciente desde Pacientes o Historia Clínica antes de guardar.</span></div>
-        </div>
-        <div class="module-patient-actions">
-          <button class="btn-soft" onclick="showScreen('pacientes')"><i class="bi bi-search me-1"></i> Buscar paciente</button>
-          <button class="btn-soft" onclick="showScreen('historia')"><i class="bi bi-file-medical me-1"></i> Historia clínica</button>
-        </div>`;
-      return;
-    }
-    card.classList.remove('empty');
-    const edad = paciente.edad || calcularEdadDesdeFecha(paciente.fecha_nacimiento) || '—';
-    card.innerHTML = `
-      <div>
-        <div class="module-patient-title"><i class="bi bi-person-check me-1"></i> ${modulo} de ${paciente.nombre || 'Paciente'}</div>
-        <div class="module-patient-meta">
-          <span>Cédula: ${paciente.cedula || '—'}</span>
-          <span>Edad: ${edad}</span>
-          <span>WhatsApp: ${paciente.telefono || '—'}</span>
-          <span>ID: ${paciente.id_paciente || '—'}</span>
-        </div>
-      </div>
-      <div class="module-patient-actions">
-        <button class="btn-action primary" onclick="abrirHistoriaPaciente('${paciente.id_paciente || ''}')"><i class="bi bi-file-medical me-1"></i> Ver historia</button>
-        <button class="btn-action success" onclick="abrirWhatsAppPaciente('${paciente.id_paciente || ''}')"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
-      </div>`;
-  });
-}
+/* AUROSANAX: función getPacienteActivo movida a pacientes.js */
 
-function validarPacienteModulo(){
-  if(!getPacienteActivo()){
-    alert('Seleccione primero un paciente para trabajar este módulo.');
-    showScreen('pacientes');
-    return false;
-  }
-  return true;
-}
+
+/* AUROSANAX: función inicialesPaciente movida a pacientes.js */
+
+
+/* AUROSANAX: función renderModulePatientCards movida a pacientes.js */
+
+
+/* AUROSANAX: función validarPacienteModulo movida a pacientes.js */
 
 async function cargarHistoriasClinicasDesdeSheets(){
   try{
@@ -2598,423 +2551,62 @@ function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('show');
 }
 
-function badgeEstado(e){
-  if(e==='Activa') return '<span class="badge-auro badge-ok">Activa</span>';
-  if(e==='Control') return '<span class="badge-auro badge-warn">Control</span>';
-  return '<span class="badge-auro badge-blue">Seguimiento</span>';
-}
 
-function auroTimestampFechaAgendaPaciente(c){
-  const fecha = String(c?.fecha_deseada || c?.fecha_cita || c?.fecha || '').substring(0,10);
-  if(!fecha) return 0;
+/* AUROSANAX: función badgeEstado movida a pacientes.js */
 
-  const horaTxt = String(c?.hora_deseada || c?.hora_inicio || c?.hora || '').trim();
-  const horaMatch = horaTxt.match(/(\d{1,2}):(\d{2})/);
-  const hora = horaMatch ? String(horaMatch[1]).padStart(2,'0') + ':' + horaMatch[2] : '00:00';
-  const t = new Date(fecha + 'T' + hora + ':00').getTime();
-  return Number.isFinite(t) ? t : 0;
-}
 
-function auroCitaPertenecePaciente(c, p){
-  if(!c || !p) return false;
+/* AUROSANAX: función auroTimestampFechaAgendaPaciente movida a pacientes.js */
 
-  const idCita = String(c.id_paciente || c.paciente_id || '').trim();
-  const idPaciente = String(p.id_paciente || '').trim();
-  if(idCita && idPaciente && idCita === idPaciente) return true;
 
-  const cedulaCita = String(c.numero_documento || c.cedula || c.documento || '').replace(/\D/g,'');
-  const cedulaPaciente = String(p.cedula || p.numero_documento || '').replace(/\D/g,'');
-  if(cedulaCita && cedulaPaciente && cedulaCita === cedulaPaciente) return true;
+/* AUROSANAX: función auroCitaPertenecePaciente movida a pacientes.js */
 
-  const telCita = String(c.whatsapp || c.telefono || c.celular || '').replace(/\D/g,'');
-  const telPaciente = String(p.telefono || p.whatsapp || p.celular || '').replace(/\D/g,'');
-  if(telCita && telPaciente && telCita.slice(-8) === telPaciente.slice(-8)) return true;
 
-  const nombreCita = normalizarTextoComparacion(c.nombre || c.paciente || c.nombre_paciente || c.nombre_completo || '');
-  const nombrePaciente = normalizarTextoComparacion(p.nombre || ((p.nombres || '') + ' ' + (p.apellidos || '')).trim() || '');
-  return !!nombreCita && !!nombrePaciente && nombreCita === nombrePaciente;
-}
+/* AUROSANAX: función auroUltimaAtencionPaciente movida a pacientes.js */
 
-function auroUltimaAtencionPaciente(p){
-  const citasAtendidas = (Array.isArray(citasAgendaWeb) ? citasAgendaWeb : [])
-    .filter(c => normalizarEstadoAgenda(c.estado) === 'atendida' && auroCitaPertenecePaciente(c, p))
-    .map(c => ({ cita: c, ts: auroTimestampFechaAgendaPaciente(c) }))
-    .filter(x => x.ts > 0)
-    .sort((a, b) => b.ts - a.ts);
 
-  if(citasAtendidas.length){
-    return {
-      fecha: String(citasAtendidas[0].cita.fecha_deseada || '').substring(0,10),
-      ts: citasAtendidas[0].ts,
-      fuente: 'cita'
-    };
-  }
+/* AUROSANAX: función renderPatients movida a pacientes.js */
 
-  // Si la agenda aún no terminó de cargar, se mantiene temporalmente el dato anterior para no dejar la tabla vacía.
-  // Cuando cargan las citas, se recalcula desde Agenda y se evita usar fecha_registro/actualizado_en como atención.
-  if(!citasAgendaWebCargadas && p.ultima){
-    const fechaFallback = normalizarFechaInput(p.ultima);
-    const tsFallback = fechaFallback ? new Date(fechaFallback + 'T00:00:00').getTime() : 0;
-    return {fecha: fechaFallback || p.ultima, ts: Number.isFinite(tsFallback) ? tsFallback : 0, fuente: 'temporal'};
-  }
 
-  return {fecha: '', ts: 0, fuente: 'sin_atencion'};
-}
+/* AUROSANAX: función cambiarPaginaPacientes movida a pacientes.js */
 
-function renderPatients(){
-  const q=(document.getElementById('patientSearch')?.value||'').toLowerCase();
-  const f=document.getElementById('patientFilter')?.value||'';
-  const rows=patients.map(p => {
-    const ultimaInfo = auroUltimaAtencionPaciente(p);
-    return {
-      ...p,
-      ultima_atencion_real: ultimaInfo.fecha,
-      ultima_atencion_ts: ultimaInfo.ts
-    };
-  }).filter(p=>{
-    const txt=[p.nombre,p.cedula,p.telefono,p.email,p.servicio,p.ciudad].join(' ').toLowerCase();
-    return (!q || txt.includes(q)) && (!f || p.servicio===f);
-  }).sort((a,b)=>{
-    const ta = Number(a.ultima_atencion_ts || 0);
-    const tb = Number(b.ultima_atencion_ts || 0);
-    if(ta && tb && ta !== tb) return tb - ta;
-    if(ta && !tb) return -1;
-    if(!ta && tb) return 1;
-    return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', {sensitivity:'base'});
-  });
 
-  const sizeSelect = document.getElementById('patientPageSize');
-  if(sizeSelect) patientPageSize = parseInt(sizeSelect.value,10) || 25;
+/* AUROSANAX: función resetPatients movida a pacientes.js */
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / patientPageSize));
-  if(patientPage > totalPages) patientPage = totalPages;
-  if(patientPage < 1) patientPage = 1;
 
-  const startIndex = (patientPage - 1) * patientPageSize;
-  const visibleRows = rows.slice(startIndex, startIndex + patientPageSize);
+/* AUROSANAX: función limpiarFormularioPaciente movida a pacientes.js */
 
-  const endIndex = Math.min(startIndex + visibleRows.length, rows.length);
-  setTextIfExists('patientCountInfo', rows.length ? `Mostrando ${startIndex + 1}–${endIndex} de ${rows.length} pacientes` : 'No hay pacientes para mostrar');
-  setTextIfExists('patientPageInfo', `Página ${patientPage} / ${totalPages}`);
-  const prevBtn = document.getElementById('patientPrevBtn');
-  const nextBtn = document.getElementById('patientNextBtn');
-  if(prevBtn) prevBtn.disabled = patientPage <= 1;
-  if(nextBtn) nextBtn.disabled = patientPage >= totalPages;
 
-  document.getElementById('patientsBody').innerHTML = visibleRows.map((p,i)=>`
-    <tr>
-      <td><b>${p.nombre}</b><br><small class="text-muted">${p.email}</small></td>
-      <td>${p.cedula}</td>
-      <td>${p.telefono}</td>
-      <td><span class="badge-auro">${p.servicio}</span></td>
-      <td>${p.ultima_atencion_real ? formatearFechaVisual(p.ultima_atencion_real) : '—'}</td>
-      <td>${badgeEstado(p.estado)}</td>
-      <td>
-        <div class="patient-action-group">
-          <button class="btn-action primary" title="Abrir historia clínica" onclick="abrirHistoriaPaciente('${p.id_paciente || ''}')"><i class="bi bi-file-medical me-1"></i> Historia</button>
-          <button class="btn-action success" title="WhatsApp" onclick="abrirWhatsAppPaciente('${p.id_paciente || ''}')"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
-          <button class="btn-action soft" title="Editar paciente" onclick="editarPacienteModal('${p.id_paciente || ''}')"><i class="bi bi-pencil me-1"></i> Editar</button>
-        </div>
-      </td>
-    </tr>
-  `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">Sin pacientes</td></tr>';
+/* AUROSANAX: función openPatientModal movida a pacientes.js */
 
-  document.getElementById('patientsMobile').innerHTML = visibleRows.map(p=>`
-    <div class="mobile-card">
-      <div class="mobile-card-top"><b>${p.nombre}</b>${badgeEstado(p.estado)}</div>
-      <div class="line"><span>Cédula</span><span>${p.cedula}</span></div>
-      <div class="line"><span>Teléfono</span><span>${p.telefono}</span></div>
-      <div class="line"><span>Servicio</span><span>${p.servicio}</span></div>
-      <div class="line"><span>Última atención</span><span>${p.ultima_atencion_real ? formatearFechaVisual(p.ultima_atencion_real) : '—'}</span></div>
-      <div class="d-grid gap-2 mt-2">
-        <button class="btn-auro w-100" onclick="abrirHistoriaPaciente('${p.id_paciente || ''}')">Ver historia clínica</button>
-        <button class="btn-soft w-100" onclick="abrirWhatsAppPaciente('${p.id_paciente || ''}')"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
-      </div>
-    </div>
-  `).join('') || '<div class="mobile-card text-muted">Sin pacientes</div>';
-  document.getElementById('stPacientes').textContent=patients.length;
-  actualizarDashboard();
-}
 
-function cambiarPaginaPacientes(delta){
-  patientPage += delta;
-  renderPatients();
-}
+/* AUROSANAX: función closePatientModal movida a pacientes.js */
 
-function resetPatients(){
-  document.getElementById('patientSearch').value='';
-  document.getElementById('patientFilter').value='';
-  patientPage = 1;
-  renderPatients();
-}
 
-function limpiarFormularioPaciente(){
-  ['pNombre','pCedula','pNacimiento','pSexo','pEstadoCivil','pOcupacion','pTelefono','pEmail','pDireccion','pSeguro','pContactoEmergencia','pTelefonoEmergencia','pTipoSangre','pAlergias','pNotas'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.value='';
-  });
-  const ciudad=document.getElementById('pCiudad');
-  if(ciudad) ciudad.value='Guayaquil';
-  const servicio=document.getElementById('pServicio');
-  if(servicio) servicio.value='Ginecología';
-}
+/* AUROSANAX: función editarPacienteModal movida a pacientes.js */
 
-function openPatientModal(){
-  editingPatientId = null;
-  limpiarFormularioPaciente();
-  setTextIfExists('patientModalTitle','Nuevo paciente');
-  setTextIfExists('patientSaveBtn','Guardar paciente');
-  document.getElementById('patientModal').classList.add('show');
-}
 
-function closePatientModal(){
-  document.getElementById('patientModal').classList.remove('show');
-  editingPatientId = null;
-}
+/* AUROSANAX: función cargarPacientesDesdeSheets movida a pacientes.js */
 
-function editarPacienteModal(idPaciente){
-  if(!idPaciente){
-    alert('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
-    return;
-  }
-  const p = patients.find(x => x.id_paciente === idPaciente);
-  if(!p){
-    alert('No se encontró el paciente en la lista cargada.');
-    return;
-  }
-  editingPatientId = idPaciente;
-  setTextIfExists('patientModalTitle','Editar paciente');
-  setTextIfExists('patientSaveBtn','Actualizar paciente');
-  setValueIfExists('pNombre', p.nombre || [p.nombres||'', p.apellidos||''].join(' ').trim());
-  setValueIfExists('pCedula', p.cedula || '');
-  setValueIfExists('pNacimiento', normalizarFechaInput(p.fecha_nacimiento || ''));
-  setValueIfExists('pSexo', p.sexo || '');
-  setValueIfExists('pEstadoCivil', normalizarEstadoCivilPaciente(p.estado_civil || ''));
-  setValueIfExists('pOcupacion', p.ocupacion || '');
-  setValueIfExists('pTelefono', p.telefono || '');
-  setValueIfExists('pEmail', p.email || '');
-  setValueIfExists('pDireccion', p.direccion || '');
-  setValueIfExists('pCiudad', p.ciudad || 'Guayaquil');
-  setValueIfExists('pSeguro', p.aseguradora || p.seguro_medico || '');
-  setValueIfExists('pContactoEmergencia', p.contacto_emergencia || '');
-  setValueIfExists('pTelefonoEmergencia', p.telefono_emergencia || '');
-  setValueIfExists('pTipoSangre', p.tipo_sangre || '');
-  setValueIfExists('pAlergias', p.alergias || '');
-  setValueIfExists('pNotas', p.antecedentes_importantes || '');
-  const serv=document.getElementById('pServicio');
-  if(serv) serv.value = p.servicio || 'Ginecología';
-  document.getElementById('patientModal').classList.add('show');
-}
 
-async function cargarPacientesDesdeSheets(){
-  try{
-    const res = await fetch(API_URL + '?accion=listarPacientes');
-    const data = await res.json();
-
-    patients = data.map(p => ({
-      id_paciente: p.id_paciente || '',
-      nombre: [p.nombres || '', p.apellidos || ''].join(' ').trim(),
-      nombres: p.nombres || '',
-      apellidos: p.apellidos || '',
-      cedula: p.numero_documento || '',
-      fecha_nacimiento: p.fecha_nacimiento || '',
-      edad: p.edad || '',
-      sexo: p.sexo || '',
-      estado_civil: p.estado_civil || '',
-      ocupacion: p.ocupacion || '',
-      telefono: p.whatsapp || p.telefono || '',
-      email: p.email || '',
-      direccion: p.direccion || '',
-      ciudad: p.ciudad || '',
-      provincia: p.provincia || '',
-      contacto_emergencia: p.contacto_emergencia || '',
-      telefono_emergencia: p.telefono_emergencia || '',
-      aseguradora: p.aseguradora || '',
-      alergias: p.alergias || '',
-      tipo_sangre: p.tipo_sangre || p.grupo_sanguineo || '',
-      antecedentes_importantes: p.antecedentes_importantes || '',
-      servicio: p.servicio_principal || 'Ginecología',
-      ultima: p.actualizado_en ? new Date(p.actualizado_en).toLocaleDateString('es-EC') : '',
-      estado: p.estado || 'Activa'
-    }));
-
-    renderPatients();
-    actualizarSelectorPacientesHistoria();
-    actualizarDashboard();
-  }catch(error){
-    console.warn('No se pudo cargar desde Google Sheets. Se mantiene demo local.', error);
-    renderPatients();
-    actualizarSelectorPacientesHistoria();
-    actualizarDashboard();
-  }
-}
-
-async function savePatient(){
-  const nombreCompleto=document.getElementById('pNombre').value.trim();
-  if(!nombreCompleto){ alert('Ingrese nombres y apellidos del paciente'); return; }
-
-  const partes = nombreCompleto.split(' ');
-  const nombres = partes.slice(0, Math.max(1, partes.length - 1)).join(' ');
-  const apellidos = partes.length > 1 ? partes.slice(-1).join(' ') : '';
-
-  const pacienteSheet = {
-    tipo_documento: 'Cédula',
-    numero_documento: document.getElementById('pCedula').value.trim(),
-    nombres: nombres,
-    apellidos: apellidos,
-    fecha_nacimiento: document.getElementById('pNacimiento').value,
-    sexo: document.getElementById('pSexo')?.value || '',
-    estado_civil: document.getElementById('pEstadoCivil')?.value || '',
-    ocupacion: document.getElementById('pOcupacion')?.value.trim() || '',
-    telefono: document.getElementById('pTelefono').value.trim(),
-    whatsapp: document.getElementById('pTelefono').value.trim(),
-    email: document.getElementById('pEmail').value.trim(),
-    direccion: document.getElementById('pDireccion').value.trim(),
-    ciudad: document.getElementById('pCiudad').value.trim(),
-    provincia: 'Guayas',
-    aseguradora: document.getElementById('pSeguro')?.value.trim() || '',
-    contacto_emergencia: document.getElementById('pContactoEmergencia')?.value.trim() || '',
-    telefono_emergencia: document.getElementById('pTelefonoEmergencia')?.value.trim() || '',
-    tipo_sangre: document.getElementById('pTipoSangre')?.value.trim() || '',
-    alergias: document.getElementById('pAlergias')?.value.trim() || '',
-    servicio_principal: document.getElementById('pServicio')?.value || 'Ginecología',
-    antecedentes_importantes: document.getElementById('pNotas').value.trim(),
-    estado: 'Activo',
-    creado_por: 'AUROSANAX ERP'
-  };
-
-  const pacienteLocal = {
-    nombre: nombreCompleto,
-    nombres: pacienteSheet.nombres,
-    apellidos: pacienteSheet.apellidos,
-    cedula: pacienteSheet.numero_documento,
-    fecha_nacimiento: pacienteSheet.fecha_nacimiento,
-    sexo: pacienteSheet.sexo,
-    estado_civil: pacienteSheet.estado_civil,
-    ocupacion: pacienteSheet.ocupacion,
-    telefono: pacienteSheet.telefono,
-    email: pacienteSheet.email,
-    direccion: pacienteSheet.direccion,
-    ciudad: pacienteSheet.ciudad,
-    provincia: pacienteSheet.provincia,
-    aseguradora: pacienteSheet.aseguradora,
-    contacto_emergencia: pacienteSheet.contacto_emergencia,
-    telefono_emergencia: pacienteSheet.telefono_emergencia,
-    tipo_sangre: pacienteSheet.tipo_sangre,
-    alergias: pacienteSheet.alergias,
-    antecedentes_importantes: pacienteSheet.antecedentes_importantes,
-    servicio: document.getElementById('pServicio').value,
-    ultima: new Date().toLocaleDateString('es-EC'),
-    estado: 'Activa'
-  };
-
-  try{
-    const esEdicion = !!editingPatientId;
-    const payloadData = esEdicion ? {...pacienteSheet, id_paciente: editingPatientId} : pacienteSheet;
-
-    await fetch(API_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({
-        accion: esEdicion ? 'editarPaciente' : 'guardarPaciente',
-        data: limpiarObjetoParaSheets(payloadData)
-      })
-    });
-
-    if(esEdicion){
-      const idx = patients.findIndex(p => p.id_paciente === editingPatientId);
-      if(idx >= 0){
-        patients[idx] = {...patients[idx], ...pacienteLocal, id_paciente: editingPatientId};
-      }
-    }else{
-      patients.unshift(pacienteLocal);
-    }
-
-    limpiarFormularioPaciente();
-    closePatientModal();
-    renderPatients();
-    actualizarSelectorPacientesHistoria();
-    actualizarDashboard();
-    setTimeout(async () => {
-      await cargarPacientesDesdeSheets();
-      renderPatients();
-      actualizarSelectorPacientesHistoria();
-      actualizarDashboard();
-    }, 1200);
-
-    alert(esEdicion ? 'Paciente actualizado correctamente.' : 'Paciente enviado a Google Sheets correctamente.');
-  }catch(error){
-    console.error(error);
-    alert('No se pudo guardar en Google Sheets. Revise la conexión o la implementación del Apps Script.');
-  }
-}
+/* AUROSANAX: función savePatient movida a pacientes.js */
 
 
 
-function abrirHistoriaPaciente(idPaciente){
-  if(!idPaciente){
-    alert('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
-    return;
-  }
 
-  activePatientId = idPaciente;
-  showScreen('historia');
-  actualizarSelectorPacientesHistoria();
-
-  const select = document.getElementById('hcPacienteSelect');
-  if(select){
-    select.value = idPaciente;
-    seleccionarPacienteHistoria();
-  }
-
-  window.scrollTo({top:0, behavior:'smooth'});
-}
-
-function actualizarSelectorPacientesHistoria(){
-  const select = document.getElementById('hcPacienteSelect');
-  if(!select) return;
-
-  const valorActual = select.value;
-  select.innerHTML = '<option value="">Seleccione un paciente registrado</option>' + patients.map(p => {
-    const nombre = p.nombre || 'Paciente sin nombre';
-    return `<option value="${p.id_paciente || ''}">${nombre}</option>`;
-  }).join('');
-
-  if(valorActual) select.value = valorActual;
-}
-
-function normalizarFechaInput(valor){
-  if(!valor) return '';
-  const d = new Date(valor);
-  if(isNaN(d.getTime())) return String(valor).slice(0,10);
-  return d.toISOString().slice(0,10);
-}
-
-function calcularEdadDesdeFecha(valor){
-  if(!valor) return '';
-  const n = new Date(normalizarFechaInput(valor) + 'T00:00:00');
-  if(isNaN(n.getTime())) return '';
-  const h = new Date();
-  let e = h.getFullYear() - n.getFullYear();
-  const m = h.getMonth() - n.getMonth();
-  if(m < 0 || (m === 0 && h.getDate() < n.getDate())) e--;
-  return e >= 0 ? e : '';
-}
+/* AUROSANAX: función abrirHistoriaPaciente movida a pacientes.js */
 
 
-function normalizarEstadoCivilPaciente(valor){
-  const v = normalizarTextoComparacion(valor);
-  if(!v) return '';
-  if(v === 'soltera' || v === 'soltero' || v === 'soltero/a') return 'Soltero/a';
-  if(v === 'casada' || v === 'casado' || v === 'casado/a') return 'Casado/a';
-  if(v === 'union libre' || v === 'unión libre') return 'Unión libre';
-  if(v === 'divorciada' || v === 'divorciado' || v === 'divorciado/a') return 'Divorciado/a';
-  if(v === 'viuda' || v === 'viudo' || v === 'viudo/a') return 'Viudo/a';
-  if(v === 'separada' || v === 'separado' || v === 'separado/a') return 'Separado/a';
-  if(v === 'no especifica' || v === 'no especificado' || v === 'no especificado/a') return 'No especifica';
-  return valor || '';
-}
+/* AUROSANAX: función actualizarSelectorPacientesHistoria movida a pacientes.js */
+
+
+/* AUROSANAX: función normalizarFechaInput movida a pacientes.js */
+
+
+/* AUROSANAX: función calcularEdadDesdeFecha movida a pacientes.js */
+
+
+
+/* AUROSANAX: función normalizarEstadoCivilPaciente movida a pacientes.js */
 
 function seleccionarPacienteHistoria(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || activePatientId || '';
@@ -3057,35 +2649,14 @@ function seleccionarPacienteHistoria(){
   renderModulePatientCards();
 }
 
-function normalizarTextoComparacion(valor){
-  return String(valor || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .trim().toLowerCase();
-}
 
-function setValueIfExists(id, value){
-  const el = document.getElementById(id);
-  if(!el) return;
+/* AUROSANAX: función normalizarTextoComparacion movida a pacientes.js */
 
-  if(el.tagName === 'SELECT'){
-    const buscado = normalizarTextoComparacion(value);
-    let encontrado = false;
-    [...el.options].forEach(opt => {
-      if(normalizarTextoComparacion(opt.value) === buscado || normalizarTextoComparacion(opt.textContent) === buscado){
-        el.value = opt.value;
-        encontrado = true;
-      }
-    });
-    if(!encontrado) el.value = '';
-    return;
-  }
 
-  el.value = value || '';
-}
+/* AUROSANAX: función setValueIfExists movida a pacientes.js */
 
-function getValueIfExists(id){
-  return document.getElementById(id)?.value || '';
-}
+
+/* AUROSANAX: función getValueIfExists movida a pacientes.js */
 
 
 /* =====================================================
@@ -3145,23 +2716,11 @@ function auroCargarAntecedentesCompletosGuardados(h){
   }
 }
 
-function limpiarTextoParaSheets(valor){
-  if(valor === null || valor === undefined) return '';
-  return String(valor)
-    .replace(/\r\n|\r|\n/g, ' ')
-    .replace(/\t/g, ' ')
-    .replace(/ {2,}/g, ' ')
-    .trim();
-}
 
-function limpiarObjetoParaSheets(obj){
-  const limpio = {};
-  Object.keys(obj || {}).forEach(k => {
-    const v = obj[k];
-    limpio[k] = typeof v === 'string' ? limpiarTextoParaSheets(v) : v;
-  });
-  return limpio;
-}
+/* AUROSANAX: función limpiarTextoParaSheets movida a pacientes.js */
+
+
+/* AUROSANAX: función limpiarObjetoParaSheets movida a pacientes.js */
 
 
 
@@ -5232,35 +4791,14 @@ async function guardarHistoriaClinicaERP(){
 
 const WHATSAPP_AUROSANAX = '593984567660';
 
-function normalizarTelefonoEcuador(numero){
-  let n = String(numero || '').replace(/\D/g, '');
-  if(!n) return '';
-  if(n.startsWith('00')) n = n.slice(2);
-  if(n.startsWith('593')) return n;
-  if(n.startsWith('0')) return '593' + n.slice(1);
-  if(n.length === 9 && n.startsWith('9')) return '593' + n;
-  return n;
-}
 
-function abrirWhatsApp(numero, mensaje){
-  const tel = normalizarTelefonoEcuador(numero);
-  if(!tel){
-    alert('No hay número de WhatsApp registrado.');
-    return;
-  }
-  const url = 'https://wa.me/' + tel + '?text=' + encodeURIComponent(mensaje || '');
-  window.open(url, '_blank');
-}
+/* AUROSANAX: función normalizarTelefonoEcuador movida a pacientes.js */
 
-function abrirWhatsAppPaciente(idPaciente){
-  const paciente = patients.find(p => p.id_paciente === idPaciente);
-  if(!paciente){
-    alert('No se encontró el paciente seleccionado.');
-    return;
-  }
-  const mensaje = `Hola ${paciente.nombre || ''},\n\nLe saluda AUROSANAX.\nQueremos realizar seguimiento a su atención médica.\n\nSi presenta alguna novedad o requiere agendar un control, estamos atentos para ayudarle.`;
-  abrirWhatsApp(paciente.telefono, mensaje);
-}
+
+/* AUROSANAX: función abrirWhatsApp movida a pacientes.js */
+
+
+/* AUROSANAX: función abrirWhatsAppPaciente movida a pacientes.js */
 
 function abrirWhatsAppHistoria(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || '';
@@ -5722,17 +5260,8 @@ function generarPDFConsentimiento(){
 
 
 
-function normalizarEstadoAgenda(estado){
-  const e = String(estado || '').trim().toLowerCase();
-  if(!e) return 'sin estado';
-  if(e === 'anulada' || e === 'anulado' || e === 'cancelada' || e === 'cancelado') return 'anulada';
-  if(e === 'no asistio' || e === 'no asistió' || e === 'inasistencia' || e === 'no asistio a cita' || e === 'no asistió a cita') return 'no asistio';
-  if(e === 'atendida' || e === 'atendidas') return 'atendida';
-  if(e === 'confirmada' || e === 'confirmado') return 'confirmada';
-  if(e === 'pendiente') return 'pendiente';
-  if(e === 'sin estado') return 'sin estado';
-  return e;
-}
+
+/* AUROSANAX: función normalizarEstadoAgenda movida a pacientes.js */
 
 function badgeEstadoAgenda(estado){
   const e = normalizarEstadoAgenda(estado);
@@ -5743,12 +5272,8 @@ function badgeEstadoAgenda(estado){
   if(e === 'pendiente') return '<span class="badge-auro badge-warn">Pendiente</span>';
   return '<span class="badge-auro badge-warn">Sin estado</span>';
 }
-function formatearFechaVisual(fecha){
-  if(!fecha) return '';
-  const partes = String(fecha).slice(0,10).split('-');
-  if(partes.length === 3) return partes[2] + '/' + partes[1] + '/' + partes[0];
-  return fecha;
-}
+
+/* AUROSANAX: función formatearFechaVisual movida a pacientes.js */
 
 
 function abrirSecretaria(){
@@ -6175,7 +5700,7 @@ async function inicializarERP(){
   auroInicializarAyudasExamenFisicoV32();
 }
 
-inicializarERP();
+/* AUROSANAX: inicialización movida después de cargar pacientes.js */
 </script>
 
 
@@ -6468,5 +5993,9 @@ document.addEventListener('click',e=>{
 })();
 </script>
 <script src="pacientes.js"></script>
+<script>
+  /* AUROSANAX: inicialización segura después de cargar pacientes.js */
+  inicializarERP();
+</script>
 </body>
 </html>
