@@ -3087,6 +3087,64 @@ function getValueIfExists(id){
   return document.getElementById(id)?.value || '';
 }
 
+
+/* =====================================================
+   AUROSANAX FIX - CARGA SEGURA DE ANTECEDENTES GUARDADOS
+   Motivo: Google Sheets sí guarda COVID, vacunas, hábitos,
+   estilo de vida, alimentación, obstétricos y ginecológicos,
+   pero al abrir/editar la historia deben volver a pintarse
+   en pantalla desde antecedentes.js.
+   No modifica base de datos, Apps Script, pacientes ni agenda.
+===================================================== */
+function auroCargarAntecedentesCompletosGuardados(h){
+  if(!h) return;
+
+  // Deja referencia global para pruebas rápidas desde consola.
+  window.historiaActual = h;
+  window.currentHistoria = h;
+
+  try{
+    if(typeof cargarAntecedentesPersonalesCompletos === 'function'){
+      cargarAntecedentesPersonalesCompletos(h.antecedentes_personales || '');
+    }
+  }catch(error){
+    console.warn('No se pudieron cargar antecedentes personales completos.', error);
+  }
+
+  try{
+    if(typeof cargarAntecedentesGinecoObstetricosCompletos === 'function'){
+      cargarAntecedentesGinecoObstetricosCompletos(h.antecedentes_gineco_obstetricos || '');
+    }
+  }catch(error){
+    console.warn('No se pudieron cargar antecedentes gineco-obstétricos completos.', error);
+  }
+
+  try{
+    if(typeof cargarAntecedentesQuirurgicosEstructurados === 'function'){
+      cargarAntecedentesQuirurgicosEstructurados(h.antecedentes_quirurgicos || '');
+    }
+  }catch(error){
+    console.warn('No se pudieron cargar antecedentes quirúrgicos.', error);
+  }
+
+  try{
+    if(typeof cargarAlergiasEstructuradas === 'function'){
+      cargarAlergiasEstructuradas(h.alergias || '');
+    }
+  }catch(error){
+    console.warn('No se pudieron cargar alergias estructuradas.', error);
+  }
+
+  // Respaldo: si existe el cargador general de antecedentes.js, también se ejecuta.
+  try{
+    if(typeof auroCargarAntecedentesDesdeHistoria === 'function'){
+      auroCargarAntecedentesDesdeHistoria(h, 'edicion');
+    }
+  }catch(error){
+    console.warn('No se pudo ejecutar auroCargarAntecedentesDesdeHistoria.', error);
+  }
+}
+
 function limpiarTextoParaSheets(valor){
   if(valor === null || valor === undefined) return '';
   return String(valor)
@@ -6059,13 +6117,17 @@ function editarHistoriaClinicaModal(idHistoria){
   }
 
   editingHistoryId = h.id_historia || idHistoria;
+  window.historiaActual = h;
+  window.currentHistoria = h;
   closeHistoriasModal();
   abrirHistoriaPaciente(h.id_paciente);
 
   setTimeout(() => {
+    window.historiaActual = h;
+    window.currentHistoria = h;
     setValueIfExists('hcMotivoConsulta', h.motivo_consulta || '');
     setValueIfExists('hcEnfermedadActual', h.enfermedad_actual || '');
-    auroCargarAntecedentesDesdeHistoria(h, 'edicion');
+    auroCargarAntecedentesCompletosGuardados(h);
     setValueIfExists('hcPeso', h.peso_kg || '');
     setValueIfExists('hcTalla', h.talla_cm || '');
     setValueIfExists('hcIMC', h.imc || '');
