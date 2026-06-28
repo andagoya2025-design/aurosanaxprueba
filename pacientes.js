@@ -597,3 +597,112 @@ function abrirWhatsAppPaciente(idPaciente){
   const mensaje = `Hola ${paciente.nombre || ''},\n\nLe saluda AUROSANAX.\nQueremos realizar seguimiento a su atención médica.\n\nSi presenta alguna novedad o requiere agendar un control, estamos atentos para ayudarle.`;
   abrirWhatsApp(paciente.telefono, mensaje);
 }
+
+
+/* =========================================================
+   AUROSANAX - PACIENTES ACCIONES PREMIUM
+   Prueba segura: solo cambia la forma visual de Acciones.
+   No cambia datos, no cambia Apps Script, no cambia index.
+   ========================================================= */
+
+function auroPacienteAccionesPremium(p){
+  const id = p?.id_paciente || p?.id || '';
+  return `
+    <div class="dropdown auro-actions-dropdown">
+      <button class="btn-action soft dropdown-toggle auro-actions-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-three-dots-vertical me-1"></i> Acciones
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end auro-actions-menu">
+        <li>
+          <button class="dropdown-item" type="button" onclick="abrirHistoriaPaciente('${id}')">
+            <i class="bi bi-file-medical me-2"></i> Historia clínica
+          </button>
+        </li>
+        <li>
+          <button class="dropdown-item" type="button" onclick="abrirWhatsAppPaciente('${id}')">
+            <i class="bi bi-whatsapp me-2"></i> WhatsApp
+          </button>
+        </li>
+        <li><hr class="dropdown-divider"></li>
+        <li>
+          <button class="dropdown-item" type="button" onclick="openPatientModal('${id}')">
+            <i class="bi bi-pencil-square me-2"></i> Editar paciente
+          </button>
+        </li>
+      </ul>
+    </div>`;
+}
+
+function auroInyectarEstiloAccionesPacientes(){
+  if(document.getElementById('auro-pacientes-acciones-premium-style')) return;
+  const style = document.createElement('style');
+  style.id = 'auro-pacientes-acciones-premium-style';
+  style.textContent = `
+    .auro-actions-dropdown{position:relative;display:inline-block}
+    .auro-actions-btn{
+      min-width:108px;
+      justify-content:center;
+      background:linear-gradient(135deg,#fff,#fff7fb)!important;
+      border:1px solid #fbcfe8!important;
+      color:#8b1e5a!important;
+      box-shadow:0 6px 18px rgba(139,30,90,.08);
+    }
+    .auro-actions-menu{
+      border:1px solid #fbcfe8;
+      border-radius:16px;
+      padding:8px;
+      box-shadow:0 18px 45px rgba(15,23,42,.16);
+      min-width:205px;
+      overflow:hidden;
+    }
+    .auro-actions-menu .dropdown-item{
+      border-radius:12px;
+      padding:9px 10px;
+      font-weight:750;
+      color:#374151;
+    }
+    .auro-actions-menu .dropdown-item:hover{
+      background:#fdf2f8;
+      color:#8b1e5a;
+    }
+    .table-modern td:last-child{white-space:nowrap}
+  `;
+  document.head.appendChild(style);
+}
+
+/* Parche seguro:
+   Envuelve renderPatients y reemplaza visualmente la columna Acciones.
+   Si algo falla, deja el render original funcionando.
+*/
+(function(){
+  const originalRenderPatients = window.renderPatients;
+  if(typeof originalRenderPatients !== 'function') return;
+
+  window.renderPatients = function(){
+    const resultado = originalRenderPatients.apply(this, arguments);
+    try{
+      auroInyectarEstiloAccionesPacientes();
+
+      const rows = document.querySelectorAll('#patientsBody tr');
+      rows.forEach((tr) => {
+        const celdas = tr.querySelectorAll('td');
+        if(!celdas.length) return;
+
+        const nombreTexto = celdas[0]?.innerText || '';
+        const paciente = (window.patients || []).find(p => {
+          const nombre = String(p.nombre || '').trim().toLowerCase();
+          return nombre && nombreTexto.toLowerCase().includes(nombre);
+        });
+
+        if(!paciente) return;
+
+        const ultimaCelda = celdas[celdas.length - 1];
+        ultimaCelda.innerHTML = auroPacienteAccionesPremium(paciente);
+      });
+    }catch(error){
+      console.warn('No se pudo aplicar acciones premium de pacientes:', error);
+    }
+    return resultado;
+  };
+})();
+
