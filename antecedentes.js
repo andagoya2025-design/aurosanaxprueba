@@ -2618,43 +2618,295 @@ function auroMostrarAntecedentesPrevios(h, modo){
 }
 
 console.log('AUROSANAX antecedentes.js: FIX FINAL grupos vacíos + campos incompletos cargado');
+
+
 /* ==========================================================
-   AUROSANAX FIX REAL FINAL - RESUMEN SIN TARJETAS VACÍAS
-   Revisado sobre archivo actual 3.txt.
-   Corrige renderizado de caja resumen usando solo datos clínicos reales.
+   AUROSANAX UI PREMIUM FINAL - TARJETAS RESUMEN ANTECEDENTES
+   Solo cambia diseño visual de la caja resumen.
+   No modifica guardado, lectura, Google Sheets, Apps Script ni index.html.
    ========================================================== */
 
-function auroEsPlaceholderClinicoReal(v){
-  if(v === null || v === undefined) return false;
-  if(typeof v === 'boolean') return v === true;
-  const t = String(v).trim();
-  if(!t) return false;
-  if(/^[-–—\s.,:]*$/.test(t)) return false;
-  if(/^(undefined|null|\[object object\]|seleccione|seleccionar|dd\/mm\/aaaa|observaci[oó]n|marca\s*\/\s*observaci[oó]n|reacci[oó]n\s*o\s*detalle|medicamento\s*\/\s*reacci[oó]n\s*\/\s*detalle|s[ií]ntomas\s*o\s*complicaciones|tipo\s*de\s*vacuna\s*si\s*recuerda|ej\.\s*5\s*d[ií]as|ej\.\s*2021\s*\/\s*aproximado)$/i.test(t)) return false;
-  if(/^(años?|meses?|d[ií]as?|horas?|km|litros\/d[ií]a|comidas\/d[ií]a|veces\/semana)$/i.test(t)) return false;
-  if(/^(no aplica|n\/a|na)$/i.test(t)) return false;
-  return true;
+function auroInyectarEstilosAntecedentesPremium(){
+  const anterior = document.getElementById('auroAntecedentesPremiumStyle');
+  if(anterior) anterior.remove();
+
+  const style = document.createElement('style');
+  style.id = 'auroAntecedentesPremiumStyle';
+  style.textContent = `
+    .auro-previos-box{
+      background:linear-gradient(135deg,#ffffff 0%,#fff6fb 48%,#ffffff 100%)!important;
+      border:1px solid rgba(194,59,131,.16)!important;
+      border-radius:22px!important;
+      padding:18px!important;
+      margin:14px 0 18px!important;
+      box-shadow:0 18px 42px rgba(139,30,90,.08)!important;
+      overflow:hidden!important;
+    }
+
+    .auro-previos-head{
+      display:flex!important;
+      justify-content:space-between!important;
+      align-items:center!important;
+      gap:14px!important;
+      padding:0 0 14px!important;
+      margin:0 0 16px!important;
+      border-bottom:1px solid rgba(194,59,131,.14)!important;
+    }
+
+    .auro-previos-head b{
+      display:flex!important;
+      align-items:center!important;
+      gap:8px!important;
+      color:#7a174f!important;
+      font-size:16px!important;
+      font-weight:900!important;
+      letter-spacing:-.02em!important;
+    }
+
+    .auro-previos-head small{
+      display:block!important;
+      color:#64748b!important;
+      font-size:12px!important;
+      font-weight:600!important;
+      margin-top:4px!important;
+      line-height:1.35!important;
+    }
+
+    .auro-previos-hide{
+      border:1px solid rgba(194,59,131,.18)!important;
+      background:#fff!important;
+      color:#8b1e5a!important;
+      padding:8px 12px!important;
+      border-radius:999px!important;
+      font-size:12px!important;
+      font-weight:800!important;
+      white-space:nowrap!important;
+      box-shadow:0 8px 18px rgba(139,30,90,.07)!important;
+    }
+
+    .auro-previos-content{
+      display:grid!important;
+      gap:14px!important;
+    }
+
+    .auro-previos-content.auro-previos-collapsed{
+      display:none!important;
+    }
+
+    .auro-previos-line{
+      background:rgba(255,255,255,.94)!important;
+      border:1px solid rgba(226,232,240,.9)!important;
+      border-radius:18px!important;
+      padding:14px!important;
+      box-shadow:0 12px 26px rgba(15,23,42,.045)!important;
+    }
+
+    .auro-previos-line > span{
+      display:flex!important;
+      align-items:center!important;
+      gap:8px!important;
+      color:#8b1e5a!important;
+      font-size:12px!important;
+      font-weight:900!important;
+      text-transform:uppercase!important;
+      letter-spacing:.045em!important;
+      margin:0 0 12px!important;
+      padding:0!important;
+    }
+
+    .auro-previos-line > span i{
+      width:24px!important;
+      height:24px!important;
+      border-radius:9px!important;
+      background:linear-gradient(135deg,#fce7f3,#fdf2f8)!important;
+      color:#b21d72!important;
+      display:inline-flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      font-size:13px!important;
+    }
+
+    .auro-previos-mini-table{
+      display:grid!important;
+      grid-template-columns:repeat(auto-fit,minmax(240px,1fr))!important;
+      gap:10px!important;
+    }
+
+    .auro-previos-mini-row{
+      position:relative!important;
+      background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%)!important;
+      border:1px solid rgba(194,59,131,.12)!important;
+      border-radius:16px!important;
+      padding:13px 14px!important;
+      min-height:76px!important;
+      box-shadow:0 8px 18px rgba(139,30,90,.055)!important;
+      break-inside:avoid!important;
+      page-break-inside:avoid!important;
+      overflow:hidden!important;
+    }
+
+    .auro-previos-mini-row::before{
+      content:''!important;
+      position:absolute!important;
+      left:0!important;
+      top:0!important;
+      right:0!important;
+      height:4px!important;
+      background:linear-gradient(90deg,#b21d72,#e879b9,#f9a8d4)!important;
+      opacity:.95!important;
+    }
+
+    .auro-previos-mini-row b{
+      display:block!important;
+      color:#172033!important;
+      font-size:13.5px!important;
+      font-weight:900!important;
+      margin:4px 0 8px!important;
+      line-height:1.22!important;
+      letter-spacing:-.01em!important;
+    }
+
+    .auro-previos-mini-row em{
+      display:flex!important;
+      flex-wrap:wrap!important;
+      gap:6px!important;
+      color:#475569!important;
+      font-size:11.5px!important;
+      font-style:normal!important;
+      line-height:1.25!important;
+    }
+
+    .auro-previos-detail-pill{
+      display:inline-flex!important;
+      align-items:center!important;
+      gap:5px!important;
+      background:#fff!important;
+      border:1px solid rgba(226,232,240,.95)!important;
+      border-radius:999px!important;
+      padding:5px 9px!important;
+      color:#334155!important;
+      font-size:11px!important;
+      font-weight:800!important;
+      box-shadow:0 3px 8px rgba(15,23,42,.035)!important;
+      max-width:100%!important;
+    }
+
+    .auro-previos-detail-pill i{
+      color:#b21d72!important;
+      font-size:11px!important;
+      flex:0 0 auto!important;
+    }
+
+    @media(max-width:760px){
+      .auro-previos-box{padding:14px!important;border-radius:18px!important;}
+      .auro-previos-head{display:block!important;}
+      .auro-previos-hide{margin-top:10px!important;}
+      .auro-previos-mini-table{grid-template-columns:1fr!important;}
+      .auro-previos-mini-row{min-height:auto!important;}
+    }
+
+    @media print{
+      .auro-previos-box{
+        background:#fff!important;
+        padding:8px!important;
+        margin:4px 0!important;
+        box-shadow:none!important;
+        border-radius:10px!important;
+        border:1px solid rgba(139,30,90,.18)!important;
+        break-inside:avoid!important;
+        page-break-inside:avoid!important;
+      }
+      .auro-previos-head{
+        padding-bottom:6px!important;
+        margin-bottom:6px!important;
+      }
+      .auro-previos-head b{font-size:12px!important;}
+      .auro-previos-head small{font-size:9px!important;}
+      .auro-previos-hide{display:none!important;}
+      .auro-previos-content{gap:5px!important;}
+      .auro-previos-line{
+        padding:7px!important;
+        box-shadow:none!important;
+        border-radius:8px!important;
+        break-inside:avoid!important;
+        page-break-inside:avoid!important;
+      }
+      .auro-previos-line > span{
+        font-size:9.5px!important;
+        margin-bottom:5px!important;
+      }
+      .auro-previos-line > span i{
+        width:18px!important;
+        height:18px!important;
+        font-size:9px!important;
+      }
+      .auro-previos-mini-table{
+        grid-template-columns:repeat(2,minmax(0,1fr))!important;
+        gap:5px!important;
+      }
+      .auro-previos-mini-row{
+        padding:6px 7px!important;
+        border-radius:7px!important;
+        min-height:auto!important;
+        box-shadow:none!important;
+      }
+      .auro-previos-mini-row::before{height:2px!important;}
+      .auro-previos-mini-row b{
+        font-size:10.5px!important;
+        margin:2px 0 4px!important;
+        line-height:1.15!important;
+      }
+      .auro-previos-mini-row em{
+        gap:3px!important;
+        font-size:9.5px!important;
+        line-height:1.15!important;
+      }
+      .auro-previos-detail-pill{
+        padding:2px 5px!important;
+        font-size:9px!important;
+        border-radius:6px!important;
+        box-shadow:none!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
-function auroDetalleRealResumen(detalle){
-  return String(detalle || '')
+function auroRenderDetallePremium(detalle){
+  const raw = String(detalle || '').trim();
+  if(!raw) return '';
+
+  const partes = raw
     .split(/\s*·\s*/)
-    .map(x => String(x || '').trim())
-    .filter(x => {
-      if(!x) return false;
-      const valor = x.includes(':') ? x.split(':').slice(1).join(':').trim() : x;
-      return auroEsPlaceholderClinicoReal(valor);
-    })
-    .join(' · ');
-}
+    .map(x => x.trim())
+    .filter(Boolean);
 
-function auroItemResumenTieneContenido(it){
-  if(!it) return false;
-  const titulo = String(it.titulo || '').trim();
-  const detalle = auroDetalleRealResumen(it.detalle || '');
-  if(!auroEsPlaceholderClinicoReal(titulo)) return false;
-  if(auroEsTokenTecnicoAntecedente && auroEsTokenTecnicoAntecedente(titulo)) return false;
-  return !!detalle || !/^(gesta|partos|ces[aá]reas|abortos|hijos vivos|hijos muertos|lactancia|ect[oó]picos|menarquia|menacme|menopausia|vida sexual activa|planificaci[oó]n familiar|terapia hormonal|infecciones vulvovaginales|ets|mamograf[ií]a|eco mamario|densitometr[ií]a [oó]sea|colposcop[ií]a|caminar|nadar|ciclismo|otros|alcohol|drogas|caf[eé]|biomasa)$/i.test(titulo);
+  return partes.map(p => {
+    let icon = 'bi-check2-circle';
+    let texto = p;
+
+    if(/^Tiempo:/i.test(p)){
+      icon = 'bi-hourglass-split';
+      texto = p.replace(/^Tiempo:\s*/i, 'Evolución: ');
+    }else if(/^Evolución:/i.test(p)){
+      icon = 'bi-hourglass-split';
+    }else if(/^(Tratamiento|Medicamento|Medicación):/i.test(p)){
+      icon = 'bi-capsule-pill';
+      texto = p.replace(/^(Tratamiento|Medicamento|Medicación):\s*/i, 'Tratamiento: ');
+    }else if(/^(Fecha|Año|Programada|Administrada):/i.test(p)){
+      icon = 'bi-calendar-check';
+    }else if(/^(Resultado):/i.test(p)){
+      icon = 'bi-clipboard2-check';
+    }else if(/^(Reacción|Reaccion|Alergia):/i.test(p)){
+      icon = 'bi-exclamation-circle';
+    }else if(/^(Marca|Vacuna):/i.test(p)){
+      icon = 'bi-shield-check';
+    }else if(/^(Presentó|Ex consumidor|Aplicada|No aplica):/i.test(p)){
+      icon = 'bi-check-circle';
+    }
+
+    return `<span class="auro-previos-detail-pill"><i class="bi ${icon}"></i>${auroEscapeHtml(texto)}</span>`;
+  }).join('');
 }
 
 function auroRenderPrevioItemsPremium(label, items){
@@ -2662,161 +2914,37 @@ function auroRenderPrevioItemsPremium(label, items){
     .map(x => {
       if(!x) return null;
       const titulo = String(x.titulo || '').trim();
-      const detalle = auroDetalleRealResumen(x.detalle || '');
-      const item = { titulo, detalle };
-      return auroItemResumenTieneContenido(item) ? item : null;
+      const detalle = typeof auroLimpiarDetalleResumenClinico === 'function'
+        ? auroLimpiarDetalleResumenClinico(x.detalle || '')
+        : String(x.detalle || '').trim();
+
+      const tituloValido = typeof auroValorClinicoReal === 'function'
+        ? auroValorClinicoReal(titulo)
+        : auroEsValorPrevioUtil(titulo);
+
+      if(!tituloValido) return null;
+      if(auroEsTokenTecnicoAntecedente(titulo)) return null;
+      return { titulo, detalle };
     })
     .filter(Boolean);
 
   if(!items.length) return '';
+
   const icono = auroIconoSeccionAntecedente(label);
 
   return `
-    <div class="auro-previos-line auro-previos-compact">
+    <section class="auro-previos-line auro-previos-compact">
       <span><i class="bi ${icono}"></i>${auroEscapeHtml(label)}</span>
       <div class="auro-previos-mini-table">
         ${items.map(it => `
-          <div class="auro-previos-mini-row">
+          <article class="auro-previos-mini-row">
             <b>${auroEscapeHtml(it.titulo)}</b>
             ${it.detalle ? `<em>${auroRenderDetallePremium(it.detalle)}</em>` : ''}
-          </div>
+          </article>
         `).join('')}
       </div>
-    </div>
+    </section>
   `;
 }
 
-function auroObjetoTieneDatoReal(obj, excluir){
-  if(!obj || typeof obj !== 'object') return false;
-  const omit = new Set(excluir || []);
-  return Object.keys(obj).some(k => {
-    if(omit.has(k)) return false;
-    const v = obj[k];
-    if(Array.isArray(v)) return v.some(x => auroObjetoTieneDatoReal(x, excluir) || auroEsPlaceholderClinicoReal(x));
-    if(v && typeof v === 'object') return auroObjetoTieneDatoReal(v, excluir);
-    return auroEsPlaceholderClinicoReal(v);
-  });
-}
-
-function auroResumenObstetricosItemsDesdeJson(dataGineco){
-  const lista = Array.isArray(dataGineco?.obstetricos) ? dataGineco.obstetricos : [];
-  return lista
-    .filter(o => auroObjetoTieneDatoReal(o, ['key','descripcion']))
-    .map(o => {
-      const detalle = [];
-      if(o.no_aplica === true) detalle.push('No aplica');
-      if(auroEsPlaceholderClinicoReal(o.detalle)) detalle.push('Detalle: ' + o.detalle);
-      if(auroEsPlaceholderClinicoReal(o.resultado)) detalle.push('Resultado: ' + o.resultado);
-      return { titulo: o.descripcion || o.key || 'Obstétrico', detalle: detalle.join(' · ') };
-    })
-    .filter(auroItemResumenTieneContenido);
-}
-
-function auroResumenGinecologicosItemsDesdeJson(dataGineco){
-  const g = dataGineco?.ginecologicos || null;
-  if(!g || typeof g !== 'object') return [];
-  const titulos = {
-    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa',
-    planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales',
-    ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
-  };
-  return Object.keys(g).map(k => {
-    const v = g[k] || {};
-    if(!auroObjetoTieneDatoReal(v, [])) return null;
-    const detalle = [];
-    if(auroEsPlaceholderClinicoReal(v.detalle)) detalle.push('Detalle: ' + v.detalle);
-    if(auroEsPlaceholderClinicoReal(v.fecha)) detalle.push('Fecha: ' + v.fecha);
-    if(auroEsPlaceholderClinicoReal(v.resultado)) detalle.push('Resultado: ' + v.resultado);
-    return { titulo: titulos[k] || auroPrevioHumanizarClave(k), detalle: detalle.join(' · ') };
-  }).filter(auroItemResumenTieneContenido);
-}
-
-function auroResumenHabitosItemsDesdeJson(data){
-  const lista = Array.isArray(data?.habitos) ? data.habitos : [];
-  return lista
-    .filter(h => auroObjetoTieneDatoReal(h, ['habito','key']))
-    .map(h => {
-      const detalle = [];
-      if(auroEsPlaceholderClinicoReal(h.actual)) detalle.push('Ex consumidor: ' + h.actual);
-      if(auroEsPlaceholderClinicoReal(h.tiempo)) detalle.push('Evolución: ' + h.tiempo);
-      if(auroEsPlaceholderClinicoReal(h.abstinencia)) detalle.push('Abstinencia: ' + h.abstinencia);
-      return { titulo:h.habito || h.key || 'Hábito', detalle: detalle.join(' · ') };
-    })
-    .filter(auroItemResumenTieneContenido);
-}
-
-function auroResumenEstiloVidaItemsDesdeJson(data){
-  const lista = Array.isArray(data?.estilo_vida || data?.estiloVida) ? (data.estilo_vida || data.estiloVida) : [];
-  return lista
-    .filter(a => auroObjetoTieneDatoReal(a, ['key','actividad']))
-    .map(a => {
-      const detalle = [];
-      if(auroEsPlaceholderClinicoReal(a.distancia_km)) detalle.push('Distancia: ' + a.distancia_km);
-      if(auroEsPlaceholderClinicoReal(a.frecuencia_dia)) detalle.push('Frecuencia: ' + a.frecuencia_dia);
-      if(auroEsPlaceholderClinicoReal(a.tiempo_horas)) detalle.push('Evolución: ' + a.tiempo_horas);
-      return { titulo:a.actividad || a.key || 'Actividad', detalle: detalle.join(' · ') };
-    })
-    .filter(auroItemResumenTieneContenido);
-}
-
-function auroMostrarAntecedentesPrevios(h, modo){
-  const box = auroAsegurarCajaAntecedentesPrevios();
-  const content = document.getElementById('auroAntecedentesPreviosContent');
-  if(!box || !content) return;
-
-  if(!auroHistoriaTieneAntecedentes(h)){
-    box.style.display = 'none';
-    content.innerHTML = '';
-    return;
-  }
-
-  const fuentePersonales = h.antecedentes_personales || '';
-  const fuenteGineco = h.antecedentes_gineco_obstetricos || '';
-  const jsonPersonales = auroParsear(AURO_ANT_PERSONALES_MARKER, fuentePersonales);
-  const jsonGineco = auroParsear(AURO_ANT_GINECO_OBS_MARKER, fuenteGineco);
-  const fuentePatologicos = jsonPersonales ? (jsonPersonales.patologicos || '') : auroExtraerFuentePatologicosPersonales(fuentePersonales);
-
-  let html = '';
-  html += auroRenderPrevioItemsPremium('Patológicos personales', auroExtraerItemsAntecedentePremium(fuentePatologicos, 'patologia'));
-  html += auroRenderPrevioItemsPremium('Quirúrgicos', auroExtraerItemsAntecedentePremium(h.antecedentes_quirurgicos || '', 'quirurgico'));
-  html += auroRenderPrevioItemsPremium('Alergias', auroExtraerItemsAntecedentePremium(h.alergias || '', 'alergia'));
-
-  if(jsonPersonales){
-    html += auroRenderPrevioItemsPremium('COVID-19', auroResumenCovidItemsDesdeJson(jsonPersonales));
-    html += auroRenderPrevioItemsPremium('Vacunas registradas', auroResumenVacunasItemsDesdeJson(jsonPersonales));
-    html += auroRenderPrevioItemsPremium('Hábitos registrados', auroResumenHabitosItemsDesdeJson(jsonPersonales));
-    html += auroRenderPrevioItemsPremium('Actividad física registrada', auroResumenEstiloVidaItemsDesdeJson(jsonPersonales));
-    html += auroRenderPrevioItemsPremium('Alimentación', auroResumenAlimentacionItemsDesdeJson(jsonPersonales));
-  }else{
-    html += auroRenderPrevioItemsPremium('Vacunas registradas', auroExtraerVacunasRegistradas(fuentePersonales));
-    html += auroRenderPrevioItemsPremium('Hábitos registrados', auroExtraerHabitosRegistrados(fuentePersonales));
-    html += auroRenderPrevioItemsPremium('Actividad física registrada', auroExtraerActividadRegistrada(fuentePersonales));
-  }
-
-  if(jsonGineco){
-    html += auroRenderPrevioItemsPremium('Obstétricos', auroResumenObstetricosItemsDesdeJson(jsonGineco));
-    html += auroRenderPrevioItemsPremium('Ginecológicos', auroResumenGinecologicosItemsDesdeJson(jsonGineco));
-  }else{
-    html += auroRenderPrevioItemsPremium('Gineco-obstétricos', auroExtraerItemsAntecedentePremium(fuenteGineco, 'gineco'));
-  }
-
-  html += auroRenderPrevioItemsPremium('Medicación actual', auroExtraerItemsAntecedentePremium(h.medicacion_actual || '', 'medicacion'));
-  html += auroRenderPrevioItemsPremium('Familiares', auroExtraerItemsAntecedentePremium(h.antecedentes_familiares || '', 'familiares'));
-
-  content.innerHTML = html;
-  const estadoPrevio = box.dataset.estado || 'visible';
-  content.classList.toggle('auro-previos-collapsed', estadoPrevio === 'oculto');
-
-  const btn = box.querySelector('.auro-previos-hide');
-  if(btn){
-    btn.innerHTML = estadoPrevio === 'oculto'
-      ? '<i class="bi bi-eye me-1"></i> Mostrar'
-      : '<i class="bi bi-eye-slash me-1"></i> Ocultar';
-  }
-
-  box.dataset.idHistoriaOrigen = h.id_historia || '';
-  box.dataset.modo = modo || '';
-  box.style.display = content.innerHTML.trim() ? 'block' : 'none';
-}
-
-console.log('AUROSANAX antecedentes.js: FIX REAL FINAL resumen limpio cargado');
+console.log('AUROSANAX antecedentes.js: UI PREMIUM tarjetas limpias cargado');
