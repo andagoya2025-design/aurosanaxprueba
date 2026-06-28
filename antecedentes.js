@@ -2321,12 +2321,11 @@ function auroMostrarAntecedentesPrevios(h, modo){
 }
 
 console.log('AUROSANAX antecedentes.js: FIX COVID/VACUNAS resumen cargado');
-
 /* ==========================================================
-   AUROSANAX FIX FINAL - FILTRO REAL DE GRUPOS VACÍOS
-   Objetivo: que la caja resumen NO muestre catálogos vacíos.
-   Mantiene COVID/Vacunas funcionando y corrige hábitos, actividad,
-   alimentación y gineco-obstétricos.
+   AUROSANAX FIX FINAL PROFESIONAL - FILTRO REAL DE RESUMEN
+   Objetivo: no mostrar tarjetas vacías ni valores incompletos.
+   Corrige hábitos, actividad física, alimentación, obstétricos y ginecológicos.
+   No modifica backend, Google Sheets, Apps Script ni index.html.
    ========================================================== */
 
 function auroValorClinicoReal(valor){
@@ -2334,58 +2333,77 @@ function auroValorClinicoReal(valor){
   if(typeof valor === 'boolean') return valor === true;
   const t = String(valor || '').trim();
   if(!t) return false;
-  return !/^(no valorado|no aplica|n\/a|na|undefined|null|\[object object\])$/i.test(t);
+  if(/^[-–—\s.,:]*$/.test(t)) return false;
+  if(/^(undefined|null|\[object object\]|seleccione|seleccionar|dd\/mm\/aaaa)$/i.test(t)) return false;
+  if(/^(años?|meses?|d[ií]as?|horas?|km|litros\/d[ií]a|comidas\/d[ií]a|veces\/semana)$/i.test(t)) return false;
+  if(/^(no aplica|n\/a|na)$/i.test(t)) return false;
+  if(/^(detalle|resultado|fecha|marca|observaci[oó]n|reacci[oó]n|tipo de vacuna si recuerda)$/i.test(t)) return false;
+  return true;
 }
 
-function auroObjetoTieneDatoClinicoReal(obj, clavesCatalogo){
+function auroValorClinicoRealIncluyeNo(valor){
+  if(valor === null || valor === undefined) return false;
+  const t = String(valor || '').trim();
+  if(/^no$/i.test(t)) return true;
+  return auroValorClinicoReal(valor);
+}
+
+function auroTieneDatoClinicoObjeto(obj, excluir){
   if(!obj || typeof obj !== 'object') return false;
-  const ignorar = new Set(clavesCatalogo || []);
+  const omit = new Set(excluir || []);
   return Object.keys(obj).some(k => {
-    if(ignorar.has(k)) return false;
+    if(omit.has(k)) return false;
     const v = obj[k];
-    if(Array.isArray(v)) return v.some(x => auroObjetoTieneDatoClinicoReal(x, ['key','descripcion','biologico','vacuna','habito','actividad','nombre','numero']));
-    if(v && typeof v === 'object') return auroObjetoTieneDatoClinicoReal(v, ['key','descripcion','biologico','vacuna','habito','actividad','nombre','numero']);
-    return auroValorClinicoReal(v);
+    if(Array.isArray(v)) return v.some(x => auroTieneDatoClinicoObjeto(x, excluir) || auroValorClinicoReal(x));
+    if(v && typeof v === 'object') return auroTieneDatoClinicoObjeto(v, excluir);
+    return auroValorClinicoRealIncluyeNo(v);
   });
 }
 
-function auroHabitoTieneDatoReal(h){
-  if(!h) return false;
-  return !!(
-    auroValorClinicoReal(h.actual) ||
-    auroValorClinicoReal(h.tiempo) ||
-    auroValorClinicoReal(h.abstinencia)
-  );
+function auroLimpiarDetalleResumenClinico(detalle){
+  return String(detalle || '')
+    .split(/\s*·\s*/)
+    .map(x => String(x || '').trim())
+    .filter(x => {
+      if(!x) return false;
+      const limpio = x.replace(/^[^:]+:\s*/,'').trim();
+      return auroValorClinicoRealIncluyeNo(limpio);
+    })
+    .join(' · ');
 }
 
-function auroActividadTieneDatoReal(a){
-  if(!a) return false;
-  const actividadPersonalizada = String(a.key || '') === 'Otro' &&
-    auroValorClinicoReal(a.actividad) &&
-    !/^(otros?|otro)$/i.test(String(a.actividad || '').trim());
+/* Refuerzo: no pintar filas incompletas en ninguna sección del resumen */
+function auroRenderPrevioItemsPremium(label, items){
+  items = (items || [])
+    .map(x => {
+      if(!x) return null;
+      const titulo = String(x.titulo || '').trim();
+      const detalle = auroLimpiarDetalleResumenClinico(x.detalle || '');
+      if(!auroValorClinicoReal(titulo)) return null;
+      if(auroEsTokenTecnicoAntecedente(titulo)) return null;
+      return { titulo, detalle };
+    })
+    .filter(Boolean);
 
-  return !!(
-    actividadPersonalizada ||
-    auroValorClinicoReal(a.distancia_km) ||
-    auroValorClinicoReal(a.frecuencia_dia) ||
-    auroValorClinicoReal(a.tiempo_horas)
-  );
+  if(!items.length) return '';
+  const icono = auroIconoSeccionAntecedente(label);
+
+  return `
+    <div class="auro-previos-line auro-previos-compact">
+      <span><i class="bi ${icono}"></i>${auroEscapeHtml(label)}</span>
+      <div class="auro-previos-mini-table">
+        ${items.map(it => `
+          <div class="auro-previos-mini-row">
+            <b>${auroEscapeHtml(it.titulo)}</b>
+            ${it.detalle ? `<em>${auroRenderDetallePremium(it.detalle)}</em>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
-function auroObstetricoTieneDatoReal(c){
-  if(!c) return false;
-  return !!(
-    auroValorClinicoReal(c.detalle) ||
-    c.no_aplica === true ||
-    auroValorClinicoReal(c.resultado)
-  );
-}
-
-function auroGinecologicoTieneDatoReal(item){
-  return auroObjetoTieneDatoClinicoReal(item, ['key','descripcion','nombre']);
-}
-
-/* Redefinición segura: guardar solo hábitos con dato real */
+/* Recopilar solo hábitos con dato real: evita Alcohol/Drogas/Café/Biomasa vacíos */
 function recopilarHabitosEstructurados(){
   const habitos = [
     { key:'Tabaco', nombre:'Tabaco' },
@@ -2400,23 +2418,23 @@ function recopilarHabitosEstructurados(){
     const abstEl = document.getElementById('hcHabito' + h.key + 'Abstinencia');
     let tiempo = tiempoEl?.value?.trim() || '';
     let abstinencia = abstEl?.value?.trim() || '';
-
     if(/^\d+$/.test(tiempo)) tiempo = tiempo + ' años';
     if(/^\d+$/.test(abstinencia)) abstinencia = abstinencia + ' meses';
-
     if(tiempoEl && tiempo) tiempoEl.value = tiempo;
     if(abstEl && abstinencia) abstEl.value = abstinencia;
 
-    return {
+    const item = {
       habito: h.nombre,
       actual: auroGetRadio('hcHabito' + h.key + 'Ex'),
       tiempo: tiempo,
       abstinencia: abstinencia
     };
-  }).filter(auroHabitoTieneDatoReal).map(auroCompactarObjeto);
+
+    return auroTieneDatoClinicoObjeto(item, ['habito','key']) ? auroCompactarObjeto(item) : null;
+  }).filter(Boolean);
 }
 
-/* Redefinición segura: guardar solo actividad física con dato real */
+/* Recopilar solo actividades con dato real: evita Caminar/Nadar/Ciclismo/Otros vacíos */
 function recopilarEstiloVidaEstructurado(){
   const actividades = [
     { key:'Correr', actividad:'Correr' },
@@ -2434,11 +2452,11 @@ function recopilarEstiloVidaEstructurado(){
       frecuencia_dia: auroGet('hcEstilo' + a.key + 'Frecuencia'),
       tiempo_horas: auroGet('hcEstilo' + a.key + 'Tiempo')
     };
-    return item;
-  }).filter(auroActividadTieneDatoReal).map(auroCompactarObjeto);
+    return auroTieneDatoClinicoObjeto(item, ['key','actividad']) ? auroCompactarObjeto(item) : null;
+  }).filter(Boolean);
 }
 
-/* Redefinición segura: guardar solo obstétricos con dato real */
+/* Recopilar solo obstétricos con dato real: evita Gesta/Partos/Hijos vivos vacíos */
 function recopilarAntecedentesObstetricosEstructurados(){
   const campos = [
     { key:'Pap', descripcion:'Fecha del último Papanicolaou (PAP)', detalle:'Fecha' },
@@ -2459,46 +2477,42 @@ function recopilarAntecedentesObstetricosEstructurados(){
     const detalleId = c.key === 'Pap' || c.key === 'Fum' || c.key === 'Fup'
       ? 'hcObs' + c.key + 'Fecha'
       : 'hcObs' + c.key + 'Detalle';
-
-    return {
+    const item = {
       key: c.key,
       descripcion: c.descripcion,
       detalle: auroGet(detalleId),
       no_aplica: auroGetCheck('hcObs' + c.key + 'NoAplica'),
       resultado: auroGet('hcObs' + c.key + 'Resultado')
     };
-  }).filter(auroObstetricoTieneDatoReal).map(auroCompactarObjeto);
+    return auroTieneDatoClinicoObjeto(item, ['key','descripcion']) ? auroCompactarObjeto(item) : null;
+  }).filter(Boolean);
 }
 
-/* Resumen: solo hábitos reales */
 function auroResumenHabitosItemsDesdeJson(data){
   const lista = Array.isArray(data?.habitos) ? data.habitos : [];
-  return lista.filter(auroHabitoTieneDatoReal).map(h => {
+  return lista.filter(h => auroTieneDatoClinicoObjeto(h, ['habito','key'])).map(h => {
     const detalle = [];
-    if(auroValorClinicoReal(h.actual)) detalle.push('Ex consumidor: ' + h.actual);
-    if(auroValorClinicoReal(h.tiempo)) detalle.push('Tiempo: ' + h.tiempo);
+    if(auroValorClinicoRealIncluyeNo(h.actual)) detalle.push('Ex consumidor: ' + h.actual);
+    if(auroValorClinicoReal(h.tiempo)) detalle.push('Evolución: ' + h.tiempo);
     if(auroValorClinicoReal(h.abstinencia)) detalle.push('Abstinencia: ' + h.abstinencia);
     return { titulo:h.habito || h.key || 'Hábito', detalle: detalle.join(' · ') };
-  }).filter(x => auroValorClinicoReal(x.titulo) && auroValorClinicoReal(x.detail || x.detalle));
+  }).filter(x => auroValorClinicoReal(x.titulo) && (x.detalle || auroValorClinicoRealIncluyeNo(x.titulo)));
 }
 
-/* Resumen: solo actividades reales */
 function auroResumenEstiloVidaItemsDesdeJson(data){
   const lista = Array.isArray(data?.estilo_vida || data?.estiloVida) ? (data.estilo_vida || data.estiloVida) : [];
-  return lista.filter(auroActividadTieneDatoReal).map(a => {
+  return lista.filter(a => auroTieneDatoClinicoObjeto(a, ['key','actividad'])).map(a => {
     const detalle = [];
     if(auroValorClinicoReal(a.distancia_km)) detalle.push('Distancia: ' + a.distancia_km);
     if(auroValorClinicoReal(a.frecuencia_dia)) detalle.push('Frecuencia: ' + a.frecuencia_dia);
-    if(auroValorClinicoReal(a.tiempo_horas)) detalle.push('Tiempo: ' + a.tiempo_horas);
+    if(auroValorClinicoReal(a.tiempo_horas)) detalle.push('Evolución: ' + a.tiempo_horas);
     return { titulo:a.actividad || a.key || 'Actividad', detalle: detalle.join(' · ') };
-  }).filter(x => auroValorClinicoReal(x.titulo) && auroValorClinicoReal(x.detalle));
+  }).filter(x => auroValorClinicoReal(x.titulo) && x.detalle);
 }
 
-/* Resumen: alimentación real */
 function auroResumenAlimentacionItemsDesdeJson(data){
   const a = data?.alimentacion || null;
   if(!a || typeof a !== 'object') return [];
-
   const detalle = [];
   if(auroValorClinicoReal(a.agua_diaria_litros)) detalle.push('Agua: ' + a.agua_diaria_litros);
   if(auroValorClinicoReal(a.comidas_dia)) detalle.push('Comidas: ' + a.comidas_dia);
@@ -2508,44 +2522,39 @@ function auroResumenAlimentacionItemsDesdeJson(data){
   if(auroValorClinicoReal(a.sal)) detalle.push('Sal: ' + a.sal);
   if(auroValorClinicoReal(a.suplementos)) detalle.push('Suplementos: ' + a.suplementos);
   if(auroValorClinicoReal(a.detalle)) detalle.push('Detalle: ' + a.detalle);
-
   return detalle.length ? [{ titulo:'Evaluación alimentaria', detalle: detalle.join(' · ') }] : [];
 }
 
-/* Resumen: obstétricos desde JSON sin tarjetas vacías */
-function auroResumenObstetricosItemsDesdeJson(data){
-  const lista = Array.isArray(data?.obstetricos) ? data.obstetricos : [];
-  return lista.filter(auroObstetricoTieneDatoReal).map(c => {
+function auroResumenObstetricosItemsDesdeJson(dataGineco){
+  const lista = Array.isArray(dataGineco?.obstetricos) ? dataGineco.obstetricos : [];
+  return lista.filter(o => auroTieneDatoClinicoObjeto(o, ['key','descripcion'])).map(o => {
     const detalle = [];
-    if(auroValorClinicoReal(c.detalle)) detalle.push('Detalle: ' + c.detalle);
-    if(c.no_aplica === true) detalle.push('No aplica');
-    if(auroValorClinicoReal(c.resultado)) detalle.push('Resultado: ' + c.resultado);
-    return { titulo:c.descripcion || c.key || 'Obstétrico', detalle: detalle.join(' · ') };
-  }).filter(x => auroValorClinicoReal(x.titulo) && auroValorClinicoReal(x.detalle));
+    if(o.no_aplica === true) detalle.push('No aplica');
+    if(auroValorClinicoReal(o.detalle)) detalle.push('Detalle: ' + o.detalle);
+    if(auroValorClinicoReal(o.resultado)) detalle.push('Resultado: ' + o.resultado);
+    return { titulo: o.descripcion || o.key || 'Obstétrico', detalle: detalle.join(' · ') };
+  }).filter(x => auroValorClinicoReal(x.titulo) && x.detalle);
 }
 
-/* Resumen: ginecológicos desde JSON sin campos vacíos */
-function auroResumenGinecologicosItemsDesdeJson(data){
-  const g = data?.ginecologicos || null;
+function auroResumenGinecologicosItemsDesdeJson(dataGineco){
+  const g = dataGineco?.ginecologicos || null;
   if(!g || typeof g !== 'object') return [];
-
+  const titulos = {
+    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa',
+    planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales',
+    ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
+  };
   return Object.keys(g).map(k => {
-    const item = g[k];
-    if(!auroGinecologicoTieneDatoReal(item)) return null;
-
+    const v = g[k] || {};
+    if(!auroTieneDatoClinicoObjeto(v, [])) return null;
     const detalle = [];
-    if(auroValorClinicoReal(item?.detalle)) detalle.push('Detalle: ' + item.detalle);
-    if(auroValorClinicoReal(item?.fecha)) detalle.push('Fecha: ' + item.fecha);
-    if(auroValorClinicoReal(item?.resultado)) detalle.push('Resultado: ' + item.resultado);
-
-    return {
-      titulo: auroPrevioHumanizarClave(k),
-      detalle: detalle.join(' · ')
-    };
-  }).filter(x => x && auroValorClinicoReal(x.titulo) && auroValorClinicoReal(x.detalle));
+    if(auroValorClinicoReal(v.detalle)) detalle.push('Detalle: ' + v.detalle);
+    if(auroValorClinicoReal(v.fecha)) detalle.push('Fecha: ' + v.fecha);
+    if(auroValorClinicoReal(v.resultado)) detalle.push('Resultado: ' + v.resultado);
+    return { titulo: titulos[k] || auroPrevioHumanizarClave(k), detalle: detalle.join(' · ') };
+  }).filter(x => x && auroValorClinicoReal(x.titulo) && x.detalle);
 }
 
-/* Redefinición final de la caja resumen */
 function auroMostrarAntecedentesPrevios(h, modo){
   const box = auroAsegurarCajaAntecedentesPrevios();
   const content = document.getElementById('auroAntecedentesPreviosContent');
@@ -2558,12 +2567,12 @@ function auroMostrarAntecedentesPrevios(h, modo){
   }
 
   const fuentePersonales = h.antecedentes_personales || '';
+  const fuenteGineco = h.antecedentes_gineco_obstetricos || '';
   const jsonPersonales = auroParsear(AURO_ANT_PERSONALES_MARKER, fuentePersonales);
-  const jsonGinecoObs = auroParsear(AURO_ANT_GINECO_OBS_MARKER, h.antecedentes_gineco_obstetricos || '');
+  const jsonGineco = auroParsear(AURO_ANT_GINECO_OBS_MARKER, fuenteGineco);
   const fuentePatologicos = jsonPersonales ? (jsonPersonales.patologicos || '') : auroExtraerFuentePatologicosPersonales(fuentePersonales);
 
   let html = '';
-
   html += auroRenderPrevioItemsPremium('Patológicos personales', auroExtraerItemsAntecedentePremium(fuentePatologicos, 'patologia'));
   html += auroRenderPrevioItemsPremium('Quirúrgicos', auroExtraerItemsAntecedentePremium(h.antecedentes_quirurgicos || '', 'quirurgico'));
   html += auroRenderPrevioItemsPremium('Alergias', auroExtraerItemsAntecedentePremium(h.alergias || '', 'alergia'));
@@ -2580,11 +2589,11 @@ function auroMostrarAntecedentesPrevios(h, modo){
     html += auroRenderPrevioItemsPremium('Actividad física registrada', auroExtraerActividadRegistrada(fuentePersonales));
   }
 
-  if(jsonGinecoObs){
-    html += auroRenderPrevioItemsPremium('Obstétricos', auroResumenObstetricosItemsDesdeJson(jsonGinecoObs));
-    html += auroRenderPrevioItemsPremium('Ginecológicos', auroResumenGinecologicosItemsDesdeJson(jsonGinecoObs));
+  if(jsonGineco){
+    html += auroRenderPrevioItemsPremium('Obstétricos', auroResumenObstetricosItemsDesdeJson(jsonGineco));
+    html += auroRenderPrevioItemsPremium('Ginecológicos', auroResumenGinecologicosItemsDesdeJson(jsonGineco));
   }else{
-    html += auroRenderPrevioItemsPremium('Gineco-obstétricos', auroExtraerItemsAntecedentePremium(h.antecedentes_gineco_obstetricos || '', 'gineco'));
+    html += auroRenderPrevioItemsPremium('Gineco-obstétricos', auroExtraerItemsAntecedentePremium(fuenteGineco, 'gineco'));
   }
 
   html += auroRenderPrevioItemsPremium('Medicación actual', auroExtraerItemsAntecedentePremium(h.medicacion_actual || '', 'medicacion'));
@@ -2608,4 +2617,4 @@ function auroMostrarAntecedentesPrevios(h, modo){
   box.style.display = content.innerHTML.trim() ? 'block' : 'none';
 }
 
-console.log('AUROSANAX antecedentes.js: FIX FINAL grupos vacíos cargado');
+console.log('AUROSANAX antecedentes.js: FIX FINAL grupos vacíos + campos incompletos cargado');
