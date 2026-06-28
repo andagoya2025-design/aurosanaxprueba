@@ -2618,3 +2618,205 @@ function auroMostrarAntecedentesPrevios(h, modo){
 }
 
 console.log('AUROSANAX antecedentes.js: FIX FINAL grupos vacíos + campos incompletos cargado');
+/* ==========================================================
+   AUROSANAX FIX REAL FINAL - RESUMEN SIN TARJETAS VACÍAS
+   Revisado sobre archivo actual 3.txt.
+   Corrige renderizado de caja resumen usando solo datos clínicos reales.
+   ========================================================== */
+
+function auroEsPlaceholderClinicoReal(v){
+  if(v === null || v === undefined) return false;
+  if(typeof v === 'boolean') return v === true;
+  const t = String(v).trim();
+  if(!t) return false;
+  if(/^[-–—\s.,:]*$/.test(t)) return false;
+  if(/^(undefined|null|\[object object\]|seleccione|seleccionar|dd\/mm\/aaaa|observaci[oó]n|marca\s*\/\s*observaci[oó]n|reacci[oó]n\s*o\s*detalle|medicamento\s*\/\s*reacci[oó]n\s*\/\s*detalle|s[ií]ntomas\s*o\s*complicaciones|tipo\s*de\s*vacuna\s*si\s*recuerda|ej\.\s*5\s*d[ií]as|ej\.\s*2021\s*\/\s*aproximado)$/i.test(t)) return false;
+  if(/^(años?|meses?|d[ií]as?|horas?|km|litros\/d[ií]a|comidas\/d[ií]a|veces\/semana)$/i.test(t)) return false;
+  if(/^(no aplica|n\/a|na)$/i.test(t)) return false;
+  return true;
+}
+
+function auroDetalleRealResumen(detalle){
+  return String(detalle || '')
+    .split(/\s*·\s*/)
+    .map(x => String(x || '').trim())
+    .filter(x => {
+      if(!x) return false;
+      const valor = x.includes(':') ? x.split(':').slice(1).join(':').trim() : x;
+      return auroEsPlaceholderClinicoReal(valor);
+    })
+    .join(' · ');
+}
+
+function auroItemResumenTieneContenido(it){
+  if(!it) return false;
+  const titulo = String(it.titulo || '').trim();
+  const detalle = auroDetalleRealResumen(it.detalle || '');
+  if(!auroEsPlaceholderClinicoReal(titulo)) return false;
+  if(auroEsTokenTecnicoAntecedente && auroEsTokenTecnicoAntecedente(titulo)) return false;
+  return !!detalle || !/^(gesta|partos|ces[aá]reas|abortos|hijos vivos|hijos muertos|lactancia|ect[oó]picos|menarquia|menacme|menopausia|vida sexual activa|planificaci[oó]n familiar|terapia hormonal|infecciones vulvovaginales|ets|mamograf[ií]a|eco mamario|densitometr[ií]a [oó]sea|colposcop[ií]a|caminar|nadar|ciclismo|otros|alcohol|drogas|caf[eé]|biomasa)$/i.test(titulo);
+}
+
+function auroRenderPrevioItemsPremium(label, items){
+  items = (items || [])
+    .map(x => {
+      if(!x) return null;
+      const titulo = String(x.titulo || '').trim();
+      const detalle = auroDetalleRealResumen(x.detalle || '');
+      const item = { titulo, detalle };
+      return auroItemResumenTieneContenido(item) ? item : null;
+    })
+    .filter(Boolean);
+
+  if(!items.length) return '';
+  const icono = auroIconoSeccionAntecedente(label);
+
+  return `
+    <div class="auro-previos-line auro-previos-compact">
+      <span><i class="bi ${icono}"></i>${auroEscapeHtml(label)}</span>
+      <div class="auro-previos-mini-table">
+        ${items.map(it => `
+          <div class="auro-previos-mini-row">
+            <b>${auroEscapeHtml(it.titulo)}</b>
+            ${it.detalle ? `<em>${auroRenderDetallePremium(it.detalle)}</em>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function auroObjetoTieneDatoReal(obj, excluir){
+  if(!obj || typeof obj !== 'object') return false;
+  const omit = new Set(excluir || []);
+  return Object.keys(obj).some(k => {
+    if(omit.has(k)) return false;
+    const v = obj[k];
+    if(Array.isArray(v)) return v.some(x => auroObjetoTieneDatoReal(x, excluir) || auroEsPlaceholderClinicoReal(x));
+    if(v && typeof v === 'object') return auroObjetoTieneDatoReal(v, excluir);
+    return auroEsPlaceholderClinicoReal(v);
+  });
+}
+
+function auroResumenObstetricosItemsDesdeJson(dataGineco){
+  const lista = Array.isArray(dataGineco?.obstetricos) ? dataGineco.obstetricos : [];
+  return lista
+    .filter(o => auroObjetoTieneDatoReal(o, ['key','descripcion']))
+    .map(o => {
+      const detalle = [];
+      if(o.no_aplica === true) detalle.push('No aplica');
+      if(auroEsPlaceholderClinicoReal(o.detalle)) detalle.push('Detalle: ' + o.detalle);
+      if(auroEsPlaceholderClinicoReal(o.resultado)) detalle.push('Resultado: ' + o.resultado);
+      return { titulo: o.descripcion || o.key || 'Obstétrico', detalle: detalle.join(' · ') };
+    })
+    .filter(auroItemResumenTieneContenido);
+}
+
+function auroResumenGinecologicosItemsDesdeJson(dataGineco){
+  const g = dataGineco?.ginecologicos || null;
+  if(!g || typeof g !== 'object') return [];
+  const titulos = {
+    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa',
+    planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales',
+    ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
+  };
+  return Object.keys(g).map(k => {
+    const v = g[k] || {};
+    if(!auroObjetoTieneDatoReal(v, [])) return null;
+    const detalle = [];
+    if(auroEsPlaceholderClinicoReal(v.detalle)) detalle.push('Detalle: ' + v.detalle);
+    if(auroEsPlaceholderClinicoReal(v.fecha)) detalle.push('Fecha: ' + v.fecha);
+    if(auroEsPlaceholderClinicoReal(v.resultado)) detalle.push('Resultado: ' + v.resultado);
+    return { titulo: titulos[k] || auroPrevioHumanizarClave(k), detalle: detalle.join(' · ') };
+  }).filter(auroItemResumenTieneContenido);
+}
+
+function auroResumenHabitosItemsDesdeJson(data){
+  const lista = Array.isArray(data?.habitos) ? data.habitos : [];
+  return lista
+    .filter(h => auroObjetoTieneDatoReal(h, ['habito','key']))
+    .map(h => {
+      const detalle = [];
+      if(auroEsPlaceholderClinicoReal(h.actual)) detalle.push('Ex consumidor: ' + h.actual);
+      if(auroEsPlaceholderClinicoReal(h.tiempo)) detalle.push('Evolución: ' + h.tiempo);
+      if(auroEsPlaceholderClinicoReal(h.abstinencia)) detalle.push('Abstinencia: ' + h.abstinencia);
+      return { titulo:h.habito || h.key || 'Hábito', detalle: detalle.join(' · ') };
+    })
+    .filter(auroItemResumenTieneContenido);
+}
+
+function auroResumenEstiloVidaItemsDesdeJson(data){
+  const lista = Array.isArray(data?.estilo_vida || data?.estiloVida) ? (data.estilo_vida || data.estiloVida) : [];
+  return lista
+    .filter(a => auroObjetoTieneDatoReal(a, ['key','actividad']))
+    .map(a => {
+      const detalle = [];
+      if(auroEsPlaceholderClinicoReal(a.distancia_km)) detalle.push('Distancia: ' + a.distancia_km);
+      if(auroEsPlaceholderClinicoReal(a.frecuencia_dia)) detalle.push('Frecuencia: ' + a.frecuencia_dia);
+      if(auroEsPlaceholderClinicoReal(a.tiempo_horas)) detalle.push('Evolución: ' + a.tiempo_horas);
+      return { titulo:a.actividad || a.key || 'Actividad', detalle: detalle.join(' · ') };
+    })
+    .filter(auroItemResumenTieneContenido);
+}
+
+function auroMostrarAntecedentesPrevios(h, modo){
+  const box = auroAsegurarCajaAntecedentesPrevios();
+  const content = document.getElementById('auroAntecedentesPreviosContent');
+  if(!box || !content) return;
+
+  if(!auroHistoriaTieneAntecedentes(h)){
+    box.style.display = 'none';
+    content.innerHTML = '';
+    return;
+  }
+
+  const fuentePersonales = h.antecedentes_personales || '';
+  const fuenteGineco = h.antecedentes_gineco_obstetricos || '';
+  const jsonPersonales = auroParsear(AURO_ANT_PERSONALES_MARKER, fuentePersonales);
+  const jsonGineco = auroParsear(AURO_ANT_GINECO_OBS_MARKER, fuenteGineco);
+  const fuentePatologicos = jsonPersonales ? (jsonPersonales.patologicos || '') : auroExtraerFuentePatologicosPersonales(fuentePersonales);
+
+  let html = '';
+  html += auroRenderPrevioItemsPremium('Patológicos personales', auroExtraerItemsAntecedentePremium(fuentePatologicos, 'patologia'));
+  html += auroRenderPrevioItemsPremium('Quirúrgicos', auroExtraerItemsAntecedentePremium(h.antecedentes_quirurgicos || '', 'quirurgico'));
+  html += auroRenderPrevioItemsPremium('Alergias', auroExtraerItemsAntecedentePremium(h.alergias || '', 'alergia'));
+
+  if(jsonPersonales){
+    html += auroRenderPrevioItemsPremium('COVID-19', auroResumenCovidItemsDesdeJson(jsonPersonales));
+    html += auroRenderPrevioItemsPremium('Vacunas registradas', auroResumenVacunasItemsDesdeJson(jsonPersonales));
+    html += auroRenderPrevioItemsPremium('Hábitos registrados', auroResumenHabitosItemsDesdeJson(jsonPersonales));
+    html += auroRenderPrevioItemsPremium('Actividad física registrada', auroResumenEstiloVidaItemsDesdeJson(jsonPersonales));
+    html += auroRenderPrevioItemsPremium('Alimentación', auroResumenAlimentacionItemsDesdeJson(jsonPersonales));
+  }else{
+    html += auroRenderPrevioItemsPremium('Vacunas registradas', auroExtraerVacunasRegistradas(fuentePersonales));
+    html += auroRenderPrevioItemsPremium('Hábitos registrados', auroExtraerHabitosRegistrados(fuentePersonales));
+    html += auroRenderPrevioItemsPremium('Actividad física registrada', auroExtraerActividadRegistrada(fuentePersonales));
+  }
+
+  if(jsonGineco){
+    html += auroRenderPrevioItemsPremium('Obstétricos', auroResumenObstetricosItemsDesdeJson(jsonGineco));
+    html += auroRenderPrevioItemsPremium('Ginecológicos', auroResumenGinecologicosItemsDesdeJson(jsonGineco));
+  }else{
+    html += auroRenderPrevioItemsPremium('Gineco-obstétricos', auroExtraerItemsAntecedentePremium(fuenteGineco, 'gineco'));
+  }
+
+  html += auroRenderPrevioItemsPremium('Medicación actual', auroExtraerItemsAntecedentePremium(h.medicacion_actual || '', 'medicacion'));
+  html += auroRenderPrevioItemsPremium('Familiares', auroExtraerItemsAntecedentePremium(h.antecedentes_familiares || '', 'familiares'));
+
+  content.innerHTML = html;
+  const estadoPrevio = box.dataset.estado || 'visible';
+  content.classList.toggle('auro-previos-collapsed', estadoPrevio === 'oculto');
+
+  const btn = box.querySelector('.auro-previos-hide');
+  if(btn){
+    btn.innerHTML = estadoPrevio === 'oculto'
+      ? '<i class="bi bi-eye me-1"></i> Mostrar'
+      : '<i class="bi bi-eye-slash me-1"></i> Ocultar';
+  }
+
+  box.dataset.idHistoriaOrigen = h.id_historia || '';
+  box.dataset.modo = modo || '';
+  box.style.display = content.innerHTML.trim() ? 'block' : 'none';
+}
+
+console.log('AUROSANAX antecedentes.js: FIX REAL FINAL resumen limpio cargado');
