@@ -5567,6 +5567,7 @@ function imprimirHistoriaClinica(){
       <div>${fecha} ${hora}</div>
     </footer>
   </div>
+<script src="pacientes.js"></script>
 </body>
 </html>`;
 
@@ -6389,7 +6390,8 @@ document.addEventListener('click',e=>{
           .consentimiento-documento{max-width:850px;margin:auto}
         </style>
       </head>
-      <body>${html}</body>
+      <body>${html}<script src="pacientes.js"></script>
+</body>
       </html>
     `);
     ventana.document.close();
@@ -6405,5 +6407,6 @@ document.addEventListener('click',e=>{
   });
 })();
 </script>
+<script src="pacientes.js"></script>
 </body>
 </html>
