@@ -1218,13 +1218,8 @@ function auroMostrarExamenFisicoPrevio(h){
   });
 
   const regionalHallazgos = auroTokensUnicosConHallazgoReal(tokensRegional);
-  const regionalNoValorados = auroTokensUnicosNoValorados(tokensRegional);
-
   const sistemasHallazgos = auroTokensUnicosConHallazgoReal(tokensSistemas);
-  const sistemasNoValorados = auroTokensUnicosNoValorados(tokensSistemas);
-
   const generalesLimpios = auroTokensUnicosConHallazgoReal(tokensGenerales);
-  const generalesNoValorados = auroTokensUnicosNoValorados(tokensGenerales);
 
   const diagnosticos = [
     h.diagnostico_cie10 ? 'Principal CIE-10: ' + h.diagnostico_cie10 : '',
@@ -1233,39 +1228,47 @@ function auroMostrarExamenFisicoPrevio(h){
     h.diagnostico_secundario ? 'Dx secundario: ' + h.diagnostico_secundario : ''
   ].filter(Boolean);
 
+  /*
+    AUROSANAX v3.2.2
+    Corrección visual:
+    Si la historia anterior solo contiene textos repetidos de "No valorado",
+    se oculta la caja previa para no mostrar un bloque largo y confuso.
+    No toca CIE-10, Pacientes, guardado ni lectura de Google Sheets.
+  */
+  const tieneContenidoClinicoReal =
+    signos.length ||
+    generalesLimpios.length ||
+    sistemasHallazgos.length ||
+    regionalHallazgos.length ||
+    diagnosticos.length;
+
+  if(!tieneContenidoClinicoReal){
+    box.style.display = 'none';
+    content.innerHTML = '';
+    return;
+  }
+
   let html = '';
 
   html += auroRenderPrevioChips('Signos vitales registrados', signos);
 
   if(generalesLimpios.length){
     html += auroRenderPrevioTabla('Examen general / medidas complementarias', generalesLimpios);
-  }else if(generalesNoValorados.length){
-    html += auroRenderPrevioLinea('Examen general / medidas complementarias', 'Registrado como no valorado.');
   }
 
   if(sistemasHallazgos.length){
     html += auroRenderPrevioTabla('Examen físico por sistemas', sistemasHallazgos);
-  }else if(sistemasNoValorados.length){
-    html += auroRenderPrevioLinea('Examen físico por sistemas', 'Sistemas registrados como no valorados.');
   }
 
   if(regionalHallazgos.length){
     html += auroRenderPrevioTabla('Examen físico regional', regionalHallazgos);
-    /* AUROSANAX: no se imprime resumen de regiones no valoradas para evitar ruido visual. */
-  }else if(regionalNoValorados.length){
-    /* AUROSANAX: si todo está no valorado, no se muestra el bloque regional. */
   }
 
   html += auroRenderPrevioChips('Diagnóstico CIE-10 guardado', diagnosticos);
 
-  if(!html){
-    html = auroRenderPrevioLinea('Examen físico', auroNormalizarTextoExamenPrevio(h.examen_fisico || ''));
-  }
-
   content.innerHTML = html;
   box.style.display = 'block';
 }
-
 
 function auroAsegurarCajaDiagnosticosPrevios(){
   const grupo = document.getElementById('hcDiagnosticoCieGrupo') || document.getElementById('hc_examen');
