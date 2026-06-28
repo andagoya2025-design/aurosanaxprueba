@@ -856,8 +856,17 @@ window.hcCie10CatalogoBase = window.hcCie10CatalogoBase || [
     "nombre": "Trastorno de piel y tejido subcutáneo no especificado"
   }
 ];
-let hcDxResultadosActuales = [];
-let hcDiagnosticosSeleccionados = [];
+/* AUROSANAX FIX SEGURO 2026-06-28
+   Evita error de consola: Identifier 'hcDxResultadosActuales' has already been declared.
+   No cambia la lógica del módulo: si el index ya creó estas variables, se reutilizan;
+   si no existen, se crean como variables globales seguras en window.
+*/
+if (typeof hcDxResultadosActuales === 'undefined') {
+  window.hcDxResultadosActuales = [];
+}
+if (typeof hcDiagnosticosSeleccionados === 'undefined') {
+  window.hcDiagnosticosSeleccionados = [];
+}
 
 function normalizarDxTexto(valor){
   return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
