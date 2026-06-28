@@ -890,6 +890,163 @@ function auroRenderPrevioLineaLimpia(label, value){
 
 
 
+
+/* ==========================================================
+   AUROSANAX - RESUMEN PREMIUM COMPLETO DE ANTECEDENTES
+   Mejora visual de caja superior: COVID, vacunas, hábitos,
+   estilo de vida, alimentación, obstétricos y ginecológicos.
+   No toca index.html, Apps Script ni Google Sheets.
+   ========================================================== */
+
+function auroPrevioJoinDetalles(obj, mapa){
+  const partes = [];
+  (mapa || []).forEach(cfg => {
+    const key = cfg[0];
+    const label = cfg[1];
+    const value = obj && obj[key];
+    if(auroPrevioEsValorUtil(value)){
+      partes.push(label + ': ' + value);
+    }
+  });
+  return partes.join(' · ');
+}
+
+function auroPrevioItemsCovidJson(covid){
+  if(!covid || typeof covid !== 'object' || !auroTieneValor(covid)) return [];
+
+  const items = [];
+  const detallePrincipal = auroPrevioJoinDetalles(covid, [
+    ['fecha','Fecha'],
+    ['anio_referencia','Referencia'],
+    ['clasificacion','Clasificación'],
+    ['detalle_clasificacion','Detalle'],
+    ['hospitalizacion','Hospitalización'],
+    ['tiempo_hospitalizado','Tiempo hospitalizado'],
+    ['vacunado','Vacunado'],
+    ['vacuna_tipo','Tipo vacuna'],
+    ['observacion_presento','Observación'],
+    ['observaciones','Observaciones']
+  ]);
+
+  const titulo = covid.presento ? ('Presentó COVID-19: ' + covid.presento) : 'Antecedente COVID-19';
+  items.push({ titulo, detalle: detallePrincipal });
+
+  const dosis = Array.isArray(covid.dosis) ? covid.dosis : [];
+  dosis.forEach(d => {
+    if(!auroTieneValor(d)) return;
+    const det = auroPrevioJoinDetalles(d, [
+      ['fecha','Fecha'],
+      ['detalle','Detalle']
+    ]);
+    if(det) items.push({ titulo:'Dosis COVID #' + (d.numero || ''), detalle:det });
+  });
+
+  return items.filter(x => auroPrevioEsValorUtil(x.titulo));
+}
+
+function auroPrevioItemsVacunasJson(vacunas){
+  if(!Array.isArray(vacunas)) return [];
+
+  return vacunas.map(v => {
+    if(!v || typeof v !== 'object' || !auroTieneValor(v)) return null;
+
+    const tituloBase = v.biologico || v.vacuna || v.key || 'Vacuna';
+    const titulo = v.nombre_comercial
+      ? (tituloBase + ' · ' + v.nombre_comercial)
+      : tituloBase;
+
+    const detalles = [];
+    const dosis = Array.isArray(v.dosis) ? v.dosis : [];
+    dosis.forEach(d => {
+      if(!d || typeof d !== 'object' || !auroTieneValor(d)) return;
+      const sub = [];
+      if(auroPrevioEsValorUtil(d.programada)) sub.push('Programada: ' + d.programada);
+      if(auroPrevioEsValorUtil(d.administracion)) sub.push('Administrada: ' + d.administracion);
+      if(d.aplicada === true) sub.push('Aplicada: Sí');
+      if(auroPrevioEsValorUtil(d.observacion)) sub.push('Obs: ' + d.observacion);
+      if(sub.length) detalles.push('Dosis ' + (d.numero || '') + ' → ' + sub.join(', '));
+    });
+
+    if(!detalles.length && !v.nombre_comercial) return null;
+    return { titulo: auroNombreVacunaClinica(titulo), detalle: detalles.join(' · ') };
+  }).filter(Boolean);
+}
+
+function auroPrevioItemsHabitosJson(habitos){
+  if(!Array.isArray(habitos)) return [];
+  return habitos.map(h => {
+    if(!h || typeof h !== 'object' || !auroTieneValor(h)) return null;
+    const detalle = auroPrevioJoinDetalles(h, [
+      ['actual','Ex consumidor'],
+      ['tiempo','Tiempo'],
+      ['abstinencia','Abstinencia']
+    ]);
+    return { titulo: h.habito || h.key || 'Hábito', detalle };
+  }).filter(Boolean);
+}
+
+function auroPrevioItemsEstiloVidaJson(lista){
+  if(!Array.isArray(lista)) return [];
+  return lista.map(a => {
+    if(!a || typeof a !== 'object' || !auroTieneValor(a)) return null;
+    const detalle = auroPrevioJoinDetalles(a, [
+      ['distancia_km','Distancia'],
+      ['frecuencia_dia','Frecuencia'],
+      ['tiempo_horas','Tiempo']
+    ]);
+    return { titulo: a.actividad || a.key || 'Actividad', detalle };
+  }).filter(Boolean);
+}
+
+function auroPrevioItemsAlimentacionJson(alimentacion){
+  if(!alimentacion || typeof alimentacion !== 'object' || !auroTieneValor(alimentacion)) return [];
+  const detalle = auroPrevioJoinDetalles(alimentacion, [
+    ['agua_diaria_litros','Agua diaria'],
+    ['comidas_dia','Comidas al día'],
+    ['frutas_verduras','Frutas / verduras'],
+    ['comida_rapida','Comida rápida'],
+    ['azucar','Azúcar'],
+    ['sal','Sal'],
+    ['suplementos','Suplementos'],
+    ['detalle','Detalle']
+  ]);
+  return detalle ? [{ titulo:'Evaluación alimentaria', detalle }] : [];
+}
+
+function auroPrevioItemsObstetricosJson(lista){
+  if(!Array.isArray(lista)) return [];
+  return lista.map(o => {
+    if(!o || typeof o !== 'object' || !auroTieneValor(o)) return null;
+    const detalle = auroPrevioJoinDetalles(o, [
+      ['detalle','Detalle'],
+      ['resultado','Resultado'],
+      ['no_aplica','No aplica']
+    ]);
+    return { titulo: o.descripcion || o.key || 'Antecedente obstétrico', detalle };
+  }).filter(Boolean);
+}
+
+function auroPrevioItemsGinecologicosJson(obj){
+  if(!obj || typeof obj !== 'object' || !auroTieneValor(obj)) return [];
+  const items = [];
+  Object.keys(obj).forEach(k => {
+    const v = obj[k];
+    if(!auroTieneValor(v)) return;
+
+    if(v && typeof v === 'object'){
+      const detalle = auroPrevioJoinDetalles(v, [
+        ['detalle','Detalle'],
+        ['fecha','Fecha'],
+        ['resultado','Resultado']
+      ]);
+      if(detalle) items.push({ titulo: auroPrevioHumanizarClave(k), detalle });
+    }else{
+      items.push({ titulo: auroPrevioHumanizarClave(k), detalle: String(v) });
+    }
+  });
+  return items;
+}
+
 function auroMostrarAntecedentesPrevios(h, modo){
   const box = auroAsegurarCajaAntecedentesPrevios();
   const content = document.getElementById('auroAntecedentesPreviosContent');
@@ -903,15 +1060,34 @@ function auroMostrarAntecedentesPrevios(h, modo){
 
   const fuentePersonales = h.antecedentes_personales || '';
   const fuentePatologicos = auroExtraerFuentePatologicosPersonales(fuentePersonales);
+  const antPersonalesJson = auroParsear(AURO_ANT_PERSONALES_MARKER, fuentePersonales);
+  const antGinecoJson = auroParsear(AURO_ANT_GINECO_OBS_MARKER, h.antecedentes_gineco_obstetricos || '');
+
   let html = '';
 
   html += auroRenderPrevioItemsPremium('Patológicos personales', auroExtraerItemsAntecedentePremium(fuentePatologicos, 'patologia'));
   html += auroRenderPrevioItemsPremium('Quirúrgicos', auroExtraerItemsAntecedentePremium(h.antecedentes_quirurgicos || '', 'quirurgico'));
   html += auroRenderPrevioItemsPremium('Alergias', auroExtraerItemsAntecedentePremium(h.alergias || '', 'alergia'));
-  html += auroRenderPrevioItemsPremium('Vacunas registradas', auroExtraerVacunasRegistradas(fuentePersonales));
-  html += auroRenderPrevioItemsPremium('Hábitos registrados', auroExtraerHabitosRegistrados(fuentePersonales));
-  html += auroRenderPrevioItemsPremium('Actividad física registrada', auroExtraerActividadRegistrada(fuentePersonales));
-  html += auroRenderPrevioItemsPremium('Gineco-obstétricos', auroExtraerItemsAntecedentePremium(h.antecedentes_gineco_obstetricos || '', 'gineco'));
+
+  if(antPersonalesJson){
+    html += auroRenderPrevioItemsPremium('COVID-19', auroPrevioItemsCovidJson(antPersonalesJson.covid || {}));
+    html += auroRenderPrevioItemsPremium('Vacunas registradas', auroPrevioItemsVacunasJson(antPersonalesJson.vacunas || []));
+    html += auroRenderPrevioItemsPremium('Hábitos registrados', auroPrevioItemsHabitosJson(antPersonalesJson.habitos || []));
+    html += auroRenderPrevioItemsPremium('Actividad física registrada', auroPrevioItemsEstiloVidaJson(antPersonalesJson.estilo_vida || antPersonalesJson.estiloVida || []));
+    html += auroRenderPrevioItemsPremium('Alimentación', auroPrevioItemsAlimentacionJson(antPersonalesJson.alimentacion || {}));
+  }else{
+    html += auroRenderPrevioItemsPremium('Vacunas registradas', auroExtraerVacunasRegistradas(fuentePersonales));
+    html += auroRenderPrevioItemsPremium('Hábitos registrados', auroExtraerHabitosRegistrados(fuentePersonales));
+    html += auroRenderPrevioItemsPremium('Actividad física registrada', auroExtraerActividadRegistrada(fuentePersonales));
+  }
+
+  if(antGinecoJson){
+    html += auroRenderPrevioItemsPremium('Obstétricos', auroPrevioItemsObstetricosJson(antGinecoJson.obstetricos || []));
+    html += auroRenderPrevioItemsPremium('Ginecológicos', auroPrevioItemsGinecologicosJson(antGinecoJson.ginecologicos || {}));
+  }else{
+    html += auroRenderPrevioItemsPremium('Gineco-obstétricos', auroExtraerItemsAntecedentePremium(h.antecedentes_gineco_obstetricos || '', 'gineco'));
+  }
+
   html += auroRenderPrevioItemsPremium('Medicación actual', auroExtraerItemsAntecedentePremium(h.medicacion_actual || '', 'medicacion'));
   html += auroRenderPrevioItemsPremium('Familiares', auroExtraerItemsAntecedentePremium(h.antecedentes_familiares || '', 'familiares'));
 
@@ -936,7 +1112,6 @@ function auroMostrarAntecedentesPrevios(h, modo){
   box.dataset.modo = modo || '';
   box.style.display = content.innerHTML.trim() ? 'block' : 'none';
 }
-
 
 function auroCargarAntecedentesDesdeHistoria(h, modo){
   if(!h) return;
