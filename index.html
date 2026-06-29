@@ -1508,6 +1508,17 @@
 }
 </style>
 
+
+<style id="recetas-historial-aurosanax-style">
+#recHistorialBody td{font-size:13px}
+.receta-preview-title{font-weight:900;color:#1f2937;margin-bottom:8px}
+.receta-preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.receta-preview-line{border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:8px}
+.receta-preview-line span{display:block;color:#8b1e5a;font-size:11px;font-weight:900;text-transform:uppercase;margin-bottom:3px}
+.receta-preview-line p{margin:0;white-space:pre-wrap;word-break:break-word}
+@media(max-width:760px){.receta-preview-grid{grid-template-columns:1fr}}
+</style>
+
 </head>
 
 <body>
@@ -2263,15 +2274,72 @@
         <div class="section-head">
           <div>
             <h4 class="fw-bold">Recetas e indicaciones</h4>
-            <p class="text-muted">Registro de receta médica en una sola fila por paciente/atención, con medicamentos escritos en formato libre.</p>
+            <p class="text-muted">Historial de recetas emitidas y registro de nueva receta por paciente/atención.</p>
           </div>
           <div class="d-flex gap-2 flex-wrap">
-            <button class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-filetype-pdf me-1"></i> PDF / imprimir</button>
+            <button class="btn-soft" onclick="auroRecetasCargarHistorial(true)"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar historial</button>
+            <button class="btn-soft" onclick="auroRecetasImprimirFormulario()"><i class="bi bi-filetype-pdf me-1"></i> PDF / imprimir</button>
             <button class="btn-auro" onclick="guardarRecetaERP()"><i class="bi bi-save me-1"></i> Guardar receta</button>
           </div>
         </div>
 
         <div class="module-patient-card" data-module-patient="Recetas"></div>
+
+        <div class="sheet-note mb-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Use <b>Historia clínica → Plan</b> para preparar medicamentos durante la consulta. En este módulo puede buscar recetas emitidas, verlas, cargarlas al formulario, imprimirlas o guardar una nueva receta.
+        </div>
+
+        <div class="cardx p-3 mb-3 bg-white">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label fw-bold">Buscar / seleccionar paciente</label>
+              <select id="recPacienteSelect" class="form-select" onchange="auroRecetasSeleccionarPaciente()">
+                <option value="">Paciente activo / todos</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-bold">Filtrar por fecha</label>
+              <input id="recFiltroFecha" type="date" class="form-control" onchange="auroRecetasRenderHistorial()">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-bold">Historia clínica</label>
+              <input id="recFiltroHistoria" class="form-control" placeholder="Ej. HCL-..." oninput="auroRecetasRenderHistorial()">
+            </div>
+            <div class="col-md-2 d-grid">
+              <button type="button" class="btn-soft" onclick="auroRecetasLimpiarFiltros()"><i class="bi bi-eraser me-1"></i> Limpiar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="cardx p-3 mb-3 bg-white">
+          <div class="section-head mb-2">
+            <div>
+              <h5 class="fw-bold mb-0">Recetas emitidas</h5>
+              <p class="text-muted mb-0" id="recHistorialInfo">Seleccione un paciente o actualice el historial.</p>
+            </div>
+          </div>
+
+          <div class="table-responsive d-block">
+            <table class="table table-modern align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Paciente / Historia</th>
+                  <th>Diagnóstico</th>
+                  <th>Medicamento</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="recHistorialBody">
+                <tr><td colspan="6" class="text-center text-muted py-4">Sin recetas cargadas.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div id="recPreviewBox" class="clinical-note mt-3" style="display:none;"></div>
+        </div>
 
         <div class="row g-3">
           <div class="col-md-3">
@@ -2326,7 +2394,10 @@
           </div>
         </div>
 
-        <div class="clinical-note mt-3"><i class="bi bi-info-circle me-1"></i> La receta vuelve al modelo simple: <b>una receta = una fila</b>. El detalle completo de medicamentos se guarda en la columna <b>medicamento</b> de la pestaña recetas para evitar múltiples filas por cada medicamento.</div>
+        <div class="clinical-note mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Flujo recomendado: <b>Plan</b> prepara la receta durante la consulta. <b>Recetas</b> permite guardar, buscar, ver, cargar al formulario e imprimir recetas emitidas.
+        </div>
       </div>
     </section>
     <section class="screen" id="seguimiento"><div class="cardx p-4"><h4 class="fw-bold">Seguimiento por WhatsApp</h4><p class="text-muted">Recordatorios, controles, postprocedimientos y mensajes rápidos.</p><button class="btn-auro" onclick="abrirWhatsAppConsultorio()"><i class="bi bi-whatsapp me-1"></i> WhatsApp AUROSANAX</button></div></section>
@@ -6023,6 +6094,357 @@ document.addEventListener('click',e=>{
   });
 })();
 </script>
+
+
+<script id="recetas-historial-aurosanax-script">
+/* =====================================================
+   AUROSANAX - Historial y conexión Recetas / Plan
+   Alcance controlado: solo módulo Recetas.
+   No modifica Pacientes, Agenda, Dashboard, Antecedentes ni Examen físico.
+===================================================== */
+(function(){
+  window.recetasEmitidasERP = window.recetasEmitidasERP || [];
+  window.auroRecetaSeleccionadaIndex = null;
+
+  function esc(v){
+    return String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  }
+
+  function val(id){
+    if(typeof getValueIfExists === 'function') return getValueIfExists(id);
+    const el = document.getElementById(id);
+    return el ? (el.value || '') : '';
+  }
+
+  function setVal(id, value){
+    if(typeof setValueIfExists === 'function') return setValueIfExists(id, value || '');
+    const el = document.getElementById(id);
+    if(el) el.value = value || '';
+  }
+
+  function fechaInput(valor){
+    const v = String(valor || '').trim();
+    if(!v) return '';
+    const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+    const latam = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(latam) return latam[3] + '-' + String(latam[2]).padStart(2,'0') + '-' + String(latam[1]).padStart(2,'0');
+    const d = new Date(v);
+    if(!isNaN(d.getTime())) return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    return '';
+  }
+
+  function fechaVisual(valor){
+    const f = fechaInput(valor);
+    if(!f) return valor || '—';
+    const p = f.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+
+  function pacienteNombre(idPaciente){
+    const p = Array.isArray(patients) ? patients.find(x => String(x.id_paciente || x.id || '') === String(idPaciente || '')) : null;
+    return p ? (p.nombre || [p.nombres, p.apellidos].filter(Boolean).join(' ') || idPaciente) : (idPaciente || '—');
+  }
+
+  function pacienteActivoId(){
+    try{
+      const p = typeof getPacienteActivo === 'function' ? getPacienteActivo() : null;
+      return (p && (p.id_paciente || p.id)) || activePatientId || '';
+    }catch(e){
+      return activePatientId || '';
+    }
+  }
+
+  function historiaActualId(){
+    return val('hcIdHistoria') || editingHistoryId || '';
+  }
+
+  function recetaDesdeFormulario(){
+    return {
+      id_receta: '',
+      id_paciente: pacienteActivoId(),
+      id_historia: historiaActualId(),
+      id_medico: 'MED-001',
+      fecha_receta: val('recFecha') || (typeof fechaHoyISO === 'function' ? fechaHoyISO() : ''),
+      diagnostico_cie10: val('recCie10'),
+      diagnostico: val('recDiagnostico'),
+      medicamento: val('recMedicamento') || val('hcRecetaMedicamentos'),
+      indicaciones: val('recIndicaciones') || val('hcIndicacionesPaciente'),
+      recomendaciones: val('recRecomendaciones') || val('hcPlanTratamiento'),
+      estado: val('recEstado') || 'Emitida',
+      creado_en: new Date().toISOString(),
+      actualizado_en: new Date().toISOString()
+    };
+  }
+
+  window.auroRecetasActualizarSelectorPacientes = function(){
+    const sel = document.getElementById('recPacienteSelect');
+    if(!sel || !Array.isArray(patients)) return;
+
+    const actual = sel.value || pacienteActivoId();
+    sel.innerHTML = '<option value="">Paciente activo / todos</option>' + patients.map(p => {
+      const id = p.id_paciente || p.id || '';
+      const nombre = p.nombre || [p.nombres, p.apellidos].filter(Boolean).join(' ') || 'Paciente';
+      return `<option value="${esc(id)}">${esc(nombre)}${p.cedula ? ' · ' + esc(p.cedula) : ''}</option>`;
+    }).join('');
+
+    if(actual) sel.value = actual;
+  };
+
+  window.auroRecetasSeleccionarPaciente = function(){
+    const id = val('recPacienteSelect');
+    if(id){
+      activePatientId = id;
+      const hc = document.getElementById('hcPacienteSelect');
+      if(hc){
+        if(typeof actualizarSelectorPacientesHistoria === 'function') actualizarSelectorPacientesHistoria();
+        hc.value = id;
+      }
+      if(typeof seleccionarPacienteHistoria === 'function') seleccionarPacienteHistoria();
+      if(typeof renderModulePatientCards === 'function') renderModulePatientCards();
+    }
+    auroRecetasRenderHistorial();
+  };
+
+  window.auroRecetasLimpiarFiltros = function(){
+    setVal('recFiltroFecha', '');
+    setVal('recFiltroHistoria', '');
+    const id = pacienteActivoId();
+    if(document.getElementById('recPacienteSelect')) document.getElementById('recPacienteSelect').value = id || '';
+    auroRecetasRenderHistorial();
+  };
+
+  window.auroRecetasCargarHistorial = async function(forzar){
+    auroRecetasActualizarSelectorPacientes();
+
+    if(window.recetasEmitidasERP.length && !forzar){
+      auroRecetasRenderHistorial();
+      return;
+    }
+
+    const info = document.getElementById('recHistorialInfo');
+    if(info) info.textContent = 'Cargando recetas emitidas...';
+
+    try{
+      const res = await fetch(API_URL + '?accion=listarRecetas');
+      const data = await res.json();
+      window.recetasEmitidasERP = Array.isArray(data) ? data : [];
+    }catch(error){
+      console.warn('No se pudieron cargar recetas desde Apps Script. Se usará historial local temporal.', error);
+      if(info) info.textContent = 'No se pudo leer Google Sheets. Mostrando historial local temporal.';
+    }
+
+    auroRecetasRenderHistorial();
+  };
+
+  window.auroRecetasFiltradas = function(){
+    const idFiltro = val('recPacienteSelect') || pacienteActivoId();
+    const fechaFiltro = val('recFiltroFecha');
+    const historiaFiltro = String(val('recFiltroHistoria') || '').trim().toLowerCase();
+
+    return (window.recetasEmitidasERP || []).filter(r => {
+      const idPaciente = String(r.id_paciente || r.idPaciente || '');
+      const idHistoria = String(r.id_historia || r.idHistoria || '').toLowerCase();
+      const fecha = fechaInput(r.fecha_receta || r.fecha || r.creado_en || '');
+      return (!idFiltro || idPaciente === String(idFiltro)) &&
+             (!fechaFiltro || fecha === fechaFiltro) &&
+             (!historiaFiltro || idHistoria.includes(historiaFiltro));
+    }).sort((a,b) => String(b.fecha_receta || b.creado_en || '').localeCompare(String(a.fecha_receta || a.creado_en || '')));
+  };
+
+  window.auroRecetasRenderHistorial = function(){
+    auroRecetasActualizarSelectorPacientes();
+
+    const body = document.getElementById('recHistorialBody');
+    const info = document.getElementById('recHistorialInfo');
+    if(!body) return;
+
+    const rows = auroRecetasFiltradas();
+
+    if(info){
+      const idFiltro = val('recPacienteSelect') || pacienteActivoId();
+      info.textContent = rows.length
+        ? `Mostrando ${rows.length} receta(s)${idFiltro ? ' de ' + pacienteNombre(idFiltro) : ''}.`
+        : 'Sin recetas para los filtros actuales.';
+    }
+
+    if(!rows.length){
+      body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin recetas cargadas para este paciente o filtro.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = rows.map((r, i) => {
+      const idx = (window.recetasEmitidasERP || []).indexOf(r);
+      const med = String(r.medicamento || '').trim();
+      const dx = String(r.diagnostico || r.diagnostico_cie10 || r.recomendaciones || '').trim();
+      return `
+        <tr>
+          <td><b>${esc(fechaVisual(r.fecha_receta || r.creado_en || ''))}</b></td>
+          <td>
+            <b>${esc(pacienteNombre(r.id_paciente))}</b><br>
+            <small class="text-muted">${esc(r.id_historia || 'Sin historia asociada')}</small>
+          </td>
+          <td>${esc(dx || '—')}</td>
+          <td>${esc(med ? (med.length > 90 ? med.slice(0,90) + '...' : med) : '—')}</td>
+          <td><span class="badge-auro">${esc(r.estado || 'Emitida')}</span></td>
+          <td>
+            <div class="patient-action-group">
+              <button type="button" class="btn-action primary" onclick="auroRecetasVer(${idx})">Ver</button>
+              <button type="button" class="btn-action soft" onclick="auroRecetasCargarFormulario(${idx})">Cargar</button>
+              <button type="button" class="btn-action success" onclick="auroRecetasImprimir(${idx})">PDF</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  };
+
+  window.auroRecetasVer = function(index){
+    const r = (window.recetasEmitidasERP || [])[index];
+    const box = document.getElementById('recPreviewBox');
+    if(!r || !box) return;
+
+    window.auroRecetaSeleccionadaIndex = index;
+    box.style.display = '';
+    box.innerHTML = `
+      <div class="receta-preview-title"><i class="bi bi-capsule me-1"></i> Vista de receta emitida</div>
+      <div class="receta-preview-grid">
+        <div class="receta-preview-line"><span>Fecha</span><p>${esc(fechaVisual(r.fecha_receta || r.creado_en || ''))}</p></div>
+        <div class="receta-preview-line"><span>Paciente</span><p>${esc(pacienteNombre(r.id_paciente))}</p></div>
+        <div class="receta-preview-line"><span>Historia</span><p>${esc(r.id_historia || 'Sin historia asociada')}</p></div>
+        <div class="receta-preview-line"><span>Estado</span><p>${esc(r.estado || 'Emitida')}</p></div>
+        <div class="receta-preview-line"><span>CIE-10 / Diagnóstico</span><p>${esc(r.diagnostico_cie10 || r.diagnostico || 'No registrado')}</p></div>
+        <div class="receta-preview-line"><span>Medicamentos</span><p>${esc(r.medicamento || 'No registrado')}</p></div>
+        <div class="receta-preview-line"><span>Indicaciones</span><p>${esc(r.indicaciones || 'No registradas')}</p></div>
+        <div class="receta-preview-line"><span>Recomendaciones</span><p>${esc(r.recomendaciones || 'No registradas')}</p></div>
+      </div>`;
+  };
+
+  window.auroRecetasCargarFormulario = function(index){
+    const r = (window.recetasEmitidasERP || [])[index];
+    if(!r) return;
+
+    window.auroRecetaSeleccionadaIndex = index;
+
+    if(r.id_paciente){
+      activePatientId = r.id_paciente;
+      const sel = document.getElementById('recPacienteSelect');
+      if(sel) sel.value = r.id_paciente;
+      const hc = document.getElementById('hcPacienteSelect');
+      if(hc){
+        if(typeof actualizarSelectorPacientesHistoria === 'function') actualizarSelectorPacientesHistoria();
+        hc.value = r.id_paciente;
+      }
+      if(typeof seleccionarPacienteHistoria === 'function') seleccionarPacienteHistoria();
+    }
+
+    setVal('recFecha', fechaInput(r.fecha_receta || r.creado_en || ''));
+    setVal('recCie10', r.diagnostico_cie10 || '');
+    setVal('recDiagnostico', r.diagnostico || '');
+    setVal('recMedicamento', r.medicamento || '');
+    setVal('recIndicaciones', r.indicaciones || '');
+    setVal('recRecomendaciones', r.recomendaciones || '');
+    setVal('recEstado', r.estado || 'Emitida');
+
+    auroRecetasVer(index);
+    if(typeof renderModulePatientCards === 'function') renderModulePatientCards();
+  };
+
+  window.auroRecetasImprimir = function(index){
+    auroRecetasCargarFormulario(index);
+    auroRecetasImprimirFormulario();
+  };
+
+  window.auroRecetasImprimirFormulario = function(){
+    const paciente = typeof getPacienteActivo === 'function' ? getPacienteActivo() : null;
+    const nombre = paciente ? (paciente.nombre || 'Paciente') : pacienteNombre(pacienteActivoId());
+    const cedula = paciente ? (paciente.cedula || '') : '';
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Receta médica AUROSANAX</title>
+        <style>
+          body{font-family:Arial,sans-serif;margin:38px;color:#111827;line-height:1.45}
+          h2,h3{text-align:center;margin:0 0 6px}
+          .sub{text-align:center;color:#6b7280;margin-bottom:24px}
+          .box{border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:14px}
+          .label{font-weight:bold;color:#8b1e5a;margin-bottom:4px}
+          pre{white-space:pre-wrap;font-family:Arial,sans-serif;margin:0}
+        </style>
+      </head>
+      <body>
+        <h2>AUROSANAX</h2>
+        <div class="sub">Receta médica</div>
+        <div class="box">
+          <div><b>Paciente:</b> ${esc(nombre)}</div>
+          <div><b>Cédula:</b> ${esc(cedula || '—')}</div>
+          <div><b>Fecha:</b> ${esc(fechaVisual(val('recFecha') || (typeof fechaHoyISO === 'function' ? fechaHoyISO() : '')))}</div>
+          <div><b>Médico:</b> ${esc(val('recMedico') || 'Dra. Aurora Andagoya')}</div>
+          <div><b>CIE-10:</b> ${esc(val('recCie10') || '—')}</div>
+        </div>
+        <div class="box"><div class="label">Diagnóstico / motivo</div><pre>${esc(val('recDiagnostico') || 'No registrado')}</pre></div>
+        <div class="box"><div class="label">Medicamentos</div><pre>${esc(val('recMedicamento') || 'No registrado')}</pre></div>
+        <div class="box"><div class="label">Indicaciones</div><pre>${esc(val('recIndicaciones') || 'No registradas')}</pre></div>
+        <div class="box"><div class="label">Recomendaciones</div><pre>${esc(val('recRecomendaciones') || 'No registradas')}</pre></div>
+      </body>
+      </html>`;
+
+    const ventana = window.open('', '_blank', 'width=900,height=900');
+    if(!ventana){
+      alert('El navegador bloqueó la ventana emergente.');
+      return;
+    }
+    ventana.document.open();
+    ventana.document.write(html);
+    ventana.document.close();
+    ventana.focus();
+    setTimeout(() => ventana.print(), 400);
+  };
+
+  const originalGuardarReceta = window.guardarRecetaERP;
+  if(typeof originalGuardarReceta === 'function'){
+    window.guardarRecetaERP = async function(){
+      const recetaLocal = recetaDesdeFormulario();
+      const r = await originalGuardarReceta.apply(this, arguments);
+
+      if(recetaLocal.id_paciente && (recetaLocal.medicamento || recetaLocal.indicaciones || recetaLocal.recomendaciones)){
+        recetaLocal.id_receta = 'REC-TEMP-' + Date.now();
+        window.recetasEmitidasERP.unshift(recetaLocal);
+        auroRecetasRenderHistorial();
+      }
+
+      return r;
+    };
+  }
+
+  const originalShowScreenRecetas = window.showScreen;
+  if(typeof originalShowScreenRecetas === 'function'){
+    window.showScreen = function(id, btn){
+      const r = originalShowScreenRecetas.apply(this, arguments);
+      if(id === 'recetas'){
+        if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+        setTimeout(() => {
+          auroRecetasActualizarSelectorPacientes();
+          auroRecetasCargarHistorial(false);
+          auroRecetasRenderHistorial();
+        }, 120);
+      }
+      return r;
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    if(typeof fechaHoyISO === 'function'){
+      const fecha = document.getElementById('recFecha');
+      if(fecha && !fecha.value) fecha.value = fechaHoyISO();
+    }
+    auroRecetasActualizarSelectorPacientes();
+  });
+})();
+</script>
+
 
 <script id="auro-plan-estabilizacion-ui-script">
 /* =====================================================
