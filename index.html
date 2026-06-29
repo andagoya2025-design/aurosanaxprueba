@@ -1477,6 +1477,37 @@
 @media(max-width:760px){.evaluaciones-grid{grid-template-columns:1fr}}
 </style>
 
+
+
+<style id="auro-plan-estabilizacion-ui-style">
+.auro-save-status{
+  width:100%;
+  border:1px solid #dbeafe;
+  background:linear-gradient(135deg,#eff6ff,#ffffff);
+  color:#1e3a8a;
+  border-radius:16px;
+  padding:10px 12px;
+  font-size:13px;
+  font-weight:750;
+  margin-top:10px;
+}
+.auro-save-status.ok{
+  border-color:#bbf7d0;
+  background:#f0fdf4;
+  color:#166534;
+}
+.auro-plan-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-start;
+  margin:0 0 14px;
+}
+@media(max-width:760px){
+  .auro-plan-actions button{width:100%;}
+}
+</style>
+
 </head>
 
 <body>
@@ -5992,6 +6023,237 @@ document.addEventListener('click',e=>{
   });
 })();
 </script>
+
+<script id="auro-plan-estabilizacion-ui-script">
+/* =====================================================
+   AUROSANAX - Estabilización visual Plan / Recetas / Historia
+   No toca Pacientes, Agenda, Antecedentes ni Examen físico.
+   - Fechas del plan en formato legible
+   - Botones claros: Guardar/Actualizar historia, Guardar receta, PDF receta
+   - Estado visible de última actualización
+===================================================== */
+(function(){
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  window.auroPlanNormalizarFechaInput = function(valor){
+    const v = String(valor || '').trim();
+    if(!v) return '';
+    const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+    const latam = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(latam) return latam[3] + '-' + pad2(latam[2]) + '-' + pad2(latam[1]);
+    const d = new Date(v);
+    if(!isNaN(d.getTime())) return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+    return v;
+  };
+
+  window.auroPlanFormatearFechaVisual = function(valor){
+    const v = String(valor || '').trim();
+    if(!v) return '';
+    const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return iso[3] + '/' + iso[2] + '/' + iso[1];
+    const latam = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(latam) return pad2(latam[1]) + '/' + pad2(latam[2]) + '/' + latam[3];
+    const d = new Date(v);
+    if(!isNaN(d.getTime())) return pad2(d.getDate()) + '/' + pad2(d.getMonth()+1) + '/' + d.getFullYear();
+    return v;
+  };
+
+  function auroPlanFormatearFechaHora(valor){
+    const v = String(valor || '').trim();
+    if(!v) return '';
+    const d = new Date(v);
+    if(!isNaN(d.getTime())){
+      return pad2(d.getDate()) + '/' + pad2(d.getMonth()+1) + '/' + d.getFullYear() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+    return auroPlanFormatearFechaVisual(v);
+  }
+
+  function auroPlanEscapeSeguro(v){
+    if(typeof auroPlanEscape === 'function') return auroPlanEscape(v);
+    return String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  }
+
+  function auroPlanValor(v){ return String(v || '').trim(); }
+
+  function auroPlanRenderListaSeguro(valor){
+    if(typeof auroPlanRenderLista === 'function') return auroPlanRenderLista(valor);
+    const txt = auroPlanEscapeSeguro(valor);
+    return txt ? '<p>' + txt + '</p>' : '<p>No registrado.</p>';
+  }
+
+  function auroPlanTieneDatos(h){
+    if(typeof auroHistoriaTienePlan === 'function') return auroHistoriaTienePlan(h);
+    if(!h) return false;
+    return ['plan_tratamiento','evaluaciones_plan','indicaciones_paciente','proximo_control','plan_terapeutico_estado','fecha_inicio_plan','fecha_fin_estimada_plan','estado'].some(k => auroPlanValor(h[k]));
+  }
+
+  window.auroRenderPlanPrevio = function(h, modo){
+    const box = document.getElementById('auroPlanPreviosBox');
+    if(!box) return;
+
+    if(!auroPlanTieneDatos(h)){
+      box.style.display = 'none';
+      box.innerHTML = '';
+      return;
+    }
+
+    const plan = auroPlanValor(h.plan_tratamiento);
+    const evaluaciones = auroPlanValor(h.evaluaciones_plan);
+    const indicaciones = auroPlanValor(h.indicaciones_paciente);
+    const control = auroPlanValor(h.proximo_control);
+    const estadoPlan = auroPlanValor(h.plan_terapeutico_estado);
+    const inicioPlan = auroPlanFormatearFechaVisual(h.fecha_inicio_plan);
+    const finPlan = auroPlanFormatearFechaVisual(h.fecha_fin_estimada_plan);
+    const estadoHistoria = auroPlanValor(h.estado);
+    const actualizado = auroPlanFormatearFechaHora(h.actualizado_en || h.creado_en || '');
+
+    box.style.display = '';
+    box.innerHTML = `
+      <div class="auro-previos-head">
+        <div>
+          <b><i class="bi bi-list-check me-1"></i> Plan previo guardado</b>
+          <small>Información leída desde Google Sheets. Se muestra para evitar pérdida de datos al editar.</small>
+        </div>
+        <button type="button" class="btn-soft auro-previos-hide" onclick="this.closest('.auro-previos-box').style.display='none'">Ocultar</button>
+      </div>
+      <div class="auro-previos-content">
+        ${actualizado ? `<div class="auro-previos-line"><span>Última actualización</span><p>${auroPlanEscapeSeguro(actualizado)}</p></div>` : ''}
+        ${plan ? `<div class="auro-previos-line"><span>Plan terapéutico</span><p>${auroPlanEscapeSeguro(plan)}</p></div>` : ''}
+        ${evaluaciones ? `<div class="auro-previos-line"><span>Evaluaciones</span>${auroPlanRenderListaSeguro(evaluaciones)}</div>` : ''}
+        ${indicaciones ? `<div class="auro-previos-line"><span>Indicaciones para paciente</span><p>${auroPlanEscapeSeguro(indicaciones)}</p></div>` : ''}
+        ${control ? `<div class="auro-previos-line"><span>Próximo control</span><p>${auroPlanEscapeSeguro(auroPlanFormatearFechaVisual(control))}</p></div>` : ''}
+        ${estadoPlan ? `<div class="auro-previos-line"><span>Estado del plan terapéutico</span><p>${auroPlanEscapeSeguro(estadoPlan)}</p></div>` : ''}
+        ${inicioPlan ? `<div class="auro-previos-line"><span>Fecha inicio plan</span><p>${auroPlanEscapeSeguro(inicioPlan)}</p></div>` : ''}
+        ${finPlan ? `<div class="auro-previos-line"><span>Fecha fin estimada plan</span><p>${auroPlanEscapeSeguro(finPlan)}</p></div>` : ''}
+        ${estadoHistoria ? `<div class="auro-previos-line"><span>Estado historia</span><p>${auroPlanEscapeSeguro(estadoHistoria)}</p></div>` : ''}
+      </div>
+    `;
+  };
+
+  function auroPlanEstadoTexto(){
+    const h = window.historiaActual || window.currentHistoria || null;
+    const actualizado = h ? auroPlanFormatearFechaHora(h.actualizado_en || h.creado_en || '') : '';
+    if(editingHistoryId){
+      return actualizado ? 'Modo edición · Última actualización: ' + actualizado : 'Modo edición · Historia lista para actualizar';
+    }
+    return 'Historia nueva · pendiente de guardar';
+  }
+
+  window.auroPlanActualizarBotonesHistoria = function(){
+    const esEdicion = !!editingHistoryId;
+
+    document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(btn => {
+      if(btn.dataset.auroPlanBtn === '1'){
+        btn.innerHTML = '<i class="bi bi-list-check me-1"></i> ' + (esEdicion ? 'Actualizar plan clínico' : 'Guardar plan clínico');
+      }else{
+        btn.id = btn.id || 'hcGuardarHistoriaBtn';
+        btn.innerHTML = '<i class="bi bi-save me-1"></i> ' + (esEdicion ? 'Actualizar historia' : 'Guardar historia');
+      }
+    });
+
+    document.querySelectorAll('button[onclick*="guardarRecetaERP"]').forEach(btn => {
+      btn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar receta';
+    });
+
+    document.querySelectorAll('button[onclick*="generarPDFReceta"]').forEach(btn => {
+      btn.innerHTML = '<i class="bi bi-filetype-pdf me-1"></i> PDF receta';
+    });
+
+    const status = document.getElementById('hcSaveStatus');
+    if(status) status.textContent = auroPlanEstadoTexto();
+  };
+
+  window.auroPlanMostrarEstadoGuardado = function(mensaje){
+    let status = document.getElementById('hcSaveStatus');
+    const actions = document.querySelector('.clinical-actions');
+    if(!status && actions){
+      status = document.createElement('div');
+      status.id = 'hcSaveStatus';
+      status.className = 'auro-save-status';
+      actions.insertAdjacentElement('afterend', status);
+    }
+    if(status){
+      status.className = 'auro-save-status ok';
+      status.textContent = mensaje || auroPlanEstadoTexto();
+    }
+  };
+
+  function auroPlanInstalarUI(){
+    const panel = document.getElementById('hc_plan');
+    if(panel && !document.getElementById('auroPlanActionButtons')){
+      const box = document.getElementById('auroPlanPreviosBox');
+      const html = `
+        <div id="auroPlanActionButtons" class="auro-plan-actions">
+          <button type="button" class="btn-auro" data-auro-plan-btn="1" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-list-check me-1"></i> Guardar plan clínico</button>
+          <button type="button" class="btn-soft" onclick="guardarRecetaERP()"><i class="bi bi-save me-1"></i> Guardar receta</button>
+          <button type="button" class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-filetype-pdf me-1"></i> PDF receta</button>
+        </div>`;
+      if(box) box.insertAdjacentHTML('afterend', html);
+      else panel.insertAdjacentHTML('afterbegin', html);
+    }
+
+    const actions = document.querySelector('.clinical-actions');
+    if(actions && !document.getElementById('hcSaveStatus')){
+      const status = document.createElement('div');
+      status.id = 'hcSaveStatus';
+      status.className = 'auro-save-status';
+      status.textContent = auroPlanEstadoTexto();
+      actions.insertAdjacentElement('afterend', status);
+    }
+
+    auroPlanActualizarBotonesHistoria();
+  }
+
+  const originalCargarPlan = window.auroCargarPlanDesdeHistoria;
+  if(typeof originalCargarPlan === 'function'){
+    window.auroCargarPlanDesdeHistoria = function(h, modo){
+      originalCargarPlan.apply(this, arguments);
+      if(h){
+        const ini = auroPlanNormalizarFechaInput(h.fecha_inicio_plan);
+        const fin = auroPlanNormalizarFechaInput(h.fecha_fin_estimada_plan);
+        if(ini && typeof setValueIfExists === 'function') setValueIfExists('hcFechaInicioPlan', ini);
+        if(fin && typeof setValueIfExists === 'function') setValueIfExists('hcFechaFinEstimadaPlan', fin);
+        window.historiaActual = h;
+        window.currentHistoria = h;
+      }
+      if(typeof auroRenderPlanPrevio === 'function') auroRenderPlanPrevio(h, modo);
+      setTimeout(auroPlanActualizarBotonesHistoria, 0);
+    };
+  }
+
+  const originalEditarHistoria = window.editarHistoriaClinicaModal;
+  if(typeof originalEditarHistoria === 'function'){
+    window.editarHistoriaClinicaModal = function(){
+      const r = originalEditarHistoria.apply(this, arguments);
+      setTimeout(auroPlanActualizarBotonesHistoria, 250);
+      setTimeout(auroPlanActualizarBotonesHistoria, 700);
+      return r;
+    };
+  }
+
+  const originalGuardarHistoria = window.guardarHistoriaClinicaERP;
+  if(typeof originalGuardarHistoria === 'function'){
+    window.guardarHistoriaClinicaERP = async function(){
+      const eraEdicion = !!editingHistoryId;
+      if(typeof setValueIfExists === 'function'){
+        const iniActual = (typeof getValueIfExists === 'function') ? getValueIfExists('hcFechaInicioPlan') : '';
+        const finActual = (typeof getValueIfExists === 'function') ? getValueIfExists('hcFechaFinEstimadaPlan') : '';
+        if(iniActual) setValueIfExists('hcFechaInicioPlan', auroPlanNormalizarFechaInput(iniActual));
+        if(finActual) setValueIfExists('hcFechaFinEstimadaPlan', auroPlanNormalizarFechaInput(finActual));
+      }
+      const r = await originalGuardarHistoria.apply(this, arguments);
+      auroPlanActualizarBotonesHistoria();
+      auroPlanMostrarEstadoGuardado(eraEdicion ? 'Historia clínica actualizada correctamente.' : 'Historia clínica guardada correctamente.');
+      return r;
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded', auroPlanInstalarUI);
+  setTimeout(auroPlanInstalarUI, 400);
+})();
+</script>
+
 <script src="pacientes.js?v=20260629_fase2_final"></script>
 <script>
   /* AUROSANAX: inicialización segura después de cargar pacientes.js */
