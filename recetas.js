@@ -1,9 +1,9 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.1
+   Versión: 1.2
    Función: vista previa profesional + PDF + historial local
-            + edición independiente de recetas.
+            + historial por paciente activo + corrección versionada de recetas.
    Importante:
    - No modifica Plan automáticamente desde Recetas.
    - Mantiene sincronización Plan → Receta.
@@ -15,6 +15,7 @@
 
   const STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
   let recetaEditandoId = null;
+  let recetaCorrigiendoBaseId = null;
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -119,14 +120,15 @@
     const btn = el('btnGuardarRecetaERP') || document.querySelector('#recetas button[onclick*="guardarRecetaERP"]');
     if(btn){
       btn.id = 'btnGuardarRecetaERP';
-      btn.innerHTML = recetaEditandoId
-        ? '<i class="bi bi-save me-1"></i> Actualizar receta'
+      btn.innerHTML = recetaCorrigiendoBaseId
+        ? '<i class="bi bi-shield-check me-1"></i> Guardar corrección'
         : '<i class="bi bi-save me-1"></i> Guardar receta';
     }
   }
 
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
+    recetaCorrigiendoBaseId = null;
     setVal('recFecha', fechaHoyReceta());
     setVal('recMedico', 'Dra. Aurora Andagoya');
     setVal('recCie10', '');
@@ -263,6 +265,8 @@
       id_receta: recetaEditandoId || crearIdReceta(),
       id_paciente: r.id_paciente || paciente.id_paciente || paciente.id || '',
       id_historia: r.id_historia || '',
+      receta_base_id: recetaCorrigiendoBaseId || '',
+      version: recetaCorrigiendoBaseId ? 2 : 1,
       paciente_nombre: paciente.nombre || '', paciente_cedula: paciente.cedula || '', paciente_telefono: paciente.telefono || paciente.whatsapp || '',
       fecha_receta: r.fecha || fechaHoyReceta(), medico: r.medico || 'Dra. Aurora Andagoya', diagnostico_cie10: r.cie10 || '', diagnostico: r.diagnostico || '',
       medicamento: r.medicamento || '', indicaciones: r.indicaciones || '', recomendaciones: r.recomendaciones || '', estado: r.estado || 'Emitida',
@@ -270,19 +274,33 @@
     };
   }
 
-  function cargarRecetaEnFormulario(receta){
+  function cargarRecetaEnFormulario(receta, modo){
     if(!receta) return;
-    recetaEditandoId = receta.id_receta || receta.id || '';
-    setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
+
+    if(modo === 'corregir'){
+      recetaEditandoId = null;
+      recetaCorrigiendoBaseId = receta.id_receta || receta.id || '';
+    }else{
+      recetaEditandoId = receta.id_receta || receta.id || '';
+      recetaCorrigiendoBaseId = null;
+    }
+
+    setVal('recFecha', fechaHoyReceta());
     setVal('recMedico', receta.medico || 'Dra. Aurora Andagoya');
     setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
-    setVal('recEstado', receta.estado || 'Emitida');
+    setVal('recEstado', 'Emitida');
     setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
     setVal('recMedicamento', receta.medicamento || receta.medicamentos || '');
     setVal('recIndicaciones', receta.indicaciones || '');
     setVal('recRecomendaciones', receta.recomendaciones || receta.observaciones || '');
     actualizarBotonGuardarReceta();
-    mostrarMensajeReceta('<i class="bi bi-pencil-square me-1"></i> Editando receta. Los cambios se aplican solo a Recetas y no modifican el Plan de la historia clínica.', '');
+
+    if(modo === 'corregir'){
+      mostrarMensajeReceta('<i class="bi bi-shield-check me-1"></i> Corrigiendo receta emitida. Al guardar se creará una nueva versión y la receta anterior quedará como reemplazada. No se modifica el Plan original.', '');
+    }else{
+      mostrarMensajeReceta('<i class="bi bi-eye me-1"></i> Receta cargada en formulario. Use Corregir para crear una nueva versión, no para borrar el registro previo.', '');
+    }
+
     vistaPreviaReceta();
   }
 
@@ -292,23 +310,57 @@
     if(!String(r.medicamento || '').trim()){ alert('Ingrese medicamentos o prescripción antes de guardar.'); return; }
 
     const lista = leerRecetasStorage();
+
+    if(recetaCorrigiendoBaseId){
+      const baseIdx = lista.findIndex(x => String(x.id_receta) === String(recetaCorrigiendoBaseId));
+      let versionNueva = 2;
+      if(baseIdx >= 0){
+        const base = lista[baseIdx];
+        const baseId = base.receta_base_id || base.id_receta;
+        versionNueva = Math.max(1, ...lista.filter(x => String(x.receta_base_id || x.id_receta) === String(baseId)).map(x => Number(x.version || 1))) + 1;
+        lista[baseIdx] = {...base, estado:'Reemplazada', reemplazada_por:r.id_receta, actualizado_en:fechaHoraVisual()};
+        r.receta_base_id = baseId;
+      }
+      r.version = versionNueva;
+      r.estado = r.estado || 'Emitida';
+      r.creado_en = fechaHoraVisual();
+      r.actualizado_en = fechaHoraVisual();
+      lista.unshift(r);
+      recetaEditandoId = null;
+      recetaCorrigiendoBaseId = null;
+      guardarRecetasStorage(lista);
+      actualizarBotonGuardarReceta(); renderHistorialRecetas();
+      mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Corrección guardada como versión v${safe(versionNueva)}. La receta anterior quedó como reemplazada.`, 'ok');
+      return;
+    }
+
     const idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
-    if(idx >= 0){ r.creado_en = lista[idx].creado_en || fechaHoraVisual(); lista[idx] = {...lista[idx], ...r, actualizado_en: fechaHoraVisual()}; recetaEditandoId = r.id_receta; }
-    else{ r.creado_en = fechaHoraVisual(); r.actualizado_en = fechaHoraVisual(); lista.unshift(r); recetaEditandoId = r.id_receta; }
+    if(idx >= 0){
+      // Seguridad médico-legal: no se sobrescribe una receta emitida. Se guarda como corrección versionada.
+      recetaCorrigiendoBaseId = r.id_receta;
+      recetaEditandoId = null;
+      return window.guardarRecetaERP();
+    }
+
+    r.version = 1;
+    r.creado_en = fechaHoraVisual(); r.actualizado_en = fechaHoraVisual();
+    lista.unshift(r); recetaEditandoId = null;
     guardarRecetasStorage(lista);
     actualizarBotonGuardarReceta(); renderHistorialRecetas();
-    mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${idx >= 0 ? 'actualizada' : 'guardada'} correctamente. Última actualización: ${safe(fechaHoraVisual())}.`, 'ok');
+    mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta guardada correctamente. Última actualización: ${safe(fechaHoraVisual())}.`, 'ok');
   };
 
   function obtenerRecetasPacienteActivo(){
     const paciente = obtenerPacienteActivoSeguro();
     const idPaciente = paciente?.id_paciente || paciente?.id || '';
+    if(!idPaciente) return [];
+
     const q = val('recHistorialBuscar').toLowerCase();
     const fecha = val('recHistorialFecha');
     return leerRecetasStorage()
-      .filter(r => !idPaciente || String(r.id_paciente || '') === String(idPaciente))
+      .filter(r => String(r.id_paciente || '') === String(idPaciente))
       .filter(r => !fecha || String(r.fecha_receta || '').slice(0,10) === fecha)
-      .filter(r => !q || [r.paciente_nombre,r.paciente_cedula,r.fecha_receta,r.diagnostico_cie10,r.diagnostico,r.medicamento,r.estado].join(' ').toLowerCase().includes(q));
+      .filter(r => !q || [r.fecha_receta,r.diagnostico_cie10,r.diagnostico,r.medicamento,r.estado,r.version].join(' ').toLowerCase().includes(q));
   }
 
   function asegurarHistorialRecetas(){
@@ -317,8 +369,8 @@
     box = document.createElement('div');
     box.id = 'recetasHistorialBox'; box.className = 'cardx p-4 bg-white mt-4';
     box.innerHTML = `
-      <div class="section-head"><div><h4 class="fw-bold">Recetas emitidas</h4><p class="text-muted">Historial local del paciente activo. Puede ver, editar o reimprimir.</p></div><button type="button" class="btn-soft" id="btnNuevaRecetaERP"><i class="bi bi-plus-circle me-1"></i> Nueva receta</button></div>
-      <div class="row g-2 mb-3"><div class="col-md-6"><input id="recHistorialBuscar" class="form-control" placeholder="Buscar por medicamento, diagnóstico, CIE-10 o paciente"></div><div class="col-md-3"><input id="recHistorialFecha" type="date" class="form-control"></div><div class="col-md-3"><button type="button" class="btn-soft w-100" id="btnLimpiarFiltroRecetas">Limpiar filtros</button></div></div>
+      <div class="section-head"><div><h4 class="fw-bold">Recetas emitidas</h4><p class="text-muted">Historial farmacológico del paciente activo. Puede ver, corregir, anular o reimprimir.</p></div><button type="button" class="btn-soft" id="btnNuevaRecetaERP"><i class="bi bi-plus-circle me-1"></i> Nueva receta</button></div>
+      <div class="row g-2 mb-3"><div class="col-md-6"><input id="recHistorialBuscar" class="form-control" placeholder="Buscar por medicamento, diagnóstico, CIE-10 o fecha"></div><div class="col-md-3"><input id="recHistorialFecha" type="date" class="form-control"></div><div class="col-md-3"><button type="button" class="btn-soft w-100" id="btnLimpiarFiltroRecetas">Limpiar filtros</button></div></div>
       <div class="table-responsive"><table class="table table-modern align-middle"><thead><tr><th>Fecha</th><th>Paciente</th><th>CIE-10</th><th>Medicamentos</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="recetasHistorialBody"><tr><td colspan="6" class="text-center text-muted py-4">Sin recetas emitidas.</td></tr></tbody></table></div>`;
     const preview = asegurarVistaPreviaReceta();
     if(preview && preview.parentNode) preview.parentNode.insertBefore(box, preview); else seccion.querySelector('.cardx')?.appendChild(box);
@@ -333,11 +385,22 @@
 
   window.renderHistorialRecetas = function(){
     asegurarHistorialRecetas(); const body = el('recetasHistorialBody'); if(!body) return;
+    const paciente = obtenerPacienteActivoSeguro();
+    const idPaciente = paciente?.id_paciente || paciente?.id || '';
+    if(!idPaciente){
+      body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-exclamation-triangle me-1"></i> Seleccione o abra un paciente para ver sus recetas emitidas.</td></tr>';
+      return;
+    }
+
     const recetas = obtenerRecetasPacienteActivo();
     if(!recetas.length){ body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin recetas emitidas para este paciente.</td></tr>'; return; }
     body.innerHTML = recetas.map(r => {
-      const id = safe(r.id_receta); const meds = String(r.medicamento || '').replace(/\n+/g, ' · ');
-      return `<tr><td><b>${safe(fechaVisual(r.fecha_receta))}</b></td><td>${safe(r.paciente_nombre || '—')}<br><small class="text-muted">${safe(r.paciente_cedula || '')}</small></td><td>${safe(r.diagnostico_cie10 || '—')}</td><td>${safe(meds.length > 80 ? meds.slice(0,80) + '...' : meds || '—')}</td><td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td><td><div class="patient-action-group"><button type="button" class="btn-action primary" onclick="verRecetaEmitida('${id}')">Ver</button><button type="button" class="btn-action soft" onclick="editarRecetaEmitida('${id}')">Editar</button><button type="button" class="btn-action success" onclick="pdfRecetaEmitida('${id}')">PDF</button></div></td></tr>`;
+      const id = safe(r.id_receta); const meds = String(r.medicamento || '').replace(/
++/g, ' · ');
+      const estado = String(r.estado || 'Emitida');
+      const estadoClass = estado.toLowerCase().includes('anulada') ? 'badge-danger' : (estado.toLowerCase().includes('reemplazada') ? 'badge-warn' : 'badge-ok');
+      const verVersion = r.version ? ` v${safe(r.version)}` : '';
+      return `<tr><td><b>${safe(fechaVisual(r.fecha_receta))}</b><br><small class="text-muted">${verVersion}</small></td><td>${safe(r.paciente_nombre || '—')}<br><small class="text-muted">${safe(r.paciente_cedula || '')}</small></td><td>${safe(r.diagnostico_cie10 || '—')}</td><td>${safe(meds.length > 80 ? meds.slice(0,80) + '...' : meds || '—')}</td><td><span class="badge-auro ${estadoClass}">${safe(estado)}${verVersion}</span></td><td><div class="patient-action-group"><button type="button" class="btn-action primary" onclick="verRecetaEmitida('${id}')">Ver</button><button type="button" class="btn-action soft" onclick="corregirRecetaEmitida('${id}')">Corregir</button><button type="button" class="btn-action" onclick="anularRecetaEmitida('${id}')">Anular</button><button type="button" class="btn-action success" onclick="pdfRecetaEmitida('${id}')">PDF</button></div></td></tr>`;
     }).join('');
   };
 
@@ -345,7 +408,9 @@
   function recetaGuardadaAFormatoPreview(r){ return {id_receta:r.id_receta,paciente:{id_paciente:r.id_paciente,nombre:r.paciente_nombre,cedula:r.paciente_cedula,telefono:r.paciente_telefono},fecha:r.fecha_receta,medico:r.medico,cie10:r.diagnostico_cie10,estado:r.estado,diagnostico:r.diagnostico,medicamento:r.medicamento,indicaciones:r.indicaciones,recomendaciones:r.recomendaciones}; }
 
   window.verRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); const box = asegurarVistaPreviaReceta(); if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r)); mostrarMensajeReceta('<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.', ''); };
-  window.editarRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); cargarRecetaEnFormulario(r); window.scrollTo({top: el('recetas')?.offsetTop || 0, behavior:'smooth'}); };
+  window.corregirRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); if(String(r.estado || '').toLowerCase().includes('anulada')) return alert('Esta receta está anulada. No se puede corregir.'); cargarRecetaEnFormulario(r, 'corregir'); window.scrollTo({top: el('recetas')?.offsetTop || 0, behavior:'smooth'}); };
+  window.editarRecetaEmitida = window.corregirRecetaEmitida;
+  window.anularRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); const motivo = prompt('Motivo de anulación de la receta:'); if(motivo === null) return; const lista = leerRecetasStorage(); const idx = lista.findIndex(x => String(x.id_receta) === String(id)); if(idx >= 0){ lista[idx] = {...lista[idx], estado:'Anulada', motivo_anulacion:motivo || 'Sin motivo especificado', actualizado_en:fechaHoraVisual()}; guardarRecetasStorage(lista); renderHistorialRecetas(); mostrarMensajeReceta('<i class="bi bi-exclamation-circle me-1"></i> Receta anulada. El registro permanece en el historial.', ''); } };
   window.pdfRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); window.generarPDFReceta(recetaGuardadaAFormatoPreview(r)); };
 
   function agregarBotonVistaPrevia(){
@@ -359,12 +424,12 @@
   function inicializarRecetas(){
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     agregarBotonVistaPrevia(); asegurarVistaPreviaReceta(); asegurarHistorialRecetas(); actualizarBotonGuardarReceta(); renderHistorialRecetas();
-    mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Recetas funciona independiente del Plan. Si edita aquí, no se modifica la historia clínica original.', '');
+    mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Recetas funciona independiente del Plan. Las recetas emitidas no se borran: se corrigen por versiones o se anulan con trazabilidad.', '');
   }
 
   document.addEventListener('DOMContentLoaded', inicializarRecetas);
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.1', totalLocal: leerRecetasStorage().length, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.2', totalLocal: leerRecetasStorage().length, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', storageKey: STORAGE_KEY}; };
 })();
