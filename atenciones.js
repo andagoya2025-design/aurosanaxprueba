@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.4 conectada a Google Sheets
+   Versión: 1.5 conectada a Google Sheets
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -12,7 +12,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_4_SHEETS';
+  const MODULO = 'AUROSANAX_ATENCIONES_V1_5_SHEETS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
@@ -369,6 +369,84 @@
     }
   }
 
+
+  function leerRecetasLocales(){
+    try{
+      const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    }catch(e){
+      console.warn(MODULO, 'No se pudo leer recetas locales.', e);
+      return [];
+    }
+  }
+
+  function recetasPorAtencion(idAtencion){
+    if(!idAtencion) return [];
+    return leerRecetasLocales().filter(r => String(r.id_atencion || '') === String(idAtencion));
+  }
+
+  function resumenTexto(valor, max){
+    const txt = String(valor || '').replace(/\s+/g, ' ').trim();
+    if(!txt) return '—';
+    return txt.length > max ? txt.slice(0, max) + '...' : txt;
+  }
+
+  function renderDetalleAtencion(a){
+    const box = $('auroAtencionActivaBox');
+    if(!box || !a) return;
+
+    const recetas = recetasPorAtencion(a.id_atencion);
+
+    let recetasHTML = '';
+    if(recetas.length){
+      recetasHTML =
+        '<div class="mt-3">' +
+          '<div class="fw-bold mb-2"><i class="bi bi-prescription2 me-1"></i> Recetas asociadas a esta atención</div>' +
+          '<div class="table-responsive">' +
+          '<table class="table table-modern align-middle mb-0">' +
+          '<thead><tr><th>Fecha</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th></tr></thead>' +
+          '<tbody>' +
+          recetas.map(r => {
+            return '<tr>' +
+              '<td>' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</td>' +
+              '<td>' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</td>' +
+              '<td>' + safe(resumenTexto(r.medicamento || r.medicamentos || '', 120)) + '</td>' +
+              '<td>' + safe(resumenTexto(r.indicaciones || '', 100)) + '</td>' +
+              '<td><span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span></td>' +
+            '</tr>';
+          }).join('') +
+          '</tbody></table></div>' +
+        '</div>';
+    }else{
+      recetasHTML =
+        '<div class="sheet-note mt-3">' +
+          '<i class="bi bi-info-circle me-1"></i> Esta atención aún no tiene recetas asociadas.' +
+        '</div>';
+    }
+
+    box.style.display = 'block';
+    box.innerHTML =
+      '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">' +
+        '<div>' +
+          '<div class="fw-bold"><i class="bi bi-eye me-1"></i> Consulta #' + safe(a.numero_consulta) + '</div>' +
+          '<div class="text-muted small">ID atención: ' + safe(a.id_atencion || '—') + '</div>' +
+        '</div>' +
+        '<span class="badge-auro ' + (String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok') + '">' +
+          safe(a.estado_atencion || '—') +
+        '</span>' +
+      '</div>' +
+      '<div class="row g-2 mt-2">' +
+        '<div class="col-md-3"><b>Fecha:</b><br>' + safe(fechaVisual(a.fecha_atencion)) + '</div>' +
+        '<div class="col-md-3"><b>Hora:</b><br>' + safe(a.hora_atencion || '—') + '</div>' +
+        '<div class="col-md-3"><b>Tipo:</b><br>' + safe(a.tipo_atencion || '—') + '</div>' +
+        '<div class="col-md-3"><b>Médico:</b><br>' + safe(a.id_medico || '—') + '</div>' +
+        '<div class="col-md-6"><b>ID historia:</b><br>' + safe(a.id_historia || '—') + '</div>' +
+        '<div class="col-md-6"><b>ID cita:</b><br>' + safe(a.id_cita || '—') + '</div>' +
+      '</div>' +
+      recetasHTML;
+  }
+
   function seleccionarAtencion(idAtencion){
     const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
     if(!a){
@@ -377,13 +455,7 @@
     }
 
     atencionActivaId = a.id_atencion;
-    const box = $('auroAtencionActivaBox');
-    if(box){
-      box.style.display = 'block';
-      box.innerHTML = '<i class="bi bi-eye me-1"></i> Visualizando Consulta #' +
-        safe(a.numero_consulta) + ' · ' + safe(fechaVisual(a.fecha_atencion)) +
-        ' · Estado: <b>' + safe(a.estado_atencion) + '</b>';
-    }
+    renderDetalleAtencion(normalizar(a));
   }
 
   function asegurarBloque(){
