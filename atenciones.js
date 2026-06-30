@@ -1,18 +1,18 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.1 segura
+   Versión: 1.2 conectada a Google Sheets
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
    - No modifica Agenda, Pacientes, Antecedentes, Examen Físico, Plan ni Recetas.
-   - Primera fase: almacenamiento local de prueba para validar flujo.
+   - Guarda localmente y sincroniza con Google Sheets mediante Apps Script.
 ===================================================== */
 
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_1';
+  const MODULO = 'AUROSANAX_ATENCIONES_V1_2_SHEETS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
@@ -78,6 +78,48 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
     }catch(e){
       console.warn(MODULO, 'No se pudo guardar localStorage.', e);
+    }
+  }
+
+
+  async function enviarAtencionGoogleSheets(atencion){
+    try{
+      if(!atencion) return { success:false, message:'No hay atención para enviar' };
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return { success:false, message:'API_URL no está definida en index.html' };
+      }
+
+      const payload = {
+        accion: 'guardarAtencion',
+        data: {
+          id_atencion: atencion.id_atencion || '',
+          numero_consulta: atencion.numero_consulta || '',
+          id_paciente: atencion.id_paciente || '',
+          id_cita: atencion.id_cita || '',
+          id_historia: atencion.id_historia || '',
+          id_medico: atencion.id_medico || medicoActual(),
+          fecha_atencion: atencion.fecha_atencion || fechaHoyISO(),
+          hora_atencion: atencion.hora_atencion || horaActual(),
+          tipo_atencion: atencion.tipo_atencion || '',
+          estado_atencion: atencion.estado_atencion || 'Finalizada',
+          creado_por: atencion.creado_por || usuarioActual(),
+          creado_en: atencion.creado_en || fechaHora(),
+          actualizado_en: atencion.actualizado_en || fechaHora()
+        }
+      };
+
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+
+      return { success:true, message:'Atención enviada a Google Sheets' };
+
+    }catch(error){
+      console.error(MODULO, 'Error enviando atención a Google Sheets:', error);
+      return { success:false, message:error.message };
     }
   }
 
@@ -215,7 +257,7 @@
     return nueva;
   }
 
-  function finalizarAtencion(){
+  async function finalizarAtencion(){
     const idPaciente = idPacienteActivo();
     if(!idPaciente){
       alert('Seleccione primero un paciente.');
@@ -232,16 +274,34 @@
 
     const lista = leerLocal();
     const idx = lista.findIndex(a => String(a.id_atencion) === String(abierta.id_atencion));
+
+    let atencionFinalizada = null;
+
     if(idx >= 0){
-      lista[idx] = Object.assign({}, lista[idx], {
+      atencionFinalizada = Object.assign({}, lista[idx], {
         estado_atencion: 'Finalizada',
         actualizado_en: fechaHora()
       });
+
+      lista[idx] = atencionFinalizada;
       guardarLocal(lista);
+    }else{
+      atencionFinalizada = Object.assign({}, abierta, {
+        estado_atencion: 'Finalizada',
+        actualizado_en: fechaHora()
+      });
     }
 
     atencionActivaId = '';
     renderAtencionesPaciente();
+
+    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada);
+
+    if(resultado && resultado.success){
+      alert('Atención finalizada y enviada a Google Sheets.');
+    }else{
+      alert('Atención finalizada localmente, pero no se pudo enviar a Google Sheets. Revise Apps Script o conexión.');
+    }
   }
 
   function seleccionarAtencion(idAtencion){
@@ -396,6 +456,25 @@
       envolverFuncion('actualizarTarjetaPacienteHistoria', renderAtencionesPaciente);
     }, 700);
   });
+
+  window.sincronizarAtencionesLocales = async function(){
+    const lista = leerLocal();
+    if(!lista.length){
+      alert('No hay atenciones locales para sincronizar.');
+      return;
+    }
+
+    let ok = 0;
+    let fail = 0;
+
+    for(const item of lista){
+      const r = await enviarAtencionGoogleSheets(normalizar(item));
+      if(r && r.success) ok++;
+      else fail++;
+    }
+
+    alert('Sincronización terminada. Enviadas: ' + ok + '. Fallidas: ' + fail + '.');
+  };
 
   window.renderAtencionesPaciente = renderAtencionesPaciente;
   window.iniciarAtencionActual = crearAtencion;
