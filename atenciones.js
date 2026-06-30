@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.9 responsive
+   Versión: 2.0 responsive móvil tarjetas
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -12,7 +12,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_9_RESPONSIVE';
+  const MODULO = 'AUROSANAX_ATENCIONES_V2_0_MOBILE_CARDS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
@@ -54,6 +54,26 @@
 
       #auroAtencionesBox .auro-table-mobile-note{
         display:none;
+      }
+
+      #auroAtencionesBox .auro-atenciones-mobile{
+        display:none;
+      }
+
+      #auroAtencionesBox .auro-consulta-card{
+        border:1px solid #e5e7eb;
+        border-radius:14px;
+        padding:12px;
+        background:#fff;
+        margin-bottom:10px;
+      }
+
+      #auroAtencionesBox .auro-consulta-card-head{
+        display:flex;
+        justify-content:space-between;
+        gap:8px;
+        align-items:flex-start;
+        margin-bottom:8px;
       }
 
       @media (max-width: 768px){
@@ -104,21 +124,25 @@
           line-height:1.35;
         }
 
-        #auroAtencionesBox #auroAtencionesLista .table-responsive{
-          overflow-x:auto;
-          -webkit-overflow-scrolling:touch;
+        #auroAtencionesBox .auro-atenciones-desktop{
+          display:none!important;
         }
 
-        #auroAtencionesBox #auroAtencionesLista table{
-          min-width:680px;
+        #auroAtencionesBox .auro-atenciones-mobile{
+          display:block!important;
+        }
+
+        #auroAtencionesBox .auro-consulta-card{
           font-size:12px;
         }
 
+        #auroAtencionesBox .auro-consulta-card .btn-action{
+          width:100%;
+          margin-top:6px;
+        }
+
         #auroAtencionesBox .auro-table-mobile-note{
-          display:block;
-          font-size:11px;
-          color:#64748b;
-          margin-bottom:6px;
+          display:none!important;
         }
 
         #auroAtencionesBox #auroAtencionActivaBox .row > div{
@@ -133,6 +157,12 @@
 
       @media (min-width: 769px){
         #auroAtencionesBox .auro-atenciones-title h5 .mobile-title{
+          display:none!important;
+        }
+        #auroAtencionesBox .auro-atenciones-desktop{
+          display:block!important;
+        }
+        #auroAtencionesBox .auro-atenciones-mobile{
           display:none!important;
         }
       }
@@ -716,24 +746,40 @@
       return;
     }
 
+    const filasTabla = arr.map(a => {
+      const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
+      return '<tr>' +
+        '<td><b>#' + safe(a.numero_consulta) + '</b></td>' +
+        '<td>' + safe(fechaVisual(a.fecha_atencion)) + '</td>' +
+        '<td>' + safe(a.hora_atencion || '—') + '</td>' +
+        '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
+        '<td><span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span></td>' +
+        '<td><button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver</button></td>' +
+      '</tr>';
+    }).join('');
+
+    const tarjetasMovil = arr.map(a => {
+      const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
+      return '<div class="auro-consulta-card">' +
+        '<div class="auro-consulta-card-head">' +
+          '<div><b>Consulta #' + safe(a.numero_consulta) + '</b><br><small class="text-muted">' + safe(fechaVisual(a.fecha_atencion)) + ' · ' + safe(a.hora_atencion || '—') + '</small></div>' +
+          '<span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span>' +
+        '</div>' +
+        '<div class="small"><b>Tipo:</b> ' + safe(a.tipo_atencion || '—') + '</div>' +
+        '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver consulta</button>' +
+      '</div>';
+    }).join('');
+
     lista.innerHTML =
-      '<div class="auro-table-mobile-note">Deslice la tabla hacia la izquierda para ver todas las columnas.</div>' +
-      '<div class="table-responsive">' +
-      '<table class="table table-modern align-middle mb-0">' +
-      '<thead><tr><th>Consulta</th><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Estado</th><th>Acción</th></tr></thead>' +
-      '<tbody>' +
-      arr.map(a => {
-        const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
-        return '<tr>' +
-          '<td><b>#' + safe(a.numero_consulta) + '</b></td>' +
-          '<td>' + safe(fechaVisual(a.fecha_atencion)) + '</td>' +
-          '<td>' + safe(a.hora_atencion || '—') + '</td>' +
-          '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
-          '<td><span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span></td>' +
-          '<td><button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver</button></td>' +
-        '</tr>';
-      }).join('') +
-      '</tbody></table></div>';
+      '<div class="auro-atenciones-desktop">' +
+        '<div class="table-responsive">' +
+          '<table class="table table-modern align-middle mb-0">' +
+            '<thead><tr><th>Consulta</th><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Estado</th><th>Acción</th></tr></thead>' +
+            '<tbody>' + filasTabla + '</tbody>' +
+          '</table>' +
+        '</div>' +
+      '</div>' +
+      '<div class="auro-atenciones-mobile">' + tarjetasMovil + '</div>';
 
     lista.querySelectorAll('[data-atencion-id]').forEach(btn => {
       btn.addEventListener('click', function(){
