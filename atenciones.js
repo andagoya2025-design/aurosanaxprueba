@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.3 conectada a Google Sheets
+   Versión: 1.4 conectada a Google Sheets
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -12,7 +12,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_3_SHEETS';
+  const MODULO = 'AUROSANAX_ATENCIONES_V1_4_SHEETS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
@@ -93,7 +93,7 @@
         accion: 'guardarAtencion',
         data: {
           id_atencion: atencion.id_atencion || '',
-          numero_consulta: atencion.numero_consulta || '',
+          numero_consulta: Number(atencion.numero_consulta || siguienteConsulta(atencion.id_paciente || idPacienteActivo()) || 1),
           id_paciente: atencion.id_paciente || '',
           id_cita: atencion.id_cita || '',
           id_historia: atencion.id_historia || obtenerIdHistoriaActual() || '',
@@ -342,6 +342,7 @@
 
     if(idx >= 0){
       atencionFinalizada = Object.assign({}, lista[idx], {
+        numero_consulta: Number(lista[idx].numero_consulta || abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
         estado_atencion: 'Finalizada',
         actualizado_en: fechaHora()
       });
@@ -350,6 +351,7 @@
       guardarLocal(lista);
     }else{
       atencionFinalizada = Object.assign({}, abierta, {
+        numero_consulta: Number(abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
         estado_atencion: 'Finalizada',
         actualizado_en: fechaHora()
       });
