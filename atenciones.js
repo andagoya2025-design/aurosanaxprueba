@@ -1,4 +1,28 @@
 /* =====================================================
+MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
+
+1. RESPONSIVE MOVIL
+- Reducir tamaño de botones en móviles (<768px).
+- Cambiar "Historial de atenciones" por "Atenciones" en móvil.
+- Reducir altura de tarjetas de estado.
+
+2. BOTON GLOBAL
+- Agregar:
+  [ Ocultar consultas ]
+  [ Mostrar consultas ]
+
+3. MANTENER
+- Cambio de color Inicio/Finalizar.
+- Estado Atención abierta/cerrada.
+- Botón Ocultar individual de cada consulta.
+
+4. ESCRITORIO
+- Mejor separación visual.
+- Tarjetas más compactas.
+
+===================================================== */
+
+/* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
    Versión: 1.6 conectada a Google Sheets
