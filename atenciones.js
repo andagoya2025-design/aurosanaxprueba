@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.2 conectada a Google Sheets
+   Versión: 1.3 conectada a Google Sheets
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -12,7 +12,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_2_SHEETS';
+  const MODULO = 'AUROSANAX_ATENCIONES_V1_3_SHEETS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
@@ -96,7 +96,7 @@
           numero_consulta: atencion.numero_consulta || '',
           id_paciente: atencion.id_paciente || '',
           id_cita: atencion.id_cita || '',
-          id_historia: atencion.id_historia || '',
+          id_historia: atencion.id_historia || obtenerIdHistoriaActual() || '',
           id_medico: atencion.id_medico || medicoActual(),
           fecha_atencion: atencion.fecha_atencion || fechaHoyISO(),
           hora_atencion: atencion.hora_atencion || horaActual(),
@@ -196,19 +196,82 @@
     return atencionesPaciente(idPaciente).reduce((m,a) => Math.max(m, Number(a.numero_consulta || 0)), 0) + 1;
   }
 
+
+  function obtenerIdHistoriaActual(){
+    try{
+      if(window.editingHistoryId){
+        return String(window.editingHistoryId);
+      }
+
+      if(window.historiaActual && (window.historiaActual.id_historia || window.historiaActual.id)){
+        return String(window.historiaActual.id_historia || window.historiaActual.id);
+      }
+
+      if(window.currentHistoria && (window.currentHistoria.id_historia || window.currentHistoria.id)){
+        return String(window.currentHistoria.id_historia || window.currentHistoria.id);
+      }
+
+      const paciente = pacienteActivo();
+      const idPaciente = paciente && (paciente.id_paciente || paciente.id || paciente.cedula)
+        ? String(paciente.id_paciente || paciente.id || paciente.cedula)
+        : '';
+
+      if(idPaciente && Array.isArray(window.historiasClinicas)){
+        const lista = window.historiasClinicas
+          .filter(h => String(h.id_paciente || h.paciente_id || h.cedula || '') === idPaciente)
+          .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_apertura || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_apertura || '')));
+
+        if(lista.length){
+          return String(lista[0].id_historia || lista[0].id || '');
+        }
+      }
+    }catch(e){
+      console.warn(MODULO, 'No se pudo obtener id_historia actual.', e);
+    }
+
+    return '';
+  }
+
+  function normalizarTextoSimple(valor){
+    return String(valor || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function obtenerDocumentoPacienteActivo(){
+    const p = pacienteActivo();
+    return p ? String(p.numero_documento || p.cedula || p.documento || '').replace(/\D/g,'') : '';
+  }
+
   function buscarCitaAtendidaHoy(idPaciente){
     try{
       const citas = Array.isArray(window.citasAgendaWeb) ? window.citasAgendaWeb : [];
       const hoy = fechaHoyISO();
+      const p = pacienteActivo();
+      const docPaciente = obtenerDocumentoPacienteActivo();
+      const nombrePaciente = normalizarTextoSimple(p ? (p.nombre || ((p.nombres || '') + ' ' + (p.apellidos || ''))) : '');
+
       return citas.find(c => {
-        const cid = c.id_paciente || c.paciente_id || c.cedula || '';
-        const fecha = c.fecha_deseada || c.fecha_cita || c.fecha || '';
-        const estado = String(c.estado || c.estado_cita || '').toLowerCase();
-        return String(cid) === String(idPaciente) &&
-               String(fecha).slice(0,10) === hoy &&
+        const estado = normalizarTextoSimple(c.estado || c.estado_cita || '');
+        const fecha = String(c.fecha_deseada || c.fecha_cita || c.fecha || '').slice(0,10);
+
+        const cid = String(c.id_paciente || c.paciente_id || '').trim();
+        const cdoc = String(c.numero_documento || c.cedula || c.documento || '').replace(/\D/g,'');
+        const cnombre = normalizarTextoSimple(c.nombre || c.paciente || c.nombre_completo || '');
+
+        const coincidePaciente =
+          (cid && String(cid) === String(idPaciente)) ||
+          (docPaciente && cdoc && docPaciente === cdoc) ||
+          (nombrePaciente && cnombre && nombrePaciente === cnombre);
+
+        return coincidePaciente &&
+               fecha === hoy &&
                estado.includes('atendid');
       }) || null;
     }catch(e){
+      console.warn(MODULO, 'No se pudo buscar cita atendida de hoy.', e);
       return null;
     }
   }
@@ -237,8 +300,8 @@
       id_atencion: idNuevo(),
       numero_consulta: num,
       id_paciente: idPaciente,
-      id_cita: cita ? (cita.id_cita || cita.id || '') : '',
-      id_historia: window.editingHistoryId || '',
+      id_cita: cita ? (cita.id_cita || cita.id || cita.id_cita_web || cita.fila_origen || '') : '',
+      id_historia: obtenerIdHistoriaActual(),
       id_medico: cita ? (cita.id_medico || medicoActual()) : medicoActual(),
       fecha_atencion: cita ? String(cita.fecha_deseada || cita.fecha_cita || fechaHoyISO()).slice(0,10) : fechaHoyISO(),
       hora_atencion: cita ? (cita.hora_deseada || cita.hora_inicio || horaActual()) : horaActual(),
