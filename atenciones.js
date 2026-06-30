@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.6 conectada a Google Sheets
+   Versión: 1.8 conectada a Google Sheets
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -12,10 +12,11 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_6_SHEETS';
+  const MODULO = 'AUROSANAX_ATENCIONES_V1_8_SHEETS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
+  let historialAtencionesVisible = true;
 
   function $(id){ return document.getElementById(id); }
 
@@ -492,6 +493,7 @@
           '<div class="text-muted small" id="auroAtencionesResumen">Seleccione un paciente para ver sus atenciones.</div>' +
         '</div>' +
         '<div class="d-flex gap-2 flex-wrap">' +
+          '<button type="button" class="btn-soft" id="btnToggleHistorialAtenciones"><i class="bi bi-eye-slash me-1"></i> Ocultar historial</button>' +
           '<button type="button" class="btn-soft" id="btnIniciarAtencion"><i class="bi bi-play-circle me-1"></i> Iniciar atención</button>' +
           '<button type="button" class="btn-auro" id="btnFinalizarAtencion"><i class="bi bi-check-circle me-1"></i> Finalizar atención</button>' +
         '</div>' +
@@ -501,8 +503,14 @@
 
     cardPaciente.parentNode.insertBefore(box, cardPaciente.nextSibling);
 
+    const btnToggle = $('btnToggleHistorialAtenciones');
     const btnIniciar = $('btnIniciarAtencion');
     const btnFinalizar = $('btnFinalizarAtencion');
+
+    if(btnToggle) btnToggle.addEventListener('click', function(){
+      historialAtencionesVisible = !historialAtencionesVisible;
+      renderAtencionesPaciente();
+    });
 
     if(btnIniciar) btnIniciar.addEventListener('click', crearAtencion);
     if(btnFinalizar) btnFinalizar.addEventListener('click', finalizarAtencion);
@@ -517,6 +525,7 @@
     const resumen = $('auroAtencionesResumen');
     const lista = $('auroAtencionesLista');
     const activaBox = $('auroAtencionActivaBox');
+    const btnToggle = $('btnToggleHistorialAtenciones');
     const btnIniciar = $('btnIniciarAtencion');
     const btnFinalizar = $('btnFinalizarAtencion');
 
@@ -526,6 +535,7 @@
       resumen.textContent = 'Seleccione un paciente para iniciar o revisar atenciones.';
       lista.innerHTML = '<div class="text-muted small">Sin paciente activo.</div>';
       if(activaBox) activaBox.style.display = 'none';
+      if(btnToggle) btnToggle.disabled = true;
       if(btnIniciar) btnIniciar.disabled = true;
       if(btnFinalizar) btnFinalizar.disabled = true;
       return;
@@ -534,39 +544,32 @@
     const arr = atencionesPaciente(idPaciente);
     const abierta = atencionAbierta(idPaciente);
 
-    if(btnIniciar){
-      btnIniciar.disabled = !!abierta;
-      btnIniciar.style.opacity = abierta ? '0.55' : '1';
-      btnIniciar.style.cursor = abierta ? 'not-allowed' : 'pointer';
+    if(btnToggle){
+      btnToggle.innerHTML = historialAtencionesVisible
+        ? '<i class="bi bi-eye-slash me-1"></i> Ocultar historial'
+        : '<i class="bi bi-eye me-1"></i> Mostrar historial';
     }
 
-    if(btnFinalizar){
-      btnFinalizar.disabled = !abierta;
-      btnFinalizar.style.opacity = abierta ? '1' : '0.55';
-      btnFinalizar.style.cursor = abierta ? 'pointer' : 'not-allowed';
-      btnFinalizar.innerHTML = abierta
-        ? '<i class="bi bi-check-circle me-1"></i> Finalizar atención'
-        : '<i class="bi bi-lock me-1"></i> Atención cerrada';
-    }
+
+    if(btnToggle) btnToggle.disabled = false;
+    if(btnIniciar) btnIniciar.disabled = !!abierta;
+    if(btnFinalizar) btnFinalizar.disabled = !abierta;
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '');
 
     if(activaBox){
       activaBox.style.display = 'block';
       if(abierta){
-        activaBox.innerHTML =
-          '<div class="alert alert-success mb-0">' +
-          '<b>🟢 ATENCIÓN ABIERTA</b><br>' +
-          'Consulta #' + safe(abierta.numero_consulta) + ' · ' +
-          safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) +
-          '</div>';
+        activaBox.innerHTML = '<i class="bi bi-play-circle me-1"></i> Atención abierta: <b>Consulta #' +
+          safe(abierta.numero_consulta) + '</b> · ' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion);
       }else{
-        activaBox.innerHTML =
-          '<div class="alert alert-secondary mb-0">' +
-          '<b>🔵 ATENCIÓN FINALIZADA</b><br>' +
-          'No existe una consulta abierta para este paciente.' +
-          '</div>';
+        activaBox.innerHTML = '<i class="bi bi-info-circle me-1"></i> No hay atención abierta para este paciente. Presione <b>Iniciar atención</b> al comenzar la consulta.';
       }
+    }
+
+    if(!historialAtencionesVisible){
+      lista.innerHTML = '<div class="sheet-note mt-2"><i class="bi bi-eye-slash me-1"></i> Historial de atenciones oculto. Presione <b>Mostrar historial</b> para verlo nuevamente.</div>';
+      return;
     }
 
     if(!arr.length){
