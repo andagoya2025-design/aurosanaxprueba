@@ -130,6 +130,21 @@
 
         #auroAtencionesBox .auro-atenciones-mobile{
           display:block!important;
+          width:100%!important;
+          visibility:visible!important;
+          overflow:visible!important;
+        }
+
+        #auroAtencionesBox #auroAtencionesLista{
+          display:block!important;
+          visibility:visible!important;
+          overflow:visible!important;
+        }
+
+        #auroAtencionesBox .auro-consulta-card{
+          display:block!important;
+          visibility:visible!important;
+          width:100%!important;
         }
 
         #auroAtencionesBox .auro-consulta-card{
