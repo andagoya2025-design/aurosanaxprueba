@@ -1,31 +1,7 @@
 /* =====================================================
-MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
-
-1. RESPONSIVE MOVIL
-- Reducir tamaño de botones en móviles (<768px).
-- Cambiar "Historial de atenciones" por "Atenciones" en móvil.
-- Reducir altura de tarjetas de estado.
-
-2. BOTON GLOBAL
-- Agregar:
-  [ Ocultar consultas ]
-  [ Mostrar consultas ]
-
-3. MANTENER
-- Cambio de color Inicio/Finalizar.
-- Estado Atención abierta/cerrada.
-- Botón Ocultar individual de cada consulta.
-
-4. ESCRITORIO
-- Mejor separación visual.
-- Tarjetas más compactas.
-
-===================================================== */
-
-/* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.6 conectada a Google Sheets
+   Versión: 1.9 responsive
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -36,12 +12,134 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_6_SHEETS';
+  const MODULO = 'AUROSANAX_ATENCIONES_V1_9_RESPONSIVE';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
+  let consultasVisible = true;
 
   function $(id){ return document.getElementById(id); }
+
+  function inyectarEstilosAtenciones(){
+    if(document.getElementById('auroAtencionesResponsiveCSS')) return;
+
+    const st = document.createElement('style');
+    st.id = 'auroAtencionesResponsiveCSS';
+    st.textContent = `
+      #auroAtencionesBox .auro-atenciones-actions{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        justify-content:flex-end;
+      }
+
+      #auroAtencionesBox .auro-atencion-status{
+        border-radius:14px;
+        padding:10px 12px;
+        margin-top:10px;
+        font-size:14px;
+      }
+
+      #auroAtencionesBox .auro-atencion-status.abierta{
+        background:#dcfce7;
+        color:#166534;
+        border:1px solid #bbf7d0;
+      }
+
+      #auroAtencionesBox .auro-atencion-status.cerrada{
+        background:#f1f5f9;
+        color:#334155;
+        border:1px solid #e2e8f0;
+      }
+
+      #auroAtencionesBox .auro-table-mobile-note{
+        display:none;
+      }
+
+      @media (max-width: 768px){
+        #auroAtencionesBox{
+          padding:12px!important;
+        }
+
+        #auroAtencionesBox .auro-atenciones-header{
+          flex-direction:column!important;
+          align-items:stretch!important;
+        }
+
+        #auroAtencionesBox .auro-atenciones-title h5{
+          font-size:16px!important;
+          margin-bottom:2px!important;
+        }
+
+        #auroAtencionesBox .auro-atenciones-title h5 .desktop-title{
+          display:none!important;
+        }
+
+        #auroAtencionesBox .auro-atenciones-title h5 .mobile-title{
+          display:inline!important;
+        }
+
+        #auroAtencionesBox .auro-atenciones-actions{
+          display:grid!important;
+          grid-template-columns:1fr 1fr;
+          gap:6px;
+          width:100%;
+        }
+
+        #auroAtencionesBox .auro-atenciones-actions button{
+          width:100%!important;
+          font-size:12px!important;
+          padding:7px 8px!important;
+          white-space:normal!important;
+          min-height:38px;
+        }
+
+        #auroAtencionesBox #btnFinalizarAtencion{
+          grid-column: span 2;
+        }
+
+        #auroAtencionesBox .auro-atencion-status{
+          font-size:12px!important;
+          padding:8px 10px!important;
+          line-height:1.35;
+        }
+
+        #auroAtencionesBox #auroAtencionesLista .table-responsive{
+          overflow-x:auto;
+          -webkit-overflow-scrolling:touch;
+        }
+
+        #auroAtencionesBox #auroAtencionesLista table{
+          min-width:680px;
+          font-size:12px;
+        }
+
+        #auroAtencionesBox .auro-table-mobile-note{
+          display:block;
+          font-size:11px;
+          color:#64748b;
+          margin-bottom:6px;
+        }
+
+        #auroAtencionesBox #auroAtencionActivaBox .row > div{
+          font-size:12px;
+        }
+
+        #auroAtencionesBox #auroAtencionActivaBox table{
+          min-width:650px;
+          font-size:12px;
+        }
+      }
+
+      @media (min-width: 769px){
+        #auroAtencionesBox .auro-atenciones-title h5 .mobile-title{
+          display:none!important;
+        }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
 
   function safe(v){
     return String(v || '')
@@ -510,23 +608,30 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
     box.id = 'auroAtencionesBox';
     box.className = 'cardx p-3 mb-3';
     box.innerHTML =
-      '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">' +
-        '<div>' +
-          '<h5 class="fw-bold mb-1"><i class="bi bi-journal-medical me-1"></i> Historial de atenciones</h5>' +
+      '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap auro-atenciones-header">' +
+        '<div class="auro-atenciones-title">' +
+          '<h5 class="fw-bold mb-1"><i class="bi bi-journal-medical me-1"></i> <span class="desktop-title">Historial de atenciones</span><span class="mobile-title">Atenciones</span></h5>' +
           '<div class="text-muted small" id="auroAtencionesResumen">Seleccione un paciente para ver sus atenciones.</div>' +
         '</div>' +
-        '<div class="d-flex gap-2 flex-wrap">' +
-          '<button type="button" class="btn-soft" id="btnIniciarAtencion"><i class="bi bi-play-circle me-1"></i> Iniciar atención</button>' +
-          '<button type="button" class="btn-auro" id="btnFinalizarAtencion"><i class="bi bi-check-circle me-1"></i> Finalizar atención</button>' +
+        '<div class="auro-atenciones-actions">' +
+          '<button type="button" class="btn-soft" id="btnToggleConsultasAtencion"><i class="bi bi-eye-slash me-1"></i> Ocultar consultas</button>' +
+          '<button type="button" class="btn-soft" id="btnIniciarAtencion"><i class="bi bi-play-circle me-1"></i> Iniciar</button>' +
+          '<button type="button" class="btn-auro" id="btnFinalizarAtencion"><i class="bi bi-check-circle me-1"></i> Finalizar</button>' +
         '</div>' +
       '</div>' +
-      '<div id="auroAtencionActivaBox" class="sheet-note mt-3" style="display:none;"></div>' +
+      '<div id="auroAtencionActivaBox" class="mt-3" style="display:none;"></div>' +
       '<div id="auroAtencionesLista" class="mt-3"></div>';
 
     cardPaciente.parentNode.insertBefore(box, cardPaciente.nextSibling);
 
+    const btnToggleConsultas = $('btnToggleConsultasAtencion');
     const btnIniciar = $('btnIniciarAtencion');
     const btnFinalizar = $('btnFinalizarAtencion');
+
+    if(btnToggleConsultas) btnToggleConsultas.addEventListener('click', function(){
+      consultasVisible = !consultasVisible;
+      renderAtencionesPaciente();
+    });
 
     if(btnIniciar) btnIniciar.addEventListener('click', crearAtencion);
     if(btnFinalizar) btnFinalizar.addEventListener('click', finalizarAtencion);
@@ -541,6 +646,7 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
     const resumen = $('auroAtencionesResumen');
     const lista = $('auroAtencionesLista');
     const activaBox = $('auroAtencionActivaBox');
+    const btnToggleConsultas = $('btnToggleConsultasAtencion');
     const btnIniciar = $('btnIniciarAtencion');
     const btnFinalizar = $('btnFinalizarAtencion');
 
@@ -550,6 +656,7 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
       resumen.textContent = 'Seleccione un paciente para iniciar o revisar atenciones.';
       lista.innerHTML = '<div class="text-muted small">Sin paciente activo.</div>';
       if(activaBox) activaBox.style.display = 'none';
+      if(btnToggleConsultas) btnToggleConsultas.disabled = true;
       if(btnIniciar) btnIniciar.disabled = true;
       if(btnFinalizar) btnFinalizar.disabled = true;
       return;
@@ -557,6 +664,14 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
 
     const arr = atencionesPaciente(idPaciente);
     const abierta = atencionAbierta(idPaciente);
+
+    if(btnToggleConsultas){
+      btnToggleConsultas.disabled = false;
+      btnToggleConsultas.innerHTML = consultasVisible
+        ? '<i class="bi bi-eye-slash me-1"></i> Ocultar consultas'
+        : '<i class="bi bi-eye me-1"></i> Mostrar consultas';
+    }
+
 
     if(btnIniciar){
       btnIniciar.disabled = !!abierta;
@@ -569,8 +684,8 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
       btnFinalizar.style.opacity = abierta ? '1' : '0.55';
       btnFinalizar.style.cursor = abierta ? 'pointer' : 'not-allowed';
       btnFinalizar.innerHTML = abierta
-        ? '<i class="bi bi-check-circle me-1"></i> Finalizar atención'
-        : '<i class="bi bi-lock me-1"></i> Atención cerrada';
+        ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
+        : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
     }
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '');
@@ -579,18 +694,21 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
       activaBox.style.display = 'block';
       if(abierta){
         activaBox.innerHTML =
-          '<div class="alert alert-success mb-0">' +
-          '<b>🟢 ATENCIÓN ABIERTA</b><br>' +
-          'Consulta #' + safe(abierta.numero_consulta) + ' · ' +
-          safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) +
+          '<div class="auro-atencion-status abierta">' +
+          '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) + '<br>' +
+          '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) + '</span>' +
           '</div>';
       }else{
         activaBox.innerHTML =
-          '<div class="alert alert-secondary mb-0">' +
-          '<b>🔵 ATENCIÓN FINALIZADA</b><br>' +
-          'No existe una consulta abierta para este paciente.' +
+          '<div class="auro-atencion-status cerrada">' +
+          '<b>🔵 FINALIZADA</b> · Sin consulta abierta' +
           '</div>';
       }
+    }
+
+    if(!consultasVisible){
+      lista.innerHTML = '<div class="sheet-note mt-2"><i class="bi bi-eye-slash me-1"></i> Consultas ocultas. Presione <b>Mostrar consultas</b> para verlas.</div>';
+      return;
     }
 
     if(!arr.length){
@@ -599,6 +717,7 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
     }
 
     lista.innerHTML =
+      '<div class="auro-table-mobile-note">Deslice la tabla hacia la izquierda para ver todas las columnas.</div>' +
       '<div class="table-responsive">' +
       '<table class="table table-modern align-middle mb-0">' +
       '<thead><tr><th>Consulta</th><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Estado</th><th>Acción</th></tr></thead>' +
@@ -624,6 +743,7 @@ MEJORAS v1.9 A IMPLEMENTAR EN ESTE ARCHIVO
   }
 
   function iniciarModulo(){
+    inyectarEstilosAtenciones();
     asegurarBloque();
     renderAtencionesPaciente();
   }
