@@ -534,18 +534,38 @@
     const arr = atencionesPaciente(idPaciente);
     const abierta = atencionAbierta(idPaciente);
 
-    if(btnIniciar) btnIniciar.disabled = !!abierta;
-    if(btnFinalizar) btnFinalizar.disabled = !abierta;
+    if(btnIniciar){
+      btnIniciar.disabled = !!abierta;
+      btnIniciar.style.opacity = abierta ? '0.55' : '1';
+      btnIniciar.style.cursor = abierta ? 'not-allowed' : 'pointer';
+    }
+
+    if(btnFinalizar){
+      btnFinalizar.disabled = !abierta;
+      btnFinalizar.style.opacity = abierta ? '1' : '0.55';
+      btnFinalizar.style.cursor = abierta ? 'pointer' : 'not-allowed';
+      btnFinalizar.innerHTML = abierta
+        ? '<i class="bi bi-check-circle me-1"></i> Finalizar atención'
+        : '<i class="bi bi-lock me-1"></i> Atención cerrada';
+    }
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '');
 
     if(activaBox){
       activaBox.style.display = 'block';
       if(abierta){
-        activaBox.innerHTML = '<i class="bi bi-play-circle me-1"></i> Atención abierta: <b>Consulta #' +
-          safe(abierta.numero_consulta) + '</b> · ' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion);
+        activaBox.innerHTML =
+          '<div class="alert alert-success mb-0">' +
+          '<b>🟢 ATENCIÓN ABIERTA</b><br>' +
+          'Consulta #' + safe(abierta.numero_consulta) + ' · ' +
+          safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) +
+          '</div>';
       }else{
-        activaBox.innerHTML = '<i class="bi bi-info-circle me-1"></i> No hay atención abierta para este paciente. Presione <b>Iniciar atención</b> al comenzar la consulta.';
+        activaBox.innerHTML =
+          '<div class="alert alert-secondary mb-0">' +
+          '<b>🔵 ATENCIÓN FINALIZADA</b><br>' +
+          'No existe una consulta abierta para este paciente.' +
+          '</div>';
       }
     }
 
