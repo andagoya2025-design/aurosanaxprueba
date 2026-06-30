@@ -1,8 +1,8 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.4
-   Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones
+   Versión: 1.5
+   Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
    Importante:
    - No modifica Plan automáticamente desde Recetas.
@@ -18,6 +18,7 @@
   let recetasPaginaActual = 1;
   const RECETAS_POR_PAGINA = 5;
   let recetasHistorialVisible = true;
+  let recetaAccionesAbiertaId = '';
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -425,6 +426,8 @@
     }
 
     guardarRecetasStorage(lista);
+    recetasHistorialVisible = true;
+    recetaAccionesAbiertaId = '';
 
     const resultado = await enviarRecetaGoogleSheets(r);
 
@@ -461,15 +464,8 @@
   }
 
   function toggleAccionesReceta(id){
-    const menu = el('recAccionesMenu_' + id);
-    if(!menu) return;
-    const abierto = menu.style.display === 'block';
-
-    document.querySelectorAll('[id^="recAccionesMenu_"]').forEach(m => {
-      m.style.display = 'none';
-    });
-
-    menu.style.display = abierto ? 'none' : 'block';
+    recetaAccionesAbiertaId = (String(recetaAccionesAbiertaId) === String(id)) ? '' : String(id);
+    renderHistorialRecetas();
   }
 
   function obtenerRecetasPacienteActivo(){
@@ -481,7 +477,8 @@
     return leerRecetasStorage()
       .filter(r => mostrarTodas || (paciente && coincideConPacienteActivo(r)))
       .filter(r => !fecha || String(r.fecha_receta || '').slice(0,10) === fecha)
-      .filter(r => !q || [r.paciente_nombre,r.paciente_cedula,r.fecha_receta,r.diagnostico_cie10,r.diagnostico,r.medicamento,r.estado,r.id_atencion].join(' ').toLowerCase().includes(q));
+      .filter(r => !q || [r.paciente_nombre,r.paciente_cedula,r.fecha_receta,r.diagnostico_cie10,r.diagnostico,r.medicamento,r.estado,r.id_atencion].join(' ').toLowerCase().includes(q))
+      .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || '')));
   }
 
   function asegurarHistorialRecetas(){
@@ -658,8 +655,9 @@
       const menuId = safe(idRaw.replace(/[^a-zA-Z0-9_-]/g, '_'));
       const meds = recortarTexto(r.medicamento || '', 95);
       const consulta = consultaPorIdAtencion(r.id_atencion || '');
+      const abierto = String(recetaAccionesAbiertaId) === String(menuId);
 
-      return `<tr>
+      const fila = `<tr>
         <td><b>${safe(fechaVisual(r.fecha_receta))}</b></td>
         <td><small class="text-muted">${safe(idRaw || '—')}</small></td>
         <td><span class="badge-auro badge-blue">${safe(consulta)}</span></td>
@@ -667,15 +665,25 @@
         <td>${safe(r.diagnostico_cie10 || '—')}</td>
         <td>${safe(meds)}</td>
         <td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td>
-        <td style="position:relative;">
+        <td>
           <button type="button" class="btn-action primary" onclick="toggleAccionesReceta('${menuId}')">Acciones ▾</button>
-          <div id="recAccionesMenu_${menuId}" class="cardx p-2 bg-white shadow-sm" style="display:none;position:absolute;right:0;z-index:20;min-width:140px;">
-            <button type="button" class="btn-action soft w-100 mb-1" onclick="verRecetaEmitida('${id}')">👁 Ver</button>
-            <button type="button" class="btn-action soft w-100 mb-1" onclick="editarRecetaEmitida('${id}')">✏ Editar</button>
-            <button type="button" class="btn-action success w-100" onclick="pdfRecetaEmitida('${id}')">📄 PDF</button>
-          </div>
         </td>
       </tr>`;
+
+      const detalle = abierto ? `<tr class="receta-acciones-row">
+        <td colspan="8">
+          <div class="cardx p-3 bg-white mt-1 mb-2" style="border-left:4px solid #8b1e5a;">
+            <div class="fw-bold mb-2">Acciones de receta</div>
+            <div class="d-flex flex-column gap-2" style="max-width:220px;">
+              <button type="button" class="btn-action soft text-start" onclick="verRecetaEmitida('${id}')">👁 Ver receta</button>
+              <button type="button" class="btn-action soft text-start" onclick="editarRecetaEmitida('${id}')">✏ Editar receta</button>
+              <button type="button" class="btn-action success text-start" onclick="pdfRecetaEmitida('${id}')">📄 PDF / imprimir</button>
+            </div>
+          </div>
+        </td>
+      </tr>` : '';
+
+      return fila + detalle;
     }).join('');
   };
 
@@ -696,9 +704,45 @@
     }
   }
 
+
+  function refrescarRecetasAlEntrar(){
+    setTimeout(function(){
+      try{
+        if(el('recetas') && el('recetas').classList.contains('active')){
+          asegurarHistorialRecetas();
+          recetasPaginaActual = 1;
+          renderHistorialRecetas();
+        }
+      }catch(e){}
+    }, 250);
+  }
+
+  function envolverRecetasFuncion(nombre, despues){
+    const original = window[nombre];
+    if(typeof original !== 'function' || original.__auroRecetasWrapped) return;
+
+    const nueva = function(){
+      const r = original.apply(this, arguments);
+      setTimeout(despues, 250);
+      return r;
+    };
+
+    nueva.__auroRecetasWrapped = true;
+    window[nombre] = nueva;
+  }
+
   function inicializarRecetas(){
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
-    agregarBotonVistaPrevia(); asegurarVistaPreviaReceta(); asegurarHistorialRecetas(); actualizarBotonGuardarReceta(); renderHistorialRecetas();
+    agregarBotonVistaPrevia();
+    asegurarVistaPreviaReceta();
+    asegurarHistorialRecetas();
+    actualizarBotonGuardarReceta();
+    renderHistorialRecetas();
+
+    envolverRecetasFuncion('showScreen', refrescarRecetasAlEntrar);
+    envolverRecetasFuncion('seleccionarPacienteHistoria', refrescarRecetasAlEntrar);
+    envolverRecetasFuncion('actualizarTarjetaPacienteHistoria', refrescarRecetasAlEntrar);
+
     mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Recetas funciona independiente del Plan. Si edita aquí, no se modifica la historia clínica original.', '');
   }
 
@@ -706,5 +750,5 @@
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.4', totalLocal: leerRecetasStorage().length, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', storageKey: STORAGE_KEY}; };
 })();
