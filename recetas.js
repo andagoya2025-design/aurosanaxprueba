@@ -1,8 +1,8 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.3
-   Función: vista previa profesional + PDF + historial local filtrado por paciente
+   Versión: 1.4
+   Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones
             + edición independiente de recetas + vínculo con atenciones.
    Importante:
    - No modifica Plan automáticamente desde Recetas.
@@ -15,6 +15,9 @@
 
   const STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
   let recetaEditandoId = null;
+  let recetasPaginaActual = 1;
+  const RECETAS_POR_PAGINA = 5;
+  let recetasHistorialVisible = true;
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -437,6 +440,38 @@
     }
   };
 
+
+  function consultaPorIdAtencion(idAtencion){
+    try{
+      if(!idAtencion) return '—';
+      const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+      const arr = raw ? JSON.parse(raw) : [];
+      if(!Array.isArray(arr)) return '—';
+      const a = arr.find(x => String(x.id_atencion || '') === String(idAtencion || ''));
+      return a && a.numero_consulta ? '#' + a.numero_consulta : '—';
+    }catch(e){
+      return '—';
+    }
+  }
+
+  function recortarTexto(valor, max){
+    const txt = String(valor || '').replace(/\s+/g, ' ').trim();
+    if(!txt) return '—';
+    return txt.length > max ? txt.slice(0, max) + '...' : txt;
+  }
+
+  function toggleAccionesReceta(id){
+    const menu = el('recAccionesMenu_' + id);
+    if(!menu) return;
+    const abierto = menu.style.display === 'block';
+
+    document.querySelectorAll('[id^="recAccionesMenu_"]').forEach(m => {
+      m.style.display = 'none';
+    });
+
+    menu.style.display = abierto ? 'none' : 'block';
+  }
+
   function obtenerRecetasPacienteActivo(){
     const paciente = obtenerPacienteActivoSeguro();
     const mostrarTodas = el('recMostrarTodas')?.checked === true;
@@ -452,36 +487,202 @@
   function asegurarHistorialRecetas(){
     const seccion = el('recetas'); if(!seccion) return null;
     let box = el('recetasHistorialBox'); if(box) return box;
+
     box = document.createElement('div');
-    box.id = 'recetasHistorialBox'; box.className = 'cardx p-4 bg-white mt-4';
+    box.id = 'recetasHistorialBox';
+    box.className = 'cardx p-4 bg-white mt-4';
     box.innerHTML = `
-      <div class="section-head"><div><h4 class="fw-bold">Recetas emitidas</h4><p class="text-muted">Historial local del paciente activo. Puede ver, editar o reimprimir.</p></div><button type="button" class="btn-soft" id="btnNuevaRecetaERP"><i class="bi bi-plus-circle me-1"></i> Nueva receta</button></div>
-      <div class="row g-2 mb-3"><div class="col-md-5"><input id="recHistorialBuscar" class="form-control" placeholder="Buscar por medicamento, diagnóstico, CIE-10 o paciente"></div><div class="col-md-3"><input id="recHistorialFecha" type="date" class="form-control"></div><div class="col-md-2"><button type="button" class="btn-soft w-100" id="btnLimpiarFiltroRecetas">Limpiar</button></div><div class="col-md-2 d-flex align-items-center"><label class="small text-muted mb-0"><input type="checkbox" id="recMostrarTodas" class="me-1"> Todas</label></div></div>
-      <div class="table-responsive"><table class="table table-modern align-middle"><thead><tr><th>Fecha</th><th>Paciente</th><th>CIE-10</th><th>Medicamentos</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="recetasHistorialBody"><tr><td colspan="6" class="text-center text-muted py-4">Sin recetas emitidas.</td></tr></tbody></table></div>`;
+      <div class="section-head">
+        <div>
+          <h4 class="fw-bold mb-1">Recetas emitidas</h4>
+          <p class="text-muted mb-1">Historial local del paciente activo. Puede ver, editar o reimprimir.</p>
+          <div class="small text-muted" id="recetasContador">Total recetas encontradas: 0</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="button" class="btn-soft" id="btnToggleRecetasHistorial"><i class="bi bi-eye-slash me-1"></i> Ocultar recetas</button>
+          <button type="button" class="btn-soft" id="btnNuevaRecetaERP"><i class="bi bi-plus-circle me-1"></i> Nueva receta</button>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3" id="recetasFiltrosBox">
+        <div class="col-md-5">
+          <input id="recHistorialBuscar" class="form-control" placeholder="Buscar por medicamento, diagnóstico, CIE-10 o paciente">
+        </div>
+        <div class="col-md-3">
+          <input id="recHistorialFecha" type="date" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <button type="button" class="btn-soft w-100" id="btnLimpiarFiltroRecetas">Limpiar</button>
+        </div>
+        <div class="col-md-2 d-flex align-items-center">
+          <label class="small text-muted mb-0">
+            <input type="checkbox" id="recMostrarTodas" class="me-1"> Mostrar todas
+          </label>
+        </div>
+      </div>
+
+      <div id="recetasHistorialContenido">
+        <div class="table-responsive">
+          <table class="table table-modern align-middle">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>ID receta</th>
+                <th>Consulta</th>
+                <th>Paciente</th>
+                <th>CIE-10</th>
+                <th>Medicamento</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="recetasHistorialBody">
+              <tr><td colspan="8" class="text-center text-muted py-4">Sin recetas emitidas.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2" id="recetasPaginacionBox">
+          <button type="button" class="btn-soft" id="btnRecetasAnterior">Anterior</button>
+          <div class="small text-muted fw-bold" id="recetasPaginaInfo">Página 1 de 1</div>
+          <button type="button" class="btn-soft" id="btnRecetasSiguiente">Siguiente</button>
+        </div>
+      </div>
+    `;
+
     const preview = asegurarVistaPreviaReceta();
-    if(preview && preview.parentNode) preview.parentNode.insertBefore(box, preview); else seccion.querySelector('.cardx')?.appendChild(box);
+    if(preview && preview.parentNode) preview.parentNode.insertBefore(box, preview);
+    else seccion.querySelector('.cardx')?.appendChild(box);
+
     setTimeout(() => {
       el('btnNuevaRecetaERP')?.addEventListener('click', limpiarFormularioReceta);
-      el('btnLimpiarFiltroRecetas')?.addEventListener('click', function(){ setVal('recHistorialBuscar', ''); setVal('recHistorialFecha', ''); renderHistorialRecetas(); });
-      el('recHistorialBuscar')?.addEventListener('input', renderHistorialRecetas);
-      el('recHistorialFecha')?.addEventListener('change', renderHistorialRecetas);
-      el('recMostrarTodas')?.addEventListener('change', renderHistorialRecetas);
+
+      el('btnToggleRecetasHistorial')?.addEventListener('click', function(){
+        recetasHistorialVisible = !recetasHistorialVisible;
+        renderHistorialRecetas();
+      });
+
+      el('btnLimpiarFiltroRecetas')?.addEventListener('click', function(){
+        setVal('recHistorialBuscar', '');
+        setVal('recHistorialFecha', '');
+        recetasPaginaActual = 1;
+        renderHistorialRecetas();
+      });
+
+      el('recHistorialBuscar')?.addEventListener('input', function(){
+        recetasPaginaActual = 1;
+        renderHistorialRecetas();
+      });
+
+      el('recHistorialFecha')?.addEventListener('change', function(){
+        recetasPaginaActual = 1;
+        renderHistorialRecetas();
+      });
+
+      el('recMostrarTodas')?.addEventListener('change', function(){
+        recetasPaginaActual = 1;
+        renderHistorialRecetas();
+      });
+
+      el('btnRecetasAnterior')?.addEventListener('click', function(){
+        if(recetasPaginaActual > 1){
+          recetasPaginaActual--;
+          renderHistorialRecetas();
+        }
+      });
+
+      el('btnRecetasSiguiente')?.addEventListener('click', function(){
+        const total = obtenerRecetasPacienteActivo().length;
+        const totalPaginas = Math.max(1, Math.ceil(total / RECETAS_POR_PAGINA));
+        if(recetasPaginaActual < totalPaginas){
+          recetasPaginaActual++;
+          renderHistorialRecetas();
+        }
+      });
     }, 0);
+
     return box;
   }
 
   window.renderHistorialRecetas = function(){
-    asegurarHistorialRecetas(); const body = el('recetasHistorialBody'); if(!body) return;
+    asegurarHistorialRecetas();
+
+    const body = el('recetasHistorialBody');
+    const contador = el('recetasContador');
+    const contenido = el('recetasHistorialContenido');
+    const filtros = el('recetasFiltrosBox');
+    const btnToggle = el('btnToggleRecetasHistorial');
+    const pagInfo = el('recetasPaginaInfo');
+    const btnAnt = el('btnRecetasAnterior');
+    const btnSig = el('btnRecetasSiguiente');
+
+    if(!body) return;
+
     const recetas = obtenerRecetasPacienteActivo();
-    if(!recetas.length){ body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin recetas emitidas para este paciente activo.</td></tr>'; return; }
-    body.innerHTML = recetas.map(r => {
-      const id = safe(r.id_receta); const meds = String(r.medicamento || '').replace(/\n+/g, ' · ');
-      return `<tr><td><b>${safe(fechaVisual(r.fecha_receta))}</b></td><td>${safe(r.paciente_nombre || '—')}<br><small class="text-muted">${safe(r.paciente_cedula || '')}</small></td><td>${safe(r.diagnostico_cie10 || '—')}</td><td>${safe(meds.length > 80 ? meds.slice(0,80) + '...' : meds || '—')}</td><td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td><td><div class="patient-action-group"><button type="button" class="btn-action primary" onclick="verRecetaEmitida('${id}')">Ver</button><button type="button" class="btn-action soft" onclick="editarRecetaEmitida('${id}')">Editar</button><button type="button" class="btn-action success" onclick="pdfRecetaEmitida('${id}')">PDF</button></div></td></tr>`;
+
+    if(contador){
+      contador.textContent = 'Total recetas encontradas: ' + recetas.length;
+    }
+
+    if(btnToggle){
+      btnToggle.innerHTML = recetasHistorialVisible
+        ? '<i class="bi bi-eye-slash me-1"></i> Ocultar recetas'
+        : '<i class="bi bi-eye me-1"></i> Mostrar recetas';
+    }
+
+    if(filtros) filtros.style.display = recetasHistorialVisible ? '' : 'none';
+    if(contenido) contenido.style.display = recetasHistorialVisible ? '' : 'none';
+
+    if(!recetasHistorialVisible){
+      return;
+    }
+
+    const totalPaginas = Math.max(1, Math.ceil(recetas.length / RECETAS_POR_PAGINA));
+    if(recetasPaginaActual > totalPaginas) recetasPaginaActual = totalPaginas;
+    if(recetasPaginaActual < 1) recetasPaginaActual = 1;
+
+    const inicio = (recetasPaginaActual - 1) * RECETAS_POR_PAGINA;
+    const pagina = recetas.slice(inicio, inicio + RECETAS_POR_PAGINA);
+
+    if(pagInfo) pagInfo.textContent = 'Página ' + recetasPaginaActual + ' de ' + totalPaginas;
+    if(btnAnt) btnAnt.disabled = recetasPaginaActual <= 1;
+    if(btnSig) btnSig.disabled = recetasPaginaActual >= totalPaginas;
+
+    if(!pagina.length){
+      body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Sin recetas emitidas para este paciente activo.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = pagina.map(r => {
+      const idRaw = String(r.id_receta || '');
+      const id = safe(idRaw);
+      const menuId = safe(idRaw.replace(/[^a-zA-Z0-9_-]/g, '_'));
+      const meds = recortarTexto(r.medicamento || '', 95);
+      const consulta = consultaPorIdAtencion(r.id_atencion || '');
+
+      return `<tr>
+        <td><b>${safe(fechaVisual(r.fecha_receta))}</b></td>
+        <td><small class="text-muted">${safe(idRaw || '—')}</small></td>
+        <td><span class="badge-auro badge-blue">${safe(consulta)}</span></td>
+        <td>${safe(r.paciente_nombre || '—')}<br><small class="text-muted">${safe(r.paciente_cedula || '')}</small></td>
+        <td>${safe(r.diagnostico_cie10 || '—')}</td>
+        <td>${safe(meds)}</td>
+        <td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td>
+        <td style="position:relative;">
+          <button type="button" class="btn-action primary" onclick="toggleAccionesReceta('${menuId}')">Acciones ▾</button>
+          <div id="recAccionesMenu_${menuId}" class="cardx p-2 bg-white shadow-sm" style="display:none;position:absolute;right:0;z-index:20;min-width:140px;">
+            <button type="button" class="btn-action soft w-100 mb-1" onclick="verRecetaEmitida('${id}')">👁 Ver</button>
+            <button type="button" class="btn-action soft w-100 mb-1" onclick="editarRecetaEmitida('${id}')">✏ Editar</button>
+            <button type="button" class="btn-action success w-100" onclick="pdfRecetaEmitida('${id}')">📄 PDF</button>
+          </div>
+        </td>
+      </tr>`;
     }).join('');
   };
 
   function buscarRecetaPorId(id){ return leerRecetasStorage().find(r => String(r.id_receta) === String(id)); }
   function recetaGuardadaAFormatoPreview(r){ return {id_receta:r.id_receta,id_atencion:r.id_atencion,paciente:{id_paciente:r.id_paciente,nombre:r.paciente_nombre,cedula:r.paciente_cedula,telefono:r.paciente_telefono},fecha:r.fecha_receta,medico:r.medico,cie10:r.diagnostico_cie10,estado:r.estado,diagnostico:r.diagnostico,medicamento:r.medicamento,indicaciones:r.indicaciones,recomendaciones:r.recomendaciones}; }
+
+  window.toggleAccionesReceta = toggleAccionesReceta;
 
   window.verRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); const box = asegurarVistaPreviaReceta(); if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r)); mostrarMensajeReceta('<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.', ''); };
   window.editarRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); cargarRecetaEnFormulario(r); window.scrollTo({top: el('recetas')?.offsetTop || 0, behavior:'smooth'}); };
@@ -505,5 +706,5 @@
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.3', totalLocal: leerRecetasStorage().length, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.4', totalLocal: leerRecetasStorage().length, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', storageKey: STORAGE_KEY}; };
 })();
