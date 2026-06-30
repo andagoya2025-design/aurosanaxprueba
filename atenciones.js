@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 1.5 conectada a Google Sheets
+   Versión: 1.6 conectada a Google Sheets
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -12,7 +12,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_ATENCIONES_V1_5_SHEETS';
+  const MODULO = 'AUROSANAX_ATENCIONES_V1_6_SHEETS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
@@ -392,6 +392,15 @@
     return txt.length > max ? txt.slice(0, max) + '...' : txt;
   }
 
+  function ocultarDetalleAtencion(){
+    const box = $('auroAtencionActivaBox');
+    if(box){
+      box.style.display = 'none';
+      box.innerHTML = '';
+    }
+    atencionActivaId = '';
+  }
+
   function renderDetalleAtencion(a){
     const box = $('auroAtencionActivaBox');
     if(!box || !a) return;
@@ -432,9 +441,12 @@
           '<div class="fw-bold"><i class="bi bi-eye me-1"></i> Consulta #' + safe(a.numero_consulta) + '</div>' +
           '<div class="text-muted small">ID atención: ' + safe(a.id_atencion || '—') + '</div>' +
         '</div>' +
-        '<span class="badge-auro ' + (String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok') + '">' +
-          safe(a.estado_atencion || '—') +
-        '</span>' +
+        '<div class="d-flex gap-2 align-items-center flex-wrap">' +
+          '<span class="badge-auro ' + (String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok') + '">' +
+            safe(a.estado_atencion || '—') +
+          '</span>' +
+          '<button type="button" class="btn-action soft" id="btnOcultarDetalleAtencion">Ocultar</button>' +
+        '</div>' +
       '</div>' +
       '<div class="row g-2 mt-2">' +
         '<div class="col-md-3"><b>Fecha:</b><br>' + safe(fechaVisual(a.fecha_atencion)) + '</div>' +
@@ -445,6 +457,9 @@
         '<div class="col-md-6"><b>ID cita:</b><br>' + safe(a.id_cita || '—') + '</div>' +
       '</div>' +
       recetasHTML;
+
+    const btnOcultar = $('btnOcultarDetalleAtencion');
+    if(btnOcultar) btnOcultar.addEventListener('click', ocultarDetalleAtencion);
   }
 
   function seleccionarAtencion(idAtencion){
