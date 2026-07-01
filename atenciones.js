@@ -17,6 +17,8 @@
 
   let atencionActivaId = '';
   let consultasVisible = true;
+  let atencionesSheetsCargadas = false;
+  let atencionesSheetsCargando = false;
 
   function $(id){ return document.getElementById(id); }
 
@@ -230,6 +232,63 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
     }catch(e){
       console.warn(MODULO, 'No se pudo guardar localStorage.', e);
+    }
+  }
+
+  function mezclarAtencionesLocalesYSheets(remotas){
+    const locales = leerLocal().map(normalizar);
+    const mapa = new Map();
+
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+      const a = normalizar(item || {});
+      if(a.id_atencion){
+        mapa.set(String(a.id_atencion), a);
+      }
+    });
+
+    locales.forEach(item => {
+      const a = normalizar(item || {});
+      if(a.id_atencion){
+        mapa.set(String(a.id_atencion), Object.assign({}, mapa.get(String(a.id_atencion)) || {}, a));
+      }
+    });
+
+    const mezcladas = Array.from(mapa.values()).sort((a,b) => {
+      const na = Number(a.numero_consulta || 0);
+      const nb = Number(b.numero_consulta || 0);
+      if(na !== nb) return nb - na;
+      return String(b.fecha_atencion + ' ' + b.hora_atencion).localeCompare(String(a.fecha_atencion + ' ' + a.hora_atencion));
+    });
+
+    guardarLocal(mezcladas);
+    return mezcladas;
+  }
+
+  async function cargarAtencionesDesdeSheets(forzar){
+    try{
+      if(atencionesSheetsCargando) return leerLocal();
+      if(atencionesSheetsCargadas && !forzar) return leerLocal();
+
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return leerLocal();
+      }
+
+      atencionesSheetsCargando = true;
+
+      const res = await fetch(API_URL + '?accion=listarAtenciones&_=' + Date.now());
+      const data = await res.json();
+      const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+
+      const mezcladas = mezclarAtencionesLocalesYSheets(remotas);
+      atencionesSheetsCargadas = true;
+      atencionesSheetsCargando = false;
+
+      return mezcladas;
+
+    }catch(error){
+      atencionesSheetsCargando = false;
+      console.warn(MODULO, 'No se pudieron cargar atenciones desde Google Sheets.', error);
+      return leerLocal();
     }
   }
 
@@ -746,18 +805,17 @@
     if(!resumen || !lista) return;
 
     if(!idPaciente){
-
       setTimeout(function(){
         const nuevoId = idPacienteActivo();
         if(nuevoId){
-          renderAtencionesPaciente();
+          cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente);
         }
       },300);
 
       setTimeout(function(){
         const nuevoId = idPacienteActivo();
         if(nuevoId){
-          renderAtencionesPaciente();
+          cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente);
         }
       },1000);
 
@@ -819,6 +877,12 @@
       return;
     }
 
+    if(!arr.length && !atencionesSheetsCargadas && !atencionesSheetsCargando){
+      lista.innerHTML = '<div class="text-muted small">Cargando atenciones desde Google Sheets...</div>';
+      cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente);
+      return;
+    }
+
     if(!arr.length){
       lista.innerHTML = '<div class="text-muted small">Este paciente aún no tiene atenciones registradas.</div>';
       return;
@@ -870,6 +934,10 @@
     inyectarEstilosAtenciones();
     asegurarBloque();
     renderAtencionesPaciente();
+
+    cargarAtencionesDesdeSheets(false).then(function(){
+      renderAtencionesPaciente();
+    });
   }
 
   function envolverFuncion(nombre, despues){
@@ -893,33 +961,21 @@
         if($('historia') && $('historia').classList.contains('active')) iniciarModulo();
       });
       envolverFuncion('seleccionarPacienteHistoria', function(){
-        setTimeout(renderAtencionesPaciente,100);
+        setTimeout(function(){ cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente); },100);
         setTimeout(renderAtencionesPaciente,500);
       });
 
       envolverFuncion('actualizarTarjetaPacienteHistoria', function(){
-        setTimeout(renderAtencionesPaciente,100);
+        setTimeout(function(){ cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente); },100);
         setTimeout(renderAtencionesPaciente,500);
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
-        setTimeout(renderAtencionesPaciente,300);
+        setTimeout(function(){ cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente); },300);
         setTimeout(renderAtencionesPaciente,800);
       });
     }, 700);
   });
-
-  setInterval(function(){
-    try{
-      if(document.hidden) return;
-      if($('historia') && $('historia').classList.contains('active')){
-        const id = idPacienteActivo();
-        if(id){
-          renderAtencionesPaciente();
-        }
-      }
-    }catch(e){}
-  },2000);
 
   window.sincronizarAtencionesLocales = async function(){
     const lista = leerLocal();
@@ -941,6 +997,13 @@
   };
 
   window.renderAtencionesPaciente = renderAtencionesPaciente;
+  window.cargarAtencionesDesdeSheets = cargarAtencionesDesdeSheets;
+  window.refrescarAtencionesDesdeSheets = function(){
+    return cargarAtencionesDesdeSheets(true).then(function(){
+      renderAtencionesPaciente();
+      return leerLocal();
+    });
+  };
   window.iniciarAtencionActual = crearAtencion;
   window.finalizarAtencionActual = finalizarAtencion;
   window.seleccionarAtencion = seleccionarAtencion;
@@ -957,6 +1020,8 @@
       modulo: MODULO,
       total: leerLocal().length,
       paciente_activo: idPacienteActivo(),
+      sheets_cargadas: atencionesSheetsCargadas,
+      sheets_cargando: atencionesSheetsCargando,
       atencion_activa: window.getAtencionActiva()
     };
   };
