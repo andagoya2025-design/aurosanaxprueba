@@ -283,8 +283,53 @@
   }
 
   function idPacienteActivo(){
-    const p = pacienteActivo();
-    return p && (p.id_paciente || p.id || p.cedula) ? String(p.id_paciente || p.id || p.cedula) : '';
+
+    try{
+
+      const p = pacienteActivo();
+
+      if(p && (p.id_paciente || p.id || p.cedula)){
+        return String(p.id_paciente || p.id || p.cedula);
+      }
+
+      if(window.activePatientId) return String(window.activePatientId);
+      if(window.currentPatientId) return String(window.currentPatientId);
+
+      if(window.pacienteActivo &&
+         (window.pacienteActivo.id_paciente || window.pacienteActivo.id || window.pacienteActivo.cedula)){
+        return String(
+          window.pacienteActivo.id_paciente ||
+          window.pacienteActivo.id ||
+          window.pacienteActivo.cedula
+        );
+      }
+
+      if(window.historiaActual &&
+         (window.historiaActual.id_paciente || window.historiaActual.paciente_id || window.historiaActual.cedula)){
+        return String(
+          window.historiaActual.id_paciente ||
+          window.historiaActual.paciente_id ||
+          window.historiaActual.cedula
+        );
+      }
+
+      if(window.currentHistoria &&
+         (window.currentHistoria.id_paciente || window.currentHistoria.paciente_id || window.currentHistoria.cedula)){
+        return String(
+          window.currentHistoria.id_paciente ||
+          window.currentHistoria.paciente_id ||
+          window.currentHistoria.cedula
+        );
+      }
+
+      const sel = $('hcPacienteSelect');
+      if(sel && sel.value) return String(sel.value);
+
+    }catch(e){
+      console.warn(MODULO,'Error obteniendo paciente activo',e);
+    }
+
+    return '';
   }
 
   function medicoActual(){
@@ -326,33 +371,12 @@
   }
 
   function atencionesPaciente(idPaciente){
-    const id = String(idPaciente || idPacienteActivo() || '').trim();
+    const id = idPaciente || idPacienteActivo();
     if(!id) return [];
-
-    const paciente = pacienteActivo() || {};
-    const cedulaPaciente = String(
-      paciente.numero_documento ||
-      paciente.cedula ||
-      paciente.documento ||
-      ''
-    ).replace(/\D/g,'');
 
     return leerLocal()
       .map(normalizar)
-      .filter(a => {
-        const idAt = String(a.id_paciente || '').trim();
-        const cedAt = String(
-          a.numero_documento ||
-          a.cedula ||
-          a.documento ||
-          ''
-        ).replace(/\D/g,'');
-
-        return (
-          idAt === id ||
-          (cedulaPaciente && cedAt && cedulaPaciente === cedAt)
-        );
-      })
+      .filter(a => String(a.id_paciente) === String(id))
       .sort((a,b) => {
         const na = Number(a.numero_consulta || 0);
         const nb = Number(b.numero_consulta || 0);
@@ -452,6 +476,13 @@
   function crearAtencion(){
     const p = pacienteActivo();
     const idPaciente = idPacienteActivo();
+
+    if(!idPaciente){
+      setTimeout(function(){
+        const nuevoId = idPacienteActivo();
+        if(nuevoId) renderAtencionesPaciente();
+      },300);
+    }
 
     if(!p || !idPaciente){
       alert('Seleccione primero un paciente desde Pacientes o Historia Clínica.');
@@ -830,14 +861,38 @@
   }
 
   document.addEventListener('DOMContentLoaded', function(){
+
     setTimeout(function(){
+
       iniciarModulo();
+
       envolverFuncion('showScreen', function(){
-        if($('historia') && $('historia').classList.contains('active')) iniciarModulo();
+        if($('historia') && $('historia').classList.contains('active')){
+          setTimeout(renderAtencionesPaciente,300);
+          setTimeout(renderAtencionesPaciente,700);
+        }
       });
-      envolverFuncion('seleccionarPacienteHistoria', renderAtencionesPaciente);
-      envolverFuncion('actualizarTarjetaPacienteHistoria', renderAtencionesPaciente);
-    }, 700);
+
+      envolverFuncion('seleccionarPacienteHistoria', function(){
+        setTimeout(renderAtencionesPaciente,100);
+        setTimeout(renderAtencionesPaciente,400);
+        setTimeout(renderAtencionesPaciente,900);
+      });
+
+      envolverFuncion('actualizarTarjetaPacienteHistoria', function(){
+        setTimeout(renderAtencionesPaciente,100);
+        setTimeout(renderAtencionesPaciente,400);
+      });
+
+      envolverFuncion('abrirHistoriaPaciente', function(){
+        setTimeout(renderAtencionesPaciente,300);
+        setTimeout(renderAtencionesPaciente,800);
+      });
+
+    },700);
+
+  });
+
   });
 
   window.sincronizarAtencionesLocales = async function(){
