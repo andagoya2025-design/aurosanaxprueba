@@ -1,11 +1,14 @@
 /****************************************************************
  AUROSANAX ERP
  plan.js
- MODULACIÓN PLAN - FASE 1.1
+ MODULACIÓN PLAN - FASE 1.2 SEGURA
+ - Basado en Fase 1.1 estable.
+ - NO usa interceptor global.
+ - NO bloquea navegación.
+ - Solo protege el botón del Plan:
+   Guardar / Actualizar plan clínico.
  - Mantiene limpieza por id_atencion.
- - Mejora botón Guardar/Actualizar plan clínico.
- - Bloquea doble clic para evitar duplicidad.
- - Mejora responsive Android/teléfono.
+ - Mantiene responsive Android/teléfono.
  - No toca Recetas, Atenciones, Pacientes, Agenda ni Dashboard.
 ****************************************************************/
 
@@ -127,7 +130,7 @@ function limpiarMedicamentosPlan(){
 }
 
 /* ============================================================
-   BOTÓN PLAN: BLOQUEO, ESTADO VISUAL Y CERO DUPLICIDAD
+   BOTÓN PLAN: PROTECCIÓN LOCAL Y SEGURA
 ============================================================ */
 
 function auroPlanBuscarBotonPrincipal(){
@@ -138,6 +141,14 @@ function auroPlanBuscarBotonPrincipal(){
 function auroPlanTextoBotonNormal(){
     const esEdicion = !!window.editingHistoryId || !!document.querySelector('#auroPlanPreviosBox:not([style*="display: none"])');
     return '<i class="bi bi-list-check me-1"></i> ' + (esEdicion ? 'Actualizar plan clínico' : 'Guardar plan clínico');
+}
+
+function auroPlanTextoGuardando(){
+    return '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
+}
+
+function auroPlanTextoGuardado(){
+    return '<i class="bi bi-check2-circle me-1"></i> Plan actualizado correctamente';
 }
 
 function auroPlanSetEstadoVisual(tipo, mensaje){
@@ -157,25 +168,56 @@ function auroPlanSetEstadoVisual(tipo, mensaje){
     if(status){
         status.className = 'auro-save-status ' + (tipo || '');
         status.textContent = mensaje || '';
+        status.style.display = mensaje ? 'block' : 'none';
     }
 }
 
-async function guardarPlanClinicoSeguro(){
+function auroPlanEstadoBotonGuardando(btn){
+    if(!btn) return;
+
+    btn.disabled = true;
+    btn.classList.add('auro-plan-btn-saving');
+    btn.classList.remove('auro-plan-btn-ok');
+    btn.innerHTML = auroPlanTextoGuardando();
+}
+
+function auroPlanEstadoBotonGuardado(btn){
+    if(!btn) return;
+
+    btn.disabled = true;
+    btn.classList.remove('auro-plan-btn-saving');
+    btn.classList.add('auro-plan-btn-ok');
+    btn.innerHTML = auroPlanTextoGuardado();
+}
+
+function auroPlanEstadoBotonNormal(btn){
+    if(!btn) return;
+
+    btn.disabled = false;
+    btn.classList.remove('auro-plan-btn-saving');
+    btn.classList.remove('auro-plan-btn-ok');
+    btn.innerHTML = auroPlanTextoBotonNormal();
+}
+
+/* ============================================================
+   GUARDADO SEGURO DEL PLAN
+   NO INTERCEPTA NINGÚN OTRO BOTÓN DEL ERP
+============================================================ */
+
+async function guardarPlanClinicoSeguro(event){
+
+    if(event && typeof event.preventDefault === 'function'){
+        event.preventDefault();
+    }
 
     if(window.auroPlanGuardando) return false;
 
     const btn = auroPlanBuscarBotonPrincipal();
-    const textoNormal = btn ? btn.innerHTML : auroPlanTextoBotonNormal();
 
     try{
         window.auroPlanGuardando = true;
 
-        if(btn){
-            btn.disabled = true;
-            btn.classList.add('auro-plan-btn-saving');
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
-        }
-
+        auroPlanEstadoBotonGuardando(btn);
         auroPlanSetEstadoVisual('', 'Guardando plan clínico...');
 
         if(typeof guardarPlanTemporal === 'function') guardarPlanTemporal();
@@ -183,35 +225,43 @@ async function guardarPlanClinicoSeguro(){
         if(typeof auroSincronizarPlanAntesGuardar === 'function'){
             auroSincronizarPlanAntesGuardar();
         }else{
+            if(typeof recopilarEvaluacionesPlan === 'function') recopilarEvaluacionesPlan();
+            if(typeof recopilarInterconsultaPlan === 'function') recopilarInterconsultaPlan();
+            if(typeof recopilarOrdenesMedicasPlan === 'function') recopilarOrdenesMedicasPlan();
             if(typeof renderMedicamentosPlanTabla === 'function') renderMedicamentosPlanTabla();
             if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
         }
 
-        if(typeof window.guardarHistoriaClinicaERP === 'function'){
-            const resultado = await window.guardarHistoriaClinicaERP();
-            auroPlanSetEstadoVisual('ok', 'Plan clínico actualizado correctamente.');
-            return resultado;
+        if(typeof window.guardarHistoriaClinicaERP !== 'function'){
+            auroPlanSetEstadoVisual('error', 'No se encontró la función guardarHistoriaClinicaERP.');
+            auroPlanEstadoBotonNormal(btn);
+            window.auroPlanGuardando = false;
+            return false;
         }
 
-        auroPlanSetEstadoVisual('error', 'No se encontró la función de guardado.');
-        return false;
+        const resultado = await window.guardarHistoriaClinicaERP();
+
+        setTimeout(()=>{
+            auroPlanEstadoBotonGuardado(btn);
+            auroPlanSetEstadoVisual('ok', 'Plan clínico actualizado correctamente.');
+        }, 120);
+
+        setTimeout(()=>{
+            auroPlanEstadoBotonNormal(btn);
+            window.auroPlanGuardando = false;
+        }, 2800);
+
+        return resultado;
 
     }catch(error){
+
         console.error('Error guardando plan clínico:', error);
+
         auroPlanSetEstadoVisual('error', 'No se pudo guardar el plan clínico. Revise la consola.');
+        auroPlanEstadoBotonNormal(btn);
+        window.auroPlanGuardando = false;
+
         return false;
-
-    }finally{
-        setTimeout(()=>{
-            window.auroPlanGuardando = false;
-
-            if(btn){
-                btn.disabled = false;
-                btn.classList.remove('auro-plan-btn-saving');
-                btn.innerHTML = auroPlanTextoBotonNormal() || textoNormal;
-            }
-
-        }, 900);
     }
 }
 
@@ -219,9 +269,13 @@ function instalarProteccionBotonPlan(){
 
     const btn = auroPlanBuscarBotonPrincipal();
 
-    if(btn && btn.dataset.auroPlanSeguro !== '1'){
-        btn.dataset.auroPlanSeguro = '1';
-        btn.setAttribute('onclick', 'guardarPlanClinicoSeguro()');
+    if(!btn) return;
+
+    btn.dataset.auroPlanBtn = '1';
+    btn.dataset.auroPlanSeguro = '1';
+    btn.setAttribute('onclick', 'return guardarPlanClinicoSeguro(event);');
+
+    if(!window.auroPlanGuardando && !btn.classList.contains('auro-plan-btn-ok')){
         btn.innerHTML = auroPlanTextoBotonNormal();
     }
 }
@@ -237,6 +291,24 @@ function instalarResponsivePlanAndroid(){
     const style = document.createElement('style');
     style.id = 'auroPlanResponsiveAndroidStyle';
     style.textContent = `
+      .auro-save-status{
+        width:100%;
+        border:1px solid #dbeafe;
+        background:linear-gradient(135deg,#eff6ff,#ffffff);
+        color:#1e3a8a;
+        border-radius:16px;
+        padding:10px 12px;
+        font-size:13px;
+        font-weight:750;
+        margin:10px 0 12px;
+      }
+
+      .auro-save-status.ok{
+        border-color:#bbf7d0;
+        background:#f0fdf4;
+        color:#166534;
+      }
+
       .auro-save-status.error{
         border-color:#fecaca;
         background:#fef2f2;
@@ -245,6 +317,13 @@ function instalarResponsivePlanAndroid(){
 
       .auro-plan-btn-saving{
         opacity:.85;
+        cursor:not-allowed!important;
+      }
+
+      .auro-plan-btn-ok{
+        background:#16a34a!important;
+        color:#fff!important;
+        border-color:#16a34a!important;
         cursor:not-allowed!important;
       }
 
@@ -301,14 +380,16 @@ function instalarResponsivePlanAndroid(){
 }
 
 /* ============================================================
-   OBSERVADOR: SI EL INDEX CREA EL BOTÓN DESPUÉS, LO PROTEGE
+   OBSERVADOR LOCAL SEGURO
+   Solo reinstala el onclick del botón Plan si aparece después.
 ============================================================ */
 
 function observarBotonPlan(){
     instalarProteccionBotonPlan();
 
-    const target = document.body;
-    if(!target || window.auroPlanObserverInstalado) return;
+    const panel = document.getElementById('hc_plan');
+
+    if(!panel || window.auroPlanObserverInstalado) return;
 
     window.auroPlanObserverInstalado = true;
 
@@ -316,7 +397,7 @@ function observarBotonPlan(){
         instalarProteccionBotonPlan();
     });
 
-    observer.observe(target, {
+    observer.observe(panel, {
         childList:true,
         subtree:true
     });
@@ -327,11 +408,15 @@ function observarBotonPlan(){
 ============================================================ */
 
 document.addEventListener('DOMContentLoaded',()=>{
+
     inicializarPlan();
     observarBotonPlan();
+
 });
 
 setTimeout(()=>{
+
     inicializarPlan();
     observarBotonPlan();
+
 }, 800);
