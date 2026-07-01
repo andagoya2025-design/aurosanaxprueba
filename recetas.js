@@ -19,6 +19,7 @@
   const RECETAS_POR_PAGINA = 5;
   let recetasHistorialVisible = true;
   let recetaAccionesAbiertaId = '';
+  let recetaGuardando = false;
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
 
@@ -392,10 +393,28 @@
     box.innerHTML = texto;
   }
 
+  function obtenerBotonGuardarReceta(){
+    return el('btnGuardarRecetaERP') ||
+      document.querySelector('#recetas button[onclick*="guardarRecetaERP"]') ||
+      document.querySelector('button[onclick*="guardarRecetaERP"]');
+  }
+
   function actualizarBotonGuardarReceta(){
-    const btn = el('btnGuardarRecetaERP') || document.querySelector('#recetas button[onclick*="guardarRecetaERP"]');
+    const btn = obtenerBotonGuardarReceta();
     if(btn){
       btn.id = 'btnGuardarRecetaERP';
+
+      if(recetaGuardando){
+        btn.disabled = true;
+        btn.style.opacity = '0.65';
+        btn.style.cursor = 'not-allowed';
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
+        return;
+      }
+
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
       btn.innerHTML = recetaEditandoId
         ? '<i class="bi bi-save me-1"></i> Actualizar receta'
         : '<i class="bi bi-save me-1"></i> Guardar receta';
@@ -576,53 +595,78 @@
   }
 
   window.guardarRecetaERP = async function(){
-    const r = recetaDesdeFormulario();
-
-    if(!r.id_paciente || !r.paciente_nombre){
-      alert('Seleccione primero un paciente para guardar la receta.');
-      if(typeof showScreen === 'function') showScreen('pacientes');
+    if(recetaGuardando){
+      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> La receta ya se está guardando. Espere unos segundos para evitar duplicados.', '');
       return;
     }
 
-    if(!String(r.medicamento || '').trim()){
-      alert('Ingrese medicamentos o prescripción antes de guardar.');
-      return;
-    }
-
-    if(!r.id_atencion){
-      r.id_atencion = obtenerIdAtencionActivaSeguro();
-    }
-
-    const lista = leerRecetasStorage();
-    const idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
-
-    if(idx >= 0){
-      r.creado_en = lista[idx].creado_en || fechaHoraVisual();
-      r.actualizado_en = fechaHoraVisual();
-      lista[idx] = {...lista[idx], ...r};
-      recetaEditandoId = r.id_receta;
-    }else{
-      r.creado_en = fechaHoraVisual();
-      r.actualizado_en = fechaHoraVisual();
-      lista.unshift(r);
-      recetaEditandoId = r.id_receta;
-    }
-
-    guardarRecetasStorage(lista);
-    recetasHistorialVisible = true;
-    recetaAccionesAbiertaId = '';
-
-    const resultado = await enviarRecetaGoogleSheets(r);
-
+    recetaGuardando = true;
     actualizarBotonGuardarReceta();
-    renderHistorialRecetas();
 
-    if(resultado && resultado.success){
-      mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${idx >= 0 ? 'actualizada' : 'guardada'} correctamente y enviada a Google Sheets.`, 'ok');
-      alert('Receta enviada a Google Sheets correctamente.');
-    }else{
-      mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '');
-      alert('Receta guardada localmente, pero no se pudo enviar a Google Sheets.');
+    try{
+      const r = recetaDesdeFormulario();
+
+      if(!r.id_paciente || !r.paciente_nombre){
+        alert('Seleccione primero un paciente para guardar la receta.');
+        if(typeof showScreen === 'function') showScreen('pacientes');
+        return;
+      }
+
+      if(!String(r.medicamento || '').trim()){
+        alert('Ingrese medicamentos o prescripción antes de guardar.');
+        return;
+      }
+
+      if(!r.id_atencion){
+        r.id_atencion = obtenerIdAtencionActivaSeguro();
+      }
+
+      const lista = leerRecetasStorage();
+      let idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
+
+      if(!recetaEditandoId && idx >= 0){
+        r.id_receta = crearIdReceta();
+        idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
+      }
+
+      if(idx >= 0){
+        r.creado_en = lista[idx].creado_en || fechaHoraVisual();
+        r.actualizado_en = fechaHoraVisual();
+        lista[idx] = {...lista[idx], ...r};
+        recetaEditandoId = r.id_receta;
+      }else{
+        r.creado_en = fechaHoraVisual();
+        r.actualizado_en = fechaHoraVisual();
+        lista.unshift(r);
+        recetaEditandoId = r.id_receta;
+      }
+
+      guardarRecetasStorage(lista);
+      recetasHistorialVisible = true;
+      recetaAccionesAbiertaId = '';
+
+      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Guardando receta y enviando a Google Sheets...', '');
+
+      const resultado = await enviarRecetaGoogleSheets(r);
+
+      await cargarRecetasDesdeSheets(true);
+      renderHistorialRecetas();
+      vistaPreviaReceta();
+
+      if(resultado && resultado.success){
+        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${idx >= 0 ? 'actualizada' : 'guardada'} correctamente y enviada a Google Sheets.`, 'ok');
+      }else{
+        mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '');
+        alert('Receta guardada localmente, pero no se pudo enviar a Google Sheets.');
+      }
+
+    }catch(error){
+      console.error('Error guardando receta:', error);
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> Error al guardar receta. Intente nuevamente.', '');
+      alert('Error al guardar receta: ' + (error && error.message ? error.message : error));
+    }finally{
+      recetaGuardando = false;
+      actualizarBotonGuardarReceta();
     }
   };
 
@@ -701,6 +745,27 @@
         </div>
       </div>
 
+      <style>
+        @media (max-width: 768px){
+          #recetasHistorialBox{padding:14px!important;}
+          #recetasHistorialBox .table-responsive{display:none!important;}
+          #recetasHistorialMobile{display:block!important;}
+          #recetasHistorialBox .section-head{display:grid!important;grid-template-columns:1fr auto;gap:10px;align-items:start;}
+          #recetasHistorialBox .section-head h4{font-size:22px!important;line-height:1.05;}
+          #recetasHistorialBox .section-head .d-flex{display:grid!important;grid-template-columns:1fr;gap:8px;}
+          #recetasHistorialBox .section-head button{min-width:130px;white-space:normal;}
+          #recetasFiltrosBox > div{width:100%!important;}
+          .auro-receta-mobile-card{border:1px solid #e5e7eb;border-radius:16px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.06);}
+          .auro-receta-mobile-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px;}
+          .auro-receta-mobile-head b{font-size:14px;}
+          .auro-receta-mobile-card .small{font-size:12px;line-height:1.35;}
+          .auro-receta-mobile-card .btn-action{width:100%;margin-top:8px;}
+        }
+        @media (min-width: 769px){
+          #recetasHistorialMobile{display:none!important;}
+        }
+      </style>
+
       <div id="recetasHistorialContenido">
         <div class="table-responsive">
           <table class="table table-modern align-middle">
@@ -721,6 +786,7 @@
             </tbody>
           </table>
         </div>
+        <div id="recetasHistorialMobile" style="display:none;"></div>
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2" id="recetasPaginacionBox">
           <button type="button" class="btn-soft" id="btnRecetasAnterior">Anterior</button>
           <div class="small text-muted fw-bold" id="recetasPaginaInfo">Página 1 de 1</div>
@@ -792,6 +858,7 @@
     const filtros = el('recetasFiltrosBox');
     const btnToggle = el('btnToggleRecetasHistorial');
     const pagInfo = el('recetasPaginaInfo');
+    const mobile = el('recetasHistorialMobile');
     const btnAnt = el('btnRecetasAnterior');
     const btnSig = el('btnRecetasSiguiente');
 
@@ -837,6 +904,7 @@
 
     if(!pagina.length){
       body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Sin recetas emitidas para este paciente activo.</td></tr>';
+      if(mobile) mobile.innerHTML = '<div class="text-muted small py-3">Sin recetas emitidas para este paciente activo.</div>';
       return;
     }
 
@@ -876,6 +944,28 @@
 
       return fila + detalle;
     }).join('');
+
+    if(mobile){
+      mobile.innerHTML = pagina.map(r => {
+        const idRaw = String(r.id_receta || '');
+        const menuId = safe(idRaw.replace(/[^a-zA-Z0-9_-]/g, '_'));
+        const meds = recortarTexto(r.medicamento || '', 120);
+        const consulta = consultaPorIdAtencion(r.id_atencion || '');
+        const estadoClase = String(r.estado || '').toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
+
+        return '<div class="auro-receta-mobile-card">' +
+          '<div class="auro-receta-mobile-head">' +
+            '<div><b>' + safe(fechaVisual(r.fecha_receta)) + '</b><br><small class="text-muted">' + safe(idRaw || '—') + '</small></div>' +
+            '<span class="badge-auro ' + estadoClase + '">' + safe(r.estado || 'Emitida') + '</span>' +
+          '</div>' +
+          '<div class="small"><b>Consulta:</b> ' + safe(consulta) + '</div>' +
+          '<div class="small"><b>Paciente:</b> ' + safe(r.paciente_nombre || '—') + (r.paciente_cedula ? '<br><span class="text-muted">' + safe(r.paciente_cedula) + '</span>' : '') + '</div>' +
+          '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || '—') + '</div>' +
+          '<div class="small"><b>Medicamento:</b> ' + safe(meds) + '</div>' +
+          '<button type="button" class="btn-action primary" onclick="toggleAccionesReceta(\'' + menuId + '\')">Acciones ▾</button>' +
+        '</div>';
+      }).join('');
+    }
   };
 
   function buscarRecetaPorId(id){ return leerRecetasStorage().find(r => String(r.id_receta) === String(id)); }
@@ -949,5 +1039,5 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
