@@ -680,7 +680,8 @@
       indicaciones: r.indicaciones || '',
       estado: r.estado || 'Emitida',
       paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
-      paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || ''
+      paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || '',
+      numero_consulta: r.numero_consulta || r.consulta || ''
     };
   }
 
@@ -741,30 +742,88 @@
     const idHistoria = String(atencion.id_historia || '').trim();
     const idPaciente = String(atencion.id_paciente || idPacienteActivo() || '').trim();
     const fechaAtencion = String(atencion.fecha_atencion || '').slice(0,10);
-    const numeroConsulta = String(atencion.numero_consulta || '').trim();
+    const numeroConsulta = String(atencion.numero_consulta || '').replace('#','').trim();
 
-    return leerRecetasLocales()
-      .map(normalizarRecetaAtencion)
-      .filter(r => {
+    const recetas = leerRecetasLocales().map(normalizarRecetaAtencion);
+
+    /*
+      Regla principal:
+      Si la receta tiene id_atencion, solo debe mostrarse en esa atención.
+      Esto evita que consulta #1 y consulta #2 muestren la misma receta.
+    */
+    const exactasPorAtencion = recetas.filter(r => {
+      const ridAtencion = String(r.id_atencion || '').trim();
+      return idAtencion && ridAtencion && ridAtencion === idAtencion;
+    });
+
+    if(exactasPorAtencion.length){
+      return exactasPorAtencion.sort((a,b) =>
+        String(b.fecha_receta || '').localeCompare(String(a.fecha_receta || ''))
+      );
+    }
+
+    /*
+      Regla secundaria:
+      Si la receta trae numero_consulta, se asocia por consulta exacta.
+    */
+    const exactasPorConsulta = recetas.filter(r => {
+      const ridAtencion = String(r.id_atencion || '').trim();
+      if(ridAtencion) return false;
+
+      const ridPaciente = String(r.id_paciente || '').trim();
+      const ridHistoria = String(r.id_historia || '').trim();
+      const rFecha = String(r.fecha_receta || '').slice(0,10);
+      const rConsulta = String(r.numero_consulta || r.consulta || '').replace('#','').trim();
+
+      return (
+        idPaciente &&
+        ridPaciente === idPaciente &&
+        fechaAtencion &&
+        rFecha === fechaAtencion &&
+        numeroConsulta &&
+        rConsulta &&
+        rConsulta === numeroConsulta &&
+        (!idHistoria || !ridHistoria || ridHistoria === idHistoria)
+      );
+    });
+
+    if(exactasPorConsulta.length){
+      return exactasPorConsulta.sort((a,b) =>
+        String(b.fecha_receta || '').localeCompare(String(a.fecha_receta || ''))
+      );
+    }
+
+    /*
+      Último respaldo seguro:
+      Solo usar paciente + fecha si hay una única atención ese día.
+      Si hay varias consultas el mismo día, no se usa porque mezclaría recetas.
+    */
+    const atencionesMismoDia = atencionesPaciente(idPaciente).filter(a =>
+      String(a.fecha_atencion || '').slice(0,10) === fechaAtencion
+    );
+
+    if(atencionesMismoDia.length === 1){
+      return recetas.filter(r => {
         const ridAtencion = String(r.id_atencion || '').trim();
-        const ridHistoria = String(r.id_historia || '').trim();
+        if(ridAtencion) return false;
+
         const ridPaciente = String(r.id_paciente || '').trim();
+        const ridHistoria = String(r.id_historia || '').trim();
         const rFecha = String(r.fecha_receta || '').slice(0,10);
 
-        if(idAtencion && ridAtencion && ridAtencion === idAtencion) return true;
+        return (
+          idPaciente &&
+          ridPaciente === idPaciente &&
+          fechaAtencion &&
+          rFecha === fechaAtencion &&
+          (!idHistoria || !ridHistoria || ridHistoria === idHistoria)
+        );
+      }).sort((a,b) =>
+        String(b.fecha_receta || '').localeCompare(String(a.fecha_receta || ''))
+      );
+    }
 
-        if(idHistoria && ridHistoria && ridHistoria === idHistoria && idPaciente && ridPaciente === idPaciente && fechaAtencion && rFecha === fechaAtencion){
-          return true;
-        }
-
-        if(idPaciente && ridPaciente === idPaciente && fechaAtencion && rFecha === fechaAtencion){
-          const rConsulta = String(r.numero_consulta || r.consulta || '').replace('#','').trim();
-          if(!rConsulta || !numeroConsulta || rConsulta === numeroConsulta) return true;
-        }
-
-        return false;
-      })
-      .sort((a,b) => String(b.fecha_receta || '').localeCompare(String(a.fecha_receta || '')));
+    return [];
   }
 
   function resumenTexto(valor, max){
@@ -861,7 +920,13 @@
     }
 
     atencionActivaId = a.id_atencion;
-    renderDetalleAtencion(normalizar(a));
+
+    cargarRecetasDesdeSheetsAtenciones(true).then(function(){
+      const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
+      renderDetalleAtencion(normalizar(actual));
+    }).catch(function(){
+      renderDetalleAtencion(normalizar(a));
+    });
   }
 
   function asegurarBloque(){
@@ -1141,6 +1206,11 @@
     const a = window.getAtencionActiva();
     return a ? a.id_atencion : '';
   };
+  window.__recetasPorAtencionDebug = function(idAtencion){
+    const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
+    return recetasPorAtencion(a ? normalizar(a) : null);
+  };
+
   window.__atencionesAurosanaxDebug = function(){
     return {
       modulo: MODULO,
