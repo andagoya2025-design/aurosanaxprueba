@@ -25,9 +25,15 @@ function setTextIfExists(id, value){
 }
 
 function getPacienteActivo(){
-  const selectId = document.getElementById('hcPacienteSelect')?.value || '';
-  const id = activePatientId || selectId;
-  return patients.find(p => p.id_paciente === id) || null;
+  const select = document.getElementById('hcPacienteSelect');
+
+  if(select && select.value){
+    activePatientId = select.value;
+  }
+
+  return patients.find(
+    p => String(p.id_paciente || '') === String(activePatientId || '')
+  ) || null;
 }
 
 function inicialesPaciente(nombre){
@@ -789,6 +795,8 @@ function seleccionarPacienteHistoria(){
   }
 
   activePatientId = p.id_paciente || idPaciente;
+  window.activePatientId = activePatientId;
+
   const fechaNacimiento = normalizarFechaInput(p.fecha_nacimiento || '');
   const edad = p.edad || calcularEdadDesdeFecha(fechaNacimiento) || '';
 
