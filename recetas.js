@@ -20,6 +20,7 @@
   let recetasHistorialVisible = true;
   let recetaAccionesAbiertaId = '';
   let recetaGuardando = false;
+  let recetaAtencionActualId = '';
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
 
@@ -461,6 +462,32 @@
     vistaPreviaReceta();
   }
 
+  function limpiarEstadoRecetaNuevaDespuesDeGuardar(){
+    recetaEditandoId = null;
+    recetaAtencionActualId = obtenerIdAtencionActivaSeguro() || '';
+
+    setVal('recDiagnostico', '');
+    setVal('recMedicamento', '');
+    setVal('recIndicaciones', '');
+    setVal('recRecomendaciones', '');
+
+    actualizarBotonGuardarReceta();
+
+    const box = el('recetaPreview');
+    if(box){
+      box.innerHTML = `<div class="text-muted text-center py-4">Receta guardada correctamente. Para una nueva atención, agregue medicamentos nuevos desde el Plan o presione <b>Nueva receta</b>.</div>`;
+    }
+  }
+
+  function verificarCambioAtencionReceta(){
+    const actual = obtenerIdAtencionActivaSeguro() || '';
+    if(recetaAtencionActualId && actual && recetaAtencionActualId !== actual){
+      recetaEditandoId = null;
+      actualizarBotonGuardarReceta();
+    }
+    if(actual) recetaAtencionActualId = actual;
+  }
+
   window.obtenerDatosReceta = function(){
     const paciente = obtenerPacienteActivoSeguro();
     const ultimaHistoria = paciente ? obtenerUltimaHistoriaPaciente(paciente.id_paciente || paciente.id) : null;
@@ -605,6 +632,7 @@
   function cargarRecetaEnFormulario(receta){
     if(!receta) return;
     recetaEditandoId = receta.id_receta || receta.id || '';
+    recetaAtencionActualId = receta.id_atencion || obtenerIdAtencionActivaSeguro() || '';
     setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
     setVal('recMedico', receta.medico || 'Dra. Aurora Andagoya');
     setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
@@ -624,6 +652,10 @@
       mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> La receta ya se está guardando. Espere unos segundos para evitar duplicados.', '');
       return;
     }
+
+    verificarCambioAtencionReceta();
+
+    const estabaEditando = !!recetaEditandoId;
 
     recetaGuardando = true;
     actualizarBotonGuardarReceta();
@@ -646,24 +678,24 @@
         r.id_atencion = obtenerIdAtencionActivaSeguro();
       }
 
+      recetaAtencionActualId = r.id_atencion || recetaAtencionActualId || '';
+
       const lista = leerRecetasStorage();
       let idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
 
-      if(!recetaEditandoId && idx >= 0){
+      if(!estabaEditando && idx >= 0){
         r.id_receta = crearIdReceta();
         idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
       }
 
-      if(idx >= 0){
+      if(estabaEditando && idx >= 0){
         r.creado_en = lista[idx].creado_en || fechaHoraVisual();
         r.actualizado_en = fechaHoraVisual();
         lista[idx] = {...lista[idx], ...r};
-        recetaEditandoId = r.id_receta;
       }else{
         r.creado_en = fechaHoraVisual();
         r.actualizado_en = fechaHoraVisual();
         lista.unshift(r);
-        recetaEditandoId = r.id_receta;
       }
 
       guardarRecetasStorage(lista);
@@ -675,14 +707,22 @@
       const resultado = await enviarRecetaGoogleSheets(r);
 
       await cargarRecetasDesdeSheets(true);
+      recetasPaginaActual = 1;
       renderHistorialRecetas();
-      vistaPreviaReceta();
 
       if(resultado && resultado.success){
-        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${idx >= 0 ? 'actualizada' : 'guardada'} correctamente y enviada a Google Sheets.`, 'ok');
+        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente y enviada a Google Sheets.`, 'ok');
       }else{
         mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '');
         alert('Receta guardada localmente, pero no se pudo enviar a Google Sheets.');
+      }
+
+      if(!estabaEditando){
+        limpiarEstadoRecetaNuevaDespuesDeGuardar();
+      }else{
+        recetaEditandoId = r.id_receta;
+        actualizarBotonGuardarReceta();
+        vistaPreviaReceta();
       }
 
     }catch(error){
@@ -984,6 +1024,8 @@
       }
 
       mobile.style.display = esMovil ? 'block' : 'none';
+      mobile.style.width = '100%';
+      mobile.style.clear = 'both';
 
       mobile.innerHTML = pagina.map(r => {
         const idRaw = String(r.id_receta || '');
@@ -1033,6 +1075,7 @@
     setTimeout(function(){
       try{
         if(el('recetas') && el('recetas').classList.contains('active')){
+          verificarCambioAtencionReceta();
           asegurarHistorialRecetas();
           recetasPaginaActual = 1;
           renderHistorialRecetas();
@@ -1083,5 +1126,5 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
