@@ -58,8 +58,76 @@
     return s;
   }
 
+  function obtenerCodigoCortoMedico(){
+    try{
+      let idMedico = '';
+
+      if(typeof window.idMedicoActual === 'string' && window.idMedicoActual.trim()){
+        idMedico = window.idMedicoActual.trim();
+      }
+
+      if(!idMedico && typeof window.getMedicoActivo === 'function'){
+        const m = window.getMedicoActivo();
+        idMedico = String((m && (m.id_medico || m.id || m.codigo)) || '').trim();
+      }
+
+      if(!idMedico && Array.isArray(window.medicos) && window.medicos.length){
+        const nombreMedico = val('recMedico') || 'Dra. Aurora Andagoya';
+        const normal = String(nombreMedico || '')
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+        const encontrado = window.medicos.find(m => {
+          const nombreCompleto = String((m.nombres || '') + ' ' + (m.apellidos || ''))
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+
+          return nombreCompleto && normal && (
+            nombreCompleto.includes(normal) ||
+            normal.includes(nombreCompleto) ||
+            nombreCompleto.includes('aurora')
+          );
+        });
+
+        if(encontrado){
+          idMedico = String(encontrado.id_medico || encontrado.id || encontrado.codigo || '').trim();
+        }
+      }
+
+      if(!idMedico) idMedico = 'MED-001';
+
+      const partes = idMedico.split('-').filter(Boolean);
+      const ultimo = partes.length ? partes[partes.length - 1] : idMedico;
+      const limpio = String(ultimo || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+      return limpio || '001';
+
+    }catch(e){
+      return '001';
+    }
+  }
+
   function crearIdReceta(){
-    return 'REC-' + Date.now() + '-' + Math.random().toString(16).slice(2,8).toUpperCase();
+    const d = new Date();
+
+    const fecha =
+      d.getFullYear() +
+      String(d.getMonth() + 1).padStart(2,'0') +
+      String(d.getDate()).padStart(2,'0');
+
+    const hora =
+      String(d.getHours()).padStart(2,'0') +
+      String(d.getMinutes()).padStart(2,'0') +
+      String(d.getSeconds()).padStart(2,'0');
+
+    const codigoMedico = obtenerCodigoCortoMedico();
+    const control = String(Math.floor(Math.random() * 90) + 10);
+
+    return 'REC-' + fecha + '-' + hora + '-' + codigoMedico + '-' + control;
   }
 
   function obtenerPacienteActivoSeguro(){
