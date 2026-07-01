@@ -26,13 +26,19 @@ function setTextIfExists(id, value){
 
 function getPacienteActivo(){
   const select = document.getElementById('hcPacienteSelect');
+  const selectId = select?.value || '';
+  const id = selectId || activePatientId || window.activePatientId || '';
 
-  if(select && select.value){
-    activePatientId = select.value;
+  if(id){
+    activePatientId = id;
+    window.activePatientId = id;
+    if(select && select.value !== id){
+      select.value = id;
+    }
   }
 
-  return patients.find(
-    p => String(p.id_paciente || '') === String(activePatientId || '')
+  return patients.find(p =>
+    String(p.id_paciente || p.id || '') === String(id)
   ) || null;
 }
 
@@ -599,15 +605,28 @@ function abrirHistoriaPaciente(idPaciente){
     return;
   }
 
-  activePatientId = idPaciente;
+  activePatientId = String(idPaciente);
+  window.activePatientId = activePatientId;
+
   showScreen('historia');
   actualizarSelectorPacientesHistoria();
 
   const select = document.getElementById('hcPacienteSelect');
   if(select){
-    select.value = idPaciente;
-    seleccionarPacienteHistoria();
+    select.value = activePatientId;
   }
+
+  seleccionarPacienteHistoria();
+  renderModulePatientCards();
+
+  setTimeout(() => {
+    const select2 = document.getElementById('hcPacienteSelect');
+    if(select2 && select2.value !== activePatientId){
+      select2.value = activePatientId;
+      seleccionarPacienteHistoria();
+      renderModulePatientCards();
+    }
+  }, 80);
 
   window.scrollTo({top:0, behavior:'smooth'});
 }
@@ -616,13 +635,17 @@ function actualizarSelectorPacientesHistoria(){
   const select = document.getElementById('hcPacienteSelect');
   if(!select) return;
 
-  const valorActual = select.value;
+  const valorActual = select.value || activePatientId || window.activePatientId || '';
   select.innerHTML = '<option value="">Seleccione un paciente registrado</option>' + patients.map(p => {
     const nombre = p.nombre || 'Paciente sin nombre';
     return `<option value="${p.id_paciente || ''}">${nombre}</option>`;
   }).join('');
 
-  if(valorActual) select.value = valorActual;
+  if(valorActual){
+    select.value = valorActual;
+    activePatientId = valorActual;
+    window.activePatientId = valorActual;
+  }
 }
 
 function normalizarFechaInput(valor){
@@ -781,11 +804,15 @@ function actualizarTarjetaPacienteHistoria(paciente){
 }
 
 function seleccionarPacienteHistoria(){
-  const idPaciente = document.getElementById('hcPacienteSelect')?.value || activePatientId || '';
+  const select = document.getElementById('hcPacienteSelect');
+  const idPaciente = select?.value || activePatientId || window.activePatientId || '';
   const p = patients.find(x => String(x.id_paciente || x.id || '') === String(idPaciente));
 
   if(!p){
-    activePatientId = '';
+    if(!idPaciente){
+      activePatientId = '';
+      window.activePatientId = '';
+    }
     ['hcCedula','hcNacimiento','hcEdad','hcOcupacion','hcTelefono','hcCorreo','hcDireccion','hcSeguro','hcContactoEmergencia','hcTelefonoEmergencia','hcTipoSangre','hcAlergiasPaciente'].forEach(id => setValueIfExists(id, ''));
     setValueIfExists('hcSexo', '');
     setValueIfExists('hcEstadoCivil', '');
@@ -796,7 +823,7 @@ function seleccionarPacienteHistoria(){
 
   activePatientId = p.id_paciente || idPaciente;
   window.activePatientId = activePatientId;
-
+  if(select && select.value !== activePatientId) select.value = activePatientId;
   const fechaNacimiento = normalizarFechaInput(p.fecha_nacimiento || '');
   const edad = p.edad || calcularEdadDesdeFecha(fechaNacimiento) || '';
 
@@ -822,3 +849,8 @@ function seleccionarPacienteHistoria(){
   actualizarTarjetaPacienteHistoria(p);
   renderModulePatientCards();
 }
+
+/* AUROSANAX - Sincronización global segura del paciente activo */
+window.getPacienteActivo = getPacienteActivo;
+window.abrirHistoriaPaciente = abrirHistoriaPaciente;
+window.seleccionarPacienteHistoria = seleccionarPacienteHistoria;
