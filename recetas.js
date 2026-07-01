@@ -393,32 +393,57 @@
     box.innerHTML = texto;
   }
 
-  function obtenerBotonGuardarReceta(){
-    return el('btnGuardarRecetaERP') ||
-      document.querySelector('#recetas button[onclick*="guardarRecetaERP"]') ||
-      document.querySelector('button[onclick*="guardarRecetaERP"]');
+  function obtenerBotonesGuardarReceta(){
+    const botones = [];
+
+    function agregar(btn){
+      if(btn && !botones.includes(btn)){
+        botones.push(btn);
+      }
+    }
+
+    agregar(el('btnGuardarRecetaERP'));
+
+    document.querySelectorAll('button[onclick*="guardarRecetaERP"], a[onclick*="guardarRecetaERP"]').forEach(agregar);
+
+    document.querySelectorAll('button').forEach(btn => {
+      const txt = String(btn.textContent || '').trim().toLowerCase();
+      if(txt.includes('guardar receta')){
+        agregar(btn);
+      }
+    });
+
+    return botones;
   }
 
   function actualizarBotonGuardarReceta(){
-    const btn = obtenerBotonGuardarReceta();
-    if(btn){
-      btn.id = 'btnGuardarRecetaERP';
+    const botones = obtenerBotonesGuardarReceta();
+
+    botones.forEach((btn, i) => {
+      if(!btn.id && i === 0){
+        btn.id = 'btnGuardarRecetaERP';
+      }
 
       if(recetaGuardando){
         btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
         btn.style.opacity = '0.65';
         btn.style.cursor = 'not-allowed';
+        btn.style.pointerEvents = 'none';
         btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
         return;
       }
 
       btn.disabled = false;
+      btn.removeAttribute('aria-busy');
       btn.style.opacity = '1';
       btn.style.cursor = 'pointer';
+      btn.style.pointerEvents = '';
+
       btn.innerHTML = recetaEditandoId
         ? '<i class="bi bi-save me-1"></i> Actualizar receta'
         : '<i class="bi bi-save me-1"></i> Guardar receta';
-    }
+    });
   }
 
   function limpiarFormularioReceta(){
@@ -841,6 +866,7 @@
         const totalPaginas = Math.max(1, Math.ceil(total / RECETAS_POR_PAGINA));
         if(recetasPaginaActual < totalPaginas){
           recetasPaginaActual++;
+          actualizarBotonGuardarReceta();
           renderHistorialRecetas();
         }
       });
@@ -946,23 +972,40 @@
     }).join('');
 
     if(mobile){
+      const esMovil = (
+        window.innerWidth <= 900 ||
+        (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) ||
+        /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')
+      );
+
+      const tablaWrap = body.closest('.table-responsive');
+      if(tablaWrap){
+        tablaWrap.style.display = esMovil ? 'none' : '';
+      }
+
+      mobile.style.display = esMovil ? 'block' : 'none';
+
       mobile.innerHTML = pagina.map(r => {
         const idRaw = String(r.id_receta || '');
-        const menuId = safe(idRaw.replace(/[^a-zA-Z0-9_-]/g, '_'));
-        const meds = recortarTexto(r.medicamento || '', 120);
+        const idSeguro = safe(idRaw);
+        const meds = recortarTexto(r.medicamento || '', 140);
         const consulta = consultaPorIdAtencion(r.id_atencion || '');
         const estadoClase = String(r.estado || '').toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
 
-        return '<div class="auro-receta-mobile-card">' +
-          '<div class="auro-receta-mobile-head">' +
-            '<div><b>' + safe(fechaVisual(r.fecha_receta)) + '</b><br><small class="text-muted">' + safe(idRaw || '—') + '</small></div>' +
+        return '<div class="auro-receta-mobile-card" style="display:block;border:1px solid #e5e7eb;border-radius:16px;padding:12px;margin:10px 0;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.06);">' +
+          '<div class="auro-receta-mobile-head" style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px;">' +
+            '<div><b>' + safe(fechaVisual(r.fecha_receta)) + '</b><br><small class="text-muted">' + idSeguro + '</small></div>' +
             '<span class="badge-auro ' + estadoClase + '">' + safe(r.estado || 'Emitida') + '</span>' +
           '</div>' +
           '<div class="small"><b>Consulta:</b> ' + safe(consulta) + '</div>' +
           '<div class="small"><b>Paciente:</b> ' + safe(r.paciente_nombre || '—') + (r.paciente_cedula ? '<br><span class="text-muted">' + safe(r.paciente_cedula) + '</span>' : '') + '</div>' +
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || '—') + '</div>' +
           '<div class="small"><b>Medicamento:</b> ' + safe(meds) + '</div>' +
-          '<button type="button" class="btn-action primary" onclick="toggleAccionesReceta(\'' + menuId + '\')">Acciones ▾</button>' +
+          '<div class="d-grid gap-2 mt-2">' +
+            '<button type="button" class="btn-action soft" onclick="verRecetaEmitida(\'' + idSeguro + '\')">👁 Ver receta</button>' +
+            '<button type="button" class="btn-action soft" onclick="editarRecetaEmitida(\'' + idSeguro + '\')">✏ Editar receta</button>' +
+            '<button type="button" class="btn-action success" onclick="pdfRecetaEmitida(\'' + idSeguro + '\')">📄 PDF / imprimir</button>' +
+          '</div>' +
         '</div>';
       }).join('');
     }
@@ -1036,6 +1079,7 @@
   window.refrescarRecetasDesdeSheets = function(){
     return cargarRecetasDesdeSheets(true).then(function(){
       renderHistorialRecetas();
+      actualizarBotonGuardarReceta();
       return leerRecetasStorage();
     });
   };
