@@ -26,8 +26,23 @@ function setTextIfExists(id, value){
 
 function getPacienteActivo(){
   const selectId = document.getElementById('hcPacienteSelect')?.value || '';
-  const id = activePatientId || selectId;
-  return patients.find(p => p.id_paciente === id) || null;
+
+  const candidatos = [
+    activePatientId,
+    window.activePatientId,
+    selectId,
+    window.historiaActual?.id_paciente,
+    window.currentHistoria?.id_paciente
+  ].filter(Boolean);
+
+  for(const id of candidatos){
+    const paciente = patients.find(p =>
+      String(p.id_paciente || p.id || '') === String(id)
+    );
+    if(paciente) return paciente;
+  }
+
+  return null;
 }
 
 function inicialesPaciente(nombre){
@@ -594,6 +609,8 @@ function abrirHistoriaPaciente(idPaciente){
   }
 
   activePatientId = idPaciente;
+  window.activePatientId = idPaciente;
+
   showScreen('historia');
   actualizarSelectorPacientesHistoria();
 
@@ -813,4 +830,9 @@ function seleccionarPacienteHistoria(){
   updateClinicalSummary();
   actualizarTarjetaPacienteHistoria(p);
   renderModulePatientCards();
+
+  if(typeof window.renderAtencionesPaciente === 'function'){
+    setTimeout(window.renderAtencionesPaciente,300);
+    setTimeout(window.renderAtencionesPaciente,800);
+  }
 }
