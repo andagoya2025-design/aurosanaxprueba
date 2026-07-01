@@ -19,6 +19,9 @@
   let consultasVisible = true;
   let atencionesSheetsCargadas = false;
   let atencionesSheetsCargando = false;
+  let recetasSheetsCargadas = false;
+  let recetasSheetsCargando = false;
+  const RECETAS_STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
 
   function $(id){ return document.getElementById(id); }
 
@@ -646,7 +649,7 @@
 
   function leerRecetasLocales(){
     try{
-      const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
+      const raw = localStorage.getItem(RECETAS_STORAGE_KEY);
       const arr = raw ? JSON.parse(raw) : [];
       return Array.isArray(arr) ? arr : [];
     }catch(e){
@@ -655,9 +658,113 @@
     }
   }
 
-  function recetasPorAtencion(idAtencion){
-    if(!idAtencion) return [];
-    return leerRecetasLocales().filter(r => String(r.id_atencion || '') === String(idAtencion));
+  function guardarRecetasLocales(arr){
+    try{
+      localStorage.setItem(RECETAS_STORAGE_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
+    }catch(e){
+      console.warn(MODULO, 'No se pudo guardar recetas locales.', e);
+    }
+  }
+
+  function normalizarRecetaAtencion(r){
+    r = r || {};
+    return {
+      id_receta: r.id_receta || r.id || '',
+      id_paciente: r.id_paciente || r.paciente_id || '',
+      id_historia: r.id_historia || '',
+      id_atencion: r.id_atencion || '',
+      id_medico: r.id_medico || '',
+      fecha_receta: r.fecha_receta || r.fecha || '',
+      diagnostico_cie10: r.diagnostico_cie10 || r.cie10 || '',
+      medicamento: r.medicamento || r.medicamentos || '',
+      indicaciones: r.indicaciones || '',
+      estado: r.estado || 'Emitida',
+      paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
+      paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || ''
+    };
+  }
+
+  function mezclarRecetasLocalesYSheets(remotas){
+    const mapa = new Map();
+
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+      const r = normalizarRecetaAtencion(item);
+      if(r.id_receta){
+        mapa.set(String(r.id_receta), r);
+      }
+    });
+
+    leerRecetasLocales().forEach(item => {
+      const r = normalizarRecetaAtencion(item);
+      if(r.id_receta){
+        mapa.set(String(r.id_receta), Object.assign({}, mapa.get(String(r.id_receta)) || {}, r));
+      }
+    });
+
+    const mezcladas = Array.from(mapa.values());
+    guardarRecetasLocales(mezcladas);
+    return mezcladas;
+  }
+
+  async function cargarRecetasDesdeSheetsAtenciones(forzar){
+    try{
+      if(recetasSheetsCargando) return leerRecetasLocales();
+      if(recetasSheetsCargadas && !forzar) return leerRecetasLocales();
+
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return leerRecetasLocales();
+      }
+
+      recetasSheetsCargando = true;
+
+      const res = await fetch(API_URL + '?accion=listarRecetas&_=' + Date.now());
+      const data = await res.json();
+      const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+
+      const mezcladas = mezclarRecetasLocalesYSheets(remotas);
+      recetasSheetsCargadas = true;
+      recetasSheetsCargando = false;
+
+      return mezcladas;
+
+    }catch(error){
+      recetasSheetsCargando = false;
+      console.warn(MODULO, 'No se pudieron cargar recetas desde Google Sheets para atenciones.', error);
+      return leerRecetasLocales();
+    }
+  }
+
+  function recetasPorAtencion(atencion){
+    if(!atencion) return [];
+
+    const idAtencion = String(atencion.id_atencion || '').trim();
+    const idHistoria = String(atencion.id_historia || '').trim();
+    const idPaciente = String(atencion.id_paciente || idPacienteActivo() || '').trim();
+    const fechaAtencion = String(atencion.fecha_atencion || '').slice(0,10);
+    const numeroConsulta = String(atencion.numero_consulta || '').trim();
+
+    return leerRecetasLocales()
+      .map(normalizarRecetaAtencion)
+      .filter(r => {
+        const ridAtencion = String(r.id_atencion || '').trim();
+        const ridHistoria = String(r.id_historia || '').trim();
+        const ridPaciente = String(r.id_paciente || '').trim();
+        const rFecha = String(r.fecha_receta || '').slice(0,10);
+
+        if(idAtencion && ridAtencion && ridAtencion === idAtencion) return true;
+
+        if(idHistoria && ridHistoria && ridHistoria === idHistoria && idPaciente && ridPaciente === idPaciente && fechaAtencion && rFecha === fechaAtencion){
+          return true;
+        }
+
+        if(idPaciente && ridPaciente === idPaciente && fechaAtencion && rFecha === fechaAtencion){
+          const rConsulta = String(r.numero_consulta || r.consulta || '').replace('#','').trim();
+          if(!rConsulta || !numeroConsulta || rConsulta === numeroConsulta) return true;
+        }
+
+        return false;
+      })
+      .sort((a,b) => String(b.fecha_receta || '').localeCompare(String(a.fecha_receta || '')));
   }
 
   function resumenTexto(valor, max){
@@ -679,20 +786,30 @@
     const box = $('auroAtencionActivaBox');
     if(!box || !a) return;
 
-    const recetas = recetasPorAtencion(a.id_atencion);
+    const recetas = recetasPorAtencion(a);
 
     let recetasHTML = '';
+    if(!recetas.length && !recetasSheetsCargadas && !recetasSheetsCargando){
+      cargarRecetasDesdeSheetsAtenciones(false).then(function(){
+        const actual = leerLocal().find(x => String(x.id_atencion || '') === String(a.id_atencion || ''));
+        if(actual){
+          renderDetalleAtencion(normalizar(actual));
+        }
+      });
+    }
+
     if(recetas.length){
       recetasHTML =
         '<div class="mt-3">' +
           '<div class="fw-bold mb-2"><i class="bi bi-prescription2 me-1"></i> Recetas asociadas a esta atención</div>' +
           '<div class="table-responsive">' +
           '<table class="table table-modern align-middle mb-0">' +
-          '<thead><tr><th>Fecha</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th></tr></thead>' +
+          '<thead><tr><th>Fecha</th><th>ID receta</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th></tr></thead>' +
           '<tbody>' +
           recetas.map(r => {
             return '<tr>' +
               '<td>' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</td>' +
+              '<td>' + safe(r.id_receta || '—') + '</td>' +
               '<td>' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</td>' +
               '<td>' + safe(resumenTexto(r.medicamento || r.medicamentos || '', 120)) + '</td>' +
               '<td>' + safe(resumenTexto(r.indicaciones || '', 100)) + '</td>' +
@@ -938,6 +1055,8 @@
     cargarAtencionesDesdeSheets(false).then(function(){
       renderAtencionesPaciente();
     });
+
+    cargarRecetasDesdeSheetsAtenciones(false);
   }
 
   function envolverFuncion(nombre, despues){
@@ -998,6 +1117,13 @@
 
   window.renderAtencionesPaciente = renderAtencionesPaciente;
   window.cargarAtencionesDesdeSheets = cargarAtencionesDesdeSheets;
+  window.cargarRecetasDesdeSheetsAtenciones = cargarRecetasDesdeSheetsAtenciones;
+  window.refrescarRecetasAtencionesDesdeSheets = function(){
+    return cargarRecetasDesdeSheetsAtenciones(true).then(function(){
+      renderAtencionesPaciente();
+      return leerRecetasLocales();
+    });
+  };
   window.refrescarAtencionesDesdeSheets = function(){
     return cargarAtencionesDesdeSheets(true).then(function(){
       renderAtencionesPaciente();
@@ -1022,6 +1148,9 @@
       paciente_activo: idPacienteActivo(),
       sheets_cargadas: atencionesSheetsCargadas,
       sheets_cargando: atencionesSheetsCargando,
+      recetas_sheets_cargadas: recetasSheetsCargadas,
+      recetas_sheets_cargando: recetasSheetsCargando,
+      recetas_locales: leerRecetasLocales().length,
       atencion_activa: window.getAtencionActiva()
     };
   };
