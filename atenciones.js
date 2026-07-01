@@ -708,6 +708,21 @@
     if(!resumen || !lista) return;
 
     if(!idPaciente){
+
+      setTimeout(function(){
+        const nuevoId = idPacienteActivo();
+        if(nuevoId){
+          renderAtencionesPaciente();
+        }
+      },300);
+
+      setTimeout(function(){
+        const nuevoId = idPacienteActivo();
+        if(nuevoId){
+          renderAtencionesPaciente();
+        }
+      },1000);
+
       resumen.textContent = 'Seleccione un paciente para iniciar o revisar atenciones.';
       lista.innerHTML = '<div class="text-muted small">Sin paciente activo.</div>';
       if(activaBox) activaBox.style.display = 'none';
@@ -855,6 +870,19 @@
       });
     }, 700);
   });
+
+
+  setInterval(function(){
+    try{
+      if(document.hidden) return;
+      if($('historia') && $('historia').classList.contains('active')){
+        const id = idPacienteActivo();
+        if(id){
+          renderAtencionesPaciente();
+        }
+      }
+    }catch(e){}
+  },2000);
 
   window.sincronizarAtencionesLocales = async function(){
     const lista = leerLocal();
