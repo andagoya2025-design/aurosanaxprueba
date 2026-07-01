@@ -283,9 +283,7 @@
   }
 
   function idPacienteActivo(){
-
     try{
-
       const p = pacienteActivo();
 
       if(p && (p.id_paciente || p.id || p.cedula)){
@@ -293,33 +291,15 @@
       }
 
       if(window.activePatientId) return String(window.activePatientId);
-      if(window.currentPatientId) return String(window.currentPatientId);
-
-      if(window.pacienteActivo &&
-         (window.pacienteActivo.id_paciente || window.pacienteActivo.id || window.pacienteActivo.cedula)){
-        return String(
-          window.pacienteActivo.id_paciente ||
-          window.pacienteActivo.id ||
-          window.pacienteActivo.cedula
-        );
-      }
 
       if(window.historiaActual &&
-         (window.historiaActual.id_paciente || window.historiaActual.paciente_id || window.historiaActual.cedula)){
-        return String(
-          window.historiaActual.id_paciente ||
-          window.historiaActual.paciente_id ||
-          window.historiaActual.cedula
-        );
+         (window.historiaActual.id_paciente || window.historiaActual.paciente_id)){
+        return String(window.historiaActual.id_paciente || window.historiaActual.paciente_id);
       }
 
       if(window.currentHistoria &&
-         (window.currentHistoria.id_paciente || window.currentHistoria.paciente_id || window.currentHistoria.cedula)){
-        return String(
-          window.currentHistoria.id_paciente ||
-          window.currentHistoria.paciente_id ||
-          window.currentHistoria.cedula
-        );
+         (window.currentHistoria.id_paciente || window.currentHistoria.paciente_id)){
+        return String(window.currentHistoria.id_paciente || window.currentHistoria.paciente_id);
       }
 
       const sel = $('hcPacienteSelect');
@@ -476,13 +456,6 @@
   function crearAtencion(){
     const p = pacienteActivo();
     const idPaciente = idPacienteActivo();
-
-    if(!idPaciente){
-      setTimeout(function(){
-        const nuevoId = idPacienteActivo();
-        if(nuevoId) renderAtencionesPaciente();
-      },300);
-    }
 
     if(!p || !idPaciente){
       alert('Seleccione primero un paciente desde Pacientes o Historia Clínica.');
@@ -861,38 +834,26 @@
   }
 
   document.addEventListener('DOMContentLoaded', function(){
-
     setTimeout(function(){
-
       iniciarModulo();
-
       envolverFuncion('showScreen', function(){
-        if($('historia') && $('historia').classList.contains('active')){
-          setTimeout(renderAtencionesPaciente,300);
-          setTimeout(renderAtencionesPaciente,700);
-        }
+        if($('historia') && $('historia').classList.contains('active')) iniciarModulo();
       });
-
       envolverFuncion('seleccionarPacienteHistoria', function(){
         setTimeout(renderAtencionesPaciente,100);
-        setTimeout(renderAtencionesPaciente,400);
-        setTimeout(renderAtencionesPaciente,900);
+        setTimeout(renderAtencionesPaciente,500);
       });
 
       envolverFuncion('actualizarTarjetaPacienteHistoria', function(){
         setTimeout(renderAtencionesPaciente,100);
-        setTimeout(renderAtencionesPaciente,400);
+        setTimeout(renderAtencionesPaciente,500);
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
         setTimeout(renderAtencionesPaciente,300);
         setTimeout(renderAtencionesPaciente,800);
       });
-
-    },700);
-
-  });
-
+    }, 700);
   });
 
   window.sincronizarAtencionesLocales = async function(){
