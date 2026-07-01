@@ -81,6 +81,28 @@
         margin-bottom:8px;
       }
 
+
+      #auroAtencionesBox .auro-recetas-atencion-mobile{
+        display:none;
+      }
+
+      #auroAtencionesBox .auro-receta-atencion-mobile-card{
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        padding:12px;
+        margin:10px 0;
+        background:#fff;
+        box-shadow:0 4px 14px rgba(15,23,42,.06);
+      }
+
+      #auroAtencionesBox .auro-receta-atencion-mobile-head{
+        display:flex;
+        justify-content:space-between;
+        gap:8px;
+        align-items:flex-start;
+        margin-bottom:8px;
+      }
+
       @media (max-width: 768px){
         #auroAtencionesBox{
           padding:12px!important;
@@ -97,6 +119,14 @@
         }
 
         #auroAtencionesBox .auro-atenciones-title h5 .desktop-title{
+          display:none!important;
+        }
+
+
+        #auroAtencionesBox .auro-recetas-atencion-desktop{
+          display:block!important;
+        }
+        #auroAtencionesBox .auro-recetas-atencion-mobile{
           display:none!important;
         }
 
@@ -148,6 +178,24 @@
 
         #auroAtencionesBox .auro-table-mobile-note{
           display:none!important;
+        }
+
+
+        #auroAtencionesBox .auro-recetas-atencion-desktop{
+          display:none!important;
+        }
+
+        #auroAtencionesBox .auro-recetas-atencion-mobile{
+          display:block!important;
+        }
+
+        #auroAtencionesBox .auro-receta-atencion-mobile-card{
+          font-size:12px!important;
+        }
+
+        #auroAtencionesBox .auro-receta-atencion-mobile-card .small{
+          line-height:1.35;
+          word-break:break-word;
         }
 
         #auroAtencionesBox #auroAtencionActivaBox .row > div{
@@ -215,6 +263,19 @@
     if(/^\d{4}-\d{2}-\d{2}/.test(s)){
       const p = s.slice(0,10).split('-');
       return p[2] + '/' + p[1] + '/' + p[0];
+    }
+    return s;
+  }
+
+  function horaVisualAtencion(hora){
+    if(!hora) return '—';
+    const s = String(hora);
+    if(s.includes('T')){
+      const hhmm = s.slice(11,16);
+      return hhmm || '—';
+    }
+    if(/^\d{1,2}:\d{2}/.test(s)){
+      return s.slice(0,5);
     }
     return s;
   }
@@ -858,24 +919,47 @@
     }
 
     if(recetas.length){
+      const filasRecetasDesktop = recetas.map(r => {
+        return '<tr>' +
+          '<td>' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</td>' +
+          '<td>' + safe(r.id_receta || '—') + '</td>' +
+          '<td>' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</td>' +
+          '<td>' + safe(resumenTexto(r.medicamento || r.medicamentos || '', 120)) + '</td>' +
+          '<td>' + safe(resumenTexto(r.indicaciones || '', 100)) + '</td>' +
+          '<td><span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span></td>' +
+        '</tr>';
+      }).join('');
+
+      const tarjetasRecetasMobile = recetas.map(r => {
+        return '<div class="auro-receta-atencion-mobile-card">' +
+          '<div class="auro-receta-atencion-mobile-head">' +
+            '<div>' +
+              '<b>Receta</b><br>' +
+              '<small class="text-muted">' + safe(r.id_receta || '—') + '</small>' +
+            '</div>' +
+            '<span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span>' +
+          '</div>' +
+          '<div class="small"><b>Fecha:</b> ' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</div>' +
+          '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</div>' +
+          '<div class="small mt-2"><b>Medicamento:</b><br>' + safe(r.medicamento || r.medicamentos || '—') + '</div>' +
+          '<div class="small mt-2"><b>Indicaciones:</b><br>' + safe(r.indicaciones || '—') + '</div>' +
+        '</div>';
+      }).join('');
+
       recetasHTML =
-        '<div class="mt-3">' +
+        '<div class="mt-3 auro-recetas-atencion-box">' +
           '<div class="fw-bold mb-2"><i class="bi bi-prescription2 me-1"></i> Recetas asociadas a esta atención</div>' +
-          '<div class="table-responsive">' +
-          '<table class="table table-modern align-middle mb-0">' +
-          '<thead><tr><th>Fecha</th><th>ID receta</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th></tr></thead>' +
-          '<tbody>' +
-          recetas.map(r => {
-            return '<tr>' +
-              '<td>' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</td>' +
-              '<td>' + safe(r.id_receta || '—') + '</td>' +
-              '<td>' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</td>' +
-              '<td>' + safe(resumenTexto(r.medicamento || r.medicamentos || '', 120)) + '</td>' +
-              '<td>' + safe(resumenTexto(r.indicaciones || '', 100)) + '</td>' +
-              '<td><span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span></td>' +
-            '</tr>';
-          }).join('') +
-          '</tbody></table></div>' +
+          '<div class="auro-recetas-atencion-desktop">' +
+            '<div class="table-responsive">' +
+              '<table class="table table-modern align-middle mb-0">' +
+                '<thead><tr><th>Fecha</th><th>ID receta</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th></tr></thead>' +
+                '<tbody>' + filasRecetasDesktop + '</tbody>' +
+              '</table>' +
+            '</div>' +
+          '</div>' +
+          '<div class="auro-recetas-atencion-mobile">' +
+            tarjetasRecetasMobile +
+          '</div>' +
         '</div>';
     }else{
       recetasHTML =
@@ -900,7 +984,7 @@
       '</div>' +
       '<div class="row g-2 mt-2">' +
         '<div class="col-md-3"><b>Fecha:</b><br>' + safe(fechaVisual(a.fecha_atencion)) + '</div>' +
-        '<div class="col-md-3"><b>Hora:</b><br>' + safe(a.hora_atencion || '—') + '</div>' +
+        '<div class="col-md-3"><b>Hora:</b><br>' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</div>' +
         '<div class="col-md-3"><b>Tipo:</b><br>' + safe(a.tipo_atencion || '—') + '</div>' +
         '<div class="col-md-3"><b>Médico:</b><br>' + safe(a.id_medico || '—') + '</div>' +
         '<div class="col-md-6"><b>ID historia:</b><br>' + safe(a.id_historia || '—') + '</div>' +
@@ -1075,7 +1159,7 @@
       return '<tr>' +
         '<td><b>#' + safe(a.numero_consulta) + '</b></td>' +
         '<td>' + safe(fechaVisual(a.fecha_atencion)) + '</td>' +
-        '<td>' + safe(a.hora_atencion || '—') + '</td>' +
+        '<td>' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</td>' +
         '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
         '<td><span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span></td>' +
         '<td><button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver</button></td>' +
@@ -1086,7 +1170,7 @@
       const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
       return '<div class="auro-consulta-card">' +
         '<div class="auro-consulta-card-head">' +
-          '<div><b>Consulta #' + safe(a.numero_consulta) + '</b><br><small class="text-muted">' + safe(fechaVisual(a.fecha_atencion)) + ' · ' + safe(a.hora_atencion || '—') + '</small></div>' +
+          '<div><b>Consulta #' + safe(a.numero_consulta) + '</b><br><small class="text-muted">' + safe(fechaVisual(a.fecha_atencion)) + ' · ' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</small></div>' +
           '<span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span>' +
         '</div>' +
         '<div class="small"><b>Tipo:</b> ' + safe(a.tipo_atencion || '—') + '</div>' +
