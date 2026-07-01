@@ -19,6 +19,8 @@
   const RECETAS_POR_PAGINA = 5;
   let recetasHistorialVisible = true;
   let recetaAccionesAbiertaId = '';
+  let recetasSheetsCargadas = false;
+  let recetasSheetsCargando = false;
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -58,7 +60,7 @@
     return s;
   }
 
-  function obtenerCodigoCortoMedico(){
+  function obtenerIdMedicoReal(){
     try{
       let idMedico = '';
 
@@ -85,11 +87,11 @@
             .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '');
-
-          return nombreCompleto && normal && (
-            nombreCompleto.includes(normal) ||
-            normal.includes(nombreCompleto) ||
-            nombreCompleto.includes('aurora')
+          const id = String(m.id_medico || m.id || m.codigo || '');
+          return (
+            (nombreCompleto && normal && (nombreCompleto.includes(normal) || normal.includes(nombreCompleto))) ||
+            (normal.includes('aurora') && nombreCompleto.includes('aurora')) ||
+            id.endsWith('-397')
           );
         });
 
@@ -98,16 +100,37 @@
         }
       }
 
-      if(!idMedico) idMedico = 'MED-001';
+      if(!idMedico || idMedico === 'MED-001' || idMedico === 'MED001'){
+        const nombreMedico = val('recMedico') || 'Dra. Aurora Andagoya';
+        const normal = String(nombreMedico || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        if(normal.includes('aurora')){
+          idMedico = 'MED-20260623160507-397';
+        }
+      }
 
+      if(!idMedico) idMedico = 'MED-20260623160507-397';
+      return idMedico;
+
+    }catch(e){
+      return 'MED-20260623160507-397';
+    }
+  }
+
+  function obtenerCodigoCortoMedico(idMedicoOpcional){
+    try{
+      const idMedico = String(idMedicoOpcional || obtenerIdMedicoReal() || '').trim();
       const partes = idMedico.split('-').filter(Boolean);
       const ultimo = partes.length ? partes[partes.length - 1] : idMedico;
       const limpio = String(ultimo || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 
-      return limpio || '001';
+      if(!limpio || limpio === '001' || limpio === 'MED001'){
+        return '397';
+      }
+
+      return limpio;
 
     }catch(e){
-      return '001';
+      return '397';
     }
   }
 
@@ -194,7 +217,7 @@
         id_receta: receta.id_receta || '',
         id_paciente: receta.id_paciente || '',
         id_historia: receta.id_historia || '',
-        id_medico: receta.id_medico || 'MED-001',
+        id_medico: receta.id_medico || obtenerIdMedicoReal(),
         fecha_receta: receta.fecha_receta || fechaHoyReceta(),
         diagnostico_cie10: receta.diagnostico_cie10 || '',
         medicamento: receta.medicamento || '',
@@ -265,6 +288,91 @@
     catch(e){ console.warn('No se pudo guardar historial local de recetas.', e); }
   }
 
+  function normalizarRecetaGuardada(r){
+    r = r || {};
+    return {
+      id_receta: r.id_receta || r.id || '',
+      id_paciente: r.id_paciente || r.paciente_id || '',
+      id_historia: r.id_historia || '',
+      id_atencion: r.id_atencion || '',
+      id_medico: r.id_medico || obtenerIdMedicoReal(),
+      codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
+      paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || '',
+      paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
+      paciente_telefono: r.paciente_telefono || r.telefono || r.whatsapp || '',
+      fecha_receta: r.fecha_receta || r.fecha || fechaHoyReceta(),
+      medico: r.medico || r.nombre_medico || val('recMedico') || 'Dra. Aurora Andagoya',
+      diagnostico_cie10: r.diagnostico_cie10 || r.cie10 || '',
+      diagnostico: r.diagnostico || r.motivo || '',
+      medicamento: r.medicamento || r.medicamentos || '',
+      presentacion: r.presentacion || '',
+      dosis: r.dosis || '',
+      via: r.via || '',
+      frecuencia: r.frecuencia || '',
+      duracion: r.duracion || '',
+      cantidad: r.cantidad || '',
+      indicaciones: r.indicaciones || '',
+      recomendaciones: r.recomendaciones || r.observaciones || '',
+      id_documento: r.id_documento || '',
+      estado: r.estado || 'Emitida',
+      creado_en: r.creado_en || '',
+      actualizado_en: r.actualizado_en || ''
+    };
+  }
+
+  function mezclarRecetasLocalesYSheets(remotas){
+    const mapa = new Map();
+
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+      const r = normalizarRecetaGuardada(item);
+      if(r.id_receta){
+        mapa.set(String(r.id_receta), r);
+      }
+    });
+
+    leerRecetasStorage().forEach(item => {
+      const r = normalizarRecetaGuardada(item);
+      if(r.id_receta){
+        mapa.set(String(r.id_receta), Object.assign({}, mapa.get(String(r.id_receta)) || {}, r));
+      }
+    });
+
+    const mezcladas = Array.from(mapa.values()).sort((a,b) =>
+      String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || ''))
+    );
+
+    guardarRecetasStorage(mezcladas);
+    return mezcladas;
+  }
+
+  async function cargarRecetasDesdeSheets(forzar){
+    try{
+      if(recetasSheetsCargando) return leerRecetasStorage();
+      if(recetasSheetsCargadas && !forzar) return leerRecetasStorage();
+
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return leerRecetasStorage();
+      }
+
+      recetasSheetsCargando = true;
+
+      const res = await fetch(API_URL + '?accion=listarRecetas&_=' + Date.now());
+      const data = await res.json();
+      const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+
+      const mezcladas = mezclarRecetasLocalesYSheets(remotas);
+      recetasSheetsCargadas = true;
+      recetasSheetsCargando = false;
+
+      return mezcladas;
+
+    }catch(error){
+      recetasSheetsCargando = false;
+      console.warn('No se pudieron cargar recetas desde Google Sheets.', error);
+      return leerRecetasStorage();
+    }
+  }
+
   function mostrarMensajeReceta(texto, tipo){
     let box = el('recetaEstadoBox');
     const seccion = el('recetas');
@@ -321,6 +429,8 @@
       paciente: paciente || {},
       fecha: val('recFecha') || fechaHoyReceta(),
       medico: val('recMedico') || 'Dra. Aurora Andagoya',
+      id_medico: obtenerIdMedicoReal(),
+      codigo_medico: obtenerCodigoCortoMedico(),
       cie10: val('recCie10'),
       estado: val('recEstado') || 'Emitida',
       diagnostico: val('recDiagnostico'),
@@ -355,6 +465,9 @@
     const edad = p.edad || (typeof calcularEdadDesdeFecha === 'function' ? calcularEdadDesdeFecha(p.fecha_nacimiento) : '') || '—';
     const telefono = p.telefono || p.whatsapp || '—';
     const idPaciente = p.id_paciente || p.id || '—';
+    const idReceta = r.id_receta || '—';
+    const idMedico = r.id_medico || obtenerIdMedicoReal();
+    const codigoMedico = r.codigo_medico || obtenerCodigoCortoMedico(idMedico);
     const estadoClass = String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
 
     return `
@@ -382,18 +495,19 @@
         </style>
         <div class="auro-receta-header">
           <div class="auro-receta-brand"><h2>AUROSANAX</h2><small>Centro Médico Especializado</small><br><small>Innovando salud al cuidado de la mujer</small></div>
-          <div class="auro-receta-title"><b>RECETA MÉDICA</b><small>Fecha: ${safe(fechaVisual(r.fecha))}</small><br><span class="badge-auro ${estadoClass}">${safe(r.estado)}</span></div>
+          <div class="auro-receta-title"><b>RECETA MÉDICA</b><small>ID receta: ${safe(idReceta)}</small><br><small>Fecha: ${safe(fechaVisual(r.fecha))}</small><br><span class="badge-auro ${estadoClass}">${safe(r.estado)}</span></div>
         </div>
         <div class="auro-receta-grid">
           <div><span>Paciente:</span> ${safe(nombre)}</div><div><span>Cédula:</span> ${safe(cedula)}</div>
           <div><span>Edad:</span> ${safe(edad)}</div><div><span>WhatsApp:</span> ${safe(telefono)}</div>
-          <div><span>ID paciente:</span> ${safe(idPaciente)}</div><div><span>Médico:</span> ${safe(r.medico)}</div>
+          <div><span>ID paciente:</span> ${safe(idPaciente)}</div><div><span>ID receta:</span> ${safe(idReceta)}</div>
+          <div><span>Médico:</span> ${safe(r.medico)}</div><div><span>Código médico:</span> ${safe(codigoMedico)}</div>
           <div><span>CIE-10:</span> ${safe(r.cie10 || '—')}</div><div><span>Diagnóstico:</span> ${safe(r.diagnostico || '—')}</div>
         </div>
         <div class="auro-receta-section"><h4>Prescripción</h4><div class="auro-receta-box"><div class="auro-rp">Rp/</div>${nl2br(r.medicamento || 'Sin medicamentos registrados.')}</div></div>
         <div class="auro-receta-section"><h4>Indicaciones para paciente</h4><div class="auro-receta-box">${nl2br(r.indicaciones || '—')}</div></div>
         ${r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${nl2br(r.recomendaciones)}</div></div>` : ''}
-        <div class="auro-receta-footer"><div style="font-size:12px;color:#6b7280;">Documento generado desde AUROSANAX Clinical ERP DEMO.<br>Esta receta debe ser validada con firma y sello del profesional tratante.</div><div class="auro-firma"><div class="auro-linea"></div><b>Dra. Aurora Andagoya Murillo</b><br><span>Ginecología y Obstetricia</span><br><span>Firma y sello</span></div></div>
+        <div class="auro-receta-footer"><div style="font-size:12px;color:#6b7280;">Documento generado desde AUROSANAX Clinical ERP DEMO.<br>Esta receta debe ser validada con firma y sello del profesional tratante.<br>ID receta: ${safe(idReceta)} · Código médico: ${safe(codigoMedico)}</div><div class="auro-firma"><div class="auro-linea"></div><b>Dra. Aurora Andagoya Murillo</b><br><span>Ginecología y Obstetricia</span><br><span>Código médico: ${safe(codigoMedico)}</span><br><span>Firma y sello</span></div></div>
       </div>`;
   }
 
@@ -434,7 +548,8 @@
       id_paciente: r.id_paciente || paciente.id_paciente || paciente.id || '',
       id_historia: r.id_historia || '',
       id_atencion: r.id_atencion || obtenerIdAtencionActivaSeguro() || '',
-      id_medico: 'MED-001',
+      id_medico: r.id_medico || obtenerIdMedicoReal(),
+      codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
       paciente_nombre: paciente.nombre || '', paciente_cedula: paciente.cedula || '', paciente_telefono: paciente.telefono || paciente.whatsapp || '',
       fecha_receta: r.fecha || fechaHoyReceta(), medico: r.medico || 'Dra. Aurora Andagoya', diagnostico_cie10: r.cie10 || '', diagnostico: r.diagnostico || '',
       medicamento: r.medicamento || '', presentacion: '', dosis: '', via: '', frecuencia: '', duracion: '', cantidad: '',
@@ -651,7 +766,7 @@
       el('btnRecetasAnterior')?.addEventListener('click', function(){
         if(recetasPaginaActual > 1){
           recetasPaginaActual--;
-          renderHistorialRecetas();
+          cargarRecetasDesdeSheets(false).then(renderHistorialRecetas);
         }
       });
 
@@ -683,6 +798,14 @@
     if(!body) return;
 
     const recetas = obtenerRecetasPacienteActivo();
+
+    if(!recetas.length && !recetasSheetsCargadas && !recetasSheetsCargando){
+      if(contador) contador.textContent = 'Cargando recetas desde Google Sheets...';
+      cargarRecetasDesdeSheets(false).then(function(){
+        renderHistorialRecetas();
+      });
+      return;
+    }
 
     if(contador){
       contador.textContent = 'Total recetas encontradas: ' + recetas.length;
@@ -756,7 +879,7 @@
   };
 
   function buscarRecetaPorId(id){ return leerRecetasStorage().find(r => String(r.id_receta) === String(id)); }
-  function recetaGuardadaAFormatoPreview(r){ return {id_receta:r.id_receta,id_atencion:r.id_atencion,paciente:{id_paciente:r.id_paciente,nombre:r.paciente_nombre,cedula:r.paciente_cedula,telefono:r.paciente_telefono},fecha:r.fecha_receta,medico:r.medico,cie10:r.diagnostico_cie10,estado:r.estado,diagnostico:r.diagnostico,medicamento:r.medicamento,indicaciones:r.indicaciones,recomendaciones:r.recomendaciones}; }
+  function recetaGuardadaAFormatoPreview(r){ return {id_receta:r.id_receta,id_atencion:r.id_atencion,id_medico:r.id_medico || obtenerIdMedicoReal(),codigo_medico:r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),paciente:{id_paciente:r.id_paciente,nombre:r.paciente_nombre,cedula:r.paciente_cedula,telefono:r.paciente_telefono},fecha:r.fecha_receta,medico:r.medico,cie10:r.diagnostico_cie10,estado:r.estado,diagnostico:r.diagnostico,medicamento:r.medicamento,indicaciones:r.indicaciones,recomendaciones:r.recomendaciones}; }
 
   window.toggleAccionesReceta = toggleAccionesReceta;
 
@@ -806,6 +929,7 @@
     asegurarHistorialRecetas();
     actualizarBotonGuardarReceta();
     renderHistorialRecetas();
+    cargarRecetasDesdeSheets(false).then(renderHistorialRecetas);
 
     envolverRecetasFuncion('showScreen', refrescarRecetasAlEntrar);
     envolverRecetasFuncion('seleccionarPacienteHistoria', refrescarRecetasAlEntrar);
@@ -818,5 +942,12 @@
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', storageKey: STORAGE_KEY}; };
+  window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
+  window.refrescarRecetasDesdeSheets = function(){
+    return cargarRecetasDesdeSheets(true).then(function(){
+      renderHistorialRecetas();
+      return leerRecetasStorage();
+    });
+  };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
