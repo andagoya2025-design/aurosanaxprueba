@@ -130,21 +130,6 @@
 
         #auroAtencionesBox .auro-atenciones-mobile{
           display:block!important;
-          width:100%!important;
-          visibility:visible!important;
-          overflow:visible!important;
-        }
-
-        #auroAtencionesBox #auroAtencionesLista{
-          display:block!important;
-          visibility:visible!important;
-          overflow:visible!important;
-        }
-
-        #auroAtencionesBox .auro-consulta-card{
-          display:block!important;
-          visibility:visible!important;
-          width:100%!important;
         }
 
         #auroAtencionesBox .auro-consulta-card{
@@ -341,12 +326,33 @@
   }
 
   function atencionesPaciente(idPaciente){
-    const id = idPaciente || idPacienteActivo();
+    const id = String(idPaciente || idPacienteActivo() || '').trim();
     if(!id) return [];
+
+    const paciente = pacienteActivo() || {};
+    const cedulaPaciente = String(
+      paciente.numero_documento ||
+      paciente.cedula ||
+      paciente.documento ||
+      ''
+    ).replace(/\D/g,'');
 
     return leerLocal()
       .map(normalizar)
-      .filter(a => String(a.id_paciente) === String(id))
+      .filter(a => {
+        const idAt = String(a.id_paciente || '').trim();
+        const cedAt = String(
+          a.numero_documento ||
+          a.cedula ||
+          a.documento ||
+          ''
+        ).replace(/\D/g,'');
+
+        return (
+          idAt === id ||
+          (cedulaPaciente && cedAt && cedulaPaciente === cedAt)
+        );
+      })
       .sort((a,b) => {
         const na = Number(a.numero_consulta || 0);
         const nb = Number(b.numero_consulta || 0);
