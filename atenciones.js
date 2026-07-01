@@ -352,11 +352,49 @@
 
   function atencionesPaciente(idPaciente){
     const id = idPaciente || idPacienteActivo();
-    if(!id) return [];
+
+    const idsValidos = new Set();
+
+    function agregarId(v){
+      const s = String(v || '').trim();
+      if(s) idsValidos.add(s);
+    }
+
+    agregarId(id);
+    agregarId(idPacienteActivo());
+
+    try{
+      const p = pacienteActivo();
+      if(p){
+        agregarId(p.id_paciente);
+        agregarId(p.id);
+        agregarId(p.cedula);
+        agregarId(p.numero_documento);
+        agregarId(p.documento);
+      }
+    }catch(e){}
+
+    try{
+      const sel = $('hcPacienteSelect');
+      if(sel && sel.value) agregarId(sel.value);
+    }catch(e){}
+
+    if(!idsValidos.size) return [];
 
     return leerLocal()
       .map(normalizar)
-      .filter(a => String(a.id_paciente) === String(id))
+      .filter(a => {
+        const posibles = [
+          a.id_paciente,
+          a.paciente_id,
+          a.id,
+          a.cedula,
+          a.numero_documento,
+          a.documento
+        ].map(v => String(v || '').trim()).filter(Boolean);
+
+        return posibles.some(v => idsValidos.has(v));
+      })
       .sort((a,b) => {
         const na = Number(a.numero_consulta || 0);
         const nb = Number(b.numero_consulta || 0);
@@ -870,7 +908,6 @@
       });
     }, 700);
   });
-
 
   setInterval(function(){
     try{
