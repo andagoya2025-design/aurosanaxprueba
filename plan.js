@@ -1,4 +1,4 @@
-e/****************************************************************
+/****************************************************************
  AUROSANAX ERP
  plan.js
  MODULACIÓN PLAN - FASE 5 EVALUACIONES
@@ -194,55 +194,17 @@ function inicializarPlan(){
 
 function cambiarPlanPorAtencion(idAtencion){
 
-    /*
-      AUROSANAX PLAN - CAMBIO SEGURO POR CONSULTA
-      Consulta 1 -> Plan 1
-      Consulta 2 -> Plan 2
-      Consulta sin plan -> campos limpios
-    */
-
     inicializarPlan();
 
     idAtencion = String(idAtencion || '').trim();
 
     if(!idAtencion) return;
 
-    window.planState = window.planState || {
-        atencionActual: '',
-        cache: {}
-    };
-
-    const idAnterior = String(window.planState.atencionActual || '').trim();
-
-    if(idAnterior && idAnterior !== idAtencion){
-        guardarPlanTemporal();
-    }
+    guardarPlanTemporal();
 
     window.planState.atencionActual = idAtencion;
 
     cargarPlanTemporal(idAtencion);
-
-    window.__auroPlanCargaToken = Date.now() + '_' + idAtencion;
-    const token = window.__auroPlanCargaToken;
-
-    if(typeof cargarPlanClinicoDesdeSheets === 'function'){
-        setTimeout(function(){
-            if(window.__auroPlanCargaToken !== token) return;
-            if(String(window.planState?.atencionActual || '').trim() !== idAtencion) return;
-
-            cargarPlanClinicoDesdeSheets(idAtencion).then(function(plan){
-                if(window.__auroPlanCargaToken !== token) return;
-                if(String(window.planState?.atencionActual || '').trim() !== idAtencion) return;
-
-                if(!plan || !plan.id_plan){
-                    limpiarPlanTemporal();
-                    console.log('AUROSANAX PLAN: consulta sin plan guardado, campos limpios:', idAtencion);
-                }
-            }).catch(function(error){
-                console.warn('AUROSANAX PLAN: no se pudo cargar desde Sheets para atención:', idAtencion, error);
-            });
-        }, 150);
-    }
 }
 
 
@@ -1455,25 +1417,14 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
     const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
 
+    if(!plan || !plan.id_plan) return null;
+
     window.planState = window.planState || {
         atencionActual: idAtencion,
         cache: {}
     };
 
-    if(String(window.planState.atencionActual || '').trim() !== idAtencion){
-        return null;
-    }
-
     window.planState.atencionActual = idAtencion;
-
-    if(!plan || !plan.id_plan){
-
-        limpiarPlanTemporal();
-
-        console.log('AUROSANAX PLAN: no existe plan guardado para esta atención:', idAtencion);
-
-        return null;
-    }
 
     function valorPlan(){
         for(const k of arguments){
@@ -1523,6 +1474,8 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
         valorPlan('estado_plan','estado','estadoHistoria') || 'Activo'
     );
 
+    guardarPlanTemporal();
+
     if(typeof renderMedicamentosPlanTabla === 'function'){
         renderMedicamentosPlanTabla();
     }
@@ -1531,15 +1484,17 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
         renderOrdenesMedicasTabla();
     }
 
-    if(typeof renderInterconsultasTabla === 'function'){
-        renderInterconsultasTabla();
+    if(typeof recopilarInterconsultaPlan === 'function'){
+        recopilarInterconsultaPlan();
+    }
+
+    if(typeof recopilarEvaluacionesPlan === 'function'){
+        recopilarEvaluacionesPlan();
     }
 
     if(typeof sincronizarPlanConReceta === 'function'){
         sincronizarPlanConReceta();
     }
-
-    guardarPlanTemporal();
 
     console.log('AUROSANAX PLAN: plan cargado desde Sheets para atención:', idAtencion, plan);
 
@@ -1565,18 +1520,32 @@ setTimeout(function(){
 
 
 /* ============================================================
-   UTILIDAD MANUAL SEGURA
+   AUTO-CARGA AL CAMBIAR CONSULTA / ATENCIÓN
+   Al ejecutar cambiarPlanPorAtencion(id), también carga desde Sheets.
 ============================================================ */
-window.auroPlanForzarConsultaActiva = function(){
-    const id = (typeof getIdAtencionActiva === 'function')
-        ? String(getIdAtencionActiva() || '').trim()
-        : String(window.planState?.atencionActual || '').trim();
+(function(){
+    if(window.__auroPlanCambioSheetsInstalado) return;
+    window.__auroPlanCambioSheetsInstalado = true;
 
-    if(!id){
-        console.warn('AUROSANAX PLAN: no hay id_atencion activo.');
-        return null;
+    const originalCambiarPlanPorAtencion =
+        window.cambiarPlanPorAtencion ||
+        (typeof cambiarPlanPorAtencion === 'function' ? cambiarPlanPorAtencion : null);
+
+    if(typeof originalCambiarPlanPorAtencion === 'function'){
+        window.cambiarPlanPorAtencion = function(idAtencion){
+            const r = originalCambiarPlanPorAtencion(idAtencion);
+
+            const id = String(idAtencion || window.planState?.atencionActual || '').trim();
+
+            if(id && typeof window.cargarPlanClinicoDesdeSheets === 'function'){
+                setTimeout(function(){
+                    window.cargarPlanClinicoDesdeSheets(id).catch(function(error){
+                        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets al cambiar atención.', error);
+                    });
+                }, 120);
+            }
+
+            return r;
+        };
     }
-
-    cambiarPlanPorAtencion(id);
-    return id;
-};
+})();
