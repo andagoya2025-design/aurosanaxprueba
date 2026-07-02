@@ -996,38 +996,54 @@
     if(btnOcultar) btnOcultar.addEventListener('click', ocultarDetalleAtencion);
   }
 
+  function auroSincronizarPlanDesdeAtencion(idAtencion){
+    idAtencion = String(idAtencion || '').trim();
+
+    if(!idAtencion) return '';
+
+    atencionActivaId = idAtencion;
+
+    window.planState = window.planState || { atencionActual: '', cache: {} };
+    window.planState.atencionActual = idAtencion;
+
+    console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', idAtencion);
+
+    if(typeof cambiarPlanPorAtencion === 'function'){
+      cambiarPlanPorAtencion(idAtencion);
+    }
+
+    if(typeof cargarPlanClinicoDesdeSheets === 'function'){
+      cargarPlanClinicoDesdeSheets(idAtencion).catch(function(error){
+        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets para esta atención.', error);
+      });
+    }
+
+    return idAtencion;
+  }
+
   function seleccionarAtencion(idAtencion){
+    idAtencion = String(idAtencion || '').trim();
+
     const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
+
     if(!a){
       alert('No se encontró la atención seleccionada.');
       return;
     }
 
-    atencionActivaId = a.id_atencion;
-
-    /* AUROSANAX PLAN: vincular consulta seleccionada con plan.js */
-    window.planState = window.planState || { atencionActual: '', cache: {} };
-    window.planState.atencionActual = a.id_atencion;
-
-    console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', a.id_atencion);
-
-    if(typeof cambiarPlanPorAtencion === 'function'){
-      cambiarPlanPorAtencion(a.id_atencion);
-    }
-
-    if(typeof cargarPlanClinicoDesdeSheets === 'function'){
-      cargarPlanClinicoDesdeSheets(a.id_atencion).catch(function(error){
-        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets para esta atención.', error);
-      });
-    }
+    auroSincronizarPlanDesdeAtencion(a.id_atencion);
 
     cargarRecetasDesdeSheetsAtenciones(true).then(function(){
       const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
+
+      auroSincronizarPlanDesdeAtencion(actual.id_atencion || idAtencion);
+
       renderDetalleAtencion(normalizar(actual));
     }).catch(function(){
       renderDetalleAtencion(normalizar(a));
     });
   }
+
 
   function asegurarBloque(){
     const historia = $('historia');
@@ -1238,6 +1254,19 @@
     window[nombre] = nueva;
   }
 
+  document.addEventListener('click', function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest('[data-atencion-id]') : null;
+    if(!btn) return;
+
+    const id = String(btn.getAttribute('data-atencion-id') || '').trim();
+    if(!id) return;
+
+    if(typeof auroSincronizarPlanDesdeAtencion === 'function'){
+      auroSincronizarPlanDesdeAtencion(id);
+    }
+  }, true);
+
+
   document.addEventListener('DOMContentLoaded', function(){
     setTimeout(function(){
       iniciarModulo();
@@ -1298,6 +1327,7 @@
   window.iniciarAtencionActual = crearAtencion;
   window.finalizarAtencionActual = finalizarAtencion;
   window.seleccionarAtencion = seleccionarAtencion;
+  window.auroSincronizarPlanDesdeAtencion = auroSincronizarPlanDesdeAtencion;
   window.getAtencionActiva = function(){
     if(!atencionActivaId) return null;
     return leerLocal().find(a => String(a.id_atencion) === String(atencionActivaId)) || null;
