@@ -1005,22 +1005,6 @@
 
     atencionActivaId = a.id_atencion;
 
-    /* AUROSANAX PLAN: vincular consulta seleccionada con plan.js */
-    window.planState = window.planState || { atencionActual: '', cache: {} };
-    window.planState.atencionActual = a.id_atencion;
-
-    console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', a.id_atencion);
-
-    if(typeof cambiarPlanPorAtencion === 'function'){
-      cambiarPlanPorAtencion(a.id_atencion);
-    }
-
-    if(typeof cargarPlanClinicoDesdeSheets === 'function'){
-      cargarPlanClinicoDesdeSheets(a.id_atencion).catch(function(error){
-        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets para esta atención.', error);
-      });
-    }
-
     cargarRecetasDesdeSheetsAtenciones(true).then(function(){
       const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
       renderDetalleAtencion(normalizar(actual));
