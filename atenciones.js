@@ -1005,14 +1005,19 @@
 
     atencionActivaId = a.id_atencion;
 
-    /* AUROSANAX PLAN: vincular consulta seleccionada con plan.js */
+    /* AUROSANAX PLAN - FIX DEFINITIVO POR CONSULTA:
+       NO asignar window.planState.atencionActual antes de llamar cambiarPlanPorAtencion().
+       Motivo: cambiarPlanPorAtencion() primero guarda el Plan actual y luego cambia de consulta.
+       Si se asigna antes, el Plan de la consulta anterior se guarda por error en la nueva consulta.
+    */
     window.planState = window.planState || { atencionActual: '', cache: {} };
-    window.planState.atencionActual = a.id_atencion;
 
     console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', a.id_atencion);
 
     if(typeof cambiarPlanPorAtencion === 'function'){
       cambiarPlanPorAtencion(a.id_atencion);
+    }else{
+      window.planState.atencionActual = a.id_atencion;
     }
 
     if(typeof cargarPlanClinicoDesdeSheets === 'function'){
