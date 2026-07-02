@@ -1426,24 +1426,77 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
     window.planState.atencionActual = idAtencion;
 
+    function valorPlan(){
+        for(const k of arguments){
+            if(plan[k] !== undefined && plan[k] !== null && String(plan[k]).trim() !== ''){
+                return plan[k];
+            }
+        }
+        return '';
+    }
+
     try{
         window.medicamentosPlanSeleccionados =
-            JSON.parse(plan.medicamentos_plan || '[]');
+            JSON.parse(valorPlan('medicamentos_plan','medicamentos','medicamentosPlan') || '[]');
     }catch(e){
         window.medicamentosPlanSeleccionados = [];
     }
 
-    auroPlanSetValue('hcPlanTratamiento', plan.plan_terapeutico || '');
-    auroPlanSetValue('hcRecetaMedicamentos', plan.receta_medica || '');
-    auroPlanSetValue('hcExamenesSolicitados', plan.ordenes_medicas || '');
-    auroPlanSetValue('hcInterconsultaResumen', plan.interconsulta || '');
-    auroPlanSetValue('hcEvaluacionesResumen', plan.evaluaciones_plan || '');
-    auroPlanSetValue('hcIndicacionesPaciente', plan.indicaciones_paciente || '');
-    auroPlanSetValue('hcControl', plan.proximo_control || '');
-    auroPlanSetValue('hcEstadoHistoria', plan.estado_plan || 'Activo');
+    auroPlanSetValue('hcPlanTratamiento',
+        valorPlan('plan_terapeutico','planTratamiento','plan_tratamiento')
+    );
+
+    auroPlanSetValue('hcRecetaMedicamentos',
+        valorPlan('receta_medica','receta','recetaMedicamentos')
+    );
+
+    auroPlanSetValue('hcExamenesSolicitados',
+        valorPlan('ordenes_medicas','ordenes','examenes_solicitados')
+    );
+
+    auroPlanSetValue('hcInterconsultaResumen',
+        valorPlan('interconsulta','interconsultas','interconsulta_plan')
+    );
+
+    auroPlanSetValue('hcEvaluacionesResumen',
+        valorPlan('evaluaciones_plan','evaluaciones','evaluacion_plan')
+    );
+
+    auroPlanSetValue('hcIndicacionesPaciente',
+        valorPlan('indicaciones_paciente','indicaciones','indicacionesPaciente')
+    );
+
+    auroPlanSetValue('hcControl',
+        valorPlan('proximo_control','control','proximoControl')
+    );
+
+    auroPlanSetValue('hcEstadoHistoria',
+        valorPlan('estado_plan','estado','estadoHistoria') || 'Activo'
+    );
 
     guardarPlanTemporal();
-    auroPlanRefrescarVistas();
+
+    if(typeof renderMedicamentosPlanTabla === 'function'){
+        renderMedicamentosPlanTabla();
+    }
+
+    if(typeof renderOrdenesMedicasTabla === 'function'){
+        renderOrdenesMedicasTabla();
+    }
+
+    if(typeof recopilarInterconsultaPlan === 'function'){
+        recopilarInterconsultaPlan();
+    }
+
+    if(typeof recopilarEvaluacionesPlan === 'function'){
+        recopilarEvaluacionesPlan();
+    }
+
+    if(typeof sincronizarPlanConReceta === 'function'){
+        sincronizarPlanConReceta();
+    }
+
+    console.log('AUROSANAX PLAN: plan cargado desde Sheets para atención:', idAtencion, plan);
 
     return plan;
 }
@@ -1464,3 +1517,35 @@ document.addEventListener('DOMContentLoaded', function(){
 setTimeout(function(){
     inicializarPlan();
 }, 800);
+
+
+/* ============================================================
+   AUTO-CARGA AL CAMBIAR CONSULTA / ATENCIÓN
+   Al ejecutar cambiarPlanPorAtencion(id), también carga desde Sheets.
+============================================================ */
+(function(){
+    if(window.__auroPlanCambioSheetsInstalado) return;
+    window.__auroPlanCambioSheetsInstalado = true;
+
+    const originalCambiarPlanPorAtencion =
+        window.cambiarPlanPorAtencion ||
+        (typeof cambiarPlanPorAtencion === 'function' ? cambiarPlanPorAtencion : null);
+
+    if(typeof originalCambiarPlanPorAtencion === 'function'){
+        window.cambiarPlanPorAtencion = function(idAtencion){
+            const r = originalCambiarPlanPorAtencion(idAtencion);
+
+            const id = String(idAtencion || window.planState?.atencionActual || '').trim();
+
+            if(id && typeof window.cargarPlanClinicoDesdeSheets === 'function'){
+                setTimeout(function(){
+                    window.cargarPlanClinicoDesdeSheets(id).catch(function(error){
+                        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets al cambiar atención.', error);
+                    });
+                }, 120);
+            }
+
+            return r;
+        };
+    }
+})();
