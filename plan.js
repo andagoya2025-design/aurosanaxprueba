@@ -1204,6 +1204,255 @@ function instalarResponsivePlanAndroid(){
 }
 
 
+
+
+/* ============================================================
+   PERSISTENCIA DEFINITIVA PLAN → GOOGLE SHEETS
+   Pestaña: planes_clinicos
+   Requiere Apps Script con acciones:
+   - guardarPlanClinico
+   - editarPlanClinico
+   - buscarPlanPorAtencion
+============================================================ */
+
+function auroPlanApiUrl(){
+    try{
+        if(typeof API_URL !== 'undefined' && API_URL) return API_URL;
+    }catch(e){}
+
+    if(window.API_URL) return window.API_URL;
+
+    const input = document.getElementById('appsScriptUrl');
+    if(input && input.value) return input.value.trim();
+
+    return '';
+}
+
+async function auroPlanApiGet(accion, params){
+
+    const urlBase = auroPlanApiUrl();
+
+    if(!urlBase){
+        throw new Error('No se encontró API_URL para conectar con Apps Script.');
+    }
+
+    const query = new URLSearchParams({
+        accion: accion
+    });
+
+    Object.keys(params || {}).forEach(k => {
+        if(params[k] !== undefined && params[k] !== null){
+            query.append(k, params[k]);
+        }
+    });
+
+    const res = await fetch(urlBase + '?' + query.toString());
+    return await res.json();
+}
+
+async function auroPlanApiPost(accion, data){
+
+    const urlBase = auroPlanApiUrl();
+
+    if(!urlBase){
+        throw new Error('No se encontró API_URL para conectar con Apps Script.');
+    }
+
+    const res = await fetch(urlBase, {
+        method: 'POST',
+        body: JSON.stringify({
+            accion: accion,
+            data: data || {}
+        })
+    });
+
+    return await res.json();
+}
+
+function auroPlanObtenerPacienteActivoSeguro(){
+
+    try{
+        if(typeof getPacienteActivo === 'function'){
+            const p = getPacienteActivo();
+            if(p) return p;
+        }
+    }catch(e){}
+
+    const idSelect = document.getElementById('hcPacienteSelect')?.value || '';
+
+    try{
+        if(Array.isArray(patients)){
+            return patients.find(p =>
+                String(p.id_paciente || '') === String(idSelect || '')
+            ) || null;
+        }
+    }catch(e){}
+
+    return null;
+}
+
+function auroPlanObtenerHistoriaIdSeguro(){
+
+    try{
+        if(typeof editingHistoryId !== 'undefined' && editingHistoryId){
+            return editingHistoryId;
+        }
+    }catch(e){}
+
+    const h = document.getElementById('hcIdHistoria')?.value || '';
+    return h || '';
+}
+
+function auroPlanObtenerMedicoIdSeguro(){
+
+    try{
+        if(typeof obtenerIdMedicoReal === 'function'){
+            const id = obtenerIdMedicoReal();
+            if(id) return id;
+        }
+    }catch(e){}
+
+    const el = document.getElementById('hcIdMedico');
+    if(el && el.value) return el.value;
+
+    return 'MED-AUROSANAX';
+}
+
+function auroPlanPrepararDatosSheets(){
+
+    auroSincronizarPlanAntesGuardar();
+
+    const paciente = auroPlanObtenerPacienteActivoSeguro();
+
+    return {
+        id_atencion:
+            String(window.planState?.atencionActual || '').trim(),
+
+        id_paciente:
+            paciente?.id_paciente ||
+            document.getElementById('hcPacienteSelect')?.value ||
+            '',
+
+        id_historia:
+            auroPlanObtenerHistoriaIdSeguro(),
+
+        id_medico:
+            auroPlanObtenerMedicoIdSeguro(),
+
+        fecha_plan:
+            new Date().toISOString(),
+
+        plan_terapeutico:
+            auroPlanGetValue('hcPlanTratamiento'),
+
+        medicamentos_plan:
+            JSON.stringify(window.medicamentosPlanSeleccionados || []),
+
+        receta_medica:
+            auroPlanGetValue('hcRecetaMedicamentos'),
+
+        ordenes_medicas:
+            auroPlanGetValue('hcExamenesSolicitados'),
+
+        interconsulta:
+            auroPlanGetValue('hcInterconsultaResumen'),
+
+        evaluaciones_plan:
+            auroPlanGetValue('hcEvaluacionesResumen'),
+
+        indicaciones_paciente:
+            auroPlanGetValue('hcIndicacionesPaciente'),
+
+        proximo_control:
+            auroPlanGetValue('hcControl'),
+
+        estado_plan:
+            auroPlanGetValue('hcEstadoHistoria') || 'Activo'
+    };
+}
+
+async function buscarPlanClinicoPorAtencionDesdeSheets(idAtencion){
+
+    idAtencion = String(idAtencion || window.planState?.atencionActual || '').trim();
+
+    if(!idAtencion) return null;
+
+    const data = await auroPlanApiGet(
+        'buscarPlanPorAtencion',
+        { id_atencion: idAtencion }
+    );
+
+    return data || null;
+}
+
+async function guardarPlanClinicoDesdeSheets(){
+
+    const data = auroPlanPrepararDatosSheets();
+
+    if(!data.id_atencion){
+        console.warn('Plan no guardado: no existe id_atencion actual.');
+        return {
+            success: false,
+            message: 'No existe id_atencion actual para guardar el Plan.'
+        };
+    }
+
+    const existente = await buscarPlanClinicoPorAtencionDesdeSheets(
+        data.id_atencion
+    );
+
+    if(existente && existente.id_plan){
+        data.id_plan = existente.id_plan;
+        return await auroPlanApiPost('editarPlanClinico', data);
+    }
+
+    return await auroPlanApiPost('guardarPlanClinico', data);
+}
+
+async function cargarPlanClinicoDesdeSheets(idAtencion){
+
+    idAtencion = String(idAtencion || window.planState?.atencionActual || '').trim();
+
+    if(!idAtencion) return null;
+
+    const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
+
+    if(!plan || !plan.id_plan) return null;
+
+    window.planState = window.planState || {
+        atencionActual: idAtencion,
+        cache: {}
+    };
+
+    window.planState.atencionActual = idAtencion;
+
+    try{
+        window.medicamentosPlanSeleccionados =
+            JSON.parse(plan.medicamentos_plan || '[]');
+    }catch(e){
+        window.medicamentosPlanSeleccionados = [];
+    }
+
+    auroPlanSetValue('hcPlanTratamiento', plan.plan_terapeutico || '');
+    auroPlanSetValue('hcRecetaMedicamentos', plan.receta_medica || '');
+    auroPlanSetValue('hcExamenesSolicitados', plan.ordenes_medicas || '');
+    auroPlanSetValue('hcInterconsultaResumen', plan.interconsulta || '');
+    auroPlanSetValue('hcEvaluacionesResumen', plan.evaluaciones_plan || '');
+    auroPlanSetValue('hcIndicacionesPaciente', plan.indicaciones_paciente || '');
+    auroPlanSetValue('hcControl', plan.proximo_control || '');
+    auroPlanSetValue('hcEstadoHistoria', plan.estado_plan || 'Activo');
+
+    guardarPlanTemporal();
+    auroPlanRefrescarVistas();
+
+    return plan;
+}
+
+window.guardarPlanClinicoDesdeSheets = guardarPlanClinicoDesdeSheets;
+window.buscarPlanClinicoPorAtencionDesdeSheets = buscarPlanClinicoPorAtencionDesdeSheets;
+window.cargarPlanClinicoDesdeSheets = cargarPlanClinicoDesdeSheets;
+
+
 /* ============================================================
    INICIO SEGURO
 ============================================================ */
