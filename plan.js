@@ -1,11 +1,11 @@
 /****************************************************************
  AUROSANAX ERP
  plan.js
- MODULACIÓN PLAN - FASE 2
+ MODULACIÓN PLAN - FASE 3
  ---------------------------------------------------------------
  OBJETIVO:
- - Mantener Fase 1.3 limpia.
- - Agregar módulo de MEDICAMENTOS DEL PLAN.
+ - Mantener Fase 2 estable.
+ - Agregar módulo de ÓRDENES MÉDICAS DEL PLAN.
  - NO tocar botón Guardar historia / Actualizar plan.
  - NO usar MutationObserver.
  - NO interceptar navegación.
@@ -14,14 +14,13 @@
  CONTIENE:
  - Estado temporal por id_atencion.
  - Limpieza del Plan al cambiar consulta.
- - Medicamentos del Plan:
+ - Medicamentos del Plan completos.
+ - Órdenes médicas:
    * búsqueda / sugerencias
-   * selección
-   * agregar medicamento
-   * eliminar medicamento
-   * limpiar formulario
+   * agregar orden
+   * eliminar orden
    * render tabla
-   * sincronización Plan → Receta
+   * sincronización con hcExamenesSolicitados
  - Responsive móvil Android/teléfono.
 ****************************************************************/
 
@@ -39,10 +38,13 @@ window.medicamentosPlanSeleccionados = Array.isArray(window.medicamentosPlanSele
     ? window.medicamentosPlanSeleccionados
     : [];
 
+window.ordenesMedicasPlanSeleccionadas = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
+    ? window.ordenesMedicasPlanSeleccionadas
+    : [];
+
 
 /* ============================================================
    CATÁLOGO BASE DE MEDICAMENTOS
-   Si el index ya tiene MEDICAMENTOS_AUROSANAX_BASE, se respeta.
 ============================================================ */
 
 window.MEDICAMENTOS_AUROSANAX_BASE = window.MEDICAMENTOS_AUROSANAX_BASE || [
@@ -65,6 +67,50 @@ window.MEDICAMENTOS_AUROSANAX_BASE = window.MEDICAMENTOS_AUROSANAX_BASE || [
 
 
 /* ============================================================
+   CATÁLOGO BASE DE ÓRDENES MÉDICAS
+============================================================ */
+
+window.ORDENES_MEDICAS_AUROSANAX_BASE = window.ORDENES_MEDICAS_AUROSANAX_BASE || [
+    {cat:'LABORATORIOS', orden:'Biometría hemática completa'},
+    {cat:'LABORATORIOS', orden:'Glucosa en ayunas'},
+    {cat:'LABORATORIOS', orden:'Insulina basal'},
+    {cat:'LABORATORIOS', orden:'Hemoglobina glicosilada HbA1c'},
+    {cat:'LABORATORIOS', orden:'Perfil lipídico'},
+    {cat:'LABORATORIOS', orden:'Perfil hepático'},
+    {cat:'LABORATORIOS', orden:'Perfil renal'},
+    {cat:'LABORATORIOS', orden:'TSH'},
+    {cat:'LABORATORIOS', orden:'T4 libre'},
+    {cat:'LABORATORIOS', orden:'Vitamina D'},
+    {cat:'LABORATORIOS', orden:'Ferritina'},
+    {cat:'LABORATORIOS', orden:'Uroanálisis'},
+    {cat:'LABORATORIOS', orden:'Urocultivo + antibiograma'},
+    {cat:'GINECOLOGÍA', orden:'Papanicolaou'},
+    {cat:'GINECOLOGÍA', orden:'Colposcopia'},
+    {cat:'GINECOLOGÍA', orden:'Biopsia cervical'},
+    {cat:'GINECOLOGÍA', orden:'Cultivo vaginal'},
+    {cat:'GINECOLOGÍA', orden:'Examen fresco de secreción vaginal'},
+    {cat:'GINECOLOGÍA', orden:'Prueba HPV'},
+    {cat:'IMÁGENES', orden:'Ecografía transvaginal'},
+    {cat:'IMÁGENES', orden:'Ecografía pélvica'},
+    {cat:'IMÁGENES', orden:'Ecografía mamaria'},
+    {cat:'IMÁGENES', orden:'Mamografía bilateral'},
+    {cat:'IMÁGENES', orden:'Densitometría ósea'},
+    {cat:'OBSTETRICIA', orden:'Ecografía obstétrica'},
+    {cat:'OBSTETRICIA', orden:'Ecografía morfológica'},
+    {cat:'OBSTETRICIA', orden:'Doppler obstétrico'},
+    {cat:'OBSTETRICIA', orden:'Monitoreo fetal'},
+    {cat:'MATERNO FETAL', orden:'Valoración materno fetal'},
+    {cat:'CARDIOLOGÍA', orden:'Electrocardiograma'},
+    {cat:'CARDIOLOGÍA', orden:'Ecocardiograma'},
+    {cat:'PROCEDIMIENTOS', orden:'Láser CO2 fraccionado'},
+    {cat:'PROCEDIMIENTOS', orden:'Depilación láser diodo'},
+    {cat:'PROCEDIMIENTOS', orden:'HIFU'},
+    {cat:'PROCEDIMIENTOS', orden:'PRP'},
+    {cat:'OTROS', orden:'Control médico'}
+];
+
+
+/* ============================================================
    INICIALIZACIÓN
 ============================================================ */
 
@@ -72,6 +118,10 @@ function inicializarPlan(){
 
     if(!Array.isArray(window.medicamentosPlanSeleccionados)){
         window.medicamentosPlanSeleccionados = [];
+    }
+
+    if(!Array.isArray(window.ordenesMedicasPlanSeleccionadas)){
+        window.ordenesMedicasPlanSeleccionadas = [];
     }
 
     if(!window.planState){
@@ -83,6 +133,7 @@ function inicializarPlan(){
 
     instalarResponsivePlanAndroid();
     instalarEventosMedicamentosPlan();
+    instalarEventosOrdenesMedicasPlan();
     auroPlanRefrescarVistas();
 }
 
@@ -123,13 +174,17 @@ function guardarPlanTemporal(){
             JSON.stringify(window.medicamentosPlanSeleccionados || [])
         ),
 
+        ordenes: JSON.parse(
+            JSON.stringify(window.ordenesMedicasPlanSeleccionadas || [])
+        ),
+
         plan:
             document.getElementById('hcPlanTratamiento')?.value || '',
 
         indicaciones:
             document.getElementById('hcIndicacionesPaciente')?.value || '',
 
-        ordenes:
+        ordenesTexto:
             document.getElementById('hcExamenesSolicitados')?.value || '',
 
         interconsulta:
@@ -166,9 +221,12 @@ function cargarPlanTemporal(idAtencion){
     window.medicamentosPlanSeleccionados =
         JSON.parse(JSON.stringify(data.medicamentos || []));
 
+    window.ordenesMedicasPlanSeleccionadas =
+        JSON.parse(JSON.stringify(data.ordenes || []));
+
     auroPlanSetValue('hcPlanTratamiento', data.plan || '');
     auroPlanSetValue('hcIndicacionesPaciente', data.indicaciones || '');
-    auroPlanSetValue('hcExamenesSolicitados', data.ordenes || '');
+    auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
     auroPlanSetValue('hcInterconsultaResumen', data.interconsulta || '');
     auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
     auroPlanSetValue('hcRecetaMedicamentos', data.receta || '');
@@ -184,6 +242,7 @@ function cargarPlanTemporal(idAtencion){
 function limpiarPlanTemporal(){
 
     window.medicamentosPlanSeleccionados = [];
+    window.ordenesMedicasPlanSeleccionadas = [];
 
     const campos = [
         'hcPlanTratamiento',
@@ -212,7 +271,7 @@ function normalizarMedTexto(t){
         .trim();
 }
 
-function escapeHtmlMed(txt){
+function escapeHtmlPlan(txt){
     return String(txt || '').replace(/[&<>'"]/g, c => ({
         '&':'&amp;',
         '<':'&lt;',
@@ -220,6 +279,10 @@ function escapeHtmlMed(txt){
         "'":'&#39;',
         '"':'&quot;'
     }[c]));
+}
+
+function escapeHtmlMed(txt){
+    return escapeHtmlPlan(txt);
 }
 
 function renderMedicamentoSugerencias(){
@@ -250,14 +313,14 @@ function renderMedicamentoSugerencias(){
 
     box.innerHTML = res.map(m => `
         <div class="med-sug-item"
-             data-med="${escapeHtmlMed(m.med)}"
-             data-pres="${escapeHtmlMed(m.pres)}"
-             data-via="${escapeHtmlMed(m.via)}"
-             data-frec="${escapeHtmlMed(m.frec)}"
-             data-dur="${escapeHtmlMed(m.dur)}"
-             data-ind="${escapeHtmlMed(m.ind)}">
-          <div>• ${escapeHtmlMed(m.med)} <span class="text-muted">${escapeHtmlMed(m.pres)}</span></div>
-          <div class="med-sug-cat">${escapeHtmlMed(m.cat)}</div>
+             data-med="${escapeHtmlPlan(m.med)}"
+             data-pres="${escapeHtmlPlan(m.pres)}"
+             data-via="${escapeHtmlPlan(m.via)}"
+             data-frec="${escapeHtmlPlan(m.frec)}"
+             data-dur="${escapeHtmlPlan(m.dur)}"
+             data-ind="${escapeHtmlPlan(m.ind)}">
+          <div>• ${escapeHtmlPlan(m.med)} <span class="text-muted">${escapeHtmlPlan(m.pres)}</span></div>
+          <div class="med-sug-cat">${escapeHtmlPlan(m.cat)}</div>
         </div>
     `).join('');
 
@@ -380,14 +443,14 @@ function renderMedicamentosPlanTabla(){
 
         tbody.innerHTML = meds.map((m,i) => `
             <tr>
-              <td>${escapeHtmlMed(m.med)}</td>
-              <td>${escapeHtmlMed(m.pres)}</td>
-              <td>${escapeHtmlMed(m.via)}</td>
-              <td>${escapeHtmlMed(m.cantidad)}</td>
-              <td>${escapeHtmlMed(m.frec)}</td>
-              <td>${escapeHtmlMed(m.dur)}</td>
-              <td>${escapeHtmlMed(m.ind)}</td>
-              <td>${escapeHtmlMed(m.continuo)}</td>
+              <td>${escapeHtmlPlan(m.med)}</td>
+              <td>${escapeHtmlPlan(m.pres)}</td>
+              <td>${escapeHtmlPlan(m.via)}</td>
+              <td>${escapeHtmlPlan(m.cantidad)}</td>
+              <td>${escapeHtmlPlan(m.frec)}</td>
+              <td>${escapeHtmlPlan(m.dur)}</td>
+              <td>${escapeHtmlPlan(m.ind)}</td>
+              <td>${escapeHtmlPlan(m.continuo)}</td>
               <td>
                 <button type="button"
                         class="btn btn-sm btn-outline-danger"
@@ -452,8 +515,184 @@ function limpiarMedicamentosPlan(){
 
 
 /* ============================================================
+   ÓRDENES MÉDICAS DEL PLAN
+============================================================ */
+
+function normalizarOrdenTexto(t){
+    return String(t || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g,'')
+        .trim();
+}
+
+function renderOrdenesSugerencias(){
+
+    const input = document.getElementById('hcOrdenBusqueda');
+    const box = document.getElementById('hcOrdenSugerencias');
+
+    if(!input || !box) return;
+
+    const q = normalizarOrdenTexto(input.value);
+    const tipoFiltro = normalizarOrdenTexto(auroPlanGetValue('hcOrdenTipo'));
+
+    const base = Array.isArray(window.ORDENES_MEDICAS_AUROSANAX_BASE)
+        ? window.ORDENES_MEDICAS_AUROSANAX_BASE
+        : [];
+
+    const res = base
+        .filter(o => {
+            const texto = normalizarOrdenTexto((o.orden || '') + ' ' + (o.cat || ''));
+            const coincideTexto = !q || texto.includes(q);
+            const coincideTipo = !tipoFiltro || normalizarOrdenTexto(o.cat || '').includes(tipoFiltro);
+            return coincideTexto && coincideTipo;
+        })
+        .slice(0,40);
+
+    if(!res.length){
+        box.innerHTML =
+            '<div class="orden-sug-item text-muted">Sin coincidencias. Puede escribirlo manualmente y agregar.</div>';
+        box.classList.remove('d-none');
+        return;
+    }
+
+    box.innerHTML = res.map(o => `
+        <div class="orden-sug-item"
+             data-orden="${escapeHtmlPlan(o.orden)}"
+             data-cat="${escapeHtmlPlan(o.cat)}">
+          <div>• ${escapeHtmlPlan(o.orden)}</div>
+          <div class="orden-sug-cat">${escapeHtmlPlan(o.cat)}</div>
+        </div>
+    `).join('');
+
+    box.classList.remove('d-none');
+}
+
+function seleccionarOrdenSugerida(el){
+
+    if(!el) return;
+
+    auroPlanSetValue('hcOrdenBusqueda', el.dataset.orden || '');
+    auroPlanSetValue('hcOrdenTipo', el.dataset.cat || '');
+
+    const box = document.getElementById('hcOrdenSugerencias');
+    if(box) box.classList.add('d-none');
+}
+
+function limpiarFormularioOrdenMedica(){
+
+    auroPlanSetValue('hcOrdenTipo', '');
+    auroPlanSetValue('hcOrdenBusqueda', '');
+    auroPlanSetValue('hcOrdenObservacion', '');
+
+    const box = document.getElementById('hcOrdenSugerencias');
+    if(box) box.classList.add('d-none');
+}
+
+function agregarOrdenMedicaDesdeFormulario(){
+
+    const orden = (auroPlanGetValue('hcOrdenBusqueda') || '').trim();
+
+    if(!orden){
+        alert('Ingrese o seleccione una orden médica.');
+        return;
+    }
+
+    window.ordenesMedicasPlanSeleccionadas.push({
+        orden,
+        cat: auroPlanGetValue('hcOrdenTipo') || 'OTROS',
+        obs: auroPlanGetValue('hcOrdenObservacion')
+    });
+
+    limpiarFormularioOrdenMedica();
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    guardarPlanTemporal();
+}
+
+function eliminarOrdenMedica(i){
+
+    i = Number(i);
+
+    if(Number.isNaN(i)) return;
+
+    window.ordenesMedicasPlanSeleccionadas.splice(i,1);
+
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    guardarPlanTemporal();
+}
+
+function renderOrdenesMedicasTabla(){
+
+    const tbody = document.getElementById('hcOrdenesTableBody');
+
+    if(!tbody) return;
+
+    const ordenes = window.ordenesMedicasPlanSeleccionadas || [];
+
+    if(!ordenes.length){
+
+        tbody.innerHTML = `
+            <tr id="hcOrdenesEmpty">
+              <td colspan="4" class="text-center text-muted py-3">
+                <i class="bi bi-file-earmark-medical me-1"></i> Sin registros
+              </td>
+            </tr>
+        `;
+
+        auroPlanSetValue('hcExamenesSolicitados', '');
+        return;
+    }
+
+    tbody.innerHTML = ordenes.map((o,i) => `
+        <tr>
+          <td>${escapeHtmlPlan(o.orden)}</td>
+          <td>${escapeHtmlPlan(o.cat)}</td>
+          <td>${escapeHtmlPlan(o.obs)}</td>
+          <td>
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    onclick="eliminarOrdenMedica(${i})">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>
+    `).join('');
+
+    recopilarOrdenesMedicasPlan();
+}
+
+function textoOrdenesMedicasPlan(){
+
+    return (window.ordenesMedicasPlanSeleccionadas || []).map((o,i) => {
+        return [
+            `${i + 1}. ${o.orden || ''}`,
+            o.cat ? `Categoría: ${o.cat}` : '',
+            o.obs ? `Observación: ${o.obs}` : ''
+        ].filter(Boolean).join(' - ');
+    }).join('\n');
+}
+
+function recopilarOrdenesMedicasPlan(){
+
+    auroPlanSetValue('hcExamenesSolicitados', textoOrdenesMedicasPlan());
+
+    return auroPlanGetValue('hcExamenesSolicitados');
+}
+
+function limpiarOrdenesMedicasPlan(){
+
+    window.ordenesMedicasPlanSeleccionadas = [];
+
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    guardarPlanTemporal();
+}
+
+
+/* ============================================================
    EVENTOS MEDICAMENTOS PLAN
-   Sin interceptar botones generales.
 ============================================================ */
 
 function instalarEventosMedicamentosPlan(){
@@ -514,8 +753,56 @@ function instalarEventosMedicamentosPlan(){
 
 
 /* ============================================================
+   EVENTOS ÓRDENES MÉDICAS PLAN
+============================================================ */
+
+function instalarEventosOrdenesMedicasPlan(){
+
+    if(window.auroPlanOrdenesEventosInstalados) return;
+    window.auroPlanOrdenesEventosInstalados = true;
+
+    document.addEventListener('input', function(e){
+        if(e.target && e.target.id === 'hcOrdenBusqueda'){
+            renderOrdenesSugerencias();
+        }
+    });
+
+    document.addEventListener('focusin', function(e){
+        if(e.target && e.target.id === 'hcOrdenBusqueda'){
+            renderOrdenesSugerencias();
+        }
+    });
+
+    document.addEventListener('change', function(e){
+        if(e.target && e.target.id === 'hcOrdenTipo'){
+            renderOrdenesSugerencias();
+        }
+    });
+
+    document.addEventListener('click', function(e){
+
+        const item = e.target.closest('.orden-sug-item[data-orden]');
+
+        if(item){
+            seleccionarOrdenSugerida(item);
+            return;
+        }
+
+        const box = document.getElementById('hcOrdenSugerencias');
+
+        if(
+            box &&
+            !e.target.closest('#hcOrdenSugerencias') &&
+            e.target.id !== 'hcOrdenBusqueda'
+        ){
+            box.classList.add('d-none');
+        }
+    });
+}
+
+
+/* ============================================================
    SINCRONIZACIÓN AUXILIAR ANTES DE GUARDAR
-   Puede llamarse desde index.html antes de guardarHistoriaClinicaERP()
 ============================================================ */
 
 function auroSincronizarPlanAntesGuardar(){
@@ -528,11 +815,10 @@ function auroSincronizarPlanAntesGuardar(){
         recopilarInterconsultaPlan();
     }
 
-    if(typeof recopilarOrdenesMedicasPlan === 'function'){
-        recopilarOrdenesMedicasPlan();
-    }
+    recopilarOrdenesMedicasPlan();
 
     renderMedicamentosPlanTabla();
+    renderOrdenesMedicasTabla();
     sincronizarPlanConReceta();
     guardarPlanTemporal();
 }
@@ -547,9 +833,8 @@ function auroPlanRefrescarVistas(){
     renderMedicamentosPlanTabla();
     sincronizarPlanConReceta();
 
-    if(typeof renderOrdenesMedicasTabla === 'function'){
-        renderOrdenesMedicasTabla();
-    }
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
 
     if(typeof recopilarEvaluacionesPlan === 'function'){
         recopilarEvaluacionesPlan();
