@@ -4510,17 +4510,12 @@ function auroInicializarAyudasExamenFisicoV32(){
    ========================================================== */
 
 function auroHistoriaTienePlan(h){
-  if(!h) return false;
-  return [
-    h.plan_tratamiento,
-    h.evaluaciones_plan,
-    h.indicaciones_paciente,
-    h.proximo_control,
-    h.plan_terapeutico_estado,
-    h.fecha_inicio_plan,
-    h.fecha_fin_estimada_plan,
-    h.estado
-  ].some(v => String(v || '').trim());
+  /*
+    AUROSANAX FIX SEGURO:
+    No considerar campos de Plan guardados en historias_clinicas.
+    Evita que aparezca "Plan previo guardado" desde la historia antigua.
+  */
+  return false;
 }
 
 function auroPlanValorSeguro(v){
@@ -4665,19 +4660,21 @@ function auroPlanCargarInterconsultaDesdeTexto(texto){
 function auroCargarPlanDesdeHistoria(h, modo){
   if(!h) return;
 
-  setValueIfExists('hcPlanTratamiento', h.plan_tratamiento || '');
-  setValueIfExists('hcEvaluacionesResumen', h.evaluaciones_plan || '');
-  setValueIfExists('hcIndicacionesPaciente', h.indicaciones_paciente || '');
-  setValueIfExists('hcControl', h.proximo_control || '');
-  setValueIfExists('hcEstadoHistoria', h.estado || getValueIfExists('hcEstadoHistoria') || 'Control');
-  setValueIfExists('hcPlanTerapeuticoEstado', h.plan_terapeutico_estado || h.estado || 'Control');
-  setValueIfExists('hcFechaInicioPlan', h.fecha_inicio_plan || '');
-  setValueIfExists('hcFechaFinEstimadaPlan', h.fecha_fin_estimada_plan || h.proximo_control || '');
+  /*
+    AUROSANAX FIX SEGURO:
+    El Plan clínico ya NO se carga desde historias_clinicas.
+    El Plan por consulta debe manejarse desde planes_clinicos mediante plan.js/id_atencion.
+    No se limpian campos aquí para no afectar botones ni navegación.
+  */
+  window.historiaActual = h;
+  window.currentHistoria = h;
 
-  auroPlanCargarEvaluacionesDesdeTexto(h.evaluaciones_plan || '');
-  auroPlanCargarInterconsultaDesdeTexto(h.plan_tratamiento || h.observaciones || '');
+  const box = document.getElementById('auroPlanPreviosBox');
+  if(box){
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
 
-  auroRenderPlanPrevio(h, modo || 'edicion');
   if(typeof updateClinicalSummary === 'function') updateClinicalSummary();
 }
 
@@ -4690,30 +4687,28 @@ function auroSincronizarPlanAntesGuardar(){
 }
 
 function auroAplicarProteccionPlanEdicion(data){
+  /*
+    AUROSANAX FIX SEGURO:
+    No volver a copiar campos del Plan desde historias_clinicas.
+    El Plan debe vivir únicamente en planes_clinicos.
+  */
   if(!editingHistoryId || !data) return;
-  const h = historiasClinicas.find((x, idx) => String(x.id_historia || x.id || idx) === String(editingHistoryId));
-  if(!h) return;
 
-  const campos = [
+  const camposPlanHistoria = [
     'plan_tratamiento',
     'evaluaciones_plan',
     'indicaciones_paciente',
     'proximo_control',
     'plan_terapeutico_estado',
     'fecha_inicio_plan',
-    'fecha_fin_estimada_plan',
-    'estado'
+    'fecha_fin_estimada_plan'
   ];
 
-  campos.forEach(campo => {
-    const actual = String(data[campo] || '').trim();
-    const previo = String(h[campo] || '').trim();
-    if(!actual && previo) data[campo] = previo;
+  camposPlanHistoria.forEach(campo => {
+    if(Object.prototype.hasOwnProperty.call(data, campo)){
+      delete data[campo];
+    }
   });
-
-  if(!String(data.estado || '').trim() && String(h.estado || '').trim()){
-    data.estado = h.estado;
-  }
 }
 
 
@@ -4855,13 +4850,6 @@ async function guardarHistoriaClinicaERP(){
     diagnostico_secundario: getValueIfExists('hcDiagnosticoSecundario'),
     cie10_secundario: getValueIfExists('hcCie10Secundario'),
     diagnosticos_cie10: recopilarDiagnosticosCie10(),
-    plan_tratamiento: getValueIfExists('hcPlanTratamiento'),
-    evaluaciones_plan: evaluacionesPlan || getValueIfExists('hcEvaluacionesResumen'),
-    indicaciones_paciente: getValueIfExists('hcIndicacionesPaciente'),
-    proximo_control: getValueIfExists('hcControl'),
-    plan_terapeutico_estado: getValueIfExists('hcPlanTerapeuticoEstado') || getValueIfExists('hcEstadoHistoria') || 'Activo',
-    fecha_inicio_plan: getValueIfExists('hcFechaInicioPlan') || (esEdicion ? '' : fechaHoyISO()),
-    fecha_fin_estimada_plan: getValueIfExists('hcFechaFinEstimadaPlan') || getValueIfExists('hcControl'),
     observaciones: observaciones,
     estado: getValueIfExists('hcEstadoHistoria') || 'Activo',
     id_medico: 'MED-001'
@@ -6332,6 +6320,44 @@ document.addEventListener('click',e=>{
 
   document.addEventListener('DOMContentLoaded', auroPlanInstalarUI);
   setTimeout(auroPlanInstalarUI, 400);
+})();
+</script>
+
+
+<script>
+/* ============================================================
+   AUROSANAX FIX MINIMO - LIMPIEZA VISUAL POR CAMBIO DE ATENCION
+   No toca fetch, no bloquea botones, no modifica Agenda/Pacientes.
+============================================================ */
+(function(){
+  window.auroLimpiarPlanVisualAntesDeCambiarAtencion = function(){
+    try{
+      if(Array.isArray(window.medicamentosPlanSeleccionados)){
+        window.medicamentosPlanSeleccionados.length = 0;
+      }
+      if(Array.isArray(window.ordenesMedicasSeleccionadas)){
+        window.ordenesMedicasSeleccionadas.length = 0;
+      }
+      if(Array.isArray(window.ordenesMedicasPlanSeleccionadas)){
+        window.ordenesMedicasPlanSeleccionadas.length = 0;
+      }
+      if(Array.isArray(window.interconsultasPlanSeleccionadas)){
+        window.interconsultasPlanSeleccionadas.length = 0;
+      }
+
+      ['hcRecetaMedicamentos','hcExamenesSolicitados','hcInterconsultaResumen','hcEvaluacionesResumen'].forEach(function(id){
+        const el = document.getElementById(id);
+        if(el) el.value = '';
+      });
+
+      if(typeof renderMedicamentosPlanTabla === 'function') renderMedicamentosPlanTabla();
+      if(typeof renderOrdenesMedicasTabla === 'function') renderOrdenesMedicasTabla();
+      if(typeof recopilarInterconsultaPlan === 'function') recopilarInterconsultaPlan();
+      if(typeof recopilarEvaluacionesPlan === 'function') recopilarEvaluacionesPlan();
+    }catch(error){
+      console.warn('AUROSANAX FIX: no se pudo limpiar plan visual.', error);
+    }
+  };
 })();
 </script>
 
