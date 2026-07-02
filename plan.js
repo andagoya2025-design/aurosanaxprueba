@@ -1,27 +1,46 @@
 /****************************************************************
  AUROSANAX ERP
  plan.js
- MODULACIÓN PLAN - FASE 1.1
- - Mantiene limpieza por id_atencion.
- - Mejora botón Guardar/Actualizar plan clínico.
- - Bloquea doble clic para evitar duplicidad.
- - Mejora responsive Android/teléfono.
- - No toca Recetas, Atenciones, Pacientes, Agenda ni Dashboard.
+ MODULACIÓN PLAN - FASE 1.3 LIMPIA
+ ---------------------------------------------------------------
+ OBJETIVO:
+ - Mantener únicamente lógica segura del Plan.
+ - NO tocar botones.
+ - NO usar MutationObserver.
+ - NO interceptar clics.
+ - NO modificar Dashboard, Pacientes, Agenda, Atenciones ni Recetas.
+
+ CONTIENE:
+ - Estado temporal del Plan por id_atencion.
+ - Limpieza del Plan al cambiar consulta.
+ - Restauración temporal por consulta.
+ - Limpieza de medicamentos del Plan.
+ - Sincronización segura con funciones ya existentes si están cargadas.
+ - Responsive móvil Android/teléfono para el bloque Plan.
+
+ IMPORTANTE:
+ - El botón Guardar historia / Actualizar plan queda en index.html.
+ - guardarHistoriaClinicaERP() queda en index.html.
 ****************************************************************/
+
 
 /* ============================================================
    ESTADO TEMPORAL DEL PLAN POR ATENCIÓN
 ============================================================ */
+
 window.planState = window.planState || {
     atencionActual: '',
     cache: {}
 };
 
-window.auroPlanGuardando = false;
+
+/* ============================================================
+   INICIALIZACIÓN
+============================================================ */
 
 function inicializarPlan(){
 
-    if(!window.medicamentosPlanSeleccionados){
+    if(!Array.isArray(window.medicamentosPlanSeleccionados)){
         window.medicamentosPlanSeleccionados = [];
     }
 
@@ -32,9 +51,13 @@ function inicializarPlan(){
         };
     }
 
-    instalarProteccionBotonPlan();
     instalarResponsivePlanAndroid();
 }
+
+
+/* ============================================================
+   CAMBIO DE CONSULTA / ATENCIÓN
+============================================================ */
 
 function cambiarPlanPorAtencion(idAtencion){
 
@@ -46,58 +69,85 @@ function cambiarPlanPorAtencion(idAtencion){
 
     guardarPlanTemporal();
 
-    planState.atencionActual = idAtencion;
+    window.planState.atencionActual = idAtencion;
 
     cargarPlanTemporal(idAtencion);
 }
 
+
+/* ============================================================
+   GUARDAR PLAN TEMPORAL EN MEMORIA
+============================================================ */
+
 function guardarPlanTemporal(){
 
-    if(!planState.atencionActual) return;
+    inicializarPlan();
 
-    planState.cache[planState.atencionActual] = {
+    if(!window.planState.atencionActual) return;
+
+    window.planState.cache[window.planState.atencionActual] = {
 
         medicamentos: JSON.parse(
-            JSON.stringify(
-                window.medicamentosPlanSeleccionados || []
-            )
+            JSON.stringify(window.medicamentosPlanSeleccionados || [])
         ),
 
-        plan: document.getElementById('hcPlanTratamiento')?.value || '',
+        plan:
+            document.getElementById('hcPlanTratamiento')?.value || '',
 
         indicaciones:
-            document.getElementById('hcIndicacionesPaciente')?.value || ''
+            document.getElementById('hcIndicacionesPaciente')?.value || '',
+
+        ordenes:
+            document.getElementById('hcExamenesSolicitados')?.value || '',
+
+        interconsulta:
+            document.getElementById('hcInterconsultaResumen')?.value || '',
+
+        evaluaciones:
+            document.getElementById('hcEvaluacionesResumen')?.value || '',
+
+        receta:
+            document.getElementById('hcRecetaMedicamentos')?.value || ''
     };
 }
 
+
+/* ============================================================
+   CARGAR PLAN TEMPORAL POR ATENCIÓN
+============================================================ */
+
 function cargarPlanTemporal(idAtencion){
+
+    inicializarPlan();
+
+    idAtencion = String(idAtencion || '').trim();
 
     limpiarPlanTemporal();
 
-    const data = planState.cache[idAtencion];
+    const data = window.planState.cache[idAtencion];
 
     if(!data){
-        if(typeof renderMedicamentosPlanTabla === 'function') renderMedicamentosPlanTabla();
-        if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+        auroPlanRefrescarVistas();
         return;
     }
 
     window.medicamentosPlanSeleccionados =
         JSON.parse(JSON.stringify(data.medicamentos || []));
 
-    if(document.getElementById('hcPlanTratamiento')){
-        document.getElementById('hcPlanTratamiento').value =
-            data.plan || '';
-    }
+    auroPlanSetValue('hcPlanTratamiento', data.plan || '');
+    auroPlanSetValue('hcIndicacionesPaciente', data.indicaciones || '');
+    auroPlanSetValue('hcExamenesSolicitados', data.ordenes || '');
+    auroPlanSetValue('hcInterconsultaResumen', data.interconsulta || '');
+    auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
+    auroPlanSetValue('hcRecetaMedicamentos', data.receta || '');
 
-    if(document.getElementById('hcIndicacionesPaciente')){
-        document.getElementById('hcIndicacionesPaciente').value =
-            data.indicaciones || '';
-    }
-
-    if(typeof renderMedicamentosPlanTabla === 'function') renderMedicamentosPlanTabla();
-    if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+    auroPlanRefrescarVistas();
 }
+
+
+/* ============================================================
+   LIMPIAR PLAN TEMPORAL
+============================================================ */
 
 function limpiarPlanTemporal(){
 
@@ -106,125 +156,98 @@ function limpiarPlanTemporal(){
     const campos = [
         'hcPlanTratamiento',
         'hcIndicacionesPaciente',
-        'hcRecetaMedicamentos'
+        'hcRecetaMedicamentos',
+        'hcExamenesSolicitados',
+        'hcInterconsultaResumen',
+        'hcEvaluacionesResumen'
     ];
 
-    campos.forEach(id=>{
-        const el = document.getElementById(id);
-        if(el) el.value = '';
-    });
+    campos.forEach(id => auroPlanSetValue(id, ''));
 
-    if(typeof renderMedicamentosPlanTabla === 'function') renderMedicamentosPlanTabla();
+    auroPlanRefrescarVistas();
 }
+
+
+/* ============================================================
+   LIMPIAR SOLO MEDICAMENTOS DEL PLAN
+============================================================ */
 
 function limpiarMedicamentosPlan(){
 
     window.medicamentosPlanSeleccionados = [];
 
-    if(typeof renderMedicamentosPlanTabla === 'function') renderMedicamentosPlanTabla();
-
-    if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+    auroPlanRefrescarVistas();
 }
+
 
 /* ============================================================
-   BOTÓN PLAN: BLOQUEO, ESTADO VISUAL Y CERO DUPLICIDAD
+   SINCRONIZACIÓN AUXILIAR ANTES DE GUARDAR
+   Puede llamarse desde index.html antes de guardarHistoriaClinicaERP()
 ============================================================ */
 
-function auroPlanBuscarBotonPrincipal(){
-    return document.querySelector('#auroPlanActionButtons button[data-auro-plan-btn="1"]') ||
-           document.querySelector('button[data-auro-plan-btn="1"]');
-}
+function auroSincronizarPlanAntesGuardar(){
 
-function auroPlanTextoBotonNormal(){
-    const esEdicion = !!window.editingHistoryId || !!document.querySelector('#auroPlanPreviosBox:not([style*="display: none"])');
-    return '<i class="bi bi-list-check me-1"></i> ' + (esEdicion ? 'Actualizar plan clínico' : 'Guardar plan clínico');
-}
-
-function auroPlanSetEstadoVisual(tipo, mensaje){
-
-    let status = document.getElementById('hcSaveStatus');
-    const panel = document.getElementById('hc_plan');
-
-    if(!status && panel){
-        status = document.createElement('div');
-        status.id = 'hcSaveStatus';
-        status.className = 'auro-save-status';
-        const acciones = document.getElementById('auroPlanActionButtons');
-        if(acciones) acciones.insertAdjacentElement('afterend', status);
-        else panel.insertAdjacentElement('afterbegin', status);
+    if(typeof recopilarEvaluacionesPlan === 'function'){
+        recopilarEvaluacionesPlan();
     }
 
-    if(status){
-        status.className = 'auro-save-status ' + (tipo || '');
-        status.textContent = mensaje || '';
+    if(typeof recopilarInterconsultaPlan === 'function'){
+        recopilarInterconsultaPlan();
     }
+
+    if(typeof recopilarOrdenesMedicasPlan === 'function'){
+        recopilarOrdenesMedicasPlan();
+    }
+
+    if(typeof renderMedicamentosPlanTabla === 'function'){
+        renderMedicamentosPlanTabla();
+    }
+
+    if(typeof sincronizarPlanConReceta === 'function'){
+        sincronizarPlanConReceta();
+    }
+
+    guardarPlanTemporal();
 }
 
-async function guardarPlanClinicoSeguro(){
 
-    if(window.auroPlanGuardando) return false;
+/* ============================================================
+   REFRESCAR VISTAS DEL PLAN
+============================================================ */
 
-    const btn = auroPlanBuscarBotonPrincipal();
-    const textoNormal = btn ? btn.innerHTML : auroPlanTextoBotonNormal();
+function auroPlanRefrescarVistas(){
 
-    try{
-        window.auroPlanGuardando = true;
+    if(typeof renderMedicamentosPlanTabla === 'function'){
+        renderMedicamentosPlanTabla();
+    }
 
-        if(btn){
-            btn.disabled = true;
-            btn.classList.add('auro-plan-btn-saving');
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
-        }
+    if(typeof sincronizarPlanConReceta === 'function'){
+        sincronizarPlanConReceta();
+    }
 
-        auroPlanSetEstadoVisual('', 'Guardando plan clínico...');
+    if(typeof renderOrdenesMedicasTabla === 'function'){
+        renderOrdenesMedicasTabla();
+    }
 
-        if(typeof guardarPlanTemporal === 'function') guardarPlanTemporal();
+    if(typeof recopilarEvaluacionesPlan === 'function'){
+        recopilarEvaluacionesPlan();
+    }
 
-        if(typeof auroSincronizarPlanAntesGuardar === 'function'){
-            auroSincronizarPlanAntesGuardar();
-        }else{
-            if(typeof renderMedicamentosPlanTabla === 'function') renderMedicamentosPlanTabla();
-            if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
-        }
-
-        if(typeof window.guardarHistoriaClinicaERP === 'function'){
-            const resultado = await window.guardarHistoriaClinicaERP();
-            auroPlanSetEstadoVisual('ok', 'Plan clínico actualizado correctamente.');
-            return resultado;
-        }
-
-        auroPlanSetEstadoVisual('error', 'No se encontró la función de guardado.');
-        return false;
-
-    }catch(error){
-        console.error('Error guardando plan clínico:', error);
-        auroPlanSetEstadoVisual('error', 'No se pudo guardar el plan clínico. Revise la consola.');
-        return false;
-
-    }finally{
-        setTimeout(()=>{
-            window.auroPlanGuardando = false;
-
-            if(btn){
-                btn.disabled = false;
-                btn.classList.remove('auro-plan-btn-saving');
-                btn.innerHTML = auroPlanTextoBotonNormal() || textoNormal;
-            }
-
-        }, 900);
+    if(typeof recopilarInterconsultaPlan === 'function'){
+        recopilarInterconsultaPlan();
     }
 }
 
-function instalarProteccionBotonPlan(){
 
-    const btn = auroPlanBuscarBotonPrincipal();
+/* ============================================================
+   UTILIDAD SEGURA
+============================================================ */
 
-    if(btn && btn.dataset.auroPlanSeguro !== '1'){
-        btn.dataset.auroPlanSeguro = '1';
-        btn.setAttribute('onclick', 'guardarPlanClinicoSeguro()');
-        btn.innerHTML = auroPlanTextoBotonNormal();
-    }
+function auroPlanSetValue(id, value){
+    const el = document.getElementById(id);
+    if(el) el.value = value || '';
 }
+
 
 /* ============================================================
    RESPONSIVE PLAN ANDROID / TELÉFONO
@@ -236,40 +259,14 @@ function instalarResponsivePlanAndroid(){
 
     const style = document.createElement('style');
     style.id = 'auroPlanResponsiveAndroidStyle';
+
     style.textContent = `
-      .auro-save-status.error{
-        border-color:#fecaca;
-        background:#fef2f2;
-        color:#991b1b;
-      }
-
-      .auro-plan-btn-saving{
-        opacity:.85;
-        cursor:not-allowed!important;
-      }
-
       @media(max-width:760px){
+
         #hc_plan .hc-plan-narrow,
         #hc_plan .hc-plan-row-small{
           width:100%!important;
           max-width:none!important;
-        }
-
-        #auroPlanActionButtons,
-        .auro-plan-actions{
-          display:flex!important;
-          flex-direction:column!important;
-          gap:10px!important;
-          width:100%!important;
-          margin:0 0 14px!important;
-        }
-
-        #auroPlanActionButtons button,
-        .auro-plan-actions button{
-          width:100%!important;
-          justify-content:center!important;
-          min-height:44px!important;
-          white-space:normal!important;
         }
 
         #hc_plan .receta-medicamentos-box,
@@ -290,9 +287,19 @@ function instalarResponsivePlanAndroid(){
           min-width:850px!important;
         }
 
-        #hcSaveStatus{
-          font-size:12px!important;
-          line-height:1.35!important;
+        #hc_plan button{
+          min-height:42px!important;
+          white-space:normal!important;
+        }
+
+        #hc_plan .row.g-3{
+          row-gap:12px!important;
+        }
+
+        #hc_plan textarea,
+        #hc_plan input,
+        #hc_plan select{
+          font-size:14px!important;
         }
       }
     `;
@@ -300,38 +307,15 @@ function instalarResponsivePlanAndroid(){
     document.head.appendChild(style);
 }
 
-/* ============================================================
-   OBSERVADOR: SI EL INDEX CREA EL BOTÓN DESPUÉS, LO PROTEGE
-============================================================ */
-
-function observarBotonPlan(){
-    instalarProteccionBotonPlan();
-
-    const target = document.body;
-    if(!target || window.auroPlanObserverInstalado) return;
-
-    window.auroPlanObserverInstalado = true;
-
-    const observer = new MutationObserver(()=>{
-        instalarProteccionBotonPlan();
-    });
-
-    observer.observe(target, {
-        childList:true,
-        subtree:true
-    });
-}
 
 /* ============================================================
-   INICIO
+   INICIO SEGURO
 ============================================================ */
 
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded', function(){
     inicializarPlan();
-    observarBotonPlan();
 });
 
-setTimeout(()=>{
+setTimeout(function(){
     inicializarPlan();
-    observarBotonPlan();
 }, 800);
