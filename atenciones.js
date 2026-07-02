@@ -1005,16 +1005,20 @@
 
     atencionActivaId = a.id_atencion;
 
-    /* AUROSANAX PLAN - conexión mínima y segura:
-       Al presionar Ver en una consulta, se informa a plan.js
-       cuál es el id_atencion activo.
-       No modifica recetas, no modifica render, no modifica agenda.
-    */
+    /* AUROSANAX PLAN: vincular consulta seleccionada con plan.js */
+    window.planState = window.planState || { atencionActual: '', cache: {} };
+    window.planState.atencionActual = a.id_atencion;
+
+    console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', a.id_atencion);
+
     if(typeof cambiarPlanPorAtencion === 'function'){
       cambiarPlanPorAtencion(a.id_atencion);
-    }else{
-      window.planState = window.planState || { atencionActual:'', cache:{} };
-      window.planState.atencionActual = a.id_atencion;
+    }
+
+    if(typeof cargarPlanClinicoDesdeSheets === 'function'){
+      cargarPlanClinicoDesdeSheets(a.id_atencion).catch(function(error){
+        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets para esta atención.', error);
+      });
     }
 
     cargarRecetasDesdeSheetsAtenciones(true).then(function(){
