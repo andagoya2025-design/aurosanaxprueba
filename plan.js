@@ -1417,44 +1417,14 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
     const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
 
+    if(!plan || !plan.id_plan) return null;
+
     window.planState = window.planState || {
         atencionActual: idAtencion,
         cache: {}
     };
 
     window.planState.atencionActual = idAtencion;
-
-    if(!plan || !plan.id_plan){
-
-        /* AUROSANAX PLAN:
-           Si la consulta no tiene plan guardado, se limpian los campos.
-           Esto evita que quede visible el Plan de otra consulta anterior.
-        */
-        window.medicamentosPlanSeleccionados = [];
-
-        auroPlanSetValue('hcPlanTratamiento', '');
-        auroPlanSetValue('hcRecetaMedicamentos', '');
-        auroPlanSetValue('hcExamenesSolicitados', '');
-        auroPlanSetValue('hcInterconsultaResumen', '');
-        auroPlanSetValue('hcEvaluacionesResumen', '');
-        auroPlanSetValue('hcIndicacionesPaciente', '');
-        auroPlanSetValue('hcControl', '');
-        auroPlanSetValue('hcEstadoHistoria', 'Activo');
-
-        if(typeof renderMedicamentosPlanTabla === 'function'){
-            renderMedicamentosPlanTabla();
-        }
-
-        if(typeof renderOrdenesMedicasTabla === 'function'){
-            renderOrdenesMedicasTabla();
-        }
-
-        guardarPlanTemporal();
-
-        console.log('AUROSANAX PLAN: consulta sin plan guardado, campos limpiados:', idAtencion);
-
-        return null;
-    }
 
     function valorPlan(){
         for(const k of arguments){
@@ -1535,73 +1505,6 @@ window.guardarPlanClinicoDesdeSheets = guardarPlanClinicoDesdeSheets;
 window.buscarPlanClinicoPorAtencionDesdeSheets = buscarPlanClinicoPorAtencionDesdeSheets;
 window.cargarPlanClinicoDesdeSheets = cargarPlanClinicoDesdeSheets;
 
-
-
-/* ============================================================
-   GUARDADO DIRECTO DEL PLAN CLÍNICO
-   Botón Actualizar Plan:
-   - Guarda solo planes_clinicos
-   - No depende de guardarHistoriaClinicaERP()
-============================================================ */
-async function auroGuardarPlanClinicoDirecto(){
-
-    try{
-        if(typeof auroSincronizarPlanAntesGuardar === 'function'){
-            auroSincronizarPlanAntesGuardar();
-        }
-
-        const idAtencion =
-            String(window.planState?.atencionActual || '').trim() ||
-            (typeof getIdAtencionActiva === 'function' ? String(getIdAtencionActiva() || '').trim() : '');
-
-        if(idAtencion){
-            window.planState = window.planState || { atencionActual: '', cache: {} };
-            window.planState.atencionActual = idAtencion;
-
-            if(typeof cambiarPlanPorAtencion === 'function'){
-                cambiarPlanPorAtencion(idAtencion);
-            }
-        }
-
-        if(!String(window.planState?.atencionActual || '').trim()){
-            alert('No hay una consulta activa seleccionada. Presione Ver en una consulta antes de guardar el Plan.');
-            return {
-                success: false,
-                message: 'Sin id_atencion activo.'
-            };
-        }
-
-        if(typeof guardarPlanClinicoDesdeSheets !== 'function'){
-            alert('No está disponible la conexión para guardar Plan clínico.');
-            return {
-                success: false,
-                message: 'guardarPlanClinicoDesdeSheets no disponible.'
-            };
-        }
-
-        const resultado = await guardarPlanClinicoDesdeSheets();
-
-        console.log('AUROSANAX PLAN: guardado directo desde botón Actualizar Plan:', resultado);
-
-        if(resultado && resultado.success !== false){
-            alert('Plan clínico guardado correctamente.');
-        }else{
-            alert('No se pudo guardar el Plan clínico. Revise consola.');
-        }
-
-        return resultado;
-
-    }catch(error){
-        console.error('AUROSANAX PLAN: error en guardado directo.', error);
-        alert('Error guardando Plan clínico: ' + error.message);
-        return {
-            success: false,
-            message: error.message
-        };
-    }
-}
-
-window.auroGuardarPlanClinicoDirecto = auroGuardarPlanClinicoDirecto;
 
 /* ============================================================
    INICIO SEGURO
