@@ -1005,36 +1005,22 @@
 
     atencionActivaId = a.id_atencion;
 
-    /*
-      AUROSANAX FIX VER ESTABLE:
-      El botón Ver debe responder de inmediato.
-      Primero pinta el detalle de la consulta.
-      Luego carga Plan y Recetas en segundo plano.
-      Evita doble llamada a cargarPlanClinicoDesdeSheets.
-    */
+    /* AUROSANAX PLAN: vincular consulta seleccionada con plan.js */
     window.planState = window.planState || { atencionActual: '', cache: {} };
     window.planState.atencionActual = a.id_atencion;
 
-    renderDetalleAtencion(normalizar(a));
+    console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', a.id_atencion);
 
-    setTimeout(function(){
-      try{
-        if(typeof cambiarPlanPorAtencion === 'function'){
-          cambiarPlanPorAtencion(a.id_atencion);
-        }
-      }catch(error){
-        console.warn('AUROSANAX PLAN: error al vincular atención con Plan.', error);
-      }
-    }, 50);
+    if(typeof cambiarPlanPorAtencion === 'function'){
+      cambiarPlanPorAtencion(a.id_atencion);
+    }
 
-    setTimeout(function(){
-      cargarRecetasDesdeSheetsAtenciones(true).then(function(){
-        const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
-        renderDetalleAtencion(normalizar(actual));
-      }).catch(function(error){
-        console.warn('AUROSANAX ATENCIONES: no se pudieron refrescar recetas.', error);
-      });
-    }, 100);
+    cargarRecetasDesdeSheetsAtenciones(true).then(function(){
+      const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
+      renderDetalleAtencion(normalizar(actual));
+    }).catch(function(){
+      renderDetalleAtencion(normalizar(a));
+    });
   }
 
   function asegurarBloque(){
@@ -1147,14 +1133,21 @@
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '');
 
     if(activaBox){
-      activaBox.style.display = 'block';
+      /*
+        AUROSANAX FIX DEFINITIVO BOTÓN VER:
+        Este mismo contenedor se usa para mostrar el detalle de una consulta.
+        Antes, renderAtencionesPaciente lo sobrescribía con "FINALIZADA · Sin consulta abierta",
+        por eso el detalle aparecía y desaparecía.
+      */
       if(abierta){
+        activaBox.style.display = 'block';
         activaBox.innerHTML =
           '<div class="auro-atencion-status abierta">' +
           '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) + '<br>' +
           '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) + '</span>' +
           '</div>';
-      }else{
+      }else if(!atencionActivaId){
+        activaBox.style.display = 'block';
         activaBox.innerHTML =
           '<div class="auro-atencion-status cerrada">' +
           '<b>🔵 FINALIZADA</b> · Sin consulta abierta' +
