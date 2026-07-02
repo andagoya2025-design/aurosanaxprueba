@@ -1484,6 +1484,14 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
     if(!idAtencion) return null;
 
+    window.__auroPlanCargasActivas = window.__auroPlanCargasActivas || {};
+
+    if(window.__auroPlanCargasActivas[idAtencion]){
+        return window.__auroPlanCargasActivas[idAtencion];
+    }
+
+    const promesaCarga = (async function(){
+
     const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
 
     /*
@@ -1587,6 +1595,16 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     console.log('AUROSANAX PLAN: plan cargado desde Sheets para atención:', idAtencion, plan);
 
     return plan;
+
+    })();
+
+    window.__auroPlanCargasActivas[idAtencion] = promesaCarga;
+
+    try{
+        return await promesaCarga;
+    }finally{
+        delete window.__auroPlanCargasActivas[idAtencion];
+    }
 }
 
 window.guardarPlanClinicoDesdeSheets = guardarPlanClinicoDesdeSheets;
@@ -1601,11 +1619,6 @@ window.cargarPlanClinicoDesdeSheets = cargarPlanClinicoDesdeSheets;
 document.addEventListener('DOMContentLoaded', function(){
     inicializarPlan();
 });
-
-setTimeout(function(){
-    inicializarPlan();
-}, 800);
-
 
 /* ============================================================
    AUTO-CARGA AL CAMBIAR CONSULTA / ATENCIÓN
