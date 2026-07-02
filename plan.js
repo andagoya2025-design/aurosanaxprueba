@@ -1,14 +1,14 @@
 /****************************************************************
  AUROSANAX ERP
  plan.js
- MODULACIÓN PLAN - FASE 4 CORREGIDA COMPLETA
+ MODULACIÓN PLAN - FASE 5 EVALUACIONES
  ---------------------------------------------------------------
  OBJETIVO:
  - Mantener Fase 3 estable.
- - Corregir Fase 4 agregando utilidades faltantes:
+ - Agregar módulo de Evaluaciones y mantener utilidades:
    auroPlanSetValue()
    auroPlanGetValue()
- - Integrar INTERCONSULTAS sin romper medicamentos ni órdenes.
+ - Integrar EVALUACIONES sin romper medicamentos, órdenes ni interconsultas.
  - NO tocar botón Guardar historia / Actualizar plan.
  - NO usar MutationObserver.
  - NO interceptar navegación.
@@ -183,6 +183,7 @@ function inicializarPlan(){
     instalarResponsivePlanAndroid();
     instalarEventosMedicamentosPlan();
     instalarEventosOrdenesMedicasPlan();
+    instalarEventosEvaluacionesPlan();
     auroPlanRefrescarVistas();
 }
 
@@ -248,6 +249,9 @@ function guardarPlanTemporal(){
         evaluaciones:
             document.getElementById('hcEvaluacionesResumen')?.value || '',
 
+        evaluacionesChecks:
+            auroPlanCapturarEvaluaciones(),
+
         receta:
             document.getElementById('hcRecetaMedicamentos')?.value || ''
     };
@@ -285,6 +289,7 @@ function cargarPlanTemporal(idAtencion){
     auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
     auroPlanSetValue('hcInterconsultaResumen', data.interconsultaTexto || '');
     auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
+    auroPlanRestaurarEvaluaciones(data.evaluacionesChecks || {});
     auroPlanSetValue('hcRecetaMedicamentos', data.receta || '');
 
     auroPlanRefrescarVistas();
@@ -319,6 +324,8 @@ function limpiarPlanTemporal(){
 
     auroPlanSetValue('hcInterconsultaPrioridad', 'Normal');
     auroPlanSetValue('hcInterconsultaEstado', 'Pendiente');
+
+    limpiarEvaluacionesCamposPlan();
 
     auroPlanRefrescarVistas();
 }
@@ -875,6 +882,113 @@ function limpiarInterconsultaPlan(){
     renderInterconsultasTabla();
     auroPlanSetValue('hcInterconsultaResumen','');
     guardarPlanTemporal();
+}
+
+
+
+/* ============================================================
+   EVALUACIONES DEL PLAN
+============================================================ */
+
+const AURO_PLAN_EVALUACIONES = [
+    {
+        id: 'hcEvalMalaActitud',
+        texto: 'Denota mala actitud ante el examinador.'
+    },
+    {
+        id: 'hcEvalAnimo',
+        texto: 'Alteraciones del estado de ánimo.'
+    },
+    {
+        id: 'hcEvalAbusoNegligencia',
+        texto: 'Sospecha psicológica: paciente víctima de abuso o negligencia.'
+    },
+    {
+        id: 'hcEvalAnomaliasMotoras',
+        texto: 'Evidencia actividades y anomalías motoras.'
+    },
+    {
+        id: 'hcEvalOdontologica',
+        texto: 'Requiere evaluación odontológica.'
+    }
+];
+
+function auroPlanCapturarEvaluaciones(){
+
+    const data = {};
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        data[item.id] = !!(el && el.checked);
+    });
+
+    return data;
+}
+
+function auroPlanRestaurarEvaluaciones(data){
+
+    data = data || {};
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el) el.checked = !!data[item.id];
+    });
+
+    recopilarEvaluacionesPlan();
+}
+
+function recopilarEvaluacionesPlan(){
+
+    const seleccionadas = [];
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el && el.checked){
+            seleccionadas.push(item.texto);
+        }
+    });
+
+    const texto = seleccionadas.join('\n');
+
+    auroPlanSetValue('hcEvaluacionesResumen', texto);
+
+    return texto;
+}
+
+function limpiarEvaluacionesCamposPlan(){
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el) el.checked = false;
+    });
+
+    auroPlanSetValue('hcEvaluacionesResumen', '');
+}
+
+function limpiarEvaluacionesPlan(){
+
+    limpiarEvaluacionesCamposPlan();
+    guardarPlanTemporal();
+}
+
+/* ============================================================
+   EVENTOS EVALUACIONES PLAN
+============================================================ */
+
+function instalarEventosEvaluacionesPlan(){
+
+    if(window.auroPlanEvaluacionesEventosInstalados) return;
+    window.auroPlanEvaluacionesEventosInstalados = true;
+
+    document.addEventListener('change', function(e){
+
+        const id = e.target?.id || '';
+
+        if(AURO_PLAN_EVALUACIONES.some(item => item.id === id)){
+            recopilarEvaluacionesPlan();
+            guardarPlanTemporal();
+        }
+    });
 }
 
 
