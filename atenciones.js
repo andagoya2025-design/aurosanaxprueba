@@ -1005,6 +1005,18 @@
 
     atencionActivaId = a.id_atencion;
 
+    /* AUROSANAX PLAN - conexión mínima y segura:
+       Al presionar Ver en una consulta, se informa a plan.js
+       cuál es el id_atencion activo.
+       No modifica recetas, no modifica render, no modifica agenda.
+    */
+    if(typeof cambiarPlanPorAtencion === 'function'){
+      cambiarPlanPorAtencion(a.id_atencion);
+    }else{
+      window.planState = window.planState || { atencionActual:'', cache:{} };
+      window.planState.atencionActual = a.id_atencion;
+    }
+
     cargarRecetasDesdeSheetsAtenciones(true).then(function(){
       const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
       renderDetalleAtencion(normalizar(actual));
