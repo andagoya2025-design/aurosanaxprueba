@@ -4717,6 +4717,81 @@ function auroAplicarProteccionPlanEdicion(data){
 }
 
 
+
+/* ============================================================
+   AUROSANAX - CONEXIÓN SEGURA INDEX → PLAN.JS
+   Objetivo:
+   - Detectar ID de atención activo visible en pantalla.
+   - Vincularlo con plan.js sin tocar Agenda, Atenciones ni Recetas.
+   - Permitir guardar Plan automáticamente al guardar Historia.
+============================================================ */
+
+function auroVincularPlanConAtencionActualDesdeIndex(){
+  try{
+    if(typeof window === 'undefined') return '';
+
+    window.planState = window.planState || { atencionActual: '', cache: {} };
+
+    if(String(window.planState.atencionActual || '').trim()){
+      return String(window.planState.atencionActual || '').trim();
+    }
+
+    const textoPantalla = document.body ? String(document.body.innerText || '') : '';
+    const match = textoPantalla.match(/ATN-[0-9]{8,}-[0-9]+/);
+
+    if(match && match[0]){
+      const idAtencion = match[0];
+
+      if(typeof cambiarPlanPorAtencion === 'function'){
+        cambiarPlanPorAtencion(idAtencion);
+      }else{
+        window.planState.atencionActual = idAtencion;
+      }
+
+      console.log('AUROSANAX PLAN: atención vinculada desde index:', idAtencion);
+      return idAtencion;
+    }
+
+    return '';
+  }catch(error){
+    console.warn('AUROSANAX PLAN: no se pudo vincular atención desde index.', error);
+    return '';
+  }
+}
+
+async function auroGuardarPlanClinicoSeguroDesdeIndex(){
+  try{
+    if(typeof guardarPlanClinicoDesdeSheets !== 'function'){
+      console.warn('AUROSANAX PLAN: guardarPlanClinicoDesdeSheets no está disponible.');
+      return null;
+    }
+
+    auroVincularPlanConAtencionActualDesdeIndex();
+
+    const idAtencion = String(window.planState?.atencionActual || '').trim();
+
+    if(!idAtencion){
+      console.warn('AUROSANAX PLAN: historia guardada, pero Plan no se guardó porque no hay ID de atención activo.');
+      return {
+        success: false,
+        message: 'Sin ID de atención activo para guardar Plan.'
+      };
+    }
+
+    const resultadoPlan = await guardarPlanClinicoDesdeSheets();
+    console.log('AUROSANAX PLAN: guardado automático desde Guardar historia:', resultadoPlan);
+    return resultadoPlan;
+
+  }catch(error){
+    console.error('AUROSANAX PLAN: error guardando Plan automático.', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -4742,6 +4817,9 @@ async function guardarHistoriaClinicaERP(){
 
   const examenFisico = auroConstruirExamenFisicoCompleto();
   auroSincronizarPlanAntesGuardar();
+
+  /* AUROSANAX: vincular Plan con la atención activa antes de guardar */
+  auroVincularPlanConAtencionActualDesdeIndex();
 
   const interconsultaPlan = recopilarInterconsultaPlan();
   const evaluacionesPlan = recopilarEvaluacionesPlan();
@@ -4811,7 +4889,10 @@ async function guardarHistoriaClinicaERP(){
       })
     });
 
-    alert(esEdicion ? 'Historia clínica actualizada correctamente en Google Sheets.' : 'Historia clínica guardada correctamente. Antecedentes conectados y registrados en Google Sheets.');
+    /* AUROSANAX: guardar Plan clínico en planes_clinicos sin bloquear Historia */
+    await auroGuardarPlanClinicoSeguroDesdeIndex();
+
+    alert(esEdicion ? 'Historia clínica actualizada correctamente en Google Sheets.' : 'Historia clínica guardada correctamente. Antecedentes conectados y Plan clínico registrados en Google Sheets.');
     await cargarHistoriasClinicasDesdeSheets();
     actualizarDashboard();
   }catch(error){
