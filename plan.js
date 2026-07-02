@@ -200,11 +200,26 @@ function cambiarPlanPorAtencion(idAtencion){
 
     if(!idAtencion) return;
 
+    /*
+      AUROSANAX FIX:
+      Antes de abrir otra consulta se guarda temporalmente la consulta actual.
+      Luego se limpia visualmente y se carga SOLO el Plan de la nueva id_atencion.
+    */
     guardarPlanTemporal();
 
     window.planState.atencionActual = idAtencion;
 
+    limpiarPlanTemporal();
+
     cargarPlanTemporal(idAtencion);
+
+    if(typeof window.cargarPlanClinicoDesdeSheets === 'function'){
+        setTimeout(function(){
+            window.cargarPlanClinicoDesdeSheets(idAtencion).catch(function(error){
+                console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets.', error);
+            });
+        }, 80);
+    }
 }
 
 
@@ -1401,12 +1416,66 @@ async function guardarPlanClinicoDesdeSheets(){
         data.id_atencion
     );
 
+    let resultado;
+
     if(existente && existente.id_plan){
         data.id_plan = existente.id_plan;
-        return await auroPlanApiPost('editarPlanClinico', data);
+        resultado = await auroPlanApiPost('editarPlanClinico', data);
+    }else{
+        resultado = await auroPlanApiPost('guardarPlanClinico', data);
     }
 
-    return await auroPlanApiPost('guardarPlanClinico', data);
+    guardarPlanTemporal();
+
+    return resultado;
+}
+
+
+function auroPlanTextoAOrdenes(texto){
+    texto = String(texto || '').trim();
+    if(!texto) return [];
+
+    return texto.split(/\n+/).map(linea => {
+        let limpia = String(linea || '').replace(/^\s*\d+\.\s*/, '').trim();
+        const partes = limpia.split(' - ').map(x => x.trim()).filter(Boolean);
+
+        const orden = partes[0] || limpia;
+        let cat = '';
+        let obs = '';
+
+        partes.slice(1).forEach(p => {
+            if(/^Categoría:/i.test(p)) cat = p.replace(/^Categoría:\s*/i, '').trim();
+            else if(/^Observación:/i.test(p)) obs = p.replace(/^Observación:\s*/i, '').trim();
+        });
+
+        return {
+            orden: orden,
+            cat: cat || 'OTROS',
+            obs: obs
+        };
+    }).filter(o => o.orden);
+}
+
+function auroPlanCargarEvaluacionesDesdeTexto(texto){
+    texto = String(texto || '').trim();
+
+    limpiarEvaluacionesCamposPlan();
+
+    if(!texto) return;
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el && texto.includes(item.texto)){
+            el.checked = true;
+        }
+    });
+
+    auroPlanSetValue('hcEvaluacionesResumen', texto);
+}
+
+function auroPlanEstadoSeguro(valor){
+    valor = String(valor || '').trim();
+    return valor || 'Control';
 }
 
 async function cargarPlanClinicoDesdeSheets(idAtencion){
@@ -1417,7 +1486,30 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
     const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
 
-    if(!plan || !plan.id_plan) return null;
+    /*
+      AUROSANAX FIX:
+      Si la consulta no tiene Plan guardado en planes_clinicos,
+      se deja el Plan limpio. No se arrastra información de otra consulta.
+    */
+    if(!plan || !plan.id_plan){
+        limpiarPlanTemporal();
+        window.planState.atencionActual = idAtencion;
+        window.planState.cache[idAtencion] = {
+            medicamentos: [],
+            ordenes: [],
+            interconsultas: [],
+            plan: '',
+            indicaciones: '',
+            ordenesTexto: '',
+            interconsultaTexto: '',
+            evaluaciones: '',
+            evaluacionesChecks: {},
+            receta: ''
+        };
+        auroPlanRefrescarVistas();
+        console.log('AUROSANAX PLAN: atención sin plan guardado, pantalla limpia:', idAtencion);
+        return null;
+    }
 
     window.planState = window.planState || {
         atencionActual: idAtencion,
@@ -1442,6 +1534,11 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
         window.medicamentosPlanSeleccionados = [];
     }
 
+    const ordenesTexto = valorPlan('ordenes_medicas','ordenes','examenes_solicitados');
+    window.ordenesMedicasPlanSeleccionadas = auroPlanTextoAOrdenes(ordenesTexto);
+
+    window.interconsultasPlanSeleccionadas = [];
+
     auroPlanSetValue('hcPlanTratamiento',
         valorPlan('plan_terapeutico','planTratamiento','plan_tratamiento')
     );
@@ -1450,17 +1547,15 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
         valorPlan('receta_medica','receta','recetaMedicamentos')
     );
 
-    auroPlanSetValue('hcExamenesSolicitados',
-        valorPlan('ordenes_medicas','ordenes','examenes_solicitados')
-    );
+    auroPlanSetValue('hcExamenesSolicitados', ordenesTexto);
 
     auroPlanSetValue('hcInterconsultaResumen',
         valorPlan('interconsulta','interconsultas','interconsulta_plan')
     );
 
-    auroPlanSetValue('hcEvaluacionesResumen',
-        valorPlan('evaluaciones_plan','evaluaciones','evaluacion_plan')
-    );
+    const evaluacionesTexto = valorPlan('evaluaciones_plan','evaluaciones','evaluacion_plan');
+    auroPlanSetValue('hcEvaluacionesResumen', evaluacionesTexto);
+    auroPlanCargarEvaluacionesDesdeTexto(evaluacionesTexto);
 
     auroPlanSetValue('hcIndicacionesPaciente',
         valorPlan('indicaciones_paciente','indicaciones','indicacionesPaciente')
@@ -1471,30 +1566,23 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     );
 
     auroPlanSetValue('hcEstadoHistoria',
-        valorPlan('estado_plan','estado','estadoHistoria') || 'Activo'
+        auroPlanEstadoSeguro(valorPlan('estado_plan','estado','estadoHistoria'))
     );
 
+    renderMedicamentosPlanTabla();
+    renderOrdenesMedicasTabla();
+
+    /*
+      No se fuerza recopilarInterconsultaPlan ni recopilarEvaluacionesPlan aquí
+      antes de conservar los valores cargados, para evitar sobrescribir datos de Sheets.
+    */
+    auroPlanSetValue('hcInterconsultaResumen',
+        valorPlan('interconsulta','interconsultas','interconsulta_plan')
+    );
+    auroPlanSetValue('hcEvaluacionesResumen', evaluacionesTexto);
+
+    sincronizarPlanConReceta();
     guardarPlanTemporal();
-
-    if(typeof renderMedicamentosPlanTabla === 'function'){
-        renderMedicamentosPlanTabla();
-    }
-
-    if(typeof renderOrdenesMedicasTabla === 'function'){
-        renderOrdenesMedicasTabla();
-    }
-
-    if(typeof recopilarInterconsultaPlan === 'function'){
-        recopilarInterconsultaPlan();
-    }
-
-    if(typeof recopilarEvaluacionesPlan === 'function'){
-        recopilarEvaluacionesPlan();
-    }
-
-    if(typeof sincronizarPlanConReceta === 'function'){
-        sincronizarPlanConReceta();
-    }
 
     console.log('AUROSANAX PLAN: plan cargado desde Sheets para atención:', idAtencion, plan);
 
@@ -1521,31 +1609,7 @@ setTimeout(function(){
 
 /* ============================================================
    AUTO-CARGA AL CAMBIAR CONSULTA / ATENCIÓN
-   Al ejecutar cambiarPlanPorAtencion(id), también carga desde Sheets.
+   AUROSANAX FIX:
+   Desactivado aquí porque cambiarPlanPorAtencion ya carga desde Sheets.
+   Evita doble carga y evita que se mezclen datos entre consultas.
 ============================================================ */
-(function(){
-    if(window.__auroPlanCambioSheetsInstalado) return;
-    window.__auroPlanCambioSheetsInstalado = true;
-
-    const originalCambiarPlanPorAtencion =
-        window.cambiarPlanPorAtencion ||
-        (typeof cambiarPlanPorAtencion === 'function' ? cambiarPlanPorAtencion : null);
-
-    if(typeof originalCambiarPlanPorAtencion === 'function'){
-        window.cambiarPlanPorAtencion = function(idAtencion){
-            const r = originalCambiarPlanPorAtencion(idAtencion);
-
-            const id = String(idAtencion || window.planState?.atencionActual || '').trim();
-
-            if(id && typeof window.cargarPlanClinicoDesdeSheets === 'function'){
-                setTimeout(function(){
-                    window.cargarPlanClinicoDesdeSheets(id).catch(function(error){
-                        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets al cambiar atención.', error);
-                    });
-                }, 120);
-            }
-
-            return r;
-        };
-    }
-})();
