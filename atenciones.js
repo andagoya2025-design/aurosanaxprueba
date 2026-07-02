@@ -1005,28 +1005,36 @@
 
     atencionActivaId = a.id_atencion;
 
-    /* AUROSANAX PLAN: vincular consulta seleccionada con plan.js */
+    /*
+      AUROSANAX FIX VER ESTABLE:
+      El botón Ver debe responder de inmediato.
+      Primero pinta el detalle de la consulta.
+      Luego carga Plan y Recetas en segundo plano.
+      Evita doble llamada a cargarPlanClinicoDesdeSheets.
+    */
     window.planState = window.planState || { atencionActual: '', cache: {} };
     window.planState.atencionActual = a.id_atencion;
 
-    console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', a.id_atencion);
+    renderDetalleAtencion(normalizar(a));
 
-    if(typeof cambiarPlanPorAtencion === 'function'){
-      cambiarPlanPorAtencion(a.id_atencion);
-    }
+    setTimeout(function(){
+      try{
+        if(typeof cambiarPlanPorAtencion === 'function'){
+          cambiarPlanPorAtencion(a.id_atencion);
+        }
+      }catch(error){
+        console.warn('AUROSANAX PLAN: error al vincular atención con Plan.', error);
+      }
+    }, 50);
 
-    if(typeof cargarPlanClinicoDesdeSheets === 'function'){
-      cargarPlanClinicoDesdeSheets(a.id_atencion).catch(function(error){
-        console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets para esta atención.', error);
+    setTimeout(function(){
+      cargarRecetasDesdeSheetsAtenciones(true).then(function(){
+        const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
+        renderDetalleAtencion(normalizar(actual));
+      }).catch(function(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudieron refrescar recetas.', error);
       });
-    }
-
-    cargarRecetasDesdeSheetsAtenciones(true).then(function(){
-      const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
-      renderDetalleAtencion(normalizar(actual));
-    }).catch(function(){
-      renderDetalleAtencion(normalizar(a));
-    });
+    }, 100);
   }
 
   function asegurarBloque(){
