@@ -1626,3 +1626,57 @@ document.addEventListener('DOMContentLoaded', function(){
    Desactivado aquí porque cambiarPlanPorAtencion ya carga desde Sheets.
    Evita doble carga y evita que se mezclen datos entre consultas.
 ============================================================ */
+
+/* ============================================================
+   ESTADO VISUAL BOTÓN GUARDAR PLAN
+============================================================ */
+window.auroPlanGuardando = false;
+
+async function guardarPlanClinicoConUX(btn){
+
+    if(window.auroPlanGuardando){
+        return {success:false,message:'Guardado en progreso'};
+    }
+
+    window.auroPlanGuardando = true;
+
+    const textoOriginal = btn ? btn.innerHTML : '';
+
+    try{
+        if(btn){
+            btn.disabled = true;
+            btn.innerHTML = 'Guardando plan...';
+        }
+
+        const r = await guardarPlanClinicoDesdeSheets();
+
+        alert('Plan clínico guardado correctamente.');
+
+        if(btn){
+            btn.innerHTML = 'Plan actualizado ✓';
+            setTimeout(function(){
+                btn.disabled = false;
+                btn.innerHTML = textoOriginal || 'Actualizar Plan Clínico';
+            },2500);
+        }
+
+        return r;
+
+    }catch(e){
+
+        alert('Error al guardar el Plan clínico.');
+
+        if(btn){
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal || 'Actualizar Plan Clínico';
+        }
+
+        throw e;
+
+    }finally{
+        setTimeout(()=>window.auroPlanGuardando=false,500);
+    }
+}
+
+window.guardarPlanClinicoConUX = guardarPlanClinicoConUX;
+
