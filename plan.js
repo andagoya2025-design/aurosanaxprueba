@@ -1344,7 +1344,14 @@ function auroPlanPrepararDatosSheets(){
 
     return {
         id_atencion:
-            String(window.planState?.atencionActual || '').trim(),
+            String(
+                (typeof window.getIdAtencionActiva === 'function'
+                    ? window.getIdAtencionActiva()
+                    : ''
+                ) ||
+                window.planState?.atencionActual ||
+                ''
+            ).trim(),
 
         id_paciente:
             paciente?.id_paciente ||
