@@ -6443,13 +6443,27 @@ document.addEventListener('click',e=>{
       }
 
       if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+        const box = document.getElementById('auroPlanMiniStatus');
+        if(box){
+          box.innerHTML =
+            '<span><i class="bi bi-journal-medical"></i> Consulta ' + auroPlanEscapeSeguro(atnResumen.consulta || 'activa') + '</span>' +
+            '<span class="ok"><i class="bi bi-list-check"></i> Plan actualizado: ' + auroPlanEscapeSeguro(fechaPlanGuardado) + '</span>' +
+            '<span class="muted"><i class="bi bi-capsule"></i> Receta pendiente</span>';
+        }
+
         window.auroPlanActualizarMiniStatus('Plan actualizado correctamente');
+
         setTimeout(function(){
-          window.auroPlanActualizarMiniStatus();
-        }, 300);
+          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            window.auroPlanActualizarMiniStatus();
+          }
+        }, 500);
+
         setTimeout(function(){
-          window.auroPlanActualizarMiniStatus();
-        }, 1200);
+          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            window.auroPlanActualizarMiniStatus();
+          }
+        }, 1500);
       }
 
       if(btn){
