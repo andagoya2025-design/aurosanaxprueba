@@ -433,25 +433,101 @@ async function guardarRecetaERP(){
 }
 
 function generarPDFReceta(){
-  if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
-  const paciente = getPacienteActivo();
-  if(!paciente){
-    alert('Seleccione primero un paciente para generar la receta.');
-    showScreen('pacientes');
-    return;
-  }
+  /*
+    AUROSANAX FIX IMPRESION RECETA:
+    impresion.js ya no imprime la pantalla actual con window.print().
+    Delega la impresión a recetas.js, que es el módulo que construye
+    la misma receta premium usada en Vista previa.
+    No modifica guardado, Google Sheets, Plan ni Atenciones.
+  */
 
-  if(document.getElementById('recFecha') && !document.getElementById('recFecha').value){
-    document.getElementById('recFecha').value = fechaHoyISO();
-  }
+  try{
+    if(typeof window.__auroRecetaPDFDelegando === 'undefined'){
+      window.__auroRecetaPDFDelegando = false;
+    }
 
-  alert('Se abrirá la ventana de impresión para guardar la receta como PDF.');
-  window.print();
+    if(window.__auroRecetaPDFDelegando){
+      return;
+    }
+
+    if(typeof sincronizarPlanConReceta === 'function'){
+      sincronizarPlanConReceta();
+    }
+
+    if(document.getElementById('recFecha') && !document.getElementById('recFecha').value){
+      document.getElementById('recFecha').value = (typeof fechaHoyISO === 'function') ? fechaHoyISO() : new Date().toISOString().slice(0,10);
+    }
+
+    const paciente = (typeof getPacienteActivo === 'function') ? getPacienteActivo() : null;
+    if(!paciente){
+      alert('Seleccione primero un paciente para generar la receta.');
+      if(typeof showScreen === 'function') showScreen('pacientes');
+      return;
+    }
+
+    /*
+      Si recetas.js está cargado correctamente, él debe ser el dueño
+      del PDF/impresión de recetas. Para evitar bucle, llamamos su flujo
+      solo cuando exista obtenerDatosReceta() y la función global haya sido
+      reemplazada por recetas.js.
+    */
+    if(typeof window.obtenerDatosReceta === 'function'){
+      const datos = window.obtenerDatosReceta();
+
+      if(typeof window.__auroRecetasConstruirPDFSeguro === 'function'){
+        return window.__auroRecetasConstruirPDFSeguro(datos);
+      }
+
+      /*
+        Fallback seguro:
+        si recetas.js ya reemplazó window.generarPDFReceta por su propia
+        función, esta función local no debería ejecutarse. Si aun así se
+        ejecuta, usamos vistaPreviaReceta() para asegurar que el contenido
+        esté actualizado antes de imprimir desde el módulo de recetas.
+      */
+      if(typeof window.vistaPreviaReceta === 'function'){
+        window.vistaPreviaReceta();
+      }
+
+      const preview = document.getElementById('recetaPreview');
+      const htmlReceta = preview ? preview.innerHTML : '';
+
+      if(htmlReceta && htmlReceta.includes('auro-receta-documento')){
+        const ventana = window.open('', '_blank');
+        if(!ventana){
+          alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes para este sitio.');
+          return;
+        }
+
+        ventana.document.open();
+        ventana.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Receta médica AUROSANAX</title></head><body>' + htmlReceta + '</body></html>');
+        ventana.document.close();
+        ventana.focus();
+
+        setTimeout(function(){
+          ventana.print();
+        }, 350);
+
+        return;
+      }
+    }
+
+    /*
+      Último respaldo: solo si recetas.js no está disponible.
+      Se conserva el comportamiento antiguo para no romper el ERP,
+      pero ya no será el camino principal.
+    */
+    alert('Se abrirá la ventana de impresión para guardar la receta como PDF.');
+    window.print();
+
+  }catch(error){
+    console.error('AUROSANAX IMPRESION: error generando PDF de receta.', error);
+    alert('No se pudo generar la impresión de la receta.');
+  }
 }
 
 function generarPDFConsentimiento(){
   alert('Se abrirá la ventana de impresión para guardar el consentimiento como PDF.');
   window.print();
 }
-
 
