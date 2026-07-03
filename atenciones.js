@@ -1005,22 +1005,36 @@
 
     atencionActivaId = a.id_atencion;
 
-    /* AUROSANAX PLAN: vincular consulta seleccionada con plan.js */
+    /*
+      AUROSANAX FIX VER ESTABLE:
+      El botón Ver debe responder de inmediato.
+      Primero pinta el detalle de la consulta.
+      Luego carga Plan y Recetas en segundo plano.
+      Evita doble llamada a cargarPlanClinicoDesdeSheets.
+    */
     window.planState = window.planState || { atencionActual: '', cache: {} };
     window.planState.atencionActual = a.id_atencion;
 
-    console.log('AUROSANAX PLAN: atención vinculada desde Atenciones:', a.id_atencion);
+    renderDetalleAtencion(normalizar(a));
 
-    if(typeof cambiarPlanPorAtencion === 'function'){
-      cambiarPlanPorAtencion(a.id_atencion);
-    }
+    setTimeout(function(){
+      try{
+        if(typeof cambiarPlanPorAtencion === 'function'){
+          cambiarPlanPorAtencion(a.id_atencion);
+        }
+      }catch(error){
+        console.warn('AUROSANAX PLAN: error al vincular atención con Plan.', error);
+      }
+    }, 50);
 
-    cargarRecetasDesdeSheetsAtenciones(true).then(function(){
-      const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
-      renderDetalleAtencion(normalizar(actual));
-    }).catch(function(){
-      renderDetalleAtencion(normalizar(a));
-    });
+    setTimeout(function(){
+      cargarRecetasDesdeSheetsAtenciones(true).then(function(){
+        const actual = leerLocal().find(x => String(x.id_atencion) === String(idAtencion)) || a;
+        renderDetalleAtencion(normalizar(actual));
+      }).catch(function(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudieron refrescar recetas.', error);
+      });
+    }, 100);
   }
 
   function asegurarBloque(){
@@ -1134,10 +1148,9 @@
 
     if(activaBox){
       /*
-        AUROSANAX FIX DEFINITIVO BOTÓN VER:
-        Este mismo contenedor se usa para mostrar el detalle de una consulta.
-        Antes, renderAtencionesPaciente lo sobrescribía con "FINALIZADA · Sin consulta abierta",
-        por eso el detalle aparecía y desaparecía.
+        AUROSANAX FIX:
+        No sobrescribir el detalle abierto por el botón Ver.
+        Si hay una consulta seleccionada (atencionActivaId), se mantiene visible.
       */
       if(abierta){
         activaBox.style.display = 'block';
@@ -1310,6 +1323,16 @@
   window.__recetasPorAtencionDebug = function(idAtencion){
     const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
     return recetasPorAtencion(a ? normalizar(a) : null);
+  };
+
+  window.__recetasAtencionActualDebug = function(){
+    const a = window.getAtencionActiva ? window.getAtencionActiva() : null;
+    return {
+      id_atencion_actual: a ? a.id_atencion : '',
+      atencion: a,
+      recetas_de_esta_atencion: a ? recetasPorAtencion(normalizar(a)) : [],
+      total_recetas_locales: leerRecetasLocales().length
+    };
   };
 
   window.__atencionesAurosanaxDebug = function(){
