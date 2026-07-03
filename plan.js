@@ -200,18 +200,32 @@ function cambiarPlanPorAtencion(idAtencion){
 
     if(!idAtencion) return;
 
+    window.planState = window.planState || {
+        atencionActual: '',
+        cache: {}
+    };
+
+    const atencionAnterior = String(window.planState.atencionActual || '').trim();
+
     /*
-      AUROSANAX FIX:
-      Antes de abrir otra consulta se guarda temporalmente la consulta actual.
-      Luego se limpia visualmente y se carga SOLO el Plan de la nueva id_atencion.
+      AUROSANAX FIX SEGURO:
+      Solo se guarda temporalmente cuando realmente salimos de otra consulta.
+      Luego se limpia la pantalla completa antes de cargar la nueva consulta.
+      Esto evita arrastrar medicamentos, receta o plan terapéutico entre consultas.
     */
-    guardarPlanTemporal();
+    if(atencionAnterior && atencionAnterior !== idAtencion){
+        guardarPlanTemporal();
+    }
 
     window.planState.atencionActual = idAtencion;
 
     limpiarPlanTemporal();
 
-    cargarPlanTemporal(idAtencion);
+    if(window.planState.cache && window.planState.cache[idAtencion]){
+        cargarPlanTemporal(idAtencion);
+    }else{
+        auroPlanRefrescarVistas();
+    }
 
     if(typeof window.cargarPlanClinicoDesdeSheets === 'function'){
         setTimeout(function(){
@@ -332,17 +346,72 @@ function limpiarPlanTemporal(){
         'hcInterconsultaEspecialidad',
         'hcInterconsultaProfesional',
         'hcInterconsultaMotivo',
-        'hcInterconsultaObservaciones'
+        'hcInterconsultaObservaciones',
+        'hcMedBusqueda',
+        'hcMedPresentacion',
+        'hcMedCantidad',
+        'hcMedFrecuencia',
+        'hcMedDuracion',
+        'hcMedIndicaciones',
+        'hcOrdenTipo',
+        'hcOrdenBusqueda',
+        'hcOrdenObservacion',
+        'recMedicamento',
+        'recIndicaciones',
+        'recRecomendaciones',
+        'recDiagnostico',
+        'recCie10'
     ];
 
     campos.forEach(id => auroPlanSetValue(id, ''));
 
+    auroPlanSetValue('hcMedVia', '');
+    auroPlanSetValue('hcMedContinuo', 'No');
     auroPlanSetValue('hcInterconsultaPrioridad', 'Normal');
     auroPlanSetValue('hcInterconsultaEstado', 'Pendiente');
 
+    const sugerenciasMed = document.getElementById('hcMedSugerencias');
+    if(sugerenciasMed) sugerenciasMed.classList.add('d-none');
+
+    const sugerenciasOrden = document.getElementById('hcOrdenSugerencias');
+    if(sugerenciasOrden) sugerenciasOrden.classList.add('d-none');
+
     limpiarEvaluacionesCamposPlan();
 
+    const tablaMed = document.getElementById('hcMedicamentosTableBody');
+    if(tablaMed){
+        tablaMed.innerHTML = `
+            <tr id="hcMedicamentosEmpty">
+              <td colspan="9" class="text-center text-muted py-3">
+                <i class="bi bi-capsule me-1"></i> Sin medicamentos agregados
+              </td>
+            </tr>
+        `;
+    }
+
+    const tablaOrdenes = document.getElementById('hcOrdenesTableBody');
+    if(tablaOrdenes){
+        tablaOrdenes.innerHTML = `
+            <tr id="hcOrdenesEmpty">
+              <td colspan="4" class="text-center text-muted py-3">
+                <i class="bi bi-file-earmark-medical me-1"></i> Sin registros
+              </td>
+            </tr>
+        `;
+    }
+
     auroPlanRefrescarVistas();
+
+    /*
+      Seguridad final: auroPlanRefrescarVistas sincroniza Plan → Receta.
+      Por eso estos campos se limpian nuevamente al final para que la receta
+      visual no arrastre datos de la consulta anterior.
+    */
+    auroPlanSetValue('recMedicamento', '');
+    auroPlanSetValue('recIndicaciones', '');
+    auroPlanSetValue('recRecomendaciones', '');
+    auroPlanSetValue('recDiagnostico', '');
+    auroPlanSetValue('recCie10', '');
 }
 
 
