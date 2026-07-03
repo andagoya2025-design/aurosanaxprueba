@@ -582,16 +582,98 @@
     return box;
   }
 
+  function auroRecetaBuscarPacientePorReceta(r){
+    try{
+      const activo = obtenerPacienteActivoSeguro();
+      const idRecetaPaciente = String(r?.id_paciente || r?.paciente?.id_paciente || r?.paciente?.id || '').trim();
+      const cedulaReceta = String(r?.paciente_cedula || r?.cedula || r?.paciente?.cedula || '').replace(/\D/g,'');
+      const nombreReceta = String(r?.paciente_nombre || r?.paciente?.nombre || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g,'')
+        .replace(/\s+/g,' ');
+
+      if(activo){
+        const idActivo = String(activo.id_paciente || activo.id || '').trim();
+        const cedulaActiva = String(activo.cedula || activo.numero_documento || activo.documento || '').replace(/\D/g,'');
+        const nombreActivo = String(activo.nombre || ((activo.nombres || '') + ' ' + (activo.apellidos || '')))
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g,'')
+          .replace(/\s+/g,' ');
+
+        if(
+          (idRecetaPaciente && idActivo && idRecetaPaciente === idActivo) ||
+          (cedulaReceta && cedulaActiva && cedulaReceta === cedulaActiva) ||
+          (nombreReceta && nombreActivo && nombreReceta === nombreActivo)
+        ){
+          return activo;
+        }
+      }
+
+      if(Array.isArray(window.patients)){
+        return window.patients.find(p => {
+          const id = String(p.id_paciente || p.id || '').trim();
+          const cedula = String(p.cedula || p.numero_documento || p.documento || '').replace(/\D/g,'');
+          const nombre = String(p.nombre || ((p.nombres || '') + ' ' + (p.apellidos || '')))
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g,'')
+            .replace(/\s+/g,' ');
+
+          return (
+            (idRecetaPaciente && id && idRecetaPaciente === id) ||
+            (cedulaReceta && cedula && cedulaReceta === cedula) ||
+            (nombreReceta && nombre && nombreReceta === nombre)
+          );
+        }) || null;
+      }
+
+      return null;
+    }catch(e){
+      return null;
+    }
+  }
+
+  function auroRecetaCompletarPacienteParaImpresion(r){
+    const pBase = (r && r.paciente) ? r.paciente : {};
+    const pEncontrado = auroRecetaBuscarPacientePorReceta(r) || {};
+
+    const nombreCompletoEncontrado = pEncontrado.nombre || ((pEncontrado.nombres || '') + ' ' + (pEncontrado.apellidos || '')).trim();
+
+    const p = Object.assign({}, pEncontrado, pBase);
+
+    p.nombre = pBase.nombre || r?.paciente_nombre || nombreCompletoEncontrado || 'Paciente no seleccionado';
+    p.cedula = pBase.cedula || r?.paciente_cedula || pEncontrado.cedula || pEncontrado.numero_documento || '—';
+    p.telefono = pBase.telefono || pBase.whatsapp || r?.paciente_telefono || pEncontrado.telefono || pEncontrado.whatsapp || '—';
+    p.whatsapp = p.telefono;
+    p.id_paciente = pBase.id_paciente || pBase.id || r?.id_paciente || pEncontrado.id_paciente || pEncontrado.id || '—';
+
+    p.fecha_nacimiento = pBase.fecha_nacimiento || pBase.nacimiento || pEncontrado.fecha_nacimiento || pEncontrado.nacimiento || '';
+    p.edad = pBase.edad || r?.paciente_edad || pEncontrado.edad || '';
+
+    if(!p.edad && p.fecha_nacimiento && typeof calcularEdadDesdeFecha === 'function'){
+      p.edad = calcularEdadDesdeFecha(p.fecha_nacimiento);
+    }
+
+    return p;
+  }
+
   function construirHTMLReceta(r){
-    const p = r.paciente || {};
+    r = r || {};
+    const p = auroRecetaCompletarPacienteParaImpresion(r);
     const nombre = p.nombre || 'Paciente no seleccionado';
     const cedula = p.cedula || '—';
-    const edad = p.edad || (typeof calcularEdadDesdeFecha === 'function' ? calcularEdadDesdeFecha(p.fecha_nacimiento) : '') || '—';
+    const edad = p.edad || '—';
     const telefono = p.telefono || p.whatsapp || '—';
     const idPaciente = p.id_paciente || p.id || '—';
     const idReceta = r.id_receta || '—';
     const idMedico = r.id_medico || obtenerIdMedicoReal();
     const codigoMedico = r.codigo_medico || obtenerCodigoCortoMedico(idMedico);
+    const medicoTexto = r.medico || val('recMedico') || 'Dra. Aurora Andagoya';
     const estadoClass = String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
 
     return `
@@ -625,7 +707,7 @@
           <div><span>Paciente:</span> ${safe(nombre)}</div><div><span>Cédula:</span> ${safe(cedula)}</div>
           <div><span>Edad:</span> ${safe(edad)}</div><div><span>WhatsApp:</span> ${safe(telefono)}</div>
           <div><span>ID paciente:</span> ${safe(idPaciente)}</div><div><span>ID receta:</span> ${safe(idReceta)}</div>
-          <div><span>Médico:</span> ${safe(r.medico)}</div><div><span>Código médico:</span> ${safe(codigoMedico)}</div>
+          <div><span>Médico:</span> ${safe(medicoTexto)}</div><div><span>Código médico:</span> ${safe(codigoMedico)}</div>
           <div><span>CIE-10:</span> ${safe(r.cie10 || '—')}</div><div><span>Diagnóstico:</span> ${safe(r.diagnostico || '—')}</div>
         </div>
         <div class="auro-receta-section"><h4>Prescripción</h4><div class="auro-receta-box"><div class="auro-rp">Rp/</div>${nl2br(r.medicamento || 'Sin medicamentos registrados.')}</div></div>
@@ -666,7 +748,7 @@
 
   function recetaDesdeFormulario(){
     const r = window.obtenerDatosReceta();
-    const paciente = r.paciente || {};
+    const paciente = auroRecetaCompletarPacienteParaImpresion(r);
     return {
       id_receta: recetaEditandoId || crearIdReceta(),
       id_paciente: r.id_paciente || paciente.id_paciente || paciente.id || '',
@@ -674,7 +756,10 @@
       id_atencion: r.id_atencion || obtenerIdAtencionActivaSeguro() || '',
       id_medico: r.id_medico || obtenerIdMedicoReal(),
       codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
-      paciente_nombre: paciente.nombre || '', paciente_cedula: paciente.cedula || '', paciente_telefono: paciente.telefono || paciente.whatsapp || '',
+      paciente_nombre: paciente.nombre || '',
+      paciente_cedula: paciente.cedula || '',
+      paciente_telefono: paciente.telefono || paciente.whatsapp || '',
+      paciente_edad: paciente.edad || '',
       fecha_receta: r.fecha || fechaHoyReceta(), medico: r.medico || 'Dra. Aurora Andagoya', diagnostico_cie10: r.cie10 || '', diagnostico: r.diagnostico || '',
       medicamento: r.medicamento || '', presentacion: '', dosis: '', via: '', frecuencia: '', duracion: '', cantidad: '',
       indicaciones: r.indicaciones || '', recomendaciones: r.recomendaciones || '', id_documento: '', estado: r.estado || 'Emitida',
@@ -1119,7 +1204,38 @@
   };
 
   function buscarRecetaPorId(id){ return leerRecetasStorage().find(r => String(r.id_receta) === String(id)); }
-  function recetaGuardadaAFormatoPreview(r){ return {id_receta:r.id_receta,id_atencion:r.id_atencion,id_medico:r.id_medico || obtenerIdMedicoReal(),codigo_medico:r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),paciente:{id_paciente:r.id_paciente,nombre:r.paciente_nombre,cedula:r.paciente_cedula,telefono:r.paciente_telefono},fecha:r.fecha_receta,medico:r.medico,cie10:r.diagnostico_cie10,estado:r.estado,diagnostico:r.diagnostico,medicamento:r.medicamento,indicaciones:r.indicaciones,recomendaciones:r.recomendaciones}; }
+  function recetaGuardadaAFormatoPreview(r){
+    const pacienteCompleto = auroRecetaCompletarPacienteParaImpresion({
+      id_paciente: r.id_paciente,
+      paciente_nombre: r.paciente_nombre,
+      paciente_cedula: r.paciente_cedula,
+      paciente_telefono: r.paciente_telefono,
+      paciente_edad: r.paciente_edad,
+      paciente: {
+        id_paciente: r.id_paciente,
+        nombre: r.paciente_nombre,
+        cedula: r.paciente_cedula,
+        telefono: r.paciente_telefono,
+        edad: r.paciente_edad
+      }
+    });
+
+    return {
+      id_receta:r.id_receta,
+      id_atencion:r.id_atencion,
+      id_medico:r.id_medico || obtenerIdMedicoReal(),
+      codigo_medico:r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
+      paciente: pacienteCompleto,
+      fecha:r.fecha_receta,
+      medico:r.medico || 'Dra. Aurora Andagoya',
+      cie10:r.diagnostico_cie10,
+      estado:r.estado,
+      diagnostico:r.diagnostico,
+      medicamento:r.medicamento,
+      indicaciones:r.indicaciones,
+      recomendaciones:r.recomendaciones
+    };
+  }
 
   window.toggleAccionesReceta = toggleAccionesReceta;
 
