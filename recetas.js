@@ -290,20 +290,6 @@
     catch(e){ console.warn('No se pudo guardar historial local de recetas.', e); }
   }
 
-  function ordenarRecetasGuardadas(lista){
-    return (Array.isArray(lista) ? lista : []).slice().sort((a,b) =>
-      String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || ''))
-    );
-  }
-
-  function limpiarCamposRecetaAntesDeEditar(){
-    setVal('recCie10', '');
-    setVal('recDiagnostico', '');
-    setVal('recMedicamento', '');
-    setVal('recIndicaciones', '');
-    setVal('recRecomendaciones', '');
-  }
-
   function normalizarRecetaGuardada(r){
     r = r || {};
     return {
@@ -336,17 +322,8 @@
     };
   }
 
-  function mezclarRecetasLocalesYSheets(remotas, forzarRemoto){
+  function mezclarRecetasLocalesYSheets(remotas){
     const mapa = new Map();
-
-    if(!forzarRemoto){
-      leerRecetasStorage().forEach(item => {
-        const r = normalizarRecetaGuardada(item);
-        if(r.id_receta){
-          mapa.set(String(r.id_receta), r);
-        }
-      });
-    }
 
     (Array.isArray(remotas) ? remotas : []).forEach(item => {
       const r = normalizarRecetaGuardada(item);
@@ -355,7 +332,17 @@
       }
     });
 
-    const mezcladas = ordenarRecetasGuardadas(Array.from(mapa.values()));
+    leerRecetasStorage().forEach(item => {
+      const r = normalizarRecetaGuardada(item);
+      if(r.id_receta){
+        mapa.set(String(r.id_receta), Object.assign({}, mapa.get(String(r.id_receta)) || {}, r));
+      }
+    });
+
+    const mezcladas = Array.from(mapa.values()).sort((a,b) =>
+      String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || ''))
+    );
+
     guardarRecetasStorage(mezcladas);
     return mezcladas;
   }
@@ -375,7 +362,7 @@
       const data = await res.json();
       const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
 
-      const mezcladas = mezclarRecetasLocalesYSheets(remotas, !!forzar);
+      const mezcladas = mezclarRecetasLocalesYSheets(remotas);
       recetasSheetsCargadas = true;
       recetasSheetsCargando = false;
 
@@ -386,6 +373,111 @@
       console.warn('No se pudieron cargar recetas desde Google Sheets.', error);
       return leerRecetasStorage();
     }
+  }
+
+  /* =====================================================
+     AUROSANAX FIX SEGURO - RECETA POR CONSULTA / ID_ATENCION
+     Objetivo:
+     - Al presionar Ver consulta, cargar automáticamente la receta vinculada a esa id_atencion.
+     - Si no existe receta para la consulta, preparar formulario para nueva receta.
+     - No modifica Plan, Atenciones, Apps Script ni la lógica actual de guardado.
+  ===================================================== */
+
+  function buscarRecetaPrincipalPorAtencion(idAtencion){
+    const id = String(idAtencion || '').trim();
+    if(!id) return null;
+
+    const recetas = leerRecetasStorage()
+      .map(normalizarRecetaGuardada)
+      .filter(r => String(r.id_atencion || '').trim() === id)
+      .sort((a,b) =>
+        String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(
+          String(a.actualizado_en || a.creado_en || a.fecha_receta || '')
+        )
+      );
+
+    return recetas[0] || null;
+  }
+
+  function prepararRecetaNuevaParaAtencion(idAtencion){
+    recetaEditandoId = null;
+    recetaAtencionActualId = String(idAtencion || obtenerIdAtencionActivaSeguro() || '').trim();
+
+    setVal('recFecha', fechaHoyReceta());
+    setVal('recMedico', val('recMedico') || 'Dra. Aurora Andagoya');
+    setVal('recEstado', 'Emitida');
+    setVal('recCie10', '');
+    setVal('recDiagnostico', '');
+    setVal('recMedicamento', '');
+    setVal('recIndicaciones', '');
+    setVal('recRecomendaciones', '');
+
+    if(typeof sincronizarPlanConReceta === 'function'){
+      try{ sincronizarPlanConReceta(); }catch(e){}
+    }
+
+    actualizarBotonGuardarReceta();
+
+    const consulta = consultaPorIdAtencion(recetaAtencionActualId);
+    mostrarMensajeReceta(
+      '<i class="bi bi-info-circle me-1"></i> Esta consulta ' + safe(consulta) + ' aún no tiene receta asociada. Puede crear una nueva receta vinculada a esta atención.',
+      ''
+    );
+
+    vistaPreviaReceta();
+  }
+
+  async function cargarRecetaPorAtencionActiva(idAtencion, opciones){
+    const id = String(idAtencion || obtenerIdAtencionActivaSeguro() || '').trim();
+    if(!id) return null;
+
+    recetaAtencionActualId = id;
+
+    let receta = buscarRecetaPrincipalPorAtencion(id);
+
+    if(!receta || opciones?.forzarSheets){
+      try{
+        await cargarRecetasDesdeSheets(!!opciones?.forzarSheets);
+        receta = buscarRecetaPrincipalPorAtencion(id);
+      }catch(error){
+        console.warn('AUROSANAX RECETAS: no se pudo refrescar receta por atención.', error);
+      }
+    }
+
+    if(receta){
+      cargarRecetaEnFormulario(receta);
+      mostrarMensajeReceta(
+        '<i class="bi bi-link-45deg me-1"></i> Receta vinculada a ' + safe(consultaPorIdAtencion(id)) + '. Modo edición activo para esta consulta.',
+        'ok'
+      );
+      return receta;
+    }
+
+    prepararRecetaNuevaParaAtencion(id);
+    return null;
+  }
+
+  function refrescarRecetaAlSeleccionarAtencion(){
+    /*
+      Espera breve: atenciones.js primero cambia la consulta y plan.js carga el Plan.
+      Luego recetas.js carga la receta asociada a la misma id_atencion.
+    */
+    setTimeout(function(){
+      cargarRecetaPorAtencionActiva('', {forzarSheets:true}).then(function(receta){
+        if(!receta){
+          setTimeout(function(){
+            if(!recetaEditandoId && typeof sincronizarPlanConReceta === 'function'){
+              try{ sincronizarPlanConReceta(); }catch(e){}
+              vistaPreviaReceta();
+            }
+          }, 350);
+        }
+      });
+    }, 450);
+  }
+
+  function instalarEngancheRecetaConAtencion(){
+    envolverRecetasFuncion('seleccionarAtencion', refrescarRecetaAlSeleccionarAtencion);
   }
 
   function mostrarMensajeReceta(texto, tipo){
@@ -462,7 +554,6 @@
 
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
-    recetaAtencionActualId = obtenerIdAtencionActivaSeguro() || '';
     setVal('recFecha', fechaHoyReceta());
     setVal('recMedico', 'Dra. Aurora Andagoya');
     setVal('recCie10', '');
@@ -645,25 +736,17 @@
 
   function cargarRecetaEnFormulario(receta){
     if(!receta) return;
-
-    limpiarCamposRecetaAntesDeEditar();
-
-    const recetaLimpia = normalizarRecetaGuardada(receta);
-
-    recetaEditandoId = recetaLimpia.id_receta || receta.id || '';
-    recetaAtencionActualId = recetaLimpia.id_atencion || obtenerIdAtencionActivaSeguro() || '';
-
-    setVal('recFecha', recetaLimpia.fecha_receta || fechaHoyReceta());
-    setVal('recMedico', recetaLimpia.medico || 'Dra. Aurora Andagoya');
-    setVal('recCie10', recetaLimpia.diagnostico_cie10 || '');
-    setVal('recEstado', recetaLimpia.estado || 'Emitida');
-    setVal('recDiagnostico', recetaLimpia.diagnostico || '');
-    setVal('recMedicamento', recetaLimpia.medicamento || '');
-    setVal('recIndicaciones', recetaLimpia.indicaciones || '');
-    setVal('recRecomendaciones', recetaLimpia.recomendaciones || '');
-
-    if(!recetaLimpia.id_atencion) recetaLimpia.id_atencion = obtenerIdAtencionActivaSeguro();
-
+    recetaEditandoId = receta.id_receta || receta.id || '';
+    recetaAtencionActualId = receta.id_atencion || obtenerIdAtencionActivaSeguro() || '';
+    setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
+    setVal('recMedico', receta.medico || 'Dra. Aurora Andagoya');
+    setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
+    setVal('recEstado', receta.estado || 'Emitida');
+    setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
+    setVal('recMedicamento', receta.medicamento || receta.medicamentos || '');
+    setVal('recIndicaciones', receta.indicaciones || '');
+    setVal('recRecomendaciones', receta.recomendaciones || receta.observaciones || '');
+    if(!receta.id_atencion) receta.id_atencion = obtenerIdAtencionActivaSeguro();
     actualizarBotonGuardarReceta();
     mostrarMensajeReceta('<i class="bi bi-pencil-square me-1"></i> Editando receta. Los cambios se aplican solo a Recetas y no modifican el Plan de la historia clínica.', '');
     vistaPreviaReceta();
@@ -1080,36 +1163,9 @@
 
   window.toggleAccionesReceta = toggleAccionesReceta;
 
-  window.verRecetaEmitida = function(id){
-    cargarRecetasDesdeSheets(true).then(function(){
-      const r = buscarRecetaPorId(id);
-      if(!r) return alert('No se encontró la receta.');
-      const box = asegurarVistaPreviaReceta();
-      if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r));
-      mostrarMensajeReceta('<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.', '');
-      renderHistorialRecetas();
-    });
-  };
-
-  window.editarRecetaEmitida = function(id){
-    mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Actualizando receta desde la base de datos...', '');
-    cargarRecetasDesdeSheets(true).then(function(){
-      const r = buscarRecetaPorId(id);
-      if(!r) return alert('No se encontró la receta.');
-      cargarRecetaEnFormulario(r);
-      renderHistorialRecetas();
-      window.scrollTo({top: el('recetas')?.offsetTop || 0, behavior:'smooth'});
-    });
-  };
-
-  window.pdfRecetaEmitida = function(id){
-    cargarRecetasDesdeSheets(true).then(function(){
-      const r = buscarRecetaPorId(id);
-      if(!r) return alert('No se encontró la receta.');
-      window.generarPDFReceta(recetaGuardadaAFormatoPreview(r));
-      renderHistorialRecetas();
-    });
-  };
+  window.verRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); const box = asegurarVistaPreviaReceta(); if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r)); mostrarMensajeReceta('<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.', ''); };
+  window.editarRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); cargarRecetaEnFormulario(r); window.scrollTo({top: el('recetas')?.offsetTop || 0, behavior:'smooth'}); };
+  window.pdfRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); window.generarPDFReceta(recetaGuardadaAFormatoPreview(r)); };
 
   function agregarBotonVistaPrevia(){
     const seccion = el('recetas'); if(!seccion) return;
@@ -1160,6 +1216,10 @@
     envolverRecetasFuncion('seleccionarPacienteHistoria', refrescarRecetasAlEntrar);
     envolverRecetasFuncion('actualizarTarjetaPacienteHistoria', refrescarRecetasAlEntrar);
 
+    instalarEngancheRecetaConAtencion();
+    setTimeout(instalarEngancheRecetaConAtencion, 900);
+    setTimeout(instalarEngancheRecetaConAtencion, 1600);
+
     mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Recetas funciona independiente del Plan. Si edita aquí, no se modifica la historia clínica original.', '');
   }
 
@@ -1168,6 +1228,7 @@
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
   window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
+  window.cargarRecetaPorAtencionActiva = cargarRecetaPorAtencionActiva;
   window.refrescarRecetasDesdeSheets = function(){
     return cargarRecetasDesdeSheets(true).then(function(){
       renderHistorialRecetas();
