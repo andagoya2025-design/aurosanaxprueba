@@ -653,7 +653,32 @@
     const lista = leerLocal();
     lista.unshift(nueva);
     guardarLocal(lista);
+
     atencionActivaId = nueva.id_atencion;
+
+    /*
+      AUROSANAX FIX CENTRAL:
+      Al iniciar una nueva atención, se sincroniza inmediatamente
+      el id_atencion activo con Plan. Esto evita que el primer Plan
+      se guarde vacío o asociado a una consulta anterior.
+    */
+    window.planState = window.planState || {
+      atencionActual: '',
+      cache: {}
+    };
+
+    window.planState.atencionActual = nueva.id_atencion;
+
+    setTimeout(function(){
+      try{
+        if(typeof cambiarPlanPorAtencion === 'function'){
+          cambiarPlanPorAtencion(nueva.id_atencion);
+        }
+      }catch(error){
+        console.warn('AUROSANAX PLAN: no se pudo sincronizar nueva atención con Plan.', error);
+      }
+    }, 100);
+
     renderAtencionesPaciente();
     return nueva;
   }
