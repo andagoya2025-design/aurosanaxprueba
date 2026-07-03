@@ -1629,8 +1629,101 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ============================================================
    ESTADO VISUAL BOTÓN GUARDAR PLAN
+   AUROSANAX FIX:
+   Esta función queda como dueña del botón Actualizar Plan Clínico.
+   Evita doble clic y actualiza el panel premium al finalizar.
 ============================================================ */
 window.auroPlanGuardando = false;
+
+function auroPlanUXFechaHoraAhora(){
+    try{
+        return new Date().toLocaleString('es-EC', {
+            year:'numeric',
+            month:'2-digit',
+            day:'2-digit',
+            hour:'2-digit',
+            minute:'2-digit'
+        });
+    }catch(e){
+        return new Date().toLocaleString();
+    }
+}
+
+function auroPlanUXEscape(txt){
+    return String(txt || '').replace(/[&<>'"]/g, c => ({
+        '&':'&amp;',
+        '<':'&lt;',
+        '>':'&gt;',
+        "'":'&#39;',
+        '"':'&quot;'
+    }[c]));
+}
+
+function auroPlanUXAtencionResumen(){
+    try{
+        if(typeof window.getAtencionActiva === 'function'){
+            const a = window.getAtencionActiva();
+            if(a){
+                return {
+                    id: String(a.id_atencion || ''),
+                    consulta: a.numero_consulta ? ('#' + a.numero_consulta) : 'activa'
+                };
+            }
+        }
+    }catch(e){}
+
+    const id = String(window.planState?.atencionActual || '').trim();
+    return {
+        id: id,
+        consulta: id ? 'activa' : 'sin atención activa'
+    };
+}
+
+function auroPlanUXGuardarFechaLocal(idAtencion, fechaHora){
+    try{
+        if(!idAtencion) return;
+        const key = 'auro_plan_ultimas_actualizaciones_v1';
+        const raw = localStorage.getItem(key);
+        const mapa = raw ? JSON.parse(raw) : {};
+        mapa[idAtencion] = fechaHora;
+        localStorage.setItem(key, JSON.stringify(mapa));
+    }catch(e){
+        console.warn('AUROSANAX PLAN UX: no se pudo guardar fecha local del Plan.', e);
+    }
+}
+
+function auroPlanUXRecetaTexto(idAtencion){
+    try{
+        const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
+        const arr = raw ? JSON.parse(raw) : [];
+        if(!Array.isArray(arr)) return 'Receta pendiente';
+
+        const recetas = arr
+            .filter(r => String(r.id_atencion || '').trim() === String(idAtencion || '').trim())
+            .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || '')));
+
+        const r = recetas[0];
+        if(!r) return 'Receta pendiente';
+
+        const f = r.actualizado_en || r.creado_en || r.fecha_receta || '';
+        return 'Receta guardada: ' + String(f);
+    }catch(e){
+        return 'Receta pendiente';
+    }
+}
+
+function auroPlanUXPintarPanelPlanGuardado(fechaHora){
+    const box = document.getElementById('auroPlanMiniStatus');
+    if(!box) return;
+
+    const atn = auroPlanUXAtencionResumen();
+    const recetaTexto = auroPlanUXRecetaTexto(atn.id);
+
+    box.innerHTML =
+        '<span><i class="bi bi-journal-medical"></i> Consulta ' + auroPlanUXEscape(atn.consulta) + '</span>' +
+        '<span class="ok"><i class="bi bi-list-check"></i> Plan actualizado: ' + auroPlanUXEscape(fechaHora) + '</span>' +
+        '<span class="' + (recetaTexto.includes('guardada') ? 'ok' : 'muted') + '"><i class="bi bi-capsule"></i> ' + auroPlanUXEscape(recetaTexto) + '</span>';
+}
 
 async function guardarPlanClinicoConUX(btn){
 
@@ -1645,33 +1738,60 @@ async function guardarPlanClinicoConUX(btn){
     try{
         if(btn){
             btn.disabled = true;
-            btn.innerHTML = 'Guardando plan...';
+            btn.style.opacity = '0.65';
+            btn.style.cursor = 'not-allowed';
+            btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando plan...';
         }
 
         const r = await guardarPlanClinicoDesdeSheets();
 
-        alert('Plan clínico guardado correctamente.');
+        if(r && r.success === false){
+            throw new Error(r.message || 'No se pudo guardar el Plan clínico.');
+        }
+
+        const atn = auroPlanUXAtencionResumen();
+        const fechaHora = auroPlanUXFechaHoraAhora();
+
+        auroPlanUXGuardarFechaLocal(atn.id, fechaHora);
+        auroPlanUXPintarPanelPlanGuardado(fechaHora);
+
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            setTimeout(function(){
+                auroPlanUXPintarPanelPlanGuardado(fechaHora);
+            }, 300);
+        }
+
+        if(typeof window.auroPlanMostrarEstadoGuardado === 'function'){
+            window.auroPlanMostrarEstadoGuardado(
+                'Plan clínico guardado correctamente. Última actualización del Plan: ' + fechaHora + '.'
+            );
+        }
 
         if(btn){
-            btn.innerHTML = 'Plan actualizado ✓';
+            btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Plan actualizado ✓';
             setTimeout(function(){
                 btn.disabled = false;
-                btn.innerHTML = textoOriginal || 'Actualizar Plan Clínico';
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+                btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar Plan Clínico';
             },2500);
         }
 
-        return r;
+        return r || {success:true};
 
     }catch(e){
 
+        console.error('AUROSANAX PLAN: error guardando plan clínico.', e);
         alert('Error al guardar el Plan clínico.');
 
         if(btn){
             btn.disabled = false;
-            btn.innerHTML = textoOriginal || 'Actualizar Plan Clínico';
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar Plan Clínico';
         }
 
-        throw e;
+        return {success:false,message:e.message || String(e)};
 
     }finally{
         setTimeout(()=>window.auroPlanGuardando=false,500);
@@ -1679,4 +1799,3 @@ async function guardarPlanClinicoConUX(btn){
 }
 
 window.guardarPlanClinicoConUX = guardarPlanClinicoConUX;
-
