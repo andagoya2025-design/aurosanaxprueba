@@ -6182,7 +6182,7 @@ document.addEventListener('click',e=>{
   window.auroPlanActualizarBotonesHistoria = function(){
     const esEdicion = !!editingHistoryId;
 
-    document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(btn => {
+    document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"], button[data-auro-plan-btn="1"]').forEach(btn => {
       if(btn.dataset.auroPlanBtn === '1'){
         btn.innerHTML = '<i class="bi bi-list-check me-1"></i> ' + (esEdicion ? 'Actualizar plan clínico' : 'Guardar plan clínico');
       }else{
@@ -6218,13 +6218,104 @@ document.addEventListener('click',e=>{
     }
   };
 
+  window.auroPlanGuardandoUX = false;
+
+  window.guardarPlanClinicoConUX = async function(btn){
+    if(window.auroPlanGuardandoUX){
+      return;
+    }
+
+    window.auroPlanGuardandoUX = true;
+
+    const textoOriginal = btn ? btn.innerHTML : '<i class="bi bi-list-check me-1"></i> Actualizar plan clínico';
+
+    let status = document.getElementById('hcSaveStatus');
+    const actions = document.querySelector('.clinical-actions');
+    if(!status && actions){
+      status = document.createElement('div');
+      status.id = 'hcSaveStatus';
+      status.className = 'auro-save-status';
+      actions.insertAdjacentElement('afterend', status);
+    }
+
+    try{
+      if(btn){
+        btn.disabled = true;
+        btn.style.opacity = '0.65';
+        btn.style.cursor = 'not-allowed';
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando plan...';
+      }
+
+      if(status){
+        status.className = 'auro-save-status';
+        status.textContent = 'Guardando plan clínico en Google Sheets, espere...';
+      }
+
+      let resultado = null;
+
+      if(typeof guardarPlanClinicoDesdeSheets === 'function'){
+        resultado = await guardarPlanClinicoDesdeSheets();
+      }else if(typeof auroGuardarPlanClinicoSeguroDesdeIndex === 'function'){
+        resultado = await auroGuardarPlanClinicoSeguroDesdeIndex();
+      }else{
+        throw new Error('No se encontró la función de guardado del Plan clínico.');
+      }
+
+      if(resultado && resultado.success === false){
+        throw new Error(resultado.message || 'No se pudo guardar el Plan clínico.');
+      }
+
+      if(status){
+        status.className = 'auro-save-status ok';
+        status.textContent = 'Plan clínico guardado correctamente en esta consulta.';
+      }
+
+      if(btn){
+        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Plan actualizado ✓';
+      }
+
+      setTimeout(function(){
+        if(btn){
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          btn.style.cursor = 'pointer';
+          btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar plan clínico';
+        }
+        window.auroPlanGuardandoUX = false;
+        if(typeof auroPlanActualizarBotonesHistoria === 'function'){
+          auroPlanActualizarBotonesHistoria();
+        }
+      }, 2800);
+
+      return resultado;
+
+    }catch(error){
+      console.error('AUROSANAX PLAN: error guardando con UX.', error);
+
+      if(status){
+        status.className = 'auro-save-status';
+        status.textContent = 'No se pudo guardar el Plan clínico: ' + (error && error.message ? error.message : error);
+      }
+
+      if(btn){
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar plan clínico';
+      }
+
+      window.auroPlanGuardandoUX = false;
+      return {success:false, message: error && error.message ? error.message : String(error)};
+    }
+  };
+
   function auroPlanInstalarUI(){
     const panel = document.getElementById('hc_plan');
     if(panel && !document.getElementById('auroPlanActionButtons')){
       const box = document.getElementById('auroPlanPreviosBox');
       const html = `
         <div id="auroPlanActionButtons" class="auro-plan-actions">
-          <button type="button" class="btn-auro" data-auro-plan-btn="1" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-list-check me-1"></i> Guardar plan clínico</button>
+          <button type="button" class="btn-auro" data-auro-plan-btn="1" onclick="guardarPlanClinicoConUX(this)"><i class="bi bi-list-check me-1"></i> Guardar plan clínico</button>
           <button type="button" class="btn-soft" onclick="guardarRecetaERP()"><i class="bi bi-save me-1"></i> Guardar receta</button>
           <button type="button" class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-filetype-pdf me-1"></i> PDF receta</button>
         </div>`;
