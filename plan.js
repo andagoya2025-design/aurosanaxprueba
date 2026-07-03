@@ -1799,3 +1799,4 @@ async function guardarPlanClinicoConUX(btn){
 }
 
 window.guardarPlanClinicoConUX = guardarPlanClinicoConUX;
+window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
