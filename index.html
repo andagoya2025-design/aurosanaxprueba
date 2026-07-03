@@ -5281,29 +5281,59 @@ function imprimirHistoriaClinica(){
 }
 
 async function guardarRecetaERP(){
-  /* AUROSANAX FIX SEGURO 2026-07-03
-     Función antigua neutralizada.
-     Motivo: esta versión guardaba directo con alert() y podía confundir al usuario.
-     La lógica oficial queda en recetas.js, donde existe control de botón,
-     bloqueo anti doble clic, mensaje visual y sincronización con id_atencion.
-  */
-  console.warn('AUROSANAX: guardarRecetaERP legacy de index.html neutralizado. Esperando recetas.js.');
-
-  const btn = document.getElementById('btnGuardarRecetaERP') ||
-    Array.from(document.querySelectorAll('button')).find(b =>
-      String(b.textContent || '').toLowerCase().includes('guardar receta')
-    );
-
-  if(btn){
-    btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Cargando módulo de recetas...';
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar receta';
-    }, 1800);
+  if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+  const paciente = getPacienteActivo();
+  if(!paciente){
+    alert('Seleccione primero un paciente para guardar la receta.');
+    showScreen('pacientes');
+    return;
   }
 
-  alert('El módulo premium de recetas aún está cargando. Espere unos segundos y vuelva a intentar.');
+  const medicamento = getValueIfExists('recMedicamento') || getValueIfExists('hcRecetaMedicamentos');
+  const indicaciones = getValueIfExists('recIndicaciones') || getValueIfExists('hcIndicacionesPaciente');
+  const recomendaciones = getValueIfExists('recRecomendaciones') || getValueIfExists('hcPlanTratamiento');
+  const diagnosticoTexto = getValueIfExists('recDiagnostico') || getValueIfExists('hcDiagnosticoPrincipal');
+
+  if(!medicamento && !indicaciones && !recomendaciones){
+    alert('Ingrese al menos medicamentos, indicaciones o recomendaciones antes de guardar la receta.');
+    return;
+  }
+
+  const data = {
+    id_paciente: paciente.id_paciente || activePatientId,
+    id_historia: getValueIfExists('hcIdHistoria') || '',
+    id_medico: 'MED-001',
+    fecha_receta: getValueIfExists('recFecha') || fechaHoyISO(),
+    diagnostico_cie10: getValueIfExists('recCie10') || getValueIfExists('hcCie10Principal'),
+    medicamento: medicamento,
+    presentacion: '',
+    dosis: '',
+    via: '',
+    frecuencia: '',
+    duracion: '',
+    cantidad: '',
+    indicaciones: indicaciones,
+    recomendaciones: [diagnosticoTexto, recomendaciones].filter(Boolean).join(' | '),
+    estado: getValueIfExists('recEstado') || 'Emitida',
+    creado_por: 'AUROSANAX ERP'
+  };
+
+  try{
+    await fetch(API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        accion: 'guardarReceta',
+        data: limpiarObjetoParaSheets(data)
+      })
+    });
+
+    alert('Receta enviada a Google Sheets correctamente.');
+  }catch(error){
+    console.error(error);
+    alert('No se pudo guardar la receta. Revise conexión o Apps Script.');
+  }
 }
 
 function generarPDFReceta(){
