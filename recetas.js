@@ -20,6 +20,9 @@
   let recetasHistorialVisible = true;
   let recetaAccionesAbiertaId = '';
   let recetaGuardando = false;
+  let recetaEstadoVisual = '';
+  let recetaEstadoTimer = null;
+  let recetaBloqueoPostGuardadoHasta = 0;
   let recetaAtencionActualId = '';
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
@@ -375,128 +378,64 @@
     }
   }
 
-  /* =====================================================
-     AUROSANAX FIX SEGURO - RECETA POR CONSULTA / ID_ATENCION
-     Objetivo:
-     - Al presionar Ver consulta, cargar automáticamente la receta vinculada a esa id_atencion.
-     - Si no existe receta para la consulta, preparar formulario para nueva receta.
-     - No modifica Plan, Atenciones, Apps Script ni la lógica actual de guardado.
-  ===================================================== */
+  function mostrarMensajeReceta(texto, tipo){
 
-  function buscarRecetaPrincipalPorAtencion(idAtencion){
-    const id = String(idAtencion || '').trim();
-    if(!id) return null;
+    function pintarEstadoEn(contenedorId, insertador){
+      let box = el(contenedorId);
 
-    const recetas = leerRecetasStorage()
-      .map(normalizarRecetaGuardada)
-      .filter(r => String(r.id_atencion || '').trim() === id)
-      .sort((a,b) =>
-        String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(
-          String(a.actualizado_en || a.creado_en || a.fecha_receta || '')
-        )
-      );
+      if(!box){
+        box = document.createElement('div');
+        box.id = contenedorId;
+        box.className = 'auro-save-status';
+        insertador(box);
+      }
 
-    return recetas[0] || null;
+      box.className = 'auro-save-status ' + (tipo === 'ok' ? 'ok' : '');
+      box.innerHTML = texto;
+      box.style.display = 'block';
+    }
+
+    const seccionRecetas = el('recetas');
+    if(seccionRecetas){
+      pintarEstadoEn('recetaEstadoBox', function(box){
+        const card = seccionRecetas.querySelector('.cardx');
+        const row = seccionRecetas.querySelector('.row.g-3');
+        if(card && row) card.insertBefore(box, row);
+        else card?.prepend(box);
+      });
+    }
+
+    const panelPlan = el('hc_plan');
+    if(panelPlan){
+      pintarEstadoEn('recetaEstadoBoxPlan', function(box){
+        const previos = el('auroPlanPreviosBox');
+        const row = panelPlan.querySelector('.row.g-3');
+        if(previos && previos.parentNode){
+          previos.parentNode.insertBefore(box, previos.nextSibling);
+        }else if(row && row.parentNode){
+          row.parentNode.insertBefore(box, row);
+        }else{
+          panelPlan.prepend(box);
+        }
+      });
+    }
   }
 
-  function prepararRecetaNuevaParaAtencion(idAtencion){
-    recetaEditandoId = null;
-    recetaAtencionActualId = String(idAtencion || obtenerIdAtencionActivaSeguro() || '').trim();
+  function marcarEstadoRecetaGuardadaVisual(esActualizacion){
+    recetaEstadoVisual = esActualizacion ? 'actualizada' : 'guardada';
+    recetaBloqueoPostGuardadoHasta = Date.now() + 2800;
 
-    setVal('recFecha', fechaHoyReceta());
-    setVal('recMedico', val('recMedico') || 'Dra. Aurora Andagoya');
-    setVal('recEstado', 'Emitida');
-    setVal('recCie10', '');
-    setVal('recDiagnostico', '');
-    setVal('recMedicamento', '');
-    setVal('recIndicaciones', '');
-    setVal('recRecomendaciones', '');
-
-    if(typeof sincronizarPlanConReceta === 'function'){
-      try{ sincronizarPlanConReceta(); }catch(e){}
+    if(recetaEstadoTimer){
+      clearTimeout(recetaEstadoTimer);
     }
 
     actualizarBotonGuardarReceta();
 
-    const consulta = consultaPorIdAtencion(recetaAtencionActualId);
-    mostrarMensajeReceta(
-      '<i class="bi bi-info-circle me-1"></i> Esta consulta ' + safe(consulta) + ' aún no tiene receta asociada. Puede crear una nueva receta vinculada a esta atención.',
-      ''
-    );
-
-    vistaPreviaReceta();
-  }
-
-  async function cargarRecetaPorAtencionActiva(idAtencion, opciones){
-    const id = String(idAtencion || obtenerIdAtencionActivaSeguro() || '').trim();
-    if(!id) return null;
-
-    recetaAtencionActualId = id;
-
-    let receta = buscarRecetaPrincipalPorAtencion(id);
-
-    if(!receta || opciones?.forzarSheets){
-      try{
-        await cargarRecetasDesdeSheets(!!opciones?.forzarSheets);
-        receta = buscarRecetaPrincipalPorAtencion(id);
-      }catch(error){
-        console.warn('AUROSANAX RECETAS: no se pudo refrescar receta por atención.', error);
-      }
-    }
-
-    if(receta){
-      cargarRecetaEnFormulario(receta);
-      mostrarMensajeReceta(
-        '<i class="bi bi-link-45deg me-1"></i> Receta vinculada a ' + safe(consultaPorIdAtencion(id)) + '. Modo edición activo para esta consulta.',
-        'ok'
-      );
-      return receta;
-    }
-
-    prepararRecetaNuevaParaAtencion(id);
-    return null;
-  }
-
-  function refrescarRecetaAlSeleccionarAtencion(){
-    /*
-      Espera breve: atenciones.js primero cambia la consulta y plan.js carga el Plan.
-      Luego recetas.js carga la receta asociada a la misma id_atencion.
-    */
-    setTimeout(function(){
-      cargarRecetaPorAtencionActiva('', {forzarSheets:true}).then(function(receta){
-        if(!receta){
-          setTimeout(function(){
-            if(!recetaEditandoId && typeof sincronizarPlanConReceta === 'function'){
-              try{ sincronizarPlanConReceta(); }catch(e){}
-              vistaPreviaReceta();
-            }
-          }, 350);
-        }
-      });
-    }, 450);
-  }
-
-  function instalarEngancheRecetaConAtencion(){
-    envolverRecetasFuncion('seleccionarAtencion', refrescarRecetaAlSeleccionarAtencion);
-  }
-
-  function mostrarMensajeReceta(texto, tipo){
-    let box = el('recetaEstadoBox');
-    const seccion = el('recetas');
-    if(!seccion) return;
-
-    if(!box){
-      box = document.createElement('div');
-      box.id = 'recetaEstadoBox';
-      box.className = 'auro-save-status';
-      const card = seccion.querySelector('.cardx');
-      const row = seccion.querySelector('.row.g-3');
-      if(card && row) card.insertBefore(box, row);
-      else card?.prepend(box);
-    }
-
-    box.className = 'auro-save-status ' + (tipo === 'ok' ? 'ok' : '');
-    box.innerHTML = texto;
+    recetaEstadoTimer = setTimeout(function(){
+      recetaEstadoVisual = '';
+      recetaBloqueoPostGuardadoHasta = 0;
+      actualizarBotonGuardarReceta();
+    }, 2800);
   }
 
   function obtenerBotonesGuardarReceta(){
@@ -510,11 +449,18 @@
 
     agregar(el('btnGuardarRecetaERP'));
 
+    document.querySelectorAll('[data-auro-receta-save-btn="1"]').forEach(agregar);
     document.querySelectorAll('button[onclick*="guardarRecetaERP"], a[onclick*="guardarRecetaERP"]').forEach(agregar);
 
-    document.querySelectorAll('button').forEach(btn => {
+    document.querySelectorAll('button, a').forEach(btn => {
       const txt = String(btn.textContent || '').trim().toLowerCase();
-      if(txt.includes('guardar receta')){
+      if(
+        txt.includes('guardar receta') ||
+        txt.includes('actualizar receta') ||
+        txt.includes('guardando') ||
+        txt.includes('receta guardada') ||
+        txt.includes('receta actualizada')
+      ){
         agregar(btn);
       }
     });
@@ -530,13 +476,27 @@
         btn.id = 'btnGuardarRecetaERP';
       }
 
+      btn.setAttribute('data-auro-receta-save-btn','1');
+
       if(recetaGuardando){
         btn.disabled = true;
         btn.setAttribute('aria-busy','true');
         btn.style.opacity = '0.65';
         btn.style.cursor = 'not-allowed';
         btn.style.pointerEvents = 'none';
-        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando receta...';
+        return;
+      }
+
+      if(recetaEstadoVisual){
+        btn.disabled = true;
+        btn.removeAttribute('aria-busy');
+        btn.style.opacity = '1';
+        btn.style.cursor = 'not-allowed';
+        btn.style.pointerEvents = 'none';
+        btn.innerHTML = recetaEstadoVisual === 'actualizada'
+          ? '<i class="bi bi-check-circle me-1"></i> Receta actualizada ✓'
+          : '<i class="bi bi-check-circle me-1"></i> Receta guardada ✓';
         return;
       }
 
@@ -554,6 +514,9 @@
 
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
+    recetaEstadoVisual = '';
+    recetaBloqueoPostGuardadoHasta = 0;
+    if(recetaEstadoTimer){ clearTimeout(recetaEstadoTimer); recetaEstadoTimer = null; }
     setVal('recFecha', fechaHoyReceta());
     setVal('recMedico', 'Dra. Aurora Andagoya');
     setVal('recCie10', '');
@@ -755,6 +718,13 @@
   window.guardarRecetaERP = async function(){
     if(recetaGuardando){
       mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> La receta ya se está guardando. Espere unos segundos para evitar duplicados.', '');
+      actualizarBotonGuardarReceta();
+      return;
+    }
+
+    if(Date.now() < recetaBloqueoPostGuardadoHasta){
+      mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> La receta ya fue guardada. Espere unos segundos antes de volver a presionar.', 'ok');
+      actualizarBotonGuardarReceta();
       return;
     }
 
@@ -816,7 +786,7 @@
       renderHistorialRecetas();
 
       if(resultado && resultado.success){
-        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente y enviada a Google Sheets.`, 'ok');
+        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente. Ya fue asociada a la consulta activa.`, 'ok');
       }else{
         mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '');
         alert('Receta guardada localmente, pero no se pudo enviar a Google Sheets.');
@@ -826,8 +796,13 @@
         limpiarEstadoRecetaNuevaDespuesDeGuardar();
       }else{
         recetaEditandoId = r.id_receta;
-        actualizarBotonGuardarReceta();
         vistaPreviaReceta();
+      }
+
+      if(resultado && resultado.success){
+        marcarEstadoRecetaGuardadaVisual(estabaEditando);
+      }else{
+        actualizarBotonGuardarReceta();
       }
 
     }catch(error){
@@ -1216,10 +1191,6 @@
     envolverRecetasFuncion('seleccionarPacienteHistoria', refrescarRecetasAlEntrar);
     envolverRecetasFuncion('actualizarTarjetaPacienteHistoria', refrescarRecetasAlEntrar);
 
-    instalarEngancheRecetaConAtencion();
-    setTimeout(instalarEngancheRecetaConAtencion, 900);
-    setTimeout(instalarEngancheRecetaConAtencion, 1600);
-
     mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Recetas funciona independiente del Plan. Si edita aquí, no se modifica la historia clínica original.', '');
   }
 
@@ -1228,7 +1199,6 @@
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
   window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
-  window.cargarRecetaPorAtencionActiva = cargarRecetaPorAtencionActiva;
   window.refrescarRecetasDesdeSheets = function(){
     return cargarRecetasDesdeSheets(true).then(function(){
       renderHistorialRecetas();
