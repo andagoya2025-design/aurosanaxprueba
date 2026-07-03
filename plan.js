@@ -211,10 +211,7 @@ function cambiarPlanPorAtencion(idAtencion){
 
     limpiarPlanTemporal();
 
-    // cargarPlanTemporal(idAtencion);
-    // AUROSANAX FIX SEGURO:
-    // Se desactiva la carga temporal para evitar doble carga.
-    // Ahora el Plan se limpia y luego carga solo desde Google Sheets por id_atencion.
+    cargarPlanTemporal(idAtencion);
 
     if(typeof window.cargarPlanClinicoDesdeSheets === 'function'){
         setTimeout(function(){
@@ -1344,14 +1341,7 @@ function auroPlanPrepararDatosSheets(){
 
     return {
         id_atencion:
-            String(
-                (typeof window.getIdAtencionActiva === 'function'
-                    ? window.getIdAtencionActiva()
-                    : ''
-                ) ||
-                window.planState?.atencionActual ||
-                ''
-            ).trim(),
+            String(window.planState?.atencionActual || '').trim(),
 
         id_paciente:
             paciente?.id_paciente ||
