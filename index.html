@@ -6238,6 +6238,21 @@ document.addEventListener('click',e=>{
     return { id:'', consulta:'sin atención activa' };
   }
 
+  function auroPlanReiniciarEstadoVisualPorCambioAtencion(){
+    const atn = auroPlanObtenerAtencionActivaResumen();
+    const ultimoId = String(window.__auroPlanMiniStatusAtencionId || '');
+
+    if(atn.id && ultimoId && atn.id !== ultimoId){
+      const status = document.getElementById('hcSaveStatus');
+      if(status){
+        status.className = 'auro-save-status';
+        status.textContent = 'Consulta ' + atn.consulta + ' activa. Plan pendiente de guardar o revisar.';
+      }
+    }
+
+    window.__auroPlanMiniStatusAtencionId = atn.id || '';
+  }
+
   function auroPlanLeerUltimaActualizacionPlan(idAtencion){
     try{
       const raw = localStorage.getItem('auro_plan_ultimas_actualizaciones_v1');
@@ -6280,16 +6295,18 @@ document.addEventListener('click',e=>{
     const box = document.getElementById('auroPlanMiniStatus');
     if(!box) return;
 
+    auroPlanReiniciarEstadoVisualPorCambioAtencion();
+
     const atn = auroPlanObtenerAtencionActivaResumen();
     const planFecha = auroPlanLeerUltimaActualizacionPlan(atn.id);
     const recetaFecha = auroPlanUltimaRecetaAtencion(atn.id);
 
     const planTexto = planFecha
       ? 'Plan actualizado: ' + planFecha
-      : 'Plan pendiente o sin actualización local';
+      : 'Plan pendiente de guardar';
 
     const recetaTexto = recetaFecha
-      ? 'Receta guardada: ' + recetaFecha
+      ? 'Receta guardada: ' + auroPlanFormatearFechaHora(recetaFecha)
       : 'Receta pendiente';
 
     box.innerHTML =
@@ -6404,6 +6421,9 @@ document.addEventListener('click',e=>{
 
       if(typeof window.auroPlanActualizarMiniStatus === 'function'){
         window.auroPlanActualizarMiniStatus('Guardado en Google Sheets');
+        setTimeout(function(){
+          window.auroPlanActualizarMiniStatus();
+        }, 900);
       }
 
       if(btn){
@@ -6488,9 +6508,39 @@ document.addEventListener('click',e=>{
             window.auroPlanActualizarMiniStatus('Receta revisada');
           }
         }, 700);
+        setTimeout(function(){
+          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            window.auroPlanActualizarMiniStatus();
+          }
+        }, 1500);
         return r;
       };
       window.__auroPlanRecetaUxWrapped = true;
+    }
+
+    if(!window.__auroPlanAtencionUxWrapped){
+      ['iniciarAtencionActual','seleccionarAtencion','finalizarAtencionActual'].forEach(function(nombre){
+        if(typeof window[nombre] === 'function' && !window[nombre].__auroPlanMiniWrapped){
+          const original = window[nombre];
+          const nueva = function(){
+            const r = original.apply(this, arguments);
+            setTimeout(function(){
+              if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+                window.auroPlanActualizarMiniStatus();
+              }
+            }, 180);
+            setTimeout(function(){
+              if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+                window.auroPlanActualizarMiniStatus();
+              }
+            }, 900);
+            return r;
+          };
+          nueva.__auroPlanMiniWrapped = true;
+          window[nombre] = nueva;
+        }
+      });
+      window.__auroPlanAtencionUxWrapped = true;
     }
   }
 
@@ -6539,12 +6589,26 @@ document.addEventListener('click',e=>{
   }
 
   document.addEventListener('click', function(e){
-    if(e.target && e.target.closest('[data-atencion-id]')){
+    const refrescarPorAtencion =
+      e.target &&
+      (
+        e.target.closest('[data-atencion-id]') ||
+        e.target.closest('#btnIniciarAtencion') ||
+        e.target.closest('#btnFinalizarAtencion')
+      );
+
+    if(refrescarPorAtencion){
       setTimeout(function(){
         if(typeof window.auroPlanActualizarMiniStatus === 'function'){
           window.auroPlanActualizarMiniStatus();
         }
-      }, 650);
+      }, 250);
+
+      setTimeout(function(){
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+          window.auroPlanActualizarMiniStatus();
+        }
+      }, 900);
     }
   });
 
