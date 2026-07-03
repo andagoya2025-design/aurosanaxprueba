@@ -404,21 +404,6 @@
         else card?.prepend(box);
       });
     }
-
-    const panelPlan = el('hc_plan');
-    if(panelPlan){
-      pintarEstadoEn('recetaEstadoBoxPlan', function(box){
-        const previos = el('auroPlanPreviosBox');
-        const row = panelPlan.querySelector('.row.g-3');
-        if(previos && previos.parentNode){
-          previos.parentNode.insertBefore(box, previos.nextSibling);
-        }else if(row && row.parentNode){
-          row.parentNode.insertBefore(box, row);
-        }else{
-          panelPlan.prepend(box);
-        }
-      });
-    }
   }
 
   function marcarEstadoRecetaGuardadaVisual(esActualizacion){
