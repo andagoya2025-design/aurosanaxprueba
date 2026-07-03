@@ -455,7 +455,6 @@
 
   function actualizarBotonGuardarReceta(){
     const botones = obtenerBotonesGuardarReceta();
-    const existeAtencion = !!obtenerIdAtencionActivaSeguro();
 
     botones.forEach((btn, i) => {
       if(!btn.id && i === 0){
@@ -483,16 +482,6 @@
         btn.innerHTML = recetaEstadoVisual === 'actualizada'
           ? '<i class="bi bi-check-circle me-1"></i> Receta actualizada ✓'
           : '<i class="bi bi-check-circle me-1"></i> Receta guardada ✓';
-        return;
-      }
-
-      if(!existeAtencion){
-        btn.disabled = true;
-        btn.removeAttribute('aria-busy');
-        btn.style.opacity = '0.65';
-        btn.style.cursor = 'not-allowed';
-        btn.style.pointerEvents = 'none';
-        btn.innerHTML = '<i class="bi bi-lock me-1"></i> Inicie una consulta';
         return;
       }
 
@@ -544,36 +533,12 @@
   }
 
   function verificarCambioAtencionReceta(){
-
     const actual = obtenerIdAtencionActivaSeguro() || '';
-
     if(recetaAtencionActualId && actual && recetaAtencionActualId !== actual){
-
       recetaEditandoId = null;
-      recetaEstadoVisual = '';
-      recetaBloqueoPostGuardadoHasta = 0;
-
-      if(recetaEstadoTimer){
-        clearTimeout(recetaEstadoTimer);
-        recetaEstadoTimer = null;
-      }
-
-      const box = el('recetaEstadoBox');
-      if(box){
-        box.innerHTML = '<i class="bi bi-info-circle me-1"></i> Nueva consulta activa. Puede registrar una nueva receta.';
-        box.className = 'auro-save-status';
-        box.style.display = 'block';
-      }
-
-      const preview = el('recetaPreview');
-      if(preview){
-        preview.innerHTML = '<div class="text-muted text-center py-4">Nueva consulta activa. Complete los medicamentos y presione <b>Guardar receta</b>.</div>';
-      }
-
       actualizarBotonGuardarReceta();
     }
-
-    recetaAtencionActualId = actual;
+    if(actual) recetaAtencionActualId = actual;
   }
 
   window.obtenerDatosReceta = function(){
@@ -1211,11 +1176,7 @@
     envolverRecetasFuncion('seleccionarPacienteHistoria', refrescarRecetasAlEntrar);
     envolverRecetasFuncion('actualizarTarjetaPacienteHistoria', refrescarRecetasAlEntrar);
 
-    if(obtenerIdAtencionActivaSeguro()){
-      mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Receta lista para la consulta activa.', '');
-    }else{
-      mostrarMensajeReceta('<i class="bi bi-lock me-1"></i> Inicie o seleccione una consulta para guardar receta.', '');
-    }
+    mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Recetas funciona independiente del Plan. Si edita aquí, no se modifica la historia clínica original.', '');
   }
 
   document.addEventListener('DOMContentLoaded', inicializarRecetas);
