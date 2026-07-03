@@ -378,7 +378,7 @@
     }
   }
 
-  function mostrarMensajeReceta(texto, tipo){
+  function mostrarMensajeReceta(texto, tipo, opciones){
 
     function pintarEstadoEn(contenedorId, insertador){
       let box = el(contenedorId);
@@ -403,6 +403,25 @@
         if(card && row) card.insertBefore(box, row);
         else card?.prepend(box);
       });
+    }
+
+    /* Aviso corto junto al botón Guardar receta del Plan.
+       No usa hc_plan completo para evitar interferir con el guardado del Plan clínico. */
+    if(opciones && opciones.cercaBotonPlan){
+      const btnPlan = obtenerBotonesGuardarReceta().find(function(btn){
+        return btn && btn.closest && btn.closest('#hc_plan');
+      });
+
+      if(btnPlan){
+        pintarEstadoEn('recetaEstadoBotonPlan', function(box){
+          box.style.marginTop = '8px';
+          box.style.marginBottom = '8px';
+          const contenedorBoton = btnPlan.parentElement || btnPlan;
+          if(contenedorBoton && contenedorBoton.parentNode){
+            contenedorBoton.parentNode.insertBefore(box, contenedorBoton.nextSibling);
+          }
+        });
+      }
     }
   }
 
@@ -702,13 +721,13 @@
 
   window.guardarRecetaERP = async function(){
     if(recetaGuardando){
-      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> La receta ya se está guardando. Espere unos segundos para evitar duplicados.', '');
+      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> La receta ya se está guardando. Espere unos segundos para evitar duplicados.', '', {cercaBotonPlan:true});
       actualizarBotonGuardarReceta();
       return;
     }
 
     if(Date.now() < recetaBloqueoPostGuardadoHasta){
-      mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> La receta ya fue guardada. Espere unos segundos antes de volver a presionar.', 'ok');
+      mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> La receta ya fue guardada. Espere unos segundos antes de volver a presionar.', 'ok', {cercaBotonPlan:true});
       actualizarBotonGuardarReceta();
       return;
     }
@@ -762,7 +781,7 @@
       recetasHistorialVisible = true;
       recetaAccionesAbiertaId = '';
 
-      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Guardando receta y enviando a Google Sheets...', '');
+      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Guardando receta y enviando a Google Sheets...', '', {cercaBotonPlan:true});
 
       const resultado = await enviarRecetaGoogleSheets(r);
 
@@ -771,9 +790,9 @@
       renderHistorialRecetas();
 
       if(resultado && resultado.success){
-        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente. Ya fue asociada a la consulta activa.`, 'ok');
+        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente. Ya fue asociada a la consulta activa.`, 'ok', {cercaBotonPlan:true});
       }else{
-        mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '');
+        mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '', {cercaBotonPlan:true});
         alert('Receta guardada localmente, pero no se pudo enviar a Google Sheets.');
       }
 
@@ -792,7 +811,7 @@
 
     }catch(error){
       console.error('Error guardando receta:', error);
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> Error al guardar receta. Intente nuevamente.', '');
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> Error al guardar receta. Intente nuevamente.', '', {cercaBotonPlan:true});
       alert('Error al guardar receta: ' + (error && error.message ? error.message : error));
     }finally{
       recetaGuardando = false;
