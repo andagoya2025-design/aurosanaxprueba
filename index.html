@@ -2939,130 +2939,34 @@ function recopilarHemoLinfaticoExamenFisico(){
 
 
 
-const hcRegionalConfig = {
-  piel_faneras: {titulo:'Piel y faneras', grupos:[{titulo:'Hallazgos regionales', items:['Piel gruesa','Piel fría','Palidez cutánea']}]},
-  cabeza: {titulo:'Cabeza', grupos:[]},
-  ojos: {titulo:'Ojos', grupos:[{titulo:'Hallazgos regionales', items:['Hinchazón periorbitaria']}]},
-  oidos: {titulo:'Oídos', grupos:[]},
-  nariz: {titulo:'Nariz', grupos:[]},
-  boca: {titulo:'Boca', grupos:[]},
-  orofaringe: {titulo:'Orofaringe', grupos:[]},
-  cuello: {titulo:'Cuello', grupos:[]},
-  axilas_mamas: {titulo:'Axilas-mamas', grupos:[{titulo:'Hallazgos regionales', items:['Mamas bilateralmente dolorosas','Nódulo palpable en mama derecha','Nódulo palpable en mama izquierda','Secreción por el pezón','Dolor mamario']}]},
-  torax: {titulo:'Tórax', grupos:[{titulo:'Hallazgos regionales', items:['Asimetría de tórax presente','Dolor a la digitopresión intercostal','Roncus presentes','Sibilancias presentes','Tiraje intercostal presente','Ruidos respiratorios presentes','Estertores presentes','No se evidencia soplos cardíacos','Ruidos cardíacos rítmicos regulares']}]},
-  abdomen_regional: {titulo:'Abdomen', grupos:[{titulo:'Hallazgos regionales', items:['Distensión abdominal presente','Blumberg positivo','Rovsing positivo','Maniobra de psoas positiva','Puntos ureterales dolorosos medios','Puntos ureterales dolorosos inferiores','Dolor en punto cístico positivo','Signo de Murphy positivo']}]},
-  columna_vertebral: {titulo:'Columna vertebral', grupos:[{titulo:'Hallazgos regionales', items:['Lasègue positivo','Bragard positivo','Valleix positivo','Spurling positivo','Descompresión cervical positiva','Contractura muscular paravertebral presente']}]},
-  ingle_perine: {titulo:'Ingle-periné', grupos:[]},
-  genitales_regional: {titulo:'Genitales', grupos:[]},
-  ano_recto: {titulo:'Ano recto', grupos:[]},
-  canal_vaginal: {titulo:'Canal vaginal', grupos:[{titulo:'Hallazgos regionales', items:['Cérvix inflamatorio presente','Flujo vaginal abundante','Cambios macroscópicos en cérvix','Irritación vaginal presente','Lesiones blanquecinas en cuello']}]},
-  miembros_superiores: {titulo:'Miembros superiores', grupos:[
-    {titulo:'Hombro', items:['Jobe positivo','Hawkins positivo','Drop Arm positivo','Neer positivo','Speed positivo']},
-    {titulo:'Muñeca', items:['Durkan positivo','Tinel positivo','Finkelstein positivo','Phalen positivo']}
-  ]},
-  miembros_inferiores: {titulo:'Miembros inferiores', grupos:[
-    {titulo:'Rodilla', items:['Test de cepillo positivo','Zohlen positivo','McMurray positivo','Apley positivo','Cajón anterior positivo','Cajón posterior positivo','Bostezo medial positivo','Bostezo lateral positivo']},
-    {titulo:'Cadera', items:['Fader positivo','Fadir positivo','Test de Thomas positivo']},
-    {titulo:'Tobillo', items:['Cotton positivo','Tobillo inestable positivo','Thompson positivo']}
-  ]},
-  neurologico_regional: {titulo:'Neurológico', grupos:[{titulo:'Hallazgos regionales', items:['Reflejo de tobillo lento']}]},
-  otros_hallazgos: {titulo:'Otros hallazgos', grupos:[{titulo:'Hallazgos regionales', items:['Movimientos lentos']}]}
-};
+/* ==========================================================
+   AUROSANAX FIX ARQUITECTURA EXAMEN FÍSICO REGIONAL
+   La lógica regional ya NO se controla desde index.html.
 
-function hcRegionalInputId(region){
-  return 'hcRegional_' + region + '_obs';
-}
+   Dueño actual del examen físico regional:
+   - examenfisico.js
 
-function renderHcRegionalPanels(){
-  const cont = document.getElementById('hcRegionalPanels');
-  if(!cont || cont.dataset.rendered === '1') return;
+   index.html conserva únicamente la interfaz visual:
+   - hcRegionalTabs
+   - hcRegionalPanels
+   - pestañas y contenedores visuales
 
-  const html = Object.keys(hcRegionalConfig).map((key, index) => {
-    const cfg = hcRegionalConfig[key];
-    const grupos = (cfg.grupos || []).map(grupo => `
-      <div class="sistemas-check-group">
-        <div class="sistemas-check-subhead">${grupo.titulo}</div>
-        <div class="sistemas-check-grid">
-          ${(grupo.items || []).map(item => `
-            <label class="sistemas-check-item">
-              <input type="checkbox" class="hcRegionalCheck" data-region="${key}" data-grupo="${grupo.titulo}" data-label="${item}"> ${item}
-            </label>
-          `).join('')}
-        </div>
-      </div>
-    `).join('');
+   Funciones activas deben venir desde examenfisico.js:
+   - hcRegionalInputId()
+   - renderHcRegionalPanels()
+   - activarHcRegional()
+   - recopilarRegionalExamenFisico()
+   - window.auroExamenFisicoRegionalConfig
 
-    return `
-      <div class="sistemas-check-card regional-panel ${index === 0 ? 'active' : ''}" data-region-panel="${key}">
-        <div class="sistemas-check-head"><i class="bi bi-person-vcard"></i> ${cfg.titulo}</div>
-        <div class="sistemas-check-body">
-          ${grupos}
-          <div class="sistemas-check-observacion mt-2">
-            <textarea id="${hcRegionalInputId(key)}" class="form-control regional-textarea" rows="1">NO VALORADO</textarea>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  cont.innerHTML = html;
-  cont.dataset.rendered = '1';
-}
-
-function activarHcRegional(region){
-  renderHcRegionalPanels();
-  document.querySelectorAll('#hcRegionalTabs .regional-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.region === region);
-  });
-  document.querySelectorAll('#hcRegionalPanels .regional-panel').forEach(panel => {
-    panel.classList.toggle('active', panel.dataset.regionPanel === region);
-  });
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  renderHcRegionalPanels();
-  document.querySelectorAll('#hcRegionalTabs .regional-tab').forEach(btn => {
-    btn.addEventListener('click', () => activarHcRegional(btn.dataset.region));
-  });
-});
-
-function recopilarRegionalExamenFisico(){
-  renderHcRegionalPanels();
-  const regiones = [];
-
-  Object.keys(hcRegionalConfig).forEach(region => {
-    const cfg = hcRegionalConfig[region];
-    const partes = [];
-    const grupos = {};
-
-    document.querySelectorAll(`.hcRegionalCheck[data-region="${region}"]`).forEach(chk => {
-      if(!chk.checked) return;
-      const grupo = chk.dataset.grupo || 'Hallazgos regionales';
-      const label = chk.dataset.label || '';
-      if(!grupos[grupo]) grupos[grupo] = [];
-      if(label) grupos[grupo].push(label);
-    });
-
-    Object.keys(grupos).forEach(grupo => {
-      partes.push(`${grupo}: ${grupos[grupo].join(', ')}`);
-    });
-
-    const observacion = getValueIfExists(hcRegionalInputId(region));
-    if(observacion) partes.push(observacion === 'NO VALORADO' ? 'No valorado' : 'Observación: ' + observacion);
-
-    if(partes.length) regiones.push(`${cfg.titulo}: ${partes.join(' | ')}`);
-  });
-
-  return regiones.join(' || ');
-}
-
+   No se toca Plan, Recetas, Atenciones, Pacientes, Agenda ni Google Sheets.
+   ========================================================== */
 
 /* ==========================================================
    AUROSANAX FIX ARQUITECTURA DIAGNÓSTICO / CIE-10
    Catálogo CIE-10 y motor de diagnóstico neutralizados en index.html.
 
    Dueño actual del CIE-10:
-   - examenfisico.js?v=20260703_cie10_dueno_examenfisico
+   - examenfisico.js?v=20260703_examen_regional_dueno
 
    index.html conserva la interfaz visual:
    - hcDxCodigoBuscar
@@ -3070,7 +2974,7 @@ function recopilarRegionalExamenFisico(){
    - hcDxResultadosBody
    - hcDxSeleccionadosBody
 
-   Las funciones activas deben cargarse desde examenfisico.js?v=20260703_cie10_dueno_examenfisico:
+   Las funciones activas deben cargarse desde examenfisico.js?v=20260703_examen_regional_dueno
    - buscarDiagnosticoCie10()
    - agregarDiagnosticoCie10()
    - agregarDiagnosticoCie10Manual()
@@ -5281,7 +5185,7 @@ document.addEventListener('click',e=>{
 });
 </script>
   <script src="antecedentes.js"></script>
-  <script src="examenfisico.js?v=20260703_cie10_dueno_examenfisico"></script>
+  <script src="examenfisico.js?v=20260703_examen_regional_dueno"></script>
   <script src="consentimientos.js"></script>
   <script src="recetas.js"></script>
 
