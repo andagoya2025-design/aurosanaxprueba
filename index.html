@@ -6375,138 +6375,40 @@ document.addEventListener('click',e=>{
     }
   };
 
+  /*
+    AUROSANAX FIX ARQUITECTURA:
+    El botón Actualizar Plan Clínico ya NO se controla desde index.html.
+    index.html solo delega hacia plan.js, que es el dueño del Plan.
+    Esto evita que dos funciones con el mismo nombre se sobrescriban.
+  */
   window.auroPlanGuardandoUX = false;
 
   window.guardarPlanClinicoConUX = async function(btn){
-    if(window.auroPlanGuardandoUX){
-      return;
+    if(typeof window.auroPlanGuardarPlanClinicoConUXPlanJS === 'function'){
+      return await window.auroPlanGuardarPlanClinicoConUXPlanJS(btn);
     }
 
-    window.auroPlanGuardandoUX = true;
-
-    const textoOriginal = btn ? btn.innerHTML : '<i class="bi bi-list-check me-1"></i> Actualizar plan clínico';
-
-    let status = document.getElementById('hcSaveStatus');
-    const actions = document.querySelector('.clinical-actions');
-    if(!status && actions){
-      status = document.createElement('div');
-      status.id = 'hcSaveStatus';
-      status.className = 'auro-save-status';
-      actions.insertAdjacentElement('afterend', status);
-    }
-
-    try{
+    if(typeof window.guardarPlanClinicoDesdeSheets === 'function'){
       if(btn){
         btn.disabled = true;
-        btn.style.opacity = '0.65';
-        btn.style.cursor = 'not-allowed';
         btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando plan...';
       }
 
-      if(status){
-        status.className = 'auro-save-status';
-        status.textContent = 'Guardando plan clínico en Google Sheets, espere...';
-      }
-
-      if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-        window.auroPlanActualizarMiniStatus('Guardando plan clínico...');
-      }
-
-      let resultado = null;
-
-      if(typeof guardarPlanClinicoDesdeSheets === 'function'){
-        resultado = await guardarPlanClinicoDesdeSheets();
-      }else if(typeof auroGuardarPlanClinicoSeguroDesdeIndex === 'function'){
-        resultado = await auroGuardarPlanClinicoSeguroDesdeIndex();
-      }else{
-        throw new Error('No se encontró la función de guardado del Plan clínico.');
-      }
-
-      if(resultado && resultado.success === false){
-        throw new Error(resultado.message || 'No se pudo guardar el Plan clínico.');
-      }
-
-      const atnResumen = auroPlanObtenerAtencionActivaResumen();
-      const fechaPlanGuardado = auroPlanFechaHoraVisualAhora();
-
-      /*
-        AUROSANAX FIX VISUAL:
-        Guarda la última actualización del Plan inmediatamente después
-        del guardado exitoso para que el panel premium cambie al instante.
-        No modifica Google Sheets, Atenciones, Recetas ni la lógica clínica.
-      */
-      auroPlanGuardarUltimaActualizacionPlan(atnResumen.id, fechaPlanGuardado);
-
-      if(status){
-        status.className = 'auro-save-status ok';
-        status.textContent = 'Plan clínico guardado correctamente en esta consulta. Última actualización del Plan: ' + fechaPlanGuardado + '.';
-      }
-
-      if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-        const box = document.getElementById('auroPlanMiniStatus');
-        if(box){
-          box.innerHTML =
-            '<span><i class="bi bi-journal-medical"></i> Consulta ' + auroPlanEscapeSeguro(atnResumen.consulta || 'activa') + '</span>' +
-            '<span class="ok"><i class="bi bi-list-check"></i> Plan actualizado: ' + auroPlanEscapeSeguro(fechaPlanGuardado) + '</span>' +
-            '<span class="muted"><i class="bi bi-capsule"></i> Receta pendiente</span>';
-        }
-
-        window.auroPlanActualizarMiniStatus('Plan actualizado correctamente');
-
-        setTimeout(function(){
-          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-            window.auroPlanActualizarMiniStatus();
-          }
-        }, 500);
-
-        setTimeout(function(){
-          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-            window.auroPlanActualizarMiniStatus();
-          }
-        }, 1500);
-      }
+      const r = await window.guardarPlanClinicoDesdeSheets();
 
       if(btn){
         btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Plan actualizado ✓';
-      }
-
-      setTimeout(function(){
-        if(btn){
+        setTimeout(function(){
           btn.disabled = false;
-          btn.style.opacity = '1';
-          btn.style.cursor = 'pointer';
-          btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar plan clínico';
-        }
-        window.auroPlanGuardandoUX = false;
-        if(typeof auroPlanActualizarBotonesHistoria === 'function'){
-          auroPlanActualizarBotonesHistoria();
-        }
-      }, 2800);
-
-      return resultado;
-
-    }catch(error){
-      console.error('AUROSANAX PLAN: error guardando con UX.', error);
-
-      if(status){
-        status.className = 'auro-save-status';
-        status.textContent = 'No se pudo guardar el Plan clínico: ' + (error && error.message ? error.message : error);
+          btn.innerHTML = '<i class="bi bi-list-check me-1"></i> Actualizar plan clínico';
+        }, 2500);
       }
 
-      if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-        window.auroPlanActualizarMiniStatus('Revise el mensaje de guardado');
-      }
-
-      if(btn){
-        btn.disabled = false;
-        btn.style.opacity = '1';
-        btn.style.cursor = 'pointer';
-        btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar plan clínico';
-      }
-
-      window.auroPlanGuardandoUX = false;
-      return {success:false, message: error && error.message ? error.message : String(error)};
+      return r;
     }
+
+    alert('No se encontró la función de guardado del Plan clínico.');
+    return {success:false, message:'No se encontró la función de guardado del Plan clínico.'};
   };
 
   function auroPlanInstalarUI(){
@@ -6706,7 +6608,7 @@ document.addEventListener('click',e=>{
 </script>
 
 <!-- AUROSANAX - Módulo Plan clínico Fase 1 -->
-<script src="plan.js?v=20260701_plan_fase1"></script>
+<script src="plan.js?v=20260703_plan_ux_panel_final"></script>
 
 <!-- AUROSANAX - Módulo Atenciones -->
 <script src="atenciones.js?v=20260629_atenciones_v11"></script>
