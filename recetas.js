@@ -511,7 +511,7 @@
     setVal('recIndicaciones', '');
     setVal('recRecomendaciones', '');
     actualizarBotonGuardarReceta();
-    mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Nueva receta. Puede escribir o cargar datos desde Plan.', '');
+    mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Nueva receta lista para registrar.', '');
     vistaPreviaReceta();
   }
 
@@ -534,10 +534,23 @@
 
   function verificarCambioAtencionReceta(){
     const actual = obtenerIdAtencionActivaSeguro() || '';
+
     if(recetaAtencionActualId && actual && recetaAtencionActualId !== actual){
       recetaEditandoId = null;
+
+      mostrarMensajeReceta(
+        '<i class="bi bi-info-circle me-1"></i> Nueva consulta activa. Lista para registrar una nueva receta.',
+        ''
+      );
+
+      const preview = el('recetaPreview');
+      if(preview){
+        preview.innerHTML = '<div class="text-muted text-center py-4">Nueva consulta activa. Puede registrar una nueva receta.</div>';
+      }
+
       actualizarBotonGuardarReceta();
     }
+
     if(actual) recetaAtencionActualId = actual;
   }
 
