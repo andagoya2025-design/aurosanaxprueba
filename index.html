@@ -6222,7 +6222,8 @@ document.addEventListener('click',e=>{
         if(a){
           return {
             id: String(a.id_atencion || ''),
-            consulta: a.numero_consulta ? ('#' + a.numero_consulta) : 'activa'
+            consulta: a.numero_consulta ? ('#' + a.numero_consulta) : 'activa',
+            estado: String(a.estado_atencion || '').trim()
           };
         }
       }
@@ -6231,11 +6232,24 @@ document.addEventListener('click',e=>{
     try{
       const id = String(window.planState?.atencionActual || '').trim();
       if(id){
-        return { id: id, consulta: 'activa' };
+        let encontrada = null;
+        try{
+          const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+          const arr = raw ? JSON.parse(raw) : [];
+          if(Array.isArray(arr)){
+            encontrada = arr.find(a => String(a.id_atencion || '') === id) || null;
+          }
+        }catch(e){}
+
+        return {
+          id: id,
+          consulta: encontrada && encontrada.numero_consulta ? ('#' + encontrada.numero_consulta) : 'activa',
+          estado: encontrada ? String(encontrada.estado_atencion || '').trim() : ''
+        };
       }
     }catch(e){}
 
-    return { id:'', consulta:'sin atención activa' };
+    return { id:'', consulta:'sin atención activa', estado:'' };
   }
 
   function auroPlanReiniciarEstadoVisualPorCambioAtencion(){
@@ -6301,17 +6315,19 @@ document.addEventListener('click',e=>{
     const planFecha = auroPlanLeerUltimaActualizacionPlan(atn.id);
     const recetaFecha = auroPlanUltimaRecetaAtencion(atn.id);
 
+    const esAbierta = String(atn.estado || '').toLowerCase().includes('abierta');
+
     const planTexto = planFecha
       ? 'Plan actualizado: ' + planFecha
-      : 'Plan pendiente de guardar';
+      : (esAbierta ? 'Plan pendiente de guardar' : 'Plan guardado / en revisión');
 
     const recetaTexto = recetaFecha
       ? 'Receta guardada: ' + auroPlanFormatearFechaHora(recetaFecha)
-      : 'Receta pendiente';
+      : (esAbierta ? 'Receta pendiente' : 'Sin receta registrada');
 
     box.innerHTML =
       '<span><i class="bi bi-journal-medical"></i> Consulta ' + auroPlanEscapeSeguro(atn.consulta) + '</span>' +
-      '<span class="' + (planFecha ? 'ok' : 'warn') + '"><i class="bi bi-list-check"></i> ' + auroPlanEscapeSeguro(planTexto) + '</span>' +
+      '<span class="' + (planFecha ? 'ok' : (esAbierta ? 'warn' : 'muted')) + '"><i class="bi bi-list-check"></i> ' + auroPlanEscapeSeguro(planTexto) + '</span>' +
       '<span class="' + (recetaFecha ? 'ok' : 'muted') + '"><i class="bi bi-capsule"></i> ' + auroPlanEscapeSeguro(recetaTexto) + '</span>' +
       (extra ? '<span class="muted"><i class="bi bi-info-circle"></i> ' + auroPlanEscapeSeguro(extra) + '</span>' : '');
   };
