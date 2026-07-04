@@ -1,1 +1,1435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AUROSANAX DEMO - Configuración v5.1 Plantillas Horario</title>
 
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --primary:#8b1e5a;--primary2:#c23b83;--soft:#fdf2f8;--bg:#f8fafc;--text:#1f2937;--muted:#6b7280;--line:#e5e7eb;--card:#fff;--ok:#16a34a;--warn:#f59e0b;--danger:#dc2626;--blue:#2563eb;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:260px;background:linear-gradient(180deg,#7a174f,#a3256c);color:#fff;position:fixed;inset:0 auto 0 0;padding:22px 16px;overflow:auto;z-index:20}
+    .brand{display:flex;gap:12px;align-items:center;margin-bottom:22px}.brand-logo{width:46px;height:46px;border-radius:16px;background:#fff;color:var(--primary);display:grid;place-items:center;font-weight:900}.brand h1{font-size:18px;margin:0;font-weight:900;line-height:1.1}.brand small{opacity:.85}
+    .menu-title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.7;font-weight:800;margin:18px 10px 8px}
+    .menu a,.menu button{width:100%;border:0;background:transparent;color:#fff;display:flex;gap:10px;align-items:center;padding:11px 12px;border-radius:14px;font-weight:750;text-align:left;margin-bottom:5px;text-decoration:none}
+    .menu a:hover,.menu button:hover,.menu a.active{background:rgba(255,255,255,.16);color:#fff}
+    .main{margin-left:260px;width:calc(100% - 260px);min-height:100vh;padding:22px;overflow-x:hidden}.mobile-menu{display:none}
+    .demo-banner{background:#111827;color:#fff;border-radius:18px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;gap:12px;align-items:center}.demo-banner b{color:#fbbf24}
+    .topbar{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:16px}.topbar h2{margin:0;font-weight:900}.topbar p{margin:3px 0 0;color:var(--muted)}
+    .cardx{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 10px 30px rgba(15,23,42,.06)}
+    .btn-auro{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border:0;border-radius:14px;padding:10px 14px;font-weight:800;box-shadow:0 14px 30px rgba(139,30,90,.22)}
+    .btn-soft{background:var(--soft);color:var(--primary);border:1px solid #fbcfe8;border-radius:14px;padding:10px 14px;font-weight:800}.btn-line{background:#fff;color:#334155;border:1px solid var(--line);border-radius:14px;padding:10px 14px;font-weight:800}.btn-danger-soft{background:#fff1f2;color:#be123c;border:1px solid #fecdd3;border-radius:14px;padding:10px 14px;font-weight:800}
+    .form-control,.form-select{border-radius:14px;padding:10px 12px}.section-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.section-head h4{margin:0;font-weight:900}.section-head p{margin:3px 0 0;color:var(--muted)}
+    .premium-hero{background:radial-gradient(circle at top right,rgba(194,59,131,.13),transparent 34%),linear-gradient(135deg,#fff,#fff7fb 55%,#fdf2f8);border:1px solid #f6cfe2;border-radius:24px;padding:18px;margin-bottom:16px;box-shadow:0 18px 45px rgba(139,30,90,.08)}.premium-hero h4{margin:0;font-weight:950}.premium-hero p{margin:6px 0 0;color:var(--muted)}
+    .config-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.config-tab{border:1px solid #f1d4e5;background:#fff;color:#7a174f;border-radius:999px;padding:9px 13px;font-weight:900}.config-tab.active,.config-tab:hover{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border-color:transparent}
+    .screen{display:none}.screen.active{display:block}.stat{padding:18px;display:flex;gap:14px;align-items:center;min-height:96px}.stat-icon{width:48px;height:48px;border-radius:16px;background:var(--soft);color:var(--primary);display:grid;place-items:center;font-size:22px}.stat small{color:var(--muted);font-weight:800}.stat h3{margin:2px 0 0;font-weight:900}
+    .table-modern th{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em;border-bottom:1px solid var(--line)}.table-modern td{vertical-align:middle;border-bottom:1px solid #f1f5f9}.badgex{border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;display:inline-block}.badge-ok{background:#dcfce7;color:#166534}.badge-warn{background:#fef3c7;color:#92400e}.badge-danger{background:#fee2e2;color:#991b1b}.badge-blue{background:#dbeafe;color:#1e40af}
+    .mobile-cards{display:none}.mobile-card{border:1px solid var(--line);border-radius:18px;padding:14px;background:#fff;margin-bottom:12px}.line{display:flex;justify-content:space-between;border-top:1px solid #f1f5f9;padding:8px 0;gap:12px;font-size:14px}.line span:first-child{color:var(--muted)}.line span:last-child{font-weight:700;text-align:right}
+    .notice{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:16px;padding:12px 14px;font-size:14px;font-weight:750}.readonly-pill{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;display:inline-flex;gap:6px;align-items:center}
+    .modalx{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;display:none;align-items:center;justify-content:center;padding:18px}.modalx.show{display:flex}.modal-panel{background:#fff;border-radius:24px;width:min(720px,100%);max-height:90vh;overflow:auto;box-shadow:0 25px 80px rgba(15,23,42,.28)}.modal-head{background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff;padding:16px 18px;display:flex;justify-content:space-between;align-items:center}.modal-head h5{margin:0;font-weight:950}.modal-bodyx{padding:18px}.modal-close{border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:12px;width:36px;height:36px;font-weight:950}
+    @media(max-width:980px){.sidebar{transform:translateX(-100%);transition:.25s}.sidebar.show{transform:translateX(0)}.main{margin-left:0;width:100%;padding:16px}.mobile-menu{display:inline-flex}.table-responsive{display:none}.mobile-cards{display:block}.demo-banner{display:block}.topbar{align-items:flex-start;flex-direction:column}.config-tabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.config-tab{white-space:nowrap}.modalx{align-items:flex-end;padding:12px}.modal-panel{border-radius:22px 22px 0 0}}
+    @media(max-width:640px){.main{padding:12px}.topbar h2{font-size:22px}.cardx{border-radius:18px}.section-head{display:block}.section-head .btn-auro,.section-head .btn-soft{width:100%;margin-top:10px}.premium-hero{padding:15px;border-radius:20px}}
+  
+
+    /* ==========================================================
+       AUROSANAX CONFIGURACION V5.0 ULTRA PREMIUM
+       SOLO VISUAL - NO MODIFICA FUNCIONES
+       Escritorio + Android + iPhone
+       ========================================================== */
+
+    /* Fondo general más fino */
+    body{
+      background:
+        radial-gradient(circle at top right, rgba(194,59,131,.075), transparent 30%),
+        linear-gradient(180deg,#fff7fb 0%,#f8fafc 42%,#ffffff 100%);
+    }
+
+    /* Hero premium */
+    .premium-hero{
+      position:relative;
+      overflow:hidden;
+      padding:24px!important;
+      border-radius:30px!important;
+      border:1px solid #f4c7dc!important;
+      background:
+        radial-gradient(circle at 92% 14%, rgba(194,59,131,.18), transparent 28%),
+        radial-gradient(circle at 5% 95%, rgba(139,30,90,.09), transparent 26%),
+        linear-gradient(135deg,#ffffff,#fff8fc 55%,#fdf2f8)!important;
+      box-shadow:0 24px 60px rgba(139,30,90,.10), inset 0 1px 0 rgba(255,255,255,.95)!important;
+    }
+    .premium-hero h4{
+      font-size:30px!important;
+      letter-spacing:-.035em!important;
+      color:#111827!important;
+    }
+    .premium-hero p{
+      font-size:15px!important;
+      line-height:1.65!important;
+      color:#64748b!important;
+      max-width:920px;
+    }
+    .readonly-pill{
+      background:linear-gradient(135deg,#eff6ff,#f8fbff)!important;
+      border-color:#bfdbfe!important;
+      box-shadow:0 10px 24px rgba(37,99,235,.06), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+
+    /* Tarjetas superiores */
+    .stat{
+      min-height:118px!important;
+      border-radius:28px!important;
+      background:
+        radial-gradient(circle at 88% 14%, rgba(194,59,131,.10), transparent 30%),
+        linear-gradient(180deg,#ffffff,#fffafd)!important;
+      border:1px solid #f1d4e5!important;
+      box-shadow:0 14px 38px rgba(15,23,42,.055), inset 0 1px 0 rgba(255,255,255,.95)!important;
+      transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .stat:hover{
+      transform:translateY(-3px);
+      border-color:#efb9d5!important;
+      box-shadow:0 24px 58px rgba(139,30,90,.13), 0 0 0 4px rgba(194,59,131,.055)!important;
+    }
+    .stat-icon{
+      width:62px!important;
+      height:62px!important;
+      font-size:27px!important;
+      border-radius:22px!important;
+      background:linear-gradient(135deg,#fff0f7,#fdf2f8)!important;
+      border:1px solid #f6cfe2!important;
+      box-shadow:0 12px 26px rgba(139,30,90,.08), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+    .stat small{
+      font-size:13px!important;
+      letter-spacing:.01em!important;
+      color:#64748b!important;
+    }
+    .stat h3{
+      font-size:38px!important;
+      line-height:1!important;
+      letter-spacing:-.035em!important;
+      color:#111827!important;
+    }
+
+    /* Tabs horizontales: conservar carrusel, hacerlo más premium */
+    .config-tabs{
+      gap:12px!important;
+      margin-bottom:22px!important;
+      padding:4px 2px 8px!important;
+    }
+    .config-tab{
+      min-height:46px!important;
+      padding:12px 18px!important;
+      border-radius:999px!important;
+      background:linear-gradient(180deg,#ffffff,#fff9fc)!important;
+      border:1px solid #f1d4e5!important;
+      color:#7a174f!important;
+      box-shadow:0 10px 24px rgba(139,30,90,.055), inset 0 1px 0 rgba(255,255,255,.9)!important;
+      transition:transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .config-tab:hover{
+      transform:translateY(-1px);
+      box-shadow:0 16px 34px rgba(139,30,90,.12),0 0 0 3px rgba(194,59,131,.08)!important;
+    }
+    .config-tab.active{
+      background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695)!important;
+      color:#fff!important;
+      border-color:transparent!important;
+      box-shadow:0 16px 34px rgba(139,30,90,.22), inset 0 1px 0 rgba(255,255,255,.2)!important;
+    }
+
+    /* Cards principales */
+    .cardx{
+      border-radius:30px!important;
+      border:1px solid #f1d4e5!important;
+      box-shadow:0 20px 52px rgba(15,23,42,.065), inset 0 1px 0 rgba(255,255,255,.9)!important;
+      background:linear-gradient(180deg,#ffffff,#fffefe)!important;
+    }
+    .section-head h4{
+      font-size:31px!important;
+      letter-spacing:-.035em!important;
+      color:#111827!important;
+    }
+    .section-head p{
+      font-size:15px!important;
+      line-height:1.6!important;
+      color:#64748b!important;
+    }
+
+    /* Botones */
+    .btn-auro{
+      min-height:48px!important;
+      border-radius:17px!important;
+      padding:12px 20px!important;
+      background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695)!important;
+      box-shadow:0 16px 36px rgba(139,30,90,.24), inset 0 1px 0 rgba(255,255,255,.18)!important;
+      transition:transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .btn-auro:hover{
+      color:#fff!important;
+      transform:translateY(-2px);
+      filter:saturate(1.06);
+      box-shadow:0 22px 44px rgba(139,30,90,.30),0 0 0 4px rgba(194,59,131,.10)!important;
+    }
+    .btn-soft,.btn-line,.btn-danger-soft{
+      border-radius:16px!important;
+      transition:transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .btn-soft{
+      background:linear-gradient(180deg,#fff7fb,#fdf2f8)!important;
+      border-color:#f4c7dc!important;
+      box-shadow:0 10px 22px rgba(139,30,90,.06), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+    .btn-line{
+      background:linear-gradient(180deg,#ffffff,#fff9fc)!important;
+      border-color:#f1d4e5!important;
+      box-shadow:0 10px 22px rgba(15,23,42,.045)!important;
+    }
+    .btn-soft:hover,.btn-line:hover,.btn-danger-soft:hover{
+      transform:translateY(-1px);
+      box-shadow:0 16px 34px rgba(139,30,90,.12),0 0 0 3px rgba(194,59,131,.075)!important;
+    }
+
+    /* Notice */
+    .notice{
+      border-radius:20px!important;
+      padding:16px 18px!important;
+      line-height:1.6!important;
+      background:linear-gradient(135deg,#fff7ed,#fffaf5)!important;
+      border:1px solid #fed7aa!important;
+      box-shadow:0 12px 28px rgba(154,52,18,.045), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+
+    /* Tablas */
+    .table-responsive{
+      border-radius:22px!important;
+      overflow:hidden!important;
+      border:1px solid #f1d4e5!important;
+      box-shadow:0 14px 34px rgba(15,23,42,.045)!important;
+      background:#fff!important;
+    }
+    .table-modern{
+      margin-bottom:0!important;
+    }
+    .table-modern th{
+      font-size:11px!important;
+      color:#8b1e5a!important;
+      background:#fff7fb!important;
+      padding:15px 14px!important;
+      border-bottom:1px solid #f3d5e5!important;
+    }
+    .table-modern td{
+      padding:18px 14px!important;
+      font-size:14px!important;
+      border-bottom:1px solid #f6edf3!important;
+    }
+    .table-modern tbody tr{
+      transition:background .18s ease;
+    }
+    .table-modern tbody tr:hover{
+      background:#fff8fc!important;
+    }
+    .table-modern tbody tr:last-child td{
+      border-bottom:0!important;
+    }
+    .badgex{
+      padding:8px 13px!important;
+      font-size:11.5px!important;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.75)!important;
+    }
+
+    /* Mobile cards */
+    .mobile-card{
+      border-radius:26px!important;
+      padding:20px!important;
+      border-color:#f1d4e5!important;
+      background:
+        radial-gradient(circle at 92% 10%, rgba(194,59,131,.08), transparent 30%),
+        linear-gradient(180deg,#fff,#fffafd)!important;
+      box-shadow:0 16px 40px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.92)!important;
+    }
+    .mobile-card b{
+      display:block;
+      font-size:21px!important;
+      line-height:1.25!important;
+      color:#111827!important;
+      letter-spacing:-.02em!important;
+      margin-bottom:8px!important;
+    }
+    .line{
+      padding:12px 0!important;
+      border-top:1px solid #f3edf2!important;
+    }
+    .line span:first-child{
+      font-size:13px!important;
+      color:#64748b!important;
+      font-weight:800!important;
+    }
+    .line span:last-child{
+      font-size:14px!important;
+      color:#334155!important;
+      font-weight:850!important;
+    }
+
+    /* Formularios y modales */
+    .modal-panel{
+      border-radius:32px!important;
+      border:1px solid rgba(255,255,255,.6)!important;
+      box-shadow:0 30px 90px rgba(15,23,42,.30)!important;
+    }
+    .modal-head{
+      padding:22px 24px!important;
+      background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695)!important;
+    }
+    .modal-head h5{
+      font-size:23px!important;
+      letter-spacing:-.02em!important;
+    }
+    .modal-bodyx{
+      padding:24px!important;
+    }
+    .form-control,.form-select{
+      min-height:50px!important;
+      border-radius:17px!important;
+      border-color:#ead2df!important;
+      background-color:#fff!important;
+      font-size:15px!important;
+    }
+    .form-control:focus,.form-select:focus{
+      border-color:#c23b83!important;
+      box-shadow:0 0 0 .22rem rgba(194,59,131,.12)!important;
+    }
+    textarea.form-control{
+      min-height:88px!important;
+    }
+
+    /* Responsive */
+    @media(max-width:980px){
+      .main{padding:16px!important;}
+      .premium-hero{padding:20px!important;border-radius:26px!important;}
+      .premium-hero h4{font-size:24px!important;}
+      .premium-hero p{font-size:14.5px!important;}
+      .stat{min-height:104px!important;border-radius:25px!important;}
+      .stat-icon{width:54px!important;height:54px!important;font-size:24px!important;border-radius:19px!important;}
+      .stat h3{font-size:32px!important;}
+      .config-tabs{
+        flex-wrap:nowrap!important;
+        overflow-x:auto!important;
+        -webkit-overflow-scrolling:touch!important;
+        scroll-snap-type:x proximity;
+        padding-bottom:10px!important;
+      }
+      .config-tabs::-webkit-scrollbar{height:0;}
+      .config-tab{
+        flex:0 0 auto!important;
+        min-height:48px!important;
+        font-size:14px!important;
+        scroll-snap-align:start;
+      }
+      .section-head h4{font-size:28px!important;}
+      .section-head p{font-size:15px!important;}
+      .modalx{padding:12px!important;align-items:flex-end!important;}
+      .modal-panel{border-radius:28px 28px 0 0!important;max-height:88vh!important;}
+    }
+
+    @media(max-width:640px){
+      .main{padding:12px!important;}
+      .demo-banner{border-radius:18px!important;font-size:13px!important;}
+      .premium-hero{padding:17px!important;border-radius:24px!important;}
+      .premium-hero h4{font-size:22px!important;}
+      .readonly-pill{border-radius:16px!important;line-height:1.35!important;}
+      .stat{min-height:92px!important;padding:16px!important;}
+      .stat-icon{width:50px!important;height:50px!important;}
+      .stat h3{font-size:29px!important;}
+      .cardx{border-radius:26px!important;}
+      .section-head h4{font-size:25px!important;}
+      .section-head p{font-size:14.5px!important;}
+      .section-head .btn-auro,.section-head .btn-soft{width:100%!important;margin-top:12px!important;}
+      .btn-auro{width:100%;min-height:50px!important;font-size:16px!important;}
+      .mobile-card{padding:20px!important;border-radius:25px!important;}
+      .mobile-card b{font-size:22px!important;}
+      .modal-bodyx{padding:20px!important;}
+    }
+
+
+    /* ==========================================================
+       V5.2 - MICROAJUSTE PROPORCIONAL SOLO ESCRITORIO
+       Objetivo: equilibrar Configuración en desktop.
+       No toca móvil, JS, Apps Script, guardado ni base de datos.
+       ========================================================== */
+    @media (min-width:1024px){
+      .main{
+        padding:20px!important;
+      }
+
+      .demo-banner{
+        padding:10px 14px!important;
+        margin-bottom:13px!important;
+        border-radius:16px!important;
+        font-size:13.5px!important;
+      }
+
+      .topbar{
+        margin-bottom:13px!important;
+      }
+      .topbar h2{
+        font-size:27px!important;
+        letter-spacing:-.025em!important;
+      }
+      .topbar p{
+        font-size:14px!important;
+      }
+
+      .premium-hero{
+        padding:18px 20px!important;
+        border-radius:24px!important;
+        margin-bottom:14px!important;
+        box-shadow:0 18px 44px rgba(139,30,90,.085), inset 0 1px 0 rgba(255,255,255,.95)!important;
+      }
+      .premium-hero h4{
+        font-size:24px!important;
+        line-height:1.15!important;
+      }
+      .premium-hero p{
+        font-size:14.5px!important;
+        line-height:1.48!important;
+      }
+      .readonly-pill{
+        font-size:12.5px!important;
+        padding:6px 10px!important;
+      }
+
+      .row.g-3.mb-4{
+        margin-bottom:18px!important;
+      }
+      .stat{
+        min-height:96px!important;
+        padding:15px 16px!important;
+        gap:12px!important;
+        border-radius:22px!important;
+        box-shadow:0 12px 30px rgba(15,23,42,.05), inset 0 1px 0 rgba(255,255,255,.95)!important;
+      }
+      .stat:hover{
+        transform:translateY(-2px)!important;
+      }
+      .stat-icon{
+        width:50px!important;
+        height:50px!important;
+        font-size:22px!important;
+        border-radius:18px!important;
+      }
+      .stat small{
+        font-size:12.8px!important;
+      }
+      .stat h3{
+        font-size:30px!important;
+        line-height:1!important;
+      }
+
+      .config-tabs{
+        gap:9px!important;
+        margin-bottom:17px!important;
+        padding:2px 1px 5px!important;
+      }
+      .config-tab{
+        min-height:40px!important;
+        padding:9px 14px!important;
+        font-size:13.5px!important;
+      }
+
+      .cardx{
+        border-radius:24px!important;
+        box-shadow:0 16px 40px rgba(15,23,42,.055), inset 0 1px 0 rgba(255,255,255,.9)!important;
+      }
+      .cardx.p-4{
+        padding:20px!important;
+      }
+
+      .section-head{
+        margin-bottom:14px!important;
+      }
+      .section-head h4{
+        font-size:25px!important;
+        line-height:1.15!important;
+      }
+      .section-head p{
+        font-size:14.5px!important;
+        line-height:1.45!important;
+      }
+
+      .notice{
+        padding:13px 15px!important;
+        border-radius:17px!important;
+        font-size:14px!important;
+        line-height:1.5!important;
+      }
+
+      .table-responsive{
+        border-radius:18px!important;
+        box-shadow:0 12px 28px rgba(15,23,42,.04)!important;
+      }
+      .table-modern th{
+        font-size:11.2px!important;
+        padding:12px 12px!important;
+      }
+      .table-modern td{
+        font-size:14.2px!important;
+        padding:13px 12px!important;
+      }
+      .badgex{
+        padding:6.5px 11px!important;
+        font-size:11.5px!important;
+      }
+
+      .btn-auro,
+      .btn-soft,
+      .btn-line,
+      .btn-danger-soft{
+        min-height:42px!important;
+        padding:9px 14px!important;
+        border-radius:15px!important;
+        font-size:14px!important;
+      }
+
+      .form-label{
+        font-size:14.5px!important;
+      }
+      .text-muted.small,
+      small.text-muted{
+        font-size:12.5px!important;
+      }
+      .form-control,
+      .form-select{
+        min-height:44px!important;
+        border-radius:15px!important;
+        font-size:14.5px!important;
+        padding:9px 12px!important;
+      }
+      textarea.form-control{
+        min-height:80px!important;
+      }
+
+      .modal-panel{
+        border-radius:26px!important;
+      }
+      .modal-head{
+        padding:17px 20px!important;
+      }
+      .modal-head h5{
+        font-size:20px!important;
+      }
+      .modal-bodyx{
+        padding:20px!important;
+      }
+    }
+
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="brand-logo">A</div><div><h1>AUROSANAX</h1><small>Secretaría DEMO</small></div></div>
+    <div class="menu">
+      <div class="menu-title">Gestión</div>
+      <a href="secretaria.html"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a href="secretaria.html#disponibilidad"><i class="bi bi-calendar-plus"></i> Disponibilidad</a>
+      <a href="secretaria.html#agenda"><i class="bi bi-calendar-check"></i> Agenda interna</a>
+      <a href="secretaria.html#pacientes"><i class="bi bi-people"></i> Pacientes básicos</a>
+      <a href="secretaria.html#whatsapp"><i class="bi bi-whatsapp"></i> WhatsApp</a>
+      <div class="menu-title">Sistema</div>
+      <a class="active" href="configuracion.html"><i class="bi bi-gear"></i> Configuración</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="demo-banner"><div><b>ENTORNO DEMO</b> — Configuración del sistema de agendamiento. No usar con pacientes reales.</div><small>Conectado a AUROSANAX DEMO HISTORIA DATOS</small></div>
+    <div class="topbar">
+      <div><button class="btn-soft mobile-menu mb-2" onclick="toggleSidebar()"><i class="bi bi-list"></i> Menú</button><h2>Configuración del sistema</h2><p>Parámetros para vender el agendamiento a médicos o centros médicos.</p></div>
+      <button class="btn-line" onclick="refrescarDemo()"><i class="bi bi-arrow-clockwise"></i> Actualizar vista</button>
+    </div>
+
+    <div class="premium-hero">
+      <h4><i class="bi bi-gear-fill me-2"></i> Panel de configuración inicial</h4>
+      <p>Módulo conectado para médicos, servicios, plantillas de horario y datos institucionales seguros desde Google Sheets.</p>
+      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos, Servicios, Médico-Servicios y Plantillas de horario conectados a Apps Script</span></div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-person-badge"></i></div><div><small>Médicos</small><h3 id="stMedicos">3</h3></div></div></div>
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-heart-pulse"></i></div><div><small>Servicios</small><h3 id="stServicios">0</h3></div></div></div>
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-clock-history"></i></div><div><small>Plantillas</small><h3 id="stPlantillas">7</h3></div></div></div>
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-building"></i></div><div><small>Centro</small><h3>DEMO</h3></div></div></div>
+    </div>
+
+    <div class="config-tabs">
+      <button class="config-tab active" onclick="showConfig('medicos',this)"><i class="bi bi-person-badge me-1"></i> Médicos</button>
+      <button class="config-tab" onclick="showConfig('servicios',this)"><i class="bi bi-heart-pulse me-1"></i> Servicios</button>
+      <button class="config-tab" onclick="showConfig('horarios',this)"><i class="bi bi-clock me-1"></i> Horarios rápidos</button>
+      <button class="config-tab" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
+    </div>
+
+    <section class="screen active" id="medicos">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Gestión de médicos</h4><p>Profesionales que aparecerán en disponibilidad y formulario de citas.</p></div><button class="btn-auro" onclick="abrirModal('medico')"><i class="bi bi-plus-circle me-1"></i> Nuevo médico</button></div>
+        <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Médicos conectado a Apps Script. Puede crear, editar y asignar servicios a cada profesional.</div>
+        <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Código</th><th>Médico</th><th>Especialidad</th><th>Teléfono</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="medicosBody"></tbody></table></div>
+        <div id="medicosMobile" class="mobile-cards"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="servicios">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Servicios de agendamiento</h4><p>Servicios que puede seleccionar el paciente o secretaría.</p></div><button class="btn-auro" onclick="abrirModal('servicio')"><i class="bi bi-plus-circle me-1"></i> Nuevo servicio</button></div>
+        <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Servicios conectado a Apps Script. Puede crear y editar servicios en la hoja <b>servicios</b>.</div>
+        <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Servicio</th><th>Especialidad</th><th>Duración</th><th>Precio</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="serviciosBody"></tbody></table></div>
+        <div id="serviciosMobile" class="mobile-cards"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="horarios">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Plantillas de horario rápido</h4><p>Bloques reutilizables para crear disponibilidad sin escribir todo manualmente.</p></div><button class="btn-auro" onclick="abrirModalHorario('')"><i class="bi bi-plus-circle me-1"></i> Nueva plantilla</button></div>
+        <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Plantilla</th><th>Horario</th><th>Intervalo</th><th>Tipo</th><th>Días</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="horariosBody"></tbody></table></div>
+        <div id="horariosMobile" class="mobile-cards"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="centro">
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div>
+            <h4>Datos del centro médico</h4>
+            <p>Información institucional segura para personalizar el ERP sin tocar citas, disponibilidad ni pacientes.</p>
+          </div>
+          <button id="btnGuardarCentro" class="btn-auro" onclick="guardarConfiguracionCentro()"><i class="bi bi-save me-1"></i> Guardar configuración</button>
+        </div>
+
+        <div id="centroMsg" class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Cargando datos institucionales...</div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Nombre del centro</label>
+            <input id="cfgNombreClinica" class="form-control" placeholder="Ej. AUROSANAX">
+            <div class="text-muted small mt-1">Se usa como nombre visible institucional del sistema.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">WhatsApp principal</label>
+            <input id="cfgWhatsappClinica" class="form-control" placeholder="Ej. 0999999999">
+            <div class="text-muted small mt-1">Número oficial del centro. No reemplaza los WhatsApp de pacientes.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Correo institucional</label>
+            <input id="cfgEmailClinica" class="form-control" placeholder="correo@centro.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Dirección</label>
+            <input id="cfgDireccionClinica" class="form-control" placeholder="Dirección del consultorio">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label fw-bold">Logo URL</label>
+            <input id="cfgLogoUrl" class="form-control" placeholder="Pegue aquí el enlace público del logo en Drive" oninput="actualizarPreviewLogoCentro()">
+            <div class="text-muted small mt-1">Recomendado: PNG transparente 600 × 600 px, compartido como “cualquier persona con el enlace puede ver”.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Vista previa</label>
+            <div style="height:112px;border:1px solid #f1d4e5;border-radius:18px;background:#fff7fb;display:grid;place-items:center;overflow:hidden">
+              <img id="cfgLogoPreview" alt="Logo" style="max-width:92px;max-height:92px;display:none;border-radius:16px">
+              <div id="cfgLogoFallback" style="width:72px;height:72px;border-radius:22px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;display:grid;place-items:center;font-weight:950;font-size:28px">A</div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Color principal</label>
+            <input id="cfgColorPrincipal" type="color" class="form-control form-control-color" value="#8b1e5a" disabled>
+            <div class="text-muted small mt-1">Bloqueado por seguridad visual.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Color secundario</label>
+            <input id="cfgColorSecundario" type="color" class="form-control form-control-color" value="#c23b83" disabled>
+            <div class="text-muted small mt-1">Bloqueado por seguridad visual.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Modo sistema</label>
+            <input id="cfgModoSistema" class="form-control" value="DEMO" disabled>
+            <div class="text-muted small mt-1">No editable para proteger el entorno.</div>
+          </div>
+
+          <div class="col-12">
+            <div class="notice"><b>Modo seguro:</b> solo se guardan nombre, WhatsApp, correo, dirección y logo URL. Colores y modo del sistema quedan bloqueados para no afectar el diseño premium ni el ERP global.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modalx" id="modalConfig" onclick="cerrarModal(event)"><div class="modal-panel" onclick="event.stopPropagation()"><div class="modal-head"><h5 id="modalTitle">Nuevo registro</h5><button class="modal-close" onclick="cerrarModal()"><i class="bi bi-x-lg"></i></button></div><div class="modal-bodyx" id="modalBody"></div></div></div>
+
+<script>
+  const API_URL = 'https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec';
+
+  let medicos = [];
+  let servicios = [];
+  let medicoServicios = [];
+  let horarios = [];
+  let configuracionCentro = {};
+
+  function toggleSidebar(){
+    document.getElementById('sidebar').classList.toggle('show');
+  }
+
+  function badge(e){
+    const estado = e || 'Activo';
+    const cls = String(estado).toLowerCase()==='activo' ? 'badge-ok' : 'badge-warn';
+    return '<span class="badgex '+cls+'">'+estado+'</span>';
+  }
+
+  function safeText(value){
+    return String(value ?? '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+
+  function normalizarHoraVisual(valor){
+    if(valor === null || valor === undefined) return '';
+
+    if(typeof valor === 'number' && isFinite(valor)){
+      const total = Math.round((valor % 1) * 24 * 60);
+      const hh = Math.floor(total / 60) % 24;
+      const mm = total % 60;
+      return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+    }
+
+    let txt = String(valor).trim();
+    if(!txt) return '';
+
+    const iso = txt.match(/T(\d{2}):(\d{2})/);
+    if(iso) return iso[1] + ':' + iso[2];
+
+    if(/^\d{1}:\d{2}$/.test(txt)) return '0' + txt;
+    if(/^\d{1,2}:\d{2}/.test(txt)){
+      const p = txt.split(':');
+      return String(p[0]).padStart(2,'0') + ':' + String(p[1]).substring(0,2);
+    }
+
+    if(/^\d{4}$/.test(txt)) return txt.substring(0,2) + ':' + txt.substring(2,4);
+
+    return txt;
+  }
+
+  function showConfig(id,btn){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.config-tab').forEach(b=>b.classList.remove('active'));
+    if(btn)btn.classList.add('active');
+  }
+
+  async function apiGet(accion){
+    const url = API_URL + '?accion=' + encodeURIComponent(accion) + '&t=' + Date.now();
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    return await res.json();
+  }
+
+  async function apiGetParams(accion, params){
+    const q = new URLSearchParams({accion, t: Date.now()});
+    Object.entries(params || {}).forEach(([k,v]) => q.append(k, v ?? ''));
+    const res = await fetch(API_URL + '?' + q.toString());
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    return await res.json();
+  }
+
+  async function apiPost(accion, data){
+    const res = await fetch(API_URL, {
+      method:'POST',
+      body: JSON.stringify({accion, data})
+    });
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    return await res.json();
+  }
+
+  function textoMedicoNombre(m){
+    return ((m.nombres || '') + ' ' + (m.apellidos || '')).trim() || m.nombre || m.nombre_completo || 'Sin nombre';
+  }
+
+  function textoMedicoEspecialidad(m){
+    return m.especialidad_principal || m.especialidad || '—';
+  }
+
+  function textoServicioNombre(s){
+    return s.nombre_servicio || s.nombre || 'Sin nombre';
+  }
+
+  function textoServicioEspecialidad(s){
+    return s.id_especialidad || s.especialidad || '—';
+  }
+
+  function textoServicioDuracion(s){
+    const d = s.duracion_minutos || s.duracion || '';
+    return d ? String(d).replace(' min','') + ' min' : '—';
+  }
+
+  function textoServicioPrecio(s){
+    const p = s.precio || '';
+    return p ? '$' + String(p).replace('$','') : '—';
+  }
+
+
+  function textoPlantillaNombre(h){
+    return h.nombre_plantilla || h.nombre || 'Sin nombre';
+  }
+
+  function textoPlantillaHorario(h){
+    const inicio = normalizarHoraVisual(h.hora_inicio || h.inicio || '');
+    const fin = normalizarHoraVisual(h.hora_fin || h.fin || '');
+    if(inicio && fin) return inicio + ' - ' + fin;
+    return h.horario || '—';
+  }
+
+  function textoPlantillaIntervalo(h){
+    const i = h.intervalo_minutos || h.intervalo || '';
+    if(!i) return '—';
+    return String(i).replace(' min','') + ' min';
+  }
+
+  function textoPlantillaTipo(h){
+    return h.tipo_bloque || h.tipo || '—';
+  }
+
+  function textoPlantillaDias(h){
+    return h.aplica_dia || h.dias || '—';
+  }
+
+  async function cargarMedicos(){
+    try{
+      medicos = await apiGet('listarMedicos');
+      if(!Array.isArray(medicos)) medicos = [];
+      renderMedicos();
+      document.getElementById('stMedicos').textContent = medicos.length;
+    }catch(e){
+      console.error(e);
+      medicosBody.innerHTML = '<tr><td colspan="6" class="text-danger fw-bold">Error cargando médicos. Revise Apps Script o la implementación.</td></tr>';
+      medicosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando médicos.</div>';
+    }
+  }
+
+  async function cargarServicios(){
+    try{
+      servicios = await apiGet('listarServicios');
+      if(!Array.isArray(servicios)) servicios = [];
+      renderServicios();
+      document.getElementById('stServicios').textContent = servicios.length;
+    }catch(e){
+      console.error(e);
+      serviciosBody.innerHTML = '<tr><td colspan="6" class="text-danger fw-bold">Error cargando servicios. Revise Apps Script o la implementación.</td></tr>';
+      serviciosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando servicios.</div>';
+    }
+  }
+
+  async function cargarMedicoServicios(){
+    try{
+      medicoServicios = await apiGet('listarMedicoServicios');
+      if(!Array.isArray(medicoServicios)) medicoServicios = [];
+    }catch(e){
+      console.error(e);
+      medicoServicios = [];
+    }
+  }
+
+
+  async function cargarPlantillasHorario(){
+    try{
+      horarios = await apiGet('listarPlantillasHorario');
+      if(!Array.isArray(horarios)) horarios = [];
+      renderHorarios();
+      document.getElementById('stPlantillas').textContent = horarios.length;
+    }catch(e){
+      console.error(e);
+      horarios = [];
+      horariosBody.innerHTML = '<tr><td colspan="7" class="text-danger fw-bold">Error cargando plantillas de horario. Revise Apps Script o la implementación.</td></tr>';
+      horariosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando plantillas de horario.</div>';
+      document.getElementById('stPlantillas').textContent = '0';
+    }
+  }
+
+
+  async async async function refrescarDemo(){
+    await cargarMedicos();
+    await cargarServicios();
+    await cargarMedicoServicios();
+    await cargarPlantillasHorario();
+    await cargarConfiguracionCentro();
+    alert('Vista actualizada.');
+  }
+
+  function renderMedicos(){
+    medicosBody.innerHTML = medicos.map(m=>`
+      <tr>
+        <td><b>${safeText(m.id_medico || '—')}</b></td>
+        <td>${safeText(textoMedicoNombre(m))}</td>
+        <td>${safeText(textoMedicoEspecialidad(m))}</td>
+        <td>${safeText(m.telefono || '—')}</td>
+        <td>${badge(m.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalMedico('${safeText(m.id_medico || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay médicos registrados.</td></tr>';
+
+    medicosMobile.innerHTML = medicos.map(m=>`
+      <div class="mobile-card">
+        <b>${safeText(textoMedicoNombre(m))}</b>
+        <div class="line"><span>Código</span><span>${safeText(m.id_medico || '—')}</span></div>
+        <div class="line"><span>Especialidad</span><span>${safeText(textoMedicoEspecialidad(m))}</span></div>
+        <div class="line"><span>Teléfono</span><span>${safeText(m.telefono || '—')}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(m.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalMedico('${safeText(m.id_medico || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay médicos registrados.</div>';
+  }
+
+  function renderServicios(){
+    serviciosBody.innerHTML = servicios.map(s=>`
+      <tr>
+        <td><b>${safeText(textoServicioNombre(s))}</b></td>
+        <td>${safeText(textoServicioEspecialidad(s))}</td>
+        <td>${safeText(textoServicioDuracion(s))}</td>
+        <td>${safeText(textoServicioPrecio(s))}</td>
+        <td>${badge(s.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalServicio('${safeText(s.id_servicio || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay servicios registrados.</td></tr>';
+
+    serviciosMobile.innerHTML = servicios.map(s=>`
+      <div class="mobile-card">
+        <b>${safeText(textoServicioNombre(s))}</b>
+        <div class="line"><span>Especialidad</span><span>${safeText(textoServicioEspecialidad(s))}</span></div>
+        <div class="line"><span>Duración</span><span>${safeText(textoServicioDuracion(s))}</span></div>
+        <div class="line"><span>Precio</span><span>${safeText(textoServicioPrecio(s))}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(s.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalServicio('${safeText(s.id_servicio || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay servicios registrados.</div>';
+  }
+
+  function renderHorarios(){
+    document.getElementById('stPlantillas').textContent = horarios.length;
+
+    horariosBody.innerHTML = horarios.map(h => `
+      <tr>
+        <td><b>${safeText(textoPlantillaNombre(h))}</b><br><small class="text-muted fw-bold">${safeText(h.id_plantilla_horario || '—')}</small></td>
+        <td>${safeText(textoPlantillaHorario(h))}</td>
+        <td>${safeText(textoPlantillaIntervalo(h))}</td>
+        <td>${safeText(textoPlantillaTipo(h))}</td>
+        <td>${safeText(textoPlantillaDias(h))}</td>
+        <td>${badge(h.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalHorario('${safeText(h.id_plantilla_horario || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">No hay plantillas de horario registradas.</td></tr>';
+
+    horariosMobile.innerHTML = horarios.map(h => `
+      <div class="mobile-card">
+        <b>${safeText(textoPlantillaNombre(h))}</b>
+        <div class="line"><span>Código</span><span>${safeText(h.id_plantilla_horario || '—')}</span></div>
+        <div class="line"><span>Horario</span><span>${safeText(textoPlantillaHorario(h))}</span></div>
+        <div class="line"><span>Intervalo</span><span>${safeText(textoPlantillaIntervalo(h))}</span></div>
+        <div class="line"><span>Tipo</span><span>${safeText(textoPlantillaTipo(h))}</span></div>
+        <div class="line"><span>Días</span><span>${safeText(textoPlantillaDias(h))}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(h.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalHorario('${safeText(h.id_plantilla_horario || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay plantillas de horario registradas.</div>';
+  }
+
+  function render(){
+    renderMedicos();
+    renderServicios();
+    renderHorarios();
+  }
+
+
+  function abrirModalHorario(id_plantilla_horario){
+    const h = horarios.find(x => String(x.id_plantilla_horario || '') === String(id_plantilla_horario || '')) || {};
+    modalTitle.textContent = id_plantilla_horario ? 'Editar plantilla de horario' : 'Nueva plantilla de horario';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombre plantilla</label>
+          <input id="horNombre" class="form-control" value="${safeText(h.nombre_plantilla || '')}" placeholder="Ej. Tarde normal">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Inicio</label>
+          <input id="horInicio" class="form-control" value="${safeText(normalizarHoraVisual(h.hora_inicio || ''))}" placeholder="16:00">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Fin</label>
+          <input id="horFin" class="form-control" value="${safeText(normalizarHoraVisual(h.hora_fin || ''))}" placeholder="20:00">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Intervalo</label>
+          <select id="horIntervalo" class="form-select">
+            <option value="30" ${String(h.intervalo_minutos || '') === '30' || !h.intervalo_minutos ? 'selected' : ''}>30 min</option>
+            <option value="45" ${String(h.intervalo_minutos || '') === '45' ? 'selected' : ''}>45 min</option>
+            <option value="60" ${String(h.intervalo_minutos || '') === '60' ? 'selected' : ''}>60 min</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo</label>
+          <select id="horTipo" class="form-select">
+            <option ${String(h.tipo_bloque || 'Consulta') === 'Consulta' ? 'selected' : ''}>Consulta</option>
+            <option ${String(h.tipo_bloque || '') === 'Procedimiento' ? 'selected' : ''}>Procedimiento</option>
+            <option ${String(h.tipo_bloque || '') === 'Ecografía' ? 'selected' : ''}>Ecografía</option>
+            <option ${String(h.tipo_bloque || '') === 'Bloque administrativo' ? 'selected' : ''}>Bloque administrativo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Días que aplica</label>
+          <input id="horDias" class="form-control" value="${safeText(h.aplica_dia || '')}" placeholder="Ej. Lun-Vie / Domingo / Todos">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="horEstado" class="form-select">
+            <option ${String(h.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(h.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Observación</label>
+          <textarea id="horObservacion" class="form-control" rows="2" placeholder="Observación interna">${safeText(h.observacion || '')}</textarea>
+        </div>
+      </div>
+      <div id="horMsg" class="notice mt-3">
+        Plantillas conectadas a la hoja <b>plantillas_horario</b>. Puede crear y editar plantillas sin afectar otras áreas.
+      </div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarHorario" class="btn-auro" onclick="guardarPlantillaHorarioReal('${safeText(id_plantilla_horario || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar plantilla
+        </button>
+      </div>
+    `;
+
+    modalConfig.classList.add('show');
+  }
+
+
+  async function guardarPlantillaHorarioReal(id_plantilla_horario){
+    const data = {
+      nombre_plantilla: document.getElementById('horNombre').value.trim(),
+      hora_inicio: normalizarHoraVisual(document.getElementById('horInicio').value.trim()),
+      hora_fin: normalizarHoraVisual(document.getElementById('horFin').value.trim()),
+      intervalo_minutos: document.getElementById('horIntervalo').value,
+      tipo_bloque: document.getElementById('horTipo').value,
+      aplica_dia: document.getElementById('horDias').value.trim(),
+      estado: document.getElementById('horEstado').value || 'Activo',
+      observacion: document.getElementById('horObservacion').value.trim()
+    };
+
+    if(id_plantilla_horario) data.id_plantilla_horario = id_plantilla_horario;
+
+    if(!data.nombre_plantilla){
+      document.getElementById('horMsg').innerHTML = 'Ingrese el nombre de la plantilla.';
+      return;
+    }
+
+    if(!data.hora_inicio || !data.hora_fin){
+      document.getElementById('horMsg').innerHTML = 'Ingrese hora de inicio y hora de fin.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarHorario');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_plantilla_horario ? 'editarPlantillaHorario' : 'guardarPlantillaHorario';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar la plantilla de horario');
+
+      document.getElementById('horMsg').innerHTML = 'Plantilla de horario guardada correctamente en <b>plantillas_horario</b>.';
+      await cargarPlantillasHorario();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('horMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar plantilla: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+  function abrirModal(tipo){
+    if(tipo === 'medico') return abrirModalMedico('');
+    if(tipo === 'servicio') return abrirModalServicio('');
+    if(tipo === 'horario') return abrirModalHorario('');
+
+    const title={horario:'Plantilla de horario'}[tipo]||'Registro';
+    modalTitle.textContent='Nuevo / editar '+title;
+    let body='';
+
+    if(tipo==='horario') body=`<div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Nombre plantilla</label><input class="form-control" placeholder="Tarde normal"></div><div class="col-md-3"><label class="form-label fw-bold">Inicio</label><input class="form-control" placeholder="16:00"></div><div class="col-md-3"><label class="form-label fw-bold">Fin</label><input class="form-control" placeholder="20:00"></div><div class="col-md-6"><label class="form-label fw-bold">Intervalo</label><select class="form-select"><option>30 min</option><option>45 min</option><option>60 min</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Tipo</label><select class="form-select"><option>Consulta</option><option>Procedimiento</option><option>Ecografía</option></select></div></div>`;
+
+    modalBody.innerHTML=body+`<div class="notice mt-3">Este módulo sigue visual por ahora. La conexión real será en la siguiente fase.</div><div class="d-flex justify-content-end gap-2 mt-3"><button class="btn-line" onclick="cerrarModal()">Cancelar</button><button class="btn-auro" onclick="alert('Guardado visual. Pendiente conectar este módulo.')">Guardar</button></div>`;
+    modalConfig.classList.add('show');
+  }
+
+  function servicioAsignadoActivo(id_medico, id_servicio){
+    return medicoServicios.some(r =>
+      String(r.id_medico || '') === String(id_medico || '') &&
+      String(r.id_servicio || '') === String(id_servicio || '') &&
+      String(r.estado || '').toLowerCase() === 'activo'
+    );
+  }
+
+  function relacionServicio(id_medico, id_servicio){
+    return medicoServicios.find(r =>
+      String(r.id_medico || '') === String(id_medico || '') &&
+      String(r.id_servicio || '') === String(id_servicio || '')
+    ) || null;
+  }
+
+  function serviciosMedicoHTML(id_medico){
+    if(!id_medico){
+      return `
+        <div class="notice mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Primero guarde el médico. Luego podrá editarlo y asignarle servicios.
+        </div>
+      `;
+    }
+
+    if(!servicios.length){
+      return `
+        <div class="notice mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Todavía no hay servicios registrados. Cree servicios en la pestaña <b>Servicios</b>.
+        </div>
+      `;
+    }
+
+    const activos = servicios.filter(s => String(s.estado || 'Activo').toLowerCase() === 'activo' || String(s.estado || '') === '');
+
+    return `
+      <div class="mt-4 p-3" style="border:1px solid #f1d4e5;border-radius:18px;background:#fff7fb">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <div>
+            <label class="form-label fw-bold mb-1">Servicios asignados al médico</label>
+            <div class="text-muted small">Marque los servicios que este profesional puede atender.</div>
+          </div>
+          <span class="readonly-pill"><i class="bi bi-link-45deg"></i> medico_servicios</span>
+        </div>
+        <div class="row g-2">
+          ${activos.map(s => {
+            const idServicio = String(s.id_servicio || '').trim();
+            const checked = servicioAsignadoActivo(id_medico, idServicio) ? 'checked' : '';
+            return `
+              <div class="col-md-6">
+                <label class="d-flex align-items-start gap-2 p-2 bg-white rounded-3 border">
+                  <input class="form-check-input mt-1 medico-servicio-check" type="checkbox" value="${safeText(idServicio)}" ${checked}>
+                  <span>
+                    <b>${safeText(textoServicioNombre(s))}</b>
+                    <br><small class="text-muted">${safeText(textoServicioEspecialidad(s))} · ${safeText(textoServicioDuracion(s))}</small>
+                  </span>
+                </label>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  async function abrirModalMedico(id_medico){
+    await cargarMedicoServicios();
+    const m = medicos.find(x => String(x.id_medico || '') === String(id_medico || '')) || {};
+    modalTitle.textContent = id_medico ? 'Editar médico' : 'Nuevo médico';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombres</label>
+          <input id="medNombres" class="form-control" value="${safeText(m.nombres || '')}" placeholder="Ej. Aurora">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Apellidos</label>
+          <input id="medApellidos" class="form-control" value="${safeText(m.apellidos || '')}" placeholder="Ej. Andagoya">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Especialidad principal</label>
+          <input id="medEspecialidad" class="form-control" value="${safeText(m.especialidad_principal || '')}" placeholder="Ej. Ginecología">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="medEstado" class="form-select">
+            <option ${String(m.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(m.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Registro SENESCYT</label>
+          <input id="medSenescyt" class="form-control" value="${safeText(m.registro_senescyt || '')}" placeholder="Opcional">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Registro MSP</label>
+          <input id="medMsp" class="form-control" value="${safeText(m.registro_msp || '')}" placeholder="Opcional">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Teléfono</label>
+          <input id="medTelefono" class="form-control" value="${safeText(m.telefono || '')}" placeholder="0999999999">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Email</label>
+          <input id="medEmail" class="form-control" value="${safeText(m.email || '')}" placeholder="correo@ejemplo.com">
+        </div>
+      </div>
+
+      ${serviciosMedicoHTML(id_medico)}
+
+      <div id="medMsg" class="notice mt-3">Este formulario guarda en <b>medicos</b> y, si corresponde, actualiza la relación en <b>medico_servicios</b>.</div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarMedico" class="btn-auro" onclick="guardarMedicoReal('${safeText(id_medico || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar médico
+        </button>
+      </div>
+    `;
+    modalConfig.classList.add('show');
+  }
+
+  function abrirModalServicio(id_servicio){
+    const s = servicios.find(x => String(x.id_servicio || '') === String(id_servicio || '')) || {};
+    modalTitle.textContent = id_servicio ? 'Editar servicio' : 'Nuevo servicio';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombre del servicio</label>
+          <input id="servNombre" class="form-control" value="${safeText(s.nombre_servicio || '')}" placeholder="Ej. Consulta ginecológica">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Especialidad / Área</label>
+          <input id="servEspecialidad" class="form-control" value="${safeText(s.id_especialidad || '')}" placeholder="Ej. Ginecología">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Duración</label>
+          <select id="servDuracion" class="form-select">
+            <option value="30" ${String(s.duracion_minutos || '') === '30' ? 'selected' : ''}>30 min</option>
+            <option value="45" ${String(s.duracion_minutos || '') === '45' ? 'selected' : ''}>45 min</option>
+            <option value="60" ${String(s.duracion_minutos || '') === '60' || !s.duracion_minutos ? 'selected' : ''}>60 min</option>
+            <option value="90" ${String(s.duracion_minutos || '') === '90' ? 'selected' : ''}>90 min</option>
+            <option value="120" ${String(s.duracion_minutos || '') === '120' ? 'selected' : ''}>120 min</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Precio</label>
+          <input id="servPrecio" class="form-control" value="${safeText(s.precio || '')}" placeholder="Opcional">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="servEstado" class="form-select">
+            <option ${String(s.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(s.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Orden</label>
+          <input id="servOrden" type="number" class="form-control" value="${safeText(s.orden || '')}" placeholder="Ej. 1">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Requiere consentimiento</label>
+          <select id="servConsentimiento" class="form-select">
+            <option value="No" ${String(s.requiere_consentimiento || 'No') === 'No' ? 'selected' : ''}>No</option>
+            <option value="Sí" ${String(s.requiere_consentimiento || '') === 'Sí' ? 'selected' : ''}>Sí</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Descripción</label>
+          <textarea id="servDescripcion" class="form-control" rows="2" placeholder="Descripción breve del servicio">${safeText(s.descripcion || '')}</textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Observación interna</label>
+          <textarea id="servObservacion" class="form-control" rows="2" placeholder="Opcional">${safeText(s.observacion || '')}</textarea>
+        </div>
+      </div>
+      <div id="servMsg" class="notice mt-3">Este formulario ya guarda en la hoja <b>servicios</b>.</div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarServicio" class="btn-auro" onclick="guardarServicioReal('${safeText(id_servicio || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar servicio
+        </button>
+      </div>
+    `;
+    modalConfig.classList.add('show');
+  }
+
+  async function guardarServiciosMedico(id_medico){
+    if(!id_medico) return;
+
+    const checks = Array.from(document.querySelectorAll('.medico-servicio-check'));
+    if(!checks.length) return;
+
+    const operaciones = [];
+
+    checks.forEach(ch => {
+      const idServicio = String(ch.value || '').trim();
+      if(!idServicio) return;
+
+      const rel = relacionServicio(id_medico, idServicio);
+      const activo = rel && String(rel.estado || '').toLowerCase() === 'activo';
+
+      if(ch.checked && !rel){
+        operaciones.push(apiPost('guardarMedicoServicio', {
+          id_medico: id_medico,
+          id_servicio: idServicio,
+          estado: 'Activo'
+        }));
+      }else if(ch.checked && rel && !activo){
+        operaciones.push(apiPost('editarMedicoServicio', {
+          id_relacion: rel.id_relacion,
+          id_medico: id_medico,
+          id_servicio: idServicio,
+          estado: 'Activo'
+        }));
+      }else if(!ch.checked && rel && activo){
+        operaciones.push(apiPost('editarMedicoServicio', {
+          id_relacion: rel.id_relacion,
+          id_medico: id_medico,
+          id_servicio: idServicio,
+          estado: 'Inactivo'
+        }));
+      }
+    });
+
+    if(operaciones.length){
+      const resultados = await Promise.all(operaciones);
+      const fallo = resultados.find(r => !r.success);
+      if(fallo) throw new Error(fallo.message || 'No se pudo guardar la relación médico-servicio');
+    }
+
+    await cargarMedicoServicios();
+  }
+
+  async function guardarMedicoReal(id_medico){
+    const data = {
+      nombres: document.getElementById('medNombres').value.trim(),
+      apellidos: document.getElementById('medApellidos').value.trim(),
+      especialidad_principal: document.getElementById('medEspecialidad').value.trim(),
+      registro_senescyt: document.getElementById('medSenescyt').value.trim(),
+      registro_msp: document.getElementById('medMsp').value.trim(),
+      telefono: document.getElementById('medTelefono').value.trim(),
+      email: document.getElementById('medEmail').value.trim(),
+      estado: document.getElementById('medEstado').value || 'Activo'
+    };
+
+    if(id_medico) data.id_medico = id_medico;
+
+    if(!data.nombres || !data.apellidos){
+      document.getElementById('medMsg').innerHTML = 'Ingrese nombres y apellidos.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarMedico');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_medico ? 'editarMedico' : 'guardarMedico';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar el médico');
+
+      const idFinalMedico = id_medico || r.id || data.id_medico || '';
+      await guardarServiciosMedico(idFinalMedico);
+
+      document.getElementById('medMsg').innerHTML = 'Médico y servicios asignados guardados correctamente.';
+      await cargarMedicos();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('medMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar médico: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+  async function guardarServicioReal(id_servicio){
+    const data = {
+      nombre_servicio: document.getElementById('servNombre').value.trim(),
+      id_especialidad: document.getElementById('servEspecialidad').value.trim(),
+      descripcion: document.getElementById('servDescripcion').value.trim(),
+      duracion_minutos: document.getElementById('servDuracion').value,
+      precio: document.getElementById('servPrecio').value.trim(),
+      estado: document.getElementById('servEstado').value || 'Activo',
+      orden: document.getElementById('servOrden').value.trim(),
+      requiere_consentimiento: document.getElementById('servConsentimiento').value || 'No',
+      observacion: document.getElementById('servObservacion').value.trim()
+    };
+
+    if(id_servicio) data.id_servicio = id_servicio;
+
+    if(!data.nombre_servicio){
+      document.getElementById('servMsg').innerHTML = 'Ingrese el nombre del servicio.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarServicio');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_servicio ? 'editarServicio' : 'guardarServicio';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar el servicio');
+
+      document.getElementById('servMsg').innerHTML = 'Servicio guardado correctamente.';
+      await cargarServicios();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('servMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar servicio: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+  function cerrarModal(event){
+    if(event && event.target!==event.currentTarget)return;
+    modalConfig.classList.remove('show');
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    await cargarMedicos();
+    await cargarServicios();
+    await cargarMedicoServicios();
+    await cargarPlantillasHorario();
+    await cargarConfiguracionCentro();
+  });
+
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
+</script>
+<script src="config-centro.js"></script>
+</body>
+</html>
