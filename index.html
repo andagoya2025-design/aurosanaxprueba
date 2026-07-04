@@ -4003,6 +4003,133 @@ async function auroGuardarPlanClinicoSeguroDesdeIndex(){
 }
 
 
+/* =====================================================
+   AUROSANAX UX - Guardar / Actualizar Historia Clínica
+   Mejora visual segura del botón central.
+   No modifica Apps Script, base de datos, Plan, Recetas ni Examen Físico.
+===================================================== */
+function auroHistoriaFechaHoraVisualAhora(){
+  const d = new Date();
+  return d.toLocaleString('es-EC', {
+    year:'numeric',
+    month:'2-digit',
+    day:'2-digit',
+    hour:'2-digit',
+    minute:'2-digit'
+  });
+}
+
+function auroHistoriaAtencionResumen(){
+  try{
+    if(typeof window.getAtencionActiva === 'function'){
+      const a = window.getAtencionActiva();
+      if(a){
+        return {
+          id: String(a.id_atencion || ''),
+          consulta: a.numero_consulta ? ('#' + a.numero_consulta) : 'activa',
+          estado: String(a.estado_atencion || '').trim()
+        };
+      }
+    }
+  }catch(e){}
+
+  try{
+    const id = String(
+      (typeof window.getIdAtencionActiva === 'function' ? window.getIdAtencionActiva() : '') ||
+      window.examenFisicoState?.atencionActual ||
+      window.planState?.atencionActual ||
+      ''
+    ).trim();
+    if(id){
+      return { id:id, consulta:'activa', estado:'' };
+    }
+  }catch(e){}
+
+  return { id:'', consulta:'sin consulta activa', estado:'' };
+}
+
+function auroHistoriaStatusBox(){
+  let status = document.getElementById('hcSaveStatus');
+  const actions = document.querySelector('.clinical-actions');
+  if(!status && actions){
+    status = document.createElement('div');
+    status.id = 'hcSaveStatus';
+    status.className = 'auro-save-status';
+    actions.insertAdjacentElement('afterend', status);
+  }
+  return status;
+}
+
+function auroHistoriaMostrarEstado(mensaje, tipo){
+  const status = auroHistoriaStatusBox();
+  if(!status) return;
+
+  status.className = 'auro-save-status';
+  if(tipo === 'ok') status.classList.add('ok');
+  if(tipo === 'error'){
+    status.style.borderColor = '#fecaca';
+    status.style.background = '#fef2f2';
+    status.style.color = '#991b1b';
+  }else{
+    status.style.borderColor = '';
+    status.style.background = '';
+    status.style.color = '';
+  }
+
+  status.textContent = mensaje || '';
+}
+
+function auroHistoriaSetBotonesGuardando(guardando){
+  document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(btn => {
+    if(guardando){
+      if(!btn.dataset.auroTextoOriginal){
+        btn.dataset.auroTextoOriginal = btn.innerHTML;
+      }
+      btn.disabled = true;
+      btn.style.opacity = '0.65';
+      btn.style.cursor = 'not-allowed';
+
+      if(btn.dataset.auroPlanBtn === '1'){
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando plan...';
+      }else{
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
+      }
+    }else{
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = '';
+      if(btn.dataset.auroTextoOriginal){
+        btn.innerHTML = btn.dataset.auroTextoOriginal;
+        delete btn.dataset.auroTextoOriginal;
+      }
+    }
+  });
+}
+
+function auroHistoriaRegistrarActualizacionVisual(fechaHora){
+  try{
+    if(window.historiaActual) window.historiaActual.actualizado_en = fechaHora;
+    if(window.currentHistoria) window.currentHistoria.actualizado_en = fechaHora;
+
+    if(editingHistoryId && Array.isArray(window.historiasClinicas)){
+      const h = window.historiasClinicas.find(x => String(x.id_historia || '') === String(editingHistoryId));
+      if(h) h.actualizado_en = fechaHora;
+    }
+
+    if(typeof actualizarTarjetaPacienteHistoria === 'function'){
+      const paciente = typeof getPacienteActivo === 'function' ? getPacienteActivo() : null;
+      actualizarTarjetaPacienteHistoria(paciente);
+    }
+
+    if(typeof updateClinicalSummary === 'function'){
+      updateClinicalSummary();
+    }
+  }catch(error){
+    console.warn('AUROSANAX UX: no se pudo refrescar actualización visual.', error);
+  }
+}
+
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -4023,6 +4150,15 @@ async function guardarHistoriaClinicaERP(){
       return;
     }
   }
+
+  const atencionUX = auroHistoriaAtencionResumen();
+  auroHistoriaSetBotonesGuardando(true);
+  auroHistoriaMostrarEstado(
+    atencionUX.id
+      ? 'Guardando historia clínica y módulos de la consulta ' + atencionUX.consulta + ', espere...'
+      : 'Guardando historia clínica, espere...',
+    'saving'
+  );
 
   const unirLinea = arr => arr.filter(Boolean).join(' | ');
 
@@ -4096,12 +4232,28 @@ async function guardarHistoriaClinicaERP(){
     /* AUROSANAX: guardar Plan clínico en planes_clinicos sin bloquear Historia */
     await auroGuardarPlanClinicoSeguroDesdeIndex();
 
-    alert(esEdicion ? 'Historia clínica actualizada correctamente en Google Sheets.' : 'Historia clínica guardada correctamente. Antecedentes conectados y Plan clínico registrados en Google Sheets.');
+    const fechaGuardadoUX = auroHistoriaFechaHoraVisualAhora();
+    const atencionFinalUX = auroHistoriaAtencionResumen();
+
+    auroHistoriaRegistrarActualizacionVisual(fechaGuardadoUX);
+
+    auroHistoriaMostrarEstado(
+      atencionFinalUX.id
+        ? 'Consulta ' + atencionFinalUX.consulta + ' actualizada correctamente · Última actualización: ' + fechaGuardadoUX
+        : (esEdicion ? 'Historia clínica actualizada correctamente · Última actualización: ' + fechaGuardadoUX : 'Historia clínica guardada correctamente · ' + fechaGuardadoUX),
+      'ok'
+    );
+
     await cargarHistoriasClinicasDesdeSheets();
     actualizarDashboard();
   }catch(error){
     console.error(error);
-    alert('No se pudo guardar o actualizar. Revise la conexión o Apps Script.');
+    auroHistoriaMostrarEstado('No se pudo guardar o actualizar. Revise la conexión o Apps Script.', 'error');
+  }finally{
+    auroHistoriaSetBotonesGuardando(false);
+    if(typeof auroPlanActualizarBotonesHistoria === 'function'){
+      auroPlanActualizarBotonesHistoria();
+    }
   }
 }
 
