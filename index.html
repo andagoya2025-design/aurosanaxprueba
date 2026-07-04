@@ -5602,8 +5602,22 @@ document.addEventListener('click',e=>{
     if(atn.id && ultimoId && atn.id !== ultimoId){
       const status = document.getElementById('hcSaveStatus');
       if(status){
-        status.className = 'auro-save-status';
-        status.textContent = 'Consulta ' + atn.consulta + ' activa. Plan pendiente de guardar o revisar.';
+        /*
+          AUROSANAX FIX UX INFERIOR:
+          Al presionar Ver/cambiar consulta, Plan puede refrescar su mini estado,
+          pero NO debe borrar el mensaje premium inferior generado por
+          Actualizar historia: "Consulta # actualizada · Última actualización".
+          Esto no toca el panel superior de Plan ni la lógica de Ver.
+        */
+        const textoActual = String(status.textContent || '');
+        const esConfirmacionHistoria =
+          status.classList.contains('ok') &&
+          (textoActual.includes('Última actualización') || textoActual.includes('actualizada correctamente'));
+
+        if(!esConfirmacionHistoria){
+          status.className = 'auro-save-status';
+          status.textContent = 'Consulta ' + atn.consulta + ' activa. Plan pendiente de guardar o revisar.';
+        }
       }
     }
 
@@ -5696,7 +5710,16 @@ document.addEventListener('click',e=>{
     });
 
     const status = document.getElementById('hcSaveStatus');
-    if(status) status.textContent = auroPlanEstadoTexto();
+    if(status){
+      const textoActual = String(status.textContent || '');
+      const esConfirmacionHistoria =
+        status.classList.contains('ok') &&
+        (textoActual.includes('Última actualización') || textoActual.includes('actualizada correctamente'));
+
+      if(!esConfirmacionHistoria){
+        status.textContent = auroPlanEstadoTexto();
+      }
+    }
 
     if(typeof window.auroPlanActualizarMiniStatus === 'function'){
       window.auroPlanActualizarMiniStatus();
@@ -5868,7 +5891,24 @@ document.addEventListener('click',e=>{
       }
       const r = await originalGuardarHistoria.apply(this, arguments);
       auroPlanActualizarBotonesHistoria();
-      auroPlanMostrarEstadoGuardado(eraEdicion ? 'Historia clínica actualizada correctamente.' : 'Historia clínica guardada correctamente.');
+
+      /*
+        AUROSANAX FIX UX INFERIOR:
+        No volver a escribir el mensaje genérico antiguo después del guardado.
+        La función principal guardarHistoriaClinicaERP ya muestra el mensaje
+        premium con consulta + fecha/hora inmediata.
+      */
+      const status = document.getElementById('hcSaveStatus');
+      const textoActual = String(status?.textContent || '');
+      const tieneMensajePremium =
+        status &&
+        status.classList.contains('ok') &&
+        (textoActual.includes('Última actualización') || textoActual.includes('actualizada correctamente'));
+
+      if(!tieneMensajePremium){
+        auroPlanMostrarEstadoGuardado(eraEdicion ? 'Historia clínica actualizada correctamente.' : 'Historia clínica guardada correctamente.');
+      }
+
       return r;
     };
   }
