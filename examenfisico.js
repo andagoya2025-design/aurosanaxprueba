@@ -1944,6 +1944,228 @@ function cargarExamenFisicoTemporal(idAtencion){
   return data;
 }
 
+/* ==========================================================
+   AUROSANAX - EXAMEN FÍSICO PERSISTENTE POR ATENCIÓN
+   Fase 2: conexión segura con Apps Script y pestaña examenes_fisicos.
+   ----------------------------------------------------------
+   Reglas:
+   - No modifica Atenciones, Plan, Recetas, Pacientes ni Agenda.
+   - Usa id_atencion como llave principal clínica de consulta.
+   - Si existe examen para la atención: lo carga.
+   - Si no existe: limpia los campos variables del examen.
+   - El botón "Actualizar historia" guarda/actualiza también
+     el examen físico en examenes_fisicos.
+   ========================================================== */
+
+function auroExamenFisicoApiUrl(){
+  try{
+    if(typeof API_URL !== 'undefined' && API_URL) return API_URL;
+  }catch(e){}
+  try{
+    if(window.API_URL) return window.API_URL;
+  }catch(e){}
+  return '';
+}
+
+function auroExamenFisicoAtencionActual(){
+  try{
+    if(typeof getAtencionActiva === 'function'){
+      return getAtencionActiva();
+    }
+  }catch(e){}
+  return null;
+}
+
+function auroExamenFisicoIdAtencionActual(){
+  try{
+    if(typeof getIdAtencionActiva === 'function'){
+      return String(getIdAtencionActiva() || '').trim();
+    }
+  }catch(e){}
+
+  try{
+    return String(window.examenFisicoState?.atencionActual || '').trim();
+  }catch(e){}
+
+  return '';
+}
+
+function auroExamenFisicoPayload(){
+  const atencion = auroExamenFisicoAtencionActual() || {};
+  const idAtencion = auroExamenFisicoIdAtencionActual() || String(window.examenFisicoState?.atencionActual || '').trim();
+
+  if(!idAtencion){
+    return null;
+  }
+
+  if(typeof sincronizarDiagnosticosConCamposHistoria === 'function'){
+    try{ sincronizarDiagnosticosConCamposHistoria(); }catch(e){}
+  }
+
+  return {
+    id_examen: String(window.examenFisicoState?.examenesSheets?.[idAtencion]?.id_examen || '').trim(),
+    id_atencion: idAtencion,
+    id_paciente: atencion.id_paciente || '',
+    id_historia: atencion.id_historia || '',
+    id_medico: atencion.id_medico || '',
+    fecha_examen: new Date().toISOString(),
+
+    peso_kg: getValueIfExists('hcPeso'),
+    talla_cm: getValueIfExists('hcTalla'),
+    imc: getValueIfExists('hcIMC'),
+    presion_arterial: getValueIfExists('hcPA'),
+    frecuencia_cardiaca: getValueIfExists('hcFC'),
+    temperatura: getValueIfExists('hcTemperatura'),
+    saturacion: getValueIfExists('hcSaturacion'),
+
+    examen_fisico: typeof auroConstruirExamenFisicoCompleto === 'function'
+      ? auroConstruirExamenFisicoCompleto()
+      : '',
+
+    diagnosticos_cie10: typeof recopilarDiagnosticosCie10 === 'function'
+      ? recopilarDiagnosticosCie10()
+      : '',
+
+    diagnostico_cie10: getValueIfExists('hcCie10Principal'),
+    diagnostico_principal: getValueIfExists('hcDiagnosticoPrincipal'),
+    cie10_secundario: getValueIfExists('hcCie10Secundario'),
+    diagnostico_secundario: getValueIfExists('hcDiagnosticoSecundario'),
+
+    estado_examen: 'Activo'
+  };
+}
+
+async function auroBuscarExamenFisicoPorAtencion(idAtencion){
+  const API = auroExamenFisicoApiUrl();
+  idAtencion = String(idAtencion || auroExamenFisicoIdAtencionActual() || '').trim();
+
+  if(!API || !idAtencion){
+    return null;
+  }
+
+  const url = API + '?accion=buscarExamenFisicoPorAtencion&id_atencion=' + encodeURIComponent(idAtencion) + '&_=' + Date.now();
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  window.examenFisicoState = window.examenFisicoState || { atencionActual:'', cache:{} };
+  window.examenFisicoState.examenesSheets = window.examenFisicoState.examenesSheets || {};
+
+  if(data && data.id_examen){
+    window.examenFisicoState.examenesSheets[idAtencion] = data;
+  }else{
+    delete window.examenFisicoState.examenesSheets[idAtencion];
+  }
+
+  return data || null;
+}
+
+function auroCargarExamenFisicoDesdeSheet(registro){
+  limpiarExamenFisicoTemporal();
+
+  if(!registro || !registro.id_examen){
+    return false;
+  }
+
+  if(typeof auroCargarExamenFisicoDesdeHistoria === 'function'){
+    auroCargarExamenFisicoDesdeHistoria(registro, 'atencion');
+  }else{
+    setValueIfExists('hcPeso', registro.peso_kg || '');
+    setValueIfExists('hcTalla', registro.talla_cm || '');
+    setValueIfExists('hcIMC', registro.imc || '');
+    setValueIfExists('hcPA', registro.presion_arterial || '');
+    setValueIfExists('hcFC', registro.frecuencia_cardiaca || '');
+    setValueIfExists('hcTemperatura', registro.temperatura || '');
+    setValueIfExists('hcSaturacion', registro.saturacion || '');
+  }
+
+  if(typeof auroCargarDiagnosticosDesdeHistoria === 'function'){
+    auroCargarDiagnosticosDesdeHistoria(registro);
+  }
+
+  guardarExamenFisicoTemporal();
+
+  return true;
+}
+
+async function auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion){
+  idAtencion = String(idAtencion || auroExamenFisicoIdAtencionActual() || '').trim();
+  if(!idAtencion) return null;
+
+  try{
+    const registro = await auroBuscarExamenFisicoPorAtencion(idAtencion);
+
+    if(String(window.examenFisicoState?.atencionActual || '') !== idAtencion){
+      return registro;
+    }
+
+    if(registro && registro.id_examen){
+      auroCargarExamenFisicoDesdeSheet(registro);
+      console.log('AUROSANAX EXAMEN: cargado desde examenes_fisicos:', idAtencion);
+    }else{
+      limpiarExamenFisicoTemporal();
+      console.log('AUROSANAX EXAMEN: sin examen físico guardado para esta atención:', idAtencion);
+    }
+
+    return registro || null;
+  }catch(error){
+    console.warn('AUROSANAX EXAMEN: no se pudo cargar desde examenes_fisicos.', error);
+    return null;
+  }
+}
+
+async function auroGuardarExamenFisicoSheets(){
+  const API = auroExamenFisicoApiUrl();
+  const payloadData = auroExamenFisicoPayload();
+
+  if(!API){
+    console.warn('AUROSANAX EXAMEN: API_URL no definida. No se guardó examen físico.');
+    return { success:false, message:'API_URL no definida' };
+  }
+
+  if(!payloadData || !payloadData.id_atencion){
+    console.warn('AUROSANAX EXAMEN: no hay id_atencion activa. No se guardó examen físico.');
+    return { success:false, message:'No hay id_atencion activa' };
+  }
+
+  const payload = {
+    accion: 'guardarExamenFisico',
+    data: payloadData
+  };
+
+  try{
+    const res = await fetch(API, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    const resultado = await res.json();
+
+    if(resultado && resultado.success){
+      window.examenFisicoState = window.examenFisicoState || { atencionActual:'', cache:{} };
+      window.examenFisicoState.examenesSheets = window.examenFisicoState.examenesSheets || {};
+
+      if(resultado.data){
+        window.examenFisicoState.examenesSheets[payloadData.id_atencion] = resultado.data;
+      }else if(resultado.id){
+        window.examenFisicoState.examenesSheets[payloadData.id_atencion] = Object.assign({}, payloadData, {
+          id_examen: resultado.id
+        });
+      }
+
+      guardarExamenFisicoTemporal();
+      console.log('AUROSANAX EXAMEN: guardado en examenes_fisicos:', resultado);
+    }else{
+      console.warn('AUROSANAX EXAMEN: Apps Script no confirmó guardado.', resultado);
+    }
+
+    return resultado;
+  }catch(error){
+    console.error('AUROSANAX EXAMEN: error guardando en examenes_fisicos.', error);
+    return { success:false, message:error.message };
+  }
+}
+
 function cambiarExamenFisicoPorAtencion(idAtencion){
   window.examenFisicoState = window.examenFisicoState || {
     atencionActual: '',
@@ -1960,9 +2182,17 @@ function cambiarExamenFisicoPorAtencion(idAtencion){
   }
 
   window.examenFisicoState.atencionActual = idAtencion;
-  cargarExamenFisicoTemporal(idAtencion);
 
-  console.log('AUROSANAX EXAMEN: atención activa sincronizada:', idAtencion);
+  const temporal = cargarExamenFisicoTemporal(idAtencion);
+
+  /*
+    Primero usa memoria temporal si existe. Luego consulta Google Sheets.
+    Si Sheets tiene registro, reemplaza el temporal por el dato persistente.
+    Si Sheets no tiene registro, el formulario queda limpio para esa atención.
+  */
+  auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion);
+
+  console.log('AUROSANAX EXAMEN: atención activa sincronizada:', idAtencion, temporal ? '(temporal encontrado)' : '(sin temporal)');
 }
 
 function auroInstalarAutoGuardadoExamenFisicoPorAtencion(){
@@ -1982,12 +2212,39 @@ function auroInstalarAutoGuardadoExamenFisicoPorAtencion(){
       guardarExamenFisicoTemporal();
     }
   });
+
+  /*
+    Guardado persistente:
+    Cuando se pulsa "Actualizar historia", se mantiene el flujo original
+    y además se guarda el examen físico en examenes_fisicos por id_atencion.
+  */
+  document.addEventListener('click', function(e){
+    const btn = e.target && e.target.closest ? e.target.closest('button, a') : null;
+    if(!btn) return;
+
+    const texto = String(btn.textContent || btn.innerText || '').toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if(texto.includes('actualizar historia')){
+      setTimeout(function(){
+        if(typeof auroGuardarExamenFisicoSheets === 'function'){
+          auroGuardarExamenFisicoSheets();
+        }
+      }, 450);
+    }
+  }, true);
 }
 
 window.guardarExamenFisicoTemporal = guardarExamenFisicoTemporal;
 window.cargarExamenFisicoTemporal = cargarExamenFisicoTemporal;
 window.limpiarExamenFisicoTemporal = limpiarExamenFisicoTemporal;
 window.cambiarExamenFisicoPorAtencion = cambiarExamenFisicoPorAtencion;
+window.auroBuscarExamenFisicoPorAtencion = auroBuscarExamenFisicoPorAtencion;
+window.auroCargarExamenFisicoDesdeSheetsPorAtencion = auroCargarExamenFisicoDesdeSheetsPorAtencion;
+window.auroGuardarExamenFisicoSheets = auroGuardarExamenFisicoSheets;
 window.auroInstalarAutoGuardadoExamenFisicoPorAtencion = auroInstalarAutoGuardadoExamenFisicoPorAtencion;
 
 if(document.readyState === 'loading'){
