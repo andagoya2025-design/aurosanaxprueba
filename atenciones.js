@@ -1,11 +1,12 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 2.0 responsive móvil tarjetas
+   Versión: 2.1 integra Examen Físico por atención
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
-   - No modifica Agenda, Pacientes, Antecedentes, Examen Físico, Plan ni Recetas.
+   - No modifica Agenda, Pacientes, Antecedentes, Plan ni Recetas.
+   - Conecta Examen Físico por id_atencion sin cambiar la vista del historial.
    - Guarda localmente y sincroniza con Google Sheets mediante Apps Script.
 ===================================================== */
 
@@ -674,6 +675,10 @@
         if(typeof cambiarPlanPorAtencion === 'function'){
           cambiarPlanPorAtencion(nueva.id_atencion);
         }
+
+        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
+          cambiarExamenFisicoPorAtencion(nueva.id_atencion);
+        }
       }catch(error){
         console.warn('AUROSANAX PLAN: no se pudo sincronizar nueva atención con Plan.', error);
       }
@@ -1046,6 +1051,10 @@
       try{
         if(typeof cambiarPlanPorAtencion === 'function'){
           cambiarPlanPorAtencion(a.id_atencion);
+        }
+
+        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
+          cambiarExamenFisicoPorAtencion(a.id_atencion);
         }
       }catch(error){
         console.warn('AUROSANAX PLAN: error al vincular atención con Plan.', error);
