@@ -1741,6 +1741,262 @@ function auroInicializarAyudasExamenFisicoV32(){
    - Protección anti-sobrescritura en edición
    ========================================================== */
 
+
+
+/* ==========================================================
+   AUROSANAX - EXAMEN FÍSICO POR ATENCIÓN
+   Fase 1: estado temporal por id_atencion
+   ----------------------------------------------------------
+   Objetivo:
+   - Igualar el comportamiento de Plan Clínico.
+   - No toca Google Sheets.
+   - No toca Apps Script.
+   - No modifica interfaz.
+   - No muestra el examen dentro del botón Ver de Atenciones.
+   - Solo conserva/carga los campos de Examen Físico y Diagnóstico
+     según la atención activa.
+   ========================================================== */
+
+window.examenFisicoState = window.examenFisicoState || {
+  atencionActual: '',
+  cache: {}
+};
+
+function auroExamenFisicoPanel(){
+  return document.getElementById('hc_examen');
+}
+
+function auroExamenFisicoCampos(){
+  const panel = auroExamenFisicoPanel();
+  if(!panel) return [];
+
+  return Array.from(panel.querySelectorAll('input[id], textarea[id], select[id]'))
+    .filter(el => {
+      const id = String(el.id || '');
+      if(!id) return false;
+
+      /* No guardar cajas visuales auxiliares; solo campos reales. */
+      if(id.includes('Sugerencias')) return false;
+      if(id.includes('ResultadosBody')) return false;
+      if(id.includes('SeleccionadosBody')) return false;
+
+      return true;
+    });
+}
+
+function auroExamenFisicoCapturarCampos(){
+  const data = {};
+
+  auroExamenFisicoCampos().forEach(el => {
+    if(!el || !el.id) return;
+
+    if(el.type === 'checkbox' || el.type === 'radio'){
+      data[el.id] = {
+        tipo: el.type,
+        checked: !!el.checked,
+        value: el.value || ''
+      };
+    }else{
+      data[el.id] = {
+        tipo: el.tagName,
+        value: el.value || ''
+      };
+    }
+  });
+
+  return data;
+}
+
+function auroExamenFisicoAplicarCampos(data){
+  data = data || {};
+
+  Object.keys(data).forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+
+    const item = data[id] || {};
+
+    if(el.type === 'checkbox' || el.type === 'radio'){
+      el.checked = !!item.checked;
+      if(item.value !== undefined) el.value = item.value;
+    }else{
+      el.value = item.value || '';
+    }
+  });
+}
+
+function auroExamenFisicoLimpiarCampos(){
+  auroExamenFisicoCampos().forEach(el => {
+    if(!el) return;
+
+    if(el.type === 'checkbox' || el.type === 'radio'){
+      el.checked = false;
+    }else if(el.tagName === 'SELECT'){
+      el.selectedIndex = 0;
+    }else{
+      el.value = '';
+    }
+  });
+}
+
+function auroExamenFisicoCapturarDiagnosticos(){
+  try{
+    return JSON.parse(JSON.stringify(window.hcDiagnosticosSeleccionados || hcDiagnosticosSeleccionados || []));
+  }catch(e){
+    return [];
+  }
+}
+
+function auroExamenFisicoAplicarDiagnosticos(lista){
+  try{
+    window.hcDiagnosticosSeleccionados = Array.isArray(lista)
+      ? JSON.parse(JSON.stringify(lista))
+      : [];
+
+    try{
+      hcDiagnosticosSeleccionados = window.hcDiagnosticosSeleccionados;
+    }catch(e){}
+
+    if(typeof renderDiagnosticosSeleccionados === 'function'){
+      renderDiagnosticosSeleccionados();
+    }
+
+    if(typeof sincronizarDiagnosticosConCamposHistoria === 'function'){
+      sincronizarDiagnosticosConCamposHistoria();
+    }
+  }catch(error){
+    console.warn('AUROSANAX EXAMEN: no se pudieron restaurar diagnósticos temporales.', error);
+  }
+}
+
+function guardarExamenFisicoTemporal(){
+  window.examenFisicoState = window.examenFisicoState || {
+    atencionActual: '',
+    cache: {}
+  };
+
+  const idAtencion = String(window.examenFisicoState.atencionActual || '').trim();
+  if(!idAtencion) return;
+
+  try{
+    if(typeof renderHcRegionalPanels === 'function'){
+      renderHcRegionalPanels();
+    }
+  }catch(e){}
+
+  window.examenFisicoState.cache[idAtencion] = {
+    campos: auroExamenFisicoCapturarCampos(),
+    diagnosticos: auroExamenFisicoCapturarDiagnosticos(),
+    examenTexto: typeof auroConstruirExamenFisicoCompleto === 'function'
+      ? auroConstruirExamenFisicoCompleto()
+      : '',
+    diagnosticosTexto: typeof recopilarDiagnosticosCie10 === 'function'
+      ? recopilarDiagnosticosCie10()
+      : '',
+    actualizado_en: new Date().toISOString()
+  };
+}
+
+function limpiarExamenFisicoTemporal(){
+  try{
+    if(typeof renderHcRegionalPanels === 'function'){
+      renderHcRegionalPanels();
+    }
+  }catch(e){}
+
+  auroExamenFisicoLimpiarCampos();
+  auroExamenFisicoAplicarDiagnosticos([]);
+
+  const previo = document.getElementById('auroExamenFisicoPrevioBox');
+  if(previo) previo.style.display = 'none';
+
+  const previoDx = document.getElementById('auroDiagnosticosPreviosBox');
+  if(previoDx) previoDx.style.display = 'none';
+
+  if(typeof auroActualizarAyudaIMC === 'function'){
+    auroActualizarAyudaIMC();
+  }
+}
+
+function cargarExamenFisicoTemporal(idAtencion){
+  window.examenFisicoState = window.examenFisicoState || {
+    atencionActual: '',
+    cache: {}
+  };
+
+  idAtencion = String(idAtencion || window.examenFisicoState.atencionActual || '').trim();
+  if(!idAtencion) return null;
+
+  limpiarExamenFisicoTemporal();
+
+  const data = window.examenFisicoState.cache[idAtencion];
+  if(!data){
+    return null;
+  }
+
+  auroExamenFisicoAplicarCampos(data.campos || {});
+  auroExamenFisicoAplicarDiagnosticos(data.diagnosticos || []);
+
+  if(typeof auroActualizarAyudaIMC === 'function'){
+    auroActualizarAyudaIMC();
+  }
+
+  return data;
+}
+
+function cambiarExamenFisicoPorAtencion(idAtencion){
+  window.examenFisicoState = window.examenFisicoState || {
+    atencionActual: '',
+    cache: {}
+  };
+
+  idAtencion = String(idAtencion || '').trim();
+  if(!idAtencion) return;
+
+  const anterior = String(window.examenFisicoState.atencionActual || '').trim();
+
+  if(anterior && anterior !== idAtencion){
+    guardarExamenFisicoTemporal();
+  }
+
+  window.examenFisicoState.atencionActual = idAtencion;
+  cargarExamenFisicoTemporal(idAtencion);
+
+  console.log('AUROSANAX EXAMEN: atención activa sincronizada:', idAtencion);
+}
+
+function auroInstalarAutoGuardadoExamenFisicoPorAtencion(){
+  if(window.__auroExamenFisicoAutoGuardadoInstalado) return;
+  window.__auroExamenFisicoAutoGuardadoInstalado = true;
+
+  document.addEventListener('input', function(e){
+    const panel = auroExamenFisicoPanel();
+    if(panel && panel.contains(e.target)){
+      guardarExamenFisicoTemporal();
+    }
+  });
+
+  document.addEventListener('change', function(e){
+    const panel = auroExamenFisicoPanel();
+    if(panel && panel.contains(e.target)){
+      guardarExamenFisicoTemporal();
+    }
+  });
+}
+
+window.guardarExamenFisicoTemporal = guardarExamenFisicoTemporal;
+window.cargarExamenFisicoTemporal = cargarExamenFisicoTemporal;
+window.limpiarExamenFisicoTemporal = limpiarExamenFisicoTemporal;
+window.cambiarExamenFisicoPorAtencion = cambiarExamenFisicoPorAtencion;
+window.auroInstalarAutoGuardadoExamenFisicoPorAtencion = auroInstalarAutoGuardadoExamenFisicoPorAtencion;
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', auroInstalarAutoGuardadoExamenFisicoPorAtencion);
+}else{
+  auroInstalarAutoGuardadoExamenFisicoPorAtencion();
+}
+
+
 /* AUROSANAX - Confirmación de carga del módulo */
 window.auroExamenFisicoModuloCargado = true;
 console.log('AUROSANAX examenfisico.js cargado correctamente');
