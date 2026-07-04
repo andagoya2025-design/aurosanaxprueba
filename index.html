@@ -4079,6 +4079,80 @@ function auroHistoriaMostrarEstado(mensaje, tipo){
   status.textContent = mensaje || '';
 }
 
+/* =====================================================
+   AUROSANAX UX - Estado inferior por consulta activa
+   Objetivo:
+   - El botón inferior Actualizar historia conserva su fecha por id_atencion.
+   - Al presionar Ver en Consulta #1, #2, #3... se recalcula el mensaje inferior.
+   - No toca Plan médico, recetas ni mensajes superiores.
+===================================================== */
+const AURO_HISTORIA_ESTADO_CONSULTA_KEY = 'auro_historia_ultimas_actualizaciones_por_atencion_v1';
+
+function auroHistoriaLeerMapaActualizacionesConsulta(){
+  try{
+    const raw = localStorage.getItem(AURO_HISTORIA_ESTADO_CONSULTA_KEY);
+    const mapa = raw ? JSON.parse(raw) : {};
+    return mapa && typeof mapa === 'object' ? mapa : {};
+  }catch(e){
+    return {};
+  }
+}
+
+function auroHistoriaGuardarMapaActualizacionesConsulta(mapa){
+  try{
+    localStorage.setItem(AURO_HISTORIA_ESTADO_CONSULTA_KEY, JSON.stringify(mapa || {}));
+  }catch(e){}
+}
+
+function auroHistoriaGuardarActualizacionConsulta(atencion, fechaHora){
+  try{
+    const atn = atencion || auroHistoriaAtencionResumen();
+    if(!atn || !atn.id) return;
+
+    const mapa = auroHistoriaLeerMapaActualizacionesConsulta();
+    mapa[String(atn.id)] = {
+      id_atencion: String(atn.id),
+      consulta: atn.consulta || 'activa',
+      fechaHora: fechaHora || auroHistoriaFechaHoraVisualAhora(),
+      guardado_en: new Date().toISOString()
+    };
+    auroHistoriaGuardarMapaActualizacionesConsulta(mapa);
+  }catch(e){
+    console.warn('AUROSANAX UX: no se pudo guardar estado visual por consulta.', e);
+  }
+}
+
+function auroHistoriaLeerActualizacionConsulta(idAtencion){
+  const id = String(idAtencion || '').trim();
+  if(!id) return null;
+  const mapa = auroHistoriaLeerMapaActualizacionesConsulta();
+  return mapa[id] || null;
+}
+
+function auroHistoriaRefrescarEstadoConsultaActiva(){
+  const atn = auroHistoriaAtencionResumen();
+  if(!atn || !atn.id){
+    auroHistoriaMostrarEstado('Sin consulta activa. Presione Ver en una consulta para trabajar por atención.', '');
+    return;
+  }
+
+  const item = auroHistoriaLeerActualizacionConsulta(atn.id);
+  if(item && item.fechaHora){
+    auroHistoriaMostrarEstado(
+      'Consulta ' + (atn.consulta || item.consulta || 'activa') + ' actualizada correctamente · Última actualización: ' + item.fechaHora,
+      'ok'
+    );
+  }else{
+    auroHistoriaMostrarEstado(
+      'Consulta ' + (atn.consulta || 'activa') + ' activa. Pendiente de actualizar historia.',
+      ''
+    );
+  }
+}
+
+window.auroHistoriaRefrescarEstadoConsultaActiva = auroHistoriaRefrescarEstadoConsultaActiva;
+window.auroHistoriaGuardarActualizacionConsulta = auroHistoriaGuardarActualizacionConsulta;
+
 function auroHistoriaSetBotonesGuardando(guardando){
   document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(btn => {
     if(guardando){
@@ -4235,6 +4309,7 @@ async function guardarHistoriaClinicaERP(){
     const fechaGuardadoUX = auroHistoriaFechaHoraVisualAhora();
     const atencionFinalUX = auroHistoriaAtencionResumen();
 
+    auroHistoriaGuardarActualizacionConsulta(atencionFinalUX, fechaGuardadoUX);
     auroHistoriaRegistrarActualizacionVisual(fechaGuardadoUX);
 
     auroHistoriaMostrarEstado(
@@ -5600,24 +5675,8 @@ document.addEventListener('click',e=>{
     const ultimoId = String(window.__auroPlanMiniStatusAtencionId || '');
 
     if(atn.id && ultimoId && atn.id !== ultimoId){
-      const status = document.getElementById('hcSaveStatus');
-      if(status){
-        /*
-          AUROSANAX FIX UX INFERIOR:
-          Al presionar Ver/cambiar consulta, Plan puede refrescar su mini estado,
-          pero NO debe borrar el mensaje premium inferior generado por
-          Actualizar historia: "Consulta # actualizada · Última actualización".
-          Esto no toca el panel superior de Plan ni la lógica de Ver.
-        */
-        const textoActual = String(status.textContent || '');
-        const esConfirmacionHistoria =
-          status.classList.contains('ok') &&
-          (textoActual.includes('Última actualización') || textoActual.includes('actualizada correctamente'));
-
-        if(!esConfirmacionHistoria){
-          status.className = 'auro-save-status';
-          status.textContent = 'Consulta ' + atn.consulta + ' activa. Plan pendiente de guardar o revisar.';
-        }
+      if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+        window.auroHistoriaRefrescarEstadoConsultaActiva();
       }
     }
 
@@ -5709,16 +5768,11 @@ document.addEventListener('click',e=>{
       btn.innerHTML = '<i class="bi bi-filetype-pdf me-1"></i> PDF receta';
     });
 
-    const status = document.getElementById('hcSaveStatus');
-    if(status){
-      const textoActual = String(status.textContent || '');
-      const esConfirmacionHistoria =
-        status.classList.contains('ok') &&
-        (textoActual.includes('Última actualización') || textoActual.includes('actualizada correctamente'));
-
-      if(!esConfirmacionHistoria){
-        status.textContent = auroPlanEstadoTexto();
-      }
+    if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+      window.auroHistoriaRefrescarEstadoConsultaActiva();
+    }else{
+      const status = document.getElementById('hcSaveStatus');
+      if(status) status.textContent = auroPlanEstadoTexto();
     }
 
     if(typeof window.auroPlanActualizarMiniStatus === 'function'){
@@ -5891,24 +5945,9 @@ document.addEventListener('click',e=>{
       }
       const r = await originalGuardarHistoria.apply(this, arguments);
       auroPlanActualizarBotonesHistoria();
-
-      /*
-        AUROSANAX FIX UX INFERIOR:
-        No volver a escribir el mensaje genérico antiguo después del guardado.
-        La función principal guardarHistoriaClinicaERP ya muestra el mensaje
-        premium con consulta + fecha/hora inmediata.
-      */
-      const status = document.getElementById('hcSaveStatus');
-      const textoActual = String(status?.textContent || '');
-      const tieneMensajePremium =
-        status &&
-        status.classList.contains('ok') &&
-        (textoActual.includes('Última actualización') || textoActual.includes('actualizada correctamente'));
-
-      if(!tieneMensajePremium){
-        auroPlanMostrarEstadoGuardado(eraEdicion ? 'Historia clínica actualizada correctamente.' : 'Historia clínica guardada correctamente.');
+      if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+        window.auroHistoriaRefrescarEstadoConsultaActiva();
       }
-
       return r;
     };
   }
@@ -5924,12 +5963,18 @@ document.addEventListener('click',e=>{
 
     if(refrescarPorAtencion){
       setTimeout(function(){
+        if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+          window.auroHistoriaRefrescarEstadoConsultaActiva();
+        }
         if(typeof window.auroPlanActualizarMiniStatus === 'function'){
           window.auroPlanActualizarMiniStatus();
         }
       }, 250);
 
       setTimeout(function(){
+        if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+          window.auroHistoriaRefrescarEstadoConsultaActiva();
+        }
         if(typeof window.auroPlanActualizarMiniStatus === 'function'){
           window.auroPlanActualizarMiniStatus();
         }
