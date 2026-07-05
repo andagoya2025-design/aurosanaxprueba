@@ -35,6 +35,68 @@ function valorConfigCentro(clave, valorDefault){
     img.src = url;
   }
 
+
+  function procesarLogoArchivoCentro(event){
+    const archivo = event && event.target && event.target.files ? event.target.files[0] : null;
+    const img = document.getElementById('cfgLogoPreview');
+    const fallback = document.getElementById('cfgLogoFallback');
+    const estado = document.getElementById('cfgLogoArchivoEstado');
+    const msg = document.getElementById('centroMsg');
+
+    window.auroLogoArchivoCentroPendiente = null;
+
+    if(!archivo){
+      if(estado) estado.innerHTML = 'Sin archivo seleccionado.';
+      actualizarPreviewLogoCentro();
+      return;
+    }
+
+    const tiposPermitidos = ['image/png','image/jpeg','image/webp','image/svg+xml'];
+    if(!tiposPermitidos.includes(archivo.type)){
+      if(estado) estado.innerHTML = '<span class="text-danger fw-bold">Formato no permitido. Use PNG, JPG, WEBP o SVG.</span>';
+      if(event && event.target) event.target.value = '';
+      actualizarPreviewLogoCentro();
+      return;
+    }
+
+    const maxBytes = 2 * 1024 * 1024;
+    if(archivo.size > maxBytes){
+      if(estado) estado.innerHTML = '<span class="text-danger fw-bold">Archivo muy pesado. Máximo recomendado: 2 MB.</span>';
+      if(event && event.target) event.target.value = '';
+      actualizarPreviewLogoCentro();
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = function(e){
+      window.auroLogoArchivoCentroPendiente = {
+        nombre: archivo.name,
+        tipo: archivo.type,
+        peso: archivo.size,
+        base64: e.target.result
+      };
+
+      if(img && fallback){
+        img.onload = () => { img.style.display = 'block'; fallback.style.display = 'none'; };
+        img.onerror = () => { img.style.display = 'none'; fallback.style.display = 'grid'; };
+        img.src = e.target.result;
+      }
+
+      const kb = Math.round(archivo.size / 1024);
+      if(estado) estado.innerHTML = '<i class="bi bi-image me-1"></i> Archivo listo para vista previa: <b>' + safeText(archivo.name) + '</b> (' + kb + ' KB).';
+      if(msg) msg.innerHTML = '<i class="bi bi-info-circle me-1"></i> Logo seleccionado en vista previa. Para guardarlo en Drive falta actualizar Apps Script en el siguiente paso.';
+    };
+
+    reader.onerror = function(){
+      window.auroLogoArchivoCentroPendiente = null;
+      if(estado) estado.innerHTML = '<span class="text-danger fw-bold">No se pudo leer el archivo seleccionado.</span>';
+      actualizarPreviewLogoCentro();
+    };
+
+    reader.readAsDataURL(archivo);
+  }
+
   async function cargarConfiguracionCentro(){
     const msg = document.getElementById('centroMsg');
     try{
@@ -50,6 +112,12 @@ function valorConfigCentro(clave, valorDefault){
       document.getElementById('cfgColorSecundario').value = valorConfigCentro('color_secundario', '#c23b83');
       document.getElementById('cfgModoSistema').value = valorConfigCentro('modo_sistema', 'DEMO');
       actualizarPreviewLogoCentro();
+
+      const archivoInput = document.getElementById('cfgLogoArchivo');
+      const archivoEstado = document.getElementById('cfgLogoArchivoEstado');
+      if(archivoInput) archivoInput.value = '';
+      if(archivoEstado) archivoEstado.innerHTML = 'Sin archivo seleccionado.';
+      window.auroLogoArchivoCentroPendiente = null;
 
       if(msg) msg.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Datos institucionales cargados desde la hoja <b>configuracion</b>. Colores y modo sistema están bloqueados por seguridad.';
     }catch(e){
@@ -69,6 +137,10 @@ function valorConfigCentro(clave, valorDefault){
       direccion_clinica: document.getElementById('cfgDireccionClinica').value.trim(),
       logo_url: document.getElementById('cfgLogoUrl').value.trim()
     };
+
+    if(window.auroLogoArchivoCentroPendiente && !datosSeguros.logo_url){
+      if(msg) msg.innerHTML = '<i class="bi bi-info-circle me-1"></i> El logo desde archivo está en vista previa, pero aún no se puede guardar en Drive hasta actualizar Apps Script. Pegue una Logo URL o continúe guardando los demás datos.';
+    }
 
     if(!datosSeguros.nombre_clinica){
       alert('Ingrese el nombre del centro médico.');
