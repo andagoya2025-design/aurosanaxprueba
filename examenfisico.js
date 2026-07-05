@@ -1,3 +1,4 @@
+/* AUROSANAX VERSION PUBLICADA CORREGIDA - DETALLE SISTEMAS REGIONALES DIAGNOSTICOS */
 /* ==========================================================
    AUROSANAX - examenfisico.js
    Versión corregida: evita repetición de 'Otros hallazgos' y regiones no valoradas
