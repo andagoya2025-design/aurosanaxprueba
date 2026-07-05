@@ -633,6 +633,16 @@
             <input id="cfgDireccionClinica" class="form-control" placeholder="Dirección del consultorio">
           </div>
           <div class="col-md-8">
+            <label class="form-label fw-bold">Subir logo desde archivo</label>
+            <input id="cfgLogoArchivo" type="file" class="form-control" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="procesarLogoArchivoCentro(event)">
+            <div class="text-muted small mt-1">Puede seleccionar un logo desde computadora o celular. En esta fase se muestra vista previa; el guardado real en Drive se activará al actualizar Apps Script.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Estado del archivo</label>
+            <div id="cfgLogoArchivoEstado" class="notice" style="min-height:44px;padding:10px 12px;font-size:13px">Sin archivo seleccionado.</div>
+          </div>
+
+          <div class="col-md-8">
             <label class="form-label fw-bold">Logo URL</label>
             <input id="cfgLogoUrl" class="form-control" placeholder="Pegue aquí el enlace público del logo en Drive" oninput="actualizarPreviewLogoCentro()">
             <div class="text-muted small mt-1">Recomendado: PNG transparente 600 × 600 px, compartido como “cualquier persona con el enlace puede ver”.</div>
@@ -662,7 +672,7 @@
           </div>
 
           <div class="col-12">
-            <div class="notice"><b>Modo seguro:</b> solo se guardan nombre, WhatsApp, correo, dirección y logo URL. Colores y modo del sistema quedan bloqueados para no afectar el diseño premium ni el ERP global.</div>
+            <div class="notice"><b>Modo seguro:</b> por ahora se guardan nombre, WhatsApp, correo, dirección y logo URL. La subida desde archivo queda preparada con vista previa; el guardado real en Drive se activará al actualizar Apps Script. Colores y modo del sistema siguen bloqueados.</div>
           </div>
         </div>
       </div>
