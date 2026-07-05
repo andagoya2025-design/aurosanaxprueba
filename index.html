@@ -2435,7 +2435,35 @@
 
 <script>
 const MODO_LAB = true;
-const API_URL = 'https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec'; // AUROSANAX DEMO - Apps Script conectado
+
+/* ==========================================================
+   AUROSANAX - URL ÚNICA DEL APPS SCRIPT
+   Corrección segura:
+   - Mantiene API_URL para el código antiguo.
+   - Expone window.API_URL para módulos externos como examenfisico.js.
+   - Expone window.APP_SCRIPT_URL para pruebas de consola.
+   - Evita que la consola o módulos tomen una ruta relativa de GitHub Pages.
+   ========================================================== */
+const AUROSANAX_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec';
+const API_URL = AUROSANAX_APPS_SCRIPT_URL;
+window.API_URL = AUROSANAX_APPS_SCRIPT_URL;
+window.APP_SCRIPT_URL = AUROSANAX_APPS_SCRIPT_URL;
+
+try{
+  localStorage.setItem('AUROSANAX_API_URL', AUROSANAX_APPS_SCRIPT_URL);
+}catch(e){}
+
+function auroApiUrlGlobal(){
+  return String(window.API_URL || window.APP_SCRIPT_URL || AUROSANAX_APPS_SCRIPT_URL || '').trim();
+}
+window.auroApiUrlGlobal = auroApiUrlGlobal;
+
+document.addEventListener('DOMContentLoaded', function(){
+  const input = document.getElementById('appsScriptUrl');
+  if(input && !String(input.value || '').trim()){
+    input.value = auroApiUrlGlobal();
+  }
+});
 
 let patients=[
   {nombre:'Paciente demo 1',cedula:'0900000001',telefono:'0990000001',email:'demo1@mail.com',servicio:'Ginecología',ultima:'05/06/2026',estado:'Activa',ciudad:'Guayaquil'},
@@ -2966,7 +2994,7 @@ function recopilarHemoLinfaticoExamenFisico(){
    Catálogo CIE-10 y motor de diagnóstico neutralizados en index.html.
 
    Dueño actual del CIE-10:
-   - examenfisico.js?v=20260703_examen_regional_dueno
+   - examenfisico.js?v=20260705_apiurl_fix
 
    index.html conserva la interfaz visual:
    - hcDxCodigoBuscar
