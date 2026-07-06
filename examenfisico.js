@@ -1904,14 +1904,86 @@ function limpiarExamenFisicoTemporal(){
     }
   }catch(e){}
 
+  /*
+    AUROSANAX FIX LIMPIEZA 2026-07-05
+    Nueva consulta debe quedar limpia.
+    Antes se limpiaban signos vitales, pero podían quedar checks de sistemas/regionales
+    por memoria temporal, paneles renderizados o campos fuera del barrido principal.
+  */
   auroExamenFisicoLimpiarCampos();
+
+  const selectoresChecks = [
+    '.hcSentidosCheck',
+    '.hcRespiratorioCheck',
+    '.hcCardiovascularCheck',
+    '.hcDigestivoCheck',
+    '.hcUrinarioCheck',
+    '.hcMusculoEsqueleticoCheck',
+    '.hcRegionalCheck'
+  ];
+
+  selectoresChecks.forEach(selector => {
+    document.querySelectorAll(selector).forEach(chk => {
+      chk.checked = false;
+      chk.removeAttribute('checked');
+    });
+  });
+
+  [
+    'hcSentidosNoValorado',
+    'hcRespiratorioNoValorado',
+    'hcCardiovascularNoValorado',
+    'hcDigestivoNoValorado',
+    'hcUrinarioNoValorado',
+    'hcMusculoEsqueleticoNoValorado',
+    'hcEndocrinoNoValorado',
+    'hcHemoLinfaticoNoValorado'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if(el){
+      el.checked = false;
+      el.removeAttribute('checked');
+    }
+  });
+
+  [
+    'hcSentidosObservacion',
+    'hcRespiratorioObservacion',
+    'hcCardiovascularObservacion',
+    'hcDigestivoObservacion',
+    'hcUrinarioObservacion',
+    'hcMusculoEsqueleticoObservacion',
+    'hcEndocrinoObservacion',
+    'hcHemoLinfaticoObservacion'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+
+  Object.keys(window.auroExamenFisicoRegionalConfig || {}).forEach(regionKey => {
+    const id = typeof hcRegionalInputId === 'function'
+      ? hcRegionalInputId(regionKey)
+      : 'hcRegional_' + regionKey + '_obs';
+
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+
   auroExamenFisicoAplicarDiagnosticos([]);
 
   const previo = document.getElementById('auroExamenFisicoPrevioBox');
-  if(previo) previo.style.display = 'none';
+  if(previo){
+    previo.style.display = 'none';
+    const c = document.getElementById('auroExamenFisicoPrevioContent');
+    if(c) c.innerHTML = '';
+  }
 
   const previoDx = document.getElementById('auroDiagnosticosPreviosBox');
-  if(previoDx) previoDx.style.display = 'none';
+  if(previoDx){
+    previoDx.style.display = 'none';
+    const cdx = document.getElementById('auroDiagnosticosPreviosContent');
+    if(cdx) cdx.innerHTML = '';
+  }
 
   if(typeof auroActualizarAyudaIMC === 'function'){
     auroActualizarAyudaIMC();
@@ -2393,16 +2465,27 @@ function cambiarExamenFisicoPorAtencion(idAtencion){
 
   window.examenFisicoState.atencionActual = idAtencion;
 
-  const temporal = cargarExamenFisicoTemporal(idAtencion);
-
   /*
-    Primero usa memoria temporal si existe. Luego consulta Google Sheets.
-    Si Sheets tiene registro, reemplaza el temporal por el dato persistente.
-    Si Sheets no tiene registro, el formulario queda limpio para esa atención.
+    AUROSANAX FIX CAMBIO DE CONSULTA 2026-07-05
+    Regla:
+    - Nueva consulta / nuevo id_atencion: limpiar primero.
+    - Luego consultar Sheets.
+    - Si existe examen para esa atención: cargar.
+    - Si no existe: queda limpio.
+    No se restaura caché temporal antes de consultar Sheets porque podía traer checks
+    de sistemas/regionales de una consulta anterior.
   */
+  limpiarExamenFisicoTemporal();
+
+  try{
+    if(window.examenFisicoState.cache){
+      delete window.examenFisicoState.cache[idAtencion];
+    }
+  }catch(e){}
+
   auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion);
 
-  console.log('AUROSANAX EXAMEN: atención activa sincronizada:', idAtencion, temporal ? '(temporal encontrado)' : '(sin temporal)');
+  console.log('AUROSANAX EXAMEN: atención activa sincronizada:', idAtencion, '(limpio hasta validar Sheets)');
 }
 
 function auroInstalarAutoGuardadoExamenFisicoPorAtencion(){
@@ -2471,3 +2554,4 @@ if(document.readyState === 'loading'){
 /* AUROSANAX - Confirmación de carga del módulo */
 window.auroExamenFisicoModuloCargado = true;
 console.log('AUROSANAX examenfisico.js cargado correctamente');
+/* AUROSANAX FIX APLICADO: limpieza completa sistemas/regionales por nueva consulta */
