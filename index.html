@@ -66,6 +66,25 @@
       font-weight:800;
       font-size:18px;
       box-shadow:0 10px 30px rgba(0,0,0,.18);
+      overflow:hidden;
+      position:relative;
+      flex:0 0 46px;
+    }
+
+    .brand-logo img{
+      width:100%;
+      height:100%;
+      object-fit:contain;
+      padding:5px;
+      display:none;
+      border-radius:14px;
+    }
+
+    .brand-logo .brand-logo-fallback{
+      display:grid;
+      place-items:center;
+      width:100%;
+      height:100%;
     }
 
     .brand h1{
@@ -1539,7 +1558,10 @@
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-logo">A</div>
+      <div class="brand-logo" id="brandLogoBox">
+        <img id="brandLogoImg" alt="Logo AUROSANAX">
+        <span id="brandLogoFallback" class="brand-logo-fallback">A</span>
+      </div>
       <div>
         <h1>AUROSANAX</h1>
         <small>Clinical ERP DEMO</small>
@@ -2457,6 +2479,69 @@ function auroApiUrlGlobal(){
   return String(window.API_URL || window.APP_SCRIPT_URL || AUROSANAX_APPS_SCRIPT_URL || '').trim();
 }
 window.auroApiUrlGlobal = auroApiUrlGlobal;
+
+/* ==========================================================
+   AUROSANAX - LOGO INSTITUCIONAL EN MENÚ LATERAL
+   Cambio seguro:
+   - Lee logo_url desde configuracion.
+   - Mantiene el contenedor original 46x46 px.
+   - Si el logo no existe o no carga, conserva la letra A.
+   - No modifica navegación, módulos clínicos, pacientes, agenda ni recetas.
+   ========================================================== */
+function auroNormalizarDriveImageUrl(url){
+  const raw = String(url || '').trim();
+  if(!raw) return '';
+
+  let m = raw.match(/\/file\/d\/([^/]+)/);
+  if(m && m[1]) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(m[1]);
+
+  m = raw.match(/[?&]id=([^&]+)/);
+  if(m && m[1]) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(m[1]);
+
+  return raw;
+}
+
+function auroAplicarLogoMenuLateral(urlLogo){
+  const img = document.getElementById('brandLogoImg');
+  const fallback = document.getElementById('brandLogoFallback');
+  if(!img || !fallback) return;
+
+  const url = auroNormalizarDriveImageUrl(urlLogo);
+  if(!url){
+    img.style.display = 'none';
+    img.removeAttribute('src');
+    fallback.style.display = 'grid';
+    return;
+  }
+
+  img.onload = function(){
+    img.style.display = 'block';
+    fallback.style.display = 'none';
+  };
+  img.onerror = function(){
+    img.style.display = 'none';
+    img.removeAttribute('src');
+    fallback.style.display = 'grid';
+  };
+  img.src = url;
+}
+
+async function auroCargarLogoMenuLateral(){
+  try{
+    const url = auroApiUrlGlobal() + '?accion=obtenerConfiguracion&t=' + Date.now();
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const cfg = await res.json();
+    if(cfg && typeof cfg === 'object' && !Array.isArray(cfg)){
+      auroAplicarLogoMenuLateral(cfg.logo_url || cfg.logo_drive_url || '');
+    }
+  }catch(error){
+    console.warn('No se pudo cargar el logo institucional del menú lateral.', error);
+    auroAplicarLogoMenuLateral('');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', auroCargarLogoMenuLateral);
 
 document.addEventListener('DOMContentLoaded', function(){
   const input = document.getElementById('appsScriptUrl');
