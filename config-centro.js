@@ -67,100 +67,6 @@
     return [raw];
   }
 
-
-  /* ==========================================================
-     AUROSANAX - LOGO EN MENÚ LATERAL (AÑADIDO SEGURO)
-     - No modifica médicos, servicios, horarios ni otros módulos.
-     - Solo cambia el contenido visual de .brand-logo si existe logo_url.
-     - Si no hay logo o falla la carga, conserva la letra A.
-     - Usa caché inteligente con logo_actualizado_en cuando existe.
-     ========================================================== */
-  function obtenerVersionLogoCentro(){
-    return valorConfigCentro('logo_actualizado_en', '') || valorConfigCentro('logo_file_id', '') || '';
-  }
-
-  function agregarVersionLogoCentro(url, version){
-    const raw = String(url || '').trim();
-    const ver = String(version || '').trim();
-    if(!raw || !ver) return raw;
-    return raw + (raw.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(ver);
-  }
-
-  function obtenerUrlsLogoSidebarCentro(url, version){
-    const raw = String(url || '').trim();
-    if(!raw) return [];
-
-    const id = extraerDriveFileIdCentro(raw);
-    let urls = [];
-
-    if(id){
-      urls = [
-        'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w400',
-        'https://drive.usercontent.google.com/download?id=' + encodeURIComponent(id) + '&export=view',
-        'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id),
-        raw
-      ];
-    }else{
-      urls = [raw];
-    }
-
-    return Array.from(new Set(urls.filter(Boolean))).map(u => agregarVersionLogoCentro(u, version));
-  }
-
-  function restaurarLogoSidebarCentro(){
-    const contenedor = document.querySelector('.brand-logo');
-    if(!contenedor) return;
-
-    contenedor.innerHTML = 'A';
-    contenedor.style.overflow = '';
-  }
-
-  function aplicarLogoSidebarCentro(urlLogo, version){
-    const contenedor = document.querySelector('.brand-logo');
-    if(!contenedor) return;
-
-    const urls = obtenerUrlsLogoSidebarCentro(urlLogo, version);
-    if(!urls.length){
-      restaurarLogoSidebarCentro();
-      return;
-    }
-
-    contenedor.style.overflow = 'hidden';
-    contenedor.innerHTML = '';
-
-    const img = document.createElement('img');
-    img.alt = 'Logo AUROSANAX';
-    img.style.width = '100%';
-    img.style.height = '100%';
-    img.style.objectFit = 'contain';
-    img.style.display = 'block';
-    img.style.background = '#fff';
-    img.style.borderRadius = 'inherit';
-
-    let intento = 0;
-
-    img.onload = function(){
-      contenedor.innerHTML = '';
-      contenedor.appendChild(img);
-    };
-
-    img.onerror = function(){
-      intento++;
-      if(intento < urls.length){
-        img.src = urls[intento];
-        return;
-      }
-      restaurarLogoSidebarCentro();
-    };
-
-    contenedor.appendChild(img);
-    img.src = urls[intento];
-  }
-
-  window.actualizarLogoSidebarCentro = function(urlLogo, version){
-    aplicarLogoSidebarCentro(urlLogo, version);
-  };
-
   function obtenerInputLogoArchivoCentro(){
     const ids = [
       'cfgLogoFile',
@@ -323,7 +229,6 @@
     if(inputUrl){
       inputUrl.value = urlLogo;
       actualizarPreviewLogoCentro();
-      aplicarLogoSidebarCentro(urlLogo, Date.now());
     }
 
     setEstadoArchivoLogoCentro('<i class="bi bi-check2-circle me-1"></i> Logo subido correctamente a Google Drive.');
@@ -381,7 +286,6 @@
       document.getElementById('cfgColorSecundario').value = valorConfigCentro('color_secundario', '#c23b83');
       document.getElementById('cfgModoSistema').value = valorConfigCentro('modo_sistema', 'DEMO');
       actualizarPreviewLogoCentro();
-      aplicarLogoSidebarCentro(document.getElementById('cfgLogoUrl').value, obtenerVersionLogoCentro());
       inicializarLogoUploaderCentro();
 
       if(msg) msg.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Datos institucionales cargados desde la hoja <b>configuracion</b>. Colores y modo sistema están bloqueados por seguridad.';
