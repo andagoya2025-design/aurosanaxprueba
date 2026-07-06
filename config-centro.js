@@ -26,17 +26,45 @@
       });
   }
 
-  function normalizarDriveImageUrl(url){
+  function extraerDriveFileIdCentro(url){
     const raw = String(url || '').trim();
     if(!raw) return '';
 
     let m = raw.match(/\/file\/d\/([^/]+)/);
-    if(m && m[1]) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(m[1]);
+    if(m && m[1]) return decodeURIComponent(m[1]);
 
     m = raw.match(/[?&]id=([^&]+)/);
-    if(m && m[1]) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(m[1]);
+    if(m && m[1]) return decodeURIComponent(m[1]);
+
+    if(/^[a-zA-Z0-9_-]{20,}$/.test(raw)) return raw;
+
+    return '';
+  }
+
+  function normalizarDriveImageUrl(url){
+    const raw = String(url || '').trim();
+    if(!raw) return '';
+
+    const id = extraerDriveFileIdCentro(raw);
+    if(id) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w400';
 
     return raw;
+  }
+
+  function obtenerUrlsPreviewLogoCentro(url){
+    const raw = String(url || '').trim();
+    if(!raw) return [];
+
+    const id = extraerDriveFileIdCentro(raw);
+    if(id){
+      return [
+        'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w400',
+        'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id),
+        raw
+      ];
+    }
+
+    return [raw];
   }
 
   function obtenerInputLogoArchivoCentro(){
@@ -83,17 +111,31 @@
     const fallback = document.getElementById('cfgLogoFallback');
     if(!input || !img || !fallback) return;
 
-    const url = normalizarDriveImageUrl(input.value);
-    if(!url){
+    const urls = obtenerUrlsPreviewLogoCentro(input.value);
+    if(!urls.length){
       img.style.display = 'none';
       fallback.style.display = 'grid';
       img.removeAttribute('src');
       return;
     }
 
-    img.onload = () => { img.style.display = 'block'; fallback.style.display = 'none'; };
-    img.onerror = () => { img.style.display = 'none'; fallback.style.display = 'grid'; };
-    img.src = url;
+    let intento = 0;
+    const cargar = () => {
+      const url = urls[intento];
+      img.onload = () => { img.style.display = 'block'; fallback.style.display = 'none'; };
+      img.onerror = () => {
+        intento++;
+        if(intento < urls.length){
+          cargar();
+          return;
+        }
+        img.style.display = 'none';
+        fallback.style.display = 'grid';
+      };
+      img.src = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+    };
+
+    cargar();
   }
 
   function previsualizarArchivoLogoCentro(file){
@@ -237,7 +279,9 @@
       document.getElementById('cfgWhatsappClinica').value = valorConfigCentro('whatsapp_clinica', '');
       document.getElementById('cfgEmailClinica').value = valorConfigCentro('email_clinica', '');
       document.getElementById('cfgDireccionClinica').value = valorConfigCentro('direccion_clinica', '');
-      document.getElementById('cfgLogoUrl').value = valorConfigCentro('logo_url', '');
+      const logoUrlGuardado = valorConfigCentro('logo_url', '');
+      const logoFileIdGuardado = valorConfigCentro('logo_file_id', '');
+      document.getElementById('cfgLogoUrl').value = logoUrlGuardado || (logoFileIdGuardado ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(logoFileIdGuardado) + '&sz=w400' : '');
       document.getElementById('cfgColorPrincipal').value = valorConfigCentro('color_principal', '#8b1e5a');
       document.getElementById('cfgColorSecundario').value = valorConfigCentro('color_secundario', '#c23b83');
       document.getElementById('cfgModoSistema').value = valorConfigCentro('modo_sistema', 'DEMO');
