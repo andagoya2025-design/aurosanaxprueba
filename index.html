@@ -66,25 +66,6 @@
       font-weight:800;
       font-size:18px;
       box-shadow:0 10px 30px rgba(0,0,0,.18);
-      overflow:hidden;
-      position:relative;
-      flex:0 0 46px;
-    }
-
-    .brand-logo img{
-      width:100%;
-      height:100%;
-      object-fit:contain;
-      display:block;
-      padding:4px;
-      background:white;
-    }
-
-    .brand-logo span{
-      display:grid;
-      place-items:center;
-      width:100%;
-      height:100%;
     }
 
     .brand h1{
@@ -1558,7 +1539,7 @@
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-logo" id="auroBrandLogo" aria-label="Logo AUROSANAX"><span id="auroBrandLogoFallback">A</span></div>
+      <div class="brand-logo">A</div>
       <div>
         <h1>AUROSANAX</h1>
         <small>Clinical ERP DEMO</small>
@@ -2478,132 +2459,142 @@ function auroApiUrlGlobal(){
 window.auroApiUrlGlobal = auroApiUrlGlobal;
 
 /* ==========================================================
-   AUROSANAX - Logo institucional en menú lateral
-   Corrección segura:
-   - Lee obtenerConfiguracion una sola vez al iniciar.
-   - Usa logo_url y logo_actualizado_en si existen.
-   - Convierte enlaces de Google Drive a formatos válidos para <img>.
+   AUROSANAX - LOGO INSTITUCIONAL EN MENÚ LATERAL
+   Corrección segura y aislada:
+   - Solo lee la hoja configuracion mediante obtenerConfiguracion.
+   - Solo actualiza .brand-logo.
+   - No toca pacientes, agenda, historia clínica, examen físico,
+     recetas, plan clínico, atenciones ni responsive.
    - Si no hay logo o falla la imagen, conserva la letra A.
-   - No toca navegación, pacientes, agenda, historia, recetas ni responsive.
    ========================================================== */
-function auroExtraerDriveFileIdERP(url){
+function auroExtraerDriveFileIdLogo(url){
   const raw = String(url || '').trim();
   if(!raw) return '';
 
-  let m = raw.match(/\/file\/d\/([^/?#]+)/);
+  let m = raw.match(/\/file\/d\/([^/]+)/);
   if(m && m[1]) return decodeURIComponent(m[1]);
 
-  m = raw.match(/[?&]id=([^&#]+)/);
+  m = raw.match(/[?&]id=([^&]+)/);
   if(m && m[1]) return decodeURIComponent(m[1]);
 
-  m = raw.match(/\/d\/([^/?#]+)/);
-  if(m && m[1]) return decodeURIComponent(m[1]);
+  if(/^[a-zA-Z0-9_-]{20,}$/.test(raw)) return raw;
 
   return '';
 }
 
-function auroAgregarVersionLogoERP(url, version){
-  const raw = String(url || '').trim();
-  const v = String(version || '').trim();
-  if(!raw || !v) return raw;
-  return raw + (raw.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(v);
+function auroVersionLogoConfig(config){
+  const c = config || {};
+  return String(
+    c.logo_actualizado_en ||
+    c.logo_updated_at ||
+    c.updated_at ||
+    c.logo_file_id ||
+    c.logo_url ||
+    ''
+  ).trim();
 }
 
-function auroCandidatosLogoERP(url, version){
-  const raw = String(url || '').trim();
-  const id = auroExtraerDriveFileIdERP(raw);
-  const lista = [];
-
-  function add(u){
-    u = String(u || '').trim();
-    if(u && !lista.includes(u)) lista.push(auroAgregarVersionLogoERP(u, version));
-  }
+function auroCrearUrlsLogoSidebar(logoUrl, logoFileId){
+  const raw = String(logoUrl || '').trim();
+  const id = String(logoFileId || '').trim() || auroExtraerDriveFileIdLogo(raw);
 
   if(id){
-    add('https://drive.usercontent.google.com/download?id=' + encodeURIComponent(id) + '&export=view');
-    add('https://lh3.googleusercontent.com/d/' + encodeURIComponent(id));
-    add('https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id));
+    return [
+      'https://drive.usercontent.google.com/download?id=' + encodeURIComponent(id) + '&export=view',
+      'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w400',
+      'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id)
+    ];
   }
 
-  add(raw);
-  return lista;
+  return raw ? [raw] : [];
 }
 
-function auroProbarImagenLogoERP(url){
-  return new Promise((resolve, reject) => {
+function auroPintarLogoSidebar(urls, version){
+  const logo = document.querySelector('.brand-logo');
+  if(!logo) return;
+
+  const lista = Array.isArray(urls) ? urls.filter(Boolean) : [];
+
+  if(!lista.length){
+    logo.innerHTML = 'A';
+    logo.removeAttribute('data-logo-url');
+    logo.removeAttribute('title');
+    return;
+  }
+
+  let intento = 0;
+  const cargar = () => {
+    const base = lista[intento];
+    const sep = base.includes('?') ? '&' : '?';
+    const src = version ? (base + sep + 'v=' + encodeURIComponent(version)) : base;
+
     const img = new Image();
-    img.onload = () => resolve(url);
-    img.onerror = () => reject(new Error('No cargó imagen: ' + url));
-    img.src = url;
-  });
+    img.alt = 'AUROSANAX';
+    img.decoding = 'async';
+    img.loading = 'eager';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'contain';
+    img.style.display = 'block';
+    img.style.borderRadius = '14px';
+    img.style.background = '#fff';
+
+    img.onload = () => {
+      logo.innerHTML = '';
+      logo.appendChild(img);
+      logo.dataset.logoUrl = src;
+      logo.title = 'AUROSANAX';
+    };
+
+    img.onerror = () => {
+      intento++;
+      if(intento < lista.length){
+        cargar();
+      }else{
+        logo.innerHTML = 'A';
+        logo.removeAttribute('data-logo-url');
+        logo.title = 'Logo institucional no disponible';
+      }
+    };
+
+    img.src = src;
+  };
+
+  cargar();
 }
 
-function auroMostrarLogoSidebarERP(url){
-  const box = document.querySelector('.brand-logo');
-  if(!box) return;
-
-  const safeUrl = String(url || '').trim();
-  if(!safeUrl){
-    box.innerHTML = '<span id="auroBrandLogoFallback">A</span>';
-    return;
-  }
-
-  box.innerHTML = '<img src="' + safeUrl.replace(/"/g, '&quot;') + '" alt="AUROSANAX" loading="eager" decoding="async" onerror="this.parentNode.innerHTML=\'<span id=&quot;auroBrandLogoFallback&quot;>A</span>\';">';
-}
-
-async function auroAplicarLogoSidebarDesdeUrlERP(logoUrl, version){
-  const box = document.querySelector('.brand-logo');
-  if(!box) return;
-
-  const candidatos = auroCandidatosLogoERP(logoUrl, version);
-  if(!candidatos.length){
-    auroMostrarLogoSidebarERP('');
-    return;
-  }
-
-  for(const candidato of candidatos){
-    try{
-      const urlOk = await auroProbarImagenLogoERP(candidato);
-      auroMostrarLogoSidebarERP(urlOk);
-      try{
-        localStorage.setItem('AUROSANAX_LOGO_SIDEBAR_URL', urlOk);
-        localStorage.setItem('AUROSANAX_LOGO_SIDEBAR_VERSION', String(version || ''));
-      }catch(e){}
+async function auroCargarLogoInstitucionalSidebar(){
+  try{
+    const api = typeof auroApiUrlGlobal === 'function' ? auroApiUrlGlobal() : String(window.API_URL || window.APP_SCRIPT_URL || '').trim();
+    if(!api){
+      auroPintarLogoSidebar([], '');
       return;
-    }catch(e){}
-  }
+    }
 
-  auroMostrarLogoSidebarERP('');
-}
+    const res = await fetch(api + '?accion=obtenerConfiguracion&t=' + Date.now());
+    if(!res.ok) throw new Error('HTTP ' + res.status);
 
-async function cargarLogoInstitucionalSidebarERP(){
-  try{
-    const cacheLogo = localStorage.getItem('AUROSANAX_LOGO_SIDEBAR_URL') || '';
-    if(cacheLogo) auroMostrarLogoSidebarERP(cacheLogo);
-  }catch(e){}
+    const config = await res.json();
+    if(!config || typeof config !== 'object' || Array.isArray(config)){
+      auroPintarLogoSidebar([], '');
+      return;
+    }
 
-  try{
-    const api = auroApiUrlGlobal();
-    if(!api) return;
+    const logoUrl = String(config.logo_url || config.logo_drive_url || '').trim();
+    const logoFileId = String(config.logo_file_id || '').trim();
+    const version = auroVersionLogoConfig(config);
+    const urls = auroCrearUrlsLogoSidebar(logoUrl, logoFileId);
 
-    const res = await fetch(api + '?accion=obtenerConfiguracion&t=' + Date.now(), { cache:'no-store' });
-    const data = await res.json();
-
-    const cfg = (data && data.datos) ? data.datos : ((data && data.data) ? data.data : data);
-    const logoUrl = String((cfg && (cfg.logo_url || cfg.logoUrl || cfg.logo_drive_url)) || '').trim();
-    const version = String((cfg && (cfg.logo_actualizado_en || cfg.logoActualizadoEn || cfg.actualizado_en)) || '').trim();
-
-    await auroAplicarLogoSidebarDesdeUrlERP(logoUrl, version);
+    auroPintarLogoSidebar(urls, version);
   }catch(error){
-    console.warn('AUROSANAX: no se pudo cargar logo institucional del menú lateral.', error);
+    console.warn('AUROSANAX: no se pudo cargar logo institucional del sidebar.', error);
+    auroPintarLogoSidebar([], '');
   }
 }
+window.auroCargarLogoInstitucionalSidebar = auroCargarLogoInstitucionalSidebar;
 
-window.cargarLogoInstitucionalSidebarERP = cargarLogoInstitucionalSidebarERP;
+document.addEventListener('DOMContentLoaded', auroCargarLogoInstitucionalSidebar);
 
-document.addEventListener('DOMContentLoaded', function(){
-  cargarLogoInstitucionalSidebarERP();
-});
 
 document.addEventListener('DOMContentLoaded', function(){
   const input = document.getElementById('appsScriptUrl');
