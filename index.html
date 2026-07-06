@@ -81,10 +81,10 @@
     }
 
     .brand-logo .brand-logo-fallback{
-      display:grid;
-      place-items:center;
       width:100%;
       height:100%;
+      display:grid;
+      place-items:center;
     }
 
     .brand h1{
@@ -1558,8 +1558,8 @@
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-logo" id="brandLogoBox">
-        <img id="brandLogoImg" alt="Logo AUROSANAX">
+      <div class="brand-logo" id="brandLogoBox" aria-label="Logo AUROSANAX">
+        <img id="brandLogoImg" alt="Logo AUROSANAX" loading="eager" decoding="async">
         <span id="brandLogoFallback" class="brand-logo-fallback">A</span>
       </div>
       <div>
@@ -2482,11 +2482,12 @@ window.auroApiUrlGlobal = auroApiUrlGlobal;
 
 /* ==========================================================
    AUROSANAX - LOGO INSTITUCIONAL EN MENÚ LATERAL
-   Cambio seguro:
-   - Lee logo_url desde configuracion.
+   Cambio seguro y localizado:
+   - Lee logo_url desde configuracion una sola vez al iniciar.
    - Mantiene el contenedor original 46x46 px.
-   - Si el logo no existe o no carga, conserva la letra A.
-   - No modifica navegación, módulos clínicos, pacientes, agenda ni recetas.
+   - Usa logo_actualizado_en como versión para evitar logo viejo en caché.
+   - Si no hay logo o falla la imagen, conserva la letra A.
+   - No modifica navegación, pacientes, agenda, historia, recetas ni módulos clínicos.
    ========================================================== */
 function auroNormalizarDriveImageUrl(url){
   const raw = String(url || '').trim();
@@ -2501,13 +2502,20 @@ function auroNormalizarDriveImageUrl(url){
   return raw;
 }
 
-function auroAplicarLogoMenuLateral(urlLogo){
+function auroUrlLogoConVersion(url, version){
+  const base = auroNormalizarDriveImageUrl(url);
+  const v = String(version || '').trim();
+  if(!base || !v) return base;
+  return base + (base.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(v);
+}
+
+function auroAplicarLogoMenuLateral(urlLogo, version){
   const img = document.getElementById('brandLogoImg');
   const fallback = document.getElementById('brandLogoFallback');
   if(!img || !fallback) return;
 
-  const url = auroNormalizarDriveImageUrl(urlLogo);
-  if(!url){
+  const urlFinal = auroUrlLogoConVersion(urlLogo, version);
+  if(!urlFinal){
     img.style.display = 'none';
     img.removeAttribute('src');
     fallback.style.display = 'grid';
@@ -2518,26 +2526,68 @@ function auroAplicarLogoMenuLateral(urlLogo){
     img.style.display = 'block';
     fallback.style.display = 'none';
   };
+
   img.onerror = function(){
     img.style.display = 'none';
     img.removeAttribute('src');
     fallback.style.display = 'grid';
   };
-  img.src = url;
+
+  img.src = urlFinal;
+}
+
+function auroLeerLogoMenuCache(){
+  try{
+    const raw = localStorage.getItem('AUROSANAX_LOGO_MENU');
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){
+    return null;
+  }
+}
+
+function auroGuardarLogoMenuCache(logoUrl, version){
+  try{
+    if(!String(logoUrl || '').trim()){
+      localStorage.removeItem('AUROSANAX_LOGO_MENU');
+      return;
+    }
+    localStorage.setItem('AUROSANAX_LOGO_MENU', JSON.stringify({
+      logo_url: logoUrl,
+      logo_actualizado_en: version || ''
+    }));
+  }catch(e){}
 }
 
 async function auroCargarLogoMenuLateral(){
+  const cache = auroLeerLogoMenuCache();
+  if(cache && cache.logo_url){
+    auroAplicarLogoMenuLateral(cache.logo_url, cache.logo_actualizado_en || '');
+  }
+
   try{
-    const url = auroApiUrlGlobal() + '?accion=obtenerConfiguracion&t=' + Date.now();
-    const res = await fetch(url);
+    const res = await fetch(auroApiUrlGlobal() + '?accion=obtenerConfiguracion&t=' + Date.now());
     if(!res.ok) throw new Error('HTTP ' + res.status);
+
     const cfg = await res.json();
-    if(cfg && typeof cfg === 'object' && !Array.isArray(cfg)){
-      auroAplicarLogoMenuLateral(cfg.logo_url || cfg.logo_drive_url || '');
+    const logoUrl = cfg && typeof cfg === 'object' && !Array.isArray(cfg)
+      ? String(cfg.logo_url || cfg.logo_drive_url || '').trim()
+      : '';
+    const version = cfg && typeof cfg === 'object' && !Array.isArray(cfg)
+      ? String(cfg.logo_actualizado_en || cfg.logo_updated_at || cfg.actualizado_en || '').trim()
+      : '';
+
+    if(logoUrl){
+      auroGuardarLogoMenuCache(logoUrl, version);
+      auroAplicarLogoMenuLateral(logoUrl, version);
+    }else{
+      auroGuardarLogoMenuCache('', '');
+      auroAplicarLogoMenuLateral('', '');
     }
   }catch(error){
-    console.warn('No se pudo cargar el logo institucional del menú lateral.', error);
-    auroAplicarLogoMenuLateral('');
+    console.warn('No se pudo actualizar el logo institucional del menú lateral.', error);
+    if(!cache || !cache.logo_url){
+      auroAplicarLogoMenuLateral('', '');
+    }
   }
 }
 
