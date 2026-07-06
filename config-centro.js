@@ -1,6 +1,29 @@
-function valorConfigCentro(clave, valorDefault){
+/* ==========================================================
+   AUROSANAX ERP DEMO - CONFIG CENTRO JS
+   Versión: 2026-07-06
+   Objetivo:
+   - Mantener carga y guardado actual de datos del centro.
+   - Conectar archivo de logo seleccionado con Apps Script.
+   - Subir logo a Google Drive mediante endpoint del scrib.gs.
+   - Guardar logo_url en configuracion.
+   - No toca pacientes, agenda, historia clínica, recetas ni módulos clínicos.
+   ========================================================== */
+
+  let logoCentroArchivoSeleccionado = null;
+
+  function valorConfigCentro(clave, valorDefault){
     const v = configuracionCentro && configuracionCentro[clave] !== undefined ? configuracionCentro[clave] : '';
     return v !== '' && v !== null && v !== undefined ? v : (valorDefault || '');
+  }
+
+  function textoSeguroCentro(valor){
+    try{
+      if(typeof safeText === 'function') return safeText(valor);
+    }catch(e){}
+    return String(valor === null || valor === undefined ? '' : valor)
+      .replace(/[&<>"']/g, function(c){
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c];
+      });
   }
 
   function normalizarDriveImageUrl(url){
@@ -14,6 +37,44 @@ function valorConfigCentro(clave, valorDefault){
     if(m && m[1]) return 'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(m[1]);
 
     return raw;
+  }
+
+  function obtenerInputLogoArchivoCentro(){
+    const ids = [
+      'cfgLogoFile',
+      'cfgLogoArchivo',
+      'cfgLogoInput',
+      'logoCentroFile',
+      'logoFile',
+      'inputLogoCentro'
+    ];
+
+    for(const id of ids){
+      const el = document.getElementById(id);
+      if(el && el.type === 'file') return el;
+    }
+
+    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    return inputs.find(el => {
+      const txt = String((el.id || '') + ' ' + (el.name || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
+      return txt.includes('logo');
+    }) || inputs[0] || null;
+  }
+
+  function setEstadoArchivoLogoCentro(html){
+    const ids = [
+      'cfgLogoFileStatus',
+      'cfgLogoArchivoEstado',
+      'cfgLogoEstado',
+      'logoCentroEstado',
+      'logoFileStatus',
+      'estadoLogoCentro'
+    ];
+
+    for(const id of ids){
+      const el = document.getElementById(id);
+      if(el){ el.innerHTML = html || ''; return; }
+    }
   }
 
   function actualizarPreviewLogoCentro(){
@@ -35,66 +96,135 @@ function valorConfigCentro(clave, valorDefault){
     img.src = url;
   }
 
-
-  function procesarLogoArchivoCentro(event){
-    const archivo = event && event.target && event.target.files ? event.target.files[0] : null;
+  function previsualizarArchivoLogoCentro(file){
     const img = document.getElementById('cfgLogoPreview');
     const fallback = document.getElementById('cfgLogoFallback');
-    const estado = document.getElementById('cfgLogoArchivoEstado');
-    const msg = document.getElementById('centroMsg');
+    if(!file || !img || !fallback) return;
 
-    window.auroLogoArchivoCentroPendiente = null;
+    const urlLocal = URL.createObjectURL(file);
+    img.onload = () => {
+      img.style.display = 'block';
+      fallback.style.display = 'none';
+      try{ URL.revokeObjectURL(urlLocal); }catch(e){}
+    };
+    img.onerror = () => {
+      img.style.display = 'none';
+      fallback.style.display = 'grid';
+      try{ URL.revokeObjectURL(urlLocal); }catch(e){}
+    };
+    img.src = urlLocal;
+  }
 
-    if(!archivo){
-      if(estado) estado.innerHTML = 'Sin archivo seleccionado.';
-      actualizarPreviewLogoCentro();
-      return;
-    }
+  function validarArchivoLogoCentro(file){
+    if(!file) return {success:false, message:'No se seleccionó archivo.'};
 
-    const tiposPermitidos = ['image/png','image/jpeg','image/webp','image/svg+xml'];
-    if(!tiposPermitidos.includes(archivo.type)){
-      if(estado) estado.innerHTML = '<span class="text-danger fw-bold">Formato no permitido. Use PNG, JPG, WEBP o SVG.</span>';
-      if(event && event.target) event.target.value = '';
-      actualizarPreviewLogoCentro();
-      return;
+    const tipo = String(file.type || '').toLowerCase();
+    const nombre = String(file.name || '').toLowerCase();
+    const esImagen = tipo.startsWith('image/') || /\.(png|jpg|jpeg|webp)$/i.test(nombre);
+
+    if(!esImagen){
+      return {success:false, message:'Seleccione una imagen válida: PNG, JPG, JPEG o WEBP.'};
     }
 
     const maxBytes = 2 * 1024 * 1024;
-    if(archivo.size > maxBytes){
-      if(estado) estado.innerHTML = '<span class="text-danger fw-bold">Archivo muy pesado. Máximo recomendado: 2 MB.</span>';
-      if(event && event.target) event.target.value = '';
-      actualizarPreviewLogoCentro();
-      return;
+    if(file.size > maxBytes){
+      return {success:false, message:'El logo es demasiado pesado. Use una imagen menor a 2 MB.'};
     }
 
-    const reader = new FileReader();
+    return {success:true};
+  }
 
-    reader.onload = function(e){
-      window.auroLogoArchivoCentroPendiente = {
-        nombre: archivo.name,
-        tipo: archivo.type,
-        peso: archivo.size,
-        base64: e.target.result
-      };
+  function leerArchivoComoDataUrlCentro(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo seleccionado.'));
+      reader.readAsDataURL(file);
+    });
+  }
 
-      if(img && fallback){
-        img.onload = () => { img.style.display = 'block'; fallback.style.display = 'none'; };
-        img.onerror = () => { img.style.display = 'none'; fallback.style.display = 'grid'; };
-        img.src = e.target.result;
+  function extraerBase64Centro(dataUrl){
+    const txt = String(dataUrl || '');
+    const idx = txt.indexOf(',');
+    return idx >= 0 ? txt.substring(idx + 1) : txt;
+  }
+
+  function obtenerUrlLogoDesdeRespuestaCentro(r){
+    r = r || {};
+    return r.logo_url || r.url_publica || r.url_visual || r.url || r.webViewLink || r.webContentLink || '';
+  }
+
+  async function subirLogoCentroSiExiste(){
+    const inputUrl = document.getElementById('cfgLogoUrl');
+    const file = logoCentroArchivoSeleccionado;
+
+    if(!file) return '';
+
+    const validacion = validarArchivoLogoCentro(file);
+    if(!validacion.success) throw new Error(validacion.message);
+
+    setEstadoArchivoLogoCentro('<i class="bi bi-arrow-clockwise me-1"></i> Subiendo logo a Google Drive...');
+
+    const dataUrl = await leerArchivoComoDataUrlCentro(file);
+    const base64 = extraerBase64Centro(dataUrl);
+
+    const r = await apiPost('subirLogoCentroDriveERP', {
+      nombre_archivo: file.name || 'logo-centro.png',
+      mime_type: file.type || 'image/png',
+      base64: base64,
+      tipo_archivo: 'logo_centro'
+    });
+
+    if(!r || !r.success){
+      throw new Error((r && r.message) || 'No se pudo subir el logo a Google Drive.');
+    }
+
+    const urlLogo = obtenerUrlLogoDesdeRespuestaCentro(r);
+    if(!urlLogo){
+      throw new Error('El servidor subió el logo, pero no devolvió una URL válida.');
+    }
+
+    if(inputUrl){
+      inputUrl.value = urlLogo;
+      actualizarPreviewLogoCentro();
+    }
+
+    setEstadoArchivoLogoCentro('<i class="bi bi-check2-circle me-1"></i> Logo subido correctamente a Google Drive.');
+
+    logoCentroArchivoSeleccionado = null;
+    const inputFile = obtenerInputLogoArchivoCentro();
+    if(inputFile) inputFile.value = '';
+
+    return urlLogo;
+  }
+
+  function inicializarLogoUploaderCentro(){
+    const inputFile = obtenerInputLogoArchivoCentro();
+    if(!inputFile || inputFile.dataset.auroLogoInit === '1') return;
+
+    inputFile.dataset.auroLogoInit = '1';
+    inputFile.addEventListener('change', function(){
+      const file = this.files && this.files.length ? this.files[0] : null;
+      logoCentroArchivoSeleccionado = file || null;
+
+      if(!file){
+        setEstadoArchivoLogoCentro('Sin archivo seleccionado.');
+        return;
       }
 
-      const kb = Math.round(archivo.size / 1024);
-      if(estado) estado.innerHTML = '<i class="bi bi-image me-1"></i> Archivo listo para vista previa: <b>' + safeText(archivo.name) + '</b> (' + kb + ' KB).';
-      if(msg) msg.innerHTML = '<i class="bi bi-info-circle me-1"></i> Logo seleccionado en vista previa. Para guardarlo en Drive falta actualizar Apps Script en el siguiente paso.';
-    };
+      const validacion = validarArchivoLogoCentro(file);
+      if(!validacion.success){
+        logoCentroArchivoSeleccionado = null;
+        setEstadoArchivoLogoCentro('<span class="text-danger fw-bold">' + textoSeguroCentro(validacion.message) + '</span>');
+        alert(validacion.message);
+        this.value = '';
+        return;
+      }
 
-    reader.onerror = function(){
-      window.auroLogoArchivoCentroPendiente = null;
-      if(estado) estado.innerHTML = '<span class="text-danger fw-bold">No se pudo leer el archivo seleccionado.</span>';
-      actualizarPreviewLogoCentro();
-    };
-
-    reader.readAsDataURL(archivo);
+      const kb = Math.round((file.size || 0) / 1024);
+      setEstadoArchivoLogoCentro('<i class="bi bi-image me-1"></i> Archivo listo: <b>' + textoSeguroCentro(file.name || 'logo') + '</b> (' + kb + ' KB). Se subirá al guardar.');
+      previsualizarArchivoLogoCentro(file);
+    });
   }
 
   async function cargarConfiguracionCentro(){
@@ -112,12 +242,7 @@ function valorConfigCentro(clave, valorDefault){
       document.getElementById('cfgColorSecundario').value = valorConfigCentro('color_secundario', '#c23b83');
       document.getElementById('cfgModoSistema').value = valorConfigCentro('modo_sistema', 'DEMO');
       actualizarPreviewLogoCentro();
-
-      const archivoInput = document.getElementById('cfgLogoArchivo');
-      const archivoEstado = document.getElementById('cfgLogoArchivoEstado');
-      if(archivoInput) archivoInput.value = '';
-      if(archivoEstado) archivoEstado.innerHTML = 'Sin archivo seleccionado.';
-      window.auroLogoArchivoCentroPendiente = null;
+      inicializarLogoUploaderCentro();
 
       if(msg) msg.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Datos institucionales cargados desde la hoja <b>configuracion</b>. Colores y modo sistema están bloqueados por seguridad.';
     }catch(e){
@@ -130,19 +255,7 @@ function valorConfigCentro(clave, valorDefault){
     const msg = document.getElementById('centroMsg');
     const btn = document.getElementById('btnGuardarCentro');
 
-    const datosSeguros = {
-      nombre_clinica: document.getElementById('cfgNombreClinica').value.trim(),
-      whatsapp_clinica: document.getElementById('cfgWhatsappClinica').value.trim(),
-      email_clinica: document.getElementById('cfgEmailClinica').value.trim(),
-      direccion_clinica: document.getElementById('cfgDireccionClinica').value.trim(),
-      logo_url: document.getElementById('cfgLogoUrl').value.trim()
-    };
-
-    if(window.auroLogoArchivoCentroPendiente && !datosSeguros.logo_url){
-      if(msg) msg.innerHTML = '<i class="bi bi-info-circle me-1"></i> El logo desde archivo está en vista previa, pero aún no se puede guardar en Drive hasta actualizar Apps Script. Pegue una Logo URL o continúe guardando los demás datos.';
-    }
-
-    if(!datosSeguros.nombre_clinica){
+    if(!document.getElementById('cfgNombreClinica').value.trim()){
       alert('Ingrese el nombre del centro médico.');
       return;
     }
@@ -155,6 +268,18 @@ function valorConfigCentro(clave, valorDefault){
     if(msg) msg.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Guardando datos institucionales...';
 
     try{
+      if(logoCentroArchivoSeleccionado){
+        await subirLogoCentroSiExiste();
+      }
+
+      const datosSeguros = {
+        nombre_clinica: document.getElementById('cfgNombreClinica').value.trim(),
+        whatsapp_clinica: document.getElementById('cfgWhatsappClinica').value.trim(),
+        email_clinica: document.getElementById('cfgEmailClinica').value.trim(),
+        direccion_clinica: document.getElementById('cfgDireccionClinica').value.trim(),
+        logo_url: document.getElementById('cfgLogoUrl').value.trim()
+      };
+
       for(const [clave, valor] of Object.entries(datosSeguros)){
         const r = await apiPost('editarConfiguracion', {clave, valor});
         if(!r.success) throw new Error(r.message || 'No se pudo guardar ' + clave);
@@ -165,7 +290,7 @@ function valorConfigCentro(clave, valorDefault){
       alert('Datos del centro guardados correctamente.');
     }catch(e){
       console.error(e);
-      if(msg) msg.innerHTML = '<span class="text-danger fw-bold">Error: ' + safeText(e.message || e) + '</span>';
+      if(msg) msg.innerHTML = '<span class="text-danger fw-bold">Error: ' + textoSeguroCentro(e.message || e) + '</span>';
       alert('Error al guardar configuración: ' + (e.message || e));
     }finally{
       if(btn){
@@ -173,4 +298,10 @@ function valorConfigCentro(clave, valorDefault){
         btn.innerHTML = old;
       }
     }
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', inicializarLogoUploaderCentro);
+  }else{
+    inicializarLogoUploaderCentro();
   }
