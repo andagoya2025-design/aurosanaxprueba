@@ -2,6 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: cie10-inteligente.js
  Módulo: Inteligencia clínica asistida por CIE-10
+ Versión corregida: 2026-07-07 alias cierre compatible
  ---------------------------------------------------------------
  OBJETIVO:
  - Conectar el diagnóstico CIE-10 seleccionado con:
@@ -643,6 +644,14 @@
   window.auroCie10InteligenteOcultar = function(){
     ocultarPanel();
   };
+
+  /* =====================================================
+     COMPATIBILIDAD ERP AUROSANAX
+     Alias requerido por pruebas e integración:
+     - Cerrar y Ocultar hacen exactamente lo mismo.
+     - No modifica Examen Físico, Plan, Recetas ni Apps Script.
+     ===================================================== */
+  window.auroCie10InteligenteCerrar = window.auroCie10InteligenteOcultar;
 
   window.auroCie10InteligenteCopiarResumen = async function(){
     const txt = textoResumenProtocolo();
