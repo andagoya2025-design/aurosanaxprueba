@@ -1,28 +1,67 @@
-/* =====================================================
-   AUROSANAX ERP - CIE10 INTELIGENTE
-   Archivo: cie10-inteligente.js
-   Versión: 1.1 corregida
-   Corrección:
-   - Expone correctamente window.auroCie10InteligenteCerrar.
-   - Mantiene búsqueda de protocolo.
-   - Mantiene panel inteligente.
-   - No modifica Examen Físico, Plan, Recetas, Pacientes ni Apps Script.
-   ===================================================== */
+/****************************************************************
+ AUROSANAX ERP DEMO
+ Archivo: cie10-inteligente.js
+ Módulo: Inteligencia clínica asistida por CIE-10
+ ---------------------------------------------------------------
+ OBJETIVO:
+ - Conectar el diagnóstico CIE-10 seleccionado con:
+   catalogo_diagnosticos
+   protocolos_clinicos
+ - Consultar Apps Script sin romper el flujo actual.
+ - Mostrar sugerencias clínicas si existe protocolo.
+ - NO aplicar automáticamente medicamentos, órdenes ni indicaciones.
+ - NO modificar Examen Físico, Plan Clínico ni Recetas por sí solo.
+ - Mantener compatibilidad: si este archivo falla o no carga,
+   Examen Físico debe seguir funcionando igual.
+
+ REQUIERE APPS SCRIPT:
+ - buscarProtocoloPorCie10
+ - listarCatalogoDiagnosticos
+ - listarProtocolosClinicos
+
+ USO ESPERADO DESDE examenfisico.js:
+ Después de agregar un diagnóstico CIE-10, llamar de forma segura:
+
+ if (typeof window.auroCie10InteligenteBuscarProtocolo === 'function') {
+   window.auroCie10InteligenteBuscarProtocolo(codigo, nombre);
+ }
+****************************************************************/
 
 (function(){
   'use strict';
 
   const MODULO = 'AUROSANAX CIE10 INTELIGENTE';
-  let protocoloActual = null;
-  let diagnosticoActual = null;
-  let panelCreado = false;
 
-  function el(id){
-    return document.getElementById(id);
+  const STATE = {
+    ultimoCodigo: '',
+    ultimoNombre: '',
+    ultimoResultado: null,
+    cargando: false
+  };
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return API_URL;
+    }catch(e){}
+
+    if(window.API_URL) return window.API_URL;
+
+    const input = document.getElementById('appsScriptUrl');
+    if(input && input.value) return input.value.trim();
+
+    return '';
   }
 
-  function safe(text){
-    return String(text ?? '')
+  function limpiarTexto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function normalizarCodigoCie10(codigo){
+    return limpiarTexto(codigo).toUpperCase();
+  }
+
+  function safeHtml(valor){
+    return String(valor || '')
       .replaceAll('&','&amp;')
       .replaceAll('<','&lt;')
       .replaceAll('>','&gt;')
@@ -30,552 +69,634 @@
       .replaceAll("'",'&#039;');
   }
 
-  function apiUrl(){
+  function parseJsonSeguro(valor, fallback){
+    if(Array.isArray(valor) || (valor && typeof valor === 'object')) return valor;
+
+    const txt = limpiarTexto(valor);
+    if(!txt) return fallback;
+
     try{
-      if(typeof API_URL !== 'undefined' && API_URL) return API_URL;
-      if(window.API_URL) return window.API_URL;
-      if(window.APP_SCRIPT_URL) return window.APP_SCRIPT_URL;
-      if(typeof window.auroApiUrlGlobal === 'function') return window.auroApiUrlGlobal();
-    }catch(e){}
-    return '';
+      return JSON.parse(txt);
+    }catch(e){
+      console.warn(MODULO + ': JSON inválido.', e, txt);
+      return fallback;
+    }
   }
 
-  async function apiGet(accion, params){
+  async function getJSON(accion, params){
     const base = apiUrl();
-    if(!base){
-      throw new Error('API_URL no está definida.');
-    }
+    if(!base) throw new Error('No se encontró API_URL para consultar Apps Script.');
 
-    const query = new URLSearchParams({ accion: accion });
+    const query = new URLSearchParams({ accion });
+
     Object.keys(params || {}).forEach(k => {
       if(params[k] !== undefined && params[k] !== null){
         query.append(k, params[k]);
       }
     });
 
-    const res = await fetch(base + '?' + query.toString());
-    const txt = await res.text();
-
-    try{
-      return JSON.parse(txt);
-    }catch(e){
-      return txt;
-    }
+    const res = await fetch(base + '?' + query.toString() + '&_=' + Date.now());
+    return await res.json();
   }
 
-  function asegurarEstilos(){
-    if(el('auroCie10InteligenteStyles')) return;
+  function obtenerContenedor(){
+    let box = document.getElementById('auroCie10InteligenteBox');
+    if(box) return box;
+
+    box = document.createElement('div');
+    box.id = 'auroCie10InteligenteBox';
+    box.className = 'auro-cie10-inteligente-box';
+    box.style.display = 'none';
+
+    const destino =
+      document.getElementById('hcDiagnosticosSeleccionadosBox') ||
+      document.getElementById('hcDiagnosticosTableBody')?.closest('.cardx') ||
+      document.getElementById('hc_diagnosticos') ||
+      document.getElementById('hc_examen') ||
+      document.querySelector('[data-module-patient="Examen Físico"]')?.parentElement;
+
+    if(destino && destino.parentNode){
+      destino.parentNode.insertBefore(box, destino.nextSibling);
+    }else{
+      const historia = document.getElementById('historia') || document.body;
+      historia.appendChild(box);
+    }
+
+    instalarEstilos();
+    return box;
+  }
+
+  function instalarEstilos(){
+    if(document.getElementById('auro-cie10-inteligente-style')) return;
 
     const style = document.createElement('style');
-    style.id = 'auroCie10InteligenteStyles';
+    style.id = 'auro-cie10-inteligente-style';
     style.textContent = `
-      .auro-cie10-panel{
-        position:fixed;
-        top:0;
-        right:0;
-        width:min(430px,92vw);
-        height:100vh;
-        background:#ffffff;
-        border-left:1px solid #f1d4e5;
-        box-shadow:-18px 0 55px rgba(15,23,42,.18);
-        z-index:9998;
-        transform:translateX(110%);
-        transition:.25s ease;
-        display:flex;
-        flex-direction:column;
-        font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      .auro-cie10-inteligente-box{
+        margin:14px 0;
+        border:1px solid #fbcfe8;
+        border-radius:20px;
+        background:linear-gradient(135deg,#ffffff,#fff7fb);
+        box-shadow:0 12px 32px rgba(139,30,90,.08);
+        overflow:hidden;
       }
-
-      .auro-cie10-panel.show{ transform:translateX(0); }
-
       .auro-cie10-head{
-        background:
-          radial-gradient(circle at top right, rgba(255,255,255,.22), transparent 30%),
-          linear-gradient(135deg,#7a174f,#c23b83);
-        color:#fff;
-        padding:18px 18px 16px;
         display:flex;
         justify-content:space-between;
-        gap:12px;
         align-items:flex-start;
+        gap:12px;
+        padding:14px 16px;
+        border-bottom:1px solid #fce7f3;
       }
-
-      .auro-cie10-head h4{
+      .auro-cie10-head h5{
         margin:0;
-        font-size:18px;
         font-weight:950;
-        line-height:1.15;
-      }
-
-      .auro-cie10-head p{
-        margin:5px 0 0;
-        font-size:12px;
-        opacity:.88;
-        font-weight:700;
-      }
-
-      .auro-cie10-close{
-        border:0;
-        background:rgba(255,255,255,.17);
-        color:#fff;
-        width:36px;
-        height:36px;
-        border-radius:12px;
-        font-size:18px;
-        font-weight:900;
-        cursor:pointer;
-      }
-
-      .auro-cie10-body{
-        padding:16px;
-        overflow:auto;
-        flex:1;
-        background:linear-gradient(180deg,#fff,#fffafd);
-      }
-
-      .auro-cie10-status{
-        border:1px solid #dbeafe;
-        background:#eff6ff;
-        color:#1d4ed8;
-        border-radius:16px;
-        padding:12px 14px;
-        font-size:13px;
-        font-weight:800;
-        margin-bottom:12px;
-      }
-
-      .auro-cie10-status.ok{
-        border-color:#bbf7d0;
-        background:#dcfce7;
-        color:#166534;
-      }
-
-      .auro-cie10-status.warn{
-        border-color:#fed7aa;
-        background:#fff7ed;
-        color:#9a3412;
-      }
-
-      .auro-cie10-status.error{
-        border-color:#fecdd3;
-        background:#fff1f2;
-        color:#be123c;
-      }
-
-      .auro-cie10-card{
-        background:#fff;
-        border:1px solid #f1d4e5;
-        border-radius:18px;
-        padding:14px;
-        margin-bottom:12px;
-        box-shadow:0 12px 28px rgba(139,30,90,.06);
-      }
-
-      .auro-cie10-card h5{
-        margin:0 0 8px;
-        font-size:14px;
         color:#8b1e5a;
-        font-weight:950;
-        text-transform:uppercase;
-        letter-spacing:.045em;
+        font-size:16px;
       }
-
-      .auro-cie10-dx{
-        font-size:15px;
-        color:#111827;
-        font-weight:900;
-        line-height:1.35;
-      }
-
-      .auro-cie10-muted{
+      .auro-cie10-head p{
+        margin:4px 0 0;
         color:#64748b;
-        font-size:12px;
+        font-size:13px;
         font-weight:700;
-        line-height:1.45;
       }
-
-      .auro-cie10-list{
+      .auro-cie10-body{
+        padding:14px 16px 16px;
+      }
+      .auro-cie10-grid{
         display:grid;
-        gap:8px;
-        margin-top:8px;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:12px;
       }
-
-      .auro-cie10-item{
-        border:1px solid #f1f5f9;
-        background:#f8fafc;
-        border-radius:14px;
-        padding:10px;
+      .auro-cie10-card{
+        border:1px solid #f1d4e5;
+        border-radius:16px;
+        background:#fff;
+        padding:12px;
+      }
+      .auro-cie10-card h6{
+        margin:0 0 8px;
+        color:#111827;
+        font-weight:950;
+        font-size:13px;
+      }
+      .auro-cie10-list{
+        margin:0;
+        padding-left:18px;
         color:#334155;
         font-size:13px;
+        font-weight:650;
+      }
+      .auro-cie10-list li{ margin-bottom:5px; }
+      .auro-cie10-note{
+        color:#64748b;
+        font-size:13px;
         font-weight:750;
-        line-height:1.4;
       }
-
-      .auro-cie10-item b{
-        color:#111827;
-        font-weight:950;
-      }
-
-      .auro-cie10-footer{
-        padding:12px 16px;
-        background:#fff;
-        border-top:1px solid #f1d4e5;
+      .auro-cie10-actions{
         display:flex;
-        gap:10px;
         justify-content:flex-end;
+        gap:8px;
+        flex-wrap:wrap;
+        margin-top:12px;
       }
-
       .auro-cie10-btn{
         border:0;
-        border-radius:14px;
-        padding:10px 13px;
+        border-radius:13px;
+        padding:9px 12px;
+        font-size:12px;
         font-weight:900;
-        font-size:13px;
         cursor:pointer;
       }
-
       .auro-cie10-btn.primary{
         background:linear-gradient(135deg,#8b1e5a,#c23b83);
         color:#fff;
-        box-shadow:0 12px 25px rgba(139,30,90,.22);
       }
-
+      .auro-cie10-btn.soft{
+        background:#fdf2f8;
+        color:#8b1e5a;
+        border:1px solid #fbcfe8;
+      }
       .auro-cie10-btn.line{
         background:#fff;
         color:#334155;
         border:1px solid #e5e7eb;
       }
-
-      .auro-cie10-btn:disabled{
-        opacity:.55;
-        cursor:not-allowed;
+      .auro-cie10-badge{
+        display:inline-block;
+        padding:4px 9px;
+        border-radius:999px;
+        background:#fdf2f8;
+        color:#8b1e5a;
+        font-size:12px;
+        font-weight:950;
       }
-
-      .auro-cie10-backdrop{
-        display:none;
-        position:fixed;
-        inset:0;
-        background:rgba(15,23,42,.32);
-        z-index:9997;
-      }
-
-      .auro-cie10-backdrop.show{ display:block; }
-
       @media(max-width:760px){
-        .auro-cie10-panel{
-          top:auto;
-          bottom:0;
-          right:0;
-          left:0;
-          width:100%;
-          height:min(82vh,720px);
-          border-left:0;
-          border-top:1px solid #f1d4e5;
-          border-radius:24px 24px 0 0;
-          transform:translateY(110%);
-          box-shadow:0 -18px 55px rgba(15,23,42,.2);
-        }
-
-        .auro-cie10-panel.show{ transform:translateY(0); }
-
-        .auro-cie10-head{
-          border-radius:24px 24px 0 0;
-          padding:16px;
-        }
-
-        .auro-cie10-head h4{ font-size:17px; }
-
-        .auro-cie10-footer{
-          position:sticky;
-          bottom:0;
-          display:grid;
-          grid-template-columns:1fr;
-        }
-
-        .auro-cie10-btn{
-          width:100%;
-          min-height:44px;
-        }
+        .auro-cie10-grid{grid-template-columns:1fr;}
+        .auro-cie10-head{display:block;}
+        .auro-cie10-actions{display:grid;grid-template-columns:1fr;}
+        .auro-cie10-btn{width:100%;}
       }
     `;
 
     document.head.appendChild(style);
   }
 
-  function cerrarPanel(){
-    const panel = el('auroCie10Panel');
-    const backdrop = el('auroCie10Backdrop');
-
-    if(panel) panel.classList.remove('show');
-    if(backdrop) backdrop.classList.remove('show');
+  function ocultarPanel(){
+    const box = document.getElementById('auroCie10InteligenteBox');
+    if(box){
+      box.style.display = 'none';
+      box.innerHTML = '';
+    }
   }
 
-  function asegurarPanel(){
-    asegurarEstilos();
-
-    if(panelCreado && el('auroCie10Panel')) return el('auroCie10Panel');
-
-    const backdrop = document.createElement('div');
-    backdrop.id = 'auroCie10Backdrop';
-    backdrop.className = 'auro-cie10-backdrop';
-    backdrop.addEventListener('click', cerrarPanel);
-
-    const panel = document.createElement('aside');
-    panel.id = 'auroCie10Panel';
-    panel.className = 'auro-cie10-panel';
-    panel.setAttribute('aria-live','polite');
-
-    panel.innerHTML = `
+  function mostrarCargando(codigo, nombre){
+    const box = obtenerContenedor();
+    box.style.display = 'block';
+    box.innerHTML = `
       <div class="auro-cie10-head">
         <div>
-          <h4>Asistente clínico CIE-10</h4>
-          <p>Protocolos y sugerencias clínicas para apoyo médico.</p>
+          <h5><i class="bi bi-stars me-1"></i> Inteligencia clínica CIE-10</h5>
+          <p>Buscando protocolo para <b>${safeHtml(codigo)}</b> ${nombre ? '· ' + safeHtml(nombre) : ''}</p>
         </div>
-        <button type="button" class="auro-cie10-close" onclick="window.auroCie10InteligenteCerrar()">×</button>
+        <span class="auro-cie10-badge">Consultando</span>
       </div>
-      <div class="auro-cie10-body" id="auroCie10PanelBody">
-        <div class="auro-cie10-status">Seleccione un diagnóstico CIE-10 para consultar sugerencias.</div>
-      </div>
-      <div class="auro-cie10-footer">
-        <button type="button" class="auro-cie10-btn line" onclick="window.auroCie10InteligenteCerrar()">Cerrar</button>
-        <button type="button" class="auro-cie10-btn primary" id="auroCie10BtnAplicar" onclick="window.auroCie10InteligenteAplicarAlPlan()" disabled>Aplicar al Plan</button>
+      <div class="auro-cie10-body">
+        <div class="auro-cie10-note">Consultando protocolos clínicos disponibles...</div>
       </div>
     `;
-
-    document.body.appendChild(backdrop);
-    document.body.appendChild(panel);
-    panelCreado = true;
-
-    return panel;
   }
 
-  function abrirPanel(){
-    const panel = asegurarPanel();
-    const backdrop = el('auroCie10Backdrop');
-
-    requestAnimationFrame(() => {
-      panel.classList.add('show');
-      if(backdrop) backdrop.classList.add('show');
-    });
-  }
-
-  function setBody(html){
-    asegurarPanel();
-    const body = el('auroCie10PanelBody');
-    if(body) body.innerHTML = html;
-  }
-
-  function setAplicarActivo(activo){
-    const btn = el('auroCie10BtnAplicar');
-    if(btn) btn.disabled = !activo;
-  }
-
-  function parseJsonSeguro(valor){
-    if(!valor) return [];
-    if(Array.isArray(valor)) return valor;
-    if(typeof valor === 'object') return [valor];
-
-    try{
-      const parsed = JSON.parse(String(valor));
-      if(Array.isArray(parsed)) return parsed;
-      if(parsed && typeof parsed === 'object') return [parsed];
-      return [];
-    }catch(e){
-      return [{ texto: String(valor) }];
-    }
-  }
-
-  function itemTexto(item){
-    if(item === null || item === undefined) return '';
-    if(typeof item === 'string') return safe(item);
-
-    if(typeof item === 'object'){
-      const partes = [];
-
-      if(item.nombre) partes.push('<b>' + safe(item.nombre) + '</b>');
-      if(item.descripcion) partes.push(safe(item.descripcion));
-      if(item.dosis) partes.push('Dosis: ' + safe(item.dosis));
-      if(item.via) partes.push('Vía: ' + safe(item.via));
-      if(item.frecuencia) partes.push('Frecuencia: ' + safe(item.frecuencia));
-      if(item.duracion) partes.push('Duración: ' + safe(item.duracion));
-      if(item.cantidad) partes.push('Cantidad: ' + safe(item.cantidad));
-      if(item.indicacion) partes.push(safe(item.indicacion));
-      if(item.texto) partes.push(safe(item.texto));
-
-      if(partes.length) return partes.join('<br>');
-      return safe(JSON.stringify(item));
-    }
-
-    return safe(String(item));
-  }
-
-  function renderLista(titulo, lista){
-    const arr = parseJsonSeguro(lista);
-
-    if(!arr.length) return '';
-
-    return `
-      <div class="auro-cie10-card">
-        <h5>${safe(titulo)}</h5>
-        <div class="auro-cie10-list">
-          ${arr.map(item => `<div class="auro-cie10-item">${itemTexto(item)}</div>`).join('')}
+  function mostrarSinProtocolo(codigo, nombre){
+    const box = obtenerContenedor();
+    box.style.display = 'block';
+    box.innerHTML = `
+      <div class="auro-cie10-head">
+        <div>
+          <h5><i class="bi bi-info-circle me-1"></i> Sin protocolo configurado</h5>
+          <p><b>${safeHtml(codigo)}</b> ${nombre ? '· ' + safeHtml(nombre) : ''}</p>
+        </div>
+        <span class="auro-cie10-badge">Sin datos</span>
+      </div>
+      <div class="auro-cie10-body">
+        <div class="auro-cie10-note">
+          El diagnóstico fue agregado correctamente. Todavía no existe un protocolo clínico asociado en <b>protocolos_clinicos</b>.
+        </div>
+        <div class="auro-cie10-actions">
+          <button type="button" class="auro-cie10-btn line" onclick="window.auroCie10InteligenteOcultar()">Cerrar</button>
         </div>
       </div>
     `;
   }
 
-  function renderSinProtocolo(codigo, nombre){
-    setAplicarActivo(false);
+  function listaHTML(items, tipo){
+    const lista = Array.isArray(items) ? items : [];
 
-    setBody(`
-      <div class="auro-cie10-status warn">
-        No se encontró protocolo configurado para este diagnóstico.
-      </div>
+    if(!lista.length){
+      return '<div class="auro-cie10-note">Sin sugerencias configuradas.</div>';
+    }
 
-      <div class="auro-cie10-card">
-        <h5>Diagnóstico seleccionado</h5>
-        <div class="auro-cie10-dx">${safe(codigo)} · ${safe(nombre || '')}</div>
-        <div class="auro-cie10-muted">
-          El diagnóstico fue agregado normalmente al Examen Físico.
-          No se aplicó ningún cambio al Plan Clínico.
-        </div>
-      </div>
-    `);
+    return '<ul class="auro-cie10-list">' + lista.map(item => {
+      if(typeof item === 'string'){
+        return '<li>' + safeHtml(item) + '</li>';
+      }
+
+      if(tipo === 'medicamentos'){
+        const partes = [
+          item.nombre || item.medicamento || item.med,
+          item.presentacion || item.pres,
+          item.dosis,
+          item.via,
+          item.frecuencia || item.frec,
+          item.duracion || item.dur,
+          item.indicaciones || item.ind
+        ].filter(Boolean);
+        return '<li>' + safeHtml(partes.join(' - ')) + '</li>';
+      }
+
+      if(tipo === 'ordenes'){
+        const partes = [
+          item.orden || item.nombre,
+          item.categoria || item.cat,
+          item.observacion || item.obs
+        ].filter(Boolean);
+        return '<li>' + safeHtml(partes.join(' - ')) + '</li>';
+      }
+
+      const partes = Object.keys(item || {}).map(k => item[k]).filter(Boolean);
+      return '<li>' + safeHtml(partes.join(' - ')) + '</li>';
+    }).join('') + '</ul>';
   }
 
-  function renderConProtocolo(codigo, nombre, respuesta){
-    const protocolo = respuesta?.protocolo || (Array.isArray(respuesta?.protocolos) ? respuesta.protocolos[0] : null);
-    const catalogo = respuesta?.catalogo || null;
+  function normalizarProtocolo(resultado){
+    const protocolo = resultado?.protocolo || null;
+    const catalogo = resultado?.catalogo || null;
 
-    protocoloActual = protocolo || null;
-    diagnosticoActual = {
-      codigo_cie10: codigo,
-      descripcion: nombre || catalogo?.descripcion || protocolo?.nombre_protocolo || ''
+    if(!protocolo) return { catalogo, protocolo:null };
+
+    return {
+      catalogo,
+      protocolo,
+      medicamentos: parseJsonSeguro(protocolo.medicamentos_json, []),
+      ordenes: parseJsonSeguro(protocolo.ordenes_json, []),
+      indicaciones: parseJsonSeguro(protocolo.indicaciones_json, []),
+      alertas: parseJsonSeguro(protocolo.alertas_json, []),
+      controles: parseJsonSeguro(protocolo.controles_json, []),
+      criterios: parseJsonSeguro(protocolo.criterios_referencia_json, [])
     };
+  }
 
-    if(!protocoloActual){
-      renderSinProtocolo(codigo, nombre);
+  function mostrarProtocolo(codigo, nombre, resultado){
+    const data = normalizarProtocolo(resultado);
+    const p = data.protocolo;
+
+    if(!p){
+      mostrarSinProtocolo(codigo, nombre);
       return;
     }
 
-    setAplicarActivo(true);
+    const box = obtenerContenedor();
+    box.style.display = 'block';
 
-    setBody(`
-      <div class="auro-cie10-status ok">
-        Protocolo clínico encontrado. Revise antes de aplicar.
-      </div>
-
-      <div class="auro-cie10-card">
-        <h5>Diagnóstico seleccionado</h5>
-        <div class="auro-cie10-dx">${safe(codigo)} · ${safe(diagnosticoActual.descripcion)}</div>
-        <div class="auro-cie10-muted">
-          ${safe(protocolo.nombre_protocolo || 'Protocolo clínico asociado')}
-          ${protocolo.version_protocolo ? ' · Versión ' + safe(protocolo.version_protocolo) : ''}
+    box.innerHTML = `
+      <div class="auro-cie10-head">
+        <div>
+          <h5><i class="bi bi-stars me-1"></i> Protocolo clínico sugerido</h5>
+          <p>
+            <b>${safeHtml(codigo)}</b> ${nombre ? '· ' + safeHtml(nombre) : ''}
+            ${p.nombre_protocolo ? '<br><span>' + safeHtml(p.nombre_protocolo) + '</span>' : ''}
+          </p>
         </div>
+        <span class="auro-cie10-badge">${safeHtml(p.especialidad || 'Protocolo')}</span>
       </div>
 
-      ${renderLista('Medicamentos sugeridos', protocolo.medicamentos_json)}
-      ${renderLista('Órdenes sugeridas', protocolo.ordenes_json)}
-      ${renderLista('Indicaciones al paciente', protocolo.indicaciones_json)}
-      ${renderLista('Alertas clínicas', protocolo.alertas_json)}
-      ${renderLista('Controles sugeridos', protocolo.controles_json)}
-      ${renderLista('Criterios de referencia', protocolo.criterios_referencia_json)}
-
-      <div class="auro-cie10-card">
-        <h5>Nota de seguridad</h5>
-        <div class="auro-cie10-muted">
-          Estas sugerencias son apoyo clínico. El médico tratante debe revisar, modificar o descartar antes de aplicar al Plan.
+      <div class="auro-cie10-body">
+        <div class="auro-cie10-note mb-2">
+          Estas son sugerencias asistidas. El médico debe revisar, aceptar, modificar o descartar.
         </div>
-      </div>
-    `);
-  }
 
-  async function buscarProtocolo(codigo, nombre){
-    const codigoLimpio = String(codigo || '').trim();
+        <div class="auro-cie10-grid">
+          <div class="auro-cie10-card">
+            <h6><i class="bi bi-capsule me-1"></i> Medicamentos sugeridos</h6>
+            ${listaHTML(data.medicamentos, 'medicamentos')}
+          </div>
 
-    if(!codigoLimpio){
-      console.warn(MODULO, 'No se recibió código CIE-10.');
-      return null;
-    }
+          <div class="auro-cie10-card">
+            <h6><i class="bi bi-file-earmark-medical me-1"></i> Órdenes sugeridas</h6>
+            ${listaHTML(data.ordenes, 'ordenes')}
+          </div>
 
-    diagnosticoActual = {
-      codigo_cie10: codigoLimpio,
-      descripcion: nombre || ''
-    };
-    protocoloActual = null;
+          <div class="auro-cie10-card">
+            <h6><i class="bi bi-clipboard-check me-1"></i> Indicaciones</h6>
+            ${listaHTML(data.indicaciones, 'indicaciones')}
+          </div>
 
-    abrirPanel();
-    setAplicarActivo(false);
-
-    setBody(`
-      <div class="auro-cie10-status">
-        Consultando protocolo clínico para <b>${safe(codigoLimpio)}</b>...
-      </div>
-    `);
-
-    try{
-      const respuesta = await apiGet('buscarProtocoloPorCie10', {
-        codigo_cie10: codigoLimpio
-      });
-
-      if(!respuesta || respuesta.success === false){
-        throw new Error(respuesta?.message || 'No se pudo consultar el protocolo.');
-      }
-
-      if(!respuesta.encontrado){
-        renderSinProtocolo(codigoLimpio, nombre);
-        return respuesta;
-      }
-
-      renderConProtocolo(codigoLimpio, nombre, respuesta);
-      return respuesta;
-
-    }catch(error){
-      console.error(MODULO, error);
-      setAplicarActivo(false);
-
-      setBody(`
-        <div class="auro-cie10-status error">
-          No se pudo consultar el protocolo CIE-10.
-        </div>
-        <div class="auro-cie10-card">
-          <h5>Diagnóstico seleccionado</h5>
-          <div class="auro-cie10-dx">${safe(codigoLimpio)} · ${safe(nombre || '')}</div>
-          <div class="auro-cie10-muted">
-            El diagnóstico fue agregado normalmente. El error solo afecta al asistente inteligente.
+          <div class="auro-cie10-card">
+            <h6><i class="bi bi-exclamation-triangle me-1"></i> Alertas / controles</h6>
+            ${listaHTML([].concat(data.alertas || [], data.controles || [], data.criterios || []), 'alertas')}
           </div>
         </div>
-      `);
+
+        <div class="auro-cie10-actions">
+          <button type="button" class="auro-cie10-btn line" onclick="window.auroCie10InteligenteOcultar()">Cerrar</button>
+          <button type="button" class="auro-cie10-btn soft" onclick="window.auroCie10InteligenteCopiarResumen()">Copiar resumen</button>
+          <button type="button" class="auro-cie10-btn primary" onclick="window.auroCie10InteligenteAplicarAlPlan()">Aplicar al Plan</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function textoResumenProtocolo(){
+    const resultado = STATE.ultimoResultado;
+    const data = normalizarProtocolo(resultado);
+
+    if(!data.protocolo) return '';
+
+    const partes = [];
+
+    partes.push('Protocolo sugerido para ' + STATE.ultimoCodigo + (STATE.ultimoNombre ? ' - ' + STATE.ultimoNombre : ''));
+
+    if(data.medicamentos?.length){
+      partes.push('Medicamentos:');
+      data.medicamentos.forEach((m,i) => {
+        if(typeof m === 'string'){
+          partes.push((i+1) + '. ' + m);
+        }else{
+          partes.push((i+1) + '. ' + [
+            m.nombre || m.medicamento || m.med,
+            m.presentacion || m.pres,
+            m.dosis,
+            m.via,
+            m.frecuencia || m.frec,
+            m.duracion || m.dur,
+            m.indicaciones || m.ind
+          ].filter(Boolean).join(' - '));
+        }
+      });
+    }
+
+    if(data.ordenes?.length){
+      partes.push('Órdenes:');
+      data.ordenes.forEach((o,i) => {
+        if(typeof o === 'string'){
+          partes.push((i+1) + '. ' + o);
+        }else{
+          partes.push((i+1) + '. ' + [
+            o.orden || o.nombre,
+            o.categoria || o.cat,
+            o.observacion || o.obs
+          ].filter(Boolean).join(' - '));
+        }
+      });
+    }
+
+    if(data.indicaciones?.length){
+      partes.push('Indicaciones:');
+      data.indicaciones.forEach((x,i) => {
+        partes.push((i+1) + '. ' + (typeof x === 'string' ? x : Object.values(x).filter(Boolean).join(' - ')));
+      });
+    }
+
+    if(data.alertas?.length){
+      partes.push('Alertas:');
+      data.alertas.forEach((x,i) => {
+        partes.push((i+1) + '. ' + (typeof x === 'string' ? x : Object.values(x).filter(Boolean).join(' - ')));
+      });
+    }
+
+    if(data.controles?.length){
+      partes.push('Controles:');
+      data.controles.forEach((x,i) => {
+        partes.push((i+1) + '. ' + (typeof x === 'string' ? x : Object.values(x).filter(Boolean).join(' - ')));
+      });
+    }
+
+    return partes.join('\n');
+  }
+
+  function aplicarMedicamentosAlPlan(medicamentos){
+    if(!Array.isArray(medicamentos) || !medicamentos.length) return 0;
+
+    window.medicamentosPlanSeleccionados = Array.isArray(window.medicamentosPlanSeleccionados)
+      ? window.medicamentosPlanSeleccionados
+      : [];
+
+    let agregados = 0;
+
+    medicamentos.forEach(m => {
+      if(typeof m === 'string'){
+        window.medicamentosPlanSeleccionados.push({
+          med: m,
+          pres: '',
+          via: '',
+          cantidad: '',
+          frec: '',
+          dur: '',
+          ind: '',
+          continuo: 'No'
+        });
+        agregados++;
+        return;
+      }
+
+      window.medicamentosPlanSeleccionados.push({
+        med: m.nombre || m.medicamento || m.med || '',
+        pres: m.presentacion || m.pres || '',
+        via: m.via || '',
+        cantidad: m.cantidad || '',
+        frec: m.frecuencia || m.frec || '',
+        dur: m.duracion || m.dur || '',
+        ind: m.indicaciones || m.ind || '',
+        continuo: m.continuo || 'No'
+      });
+      agregados++;
+    });
+
+    if(typeof window.renderMedicamentosPlanTabla === 'function'){
+      window.renderMedicamentosPlanTabla();
+    }
+
+    if(typeof window.sincronizarPlanConReceta === 'function'){
+      window.sincronizarPlanConReceta();
+    }
+
+    return agregados;
+  }
+
+  function aplicarOrdenesAlPlan(ordenes){
+    if(!Array.isArray(ordenes) || !ordenes.length) return 0;
+
+    window.ordenesMedicasPlanSeleccionadas = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
+      ? window.ordenesMedicasPlanSeleccionadas
+      : [];
+
+    let agregadas = 0;
+
+    ordenes.forEach(o => {
+      if(typeof o === 'string'){
+        window.ordenesMedicasPlanSeleccionadas.push({
+          orden: o,
+          cat: 'OTROS',
+          obs: ''
+        });
+        agregadas++;
+        return;
+      }
+
+      window.ordenesMedicasPlanSeleccionadas.push({
+        orden: o.orden || o.nombre || '',
+        cat: o.categoria || o.cat || 'OTROS',
+        obs: o.observacion || o.obs || ''
+      });
+      agregadas++;
+    });
+
+    if(typeof window.renderOrdenesMedicasTabla === 'function'){
+      window.renderOrdenesMedicasTabla();
+    }
+
+    if(typeof window.recopilarOrdenesMedicasPlan === 'function'){
+      window.recopilarOrdenesMedicasPlan();
+    }
+
+    return agregadas;
+  }
+
+  function aplicarIndicacionesAlPlan(indicaciones, controles){
+    const lista = []
+      .concat(Array.isArray(indicaciones) ? indicaciones : [])
+      .concat(Array.isArray(controles) ? controles : []);
+
+    if(!lista.length) return 0;
+
+    const textoNuevo = lista.map(x => {
+      if(typeof x === 'string') return x;
+      return Object.values(x || {}).filter(Boolean).join(' - ');
+    }).filter(Boolean).join('\n');
+
+    if(!textoNuevo) return 0;
+
+    const campo = document.getElementById('hcIndicacionesPaciente');
+    if(campo){
+      const actual = String(campo.value || '').trim();
+      campo.value = actual ? actual + '\n' + textoNuevo : textoNuevo;
+    }
+
+    return lista.length;
+  }
+
+  window.auroCie10InteligenteBuscarProtocolo = async function(codigo, nombre){
+    codigo = normalizarCodigoCie10(codigo);
+    nombre = limpiarTexto(nombre);
+
+    if(!codigo) return null;
+
+    STATE.ultimoCodigo = codigo;
+    STATE.ultimoNombre = nombre;
+    STATE.ultimoResultado = null;
+    STATE.cargando = true;
+
+    try{
+      mostrarCargando(codigo, nombre);
+
+      const resultado = await getJSON('buscarProtocoloPorCie10', {
+        codigo_cie10: codigo
+      });
+
+      STATE.ultimoResultado = resultado;
+      STATE.cargando = false;
+
+      if(!resultado || resultado.success === false){
+        mostrarSinProtocolo(codigo, nombre);
+        return resultado || null;
+      }
+
+      mostrarProtocolo(codigo, nombre, resultado);
+      return resultado;
+
+    }catch(error){
+      STATE.cargando = false;
+      console.warn(MODULO + ': no se pudo consultar protocolo.', error);
+
+      const box = obtenerContenedor();
+      box.style.display = 'block';
+      box.innerHTML = `
+        <div class="auro-cie10-head">
+          <div>
+            <h5><i class="bi bi-exclamation-triangle me-1"></i> Inteligencia CIE-10 no disponible</h5>
+            <p>El diagnóstico fue agregado, pero no se pudo consultar el protocolo.</p>
+          </div>
+          <span class="auro-cie10-badge">Sin conexión</span>
+        </div>
+        <div class="auro-cie10-body">
+          <div class="auro-cie10-note">${safeHtml(error.message || error)}</div>
+          <div class="auro-cie10-actions">
+            <button type="button" class="auro-cie10-btn line" onclick="window.auroCie10InteligenteOcultar()">Cerrar</button>
+          </div>
+        </div>
+      `;
 
       return null;
     }
-  }
+  };
 
-  function aplicarAlPlan(){
-    if(!protocoloActual){
-      alert('No hay protocolo disponible para aplicar.');
+  window.auroCie10InteligenteOcultar = function(){
+    ocultarPanel();
+  };
+
+  window.auroCie10InteligenteCopiarResumen = async function(){
+    const txt = textoResumenProtocolo();
+
+    if(!txt){
+      alert('No hay protocolo para copiar.');
       return;
     }
 
-    console.log(MODULO, 'Protocolo listo para aplicar al Plan:', {
-      diagnostico: diagnosticoActual,
-      protocolo: protocoloActual
-    });
+    try{
+      await navigator.clipboard.writeText(txt);
+      alert('Resumen del protocolo copiado.');
+    }catch(e){
+      alert(txt);
+    }
+  };
 
-    alert('Protocolo listo. La aplicación automática al Plan se activará en la siguiente etapa, con autorización.');
-  }
+  window.auroCie10InteligenteAplicarAlPlan = function(){
+    const resultado = STATE.ultimoResultado;
+    const data = normalizarProtocolo(resultado);
 
-  /* =====================================================
-     EXPORTACIÓN GLOBAL SEGURA
-     Estas funciones son las que verifica la consola.
-     ===================================================== */
-  window.auroCie10InteligenteBuscarProtocolo = buscarProtocolo;
-  window.auroCie10InteligenteCerrar = cerrarPanel;
-  window.auroCie10InteligenteAplicarAlPlan = aplicarAlPlan;
+    if(!data.protocolo){
+      alert('No hay protocolo para aplicar.');
+      return;
+    }
 
-  /* Alias defensivos por si alguna prueba antigua usa otro nombre */
-  window.auroCie10InteligenteClose = cerrarPanel;
-  window.auroCie10InteligenteAbrir = abrirPanel;
+    const confirmar = confirm(
+      'Esto agregará las sugerencias del protocolo al Plan Clínico.\n\n' +
+      'Revise y modifique antes de guardar o emitir receta.\n\n' +
+      '¿Desea continuar?'
+    );
+
+    if(!confirmar) return;
+
+    const meds = aplicarMedicamentosAlPlan(data.medicamentos);
+    const ords = aplicarOrdenesAlPlan(data.ordenes);
+    const inds = aplicarIndicacionesAlPlan(data.indicaciones, data.controles);
+
+    if(typeof window.guardarPlanTemporal === 'function'){
+      window.guardarPlanTemporal();
+    }
+
+    alert(
+      'Sugerencias aplicadas al Plan:\n' +
+      '- Medicamentos: ' + meds + '\n' +
+      '- Órdenes: ' + ords + '\n' +
+      '- Indicaciones/controles: ' + inds + '\n\n' +
+      'Debe revisar antes de guardar.'
+    );
+  };
+
+  window.auroCie10InteligenteEstado = function(){
+    return JSON.parse(JSON.stringify(STATE));
+  };
 
   console.info(MODULO + ': módulo cargado correctamente.');
 
