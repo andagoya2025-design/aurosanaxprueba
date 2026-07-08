@@ -1,6 +1,6 @@
 /****************************************************************
  AUROSANAX ERP DEMO
- Archivo: cie10-inteligente.js
+ Archivo: cie10_inteligente.js
  Módulo: Inteligencia clínica asistida por CIE-10
  Versión corregida: 2026-07-07 alias cierre compatible
  ---------------------------------------------------------------
