@@ -1,10 +1,10 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.7 premium compacto responsive
+   Versión: 1.8 premium compacto responsive final edición
    Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
-            + guardado JSON + impresión premium compacta + edición responsive + hora local Ecuador.
+            + guardado JSON + impresión premium compacta + edición responsive + hora local Ecuador + edición limpia sin duplicidades.
    Importante:
    - No modifica Plan automáticamente desde Recetas.
    - Mantiene sincronización Plan → Receta.
@@ -201,6 +201,172 @@
     return safe([med, pres].filter(Boolean).join(' '));
   }
 
+
+  function recetaTituloMedicamentoPlano(m){
+    if(m.texto) return String(m.texto || '').replace(/^\s*\d+\.\s*/, '').trim();
+
+    const med = String(m.med || '').trim();
+    const pres = String(m.pres || '').trim();
+    if(!pres) return med;
+
+    const nMed = recetaNormalizarPlano(med);
+    const nPres = recetaNormalizarPlano(pres);
+
+    // Evita duplicados como "Clotrimazol óvulo vaginal óvulo vaginal".
+    if(nMed && nPres && nMed.includes(nPres)) return med;
+
+    return [med, pres].filter(Boolean).join(' ');
+  }
+
+  function recetaMedicamentoTextoAObjeto(linea){
+    const original = String(linea || '').replace(/^\s*\d+\.\s*/, '').trim();
+    if(!original) return null;
+
+    const partes = original.split(' - ').map(x => x.trim()).filter(Boolean);
+
+    if(partes.length < 3){
+      return { texto: original };
+    }
+
+    return {
+      med: partes[0] || '',
+      pres: partes[1] || '',
+      via: partes[2] || '',
+      cantidad: /^Cantidad:/i.test(partes[3] || '') ? (partes[3] || '').replace(/^Cantidad:\s*/i, '') : '',
+      frec: /^Cantidad:/i.test(partes[3] || '') ? (partes[4] || '') : (partes[3] || ''),
+      dur: (partes.find(x => /^por\s+/i.test(x)) || '').replace(/^por\s+/i, ''),
+      ind: partes.filter(x => !/^Cantidad:/i.test(x) && !/^por\s+/i.test(x)).slice(/^Cantidad:/i.test(partes[3] || '') ? 5 : 4).join(' - '),
+      continuo: /tratamiento\s+continuo/i.test(original) ? 'Sí' : 'No'
+    };
+  }
+
+  function recetaMedicamentosListaEdicion(valor){
+    const medsPlan = Array.isArray(window.medicamentosPlanSeleccionados)
+      ? window.medicamentosPlanSeleccionados
+      : [];
+
+    if(medsPlan.length){
+      return medsPlan.map(normalizarMedicamentoRecetaObjeto).filter(x => (x.med || '').trim());
+    }
+
+    return recetaMedicamentosALista(valor).map(item => {
+      if(item && item.texto){
+        return recetaMedicamentoTextoAObjeto(item.texto) || item;
+      }
+      return normalizarMedicamentoRecetaObjeto(item || {});
+    }).filter(x => (x.texto || x.med || '').trim());
+  }
+
+  function recetaMedicamentosEdicionTexto(valor){
+    const lista = recetaMedicamentosListaEdicion(valor);
+    if(!lista.length) return String(valor || '').trim();
+
+    return lista.map((item, i) => {
+      if(item.texto){
+        return `${i + 1}. ${String(item.texto || '').replace(/^\s*\d+\.\s*/, '').trim()}`;
+      }
+
+      const m = normalizarMedicamentoRecetaObjeto(item);
+      const lineas = [];
+      lineas.push(`${i + 1}. ${recetaTituloMedicamentoPlano(m)}`.trim());
+
+      const detalle = [
+        m.via ? `Vía: ${m.via}` : '',
+        m.cantidad ? `Cantidad: ${m.cantidad}` : '',
+        m.frec ? `Frecuencia: ${m.frec}` : '',
+        m.dur ? `Duración: ${m.dur}` : '',
+        m.continuo === 'Sí' ? 'Tratamiento continuo' : ''
+      ].filter(Boolean).join(' · ');
+
+      if(detalle) lineas.push(`   ${detalle}`);
+      if(m.ind) lineas.push(`   Indicaciones: ${m.ind}`);
+
+      return lineas.join('\n');
+    }).join('\n\n');
+  }
+
+  function auroRecetaNormalizarMedicamentosEdicionSiSeguro(){
+    const campo = el('recMedicamento');
+    if(!campo) return;
+
+    const actual = campo.value || '';
+    const nuevo = recetaMedicamentosEdicionTexto(actual);
+
+    if(nuevo && nuevo !== actual){
+      campo.value = nuevo;
+    }
+  }
+
+  function auroRecetaCodigoNormalizado(codigo){
+    return String(codigo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  function auroRecetaDiagnosticoGenerico(txt){
+    const n = recetaNormalizarPlano(txt);
+    return !n || n === 'diagnostico principal' || n === 'diagnostico' || n === 'motivo de receta' || n === 'sin diagnostico';
+  }
+
+  function auroRecetaBuscarDiagnosticoActivoPorCIE(cie){
+    const cieNorm = auroRecetaCodigoNormalizado(cie);
+    if(!cieNorm) return '';
+
+    const posiblesBodies = [
+      document.getElementById('hcDxSeleccionadosBody'),
+      document.getElementById('hcDiagnosticosSeleccionadosBody'),
+      document.getElementById('hcDiagnosticosPreviosBody')
+    ].filter(Boolean);
+
+    for(const body of posiblesBodies){
+      const filas = Array.from(body.querySelectorAll('tr'));
+      for(const tr of filas){
+        const txtFila = String(tr.innerText || '').replace(/\s+/g, ' ').trim();
+        if(!txtFila) continue;
+        if(!txtFila.toUpperCase().replace(/[^A-Z0-9]/g, '').includes(cieNorm)) continue;
+
+        const celdas = Array.from(tr.querySelectorAll('td')).map(td => String(td.innerText || '').trim()).filter(Boolean);
+        const nombre = celdas.find(c => {
+          const cn = auroRecetaCodigoNormalizado(c);
+          return cn !== cieNorm && !/^principal|presuntivo|definitivo|accion|agregar$/i.test(c);
+        });
+
+        if(nombre && !auroRecetaDiagnosticoGenerico(nombre)){
+          return `${cie} - ${nombre.replace(/^\s*[-–]\s*/, '')}`;
+        }
+
+        return txtFila;
+      }
+    }
+
+    return '';
+  }
+
+  function auroRecetaObtenerDiagnosticoAutomatico(){
+    const cie = val('recCie10') || val('hcCie10Principal');
+    const dxDOM = auroRecetaBuscarDiagnosticoActivoPorCIE(cie);
+    if(dxDOM && !auroRecetaDiagnosticoGenerico(dxDOM)) return dxDOM;
+
+    const dx = val('hcDiagnosticoPrincipal') || val('hcDiagnosticoResumen') || val('hcDiagnosticoTexto') || '';
+    if(dx && !auroRecetaDiagnosticoGenerico(dx)){
+      const cieNorm = auroRecetaCodigoNormalizado(cie);
+      const dxNorm = auroRecetaCodigoNormalizado(dx);
+      return cie && !dxNorm.includes(cieNorm) ? `${cie} - ${dx}` : dx;
+    }
+
+    return cie ? `${cie} - Diagnóstico clínico relacionado` : '';
+  }
+
+  function auroRecetaAutocompletarDiagnosticoSiVacio(){
+    if(!val('recCie10') && val('hcCie10Principal')){
+      setVal('recCie10', val('hcCie10Principal'));
+    }
+
+    const actual = val('recDiagnostico');
+    if(actual && !auroRecetaDiagnosticoGenerico(actual)) return;
+
+    const dx = auroRecetaObtenerDiagnosticoAutomatico();
+    if(dx) setVal('recDiagnostico', dx);
+  }
+
   function recetaMedicamentosPremiumHTML(valor){
     const lista = recetaMedicamentosALista(valor);
     if(!lista.length){
@@ -305,9 +471,11 @@
 
     if(!actual) return '';
 
-    const lineas = actual.split(/\n+/).map(x => x.trim()).filter(Boolean);
+    const bloques = actual.split(/\n\s*\n+/).map(x => x.trim()).filter(Boolean);
+    const lineas = bloques.length > 1 ? bloques : actual.split(/\n+/).map(x => x.trim()).filter(Boolean);
+
     return JSON.stringify(lineas.map(x => ({
-      texto: x.replace(/^\s*\d+\.\s*/, '')
+      texto: x.replace(/^\s*\d+\.\s*/, '').replace(/\n\s*/g, ' · ')
     })));
   }
 
@@ -998,6 +1166,8 @@
   window.vistaPreviaReceta = function(){
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     if(!recetaEditandoId && typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+    auroRecetaAutocompletarDiagnosticoSiVacio();
+    auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     const box = asegurarVistaPreviaReceta();
     const r = window.obtenerDatosReceta();
     if(!r.paciente || !r.paciente.nombre){
@@ -1011,6 +1181,10 @@
   window.generarPDFReceta = function(recetaOpcional){
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     if(!recetaOpcional && !recetaEditandoId && typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+    if(!recetaOpcional){
+      auroRecetaAutocompletarDiagnosticoSiVacio();
+      auroRecetaNormalizarMedicamentosEdicionSiSeguro();
+    }
     const r = recetaOpcional || window.obtenerDatosReceta();
     if(!r.paciente || !r.paciente.nombre){
       alert('Seleccione primero un paciente para generar la receta.');
@@ -1025,6 +1199,8 @@
   };
 
   function recetaDesdeFormulario(){
+    auroRecetaAutocompletarDiagnosticoSiVacio();
+    auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     const r = window.obtenerDatosReceta();
     const paciente = auroRecetaCompletarPacienteParaImpresion(r);
     return {
@@ -1054,7 +1230,7 @@
     setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
     setVal('recEstado', receta.estado || 'Emitida');
     setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
-    setVal('recMedicamento', medicamentoRecetaJSONATexto(receta.medicamento || receta.medicamentos || ''));
+    setVal('recMedicamento', recetaMedicamentosEdicionTexto(receta.medicamento || receta.medicamentos || ''));
     setVal('recIndicaciones', receta.indicaciones || '');
     setVal('recRecomendaciones', receta.recomendaciones || receta.observaciones || '');
     if(!receta.id_atencion) receta.id_atencion = obtenerIdAtencionActivaSeguro();
@@ -1560,6 +1736,10 @@
   function inicializarRecetas(){
     instalarEstilosEdicionRecetaPremium();
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
+    setTimeout(function(){
+      auroRecetaAutocompletarDiagnosticoSiVacio();
+      auroRecetaNormalizarMedicamentosEdicionSiSeguro();
+    }, 250);
     agregarBotonVistaPrevia();
     asegurarVistaPreviaReceta();
     asegurarHistorialRecetas();
