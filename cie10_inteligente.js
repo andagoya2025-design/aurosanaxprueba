@@ -475,49 +475,198 @@
     return partes.join('\n');
   }
 
+  /* =====================================================
+     MOTOR SEGURO CIE10 → PLAN
+     Objetivo:
+     - Convertir medicamentos del protocolo en el MISMO formato
+       que usa el Plan al agregar medicamentos manualmente.
+     - No guardar en Sheets aquí.
+     - Solo alimentar window.medicamentosPlanSeleccionados.
+     ===================================================== */
+
   function normalizarTextoBusquedaCie10(txt){
     return String(txt || '')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g,'')
+      .replace(/\+/g,' mas ')
       .replace(/[^a-z0-9\s]/g,' ')
       .replace(/\s+/g,' ')
       .trim();
   }
 
-  function buscarMedicamentoEnCatalogoPlan(nombre){
-    const base = Array.isArray(window.MEDICAMENTOS_AUROSANAX_BASE)
+  function tokenizarTextoCie10(txt){
+    const palabrasVacias = new Set([
+      'de','del','la','el','los','las','y','o','u','en','por','para','con','sin',
+      'segun','esquema','medico','indicacion','tratamiento','automatico','sugerir',
+      'vaginal','oral','vo','topica','topico','tableta','capsula','ovulo','crema',
+      'unguento','mg','g','ml','ui','dosis'
+    ]);
+
+    return normalizarTextoBusquedaCie10(txt)
+      .split(' ')
+      .map(x => x.trim())
+      .filter(x => x && x.length > 2 && !palabrasVacias.has(x));
+  }
+
+  function extraerNombreMedicamentoProtocolo(item){
+    if(typeof item === 'string') return limpiarTexto(item);
+
+    return limpiarTexto(
+      item?.med ||
+      item?.medicamento ||
+      item?.nombre ||
+      item?.nombre_medicamento ||
+      item?.principio_activo ||
+      item?.farmaco ||
+      ''
+    );
+  }
+
+  function mapaMedicamentosFallbackCie10(){
+    /*
+      Catálogo auxiliar mínimo para medicamentos que todavía no existen
+      en MEDICAMENTOS_AUROSANAX_BASE, pero que sí pueden venir desde
+      protocolos clínicos. No reemplaza al catálogo principal del Plan.
+    */
+    return [
+      {cat:'GINECOLOGÍA', med:'Clindamicina vaginal', pres:'2% crema vaginal', via:'Vaginal', cantidad:'', frec:'cada noche', dur:'7 noches', ind:'Aplicar antes de dormir'},
+      {cat:'GINECOLOGÍA', med:'Clindamicina', pres:'300 mg cápsula', via:'VO', cantidad:'', frec:'cada 12 horas', dur:'7 días', ind:'Tomar según indicación médica'},
+      {cat:'GINECOLOGÍA', med:'Clotrimazol óvulo vaginal', pres:'óvulo vaginal', via:'Vaginal', cantidad:'', frec:'cada noche', dur:'7 noches', ind:'Aplicar antes de dormir'},
+      {cat:'GINECOLOGÍA', med:'Miconazol vaginal', pres:'óvulo/crema vaginal', via:'Vaginal', cantidad:'', frec:'cada noche', dur:'7 noches', ind:'Aplicar antes de dormir'},
+      {cat:'GINECOLOGÍA', med:'Nistatina vaginal', pres:'óvulo vaginal', via:'Vaginal', cantidad:'', frec:'cada noche', dur:'7 a 14 noches', ind:'Aplicar antes de dormir'},
+      {cat:'GINECOLOGÍA', med:'Metronidazol vaginal', pres:'gel/óvulo vaginal', via:'Vaginal', cantidad:'', frec:'cada noche', dur:'5 a 7 noches', ind:'Aplicar antes de dormir'},
+      {cat:'GINECOLOGÍA', med:'Doxiciclina', pres:'100 mg tableta/cápsula', via:'VO', cantidad:'', frec:'cada 12 horas', dur:'7 días', ind:'Tomar con abundante agua'},
+      {cat:'GINECOLOGÍA', med:'Azitromicina', pres:'500 mg tableta', via:'VO', cantidad:'', frec:'dosis única o según esquema', dur:'1 día', ind:'Tomar según indicación médica'},
+      {cat:'GINECOLOGÍA', med:'Ceftriaxona', pres:'500 mg ampolla', via:'IM', cantidad:'', frec:'dosis única', dur:'1 día', ind:'Aplicación por personal de salud'},
+      {cat:'UROLOGÍA', med:'Nitrofurantoína', pres:'100 mg cápsula', via:'VO', cantidad:'', frec:'cada 12 horas', dur:'5 días', ind:'Tomar con alimentos'},
+      {cat:'UROLOGÍA', med:'Fosfomicina trometamol', pres:'3 g sobre', via:'VO', cantidad:'', frec:'dosis única', dur:'1 día', ind:'Disolver en agua y tomar según indicación'},
+      {cat:'MEDICINA GENERAL', med:'Losartán', pres:'50 mg tableta', via:'VO', cantidad:'', frec:'cada día', dur:'según control', ind:'Controlar presión arterial'},
+      {cat:'MEDICINA GENERAL', med:'Enalapril', pres:'10 mg tableta', via:'VO', cantidad:'', frec:'cada 12 a 24 horas', dur:'según control', ind:'Controlar presión arterial'},
+      {cat:'MEDICINA GENERAL', med:'Amlodipino', pres:'5 mg tableta', via:'VO', cantidad:'', frec:'cada día', dur:'según control', ind:'Controlar presión arterial'},
+      {cat:'ENDOCRINOLOGÍA / GINECOLOGÍA', med:'Metformina', pres:'500 mg tableta', via:'VO', cantidad:'', frec:'cada 12 horas', dur:'según control', ind:'Tomar con alimentos'},
+      {cat:'GINECOLOGÍA', med:'Ácido fólico', pres:'1 mg tableta', via:'VO', cantidad:'', frec:'cada día', dur:'según indicación', ind:'Tomar diariamente'},
+      {cat:'GINECOLOGÍA', med:'Espironolactona', pres:'25 mg tableta', via:'VO', cantidad:'', frec:'cada día', dur:'según control', ind:'Usar solo bajo criterio médico'},
+      {cat:'GINECOLOGÍA', med:'Medroxiprogesterona', pres:'10 mg tableta', via:'VO', cantidad:'', frec:'cada día', dur:'según esquema', ind:'Tomar según indicación médica'},
+      {cat:'GINECOLOGÍA', med:'Letrozol', pres:'2.5 mg tableta', via:'VO', cantidad:'', frec:'cada día', dur:'según esquema reproductivo', ind:'Usar solo bajo indicación médica'},
+      {cat:'GINECOLOGÍA', med:'Ácido tranexámico', pres:'500 mg tableta', via:'VO', cantidad:'', frec:'cada 8 horas', dur:'3 a 5 días', ind:'Usar durante sangrado según indicación'},
+      {cat:'GINECOLOGÍA', med:'Anticonceptivo hormonal combinado', pres:'tableta', via:'VO', cantidad:'', frec:'cada día', dur:'según esquema', ind:'Usar según indicación médica'},
+      {cat:'GINECOLOGÍA', med:'Progestágeno', pres:'tableta', via:'VO', cantidad:'', frec:'según esquema', dur:'según indicación', ind:'Usar según criterio médico'},
+      {cat:'MEDICINA GENERAL', med:'Hierro oral', pres:'tableta/cápsula', via:'VO', cantidad:'', frec:'cada día', dur:'según control', ind:'Tomar separado de lácteos si es posible'}
+    ];
+  }
+
+  function obtenerCatalogoMedicamentosCie10(){
+    const basePlan = Array.isArray(window.MEDICAMENTOS_AUROSANAX_BASE)
       ? window.MEDICAMENTOS_AUROSANAX_BASE
       : [];
 
-    const q = normalizarTextoBusquedaCie10(nombre);
+    return basePlan.concat(mapaMedicamentosFallbackCie10());
+  }
+
+  function puntuarCoincidenciaMedicamentoCie10(query, item){
+    const qNorm = normalizarTextoBusquedaCie10(query);
+    const nombre = item?.med || item?.medicamento || item?.nombre || '';
+    const textoItem = [nombre, item?.pres, item?.via, item?.cat].filter(Boolean).join(' ');
+    const itemNorm = normalizarTextoBusquedaCie10(textoItem);
+    const nombreNorm = normalizarTextoBusquedaCie10(nombre);
+
+    if(!qNorm || !nombreNorm) return 0;
+
+    let score = 0;
+
+    if(nombreNorm === qNorm) score += 100;
+    if(nombreNorm.includes(qNorm)) score += 80;
+    if(qNorm.includes(nombreNorm)) score += 70;
+    if(itemNorm.includes(qNorm)) score += 40;
+
+    const qTokens = tokenizarTextoCie10(qNorm);
+    const nTokens = tokenizarTextoCie10(nombreNorm);
+    const itemTokens = tokenizarTextoCie10(itemNorm);
+
+    qTokens.forEach(t => {
+      if(nTokens.includes(t)) score += 20;
+      else if(itemTokens.includes(t)) score += 10;
+    });
+
+    // Preferencias clínicas simples según texto del protocolo.
+    if(qNorm.includes('vaginal') && itemNorm.includes('vaginal')) score += 20;
+    if(qNorm.includes('ovulo') && itemNorm.includes('ovulo')) score += 15;
+    if(qNorm.includes('crema') && itemNorm.includes('crema')) score += 15;
+    if(qNorm.includes('oral') && (itemNorm.includes(' vo ') || itemNorm.endsWith(' vo'))) score += 10;
+
+    return score;
+  }
+
+  function buscarMedicamentoEnCatalogoPlan(nombre){
+    const q = limpiarTexto(nombre);
     if(!q) return null;
 
-    return base.find(item => {
-      const med = normalizarTextoBusquedaCie10(item.med || item.medicamento || item.nombre || '');
-      return med && (med === q || med.includes(q) || q.includes(med));
-    }) || null;
+    const catalogo = obtenerCatalogoMedicamentosCie10();
+    let mejor = null;
+    let mejorScore = 0;
+
+    catalogo.forEach(item => {
+      const score = puntuarCoincidenciaMedicamentoCie10(q, item);
+      if(score > mejorScore){
+        mejorScore = score;
+        mejor = item;
+      }
+    });
+
+    // Umbral bajo pero seguro para permitir "Clotrimazol óvulo vaginal" → "Clotrimazol".
+    return mejorScore >= 20 ? mejor : null;
   }
 
   function construirMedicamentoPlanDesdeProtocolo(item){
-    const esTexto = typeof item === 'string';
-    const nombre = esTexto
-      ? item
-      : (item.med || item.medicamento || item.nombre || item.nombre_medicamento || '');
-
+    const obj = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
+    const nombre = extraerNombreMedicamentoProtocolo(item);
     const catalogo = buscarMedicamentoEnCatalogoPlan(nombre) || {};
-    const obj = esTexto ? {} : (item || {});
+
+    const med = limpiarTexto(
+      obj.med ||
+      obj.medicamento ||
+      obj.nombre ||
+      obj.nombre_medicamento ||
+      catalogo.med ||
+      nombre ||
+      ''
+    );
+
+    if(!med || normalizarTextoBusquedaCie10(med).includes('no sugerir medicamentos automaticos')){
+      return null;
+    }
 
     return {
-      med: obj.med || obj.medicamento || obj.nombre || catalogo.med || nombre || '',
-      pres: obj.pres || obj.presentacion || catalogo.pres || '',
-      via: obj.via || catalogo.via || '',
-      cantidad: obj.cantidad || catalogo.cantidad || '',
-      frec: obj.frec || obj.frecuencia || catalogo.frec || '',
-      dur: obj.dur || obj.duracion || catalogo.dur || '',
-      ind: obj.ind || obj.indicaciones || catalogo.ind || '',
-      continuo: obj.continuo || 'No'
+      med,
+      pres: limpiarTexto(obj.pres || obj.presentacion || obj.presentacion_farmaceutica || catalogo.pres || ''),
+      via: limpiarTexto(obj.via || obj.vía || catalogo.via || ''),
+      cantidad: limpiarTexto(obj.cantidad || obj.cant || catalogo.cantidad || ''),
+      frec: limpiarTexto(obj.frec || obj.frecuencia || obj.intervalo || catalogo.frec || ''),
+      dur: limpiarTexto(obj.dur || obj.duracion || obj.duración || catalogo.dur || ''),
+      ind: limpiarTexto(obj.ind || obj.indicaciones || obj.observacion || obj.observación || catalogo.ind || ''),
+      continuo: limpiarTexto(obj.continuo || obj.tratamiento_continuo || 'No') || 'No'
     };
+  }
+
+  function firmaMedicamentoPlan(m){
+    return normalizarTextoBusquedaCie10([
+      m?.med || '',
+      m?.pres || '',
+      m?.via || '',
+      m?.frec || '',
+      m?.dur || ''
+    ].join(' '));
+  }
+
+  function fusionarMedicamentoPlanExistente(existente, nuevo){
+    if(!existente || !nuevo) return;
+
+    ['pres','via','cantidad','frec','dur','ind','continuo'].forEach(k => {
+      if(!limpiarTexto(existente[k]) && limpiarTexto(nuevo[k])){
+        existente[k] = nuevo[k];
+      }
+    });
   }
 
   function aplicarMedicamentosAlPlan(medicamentos){
@@ -531,8 +680,15 @@
 
     medicamentos.forEach(m => {
       const medPlan = construirMedicamentoPlanDesdeProtocolo(m);
+      if(!medPlan || !medPlan.med) return;
 
-      if(!medPlan.med) return;
+      const firmaNueva = firmaMedicamentoPlan(medPlan);
+      const existente = window.medicamentosPlanSeleccionados.find(x => firmaMedicamentoPlan(x) === firmaNueva);
+
+      if(existente){
+        fusionarMedicamentoPlanExistente(existente, medPlan);
+        return;
+      }
 
       window.medicamentosPlanSeleccionados.push(medPlan);
       agregados++;
