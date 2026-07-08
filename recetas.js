@@ -1,10 +1,10 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.6 JSON receta + hora local Ecuador
+   Versión: 1.7 JSON receta + impresión premium + hora local Ecuador
    Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
-            + guardado JSON en columna medicamento + impresión normal + hora local Ecuador.
+            + guardado JSON en columna medicamento + impresión premium normal + hora local Ecuador.
    Importante:
    - No modifica Plan automáticamente desde Recetas.
    - Mantiene sincronización Plan → Receta.
@@ -143,6 +143,61 @@
       return txt;
     }
   }
+
+  function medicamentoRecetaJSONAHTMLPremium(valor){
+    const txt = String(valor || '').trim();
+    if(!txt){
+      return '<div class="text-muted">Sin medicamentos registrados.</div>';
+    }
+
+    if(!medicamentoRecetaEsJSON(txt)){
+      return nl2br(txt);
+    }
+
+    try{
+      let data = JSON.parse(txt);
+      if(!Array.isArray(data)) data = [data];
+
+      const items = data.map((item, i) => {
+        if(typeof item === 'string'){
+          return `
+            <div class="auro-rx-item">
+              <div class="auro-rx-main"><span class="auro-rx-num">${i + 1}</span><strong>${safe(item)}</strong></div>
+            </div>`;
+        }
+
+        if(item && item.texto){
+          return `
+            <div class="auro-rx-item">
+              <div class="auro-rx-main"><span class="auro-rx-num">${i + 1}</span><strong>${safe(String(item.texto || '').replace(/^\s*\d+\.\s*/, ''))}</strong></div>
+            </div>`;
+        }
+
+        const m = normalizarMedicamentoRecetaObjeto(item || {});
+        const titulo = [m.med || '', m.pres || ''].filter(Boolean).join(' ');
+        const detalles = [
+          m.via ? `<span><b>Vía:</b> ${safe(m.via)}</span>` : '',
+          m.cantidad ? `<span><b>Cantidad:</b> ${safe(m.cantidad)}</span>` : '',
+          m.frec ? `<span><b>Frecuencia:</b> ${safe(m.frec)}</span>` : '',
+          m.dur ? `<span><b>Duración:</b> ${safe(m.dur)}</span>` : '',
+          m.continuo === 'Sí' ? `<span><b>Tratamiento continuo</b></span>` : ''
+        ].filter(Boolean).join('');
+
+        return `
+          <div class="auro-rx-item">
+            <div class="auro-rx-main"><span class="auro-rx-num">${i + 1}</span><strong>${safe(titulo || m.med || 'Medicamento')}</strong></div>
+            ${detalles ? `<div class="auro-rx-meta">${detalles}</div>` : ''}
+            ${m.ind ? `<div class="auro-rx-ind"><b>Indicaciones:</b> ${safe(m.ind)}</div>` : ''}
+          </div>`;
+      }).filter(Boolean).join('');
+
+      return `<div class="auro-rx-list">${items}</div>`;
+
+    }catch(e){
+      return nl2br(txt);
+    }
+  }
+
 
   function medicamentoRecetaParaGuardarJSON(textoFormulario){
     const actual = String(textoFormulario || '').trim();
@@ -809,6 +864,14 @@
           .auro-linea{border-top:1px solid #111827;margin-bottom:6px;}
           .badge-auro{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:800;}
           .badge-ok{background:#dcfce7;color:#166534;}.badge-danger{background:#fee2e2;color:#991b1b;}
+          .auro-rx-list{display:grid;gap:10px;margin-top:4px;}
+          .auro-rx-item{border:1px solid #eef2f7;border-left:4px solid #8b1e5a;border-radius:14px;padding:10px 12px;background:#fff;break-inside:avoid;}
+          .auro-rx-main{display:flex;gap:8px;align-items:flex-start;color:#111827;}
+          .auro-rx-main strong{font-size:14px;font-weight:900;line-height:1.25;}
+          .auro-rx-num{width:22px;height:22px;min-width:22px;border-radius:999px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;}
+          .auro-rx-meta{display:flex;flex-wrap:wrap;gap:6px 12px;margin:6px 0 0 30px;color:#374151;font-size:12.5px;}
+          .auro-rx-meta span{background:#f8fafc;border:1px solid #e5e7eb;border-radius:999px;padding:4px 8px;}
+          .auro-rx-ind{margin:7px 0 0 30px;color:#1f2937;font-size:12.5px;line-height:1.35;}
           @media print{.no-print{display:none!important}.auro-receta-documento{max-width:none}.auro-receta-box{break-inside:avoid}.auro-receta-header{break-inside:avoid}}
         </style>
         <div class="auro-receta-header">
@@ -822,7 +885,7 @@
           <div><span>Médico:</span> ${safe(medicoTexto)}</div><div><span>Código médico:</span> ${safe(codigoMedico)}</div>
           <div><span>CIE-10:</span> ${safe(r.cie10 || '—')}</div><div><span>Diagnóstico:</span> ${safe(r.diagnostico || '—')}</div>
         </div>
-        <div class="auro-receta-section"><h4>Prescripción</h4><div class="auro-receta-box"><div class="auro-rp">Rp/</div>${nl2br(medicamentoRecetaJSONATexto(r.medicamento) || 'Sin medicamentos registrados.')}</div></div>
+        <div class="auro-receta-section"><h4>Prescripción</h4><div class="auro-receta-box"><div class="auro-rp">Rp/</div>${medicamentoRecetaJSONAHTMLPremium(r.medicamento)}</div></div>
         <div class="auro-receta-section"><h4>Indicaciones para paciente</h4><div class="auro-receta-box">${nl2br(r.indicaciones || '—')}</div></div>
         ${r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${nl2br(r.recomendaciones)}</div></div>` : ''}
         <div class="auro-receta-footer"><div style="font-size:12px;color:#6b7280;">Documento generado desde AUROSANAX Clinical ERP DEMO.<br>Esta receta debe ser validada con firma y sello del profesional tratante.<br>ID receta: ${safe(idReceta)} · Código médico: ${safe(codigoMedico)}</div><div class="auro-firma"><div class="auro-linea"></div><b>Dra. Aurora Andagoya Murillo</b><br><span>Ginecología y Obstetricia</span><br><span>Código médico: ${safe(codigoMedico)}</span><br><span>Firma y sello</span></div></div>
