@@ -923,6 +923,95 @@
     return txt.length > max ? txt.slice(0, max) + '...' : txt;
   }
 
+  function auroAtencionMedicamentoEsJSON(valor){
+    const txt = String(valor || '').trim();
+    if(!txt) return false;
+    if(!(txt.startsWith('[') || txt.startsWith('{'))) return false;
+    try{
+      JSON.parse(txt);
+      return true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function auroAtencionNormalizarMedicamento(m){
+    m = m || {};
+    return {
+      med: m.med || m.medicamento || m.nombre || '',
+      pres: m.pres || m.presentacion || '',
+      via: m.via || '',
+      cantidad: m.cantidad || '',
+      frec: m.frec || m.frecuencia || '',
+      dur: m.dur || m.duracion || '',
+      ind: m.ind || m.indicaciones || '',
+      continuo: m.continuo || 'No'
+    };
+  }
+
+  function auroAtencionUnirNombrePresentacion(nombre, presentacion){
+    const n = String(nombre || '').trim();
+    const p = String(presentacion || '').trim();
+    if(!n) return p;
+    if(!p) return n;
+
+    const limpiar = x => String(x || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const nn = limpiar(n);
+    const pp = limpiar(p);
+
+    if(nn.includes(pp)) return n;
+    return n + ' ' + p;
+  }
+
+  function auroAtencionMedicamentoTexto(valor, maxItems){
+    const txt = String(valor || '').trim();
+    if(!txt) return '—';
+
+    if(!auroAtencionMedicamentoEsJSON(txt)){
+      return resumenTexto(txt, 180);
+    }
+
+    try{
+      let data = JSON.parse(txt);
+      if(!Array.isArray(data)) data = [data];
+      data = data.filter(Boolean);
+
+      if(!data.length) return '—';
+
+      const limite = maxItems || 2;
+      const visibles = data.slice(0, limite).map((item, i) => {
+        if(typeof item === 'string'){
+          return (i + 1) + '. ' + item.replace(/^\s*\d+\.\s*/, '').trim();
+        }
+
+        if(item.texto){
+          return (i + 1) + '. ' + String(item.texto || '').replace(/^\s*\d+\.\s*/, '').trim();
+        }
+
+        const m = auroAtencionNormalizarMedicamento(item);
+        const nombre = auroAtencionUnirNombrePresentacion(m.med, m.pres);
+        const detalle = [m.via, m.frec, m.dur].filter(Boolean).join(' · ');
+        return (i + 1) + '. ' + [nombre, detalle].filter(Boolean).join(' — ');
+      }).filter(Boolean);
+
+      const restantes = data.length - visibles.length;
+      if(restantes > 0){
+        visibles.push('+' + restantes + ' medicamento' + (restantes === 1 ? '' : 's'));
+      }
+
+      return visibles.join('\n');
+    }catch(e){
+      return resumenTexto(txt, 180);
+    }
+  }
+
   function ocultarDetalleAtencion(){
     const box = $('auroAtencionActivaBox');
     if(box){
@@ -954,7 +1043,7 @@
           '<td>' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</td>' +
           '<td>' + safe(r.id_receta || '—') + '</td>' +
           '<td>' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</td>' +
-          '<td>' + safe(resumenTexto(r.medicamento || r.medicamentos || '', 120)) + '</td>' +
+          '<td>' + safe(auroAtencionMedicamentoTexto(r.medicamento || r.medicamentos || '', 2)) + '</td>' +
           '<td>' + safe(resumenTexto(r.indicaciones || '', 100)) + '</td>' +
           '<td><span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span></td>' +
         '</tr>';
@@ -971,7 +1060,7 @@
           '</div>' +
           '<div class="small"><b>Fecha:</b> ' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</div>' +
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</div>' +
-          '<div class="small mt-2"><b>Medicamento:</b><br>' + safe(r.medicamento || r.medicamentos || '—') + '</div>' +
+          '<div class="small mt-2"><b>Medicamento:</b><br>' + safe(auroAtencionMedicamentoTexto(r.medicamento || r.medicamentos || '', 4)) + '</div>' +
           '<div class="small mt-2"><b>Indicaciones:</b><br>' + safe(r.indicaciones || '—') + '</div>' +
         '</div>';
       }).join('');
