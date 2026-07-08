@@ -882,7 +882,43 @@ function buscarDiagnosticoCie10(){
 }
 function agregarDiagnosticoCie10DesdeResultado(index){const d=hcDxResultadosActuales[index];if(d)agregarDiagnosticoCie10(d.codigo,d.nombre);}
 function agregarDiagnosticoCie10Manual(){const codigo=getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');const nombre=getValueIfExists('hcDxNombreBuscar').trim();if(!codigo||!nombre){alert('Ingrese código CIE-10 y nombre de diagnóstico, o seleccione un resultado de la búsqueda.');return;}agregarDiagnosticoCie10(codigo,nombre);}
-function agregarDiagnosticoCie10(codigo,nombre){codigo=String(codigo||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');nombre=String(nombre||'').trim();if(!codigo||!nombre)return;if(hcDiagnosticosSeleccionados.some(d=>d.codigo===codigo)){alert('Este diagnóstico ya fue agregado.');return;}hcDiagnosticosSeleccionados.push({codigo,nombre,principal:hcDiagnosticosSeleccionados.length===0,tipo:'Presuntivo'});renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function agregarDiagnosticoCie10(codigo,nombre){
+  codigo = String(codigo || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  nombre = String(nombre || '').trim();
+
+  if(!codigo || !nombre) return;
+
+  if(hcDiagnosticosSeleccionados.some(d => d.codigo === codigo)){
+    alert('Este diagnóstico ya fue agregado.');
+    return;
+  }
+
+  hcDiagnosticosSeleccionados.push({
+    codigo,
+    nombre,
+    principal: hcDiagnosticosSeleccionados.length === 0,
+    tipo: 'Presuntivo'
+  });
+
+  renderDiagnosticosSeleccionados();
+  sincronizarDiagnosticosConCamposHistoria();
+
+  /* ======================================================
+     AUROSANAX - CONEXIÓN SEGURA CIE-10 INTELIGENTE
+     ------------------------------------------------------
+     - Se ejecuta solo después de agregar el diagnóstico.
+     - No modifica Examen Físico, Plan, Recetas ni guardado.
+     - Si el módulo cie10_inteligente.js no está cargado,
+       el sistema continúa funcionando igual.
+     ====================================================== */
+  try{
+    if(typeof window.auroCie10InteligenteBuscarProtocolo === 'function'){
+      window.auroCie10InteligenteBuscarProtocolo(codigo, nombre);
+    }
+  }catch(error){
+    console.warn('AUROSANAX EXAMEN: CIE-10 inteligente no pudo ejecutarse.', error);
+  }
+}
 function eliminarDiagnosticoCie10(index){hcDiagnosticosSeleccionados.splice(index,1);if(hcDiagnosticosSeleccionados.length&&!hcDiagnosticosSeleccionados.some(d=>d.principal))hcDiagnosticosSeleccionados[0].principal=true;renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
 function marcarDiagnosticoPrincipal(index){hcDiagnosticosSeleccionados.forEach((d,i)=>d.principal=i===index);renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
 function cambiarTipoDiagnostico(index,valor){if(hcDiagnosticosSeleccionados[index])hcDiagnosticosSeleccionados[index].tipo=valor;sincronizarDiagnosticosConCamposHistoria();}
