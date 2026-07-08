@@ -475,6 +475,51 @@
     return partes.join('\n');
   }
 
+  function normalizarTextoBusquedaCie10(txt){
+    return String(txt || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9\s]/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+
+  function buscarMedicamentoEnCatalogoPlan(nombre){
+    const base = Array.isArray(window.MEDICAMENTOS_AUROSANAX_BASE)
+      ? window.MEDICAMENTOS_AUROSANAX_BASE
+      : [];
+
+    const q = normalizarTextoBusquedaCie10(nombre);
+    if(!q) return null;
+
+    return base.find(item => {
+      const med = normalizarTextoBusquedaCie10(item.med || item.medicamento || item.nombre || '');
+      return med && (med === q || med.includes(q) || q.includes(med));
+    }) || null;
+  }
+
+  function construirMedicamentoPlanDesdeProtocolo(item){
+    const esTexto = typeof item === 'string';
+    const nombre = esTexto
+      ? item
+      : (item.med || item.medicamento || item.nombre || item.nombre_medicamento || '');
+
+    const catalogo = buscarMedicamentoEnCatalogoPlan(nombre) || {};
+    const obj = esTexto ? {} : (item || {});
+
+    return {
+      med: obj.med || obj.medicamento || obj.nombre || catalogo.med || nombre || '',
+      pres: obj.pres || obj.presentacion || catalogo.pres || '',
+      via: obj.via || catalogo.via || '',
+      cantidad: obj.cantidad || catalogo.cantidad || '',
+      frec: obj.frec || obj.frecuencia || catalogo.frec || '',
+      dur: obj.dur || obj.duracion || catalogo.dur || '',
+      ind: obj.ind || obj.indicaciones || catalogo.ind || '',
+      continuo: obj.continuo || 'No'
+    };
+  }
+
   function aplicarMedicamentosAlPlan(medicamentos){
     if(!Array.isArray(medicamentos) || !medicamentos.length) return 0;
 
@@ -485,31 +530,11 @@
     let agregados = 0;
 
     medicamentos.forEach(m => {
-      if(typeof m === 'string'){
-        window.medicamentosPlanSeleccionados.push({
-          med: m,
-          pres: '',
-          via: '',
-          cantidad: '',
-          frec: '',
-          dur: '',
-          ind: '',
-          continuo: 'No'
-        });
-        agregados++;
-        return;
-      }
+      const medPlan = construirMedicamentoPlanDesdeProtocolo(m);
 
-      window.medicamentosPlanSeleccionados.push({
-        med: m.nombre || m.medicamento || m.med || '',
-        pres: m.presentacion || m.pres || '',
-        via: m.via || '',
-        cantidad: m.cantidad || '',
-        frec: m.frecuencia || m.frec || '',
-        dur: m.duracion || m.dur || '',
-        ind: m.indicaciones || m.ind || '',
-        continuo: m.continuo || 'No'
-      });
+      if(!medPlan.med) return;
+
+      window.medicamentosPlanSeleccionados.push(medPlan);
       agregados++;
     });
 
@@ -519,6 +544,10 @@
 
     if(typeof window.sincronizarPlanConReceta === 'function'){
       window.sincronizarPlanConReceta();
+    }
+
+    if(typeof window.guardarPlanTemporal === 'function'){
+      window.guardarPlanTemporal();
     }
 
     return agregados;
