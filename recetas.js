@@ -1,9 +1,10 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.5
+   Versión: 1.6 JSON receta + hora local Ecuador
    Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
+            + guardado JSON en columna medicamento + impresión normal + hora local Ecuador.
    Importante:
    - No modifica Plan automáticamente desde Recetas.
    - Mantiene sincronización Plan → Receta.
@@ -51,8 +52,119 @@
   function fechaHoraVisual(){
     const d = new Date();
     return d.toLocaleString('es-EC', {
+      timeZone:'America/Guayaquil',
       year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
     });
+  }
+
+  function fechaHoraEcuadorISO(){
+    const d = new Date();
+    const partes = new Intl.DateTimeFormat('en-CA', {
+      timeZone:'America/Guayaquil',
+      year:'numeric',
+      month:'2-digit',
+      day:'2-digit',
+      hour:'2-digit',
+      minute:'2-digit',
+      second:'2-digit',
+      hour12:false
+    }).formatToParts(d).reduce((acc, p) => {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+    return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}-05:00`;
+  }
+
+  function normalizarMedicamentoRecetaObjeto(m){
+    m = m || {};
+    return {
+      med: m.med || m.medicamento || m.nombre || '',
+      pres: m.pres || m.presentacion || '',
+      via: m.via || '',
+      cantidad: m.cantidad || '',
+      frec: m.frec || m.frecuencia || '',
+      dur: m.dur || m.duracion || '',
+      ind: m.ind || m.indicaciones || '',
+      continuo: m.continuo || 'No'
+    };
+  }
+
+  function medicamentoRecetaEsJSON(valor){
+    const txt = String(valor || '').trim();
+    if(!txt) return false;
+    if(!(txt.startsWith('[') || txt.startsWith('{'))) return false;
+    try{
+      JSON.parse(txt);
+      return true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function medicamentoRecetaJSONATexto(valor){
+    const txt = String(valor || '').trim();
+    if(!txt) return '';
+
+    if(!medicamentoRecetaEsJSON(txt)){
+      return txt;
+    }
+
+    try{
+      let data = JSON.parse(txt);
+      if(!Array.isArray(data)) data = [data];
+
+      return data.map((item, i) => {
+        if(typeof item === 'string'){
+          return `${i + 1}. ${item}`;
+        }
+
+        if(item && item.texto){
+          const limpio = String(item.texto || '').trim();
+          return /^\d+\./.test(limpio) ? limpio : `${i + 1}. ${limpio}`;
+        }
+
+        const m = normalizarMedicamentoRecetaObjeto(item || {});
+        const linea = [
+          `${i + 1}. ${m.med || ''}`,
+          m.pres || '',
+          m.via || '',
+          m.cantidad ? `Cantidad: ${m.cantidad}` : '',
+          m.frec || '',
+          m.dur ? `por ${m.dur}` : '',
+          m.ind || ''
+        ].filter(Boolean).join(' - ');
+
+        return m.continuo === 'Sí'
+          ? linea + ' - Tratamiento continuo'
+          : linea;
+      }).filter(Boolean).join('\n');
+
+    }catch(e){
+      return txt;
+    }
+  }
+
+  function medicamentoRecetaParaGuardarJSON(textoFormulario){
+    const actual = String(textoFormulario || '').trim();
+
+    if(medicamentoRecetaEsJSON(actual)){
+      return actual;
+    }
+
+    const medsPlan = Array.isArray(window.medicamentosPlanSeleccionados)
+      ? window.medicamentosPlanSeleccionados
+      : [];
+
+    if(medsPlan.length){
+      return JSON.stringify(medsPlan.map(normalizarMedicamentoRecetaObjeto));
+    }
+
+    if(!actual) return '';
+
+    const lineas = actual.split(/\n+/).map(x => x.trim()).filter(Boolean);
+    return JSON.stringify(lineas.map(x => ({
+      texto: x.replace(/^\s*\d+\.\s*/, '')
+    })));
   }
 
   function fechaVisual(fecha){
@@ -236,8 +348,8 @@
         recomendaciones: receta.recomendaciones || '',
         id_documento: receta.id_documento || '',
         estado: receta.estado || 'Emitida',
-        creado_en: receta.creado_en || fechaHoraVisual(),
-        actualizado_en: fechaHoraVisual(),
+        creado_en: receta.creado_en || fechaHoraEcuadorISO(),
+        actualizado_en: fechaHoraEcuadorISO(),
         id_atencion: receta.id_atencion || obtenerIdAtencionActivaSeguro() || ''
       };
 
@@ -710,7 +822,7 @@
           <div><span>Médico:</span> ${safe(medicoTexto)}</div><div><span>Código médico:</span> ${safe(codigoMedico)}</div>
           <div><span>CIE-10:</span> ${safe(r.cie10 || '—')}</div><div><span>Diagnóstico:</span> ${safe(r.diagnostico || '—')}</div>
         </div>
-        <div class="auro-receta-section"><h4>Prescripción</h4><div class="auro-receta-box"><div class="auro-rp">Rp/</div>${nl2br(r.medicamento || 'Sin medicamentos registrados.')}</div></div>
+        <div class="auro-receta-section"><h4>Prescripción</h4><div class="auro-receta-box"><div class="auro-rp">Rp/</div>${nl2br(medicamentoRecetaJSONATexto(r.medicamento) || 'Sin medicamentos registrados.')}</div></div>
         <div class="auro-receta-section"><h4>Indicaciones para paciente</h4><div class="auro-receta-box">${nl2br(r.indicaciones || '—')}</div></div>
         ${r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${nl2br(r.recomendaciones)}</div></div>` : ''}
         <div class="auro-receta-footer"><div style="font-size:12px;color:#6b7280;">Documento generado desde AUROSANAX Clinical ERP DEMO.<br>Esta receta debe ser validada con firma y sello del profesional tratante.<br>ID receta: ${safe(idReceta)} · Código médico: ${safe(codigoMedico)}</div><div class="auro-firma"><div class="auro-linea"></div><b>Dra. Aurora Andagoya Murillo</b><br><span>Ginecología y Obstetricia</span><br><span>Código médico: ${safe(codigoMedico)}</span><br><span>Firma y sello</span></div></div>
@@ -761,9 +873,9 @@
       paciente_telefono: paciente.telefono || paciente.whatsapp || '',
       paciente_edad: paciente.edad || '',
       fecha_receta: r.fecha || fechaHoyReceta(), medico: r.medico || 'Dra. Aurora Andagoya', diagnostico_cie10: r.cie10 || '', diagnostico: r.diagnostico || '',
-      medicamento: r.medicamento || '', presentacion: '', dosis: '', via: '', frecuencia: '', duracion: '', cantidad: '',
+      medicamento: medicamentoRecetaParaGuardarJSON(r.medicamento), presentacion: '', dosis: '', via: '', frecuencia: '', duracion: '', cantidad: '',
       indicaciones: r.indicaciones || '', recomendaciones: r.recomendaciones || '', id_documento: '', estado: r.estado || 'Emitida',
-      creado_en: '', actualizado_en: fechaHoraVisual()
+      creado_en: '', actualizado_en: fechaHoraEcuadorISO()
     };
   }
 
@@ -776,7 +888,7 @@
     setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
     setVal('recEstado', receta.estado || 'Emitida');
     setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
-    setVal('recMedicamento', receta.medicamento || receta.medicamentos || '');
+    setVal('recMedicamento', medicamentoRecetaJSONATexto(receta.medicamento || receta.medicamentos || ''));
     setVal('recIndicaciones', receta.indicaciones || '');
     setVal('recRecomendaciones', receta.recomendaciones || receta.observaciones || '');
     if(!receta.id_atencion) receta.id_atencion = obtenerIdAtencionActivaSeguro();
@@ -834,12 +946,12 @@
       }
 
       if(estabaEditando && idx >= 0){
-        r.creado_en = lista[idx].creado_en || fechaHoraVisual();
-        r.actualizado_en = fechaHoraVisual();
+        r.creado_en = lista[idx].creado_en || fechaHoraEcuadorISO();
+        r.actualizado_en = fechaHoraEcuadorISO();
         lista[idx] = {...lista[idx], ...r};
       }else{
-        r.creado_en = fechaHoraVisual();
-        r.actualizado_en = fechaHoraVisual();
+        r.creado_en = fechaHoraEcuadorISO();
+        r.actualizado_en = fechaHoraEcuadorISO();
         lista.unshift(r);
       }
 
@@ -1128,7 +1240,7 @@
       const idRaw = String(r.id_receta || '');
       const id = safe(idRaw);
       const menuId = safe(idRaw.replace(/[^a-zA-Z0-9_-]/g, '_'));
-      const meds = recortarTexto(r.medicamento || '', 95);
+      const meds = recortarTexto(medicamentoRecetaJSONATexto(r.medicamento || ''), 95);
       const consulta = consultaPorIdAtencion(r.id_atencion || '');
       const abierto = String(recetaAccionesAbiertaId) === String(menuId);
 
@@ -1180,7 +1292,7 @@
       mobile.innerHTML = pagina.map(r => {
         const idRaw = String(r.id_receta || '');
         const idSeguro = safe(idRaw);
-        const meds = recortarTexto(r.medicamento || '', 140);
+        const meds = recortarTexto(medicamentoRecetaJSONATexto(r.medicamento || ''), 140);
         const consulta = consultaPorIdAtencion(r.id_atencion || '');
         const estadoClase = String(r.estado || '').toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
 
@@ -1307,5 +1419,5 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.5', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.6 JSON receta + hora Ecuador', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
