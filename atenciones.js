@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 2.1 integra Examen Físico por atención
+   Versión: 2.2 resumen premium + paginación segura
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -22,6 +22,8 @@
   let atencionesSheetsCargando = false;
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
+  let consultasPaginaActual = 1;
+  const CONSULTAS_POR_PAGINA = 10;
   const RECETAS_STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
 
   function $(id){ return document.getElementById(id); }
@@ -102,6 +104,157 @@
         gap:8px;
         align-items:flex-start;
         margin-bottom:8px;
+      }
+
+
+      #auroAtencionesBox .auro-atencion-premium-head{
+        border:1px solid #fbcfe8;
+        background:linear-gradient(135deg,#fff7fb,#ffffff);
+        border-radius:18px;
+        padding:14px;
+        display:flex;
+        justify-content:space-between;
+        gap:12px;
+        align-items:flex-start;
+        box-shadow:0 6px 18px rgba(139,30,90,.06);
+      }
+
+      #auroAtencionesBox .auro-atencion-premium-title{
+        display:flex;
+        gap:10px;
+        align-items:flex-start;
+      }
+
+      #auroAtencionesBox .auro-atencion-premium-icon{
+        width:42px;
+        height:42px;
+        border-radius:15px;
+        display:grid;
+        place-items:center;
+        background:#fdf2f8;
+        color:#8b1e5a;
+        border:1px solid #fbcfe8;
+        font-weight:900;
+        flex:0 0 auto;
+      }
+
+      #auroAtencionesBox .auro-atencion-premium-title b{
+        font-size:17px;
+        color:#111827;
+      }
+
+      #auroAtencionesBox .auro-atencion-id{
+        color:#6b7280;
+        font-size:12px;
+        word-break:break-all;
+      }
+
+      #auroAtencionesBox .auro-atencion-info-grid{
+        display:grid;
+        grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:8px;
+        margin-top:10px;
+      }
+
+      #auroAtencionesBox .auro-atencion-info-card{
+        border:1px solid #e5e7eb;
+        border-radius:14px;
+        padding:9px 10px;
+        background:#fff;
+        min-width:0;
+      }
+
+      #auroAtencionesBox .auro-atencion-info-card span{
+        display:block;
+        color:#6b7280;
+        font-size:11px;
+        text-transform:uppercase;
+        letter-spacing:.04em;
+        font-weight:800;
+        margin-bottom:3px;
+      }
+
+      #auroAtencionesBox .auro-atencion-info-card b{
+        display:block;
+        color:#111827;
+        font-size:13px;
+        word-break:break-word;
+      }
+
+      #auroAtencionesBox .auro-receta-resumen-box{
+        display:grid;
+        gap:3px;
+        white-space:normal;
+        min-width:220px;
+      }
+
+      #auroAtencionesBox .auro-receta-med-principal{
+        font-weight:900;
+        color:#111827;
+        line-height:1.25;
+      }
+
+      #auroAtencionesBox .auro-receta-med-esquema{
+        color:#475569;
+        font-size:12px;
+        line-height:1.25;
+      }
+
+      #auroAtencionesBox .auro-receta-med-extra{
+        display:inline-block;
+        width:max-content;
+        max-width:100%;
+        margin-top:2px;
+        border-radius:999px;
+        padding:3px 8px;
+        background:#fdf2f8;
+        color:#8b1e5a;
+        border:1px solid #fbcfe8;
+        font-size:11px;
+        font-weight:900;
+      }
+
+      #auroAtencionesBox .auro-recetas-atencion-box{
+        border:1px solid #e5e7eb;
+        border-radius:18px;
+        padding:12px;
+        background:#fff;
+        box-shadow:0 6px 18px rgba(15,23,42,.04);
+      }
+
+      #auroAtencionesBox .auro-recetas-atencion-title{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        flex-wrap:wrap;
+        margin-bottom:10px;
+      }
+
+      #auroAtencionesBox .auro-recetas-atencion-title b{
+        color:#111827;
+      }
+
+      #auroAtencionesBox .auro-receta-indicacion-resumen{
+        color:#475569;
+        font-size:12px;
+        line-height:1.25;
+        max-width:260px;
+        white-space:normal;
+      }
+
+      #auroAtencionesBox .auro-consultas-paginacion{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+        flex-wrap:wrap;
+        margin-top:10px;
+        padding:10px 0 0;
+      }
+
+      #auroAtencionesBox .auro-consultas-paginacion .small{
+        font-weight:800;
       }
 
       @media (max-width: 768px){
@@ -207,6 +360,43 @@
           min-width:650px;
           font-size:12px;
         }
+
+        #auroAtencionesBox .auro-atencion-premium-head{
+          padding:12px!important;
+          border-radius:16px!important;
+          display:grid!important;
+          grid-template-columns:1fr!important;
+        }
+
+        #auroAtencionesBox .auro-atencion-info-grid{
+          grid-template-columns:1fr!important;
+          gap:7px!important;
+        }
+
+        #auroAtencionesBox .auro-atencion-info-card{
+          padding:8px 9px!important;
+        }
+
+        #auroAtencionesBox .auro-recetas-atencion-box{
+          padding:10px!important;
+          border-radius:16px!important;
+        }
+
+        #auroAtencionesBox .auro-receta-resumen-box{
+          min-width:0!important;
+          width:100%!important;
+        }
+
+        #auroAtencionesBox .auro-consultas-paginacion{
+          display:grid!important;
+          grid-template-columns:1fr!important;
+        }
+
+        #auroAtencionesBox .auro-consultas-paginacion button{
+          width:100%!important;
+          margin:0!important;
+        }
+
       }
 
       @media (min-width: 769px){
@@ -1012,6 +1202,67 @@
     }
   }
 
+
+  function auroAtencionMedicamentosArray(valor){
+    const txt = String(valor || '').trim();
+    if(!txt) return [];
+
+    if(!auroAtencionMedicamentoEsJSON(txt)){
+      return txt.split(/\n+/).map(linea => ({texto: linea.replace(/^\s*\d+\.\s*/, '').trim()})).filter(x => x.texto);
+    }
+
+    try{
+      let data = JSON.parse(txt);
+      if(!Array.isArray(data)) data = [data];
+      return data.filter(Boolean);
+    }catch(e){
+      return [];
+    }
+  }
+
+  function auroAtencionMedicamentoResumenHTML(valor){
+    const meds = auroAtencionMedicamentosArray(valor);
+    if(!meds.length){
+      return '<div class="text-muted small">Sin medicamentos registrados</div>';
+    }
+
+    const primero = meds[0];
+
+    if(typeof primero === 'string' || primero.texto){
+      const texto = typeof primero === 'string'
+        ? primero.replace(/^\s*\d+\.\s*/, '').trim()
+        : String(primero.texto || '').replace(/^\s*\d+\.\s*/, '').trim();
+      const extra = meds.length > 1 ? '<span class="auro-receta-med-extra">+' + (meds.length - 1) + ' medicamento' + (meds.length - 1 === 1 ? '' : 's') + '</span>' : '';
+      return '<div class="auro-receta-resumen-box">' +
+        '<div class="auro-receta-med-principal">' + safe(texto || 'Medicamento registrado') + '</div>' +
+        extra +
+      '</div>';
+    }
+
+    const m = auroAtencionNormalizarMedicamento(primero || {});
+    const nombre = auroAtencionUnirNombrePresentacion(m.med, m.pres);
+    const esquema = [m.via, m.frec, m.dur].filter(Boolean).join(' · ');
+    const indicacion = m.ind ? '<div class="auro-receta-med-esquema">' + safe(m.ind) + '</div>' : '';
+    const extra = meds.length > 1 ? '<span class="auro-receta-med-extra">+' + (meds.length - 1) + ' medicamento' + (meds.length - 1 === 1 ? '' : 's') + '</span>' : '';
+
+    return '<div class="auro-receta-resumen-box">' +
+      '<div class="auro-receta-med-principal">' + safe(nombre || 'Medicamento registrado') + '</div>' +
+      (esquema ? '<div class="auro-receta-med-esquema">' + safe(esquema) + '</div>' : '') +
+      indicacion +
+      extra +
+    '</div>';
+  }
+
+  function auroAtencionDato(label, valor){
+    const v = String(valor || '').trim() || '—';
+    return '<div class="auro-atencion-info-card"><span>' + safe(label) + '</span><b>' + safe(v) + '</b></div>';
+  }
+
+  function auroAtencionCitaTexto(a){
+    const id = String(a?.id_cita || '').trim();
+    return id || 'Sin cita vinculada';
+  }
+
   function ocultarDetalleAtencion(){
     const box = $('auroAtencionActivaBox');
     if(box){
@@ -1043,8 +1294,8 @@
           '<td>' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</td>' +
           '<td>' + safe(r.id_receta || '—') + '</td>' +
           '<td>' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</td>' +
-          '<td>' + safe(auroAtencionMedicamentoTexto(r.medicamento || r.medicamentos || '', 2)) + '</td>' +
-          '<td>' + safe(resumenTexto(r.indicaciones || '', 100)) + '</td>' +
+          '<td>' + auroAtencionMedicamentoResumenHTML(r.medicamento || r.medicamentos || '') + '</td>' +
+          '<td><div class="auro-receta-indicacion-resumen">' + safe(resumenTexto(r.indicaciones || '', 120)) + '</div></td>' +
           '<td><span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span></td>' +
         '</tr>';
       }).join('');
@@ -1060,14 +1311,14 @@
           '</div>' +
           '<div class="small"><b>Fecha:</b> ' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</div>' +
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</div>' +
-          '<div class="small mt-2"><b>Medicamento:</b><br>' + safe(auroAtencionMedicamentoTexto(r.medicamento || r.medicamentos || '', 4)) + '</div>' +
-          '<div class="small mt-2"><b>Indicaciones:</b><br>' + safe(r.indicaciones || '—') + '</div>' +
+          '<div class="small mt-2"><b>Medicamento:</b><br>' + auroAtencionMedicamentoResumenHTML(r.medicamento || r.medicamentos || '') + '</div>' +
+          '<div class="small mt-2"><b>Indicaciones:</b><br>' + safe(resumenTexto(r.indicaciones || '', 160)) + '</div>' +
         '</div>';
       }).join('');
 
       recetasHTML =
         '<div class="mt-3 auro-recetas-atencion-box">' +
-          '<div class="fw-bold mb-2"><i class="bi bi-prescription2 me-1"></i> Recetas asociadas a esta atención</div>' +
+          '<div class="auro-recetas-atencion-title"><b><i class="bi bi-prescription2 me-1"></i> Recetas asociadas a esta atención</b><span class="badge-auro badge-blue">' + recetas.length + ' receta' + (recetas.length === 1 ? '' : 's') + '</span></div>' +
           '<div class="auro-recetas-atencion-desktop">' +
             '<div class="table-responsive">' +
               '<table class="table table-modern align-middle mb-0">' +
@@ -1089,25 +1340,28 @@
 
     box.style.display = 'block';
     box.innerHTML =
-      '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">' +
-        '<div>' +
-          '<div class="fw-bold"><i class="bi bi-eye me-1"></i> Consulta #' + safe(a.numero_consulta) + '</div>' +
-          '<div class="text-muted small">ID atención: ' + safe(a.id_atencion || '—') + '</div>' +
+      '<div class="auro-atencion-premium-head">' +
+        '<div class="auro-atencion-premium-title">' +
+          '<div class="auro-atencion-premium-icon">#' + safe(a.numero_consulta || '') + '</div>' +
+          '<div>' +
+            '<b>Consulta #' + safe(a.numero_consulta || '—') + '</b>' +
+            '<div class="auro-atencion-id">ID atención: ' + safe(a.id_atencion || '—') + '</div>' +
+          '</div>' +
         '</div>' +
-        '<div class="d-flex gap-2 align-items-center flex-wrap">' +
-          '<span class="badge-auro ' + (String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok') + '">' +
-            safe(a.estado_atencion || '—') +
-          '</span>' +
+        '<div class="d-flex gap-2 align-items-center flex-wrap justify-content-end">' +
+          '<span class="badge-auro ' + (String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok') + '">' + safe(a.estado_atencion || '—') + '</span>' +
           '<button type="button" class="btn-action soft" id="btnOcultarDetalleAtencion">Ocultar</button>' +
         '</div>' +
       '</div>' +
-      '<div class="row g-2 mt-2">' +
-        '<div class="col-md-3"><b>Fecha:</b><br>' + safe(fechaVisual(a.fecha_atencion)) + '</div>' +
-        '<div class="col-md-3"><b>Hora:</b><br>' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</div>' +
-        '<div class="col-md-3"><b>Tipo:</b><br>' + safe(a.tipo_atencion || '—') + '</div>' +
-        '<div class="col-md-3"><b>Médico:</b><br>' + safe(a.id_medico || '—') + '</div>' +
-        '<div class="col-md-6"><b>ID historia:</b><br>' + safe(a.id_historia || '—') + '</div>' +
-        '<div class="col-md-6"><b>ID cita:</b><br>' + safe(a.id_cita || '—') + '</div>' +
+      '<div class="auro-atencion-info-grid">' +
+        auroAtencionDato('Fecha', fechaVisual(a.fecha_atencion)) +
+        auroAtencionDato('Hora', horaVisualAtencion(a.hora_atencion || '—')) +
+        auroAtencionDato('Tipo', a.tipo_atencion || '—') +
+        auroAtencionDato('Médico / ID médico', a.id_medico || '—') +
+        auroAtencionDato('ID historia', a.id_historia || '—') +
+        auroAtencionDato('ID cita', auroAtencionCitaTexto(a)) +
+        auroAtencionDato('Paciente', a.id_paciente || idPacienteActivo() || '—') +
+        auroAtencionDato('Actualizado', a.actualizado_en || '—') +
       '</div>' +
       recetasHTML;
 
@@ -1307,10 +1561,17 @@
       return;
     }
 
-    const filasTabla = arr.map(a => {
+    const totalPaginas = Math.max(1, Math.ceil(arr.length / CONSULTAS_POR_PAGINA));
+    if(consultasPaginaActual > totalPaginas) consultasPaginaActual = totalPaginas;
+    if(consultasPaginaActual < 1) consultasPaginaActual = 1;
+
+    const inicioPagina = (consultasPaginaActual - 1) * CONSULTAS_POR_PAGINA;
+    const arrPagina = arr.slice(inicioPagina, inicioPagina + CONSULTAS_POR_PAGINA);
+
+    const filasTabla = arrPagina.map(a => {
       const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
       return '<tr>' +
-        '<td><b>#' + safe(a.numero_consulta) + '</b></td>' +
+        '<td><b>#' + safe(a.numero_consulta) + '</b><br><small class="text-muted">' + safe(a.id_atencion || '—') + '</small></td>' +
         '<td>' + safe(fechaVisual(a.fecha_atencion)) + '</td>' +
         '<td>' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</td>' +
         '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
@@ -1319,7 +1580,7 @@
       '</tr>';
     }).join('');
 
-    const tarjetasMovil = arr.map(a => {
+    const tarjetasMovil = arrPagina.map(a => {
       const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
       return '<div class="auro-consulta-card">' +
         '<div class="auro-consulta-card-head">' +
@@ -1327,9 +1588,17 @@
           '<span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span>' +
         '</div>' +
         '<div class="small"><b>Tipo:</b> ' + safe(a.tipo_atencion || '—') + '</div>' +
+        '<div class="small text-muted"><b>ID:</b> ' + safe(a.id_atencion || '—') + '</div>' +
         '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver consulta</button>' +
       '</div>';
     }).join('');
+
+    const paginacionHTML =
+      '<div class="auro-consultas-paginacion">' +
+        '<button type="button" class="btn-soft" id="btnAtencionesAnterior" ' + (consultasPaginaActual <= 1 ? 'disabled' : '') + '>Anterior</button>' +
+        '<div class="small text-muted">Página ' + consultasPaginaActual + ' de ' + totalPaginas + ' · ' + arr.length + ' consulta' + (arr.length === 1 ? '' : 's') + '</div>' +
+        '<button type="button" class="btn-soft" id="btnAtencionesSiguiente" ' + (consultasPaginaActual >= totalPaginas ? 'disabled' : '') + '>Siguiente</button>' +
+      '</div>';
 
     lista.innerHTML =
       '<div class="auro-atenciones-desktop">' +
@@ -1340,7 +1609,27 @@
           '</table>' +
         '</div>' +
       '</div>' +
-      '<div class="auro-atenciones-mobile">' + tarjetasMovil + '</div>';
+      '<div class="auro-atenciones-mobile">' + tarjetasMovil + '</div>' +
+      paginacionHTML;
+
+    const btnAnt = $('btnAtencionesAnterior');
+    const btnSig = $('btnAtencionesSiguiente');
+
+    if(btnAnt){
+      btnAnt.addEventListener('click', function(){
+        if(consultasPaginaActual > 1){
+          consultasPaginaActual--;
+          renderAtencionesPaciente();
+        }
+      });
+    }
+
+    if(btnSig){
+      btnSig.addEventListener('click', function(){
+        consultasPaginaActual++;
+        renderAtencionesPaciente();
+      });
+    }
 
     lista.querySelectorAll('[data-atencion-id]').forEach(btn => {
       btn.addEventListener('click', function(){
