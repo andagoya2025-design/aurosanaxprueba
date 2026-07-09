@@ -260,15 +260,45 @@
 
       #auroAtencionesBox .auro-atencion-medico-box{
         display:grid;
-        gap:3px;
-        line-height:1.25;
+        gap:4px;
+        line-height:1.22;
+        min-width:0;
+      }
+
+      #auroAtencionesBox .auro-atencion-medico-nombre{
+        display:block;
+        color:#111827;
+        font-size:13px;
+        font-weight:900;
+        word-break:break-word;
+      }
+
+      #auroAtencionesBox .auro-atencion-medico-id-row{
+        display:flex;
+        align-items:center;
+        gap:6px;
+        flex-wrap:wrap;
+      }
+
+      #auroAtencionesBox .auro-atencion-medico-id-label{
+        display:inline-flex;
+        align-items:center;
+        border:1px solid #f3d4e8;
+        background:#fdf2f8;
+        color:#7a174f;
+        border-radius:999px;
+        padding:2px 7px;
+        font-size:9.5px;
+        font-weight:900;
+        letter-spacing:.04em;
+        text-transform:uppercase;
       }
 
       #auroAtencionesBox .auro-atencion-medico-id{
-        display:block;
+        display:inline-block;
         font-size:11px;
-        font-weight:800;
-        color:#6b1b51;
+        font-weight:750;
+        color:#475569;
         word-break:break-word;
       }
 
@@ -1351,10 +1381,15 @@
 
   function auroAtencionMedicoHTML(atencion){
     const m = auroAtencionResolverMedico(atencion);
-    const idHtml = m.id && m.id !== '—'
-      ? '<small class="auro-atencion-medico-id">' + safe(m.id) + '</small>'
-      : '<small class="auro-atencion-medico-id text-muted">ID no disponible</small>';
-    return '<div class="auro-atencion-medico-box"><b>' + safe(m.nombre) + '</b>' + idHtml + '</div>';
+    const idValor = m.id && m.id !== '—' ? safe(m.id) : 'ID no disponible';
+
+    return '<div class="auro-atencion-medico-box">' +
+      '<strong class="auro-atencion-medico-nombre">' + safe(m.nombre) + '</strong>' +
+      '<div class="auro-atencion-medico-id-row">' +
+        '<span class="auro-atencion-medico-id-label">ID médico</span>' +
+        '<small class="auro-atencion-medico-id">' + idValor + '</small>' +
+      '</div>' +
+    '</div>';
   }
 
   function ocultarDetalleAtencion(){
@@ -1451,7 +1486,7 @@
         auroAtencionDato('Fecha', fechaVisual(a.fecha_atencion)) +
         auroAtencionDato('Hora', horaVisualAtencion(a.hora_atencion || '—')) +
         auroAtencionDato('Tipo', a.tipo_atencion || '—') +
-        auroAtencionDatoHTML('Médico / ID médico', auroAtencionMedicoHTML(a)) +
+        auroAtencionDatoHTML('Médico', auroAtencionMedicoHTML(a)) +
         auroAtencionDato('ID historia', a.id_historia || '—') +
         auroAtencionDato('ID cita', auroAtencionCitaTexto(a)) +
         auroAtencionDato('Paciente', a.id_paciente || idPacienteActivo() || '—') +
