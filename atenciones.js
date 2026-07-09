@@ -162,6 +162,10 @@
         padding:9px 10px;
         background:#fff;
         min-width:0;
+        min-height:72px;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
       }
 
       #auroAtencionesBox .auro-atencion-info-card span{
@@ -183,7 +187,7 @@
 
       #auroAtencionesBox .auro-receta-resumen-box{
         display:grid;
-        gap:3px;
+        gap:5px;
         white-space:normal;
         min-width:220px;
       }
@@ -192,6 +196,7 @@
         font-weight:900;
         color:#111827;
         line-height:1.25;
+        margin-bottom:1px;
       }
 
       #auroAtencionesBox .auro-receta-med-esquema{
@@ -238,9 +243,13 @@
       #auroAtencionesBox .auro-receta-indicacion-resumen{
         color:#475569;
         font-size:12px;
-        line-height:1.25;
+        line-height:1.3;
         max-width:260px;
         white-space:normal;
+        display:-webkit-box;
+        -webkit-line-clamp:2;
+        -webkit-box-orient:vertical;
+        overflow:hidden;
       }
 
       #auroAtencionesBox .auro-consultas-paginacion{
@@ -420,6 +429,7 @@
 
         #auroAtencionesBox .auro-atencion-info-card{
           padding:8px 9px!important;
+          min-height:auto!important;
         }
 
         #auroAtencionesBox .auro-recetas-atencion-box{
@@ -1386,7 +1396,7 @@
     return '<div class="auro-atencion-medico-box">' +
       '<strong class="auro-atencion-medico-nombre">' + safe(m.nombre) + '</strong>' +
       '<div class="auro-atencion-medico-id-row">' +
-        '<span class="auro-atencion-medico-id-label">ID médico</span>' +
+        '<span class="auro-atencion-medico-id-label">ID</span>' +
         '<small class="auro-atencion-medico-id">' + idValor + '</small>' +
       '</div>' +
     '</div>';
