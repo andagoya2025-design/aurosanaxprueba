@@ -257,6 +257,21 @@
         font-weight:800;
       }
 
+
+      #auroAtencionesBox .auro-atencion-medico-box{
+        display:grid;
+        gap:3px;
+        line-height:1.25;
+      }
+
+      #auroAtencionesBox .auro-atencion-medico-id{
+        display:block;
+        font-size:11px;
+        font-weight:800;
+        color:#6b1b51;
+        word-break:break-word;
+      }
+
       @media (max-width: 768px){
         #auroAtencionesBox{
           padding:12px!important;
@@ -1255,12 +1270,87 @@
 
   function auroAtencionDato(label, valor){
     const v = String(valor || '').trim() || '—';
-    return '<div class="auro-atencion-info-card"><span>' + safe(label) + '</span><b>' + safe(v) + '</b></div>';
+    const esHTMLSeguro = /<\/?(div|b|small|span)/i.test(v);
+    return '<div class="auro-atencion-info-card"><span>' + safe(label) + '</span><b>' + (esHTMLSeguro ? v : safe(v)) + '</b></div>';
   }
 
   function auroAtencionCitaTexto(a){
     const id = String(a?.id_cita || '').trim();
     return id || 'Sin cita vinculada';
+  }
+
+
+  function auroAtencionNormalizarNombre(texto){
+    return String(texto || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g,'')
+      .replace(/\s+/g,' ');
+  }
+
+  function auroAtencionResolverMedico(atencion){
+    const raw = String(atencion?.id_medico || '').trim();
+    let nombre = '';
+    let id = '';
+
+    if(raw && /^MED[-_]/i.test(raw)){
+      id = raw;
+    }else if(raw){
+      nombre = raw;
+    }
+
+    try{
+      const medicosLista = Array.isArray(window.medicos) ? window.medicos : [];
+      if(medicosLista.length){
+        const rawNorm = auroAtencionNormalizarNombre(raw);
+        const encontrado = medicosLista.find(m => {
+          const mid = String(m.id_medico || m.id || m.codigo || '').trim();
+          const mnombre = String(m.nombre || m.nombres || '').trim();
+          const mapellidos = String(m.apellidos || '').trim();
+          const completo = String(m.nombre_completo || (mnombre + ' ' + mapellidos)).trim();
+          const completoNorm = auroAtencionNormalizarNombre(completo);
+          const nombreNorm = auroAtencionNormalizarNombre(mnombre + ' ' + mapellidos);
+          return (
+            (id && mid && mid === id) ||
+            (rawNorm && completoNorm && (completoNorm.includes(rawNorm) || rawNorm.includes(completoNorm))) ||
+            (rawNorm && nombreNorm && (nombreNorm.includes(rawNorm) || rawNorm.includes(nombreNorm))) ||
+            (rawNorm.includes('aurora') && (completoNorm.includes('aurora') || nombreNorm.includes('aurora')))
+          );
+        });
+
+        if(encontrado){
+          id = String(encontrado.id_medico || encontrado.id || encontrado.codigo || id || '').trim();
+          const n = String(encontrado.nombre_completo || ((encontrado.nombres || encontrado.nombre || '') + ' ' + (encontrado.apellidos || ''))).trim();
+          if(n) nombre = n;
+        }
+      }
+    }catch(e){
+      console.warn(MODULO, 'No se pudo resolver médico desde catálogo.', e);
+    }
+
+    const normal = auroAtencionNormalizarNombre(nombre || raw);
+    if((!id || !/^MED[-_]/i.test(id)) && normal.includes('aurora')){
+      id = 'MED-20260623160507-397';
+    }
+
+    if(!nombre){
+      if(normal.includes('aurora')) nombre = 'Dra. Aurora Andagoya';
+      else nombre = raw || '—';
+    }
+
+    return {
+      nombre: nombre || '—',
+      id: id || '—'
+    };
+  }
+
+  function auroAtencionMedicoHTML(atencion){
+    const m = auroAtencionResolverMedico(atencion);
+    const idHtml = m.id && m.id !== '—'
+      ? '<small class="auro-atencion-medico-id">' + safe(m.id) + '</small>'
+      : '<small class="auro-atencion-medico-id text-muted">ID no disponible</small>';
+    return '<div class="auro-atencion-medico-box"><b>' + safe(m.nombre) + '</b>' + idHtml + '</div>';
   }
 
   function ocultarDetalleAtencion(){
@@ -1357,7 +1447,7 @@
         auroAtencionDato('Fecha', fechaVisual(a.fecha_atencion)) +
         auroAtencionDato('Hora', horaVisualAtencion(a.hora_atencion || '—')) +
         auroAtencionDato('Tipo', a.tipo_atencion || '—') +
-        auroAtencionDato('Médico / ID médico', a.id_medico || '—') +
+        auroAtencionDato('Médico / ID médico', auroAtencionMedicoHTML(a)) +
         auroAtencionDato('ID historia', a.id_historia || '—') +
         auroAtencionDato('ID cita', auroAtencionCitaTexto(a)) +
         auroAtencionDato('Paciente', a.id_paciente || idPacienteActivo() || '—') +
