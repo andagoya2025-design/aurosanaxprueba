@@ -1270,8 +1270,12 @@
 
   function auroAtencionDato(label, valor){
     const v = String(valor || '').trim() || '—';
-    const esHTMLSeguro = /<\/?(div|b|small|span)/i.test(v);
-    return '<div class="auro-atencion-info-card"><span>' + safe(label) + '</span><b>' + (esHTMLSeguro ? v : safe(v)) + '</b></div>';
+    return '<div class="auro-atencion-info-card"><span>' + safe(label) + '</span><b>' + safe(v) + '</b></div>';
+  }
+
+  function auroAtencionDatoHTML(label, html){
+    const h = String(html || '').trim() || '<b>—</b>';
+    return '<div class="auro-atencion-info-card"><span>' + safe(label) + '</span>' + h + '</div>';
   }
 
   function auroAtencionCitaTexto(a){
@@ -1447,7 +1451,7 @@
         auroAtencionDato('Fecha', fechaVisual(a.fecha_atencion)) +
         auroAtencionDato('Hora', horaVisualAtencion(a.hora_atencion || '—')) +
         auroAtencionDato('Tipo', a.tipo_atencion || '—') +
-        auroAtencionDato('Médico / ID médico', auroAtencionMedicoHTML(a)) +
+        auroAtencionDatoHTML('Médico / ID médico', auroAtencionMedicoHTML(a)) +
         auroAtencionDato('ID historia', a.id_historia || '—') +
         auroAtencionDato('ID cita', auroAtencionCitaTexto(a)) +
         auroAtencionDato('Paciente', a.id_paciente || idPacienteActivo() || '—') +
