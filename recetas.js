@@ -434,6 +434,8 @@
       #recetas .form-control,#recetas .form-select{
         border-radius:14px!important;
       }
+      #recetas label[for="recMedicamento"],#recetas label[for="recIndicaciones"],#recetas label[for="recRecomendaciones"]{display:flex;align-items:center;gap:7px;margin-bottom:7px!important;color:#5a1740!important;}
+      #recetas label[for="recMedicamento"]:before,#recetas label[for="recIndicaciones"]:before,#recetas label[for="recRecomendaciones"]:before{content:"";width:7px;height:7px;border-radius:50%;background:#c23b83;box-shadow:0 0 0 4px #fdf2f8;flex:0 0 auto;}
       #recetaPreview{border-radius:22px!important;}
       @media(max-width:760px){
         #recetas .cardx{padding:14px!important;border-radius:18px!important;}
@@ -1116,12 +1118,12 @@
           .auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px;}
           .auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;word-break:break-word;}
           .auro-receta-section{margin-top:9px;break-inside:avoid;}
-          .auro-receta-section h4{margin:0 0 5px;color:#8b1e5a;font-size:13px;border-bottom:1px solid #fbcfe8;padding-bottom:4px;font-weight:950;letter-spacing:.01em;}
-          .auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:9px 10px;min-height:auto;white-space:normal;word-break:break-word;background:linear-gradient(135deg,#ffffff,#fffafd);}
-          .auro-rp{font-size:16px;font-weight:950;color:#111827;margin-bottom:5px;display:inline-flex;align-items:center;gap:6px;}
-          .auro-rp:after{content:"Prescripción médica";font-size:10px;font-weight:850;color:#8b1e5a;background:#fdf2f8;border:1px solid #fbcfe8;border-radius:999px;padding:3px 8px;}
-          .auro-rx-list{display:grid;gap:6px;}
-          .auro-rx-item{border:1px solid #edf2f7;border-left:3px solid #c23b83;border-radius:12px;background:#fff;padding:6px 8px;break-inside:avoid;}
+          .auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950;letter-spacing:.015em;}
+          .auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;min-height:auto;white-space:normal;word-break:break-word;background:linear-gradient(135deg,#ffffff,#fffafd);box-shadow:0 4px 14px rgba(139,30,90,.035);}
+          .auro-rp{display:flex;align-items:center;gap:8px;margin-bottom:7px;color:#111827;font-size:12.5px;font-weight:950;letter-spacing:.01em;}
+          .auro-rp-icon{width:25px;height:25px;border-radius:9px;display:inline-grid;place-items:center;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;font-size:11px;font-weight:950;box-shadow:0 5px 12px rgba(139,30,90,.16);flex:0 0 auto;}
+          .auro-rx-list{display:grid;gap:5px;}
+          .auro-rx-item{border:1px solid #edf2f7;border-left:3px solid #c23b83;border-radius:12px;background:#fff;padding:7px 9px;break-inside:avoid;}
           .auro-rx-item.compacto{padding:6px 8px;}
           .auro-rx-title{display:flex;align-items:flex-start;gap:6px;color:#111827;line-height:1.25;}
           .auro-rx-title b{font-size:12.8px;font-weight:950;}
@@ -1156,7 +1158,7 @@
           <div><span>Médico</span><b>${safe(medicoTexto)}</b></div><div><span>Cód. médico</span><b>${safe(codigoMedico)}</b></div>
           <div style="grid-column:1/-1"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>
         </div>
-        <div class="auro-receta-section"><h4>Prescripción</h4><div class="auro-receta-box"><div class="auro-rp">Rp/</div>${recetaMedicamentosPremiumHTML(r.medicamento)}</div></div>
+        <div class="auro-receta-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box"><div class="auro-rp"><span class="auro-rp-icon">Rx</span><span>Prescripción médica</span></div>${recetaMedicamentosPremiumHTML(r.medicamento)}</div></div>
         <div class="auro-receta-section"><h4>Indicaciones para paciente</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.indicaciones, '—')}</div></div>
         ${r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.recomendaciones, '—')}</div></div>` : ''}
         <div class="auro-receta-footer"><div style="font-size:10.5px;color:#6b7280;line-height:1.35;">Documento generado desde AUROSANAX Clinical ERP DEMO.<br>Esta receta debe ser validada con firma y sello del profesional tratante.<br>ID receta: ${safe(idReceta)} · Código médico: ${safe(codigoMedico)}</div><div class="auro-firma"><div class="auro-linea"></div><b>Dra. Aurora Andagoya Murillo</b><br><span>Ginecología y Obstetricia</span><br><span>Código médico: ${safe(codigoMedico)}</span><br><span>Firma y sello</span></div></div>
