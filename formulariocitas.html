@@ -101,6 +101,12 @@
     .success-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}
     .success-note{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:14px;padding:10px 12px;margin-top:12px;font-size:13px;font-weight:800}
 
+    /* AUROSANAX: estado final seguro después de reservar */
+    #citaForm.reserva-completada > .flow-card,
+    #citaForm.reserva-completada > .mini-note,
+    #citaForm.reserva-completada > #formMainActions{display:none!important}
+    #citaForm.reserva-completada #statusBox{margin-top:0}
+
     .ux-guide{border:1px solid #f1d4e5;background:linear-gradient(180deg,#fff,#fff7fb);border-radius:22px;padding:14px;margin-bottom:16px;box-shadow:0 12px 28px rgba(139,30,90,.055)}
     .ux-guide-title{font-weight:950;color:#7a174f;margin-bottom:9px;display:flex;align-items:center;gap:7px}
     .ux-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
@@ -304,7 +310,7 @@
 
           <div id="statusBox" class="status"></div>
 
-          <div class="d-flex gap-2 flex-wrap mt-4">
+          <div id="formMainActions" class="d-flex gap-2 flex-wrap mt-4">
             <button type="submit" class="btn-auro flex-fill"><i class="bi bi-calendar-check me-1"></i> Reservar cita</button>
             <button type="button" class="btn-line" onclick="cargarDatosIniciales()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
           </div>
@@ -325,6 +331,7 @@
     let serviciosMedico = [];
     let selectedSlot = null;
     let enviandoCita = false;
+    let reservaCompletada = false;
     let miniCalendarDate = new Date();
     const miniMonthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const miniDayNames = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -1044,12 +1051,96 @@
       }) || null;
     }
 
+    function citaCorrespondeAlPaciente(c, data){
+      const doc = soloDigitos(data?.numero_documento || '');
+      const wa = soloDigitos(data?.whatsapp || data?.telefono || '');
+      const idsPaciente = idsPacientesRelacionadosLocal(data);
+      const cDoc = extraerDocumentoCita(c);
+      const cTel = extraerTelefonoCita(c);
+      const cIdPaciente = String(c?.id_paciente || '').trim();
+
+      return !!(
+        (doc && cDoc && doc === cDoc) ||
+        (wa && cTel && wa === cTel) ||
+        (cIdPaciente && idsPaciente.has(cIdPaciente))
+      );
+    }
+
+    function buscarCitaFuturaActivaPaciente(data){
+      const hoy = fechaISO(new Date());
+      return (Array.isArray(citas) ? citas : [])
+        .filter(c => estadoCitaActiva(c))
+        .filter(c => citaCorrespondeAlPaciente(c, data))
+        .filter(c => {
+          const fecha = normalizarFecha(c.fecha_cita || c.fecha || '');
+          return fecha && fecha >= hoy;
+        })
+        .sort((a,b) => {
+          const fa = normalizarFecha(a.fecha_cita || a.fecha || '');
+          const fb = normalizarFecha(b.fecha_cita || b.fecha || '');
+          const ha = formatearHoraVista(a.hora_inicio || '00:00');
+          const hb = formatearHoraVista(b.hora_inicio || '00:00');
+          return (fa + ' ' + ha).localeCompare(fb + ' ' + hb);
+        })[0] || null;
+    }
+
+    function confirmarNuevaReservaConCitaFutura(data){
+      const existente = buscarCitaFuturaActivaPaciente(data);
+      if(!existente) return true;
+
+      const fecha = formatearFechaBonita(normalizarFecha(existente.fecha_cita || existente.fecha || ''));
+      const hora = formatearHoraVista(existente.hora_inicio || '');
+      const fin = formatearHoraVista(existente.hora_fin || '');
+      const estado = existente.estado_cita || existente.estado || 'Pendiente';
+      const medico = medicoNombre(existente.id_medico || '');
+      const codigo = existente.id_cita || '';
+
+      return window.confirm(
+        'Este paciente ya tiene una cita futura activa.\n\n' +
+        (codigo ? 'Código: ' + codigo + '\n' : '') +
+        'Fecha: ' + (fecha || 'No registrada') + '\n' +
+        'Hora: ' + (hora || 'No registrada') + (fin ? ' - ' + fin : '') + '\n' +
+        'Médico: ' + medico + '\n' +
+        'Estado: ' + estado + '\n\n' +
+        '¿Desea continuar y reservar una nueva cita?'
+      );
+    }
+
+    function activarModoReservaCompletada(){
+      reservaCompletada = true;
+      const form = document.getElementById('citaForm');
+      if(form) form.classList.add('reserva-completada');
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+
+    async function iniciarNuevaReserva(){
+      reservaCompletada = false;
+      const form = document.getElementById('citaForm');
+      if(form){
+        form.classList.remove('reserva-completada');
+        form.reset();
+      }
+
+      selectedSlot = null;
+      window.__slotsDisponibles = [];
+      const hoy = new Date();
+      document.getElementById('fecha_cita').value = fechaISO(hoy);
+      document.getElementById('hora_inicio').value = '';
+      document.getElementById('hora_fin').value = '';
+      miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      limpiarStatus();
+      actualizarResumenSeleccion();
+      await cargarDatosIniciales();
+      const main = document.querySelector('main.cardx');
+      if(main) main.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+
     document.getElementById('citaForm').addEventListener('submit', async function(e){
       e.preventDefault();
       limpiarStatus();
       limpiarErroresCampos();
 
-      if(enviandoCita) return;
+      if(enviandoCita || reservaCompletada) return;
 
       const data = {
         numero_documento: document.getElementById('numero_documento').value.trim(),
@@ -1075,6 +1166,11 @@
       const duplicada = citaDuplicadaLocal(data);
       if(duplicada){
         setStatus('err', mensajeDuplicidadReserva(duplicada));
+        return;
+      }
+
+      if(!confirmarNuevaReservaConCitaFutura(data)){
+        setStatus('info','<i class="bi bi-info-circle me-1"></i> La nueva reserva fue cancelada. La cita futura existente se mantiene sin cambios.');
         return;
       }
 
@@ -1162,19 +1258,12 @@
             <div class="success-actions">
               ${waLink ? `<a class="btn-wa" target="_blank" href="${waLink}"><i class="bi bi-whatsapp"></i> Guardar mi comprobante</a>` : ''}
               ${secretariaWaLink ? `<a class="btn-wa-secretaria" target="_blank" href="${secretariaWaLink}"><i class="bi bi-send-check"></i> Confirmar cita con Secretaría</a>` : ''}
-              <button type="button" class="btn-line" onclick="cargarDatosIniciales(true)"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
+              <button type="button" class="btn-line" onclick="iniciarNuevaReserva()"><i class="bi bi-calendar-plus me-1"></i> Nueva reserva</button>
             </div>
           </div>
         `);
 
-        this.reset();
-        const hoy = new Date();
-        document.getElementById('fecha_cita').value = fechaISO(hoy);
-        selectedSlot = null;
-        document.getElementById('hora_inicio').value = '';
-        document.getElementById('hora_fin').value = '';
-        actualizarResumenSeleccion();
-        await cargarDatosIniciales(true);
+        activarModoReservaCompletada();
       }catch(err){
         console.error(err);
         setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> ' + err.message);
