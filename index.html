@@ -2633,10 +2633,36 @@ function actualizarDashboard(){
   setTextIfExists('stHistorias', historiasClinicas.length);
   setTextIfExists('stAtendidas', atendidas.length);
 
+  /* AUROSANAX DASHBOARD - Agenda rápida segura
+     Muestra únicamente las próximas citas vigentes,
+     ordenadas desde la más cercana a la más lejana.
+     No modifica la Agenda médica ni el almacenamiento. */
+  const ahoraDashboard = Date.now();
   const proximas = citasAgendaWeb
-    .filter(c => c.fecha_deseada)
+    .filter(c => {
+      const fecha = String(c.fecha_deseada || c.fecha_cita || c.fecha || '').slice(0,10);
+      if(!fecha) return false;
+
+      const horaTexto = String(c.hora_deseada || c.hora_inicio || c.hora || '00:00');
+      const horaMatch = horaTexto.match(/(\d{1,2}):(\d{2})/);
+      const hora = horaMatch
+        ? String(horaMatch[1]).padStart(2,'0') + ':' + horaMatch[2]
+        : '00:00';
+
+      const timestamp = new Date(fecha + 'T' + hora + ':00').getTime();
+      if(!Number.isFinite(timestamp) || timestamp < ahoraDashboard) return false;
+
+      const estado = normalizarEstadoAgenda(c.estado || c.estado_cita || '');
+      return estado !== 'anulada' && estado !== 'atendida' && estado !== 'no asistio';
+    })
     .slice()
-    .sort((a,b) => String(a.fecha_deseada + ' ' + (a.hora_deseada || '')).localeCompare(String(b.fecha_deseada + ' ' + (b.hora_deseada || ''))))
+    .sort((a,b) => {
+      const fechaA = String(a.fecha_deseada || a.fecha_cita || a.fecha || '').slice(0,10);
+      const fechaB = String(b.fecha_deseada || b.fecha_cita || b.fecha || '').slice(0,10);
+      const horaA = String(a.hora_deseada || a.hora_inicio || a.hora || '00:00');
+      const horaB = String(b.hora_deseada || b.hora_inicio || b.hora || '00:00');
+      return String(fechaA + ' ' + horaA).localeCompare(String(fechaB + ' ' + horaB));
+    })
     .slice(0,5);
 
   const body = document.getElementById('dashboardAgendaBody');
@@ -2649,7 +2675,7 @@ function actualizarDashboard(){
         <td><span class="badge-auro">${c.servicio || ''}</span></td>
         <td>${badgeEstadoAgenda(c.estado)}</td>
       </tr>
-    `).join('') || '<tr><td colspan="5" class="dashboard-agenda-empty">Sin citas cargadas</td></tr>';
+    `).join('') || '<tr><td colspan="5" class="dashboard-agenda-empty">Sin próximas citas</td></tr>';
   }
 
   const mobile = document.getElementById('dashboardAgendaMobile');
@@ -2660,7 +2686,7 @@ function actualizarDashboard(){
         <div class="line"><span>Paciente</span><span>${c.nombre || ''}</span></div>
         <div class="line"><span>Servicio</span><span>${c.servicio || ''}</span></div>
       </div>
-    `).join('') || '<div class="mobile-card text-muted">Sin citas cargadas</div>';
+    `).join('') || '<div class="mobile-card text-muted">Sin próximas citas</div>';
   }
 }
 
