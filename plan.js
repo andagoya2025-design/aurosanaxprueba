@@ -26,6 +26,7 @@
    * limpiar interconsulta
    * guardar/restaurar por consulta
  - Responsive móvil Android/teléfono.
+ - Persistencia JSON uniforme para medicamentos, órdenes, interconsultas y evaluaciones.
 ****************************************************************/
 
 
@@ -63,6 +64,124 @@ function normalizarTextoPlan(t){
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g,'')
         .trim();
+}
+
+
+/* ============================================================
+   UTILIDADES JSON SEGURAS DEL PLAN
+   - Mantienen la interfaz actual.
+   - Evitan duplicados antes de guardar.
+   - Permiten cargar JSON sin afectar Recetas.
+============================================================ */
+
+function auroPlanParseJSONSeguro(valor, fallback){
+    if(valor === null || valor === undefined || valor === ''){
+        return fallback;
+    }
+
+    if(typeof valor === 'object'){
+        return valor;
+    }
+
+    const texto = String(valor || '').trim();
+
+    if(!texto){
+        return fallback;
+    }
+
+    try{
+        return JSON.parse(texto);
+    }catch(e){
+        return fallback;
+    }
+}
+
+function auroPlanClaveUnica(partes){
+    return (partes || [])
+        .map(v => normalizarTextoPlan(v))
+        .join('|');
+}
+
+function auroPlanOrdenesUnicas(lista){
+    const mapa = new Map();
+
+    (Array.isArray(lista) ? lista : []).forEach(item => {
+        const orden = String(item?.orden || '').trim();
+        if(!orden) return;
+
+        const normalizada = {
+            orden: orden,
+            cat: String(item?.cat || item?.categoria || 'OTROS').trim() || 'OTROS',
+            obs: String(item?.obs || item?.observacion || '').trim()
+        };
+
+        const clave = auroPlanClaveUnica([
+            normalizada.orden,
+            normalizada.cat,
+            normalizada.obs
+        ]);
+
+        if(!mapa.has(clave)){
+            mapa.set(clave, normalizada);
+        }
+    });
+
+    return Array.from(mapa.values());
+}
+
+function auroPlanInterconsultasUnicas(lista){
+    const mapa = new Map();
+
+    (Array.isArray(lista) ? lista : []).forEach(item => {
+        const normalizada = {
+            tipo: String(item?.tipo || '').trim(),
+            especialidad: String(item?.especialidad || '').trim(),
+            prioridad: String(item?.prioridad || 'Normal').trim() || 'Normal',
+            profesional: String(item?.profesional || '').trim(),
+            estado: String(item?.estado || 'Pendiente').trim() || 'Pendiente',
+            motivo: String(item?.motivo || '').trim(),
+            observaciones: String(item?.observaciones || item?.observacion || '').trim()
+        };
+
+        const tieneContenido = !!(
+            normalizada.tipo ||
+            normalizada.especialidad ||
+            normalizada.profesional ||
+            normalizada.motivo ||
+            normalizada.observaciones
+        );
+
+        if(!tieneContenido) return;
+
+        const clave = auroPlanClaveUnica([
+            normalizada.tipo,
+            normalizada.especialidad,
+            normalizada.prioridad,
+            normalizada.profesional,
+            normalizada.estado,
+            normalizada.motivo,
+            normalizada.observaciones
+        ]);
+
+        if(!mapa.has(clave)){
+            mapa.set(clave, normalizada);
+        }
+    });
+
+    return Array.from(mapa.values());
+}
+
+function auroPlanEvaluacionesSeleccionadasJSON(){
+    return AURO_PLAN_EVALUACIONES
+        .filter(item => {
+            const el = document.getElementById(item.id);
+            return !!(el && el.checked);
+        })
+        .map(item => ({
+            id: item.id,
+            texto: item.texto,
+            seleccionado: true
+        }));
 }
 
 
@@ -661,11 +780,14 @@ function agregarOrdenMedicaDesdeFormulario(){
         return;
     }
 
-    window.ordenesMedicasPlanSeleccionadas.push({
-        orden,
-        cat: auroPlanGetValue('hcOrdenTipo') || 'OTROS',
-        obs: auroPlanGetValue('hcOrdenObservacion')
-    });
+    window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas([
+        ...(window.ordenesMedicasPlanSeleccionadas || []),
+        {
+            orden,
+            cat: auroPlanGetValue('hcOrdenTipo') || 'OTROS',
+            obs: auroPlanGetValue('hcOrdenObservacion')
+        }
+    ]);
 
     limpiarFormularioOrdenMedica();
     renderOrdenesMedicasTabla();
@@ -778,7 +900,17 @@ function recopilarInterconsultaPlan(){
     if(motivo) partes.push('Motivo: ' + motivo);
     if(observaciones) partes.push('Observaciones: ' + observaciones);
 
-    const textoFormulario = partes.join('\n');
+    const formularioTieneContenido = !!(
+        tipo ||
+        especialidad ||
+        profesional ||
+        motivo ||
+        observaciones
+    );
+
+    const textoFormulario = formularioTieneContenido
+        ? partes.join('\n')
+        : '';
 
     if(textoFormulario){
         auroPlanSetValue('hcInterconsultaResumen', textoFormulario);
@@ -812,15 +944,18 @@ function agregarInterconsultaPlan(){
         return;
     }
 
-    window.interconsultasPlanSeleccionadas.push({
-        tipo: auroPlanGetValue('hcInterconsultaTipo'),
-        especialidad,
-        prioridad: auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal',
-        profesional: auroPlanGetValue('hcInterconsultaProfesional'),
-        estado: auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente',
-        motivo: auroPlanGetValue('hcInterconsultaMotivo'),
-        observaciones: auroPlanGetValue('hcInterconsultaObservaciones')
-    });
+    window.interconsultasPlanSeleccionadas = auroPlanInterconsultasUnicas([
+        ...(window.interconsultasPlanSeleccionadas || []),
+        {
+            tipo: auroPlanGetValue('hcInterconsultaTipo'),
+            especialidad,
+            prioridad: auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal',
+            profesional: auroPlanGetValue('hcInterconsultaProfesional'),
+            estado: auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente',
+            motivo: auroPlanGetValue('hcInterconsultaMotivo'),
+            observaciones: auroPlanGetValue('hcInterconsultaObservaciones')
+        }
+    ]);
 
     renderInterconsultasTabla();
     recopilarInterconsultaPlan();
@@ -1123,6 +1258,12 @@ function instalarEventosOrdenesMedicasPlan(){
 
 function auroSincronizarPlanAntesGuardar(){
 
+    window.ordenesMedicasPlanSeleccionadas =
+        auroPlanOrdenesUnicas(window.ordenesMedicasPlanSeleccionadas || []);
+
+    window.interconsultasPlanSeleccionadas =
+        auroPlanInterconsultasUnicas(window.interconsultasPlanSeleccionadas || []);
+
     if(typeof recopilarEvaluacionesPlan === 'function'){
         recopilarEvaluacionesPlan();
     }
@@ -1367,13 +1508,23 @@ function auroPlanPrepararDatosSheets(){
             auroPlanGetValue('hcRecetaMedicamentos'),
 
         ordenes_medicas:
-            auroPlanGetValue('hcExamenesSolicitados'),
+            JSON.stringify(
+                auroPlanOrdenesUnicas(
+                    window.ordenesMedicasPlanSeleccionadas || []
+                )
+            ),
 
         interconsulta:
-            auroPlanGetValue('hcInterconsultaResumen'),
+            JSON.stringify(
+                auroPlanInterconsultasUnicas(
+                    window.interconsultasPlanSeleccionadas || []
+                )
+            ),
 
         evaluaciones_plan:
-            auroPlanGetValue('hcEvaluacionesResumen'),
+            JSON.stringify(
+                auroPlanEvaluacionesSeleccionadasJSON()
+            ),
 
         indicaciones_paciente:
             auroPlanGetValue('hcIndicacionesPaciente'),
@@ -1456,6 +1607,64 @@ function auroPlanTextoAOrdenes(texto){
     }).filter(o => o.orden);
 }
 
+function auroPlanTextoAInterconsultas(texto){
+    texto = String(texto || '').trim();
+    if(!texto) return [];
+
+    const bloques = texto
+        .split(/\n(?=\s*\d+\.\s*)/)
+        .map(x => x.trim())
+        .filter(Boolean);
+
+    const origen = bloques.length > 1 ? bloques : [texto];
+
+    return origen.map(bloque => {
+        const limpio = bloque.replace(/^\s*\d+\.\s*/, '').trim();
+        const partes = limpio
+            .split(/\s+-\s+|\n+/)
+            .map(x => x.trim())
+            .filter(Boolean);
+
+        const item = {
+            tipo: '',
+            especialidad: '',
+            prioridad: 'Normal',
+            profesional: '',
+            estado: 'Pendiente',
+            motivo: '',
+            observaciones: ''
+        };
+
+        partes.forEach((parte, index) => {
+            if(/^Tipo:/i.test(parte)){
+                item.tipo = parte.replace(/^Tipo:\s*/i, '').trim();
+            }else if(/^Especialidad:/i.test(parte)){
+                item.especialidad = parte.replace(/^Especialidad:\s*/i, '').trim();
+            }else if(/^Prioridad:/i.test(parte)){
+                item.prioridad = parte.replace(/^Prioridad:\s*/i, '').trim() || 'Normal';
+            }else if(/^Profesional:/i.test(parte)){
+                item.profesional = parte.replace(/^Profesional:\s*/i, '').trim();
+            }else if(/^Estado:/i.test(parte)){
+                item.estado = parte.replace(/^Estado:\s*/i, '').trim() || 'Pendiente';
+            }else if(/^Motivo:/i.test(parte)){
+                item.motivo = parte.replace(/^Motivo:\s*/i, '').trim();
+            }else if(/^Observaciones:/i.test(parte)){
+                item.observaciones = parte.replace(/^Observaciones:\s*/i, '').trim();
+            }else if(index === 0 && parte){
+                item.especialidad = parte;
+            }
+        });
+
+        return item;
+    }).filter(item =>
+        item.tipo ||
+        item.especialidad ||
+        item.profesional ||
+        item.motivo ||
+        item.observaciones
+    );
+}
+
 function auroPlanCargarEvaluacionesDesdeTexto(texto){
     texto = String(texto || '').trim();
 
@@ -1471,6 +1680,51 @@ function auroPlanCargarEvaluacionesDesdeTexto(texto){
     });
 
     auroPlanSetValue('hcEvaluacionesResumen', texto);
+}
+
+function auroPlanCargarEvaluacionesDesdeValor(valor){
+    limpiarEvaluacionesCamposPlan();
+
+    const data = auroPlanParseJSONSeguro(valor, null);
+
+    if(Array.isArray(data)){
+        const ids = new Set();
+        const textos = new Set();
+
+        data.forEach(item => {
+            if(typeof item === 'string'){
+                textos.add(item);
+                return;
+            }
+
+            if(item && item.seleccionado !== false){
+                if(item.id) ids.add(String(item.id));
+                if(item.texto) textos.add(String(item.texto));
+            }
+        });
+
+        AURO_PLAN_EVALUACIONES.forEach(item => {
+            const el = document.getElementById(item.id);
+            if(el){
+                el.checked = ids.has(item.id) || textos.has(item.texto);
+            }
+        });
+
+        recopilarEvaluacionesPlan();
+        return;
+    }
+
+    if(data && typeof data === 'object'){
+        AURO_PLAN_EVALUACIONES.forEach(item => {
+            const el = document.getElementById(item.id);
+            if(el) el.checked = !!data[item.id];
+        });
+
+        recopilarEvaluacionesPlan();
+        return;
+    }
+
+    auroPlanCargarEvaluacionesDesdeTexto(valor);
 }
 
 function auroPlanEstadoSeguro(valor){
@@ -1542,10 +1796,31 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
         window.medicamentosPlanSeleccionados = [];
     }
 
-    const ordenesTexto = valorPlan('ordenes_medicas','ordenes','examenes_solicitados');
-    window.ordenesMedicasPlanSeleccionadas = auroPlanTextoAOrdenes(ordenesTexto);
+    const ordenesValor = valorPlan('ordenes_medicas','ordenes','examenes_solicitados');
+    const ordenesJSON = auroPlanParseJSONSeguro(ordenesValor, null);
 
-    window.interconsultasPlanSeleccionadas = [];
+    window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas(
+        Array.isArray(ordenesJSON)
+            ? ordenesJSON
+            : auroPlanTextoAOrdenes(ordenesValor)
+    );
+
+    const interconsultaValor = valorPlan(
+        'interconsulta',
+        'interconsultas',
+        'interconsulta_plan'
+    );
+
+    const interconsultaJSON = auroPlanParseJSONSeguro(
+        interconsultaValor,
+        null
+    );
+
+    window.interconsultasPlanSeleccionadas = auroPlanInterconsultasUnicas(
+        Array.isArray(interconsultaJSON)
+            ? interconsultaJSON
+            : auroPlanTextoAInterconsultas(interconsultaValor)
+    );
 
     auroPlanSetValue('hcPlanTratamiento',
         valorPlan('plan_terapeutico','planTratamiento','plan_tratamiento')
@@ -1555,15 +1830,17 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
         valorPlan('receta_medica','receta','recetaMedicamentos')
     );
 
-    auroPlanSetValue('hcExamenesSolicitados', ordenesTexto);
+    auroPlanSetValue('hcExamenesSolicitados', '');
 
-    auroPlanSetValue('hcInterconsultaResumen',
-        valorPlan('interconsulta','interconsultas','interconsulta_plan')
+    auroPlanSetValue('hcInterconsultaResumen', '');
+
+    const evaluacionesValor = valorPlan(
+        'evaluaciones_plan',
+        'evaluaciones',
+        'evaluacion_plan'
     );
 
-    const evaluacionesTexto = valorPlan('evaluaciones_plan','evaluaciones','evaluacion_plan');
-    auroPlanSetValue('hcEvaluacionesResumen', evaluacionesTexto);
-    auroPlanCargarEvaluacionesDesdeTexto(evaluacionesTexto);
+    auroPlanCargarEvaluacionesDesdeValor(evaluacionesValor);
 
     auroPlanSetValue('hcIndicacionesPaciente',
         valorPlan('indicaciones_paciente','indicaciones','indicacionesPaciente')
@@ -1579,15 +1856,11 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
     renderMedicamentosPlanTabla();
     renderOrdenesMedicasTabla();
+    renderInterconsultasTabla();
 
-    /*
-      No se fuerza recopilarInterconsultaPlan ni recopilarEvaluacionesPlan aquí
-      antes de conservar los valores cargados, para evitar sobrescribir datos de Sheets.
-    */
-    auroPlanSetValue('hcInterconsultaResumen',
-        valorPlan('interconsulta','interconsultas','interconsulta_plan')
-    );
-    auroPlanSetValue('hcEvaluacionesResumen', evaluacionesTexto);
+    recopilarOrdenesMedicasPlan();
+    recopilarInterconsultaPlan();
+    recopilarEvaluacionesPlan();
 
     sincronizarPlanConReceta();
     guardarPlanTemporal();
