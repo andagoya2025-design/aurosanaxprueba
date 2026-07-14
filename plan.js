@@ -27,6 +27,7 @@
    * guardar/restaurar por consulta
  - Responsive móvil Android/teléfono.
  - Persistencia JSON uniforme para medicamentos, órdenes, interconsultas y evaluaciones.
+ - Captura automática de interconsulta al actualizar el Plan.
 ****************************************************************/
 
 
@@ -1261,8 +1262,31 @@ function auroSincronizarPlanAntesGuardar(){
     window.ordenesMedicasPlanSeleccionadas =
         auroPlanOrdenesUnicas(window.ordenesMedicasPlanSeleccionadas || []);
 
+    const interconsultaFormulario = {
+        tipo: auroPlanGetValue('hcInterconsultaTipo'),
+        especialidad: auroPlanGetValue('hcInterconsultaEspecialidad'),
+        prioridad: auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal',
+        profesional: auroPlanGetValue('hcInterconsultaProfesional'),
+        estado: auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente',
+        motivo: auroPlanGetValue('hcInterconsultaMotivo'),
+        observaciones: auroPlanGetValue('hcInterconsultaObservaciones')
+    };
+
+    const formularioInterconsultaTieneContenido = !!(
+        String(interconsultaFormulario.tipo || '').trim() ||
+        String(interconsultaFormulario.especialidad || '').trim() ||
+        String(interconsultaFormulario.profesional || '').trim() ||
+        String(interconsultaFormulario.motivo || '').trim() ||
+        String(interconsultaFormulario.observaciones || '').trim()
+    );
+
     window.interconsultasPlanSeleccionadas =
-        auroPlanInterconsultasUnicas(window.interconsultasPlanSeleccionadas || []);
+        auroPlanInterconsultasUnicas([
+            ...(window.interconsultasPlanSeleccionadas || []),
+            ...(formularioInterconsultaTieneContenido
+                ? [interconsultaFormulario]
+                : [])
+        ]);
 
     if(typeof recopilarEvaluacionesPlan === 'function'){
         recopilarEvaluacionesPlan();
