@@ -549,17 +549,25 @@
     const locales = leerLocal().map(normalizar);
     const mapa = new Map();
 
-    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+    /*
+      AUROSANAX FIX:
+      localStorage es solo respaldo temporal.
+      Google Sheets es la fuente principal y sobrescribe la copia local.
+    */
+    locales.forEach(item => {
       const a = normalizar(item || {});
       if(a.id_atencion){
         mapa.set(String(a.id_atencion), a);
       }
     });
 
-    locales.forEach(item => {
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
       const a = normalizar(item || {});
       if(a.id_atencion){
-        mapa.set(String(a.id_atencion), Object.assign({}, mapa.get(String(a.id_atencion)) || {}, a));
+        mapa.set(
+          String(a.id_atencion),
+          Object.assign({}, mapa.get(String(a.id_atencion)) || {}, a)
+        );
       }
     });
 
@@ -567,7 +575,8 @@
       const na = Number(a.numero_consulta || 0);
       const nb = Number(b.numero_consulta || 0);
       if(na !== nb) return nb - na;
-      return String(b.fecha_atencion + ' ' + b.hora_atencion).localeCompare(String(a.fecha_atencion + ' ' + a.hora_atencion));
+      return String(b.fecha_atencion + ' ' + b.hora_atencion)
+        .localeCompare(String(a.fecha_atencion + ' ' + a.hora_atencion));
     });
 
     guardarLocal(mezcladas);
@@ -720,55 +729,24 @@
   }
 
   function atencionesPaciente(idPaciente){
-    const id = idPaciente || idPacienteActivo();
+    /*
+      AUROSANAX FIX:
+      Se usa exclusivamente el paciente solicitado.
+      No se agregan IDs de otro paciente conservado en memoria.
+    */
+    const id = String(idPaciente || idPacienteActivo() || '').trim();
 
-    const idsValidos = new Set();
-
-    function agregarId(v){
-      const s = String(v || '').trim();
-      if(s) idsValidos.add(s);
-    }
-
-    agregarId(id);
-    agregarId(idPacienteActivo());
-
-    try{
-      const p = pacienteActivo();
-      if(p){
-        agregarId(p.id_paciente);
-        agregarId(p.id);
-        agregarId(p.cedula);
-        agregarId(p.numero_documento);
-        agregarId(p.documento);
-      }
-    }catch(e){}
-
-    try{
-      const sel = $('hcPacienteSelect');
-      if(sel && sel.value) agregarId(sel.value);
-    }catch(e){}
-
-    if(!idsValidos.size) return [];
+    if(!id) return [];
 
     return leerLocal()
       .map(normalizar)
-      .filter(a => {
-        const posibles = [
-          a.id_paciente,
-          a.paciente_id,
-          a.id,
-          a.cedula,
-          a.numero_documento,
-          a.documento
-        ].map(v => String(v || '').trim()).filter(Boolean);
-
-        return posibles.some(v => idsValidos.has(v));
-      })
+      .filter(a => String(a.id_paciente || '').trim() === id)
       .sort((a,b) => {
         const na = Number(a.numero_consulta || 0);
         const nb = Number(b.numero_consulta || 0);
         if(na !== nb) return nb - na;
-        return String(b.fecha_atencion + ' ' + b.hora_atencion).localeCompare(String(a.fecha_atencion + ' ' + a.hora_atencion));
+        return String(b.fecha_atencion + ' ' + b.hora_atencion)
+          .localeCompare(String(a.fecha_atencion + ' ' + a.hora_atencion));
       });
   }
 
@@ -783,31 +761,36 @@
 
   function obtenerIdHistoriaActual(){
     try{
+      /*
+        AUROSANAX FIX:
+        Solo se acepta una historia explícitamente activa.
+        No se toma automáticamente la historia más reciente del paciente,
+        porque podría corresponder a otra consulta.
+      */
+      if(window.auroHistoriaSeleccionadaId){
+        return String(window.auroHistoriaSeleccionadaId).trim();
+      }
+
       if(window.editingHistoryId){
-        return String(window.editingHistoryId);
+        return String(window.editingHistoryId).trim();
       }
 
-      if(window.historiaActual && (window.historiaActual.id_historia || window.historiaActual.id)){
-        return String(window.historiaActual.id_historia || window.historiaActual.id);
+      if(
+        window.historiaActual &&
+        (window.historiaActual.id_historia || window.historiaActual.id)
+      ){
+        return String(
+          window.historiaActual.id_historia || window.historiaActual.id
+        ).trim();
       }
 
-      if(window.currentHistoria && (window.currentHistoria.id_historia || window.currentHistoria.id)){
-        return String(window.currentHistoria.id_historia || window.currentHistoria.id);
-      }
-
-      const paciente = pacienteActivo();
-      const idPaciente = paciente && (paciente.id_paciente || paciente.id || paciente.cedula)
-        ? String(paciente.id_paciente || paciente.id || paciente.cedula)
-        : '';
-
-      if(idPaciente && Array.isArray(window.historiasClinicas)){
-        const lista = window.historiasClinicas
-          .filter(h => String(h.id_paciente || h.paciente_id || h.cedula || '') === idPaciente)
-          .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_apertura || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_apertura || '')));
-
-        if(lista.length){
-          return String(lista[0].id_historia || lista[0].id || '');
-        }
+      if(
+        window.currentHistoria &&
+        (window.currentHistoria.id_historia || window.currentHistoria.id)
+      ){
+        return String(
+          window.currentHistoria.id_historia || window.currentHistoria.id
+        ).trim();
       }
     }catch(e){
       console.warn(MODULO, 'No se pudo obtener id_historia actual.', e);
@@ -982,6 +965,128 @@
     }
   }
 
+
+  async function vincularHistoriaAAtencionActual(idHistoria, idPaciente){
+    idHistoria = String(idHistoria || '').trim();
+    idPaciente = String(idPaciente || idPacienteActivo() || '').trim();
+
+    if(!idHistoria){
+      return {
+        success:false,
+        message:'No se recibió un id_historia válido.'
+      };
+    }
+
+    if(!idPaciente){
+      return {
+        success:false,
+        message:'No existe un paciente activo para vincular la historia.'
+      };
+    }
+
+    const lista = leerLocal().map(normalizar);
+
+    /*
+      Prioridad:
+      1. Atención activa del mismo paciente.
+      2. Atención abierta del mismo paciente.
+      3. Última atención sin id_historia del mismo paciente.
+      Nunca se toma una atención de otro paciente.
+    */
+    let idx = lista.findIndex(a =>
+      atencionActivaId &&
+      String(a.id_atencion || '') === String(atencionActivaId) &&
+      String(a.id_paciente || '').trim() === idPaciente
+    );
+
+    if(idx < 0){
+      idx = lista.findIndex(a =>
+        String(a.id_paciente || '').trim() === idPaciente &&
+        String(a.estado_atencion || '').toLowerCase() === 'abierta'
+      );
+    }
+
+    if(idx < 0){
+      const candidatas = lista
+        .map((a, index) => ({a, index}))
+        .filter(x =>
+          String(x.a.id_paciente || '').trim() === idPaciente &&
+          !String(x.a.id_historia || '').trim()
+        )
+        .sort((x, y) =>
+          String(y.a.actualizado_en || y.a.creado_en || y.a.fecha_atencion || '')
+            .localeCompare(
+              String(x.a.actualizado_en || x.a.creado_en || x.a.fecha_atencion || '')
+            )
+        );
+
+      if(candidatas.length){
+        idx = candidatas[0].index;
+      }
+    }
+
+    if(idx < 0){
+      return {
+        success:false,
+        message:'No se encontró una atención del paciente pendiente de vincular.'
+      };
+    }
+
+    const atencion = lista[idx];
+
+    if(String(atencion.id_paciente || '').trim() !== idPaciente){
+      return {
+        success:false,
+        message:'La atención localizada pertenece a otro paciente.'
+      };
+    }
+
+    /*
+      Si ya tiene otra historia, no se reemplaza silenciosamente.
+    */
+    const historiaAnterior = String(atencion.id_historia || '').trim();
+
+    if(historiaAnterior && historiaAnterior !== idHistoria){
+      return {
+        success:false,
+        message:
+          'La atención ya está vinculada a otra historia clínica. ' +
+          'Se bloqueó el cambio automático.'
+      };
+    }
+
+    const actualizada = normalizar(Object.assign({}, atencion, {
+      id_historia: idHistoria,
+      actualizado_en: fechaHora()
+    }));
+
+    lista[idx] = actualizada;
+    guardarLocal(lista);
+
+    atencionActivaId = actualizada.id_atencion;
+
+    window.planState = window.planState || {
+      atencionActual:'',
+      cache:{}
+    };
+    window.planState.atencionActual = actualizada.id_atencion;
+
+    if(window.examenFisicoState){
+      window.examenFisicoState.atencionActual = actualizada.id_atencion;
+    }
+
+    const resultado = await enviarAtencionGoogleSheets(actualizada);
+
+    renderAtencionesPaciente();
+
+    return {
+      success: !!(resultado && resultado.success),
+      message: resultado?.message || 'Atención vinculada con la historia clínica.',
+      id_atencion: actualizada.id_atencion,
+      id_historia: idHistoria,
+      id_paciente: idPaciente
+    };
+  }
 
   function leerRecetasLocales(){
     try{
@@ -1509,9 +1614,29 @@
   }
 
   function seleccionarAtencion(idAtencion){
-    const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
+    const a = leerLocal().find(x =>
+      String(x.id_atencion || '') === String(idAtencion || '')
+    );
+
     if(!a){
       alert('No se encontró la atención seleccionada.');
+      return;
+    }
+
+    const idPacienteVisible = String(idPacienteActivo() || '').trim();
+    const idPacienteAtencion = String(a.id_paciente || '').trim();
+
+    if(
+      idPacienteVisible &&
+      idPacienteAtencion &&
+      idPacienteVisible !== idPacienteAtencion
+    ){
+      alert(
+        'La consulta seleccionada pertenece a otro paciente. ' +
+        'Se bloqueó la apertura para proteger la historia clínica.'
+      );
+      atencionActivaId = '';
+      renderAtencionesPaciente();
       return;
     }
 
@@ -1810,7 +1935,19 @@
         if($('historia') && $('historia').classList.contains('active')) iniciarModulo();
       });
       envolverFuncion('seleccionarPacienteHistoria', function(){
-        setTimeout(function(){ cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente); },100);
+        atencionActivaId = '';
+        consultasPaginaActual = 1;
+
+        const box = $('auroAtencionActivaBox');
+        if(box){
+          box.style.display = 'none';
+          box.innerHTML = '';
+        }
+
+        setTimeout(function(){
+          cargarAtencionesDesdeSheets(true).then(renderAtencionesPaciente);
+        },100);
+
         setTimeout(renderAtencionesPaciente,500);
       });
 
@@ -1820,11 +1957,49 @@
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
-        setTimeout(function(){ cargarAtencionesDesdeSheets(false).then(renderAtencionesPaciente); },300);
+        atencionActivaId = '';
+        consultasPaginaActual = 1;
+
+        const box = $('auroAtencionActivaBox');
+        if(box){
+          box.style.display = 'none';
+          box.innerHTML = '';
+        }
+
+        setTimeout(function(){
+          cargarAtencionesDesdeSheets(true).then(renderAtencionesPaciente);
+        },300);
+
         setTimeout(renderAtencionesPaciente,800);
       });
     }, 700);
   });
+
+  window.vincularHistoriaAAtencionActual = vincularHistoriaAAtencionActual;
+
+  window.limpiarCacheAtencionesAurosanax = function(){
+    try{
+      localStorage.removeItem(STORAGE_KEY);
+      atencionActivaId = '';
+      atencionesSheetsCargadas = false;
+      atencionesSheetsCargando = false;
+      consultasPaginaActual = 1;
+
+      return cargarAtencionesDesdeSheets(true).then(function(lista){
+        renderAtencionesPaciente();
+        return {
+          success:true,
+          message:'Caché de atenciones reconstruida desde Google Sheets.',
+          total:Array.isArray(lista) ? lista.length : 0
+        };
+      });
+    }catch(error){
+      return Promise.resolve({
+        success:false,
+        message:error.message || String(error)
+      });
+    }
+  };
 
   window.sincronizarAtencionesLocales = async function(){
     const lista = leerLocal();
@@ -1901,3 +2076,12 @@
   };
 
 })();
+
+/* =====================================================
+   AUROSANAX ATENCIONES - CORRECCIÓN DEFINITIVA
+   - Aislamiento estricto por id_paciente
+   - Google Sheets tiene prioridad sobre localStorage
+   - No reutiliza automáticamente historias antiguas
+   - Permite vincular id_historia después de crear la atención
+   - Bloquea atención de otro paciente
+===================================================== */
