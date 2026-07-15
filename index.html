@@ -2856,6 +2856,11 @@ function seleccionarPacienteHistoria(){
 
   if(!p){
     activePatientId = '';
+    editingHistoryId = null;
+    window.auroHistoriaSeleccionadaId = '';
+    window.historiaActual = null;
+    window.currentHistoria = null;
+
     ['hcCedula','hcNacimiento','hcEdad','hcOcupacion','hcTelefono','hcCorreo','hcDireccion','hcSeguro','hcContactoEmergencia','hcTelefonoEmergencia','hcTipoSangre','hcAlergiasPaciente'].forEach(id => setValueIfExists(id, ''));
     setValueIfExists('hcSexo', '');
     setValueIfExists('hcEstadoCivil', '');
@@ -4123,35 +4128,201 @@ function auroAplicarProteccionPlanEdicion(data){
    - Permitir guardar Plan automáticamente al guardar Historia.
 ============================================================ */
 
+function auroHistoriaIdSeleccionadaSegura(){
+  const idGlobal = String(
+    window.auroHistoriaSeleccionadaId ||
+    editingHistoryId ||
+    window.historiaActual?.id_historia ||
+    window.currentHistoria?.id_historia ||
+    ''
+  ).trim();
+
+  return idGlobal;
+}
+
+function auroHistoriaPacienteSeleccionadoSeguro(){
+  return String(
+    document.getElementById('hcPacienteSelect')?.value ||
+    activePatientId ||
+    window.historiaActual?.id_paciente ||
+    window.currentHistoria?.id_paciente ||
+    ''
+  ).trim();
+}
+
+function auroHistoriaAtencionActivaObjetoSeguro(){
+  try{
+    if(typeof window.getAtencionActiva === 'function'){
+      const atencion = window.getAtencionActiva();
+      if(atencion && atencion.id_atencion) return atencion;
+    }
+  }catch(error){
+    console.warn('AUROSANAX HISTORIA: no se pudo leer getAtencionActiva().', error);
+  }
+
+  return null;
+}
+
+function auroHistoriaIdAtencionActivaSeguro(){
+  const atencion = auroHistoriaAtencionActivaObjetoSeguro();
+  if(atencion?.id_atencion){
+    return String(atencion.id_atencion).trim();
+  }
+
+  try{
+    if(typeof window.getIdAtencionActiva === 'function'){
+      const id = String(window.getIdAtencionActiva() || '').trim();
+      if(id) return id;
+    }
+  }catch(error){
+    console.warn('AUROSANAX HISTORIA: no se pudo leer getIdAtencionActiva().', error);
+  }
+
+  return String(
+    window.examenFisicoState?.atencionActual ||
+    window.planState?.atencionActual ||
+    ''
+  ).trim();
+}
+
+function auroHistoriaValidarCoherenciaAntesGuardar(){
+  const idPaciente = auroHistoriaPacienteSeleccionadoSeguro();
+  const idHistoria = auroHistoriaIdSeleccionadaSegura();
+  const historia = idHistoria
+    ? historiasClinicas.find(h => String(h.id_historia || '').trim() === idHistoria)
+    : null;
+
+  if(idHistoria && !historia){
+    return {
+      success: false,
+      message: 'La historia seleccionada ya no está disponible en la lista actual. Actualice la vista y vuelva a abrirla.'
+    };
+  }
+
+  if(historia && String(historia.id_paciente || '').trim() !== idPaciente){
+    return {
+      success: false,
+      message: 'La historia seleccionada no pertenece al paciente activo. Se bloqueó la actualización para evitar mezclar expedientes.'
+    };
+  }
+
+  const atencion = auroHistoriaAtencionActivaObjetoSeguro();
+
+  if(atencion){
+    const pacienteAtencion = String(atencion.id_paciente || '').trim();
+    const historiaAtencion = String(atencion.id_historia || '').trim();
+
+    if(pacienteAtencion && idPaciente && pacienteAtencion !== idPaciente){
+      return {
+        success: false,
+        message: 'La atención activa pertenece a otro paciente. Seleccione nuevamente la consulta correcta.'
+      };
+    }
+
+    if(historiaAtencion && idHistoria && historiaAtencion !== idHistoria){
+      return {
+        success: false,
+        message: 'La atención activa está vinculada a otra historia clínica. Se bloqueó la actualización para proteger los datos.'
+      };
+    }
+  }
+
+  return {
+    success: true,
+    id_paciente: idPaciente,
+    id_historia: idHistoria,
+    id_atencion: auroHistoriaIdAtencionActivaSeguro()
+  };
+}
+
+async function auroHistoriaVincularAtencionPorHistoria(idHistoria, idPaciente){
+  idHistoria = String(idHistoria || '').trim();
+  idPaciente = String(idPaciente || '').trim();
+
+  if(!idHistoria || !idPaciente) return null;
+
+  try{
+    const url = API_URL +
+      '?accion=listarAtencionesPorPaciente&id_paciente=' +
+      encodeURIComponent(idPaciente);
+
+    const response = await fetch(url);
+    const data = await response.json();
+    const lista = Array.isArray(data) ? data : [];
+
+    const relacionadas = lista
+      .filter(a =>
+        String(a.id_historia || '').trim() === idHistoria &&
+        String(a.id_paciente || '').trim() === idPaciente
+      )
+      .sort((a, b) =>
+        String(b.actualizado_en || b.creado_en || b.fecha_atencion || '')
+          .localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_atencion || ''))
+      );
+
+    const atencion = relacionadas[0] || null;
+    if(!atencion?.id_atencion) return null;
+
+    const idAtencion = String(atencion.id_atencion).trim();
+
+    window.planState = window.planState || { atencionActual: '', cache: {} };
+    window.planState.atencionActual = idAtencion;
+
+    if(window.examenFisicoState){
+      window.examenFisicoState.atencionActual = idAtencion;
+    }
+
+    if(typeof cambiarPlanPorAtencion === 'function'){
+      cambiarPlanPorAtencion(idAtencion);
+    }
+
+    if(typeof window.cambiarExamenFisicoPorAtencion === 'function'){
+      window.cambiarExamenFisicoPorAtencion(idAtencion);
+    }
+
+    console.log(
+      'AUROSANAX HISTORIA: atención vinculada por id_historia:',
+      idHistoria,
+      idAtencion
+    );
+
+    return atencion;
+  }catch(error){
+    console.warn(
+      'AUROSANAX HISTORIA: no se pudo localizar la atención de la historia seleccionada.',
+      error
+    );
+    return null;
+  }
+}
+
 function auroVincularPlanConAtencionActualDesdeIndex(){
   try{
     if(typeof window === 'undefined') return '';
 
     window.planState = window.planState || { atencionActual: '', cache: {} };
 
-    if(String(window.planState.atencionActual || '').trim()){
-      return String(window.planState.atencionActual || '').trim();
+    const idAtencion = auroHistoriaIdAtencionActivaSeguro();
+
+    if(!idAtencion){
+      console.warn(
+        'AUROSANAX PLAN: no existe una atención activa verificable. ' +
+        'No se buscará un ID leyendo textos visibles de la pantalla.'
+      );
+      return '';
     }
 
-    const textoPantalla = document.body ? String(document.body.innerText || '') : '';
-    const match = textoPantalla.match(/ATN-[0-9]{8,}-[0-9]+/);
-
-    if(match && match[0]){
-      const idAtencion = match[0];
-
-      if(typeof cambiarPlanPorAtencion === 'function'){
+    if(typeof cambiarPlanPorAtencion === 'function'){
+      if(String(window.planState.atencionActual || '').trim() !== idAtencion){
         cambiarPlanPorAtencion(idAtencion);
-      }else{
-        window.planState.atencionActual = idAtencion;
       }
-
-      console.log('AUROSANAX PLAN: atención vinculada desde index:', idAtencion);
-      return idAtencion;
+    }else{
+      window.planState.atencionActual = idAtencion;
     }
 
-    return '';
+    return idAtencion;
   }catch(error){
-    console.warn('AUROSANAX PLAN: no se pudo vincular atención desde index.', error);
+    console.warn('AUROSANAX PLAN: no se pudo vincular la atención activa.', error);
     return '';
   }
 }
@@ -4402,6 +4573,23 @@ async function guardarHistoriaClinicaERP(){
   const paciente = patients.find(p => p.id_paciente === idPaciente);
   const esEdicion = !!editingHistoryId;
 
+  /*
+    Protección de integridad:
+    antes de actualizar se confirma que paciente, historia y atención
+    correspondan al mismo expediente.
+  */
+  const coherenciaHistoria = auroHistoriaValidarCoherenciaAntesGuardar();
+
+  if(!coherenciaHistoria.success){
+    alert(coherenciaHistoria.message);
+    return;
+  }
+
+  if(esEdicion){
+    editingHistoryId = coherenciaHistoria.id_historia;
+    window.auroHistoriaSeleccionadaId = coherenciaHistoria.id_historia;
+  }
+
   if(!esEdicion){
     const historiaExistente = historiasClinicas.find(h => String(h.id_paciente || '') === String(idPaciente));
     if(historiaExistente && historiaExistente.id_historia){
@@ -4506,6 +4694,25 @@ async function guardarHistoriaClinicaERP(){
     );
 
     await cargarHistoriasClinicasDesdeSheets();
+
+    /*
+      Después de guardar/actualizar se reafirma la historia seleccionada.
+      No se permite que una recarga visual cambie silenciosamente el ID activo.
+    */
+    if(esEdicion && data.id_historia){
+      editingHistoryId = String(data.id_historia).trim();
+      window.auroHistoriaSeleccionadaId = editingHistoryId;
+
+      const historiaRefrescada = historiasClinicas.find(h =>
+        String(h.id_historia || '').trim() === editingHistoryId
+      );
+
+      if(historiaRefrescada){
+        window.historiaActual = historiaRefrescada;
+        window.currentHistoria = historiaRefrescada;
+      }
+    }
+
     actualizarDashboard();
   }catch(error){
     console.error(error);
@@ -5329,26 +5536,55 @@ function renderHistoriasClinicas(){
 }
 
 
-function editarHistoriaClinicaModal(idHistoria){
-  const h = historiasClinicas.find((x, idx) => String(x.id_historia || x.id || idx) === String(idHistoria));
+async function editarHistoriaClinicaModal(idHistoria){
+  const h = historiasClinicas.find((x, idx) =>
+    String(x.id_historia || x.id || idx) === String(idHistoria)
+  );
+
   if(!h){
     alert('No se encontró la historia clínica seleccionada.');
     return;
   }
+
   if(!h.id_paciente){
     alert('Esta historia no tiene paciente vinculado. Primero debe estar relacionada con un paciente registrado.');
     return;
   }
 
-  editingHistoryId = h.id_historia || idHistoria;
+  const idHistoriaReal = String(h.id_historia || idHistoria || '').trim();
+  const idPacienteReal = String(h.id_paciente || '').trim();
+
+  editingHistoryId = idHistoriaReal;
+  window.auroHistoriaSeleccionadaId = idHistoriaReal;
   window.historiaActual = h;
   window.currentHistoria = h;
+
   closeHistoriasModal();
-  abrirHistoriaPaciente(h.id_paciente);
+  abrirHistoriaPaciente(idPacienteReal);
+
+  /*
+    Se localiza la atención por la pareja real:
+    id_paciente + id_historia.
+    Esto evita conservar la atención o historia abierta anteriormente.
+  */
+  await auroHistoriaVincularAtencionPorHistoria(
+    idHistoriaReal,
+    idPacienteReal
+  );
 
   setTimeout(() => {
+    editingHistoryId = idHistoriaReal;
+    window.auroHistoriaSeleccionadaId = idHistoriaReal;
     window.historiaActual = h;
     window.currentHistoria = h;
+
+    const selector = document.getElementById('hcPacienteSelect');
+    if(selector && String(selector.value || '') !== idPacienteReal){
+      selector.value = idPacienteReal;
+      activePatientId = idPacienteReal;
+      seleccionarPacienteHistoria();
+    }
+
     setValueIfExists('hcMotivoConsulta', h.motivo_consulta || '');
     setValueIfExists('hcEnfermedadActual', h.enfermedad_actual || '');
     auroCargarAntecedentesCompletosGuardados(h);
@@ -5361,14 +5597,27 @@ function editarHistoriaClinicaModal(idHistoria){
     setValueIfExists('hcSaturacion', h.saturacion || '');
     auroCargarExamenFisicoDesdeHistoria(h, 'edicion');
     auroCargarDiagnosticosDesdeHistoria(h);
-    setValueIfExists('hcCie10Principal', h.diagnostico_cie10 || getValueIfExists('hcCie10Principal'));
+    setValueIfExists(
+      'hcCie10Principal',
+      h.diagnostico_cie10 || getValueIfExists('hcCie10Principal')
+    );
     auroCargarPlanDesdeHistoria(h, 'edicion');
+
     if(h.imc) setTextIfExists('hcImcResumen', h.imc);
     updateClinicalSummary();
 
-    const botonesGuardar = [...document.querySelectorAll('button')].filter(b => (b.textContent || '').includes('Guardar'));
-    botonesGuardar.forEach(b => b.innerHTML = '<i class="bi bi-save me-1"></i> Actualizar historia');
-    alert('Historia cargada en modo edición. Ahora modifique los campos y presione Actualizar historia.');
+    const botonesGuardar = [
+      ...document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]')
+    ];
+
+    botonesGuardar.forEach(b => {
+      b.innerHTML = '<i class="bi bi-save me-1"></i> Actualizar historia';
+    });
+
+    alert(
+      'Historia cargada en modo edición. ' +
+      'Ahora modifique los campos y presione Actualizar historia.'
+    );
   }, 150);
 }
 
@@ -6231,3 +6480,7 @@ document.addEventListener('click',e=>{
 <script src="atenciones.js?v=20260629_atenciones_v11"></script>
 </body>
 </html>
+<!--
+  AUROSANAX FIX VINCULACIÓN HISTORIA-ATENCIÓN
+  Corrige estado cruzado de id_historia/id_atencion sin modificar módulos clínicos estables.
+-->
