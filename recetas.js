@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.8 premium compacto responsive final edición
+   Versión: 1.9 segura JSON IDs diagnóstico
    Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
             + guardado JSON + impresión premium compacta + edición responsive + hora local Ecuador + edición limpia sin duplicidades.
@@ -99,6 +99,68 @@
     }catch(e){
       return false;
     }
+  }
+
+  function recetaListaTextoDesdeValor(valor){
+    const txt = String(valor || '').trim();
+    if(!txt) return [];
+
+    if(txt.startsWith('[') || txt.startsWith('{')){
+      try{
+        let data = JSON.parse(txt);
+        if(!Array.isArray(data)) data = [data];
+
+        return data
+          .map(item => {
+            if(typeof item === 'string') return item;
+            if(item && typeof item === 'object'){
+              return item.texto || item.descripcion || item.indicacion || item.recomendacion || '';
+            }
+            return '';
+          })
+          .map(x => String(x || '').trim())
+          .filter(Boolean);
+      }catch(e){}
+    }
+
+    return txt
+      .split(/\r?\n+/)
+      .map(x => String(x || '').replace(/^[•\-]\s*/, '').trim())
+      .filter(Boolean);
+  }
+
+  function recetaClaveLinea(valor){
+    return String(valor || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function recetaDeduplicarLineas(valor){
+    const vistas = new Set();
+    const salida = [];
+
+    recetaListaTextoDesdeValor(valor).forEach(linea => {
+      const limpia = String(linea || '').trim();
+      const clave = recetaClaveLinea(limpia);
+      if(!limpia || !clave || vistas.has(clave)) return;
+      vistas.add(clave);
+      salida.push(limpia);
+    });
+
+    return salida;
+  }
+
+  function recetaListaParaGuardarJSON(valor){
+    const lista = recetaDeduplicarLineas(valor);
+    return lista.length ? JSON.stringify(lista) : '';
+  }
+
+  function recetaListaParaFormulario(valor){
+    return recetaDeduplicarLineas(valor).join('\n');
   }
 
   function medicamentoRecetaJSONATexto(valor){
@@ -340,10 +402,58 @@
     return '';
   }
 
+  function auroRecetaBuscarDiagnosticoPersistido(cie){
+    const cieNorm = auroRecetaCodigoNormalizado(cie);
+    const idAtencion = obtenerIdAtencionActivaSeguro();
+    const paciente = obtenerPacienteActivoSeguro();
+    const idPaciente = String(paciente?.id_paciente || paciente?.id || '').trim();
+
+    const fuentes = [
+      window.diagnosticos,
+      window.diagnosticosClinicos,
+      window.examenFisicoState?.diagnosticos
+    ].filter(Array.isArray);
+
+    for(const lista of fuentes){
+      const encontrados = lista.filter(dx => {
+        const codigo = auroRecetaCodigoNormalizado(
+          dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || ''
+        );
+        const coincideAtencion = !idAtencion || !dx.id_atencion ||
+          String(dx.id_atencion) === String(idAtencion);
+        const coincidePaciente = !idPaciente || !dx.id_paciente ||
+          String(dx.id_paciente) === String(idPaciente);
+        return codigo === cieNorm && coincideAtencion && coincidePaciente;
+      });
+
+      const principal = encontrados.find(dx =>
+        String(dx.principal || '').toUpperCase() === 'SI'
+      ) || encontrados[0];
+
+      const descripcion = String(
+        principal?.descripcion ||
+        principal?.diagnostico ||
+        principal?.nombre ||
+        ''
+      ).trim();
+
+      if(descripcion && !auroRecetaDiagnosticoGenerico(descripcion)){
+        return cie ? `${cie} - ${descripcion}` : descripcion;
+      }
+    }
+
+    return '';
+  }
+
   function auroRecetaObtenerDiagnosticoAutomatico(){
     const cie = val('recCie10') || val('hcCie10Principal');
     const dxDOM = auroRecetaBuscarDiagnosticoActivoPorCIE(cie);
     if(dxDOM && !auroRecetaDiagnosticoGenerico(dxDOM)) return dxDOM;
+
+    const dxPersistido = auroRecetaBuscarDiagnosticoPersistido(cie);
+    if(dxPersistido && !auroRecetaDiagnosticoGenerico(dxPersistido)){
+      return dxPersistido;
+    }
 
     const dx = val('hcDiagnosticoPrincipal') || val('hcDiagnosticoResumen') || val('hcDiagnosticoTexto') || '';
     if(dx && !auroRecetaDiagnosticoGenerico(dx)){
@@ -398,11 +508,16 @@
   }
 
   function recetaBloqueTextoPremium(texto, vacio){
-    const t = String(texto || '').trim();
-    if(!t) return '<div class="auro-empty-note">' + safe(vacio || '—') + '</div>';
-    const partes = t.split(/\n+/).map(x => x.trim()).filter(Boolean);
-    if(partes.length <= 1) return '<div class="auro-text-premium">' + nl2br(t) + '</div>';
-    return '<div class="auro-text-premium"><ul>' + partes.map(x => '<li>' + safe(x.replace(/^[•\-]\s*/, '')) + '</li>').join('') + '</ul></div>';
+    const partes = recetaDeduplicarLineas(texto);
+    if(!partes.length){
+      return '<div class="auro-empty-note">' + safe(vacio || '—') + '</div>';
+    }
+    if(partes.length === 1){
+      return '<div class="auro-text-premium">' + safe(partes[0]) + '</div>';
+    }
+    return '<div class="auro-text-premium"><ul>' +
+      partes.map(x => '<li>' + safe(x) + '</li>').join('') +
+      '</ul></div>';
   }
 
   function instalarEstilosEdicionRecetaPremium(){
@@ -619,18 +734,68 @@
   }
 
 
-  function obtenerIdAtencionActivaSeguro(){
+  function obtenerAtencionActivaSegura(){
     try{
-      if(typeof window.getIdAtencionActiva === 'function'){
-        return String(window.getIdAtencionActiva() || '');
-      }
-
       if(typeof window.getAtencionActiva === 'function'){
         const a = window.getAtencionActiva();
-        return String((a && (a.id_atencion || a.id)) || '');
+        if(a && (a.id_atencion || a.id)) return a;
       }
     }catch(e){
+      console.warn('No se pudo obtener la atención activa.', e);
+    }
+    return null;
+  }
+
+  function obtenerIdAtencionActivaSeguro(){
+    try{
+      const atencion = obtenerAtencionActivaSegura();
+      if(atencion){
+        return String(atencion.id_atencion || atencion.id || '').trim();
+      }
+
+      if(typeof window.getIdAtencionActiva === 'function'){
+        return String(window.getIdAtencionActiva() || '').trim();
+      }
+
+      return String(
+        window.planState?.atencionActual ||
+        window.examenFisicoState?.atencionActual ||
+        ''
+      ).trim();
+    }catch(e){
       console.warn('No se pudo obtener id_atencion activo.', e);
+      return '';
+    }
+  }
+
+  function obtenerIdHistoriaActivaSeguro(idPaciente){
+    const pacienteId = String(idPaciente || '').trim();
+
+    try{
+      const atencion = obtenerAtencionActivaSegura();
+      const historiaAtencion = String(atencion?.id_historia || '').trim();
+      const pacienteAtencion = String(atencion?.id_paciente || '').trim();
+
+      if(
+        historiaAtencion &&
+        (!pacienteId || !pacienteAtencion || pacienteId === pacienteAtencion)
+      ){
+        return historiaAtencion;
+      }
+
+      const candidatos = [
+        window.auroHistoriaSeleccionadaId,
+        window.editingHistoryId,
+        window.historiaActual?.id_historia,
+        window.currentHistoria?.id_historia
+      ];
+
+      for(const valor of candidatos){
+        const id = String(valor || '').trim();
+        if(id) return id;
+      }
+    }catch(e){
+      console.warn('No se pudo obtener id_historia activo.', e);
     }
 
     return '';
@@ -651,6 +816,7 @@
         id_medico: receta.id_medico || obtenerIdMedicoReal(),
         fecha_receta: receta.fecha_receta || fechaHoyReceta(),
         diagnostico_cie10: receta.diagnostico_cie10 || '',
+        diagnostico: receta.diagnostico || '',
         medicamento: receta.medicamento || '',
         presentacion: receta.presentacion || '',
         dosis: receta.dosis || '',
@@ -658,8 +824,8 @@
         frecuencia: receta.frecuencia || '',
         duracion: receta.duracion || '',
         cantidad: receta.cantidad || '',
-        indicaciones: receta.indicaciones || '',
-        recomendaciones: receta.recomendaciones || '',
+        indicaciones: recetaListaParaGuardarJSON(receta.indicaciones || ''),
+        recomendaciones: recetaListaParaGuardarJSON(receta.recomendaciones || ''),
         id_documento: receta.id_documento || '',
         estado: receta.estado || 'Emitida',
         creado_en: receta.creado_en || fechaHoraEcuadorISO(),
@@ -742,8 +908,8 @@
       frecuencia: r.frecuencia || '',
       duracion: r.duracion || '',
       cantidad: r.cantidad || '',
-      indicaciones: r.indicaciones || '',
-      recomendaciones: r.recomendaciones || r.observaciones || '',
+      indicaciones: recetaListaParaGuardarJSON(r.indicaciones || ''),
+      recomendaciones: recetaListaParaGuardarJSON(r.recomendaciones || r.observaciones || ''),
       id_documento: r.id_documento || '',
       estado: r.estado || 'Emitida',
       creado_en: r.creado_en || '',
@@ -754,17 +920,25 @@
   function mezclarRecetasLocalesYSheets(remotas){
     const mapa = new Map();
 
-    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+    /*
+      La copia local es respaldo. Google Sheets tiene prioridad
+      para evitar que datos antiguos del navegador sobrescriban
+      recetas ya corregidas en la base.
+    */
+    leerRecetasStorage().forEach(item => {
       const r = normalizarRecetaGuardada(item);
       if(r.id_receta){
         mapa.set(String(r.id_receta), r);
       }
     });
 
-    leerRecetasStorage().forEach(item => {
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
       const r = normalizarRecetaGuardada(item);
       if(r.id_receta){
-        mapa.set(String(r.id_receta), Object.assign({}, mapa.get(String(r.id_receta)) || {}, r));
+        mapa.set(
+          String(r.id_receta),
+          Object.assign({}, mapa.get(String(r.id_receta)) || {}, r)
+        );
       }
     });
 
@@ -969,12 +1143,16 @@
 
   window.obtenerDatosReceta = function(){
     const paciente = obtenerPacienteActivoSeguro();
-    const ultimaHistoria = paciente ? obtenerUltimaHistoriaPaciente(paciente.id_paciente || paciente.id) : null;
+    const idPaciente = String(paciente?.id_paciente || paciente?.id || '').trim();
+    const idHistoriaActiva = obtenerIdHistoriaActivaSeguro(idPaciente);
+    const ultimaHistoria = !idHistoriaActiva && paciente
+      ? obtenerUltimaHistoriaPaciente(idPaciente)
+      : null;
 
     return {
       id_receta: recetaEditandoId || '',
-      id_paciente: paciente?.id_paciente || paciente?.id || '',
-      id_historia: ultimaHistoria?.id_historia || ultimaHistoria?.id || '',
+      id_paciente: idPaciente,
+      id_historia: idHistoriaActiva || ultimaHistoria?.id_historia || ultimaHistoria?.id || '',
       id_atencion: obtenerIdAtencionActivaSeguro(),
       paciente: paciente || {},
       fecha: val('recFecha') || fechaHoyReceta(),
@@ -1217,7 +1395,10 @@
       paciente_edad: paciente.edad || '',
       fecha_receta: r.fecha || fechaHoyReceta(), medico: r.medico || 'Dra. Aurora Andagoya', diagnostico_cie10: r.cie10 || '', diagnostico: r.diagnostico || '',
       medicamento: medicamentoRecetaParaGuardarJSON(r.medicamento), presentacion: '', dosis: '', via: '', frecuencia: '', duracion: '', cantidad: '',
-      indicaciones: r.indicaciones || '', recomendaciones: r.recomendaciones || '', id_documento: '', estado: r.estado || 'Emitida',
+      indicaciones: recetaListaParaGuardarJSON(r.indicaciones || ''),
+      recomendaciones: recetaListaParaGuardarJSON(r.recomendaciones || ''),
+      id_documento: '',
+      estado: r.estado || 'Emitida',
       creado_en: '', actualizado_en: fechaHoraEcuadorISO()
     };
   }
@@ -1232,8 +1413,8 @@
     setVal('recEstado', receta.estado || 'Emitida');
     setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
     setVal('recMedicamento', recetaMedicamentosEdicionTexto(receta.medicamento || receta.medicamentos || ''));
-    setVal('recIndicaciones', receta.indicaciones || '');
-    setVal('recRecomendaciones', receta.recomendaciones || receta.observaciones || '');
+    setVal('recIndicaciones', recetaListaParaFormulario(receta.indicaciones || ''));
+    setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones || receta.observaciones || ''));
     if(!receta.id_atencion) receta.id_atencion = obtenerIdAtencionActivaSeguro();
     actualizarBotonGuardarReceta();
     mostrarMensajeReceta('<i class="bi bi-pencil-square me-1"></i> Editando receta. Los cambios se aplican solo a Recetas y no modifican el Plan de la historia clínica.', '');
@@ -1276,6 +1457,14 @@
 
       if(!r.id_atencion){
         r.id_atencion = obtenerIdAtencionActivaSeguro();
+      }
+
+      if(!r.id_historia){
+        r.id_historia = obtenerIdHistoriaActivaSeguro(r.id_paciente);
+      }
+
+      if(!r.diagnostico || auroRecetaDiagnosticoGenerico(r.diagnostico)){
+        r.diagnostico = auroRecetaObtenerDiagnosticoAutomatico();
       }
 
       recetaAtencionActualId = r.id_atencion || recetaAtencionActualId || '';
@@ -1767,5 +1956,15 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.6 JSON receta + hora Ecuador', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'1.9 JSON listas + IDs activos + diagnóstico', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
+
+/* =====================================================
+   AUROSANAX RECETAS 1.9
+   - Mantiene compatibilidad con recetas antiguas en texto
+   - Guarda indicaciones/recomendaciones como arrays JSON sin duplicados
+   - Lee arrays JSON para formulario, historial y PDF
+   - Prioriza id_atencion e id_historia de la consulta activa
+   - Autocompleta descripción diagnóstica sin reemplazar datos válidos
+   - Google Sheets tiene prioridad sobre localStorage
+===================================================== */
