@@ -316,7 +316,11 @@ function cambiarPlanPorAtencion(idAtencion){
 
     inicializarPlan();
 
-    idAtencion = String(idAtencion || '').trim();
+    idAtencion = String(
+        idAtencion ||
+        auroPlanObtenerIdAtencionActivaSeguro() ||
+        ''
+    ).trim();
 
     if(!idAtencion) return;
 
@@ -1472,6 +1476,54 @@ async function auroPlanApiPost(accion, data){
     return await res.json();
 }
 
+function auroPlanObtenerIdAtencionActivaSeguro(){
+    let idReal = '';
+
+    try{
+        if(typeof window.getAtencionActiva === 'function'){
+            const atencion = window.getAtencionActiva();
+            idReal = String(atencion?.id_atencion || '').trim();
+        }
+    }catch(e){}
+
+    if(!idReal){
+        try{
+            if(typeof getAtencionActiva === 'function'){
+                const atencion = getAtencionActiva();
+                idReal = String(atencion?.id_atencion || '').trim();
+            }
+        }catch(e){}
+    }
+
+    if(!idReal){
+        idReal = String(
+            document.getElementById('hcIdAtencion')?.value ||
+            document.getElementById('idAtencionActiva')?.value ||
+            ''
+        ).trim();
+    }
+
+    if(!idReal){
+        idReal = String(window.planState?.atencionActual || '').trim();
+    }
+
+    return idReal;
+}
+
+function auroPlanSincronizarAtencionActiva(){
+    const idReal = auroPlanObtenerIdAtencionActivaSeguro();
+
+    if(!idReal) return '';
+
+    window.planState = window.planState || {
+        atencionActual: '',
+        cache: {}
+    };
+
+    window.planState.atencionActual = idReal;
+    return idReal;
+}
+
 function auroPlanObtenerPacienteActivoSeguro(){
 
     try{
@@ -1523,13 +1575,15 @@ function auroPlanObtenerMedicoIdSeguro(){
 
 function auroPlanPrepararDatosSheets(){
 
+    const idAtencionReal = auroPlanSincronizarAtencionActiva();
+
     auroSincronizarPlanAntesGuardar();
 
     const paciente = auroPlanObtenerPacienteActivoSeguro();
 
     return {
         id_atencion:
-            String(window.planState?.atencionActual || '').trim(),
+            idAtencionReal,
 
         id_paciente:
             paciente?.id_paciente ||
@@ -1599,6 +1653,17 @@ async function buscarPlanClinicoPorAtencionDesdeSheets(idAtencion){
 }
 
 async function guardarPlanClinicoDesdeSheets(){
+
+    const idAtencionVisible = auroPlanObtenerIdAtencionActivaSeguro();
+    const idAtencionInterna = String(window.planState?.atencionActual || '').trim();
+
+    if(
+        idAtencionVisible &&
+        idAtencionInterna &&
+        idAtencionVisible !== idAtencionInterna
+    ){
+        window.planState.atencionActual = idAtencionVisible;
+    }
 
     const data = auroPlanPrepararDatosSheets();
 
@@ -1781,7 +1846,12 @@ function auroPlanEstadoSeguro(valor){
 
 async function cargarPlanClinicoDesdeSheets(idAtencion){
 
-    idAtencion = String(idAtencion || window.planState?.atencionActual || '').trim();
+    idAtencion = String(
+        idAtencion ||
+        auroPlanObtenerIdAtencionActivaSeguro() ||
+        window.planState?.atencionActual ||
+        ''
+    ).trim();
 
     if(!idAtencion) return null;
 
@@ -1794,6 +1864,16 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     const promesaCarga = (async function(){
 
     const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
+
+    const idAtencionActual = auroPlanObtenerIdAtencionActivaSeguro();
+
+    if(idAtencionActual && idAtencionActual !== idAtencion){
+        console.warn(
+            'AUROSANAX PLAN: se descartó una respuesta tardía de otra atención.',
+            { solicitada: idAtencion, actual: idAtencionActual }
+        );
+        return null;
+    }
 
     /*
       AUROSANAX FIX:
@@ -1992,7 +2072,7 @@ function auroPlanUXAtencionResumen(){
         }
     }catch(e){}
 
-    const id = String(window.planState?.atencionActual || '').trim();
+    const id = auroPlanObtenerIdAtencionActivaSeguro();
     return {
         id: id,
         consulta: id ? 'activa' : 'sin atención activa'
@@ -2126,4 +2206,13 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
    - No limpia el Plan al volver a la misma consulta
    - No recarga Sheets sobre cambios temporales de la misma atención
    - Verifica la atención activa antes de una carga diferida
+============================================================ */
+
+/* ============================================================
+   AUROSANAX PLAN - FIX SINCRONIZACIÓN ID_ATENCION
+   - Fuente oficial: getAtencionActiva()
+   - planState se usa como cache, no como autoridad clínica
+   - Bloquea mezcla entre consultas
+   - Descarta respuestas tardías
+   - No modifica JSON, Apps Script ni estructura de datos
 ============================================================ */
