@@ -1,7 +1,7 @@
 /****************************************************************
  AUROSANAX ERP
  plan.js
- MODULACIÓN PLAN - FASE 5 EVALUACIONES
+ MODULACIÓN PLAN - FASE 5 EVALUACIONES / NAVEGACIÓN SEGURA
  ---------------------------------------------------------------
  OBJETIVO:
  - Mantener Fase 3 estable.
@@ -320,21 +320,44 @@ function cambiarPlanPorAtencion(idAtencion){
 
     if(!idAtencion) return;
 
+    const atencionAnterior = String(
+        window.planState?.atencionActual || ''
+    ).trim();
+
     /*
-      AUROSANAX FIX:
-      Antes de abrir otra consulta se guarda temporalmente la consulta actual.
-      Luego se limpia visualmente y se carga SOLO el Plan de la nueva id_atencion.
+      AUROSANAX FIX SEGURO:
+      Si continúa abierta la misma atención, no limpiar ni volver a consultar
+      Google Sheets. Esto evita que un Plan temporal recién aplicado sea
+      reemplazado por la versión anterior guardada en la base al navegar
+      entre pestañas de la misma consulta.
+    */
+    if(atencionAnterior && atencionAnterior === idAtencion){
+        guardarPlanTemporal();
+        auroPlanRefrescarVistas();
+        return;
+    }
+
+    /*
+      Antes de abrir una atención diferente se conserva temporalmente
+      la atención actual. Después se limpia y se carga exclusivamente
+      el Plan de la nueva id_atencion.
     */
     guardarPlanTemporal();
 
     window.planState.atencionActual = idAtencion;
 
     limpiarPlanTemporal();
-
     cargarPlanTemporal(idAtencion);
 
     if(typeof window.cargarPlanClinicoDesdeSheets === 'function'){
         setTimeout(function(){
+            /*
+              Solo cargar si la atención solicitada continúa siendo la activa.
+            */
+            if(String(window.planState?.atencionActual || '').trim() !== idAtencion){
+                return;
+            }
+
             window.cargarPlanClinicoDesdeSheets(idAtencion).catch(function(error){
                 console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets.', error);
             });
@@ -2097,3 +2120,10 @@ async function guardarPlanClinicoConUX(btn){
 
 window.guardarPlanClinicoConUX = guardarPlanClinicoConUX;
 window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
+
+/* ============================================================
+   AUROSANAX PLAN - CORRECCIÓN NAVEGACIÓN MISMA ATENCIÓN
+   - No limpia el Plan al volver a la misma consulta
+   - No recarga Sheets sobre cambios temporales de la misma atención
+   - Verifica la atención activa antes de una carga diferida
+============================================================ */
