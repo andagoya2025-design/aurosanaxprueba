@@ -1901,94 +1901,103 @@ function instalarResponsivePlanAndroid(){
 
       @media(min-width:981px){
         /*
-          AUROSANAX PLAN - ANCHO PREMIUM SOLO ESCRITORIO
-          - Afecta únicamente la caja y tabla de medicamentos del Plan.
-          - No modifica tablas de otros módulos.
-          - El contenedor se amplía de forma controlada sin invadir el menú.
-          - En escritorio desaparece la barra horizontal porque la tabla
-            distribuye sus columnas dentro del ancho disponible.
+          AUROSANAX PLAN - AJUSTE PREMIUM CONSERVADOR
+          - Solo amplía la caja de medicamentos dentro de Plan.
+          - Conserva el ancho natural y proporcional de cada columna.
+          - No desplaza, centra ni fuerza la tabla.
+          - La barra horizontal aparece únicamente si realmente hace falta.
+          - No afecta móvil, tablet ni tablas de otros módulos.
         */
         #hc_plan .receta-medicamentos-box.hc-plan-narrow,
         #hc_plan .receta-medicamentos-box{
-          width:min(1280px, calc(100vw - 340px))!important;
+          width:100%!important;
           max-width:none!important;
-          margin-left:50%!important;
-          margin-right:0!important;
-          transform:translateX(-50%)!important;
         }
 
         #hc_plan .receta-medicamentos-box .table-responsive{
           display:block!important;
           width:100%!important;
           max-width:100%!important;
-          overflow-x:visible!important;
-          scrollbar-width:none!important;
-        }
-
-        #hc_plan .receta-medicamentos-box .table-responsive::-webkit-scrollbar{
-          display:none!important;
+          overflow-x:auto!important;
+          -webkit-overflow-scrolling:touch!important;
         }
 
         #hc_plan .auro-plan-tabla-medicamentos{
           width:100%!important;
-          min-width:0!important;
-          max-width:100%!important;
-          table-layout:fixed!important;
+          min-width:980px!important;
+          table-layout:auto!important;
         }
 
         #hc_plan .auro-plan-tabla-medicamentos th,
         #hc_plan .auro-plan-tabla-medicamentos td{
-          padding:9px 8px!important;
-          font-size:13px!important;
-          line-height:1.35!important;
+          padding:10px 9px!important;
           vertical-align:middle!important;
-          overflow-wrap:anywhere!important;
+          white-space:normal!important;
           word-break:normal!important;
+          overflow-wrap:break-word!important;
         }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(1),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(1){ width:14%!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(1){
+          min-width:145px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(2),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(2){ width:13%!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(2){
+          min-width:135px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(3),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(3){ width:11%!important; min-width:0!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(3){
+          min-width:125px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(4),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(4){ width:9%!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(4){
+          min-width:95px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(5),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(5){ width:11%!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(5){
+          min-width:125px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(6),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(6){ width:9%!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(6){
+          min-width:105px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(7),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(7){ width:15%!important; min-width:0!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(7){
+          min-width:190px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(8),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(8){ width:8%!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(8){
+          min-width:105px!important;
+        }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(9),
-        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(9){ width:10%!important; }
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(9){
+          min-width:92px!important;
+        }
 
         #hc_plan .auro-plan-acciones-medicamento{
-          gap:5px!important;
+          gap:6px!important;
         }
 
         #hc_plan .auro-plan-acciones-medicamento .btn{
-          width:34px!important;
-          height:34px!important;
-          min-height:34px!important;
-          padding:5px!important;
-          border-radius:9px!important;
+          width:36px!important;
+          height:36px!important;
+          min-height:36px!important;
+          padding:6px!important;
+          border-radius:10px!important;
         }
 
         #hc_plan .auro-plan-ayuda-select{
           border:1px solid #d8b4fe!important;
           background:linear-gradient(180deg,#ffffff 0%,#faf5ff 100%)!important;
-          box-shadow:0 5px 16px rgba(126,34,206,.08)!important;
+          box-shadow:0 4px 14px rgba(126,34,206,.08)!important;
           font-weight:600!important;
         }
       }
