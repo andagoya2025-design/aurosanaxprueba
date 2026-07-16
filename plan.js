@@ -324,41 +324,70 @@ function cambiarPlanPorAtencion(idAtencion){
 
     if(!idAtencion) return;
 
-    const atencionAnterior = String(
-        window.planState?.atencionActual || ''
+    /*
+      FUENTE REAL DEL PLAN VISIBLE:
+      No se usa planState.atencionActual para decidir si cambió la consulta,
+      porque Atenciones puede actualizar ese valor antes de llamar esta función.
+      __auroPlanAtencionRenderizada representa la consulta que realmente está
+      dibujada actualmente en el módulo Plan.
+    */
+    const atencionAnteriorRenderizada = String(
+        window.__auroPlanAtencionRenderizada || ''
     ).trim();
 
     /*
-      AUROSANAX FIX SEGURO:
-      Si continúa abierta la misma atención, no limpiar ni volver a consultar
-      Google Sheets. Esto evita que un Plan temporal recién aplicado sea
-      reemplazado por la versión anterior guardada en la base al navegar
-      entre pestañas de la misma consulta.
+      Solo se conserva el Plan temporal cuando realmente existe otra consulta
+      dibujada. Se guarda usando su id original, nunca bajo la nueva atención.
     */
-    if(atencionAnterior && atencionAnterior === idAtencion){
+    if(
+        atencionAnteriorRenderizada &&
+        atencionAnteriorRenderizada !== idAtencion
+    ){
+        const idTemporalActual = String(
+            window.planState?.atencionActual || ''
+        ).trim();
+
+        window.planState.atencionActual = atencionAnteriorRenderizada;
         guardarPlanTemporal();
+        window.planState.atencionActual = idTemporalActual;
+    }
+
+    /*
+      Si la consulta realmente dibujada ya es la misma, no se limpia.
+      Esto protege cambios temporales al navegar entre pestañas de una misma
+      atención, pero no confunde una atención nueva con la anterior.
+    */
+    if(
+        atencionAnteriorRenderizada &&
+        atencionAnteriorRenderizada === idAtencion
+    ){
+        window.planState.atencionActual = idAtencion;
         auroPlanRefrescarVistas();
         return;
     }
 
-    /*
-      Antes de abrir una atención diferente se conserva temporalmente
-      la atención actual. Después se limpia y se carga exclusivamente
-      el Plan de la nueva id_atencion.
-    */
-    guardarPlanTemporal();
-
     window.planState.atencionActual = idAtencion;
+    window.__auroPlanAtencionRenderizada = idAtencion;
 
+    /*
+      Primero se limpia completamente la pantalla.
+      Después se restaura solo el cache propio de la atención solicitada,
+      si realmente existe.
+    */
     limpiarPlanTemporal();
-    cargarPlanTemporal(idAtencion);
+
+    if(window.planState.cache[idAtencion]){
+        cargarPlanTemporal(idAtencion);
+    }else{
+        auroPlanRefrescarVistas();
+    }
 
     if(typeof window.cargarPlanClinicoDesdeSheets === 'function'){
         setTimeout(function(){
-            /*
-              Solo cargar si la atención solicitada continúa siendo la activa.
-            */
-            if(String(window.planState?.atencionActual || '').trim() !== idAtencion){
+            if(
+                String(window.__auroPlanAtencionRenderizada || '').trim() !== idAtencion ||
+                String(window.planState?.atencionActual || '').trim() !== idAtencion
+            ){
                 return;
             }
 
@@ -486,6 +515,14 @@ function limpiarPlanTemporal(){
 
     auroPlanSetValue('hcInterconsultaPrioridad', 'Normal');
     auroPlanSetValue('hcInterconsultaEstado', 'Pendiente');
+
+    /*
+      Campos de Receta alimentados por Plan.
+      Deben quedar vacíos al cambiar de atención para evitar arrastre.
+    */
+    auroPlanSetValue('recMedicamento', '');
+    auroPlanSetValue('recIndicaciones', '');
+    auroPlanSetValue('recRecomendaciones', '');
 
     limpiarEvaluacionesCamposPlan();
 
@@ -690,7 +727,12 @@ function renderMedicamentosPlanTabla(){
 function sincronizarPlanConReceta(){
 
     const txt = auroPlanGetValue('hcRecetaMedicamentos');
-    if(txt) auroPlanSetValue('recMedicamento', txt);
+
+    /*
+      Siempre sincronizar, incluso cuando está vacío.
+      Así una consulta nueva no conserva medicamentos de la receta anterior.
+    */
+    auroPlanSetValue('recMedicamento', txt);
 
     const ind = auroPlanGetValue('hcIndicacionesPaciente');
     if(ind && !auroPlanGetValue('recIndicaciones')){
@@ -2215,4 +2257,12 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
    - Bloquea mezcla entre consultas
    - Descarta respuestas tardías
    - No modifica JSON, Apps Script ni estructura de datos
+============================================================ */
+
+/* ============================================================
+   AUROSANAX PLAN - CORRECCIÓN DEFINITIVA CAMBIO DE CONSULTA
+   - Diferencia atención interna de atención realmente renderizada
+   - Evita guardar datos viejos bajo una atención nueva
+   - Limpia medicamentos y campos de receta al cambiar consulta
+   - Conserva cache temporal únicamente por id_atencion correcto
 ============================================================ */
