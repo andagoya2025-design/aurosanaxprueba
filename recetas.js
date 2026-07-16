@@ -365,7 +365,26 @@
 
   function auroRecetaDiagnosticoGenerico(txt){
     const n = recetaNormalizarPlano(txt);
-    return !n || n === 'diagnostico principal' || n === 'diagnostico' || n === 'motivo de receta' || n === 'sin diagnostico';
+
+    if(!n) return true;
+
+    const exactos = new Set([
+      'diagnostico principal',
+      'diagnostico',
+      'motivo de receta',
+      'sin diagnostico',
+      'diagnostico clinico',
+      'diagnostico clinico relacionado',
+      'diagnostico relacionado'
+    ]);
+
+    if(exactos.has(n)) return true;
+
+    return (
+      n.startsWith('diagnostico clinico relacionado') ||
+      n.startsWith('diagnostico clinico') ||
+      n === 'clinico'
+    );
   }
 
   function auroRecetaBuscarDiagnosticoActivoPorCIE(cie){
@@ -462,7 +481,12 @@
       return cie && !dxNorm.includes(cieNorm) ? `${cie} - ${dx}` : dx;
     }
 
-    return cie ? `${cie} - Diagnóstico clínico relacionado` : '';
+    /*
+      No fabricar una descripción clínica.
+      Si todavía no existe una descripción real, se devuelve vacío para que
+      el flujo asíncrono la consulte por id_atencion en diagnósticos.
+    */
+    return '';
   }
 
   function auroRecetaAutocompletarDiagnosticoSiVacio(){
@@ -902,6 +926,57 @@
     return fallback;
   }
 
+  async function auroRecetaResolverDiagnosticoPorRecetaGuardada(receta){
+    receta = receta || {};
+
+    const actual = String(
+      receta.diagnostico ||
+      receta.motivo ||
+      ''
+    ).trim();
+
+    if(actual && !auroRecetaDiagnosticoGenerico(actual)){
+      return actual;
+    }
+
+    const idAtencion = String(receta.id_atencion || '').trim();
+    const cie = String(
+      receta.diagnostico_cie10 ||
+      receta.cie10 ||
+      ''
+    ).trim();
+
+    if(!idAtencion){
+      return '';
+    }
+
+    const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion);
+    const real = auroRecetaElegirDiagnosticoEstructurado(lista, cie);
+
+    if(real){
+      receta.diagnostico = real;
+
+      /*
+        Actualiza únicamente el respaldo local de esa misma receta.
+        No cambia id_atencion, medicamentos, Plan ni Google Sheets.
+      */
+      const almacenadas = leerRecetasStorage();
+      const indice = almacenadas.findIndex(x =>
+        String(x.id_receta || '') === String(receta.id_receta || '')
+      );
+
+      if(indice >= 0){
+        almacenadas[indice] = {
+          ...almacenadas[indice],
+          diagnostico: real
+        };
+        guardarRecetasStorage(almacenadas);
+      }
+    }
+
+    return real || '';
+  }
+
   function obtenerIdHistoriaActivaSeguro(idPaciente){
     const pacienteId = String(idPaciente || '').trim();
 
@@ -1034,7 +1109,9 @@
       fecha_receta: r.fecha_receta || r.fecha || fechaHoyReceta(),
       medico: r.medico || r.nombre_medico || val('recMedico') || 'Dra. Aurora Andagoya',
       diagnostico_cie10: r.diagnostico_cie10 || r.cie10 || '',
-      diagnostico: r.diagnostico || r.motivo || '',
+      diagnostico: auroRecetaDiagnosticoGenerico(r.diagnostico || r.motivo || '')
+        ? ''
+        : (r.diagnostico || r.motivo || ''),
       medicamento: r.medicamento || r.medicamentos || '',
       presentacion: r.presentacion || '',
       dosis: r.dosis || '',
@@ -2009,10 +2086,7 @@
     }
   };
 
-  function buscarRecetaPorId(id){
-    const lista = leerRecetasStorage();
-    return lista.find(r => String(r.id_receta) === String(id));
-  }
+  function buscarRecetaPorId(id){ return leerRecetasStorage().find(r => String(r.id_receta) === String(id)); }
   function recetaGuardadaAFormatoPreview(r){
     const pacienteCompleto = auroRecetaCompletarPacienteParaImpresion({
       id_paciente: r.id_paciente,
@@ -2039,7 +2113,9 @@
       medico:r.medico || 'Dra. Aurora Andagoya',
       cie10:r.diagnostico_cie10,
       estado:r.estado,
-      diagnostico:(r.diagnostico && String(r.diagnostico).trim()) ? r.diagnostico : (r.diagnostico_cie10 ? (r.diagnostico_cie10 + ' - Diagnóstico clínico') : ''),
+      diagnostico: auroRecetaDiagnosticoGenerico(r.diagnostico)
+        ? ''
+        : r.diagnostico,
       medicamento:r.medicamento,
       indicaciones:r.indicaciones,
       recomendaciones:r.recomendaciones
@@ -2048,9 +2124,41 @@
 
   window.toggleAccionesReceta = toggleAccionesReceta;
 
-  window.verRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); const box = asegurarVistaPreviaReceta(); if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r)); mostrarMensajeReceta('<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.', ''); };
-  window.editarRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); cargarRecetaEnFormulario(r); window.scrollTo({top: el('recetas')?.offsetTop || 0, behavior:'smooth'}); };
-  window.pdfRecetaEmitida = function(id){ const r = buscarRecetaPorId(id); if(!r) return alert('No se encontró la receta.'); window.generarPDFReceta(recetaGuardadaAFormatoPreview(r)); };
+  window.verRecetaEmitida = async function(id){
+    const r = buscarRecetaPorId(id);
+    if(!r) return alert('No se encontró la receta.');
+
+    await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
+
+    const box = asegurarVistaPreviaReceta();
+    if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r));
+
+    mostrarMensajeReceta(
+      '<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.',
+      ''
+    );
+  };
+
+  window.editarRecetaEmitida = async function(id){
+    const r = buscarRecetaPorId(id);
+    if(!r) return alert('No se encontró la receta.');
+
+    await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
+    cargarRecetaEnFormulario(r);
+
+    window.scrollTo({
+      top: el('recetas')?.offsetTop || 0,
+      behavior:'smooth'
+    });
+  };
+
+  window.pdfRecetaEmitida = async function(id){
+    const r = buscarRecetaPorId(id);
+    if(!r) return alert('No se encontró la receta.');
+
+    await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
+    window.generarPDFReceta(recetaGuardadaAFormatoPreview(r));
+  };
 
   function agregarBotonVistaPrevia(){
     const seccion = el('recetas'); if(!seccion) return;
@@ -2124,7 +2232,7 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'2.1 diagnóstico estructurado por atención', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'2.2 diagnóstico real por atención y recuperación histórica', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
 
 /* =====================================================
@@ -2152,4 +2260,13 @@
    - Prioriza diagnóstico principal de la atención activa
    - Conserva código CIE-10 y descripción
    - Bloquea guardado si la descripción no puede resolverse
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.2 - DIAGNÓSTICO REAL
+   - No acepta “Diagnóstico clínico” como descripción válida
+   - No fabrica diagnósticos genéricos
+   - Ver / Editar / PDF recuperan la descripción por id_atencion
+   - Conserva intacta la separación de Plan y Recetas por consulta
+   - No modifica Apps Script, Atenciones ni JSON de medicamentos
 ===================================================== */
