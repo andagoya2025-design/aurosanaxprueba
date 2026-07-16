@@ -2009,7 +2009,10 @@
     }
   };
 
-  function buscarRecetaPorId(id){ return leerRecetasStorage().find(r => String(r.id_receta) === String(id)); }
+  function buscarRecetaPorId(id){
+    const lista = leerRecetasStorage();
+    return lista.find(r => String(r.id_receta) === String(id));
+  }
   function recetaGuardadaAFormatoPreview(r){
     const pacienteCompleto = auroRecetaCompletarPacienteParaImpresion({
       id_paciente: r.id_paciente,
@@ -2036,7 +2039,7 @@
       medico:r.medico || 'Dra. Aurora Andagoya',
       cie10:r.diagnostico_cie10,
       estado:r.estado,
-      diagnostico:r.diagnostico,
+      diagnostico:(r.diagnostico && String(r.diagnostico).trim()) ? r.diagnostico : (r.diagnostico_cie10 ? (r.diagnostico_cie10 + ' - Diagnóstico clínico') : ''),
       medicamento:r.medicamento,
       indicaciones:r.indicaciones,
       recomendaciones:r.recomendaciones
