@@ -1744,14 +1744,16 @@
                 <th>Fecha</th>
                 <th>Hora</th>
                 <th>Paciente</th>
+                <th>Médico</th>
                 <th>WhatsApp</th>
                 <th>Servicio</th>
+                <th>Historia</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody id="agendaBody">
-              <tr><td colspan="7" class="text-center text-muted py-4">Cargando agenda...</td></tr>
+              <tr><td colspan="9" class="text-center text-muted py-4">Cargando agenda...</td></tr>
             </tbody>
           </table>
         </div>
@@ -2605,6 +2607,7 @@ let patients=[
 
 let citasAgendaWeb = [];
 let citasAgendaWebCargadas = false;
+let medicosAgendaWeb = [];
 let historiasClinicas = [];
 let patientPage = 1;
 let patientPageSize = 25;
@@ -5236,6 +5239,55 @@ function auroServicioAgenda(c){
   return String(c?.servicio || c?.tipo_cita || c?.motivo || '').trim();
 }
 
+function auroMedicoAgendaPorId(idMedico){
+  const id = String(idMedico || '').trim();
+  if(!id || !Array.isArray(medicosAgendaWeb)) return null;
+  return medicosAgendaWeb.find(m => String(m.id_medico || m.id || '').trim() === id) || null;
+}
+
+function auroNombreMedicoAgenda(c){
+  const directo = String(
+    c?.nombre_medico ||
+    c?.medico_nombre ||
+    c?.doctor_nombre ||
+    c?.medico ||
+    c?.doctor ||
+    ''
+  ).trim();
+  if(directo) return directo;
+
+  const m = auroMedicoAgendaPorId(c?.id_medico);
+  if(m){
+    return String(
+      m.nombre_completo ||
+      m.nombre ||
+      ((m.nombres || '') + ' ' + (m.apellidos || '')).trim() ||
+      ''
+    ).trim();
+  }
+
+  return String(c?.id_medico || '').trim();
+}
+
+function auroPacienteVinculadoAgenda(c){
+  return auroPacienteAgendaPorId(c?.id_paciente);
+}
+
+function auroHistoriaPacienteAgenda(c){
+  const p = auroPacienteVinculadoAgenda(c);
+  if(!p || !Array.isArray(historiasClinicas)) return null;
+  const idPaciente = String(p.id_paciente || '').trim();
+  return historiasClinicas.find(h => String(h.id_paciente || h.paciente_id || '').trim() === idPaciente) || null;
+}
+
+function auroBadgeHistoriaAgenda(c){
+  const p = auroPacienteVinculadoAgenda(c);
+  if(!p) return '<span class="badge-auro badge-warn">Paciente no vinculado</span>';
+  return auroHistoriaPacienteAgenda(c)
+    ? '<span class="badge-auro badge-ok">Disponible</span>'
+    : '<span class="badge-auro badge-warn">Sin historia</span>';
+}
+
 function auroFechaAgenda(c){
   return String(c?.fecha_cita || c?.fecha || c?.fecha_deseada || '').substring(0,10);
 }
@@ -5287,6 +5339,7 @@ function auroNormalizarCitaSecretariaParaERP(c, index){
     fecha_deseada: auroFechaAgenda(c),
     hora_deseada: auroHoraAgenda(c),
     estado: auroEstadoAgenda(c),
+    medico_nombre: auroNombreMedicoAgenda(c),
     origen: 'Secretaría'
   };
 }
@@ -5294,15 +5347,27 @@ function auroNormalizarCitaSecretariaParaERP(c, index){
 async function cargarCitasAgendaWeb(){
   const body = document.getElementById('agendaBody');
   if(body){
-    body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Cargando citas desde Secretaría...</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Cargando citas desde Secretaría...</td></tr>';
   }
 
   try{
-    const res = await fetch(API_URL + '?accion=listarCitas&t=' + Date.now());
-    const data = await res.json();
+    const [resCitas, resMedicos] = await Promise.all([
+      fetch(API_URL + '?accion=listarCitas&t=' + Date.now()),
+      fetch(API_URL + '?accion=listarMedicos&t=' + Date.now()).catch(() => null)
+    ]);
+    const data = await resCitas.json();
 
     if(!Array.isArray(data)){
       throw new Error(data.message || 'Secretaría no devolvió una lista válida de citas.');
+    }
+
+    if(resMedicos){
+      try{
+        const dataMedicos = await resMedicos.json();
+        medicosAgendaWeb = Array.isArray(dataMedicos) ? dataMedicos : [];
+      }catch(_e){
+        medicosAgendaWeb = [];
+      }
     }
 
     citasAgendaWeb = data.map((c, index) => auroNormalizarCitaSecretariaParaERP(c, index));
@@ -5318,7 +5383,7 @@ async function cargarCitasAgendaWeb(){
     citasAgendaWebCargadas = false;
     console.error(error);
     if(body){
-      body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">No se pudo cargar la agenda desde Secretaría.</td></tr>';
+      body.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">No se pudo cargar la agenda desde Secretaría.</td></tr>';
     }
     const mobile = document.getElementById('agendaMobile');
     if(mobile){
@@ -5385,14 +5450,21 @@ function renderAgendaWeb(){
         <td>${formatearFechaVisual(c.fecha_deseada)}</td>
         <td><b>${c.hora_deseada || ''}</b></td>
         <td><b>${c.nombre || ''}</b><br><small class="text-muted">${c.origen || 'Agenda Web'}</small></td>
+        <td>${c.medico_nombre || auroNombreMedicoAgenda(c) || '<span class="text-muted">Sin asignar</span>'}</td>
         <td>${c.whatsapp || ''}</td>
         <td><span class="badge-auro">${c.servicio || ''}</span></td>
+        <td>${auroBadgeHistoriaAgenda(c)}</td>
         <td>${badgeEstadoAgenda(c.estado)}</td>
         <td>
-          <button class="btn-action success" title="WhatsApp" onclick="abrirWhatsAppCitaAgenda(${c.originalIndex})"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
+          <div class="patient-action-group">
+            <button class="btn-action success" title="WhatsApp" onclick="abrirWhatsAppCitaAgenda(${c.originalIndex})"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
+            ${auroPacienteVinculadoAgenda(c)
+              ? `<button class="btn-action primary" title="Abrir historia clínica" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-medical me-1"></i> ${auroHistoriaPacienteAgenda(c) ? 'Iniciar consulta' : 'Crear historia'}</button>`
+              : '<button class="btn-action" disabled title="La cita no tiene un paciente registrado vinculado"><i class="bi bi-link-45deg me-1"></i> Sin vínculo</button>'}
+          </div>
         </td>
       </tr>
-    `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">Sin citas para mostrar</td></tr>';
+    `).join('') || '<tr><td colspan="9" class="text-center text-muted py-4">Sin citas para mostrar</td></tr>';
   }
 
   const mobile = document.getElementById('agendaMobile');
@@ -5401,9 +5473,14 @@ function renderAgendaWeb(){
       <div class="mobile-card">
         <div class="mobile-card-top"><b>${formatearFechaVisual(c.fecha_deseada)} · ${c.hora_deseada || ''}</b>${badgeEstadoAgenda(c.estado)}</div>
         <div class="line"><span>Paciente</span><span>${c.nombre || ''}</span></div>
+        <div class="line"><span>Médico</span><span>${c.medico_nombre || auroNombreMedicoAgenda(c) || 'Sin asignar'}</span></div>
         <div class="line"><span>WhatsApp</span><span>${c.whatsapp || ''}</span></div>
         <div class="line"><span>Servicio</span><span>${c.servicio || ''}</span></div>
+        <div class="line"><span>Historia</span><span>${auroBadgeHistoriaAgenda(c)}</span></div>
         <button class="btn-soft w-100 mt-2" onclick="abrirWhatsAppCitaAgenda(${c.originalIndex})"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
+        ${auroPacienteVinculadoAgenda(c)
+          ? `<button class="btn-auro w-100 mt-2" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-medical me-1"></i> ${auroHistoriaPacienteAgenda(c) ? 'Iniciar consulta' : 'Crear historia'}</button>`
+          : '<button class="btn-soft w-100 mt-2" disabled><i class="bi bi-link-45deg me-1"></i> Paciente no vinculado</button>'}
       </div>
     `).join('') || '<div class="mobile-card text-muted">Sin citas para mostrar</div>';
   }
@@ -5434,6 +5511,39 @@ function abrirWhatsAppCitaAgenda(index){
 
   const mensaje = `Hola ${c.nombre || ''},\n\nLe saluda AUROSANAX.\nLe escribimos sobre su solicitud de cita para ${c.servicio || 'atención médica'} el ${formatearFechaVisual(c.fecha_deseada)} a las ${c.hora_deseada || ''}.\n\nPor favor, confirme si mantiene su disponibilidad.`;
   abrirWhatsApp(c.whatsapp, mensaje);
+}
+
+function abrirHistoriaDesdeAgenda(index){
+  const c = citasAgendaWeb[index];
+  if(!c){
+    alert('No se encontró la cita seleccionada.');
+    return;
+  }
+
+  const paciente = auroPacienteVinculadoAgenda(c);
+  if(!paciente){
+    alert('Esta cita todavía no está vinculada a un paciente registrado. Vincule primero el paciente para evitar historias duplicadas.');
+    return;
+  }
+
+  const referencia = {
+    id_cita: String(c.id_cita || c.id || '').trim(),
+    id_paciente: String(paciente.id_paciente || '').trim(),
+    id_medico: String(c.id_medico || '').trim(),
+    fecha: String(c.fecha_deseada || '').trim(),
+    hora: String(c.hora_deseada || '').trim(),
+    servicio: String(c.servicio || '').trim(),
+    origen: 'agenda_medica'
+  };
+
+  window.auroCitaSeleccionadaAgenda = referencia;
+  try{
+    sessionStorage.setItem('auro_cita_seleccionada_agenda', JSON.stringify(referencia));
+  }catch(_e){
+    console.warn('No se pudo conservar temporalmente la cita seleccionada.', _e);
+  }
+
+  abrirHistoriaPaciente(referencia.id_paciente);
 }
 
 function actualizarResumenGinecologia(){
