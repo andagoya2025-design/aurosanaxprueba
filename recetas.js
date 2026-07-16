@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 2.0 contexto seguro por atención
+   Versión: 2.1 diagnóstico estructurado por atención
    Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
             + guardado JSON + impresión premium compacta + edición responsive + hora local Ecuador + edición limpia sin duplicidades.
@@ -28,6 +28,7 @@
   let recetaPlanAtencionId = '';
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
+  const recetaDiagnosticosPorAtencionCache = new Map();
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -807,6 +808,100 @@
     }
   }
 
+  async function auroRecetaConsultarDiagnosticosAtencion(idAtencion){
+    idAtencion = String(idAtencion || '').trim();
+    if(!idAtencion) return [];
+
+    if(recetaDiagnosticosPorAtencionCache.has(idAtencion)){
+      return recetaDiagnosticosPorAtencionCache.get(idAtencion);
+    }
+
+    if(typeof API_URL === 'undefined' || !API_URL) return [];
+
+    try{
+      const url = API_URL +
+        '?accion=listarDiagnosticosPorAtencion&id_atencion=' +
+        encodeURIComponent(idAtencion) +
+        '&_=' + Date.now();
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const lista = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.data) ? data.data : []);
+
+      recetaDiagnosticosPorAtencionCache.set(idAtencion, lista);
+      return lista;
+    }catch(error){
+      console.warn('AUROSANAX RECETAS: no se pudieron consultar diagnósticos de la atención.', error);
+      return [];
+    }
+  }
+
+  function auroRecetaElegirDiagnosticoEstructurado(lista, cie){
+    const cieNorm = auroRecetaCodigoNormalizado(cie);
+    const items = Array.isArray(lista) ? lista : [];
+
+    const coincidentes = items.filter(dx => {
+      const codigo = auroRecetaCodigoNormalizado(
+        dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || ''
+      );
+      return !cieNorm || codigo === cieNorm;
+    });
+
+    const principal =
+      coincidentes.find(dx => String(dx.principal || '').toUpperCase() === 'SI') ||
+      coincidentes[0] ||
+      items.find(dx => String(dx.principal || '').toUpperCase() === 'SI') ||
+      items[0];
+
+    if(!principal) return '';
+
+    const codigo = String(
+      principal.codigo_cie10 ||
+      principal.diagnostico_cie10 ||
+      principal.cie10 ||
+      cie ||
+      ''
+    ).trim();
+
+    const descripcion = String(
+      principal.descripcion ||
+      principal.diagnostico ||
+      principal.nombre ||
+      principal.detalle ||
+      ''
+    ).trim();
+
+    if(!descripcion || auroRecetaDiagnosticoGenerico(descripcion)) return '';
+
+    const codigoNorm = auroRecetaCodigoNormalizado(codigo);
+    const descripcionNorm = auroRecetaCodigoNormalizado(descripcion);
+
+    return codigo && !descripcionNorm.includes(codigoNorm)
+      ? `${codigo} - ${descripcion}`
+      : descripcion;
+  }
+
+  async function auroRecetaResolverDiagnosticoEstructurado(){
+    const idAtencion = obtenerIdAtencionActivaSeguro();
+    const cie = val('recCie10') || val('hcCie10Principal');
+
+    if(!idAtencion) return auroRecetaObtenerDiagnosticoAutomatico();
+
+    const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion);
+    const estructurado = auroRecetaElegirDiagnosticoEstructurado(lista, cie);
+
+    if(estructurado){
+      setVal('recDiagnostico', estructurado);
+      return estructurado;
+    }
+
+    const fallback = auroRecetaObtenerDiagnosticoAutomatico();
+    if(fallback) setVal('recDiagnostico', fallback);
+    return fallback;
+  }
+
   function obtenerIdHistoriaActivaSeguro(idPaciente){
     const pacienteId = String(idPaciente || '').trim();
 
@@ -1487,6 +1582,7 @@
     actualizarBotonGuardarReceta();
 
     try{
+      await auroRecetaResolverDiagnosticoEstructurado();
       const r = recetaDesdeFormulario();
 
       if(!r.id_paciente || !r.paciente_nombre){
@@ -1525,7 +1621,12 @@
       }
 
       if(!r.diagnostico || auroRecetaDiagnosticoGenerico(r.diagnostico)){
-        r.diagnostico = auroRecetaObtenerDiagnosticoAutomatico();
+        r.diagnostico = await auroRecetaResolverDiagnosticoEstructurado();
+      }
+
+      if(!r.diagnostico || auroRecetaDiagnosticoGenerico(r.diagnostico)){
+        alert('No se pudo identificar la descripción del diagnóstico de esta consulta. Actualice el diagnóstico estructurado antes de guardar la receta.');
+        return;
       }
 
       recetaAtencionActualId = r.id_atencion || recetaAtencionActualId || '';
@@ -2013,13 +2114,14 @@
 
   window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
   window.refrescarRecetasDesdeSheets = function(){
+    recetaDiagnosticosPorAtencionCache.clear();
     return cargarRecetasDesdeSheets(true).then(function(){
       renderHistorialRecetas();
       actualizarBotonGuardarReceta();
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'2.0 contexto seguro por atención', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'2.1 diagnóstico estructurado por atención', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
 
 /* =====================================================
@@ -2039,4 +2141,12 @@
    - Bloquea guardado sin id_atencion
    - Bloquea Plan perteneciente a otra consulta
    - Bloquea recetas sin medicamentos reales
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.1 - DIAGNÓSTICO ESTRUCTURADO
+   - Consulta listarDiagnosticosPorAtencion
+   - Prioriza diagnóstico principal de la atención activa
+   - Conserva código CIE-10 y descripción
+   - Bloquea guardado si la descripción no puede resolverse
 ===================================================== */
