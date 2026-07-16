@@ -1509,27 +1509,113 @@
   }
 
   function auroRecetaMedicoEmisor(r){
-    const id = String(r?.id_medico || obtenerIdMedicoReal() || '').trim();
-    const nombreGuardado = String(r?.medico || val('recMedico') || '').trim();
-    let encontrado = null;
+    r = r || {};
 
-    const listas = [window.medicos, window.medicosActivos, window.listaMedicos];
-    for(const lista of listas){
-      if(!Array.isArray(lista)) continue;
-      encontrado = lista.find(m => String(m.id_medico || m.id || '').trim() === id) || null;
-      if(encontrado) break;
+    const idReceta = String(r.id_medico || '').trim();
+    const idDetectado = String(obtenerIdMedicoReal() || '').trim();
+    const idBuscado = idReceta || idDetectado;
+    const nombreGuardado = String(r.medico || r.nombre_medico || val('recMedico') || '').trim();
+
+    function normalizarNombreMedico(valor){
+      return String(valor || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\b(dra|dr|doctora|doctor|medica|medico|especialista)\b\.?/g, ' ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
     }
 
-    const nombreCompleto = encontrado
-      ? String(encontrado.nombre_completo || encontrado.nombre || ((encontrado.nombres || '') + ' ' + (encontrado.apellidos || ''))).trim()
-      : nombreGuardado;
+    function idMedicoDe(m){
+      return String(m?.id_medico || m?.id || m?.codigo || '').trim();
+    }
+
+    function nombreMedicoDe(m){
+      return String(
+        m?.nombre_completo ||
+        m?.nombre ||
+        ((m?.nombres || '') + ' ' + (m?.apellidos || ''))
+      ).trim();
+    }
+
+    const listas = [];
+
+    function agregarLista(lista){
+      if(Array.isArray(lista) && !listas.includes(lista)) listas.push(lista);
+    }
+
+    agregarLista(window.medicos);
+    agregarLista(window.medicosActivos);
+    agregarLista(window.listaMedicos);
+    agregarLista(window.configuracionMedicos);
+    agregarLista(window.medicosConfiguracion);
+
+    try{ if(typeof medicos !== 'undefined') agregarLista(medicos); }catch(e){}
+    try{ if(typeof medicosActivos !== 'undefined') agregarLista(medicosActivos); }catch(e){}
+    try{ if(typeof listaMedicos !== 'undefined') agregarLista(listaMedicos); }catch(e){}
+
+    const medicosDisponibles = [];
+    const clavesVistas = new Set();
+
+    listas.forEach(lista => {
+      lista.forEach(m => {
+        if(!m || typeof m !== 'object') return;
+        const clave = idMedicoDe(m) || normalizarNombreMedico(nombreMedicoDe(m));
+        if(!clave || clavesVistas.has(clave)) return;
+        clavesVistas.add(clave);
+        medicosDisponibles.push(m);
+      });
+    });
+
+    let encontrado = null;
+
+    /* 1. Búsqueda oficial y prioritaria por id_medico. */
+    if(idBuscado){
+      encontrado = medicosDisponibles.find(m => idMedicoDe(m) === idBuscado) || null;
+    }
+
+    /* 2. Si el ID falla, búsqueda tolerante por nombre almacenado. */
+    if(!encontrado && nombreGuardado){
+      const nombreBuscado = normalizarNombreMedico(nombreGuardado);
+
+      if(nombreBuscado){
+        encontrado = medicosDisponibles.find(m => {
+          const nombreLista = normalizarNombreMedico(nombreMedicoDe(m));
+          if(!nombreLista) return false;
+
+          return (
+            nombreLista === nombreBuscado ||
+            nombreLista.includes(nombreBuscado) ||
+            nombreBuscado.includes(nombreLista)
+          );
+        }) || null;
+      }
+    }
+
+    const nombreEncontrado = nombreMedicoDe(encontrado);
+    const idEncontrado = idMedicoDe(encontrado);
 
     return {
-      id_medico: id,
-      nombre: nombreCompleto || 'Profesional tratante',
-      especialidad: String(encontrado?.especialidad_principal || encontrado?.especialidad || encontrado?.especialidad_medica || '').trim(),
-      registro_msp: String(encontrado?.registro_msp || encontrado?.msp || encontrado?.registro_profesional || '').trim(),
-      registro_senescyt: String(encontrado?.registro_senescyt || encontrado?.senescyt || '').trim(),
+      id_medico: idEncontrado || idBuscado,
+      nombre: nombreEncontrado || nombreGuardado || 'Profesional tratante',
+      especialidad: String(
+        encontrado?.especialidad_principal ||
+        encontrado?.especialidad ||
+        encontrado?.especialidad_medica ||
+        ''
+      ).trim(),
+      registro_msp: String(
+        encontrado?.registro_msp ||
+        encontrado?.msp ||
+        encontrado?.registro_profesional ||
+        ''
+      ).trim(),
+      registro_senescyt: String(
+        encontrado?.registro_senescyt ||
+        encontrado?.senescyt ||
+        ''
+      ).trim(),
       telefono: String(encontrado?.telefono || encontrado?.whatsapp || '').trim(),
       email: String(encontrado?.email || encontrado?.correo || '').trim()
     };
