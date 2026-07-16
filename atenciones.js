@@ -545,6 +545,110 @@
     }
   }
 
+  function activarAtencionCentral(atencion, opciones){
+    opciones = opciones || {};
+
+    const a = atencion && atencion.id_atencion
+      ? normalizar(atencion)
+      : null;
+
+    const id = a ? String(a.id_atencion || '').trim() : '';
+
+    atencionActivaId = id;
+
+    window.planState = window.planState || {
+      atencionActual: '',
+      cache: {}
+    };
+    window.planState.atencionActual = id;
+
+    if(window.examenFisicoState){
+      window.examenFisicoState.atencionActual = id;
+    }
+
+    window.auroAtencionActivaId = id;
+    window.auroAtencionActiva = a;
+
+    try{
+      window.dispatchEvent(new CustomEvent('auro:atencion-cambiada', {
+        detail: {
+          id_atencion: id,
+          atencion: a,
+          origen: opciones.origen || 'atenciones'
+        }
+      }));
+    }catch(e){}
+
+    if(!id || opciones.cargarModulos === false){
+      return a;
+    }
+
+    setTimeout(function(){
+      if(String(atencionActivaId || '') !== id) return;
+
+      try{
+        if(typeof cambiarPlanPorAtencion === 'function'){
+          cambiarPlanPorAtencion(id);
+        }
+      }catch(error){
+        console.warn(MODULO, 'No se pudo sincronizar Plan con atención activa.', error);
+      }
+
+      try{
+        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
+          cambiarExamenFisicoPorAtencion(id);
+        }
+      }catch(error){
+        console.warn(MODULO, 'No se pudo sincronizar Examen Físico con atención activa.', error);
+      }
+
+      try{
+        if(typeof window.cambiarDiagnosticoPorAtencion === 'function'){
+          window.cambiarDiagnosticoPorAtencion(id);
+        }
+      }catch(error){
+        console.warn(MODULO, 'No se pudo sincronizar Diagnóstico con atención activa.', error);
+      }
+
+      try{
+        if(typeof window.cambiarRecetaPorAtencion === 'function'){
+          window.cambiarRecetaPorAtencion(id);
+        }else if(typeof window.prepararNuevaRecetaParaAtencion === 'function'){
+          window.prepararNuevaRecetaParaAtencion(id);
+        }
+      }catch(error){
+        console.warn(MODULO, 'No se pudo sincronizar Receta con atención activa.', error);
+      }
+    }, Number(opciones.delay || 60));
+
+    return a;
+  }
+
+  function limpiarAtencionCentral(){
+    atencionActivaId = '';
+
+    if(window.planState){
+      window.planState.atencionActual = '';
+    }
+
+    if(window.examenFisicoState){
+      window.examenFisicoState.atencionActual = '';
+    }
+
+    window.auroAtencionActivaId = '';
+    window.auroAtencionActiva = null;
+
+    try{
+      window.dispatchEvent(new CustomEvent('auro:atencion-cambiada', {
+        detail: {
+          id_atencion: '',
+          atencion: null,
+          origen: 'limpieza'
+        }
+      }));
+    }catch(e){}
+  }
+
   function mezclarAtencionesLocalesYSheets(remotas){
     const locales = leerLocal().map(normalizar);
     const mapa = new Map();
@@ -883,34 +987,11 @@
     lista.unshift(nueva);
     guardarLocal(lista);
 
-    atencionActivaId = nueva.id_atencion;
-
-    /*
-      AUROSANAX FIX CENTRAL:
-      Al iniciar una nueva atención, se sincroniza inmediatamente
-      el id_atencion activo con Plan. Esto evita que el primer Plan
-      se guarde vacío o asociado a una consulta anterior.
-    */
-    window.planState = window.planState || {
-      atencionActual: '',
-      cache: {}
-    };
-
-    window.planState.atencionActual = nueva.id_atencion;
-
-    setTimeout(function(){
-      try{
-        if(typeof cambiarPlanPorAtencion === 'function'){
-          cambiarPlanPorAtencion(nueva.id_atencion);
-        }
-
-        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
-          cambiarExamenFisicoPorAtencion(nueva.id_atencion);
-        }
-      }catch(error){
-        console.warn('AUROSANAX PLAN: no se pudo sincronizar nueva atención con Plan.', error);
-      }
-    }, 100);
+    activarAtencionCentral(nueva, {
+      origen: 'crearAtencion',
+      cargarModulos: true,
+      delay: 80
+    });
 
     renderAtencionesPaciente();
     return nueva;
@@ -953,7 +1034,7 @@
       });
     }
 
-    atencionActivaId = '';
+    limpiarAtencionCentral();
     renderAtencionesPaciente();
 
     const resultado = await enviarAtencionGoogleSheets(atencionFinalizada);
@@ -1063,17 +1144,11 @@
     lista[idx] = actualizada;
     guardarLocal(lista);
 
-    atencionActivaId = actualizada.id_atencion;
-
-    window.planState = window.planState || {
-      atencionActual:'',
-      cache:{}
-    };
-    window.planState.atencionActual = actualizada.id_atencion;
-
-    if(window.examenFisicoState){
-      window.examenFisicoState.atencionActual = actualizada.id_atencion;
-    }
+    activarAtencionCentral(actualizada, {
+      origen: 'vincularHistoria',
+      cargarModulos: true,
+      delay: 60
+    });
 
     const resultado = await enviarAtencionGoogleSheets(actualizada);
 
@@ -1129,17 +1204,20 @@
   function mezclarRecetasLocalesYSheets(remotas){
     const mapa = new Map();
 
-    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+    leerRecetasLocales().forEach(item => {
       const r = normalizarRecetaAtencion(item);
       if(r.id_receta){
         mapa.set(String(r.id_receta), r);
       }
     });
 
-    leerRecetasLocales().forEach(item => {
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
       const r = normalizarRecetaAtencion(item);
       if(r.id_receta){
-        mapa.set(String(r.id_receta), Object.assign({}, mapa.get(String(r.id_receta)) || {}, r));
+        mapa.set(
+          String(r.id_receta),
+          Object.assign({}, mapa.get(String(r.id_receta)) || {}, r)
+        );
       }
     });
 
@@ -1513,7 +1591,6 @@
       box.style.display = 'none';
       box.innerHTML = '';
     }
-    atencionActivaId = '';
   }
 
   function renderDetalleAtencion(a){
@@ -1640,33 +1717,13 @@
       return;
     }
 
-    atencionActivaId = a.id_atencion;
-
-    /*
-      AUROSANAX FIX VER ESTABLE:
-      El botón Ver debe responder de inmediato.
-      Primero pinta el detalle de la consulta.
-      Luego carga Plan y Recetas en segundo plano.
-      Evita doble llamada a cargarPlanClinicoDesdeSheets.
-    */
-    window.planState = window.planState || { atencionActual: '', cache: {} };
-    window.planState.atencionActual = a.id_atencion;
+    activarAtencionCentral(a, {
+      origen: 'seleccionarAtencion',
+      cargarModulos: true,
+      delay: 50
+    });
 
     renderDetalleAtencion(normalizar(a));
-
-    setTimeout(function(){
-      try{
-        if(typeof cambiarPlanPorAtencion === 'function'){
-          cambiarPlanPorAtencion(a.id_atencion);
-        }
-
-        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
-          cambiarExamenFisicoPorAtencion(a.id_atencion);
-        }
-      }catch(error){
-        console.warn('AUROSANAX PLAN: error al vincular atención con Plan.', error);
-      }
-    }, 50);
 
     setTimeout(function(){
       cargarRecetasDesdeSheetsAtenciones(true).then(function(){
@@ -1761,6 +1818,14 @@
 
     const arr = atencionesPaciente(idPaciente);
     const abierta = atencionAbierta(idPaciente);
+
+    if(abierta && !atencionActivaId){
+      activarAtencionCentral(abierta, {
+        origen: 'restaurarAtencionAbierta',
+        cargarModulos: true,
+        delay: 100
+      });
+    }
 
     if(btnToggleConsultas){
       btnToggleConsultas.disabled = false;
@@ -1935,7 +2000,7 @@
         if($('historia') && $('historia').classList.contains('active')) iniciarModulo();
       });
       envolverFuncion('seleccionarPacienteHistoria', function(){
-        atencionActivaId = '';
+        limpiarAtencionCentral();
         consultasPaginaActual = 1;
 
         const box = $('auroAtencionActivaBox');
@@ -1957,7 +2022,7 @@
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
-        atencionActivaId = '';
+        limpiarAtencionCentral();
         consultasPaginaActual = 1;
 
         const box = $('auroAtencionActivaBox');
@@ -2039,13 +2104,38 @@
   window.finalizarAtencionActual = finalizarAtencion;
   window.seleccionarAtencion = seleccionarAtencion;
   window.getAtencionActiva = function(){
-    if(!atencionActivaId) return null;
-    return leerLocal().find(a => String(a.id_atencion) === String(atencionActivaId)) || null;
+    const lista = leerLocal().map(normalizar);
+
+    if(atencionActivaId){
+      const seleccionada = lista.find(a =>
+        String(a.id_atencion || '') === String(atencionActivaId || '')
+      );
+
+      if(seleccionada) return seleccionada;
+    }
+
+    const idPaciente = String(idPacienteActivo() || '').trim();
+
+    const abierta = lista.find(a =>
+      String(a.id_paciente || '').trim() === idPaciente &&
+      String(a.estado_atencion || '').toLowerCase() === 'abierta'
+    ) || null;
+
+    if(abierta){
+      atencionActivaId = abierta.id_atencion;
+      window.auroAtencionActivaId = abierta.id_atencion;
+      window.auroAtencionActiva = abierta;
+    }
+
+    return abierta;
   };
   window.getIdAtencionActiva = function(){
     const a = window.getAtencionActiva();
     return a ? a.id_atencion : '';
   };
+  window.activarAtencionCentral = activarAtencionCentral;
+  window.limpiarAtencionCentral = limpiarAtencionCentral;
+
   window.__recetasPorAtencionDebug = function(idAtencion){
     const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
     return recetasPorAtencion(a ? normalizar(a) : null);
@@ -2084,4 +2174,13 @@
    - No reutiliza automáticamente historias antiguas
    - Permite vincular id_historia después de crear la atención
    - Bloquea atención de otro paciente
+===================================================== */
+
+/* =====================================================
+   AUROSANAX ATENCIONES - FIX CENTRAL DE SINCRONIZACIÓN
+   - Una sola atención activa para Plan, Examen, Diagnóstico y Recetas
+   - Ocultar detalle no desactiva la consulta
+   - Restaura automáticamente la atención abierta
+   - Google Sheets tiene prioridad real sobre recetas locales
+   - Evita mezclar una misma receta entre consultas
 ===================================================== */
