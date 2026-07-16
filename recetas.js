@@ -1481,79 +1481,191 @@
     return p;
   }
 
-  function construirHTMLReceta(r){
+  function auroRecetaConfigInstitucional(){
+    const candidatos = [
+      window.auroConfiguracionCentro,
+      window.configuracionCentro,
+      window.configCentro,
+      window.CONFIG_CENTRO,
+      window.configuracionInstitucional
+    ];
+
+    let cfg = candidatos.find(x => x && typeof x === 'object' && !Array.isArray(x)) || {};
+    if(cfg.datos && typeof cfg.datos === 'object') cfg = cfg.datos;
+
+    return {
+      nombre: String(cfg.nombre_clinica || cfg.nombre_centro || cfg.nombre_comercial || cfg.razon_social || '').trim(),
+      subtitulo: String(cfg.subtitulo_clinica || cfg.descripcion_clinica || cfg.eslogan_clinica || '').trim(),
+      direccion: String(cfg.direccion_clinica || cfg.direccion || '').trim(),
+      ciudad: String(cfg.ciudad_clinica || cfg.ciudad || '').trim(),
+      provincia: String(cfg.provincia_clinica || cfg.provincia || '').trim(),
+      pais: String(cfg.pais_clinica || cfg.pais || 'Ecuador').trim(),
+      telefono: String(cfg.telefono_clinica || cfg.whatsapp_clinica || cfg.telefono || cfg.whatsapp || '').trim(),
+      email: String(cfg.email_clinica || cfg.correo_clinica || cfg.email || cfg.correo || '').trim(),
+      web: String(cfg.sitio_web_clinica || cfg.web_clinica || cfg.web || '').trim(),
+      logo: String(cfg.logo_url || cfg.logo_drive_url || cfg.logo || '').trim(),
+      mostrarLogo: String(cfg.mostrar_logo_receta ?? cfg.mostrar_logo ?? 'SI').trim().toUpperCase() !== 'NO'
+    };
+  }
+
+  function auroRecetaMedicoEmisor(r){
+    const id = String(r?.id_medico || obtenerIdMedicoReal() || '').trim();
+    const nombreGuardado = String(r?.medico || val('recMedico') || '').trim();
+    let encontrado = null;
+
+    const listas = [window.medicos, window.medicosActivos, window.listaMedicos];
+    for(const lista of listas){
+      if(!Array.isArray(lista)) continue;
+      encontrado = lista.find(m => String(m.id_medico || m.id || '').trim() === id) || null;
+      if(encontrado) break;
+    }
+
+    const nombreCompleto = encontrado
+      ? String(encontrado.nombre_completo || encontrado.nombre || ((encontrado.nombres || '') + ' ' + (encontrado.apellidos || ''))).trim()
+      : nombreGuardado;
+
+    return {
+      id_medico: id,
+      nombre: nombreCompleto || 'Profesional tratante',
+      especialidad: String(encontrado?.especialidad_principal || encontrado?.especialidad || encontrado?.especialidad_medica || '').trim(),
+      registro_msp: String(encontrado?.registro_msp || encontrado?.msp || encontrado?.registro_profesional || '').trim(),
+      registro_senescyt: String(encontrado?.registro_senescyt || encontrado?.senescyt || '').trim(),
+      telefono: String(encontrado?.telefono || encontrado?.whatsapp || '').trim(),
+      email: String(encontrado?.email || encontrado?.correo || '').trim()
+    };
+  }
+
+  function auroRecetaViaCompleta(via){
+    const raw = String(via || '').trim();
+    const key = raw.toUpperCase().replace(/[.\s_-]/g,'');
+    const mapa = {
+      VO:'Vía oral', ORAL:'Vía oral',
+      IM:'Vía intramuscular', INTRAMUSCULAR:'Vía intramuscular',
+      IV:'Vía intravenosa', INTRAVENOSA:'Vía intravenosa',
+      SC:'Vía subcutánea', SUBCUTANEA:'Vía subcutánea', SUBCUTÁNEA:'Vía subcutánea',
+      SL:'Vía sublingual', SUBLINGUAL:'Vía sublingual',
+      TOPICA:'Vía tópica', TÓPICA:'Vía tópica',
+      VAGINAL:'Vía vaginal', RECTAL:'Vía rectal',
+      OFTALMICA:'Vía oftálmica', OFTÁLMICA:'Vía oftálmica',
+      OTICA:'Vía ótica', ÓTICA:'Vía ótica',
+      INHALATORIA:'Vía inhalatoria', NASAL:'Vía nasal'
+    };
+    return mapa[key] || raw;
+  }
+
+  function auroRecetaMedicamentosPacienteHTML(valor){
+    const txt = String(valor || '').trim();
+    if(!txt) return '<div class="auro-empty-note">Sin medicamentos registrados.</div>';
+
+    let data = null;
+    try{
+      data = JSON.parse(txt);
+      if(!Array.isArray(data)) data = [data];
+    }catch(e){}
+
+    if(!Array.isArray(data)) return recetaBloqueTextoPremium(medicamentoRecetaJSONATexto(txt), 'Sin medicamentos registrados.');
+
+    const items = data.map((item, index) => {
+      if(typeof item === 'string' || item?.texto){
+        const linea = typeof item === 'string' ? item : item.texto;
+        return `<article class="auro-rx-item"><div class="auro-rx-title"><span class="auro-rx-num">${index + 1}</span><b>${safe(String(linea || '').replace(/^\s*\d+\.\s*/,''))}</b></div></article>`;
+      }
+
+      const m = normalizarMedicamentoRecetaObjeto(item || {});
+      const meta = [
+        m.pres ? `<span><b>Presentación:</b> ${safe(m.pres)}</span>` : '',
+        m.cantidad ? `<span><b>Cantidad:</b> ${safe(m.cantidad)}</span>` : '',
+        m.via ? `<span><b>Vía:</b> ${safe(auroRecetaViaCompleta(m.via))}</span>` : '',
+        m.frec ? `<span><b>Frecuencia:</b> ${safe(m.frec)}</span>` : '',
+        m.dur ? `<span><b>Duración:</b> ${safe(m.dur)}</span>` : ''
+      ].filter(Boolean).join('');
+
+      return `<article class="auro-rx-item">
+        <div class="auro-rx-title"><span class="auro-rx-num">${index + 1}</span><b>${safe(m.med || 'Medicamento')}</b>${String(m.continuo).toLowerCase()==='sí' ? '<em>Tratamiento continuo</em>' : ''}</div>
+        ${meta ? `<div class="auro-rx-meta">${meta}</div>` : ''}
+        ${m.ind ? `<div class="auro-rx-ind"><b>Indicaciones:</b> ${safe(m.ind)}</div>` : ''}
+      </article>`;
+    }).join('');
+
+    return `<div class="auro-rx-list">${items}</div>`;
+  }
+
+  function construirHTMLReceta(r, modo){
     r = r || {};
+    modo = modo === 'administrativo' ? 'administrativo' : 'paciente';
+    const esAdministrativo = modo === 'administrativo';
     const p = auroRecetaCompletarPacienteParaImpresion(r);
+    const cfg = auroRecetaConfigInstitucional();
+    const medico = auroRecetaMedicoEmisor(r);
+
     const nombre = p.nombre || 'Paciente no seleccionado';
     const cedula = p.cedula || '—';
     const edad = p.edad || '—';
     const telefono = p.telefono || p.whatsapp || '—';
     const idPaciente = p.id_paciente || p.id || '—';
     const idReceta = r.id_receta || '—';
-    const idMedico = r.id_medico || obtenerIdMedicoReal();
-    const codigoMedico = r.codigo_medico || obtenerCodigoCortoMedico(idMedico);
-    const medicoTexto = r.medico || val('recMedico') || 'Dra. Aurora Andagoya';
+    const idAtencion = r.id_atencion || '—';
+    const idMedico = medico.id_medico || '—';
+    const centro = cfg.nombre || 'AUROSANAX';
     const estadoClass = String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
+    const ubicacion = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais].filter(Boolean).join(' · ');
+    const contacto = [cfg.telefono, cfg.email, cfg.web].filter(Boolean).join(' · ');
+    const registros = [
+      medico.registro_msp ? `Registro MSP/ACESS: ${medico.registro_msp}` : '',
+      medico.registro_senescyt ? `Registro SENESCYT: ${medico.registro_senescyt}` : ''
+    ].filter(Boolean);
 
-    return `
-      <div class="auro-receta-documento">
-        <style>
-          .auro-receta-documento{font-family:Arial,system-ui,sans-serif;color:#111827;line-height:1.32;max-width:900px;margin:auto;background:#fff;font-size:12.5px;}
-          .auro-receta-header{border-radius:18px;background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;gap:14px;align-items:center;position:relative;overflow:hidden;}
-          .auro-receta-header:after{content:"";position:absolute;right:-38px;top:-54px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.14)}
-          .auro-receta-brand{position:relative;z-index:1}.auro-receta-brand h2{margin:0;color:#fff;font-weight:950;letter-spacing:.055em;font-size:23px;line-height:1;}
-          .auro-receta-brand small{color:rgba(255,255,255,.88);font-weight:750;font-size:11px;line-height:1.25;display:block;margin-top:3px;}
-          .auro-receta-title{position:relative;z-index:1;text-align:right;color:#fff;min-width:190px;}
-          .auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em;line-height:1.1;}
-          .auro-receta-title small{display:block;color:rgba(255,255,255,.88);font-size:11px;margin-top:2px;}
-          .auro-receta-grid{display:grid;grid-template-columns:1.2fr .85fr .9fr .85fr;gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px;}
-          .auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0;}
-          .auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px;}
-          .auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;word-break:break-word;}
-          .auro-receta-section{margin-top:9px;break-inside:avoid;}
-          .auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950;letter-spacing:.015em;}
-          .auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;min-height:auto;white-space:normal;word-break:break-word;background:linear-gradient(135deg,#ffffff,#fffafd);box-shadow:0 4px 14px rgba(139,30,90,.035);}
-          .auro-rp{display:flex;align-items:center;gap:8px;margin-bottom:7px;color:#111827;font-size:12.5px;font-weight:950;letter-spacing:.01em;}
-          .auro-rx-list{display:grid;gap:5px;}
-          .auro-rx-item{border:1px solid #edf2f7;border-left:3px solid #c23b83;border-radius:12px;background:#fff;padding:7px 9px;break-inside:avoid;}
-          .auro-rx-item.compacto{padding:6px 8px;}
-          .auro-rx-title{display:flex;align-items:flex-start;gap:6px;color:#111827;line-height:1.25;}
-          .auro-rx-title b{font-size:12.8px;font-weight:950;}
-          .auro-rx-title em{margin-left:auto;font-style:normal;font-size:9.5px;font-weight:900;color:#166534;background:#dcfce7;border-radius:999px;padding:2px 6px;white-space:nowrap;}
-          .auro-rx-num{width:20px;height:20px;border-radius:7px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;display:inline-grid;place-items:center;font-size:10px;font-weight:950;flex:0 0 auto;}
-          .auro-rx-meta{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0 0 26px;color:#475569;font-size:11.3px;}
-          .auro-rx-meta span{white-space:nowrap}.auro-rx-meta b{color:#6b7280;}
-          .auro-rx-ind{margin:3px 0 0 26px;color:#334155;font-size:11.3px;line-height:1.25;background:#f8fafc;border:1px solid #eef2f7;border-radius:9px;padding:4px 6px;}
-          .auro-rx-ind b{color:#8b1e5a;}
-          .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35;}
-          .auro-text-premium ul{margin:0;padding-left:17px}.auro-text-premium li{margin:2px 0;}
-          .auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px;}
-          .auro-receta-footer{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:24px;align-items:end;}
-          .auro-firma{text-align:center;padding-top:20px;font-size:11px;}
-          .auro-linea{border-top:1px solid #111827;margin-bottom:5px;}
-          .badge-auro{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:900;margin-top:3px;}
-          .badge-ok{background:#dcfce7;color:#166534;}.badge-danger{background:#fee2e2;color:#991b1b;}
-          @page{size:A4;margin:9mm}
-          @media print{
-            .no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-item{break-inside:avoid;page-break-inside:avoid}.auro-receta-header{padding:10px 14px;margin-bottom:7px;border-radius:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.auro-receta-brand h2{font-size:20px}.auro-receta-title b{font-size:16px}.auro-receta-grid{gap:4px;padding:6px;margin-bottom:7px}.auro-receta-grid div{padding:4px 6px;border-radius:8px}.auro-receta-section{margin-top:7px}.auro-receta-box{padding:7px 8px}.auro-rx-list{gap:4px}.auro-rx-item{padding:5px 7px;border-radius:10px}.auro-rx-title b{font-size:11.6px}.auro-rx-meta,.auro-rx-ind{font-size:10.4px}.auro-rx-ind{padding:3px 5px}.auro-receta-footer{margin-top:18px}.auro-firma{padding-top:16px}
-          }
-          @media(max-width:700px){.auro-receta-documento{font-size:12px}.auro-receta-header{display:block;padding:12px}.auro-receta-title{text-align:left;margin-top:8px}.auro-receta-grid{grid-template-columns:1fr 1fr}.auro-rx-meta{display:grid;grid-template-columns:1fr;margin-left:26px}.auro-receta-footer{grid-template-columns:1fr;gap:12px}}
-        </style>
-        <div class="auro-receta-header">
-          <div class="auro-receta-brand"><h2>AUROSANAX</h2><small>Centro Médico Especializado</small><small>Innovando salud al cuidado de la mujer</small></div>
-          <div class="auro-receta-title"><b>RECETA MÉDICA</b><small>ID: ${safe(idReceta)}</small><small>Fecha: ${safe(fechaVisual(r.fecha))}</small><span class="badge-auro ${estadoClass}">${safe(r.estado)}</span></div>
-        </div>
-        <div class="auro-receta-grid">
+    const logo = cfg.mostrarLogo && cfg.logo
+      ? `<img class="auro-receta-logo" src="${safe(cfg.logo)}" alt="Logo institucional" onerror="this.style.display='none';this.parentElement.classList.add('sin-logo');">`
+      : '';
+
+    const datosPaciente = esAdministrativo
+      ? `
           <div><span>Paciente</span><b>${safe(nombre)}</b></div><div><span>Cédula</span><b>${safe(cedula)}</b></div>
           <div><span>Edad</span><b>${safe(edad)}</b></div><div><span>WhatsApp</span><b>${safe(telefono)}</b></div>
-          <div><span>ID paciente</span><b>${safe(idPaciente)}</b></div><div><span>CIE-10</span><b>${safe(r.cie10 || '—')}</b></div>
-          <div style="grid-column:span 2"><span>Médico</span><b>${safe(medicoTexto)}</b><small style="display:block;color:#64748b;font-size:10.5px;font-weight:800;margin-top:3px;word-break:break-word;">ID médico: ${safe(idMedico)}</small></div>
-          <div style="grid-column:1/-1"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>
+          <div><span>ID paciente</span><b>${safe(idPaciente)}</b></div><div><span>ID atención</span><b>${safe(idAtencion)}</b></div>
+          <div><span>ID receta</span><b>${safe(idReceta)}</b></div><div><span>ID médico</span><b>${safe(idMedico)}</b></div>
+          <div><span>CIE-10</span><b>${safe(r.cie10 || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
+          <div style="grid-column:1/-1"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>`
+      : `
+          <div><span>Paciente</span><b>${safe(nombre)}</b></div>
+          <div><span>Edad</span><b>${safe(edad)}</b></div>
+          <div><span>Fecha de emisión</span><b>${safe(fechaVisual(r.fecha))}</b></div>
+          <div><span>N.º de receta</span><b>${safe(idReceta === '—' ? '—' : idReceta)}</b></div>
+          ${r.cie10 ? `<div><span>CIE-10</span><b>${safe(r.cie10)}</b></div>` : ''}
+          ${r.diagnostico ? `<div style="grid-column:span 3"><span>Diagnóstico</span><b>${safe(r.diagnostico)}</b></div>` : ''}`;
+
+    return `
+      <div class="auro-receta-documento ${esAdministrativo ? 'modo-administrativo' : 'modo-paciente'}">
+        <style>
+          .auro-receta-documento{font-family:Arial,system-ui,sans-serif;color:#111827;line-height:1.32;max-width:900px;margin:auto;background:#fff;font-size:12.5px;}
+          .auro-receta-header{border-bottom:3px solid #8b1e5a;padding:0 0 11px;margin-bottom:10px;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;}
+          .auro-receta-logo-wrap{width:76px;height:76px;display:grid;place-items:center;border:1px solid #ead5e2;border-radius:16px;background:#fff;overflow:hidden}.auro-receta-logo-wrap:empty,.auro-receta-logo-wrap.sin-logo{display:none}.auro-receta-logo{max-width:100%;max-height:100%;object-fit:contain;display:block}
+          .auro-receta-brand h2{margin:0;color:#8b1e5a;font-weight:950;letter-spacing:.04em;font-size:22px;line-height:1.05}.auro-receta-brand small{color:#6b7280;font-weight:750;font-size:11px;line-height:1.3;display:block;margin-top:3px}
+          .auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
+          .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;word-break:break-word}
+          .auro-receta-section{margin-top:9px;break-inside:avoid}.auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950}.auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;white-space:normal;word-break:break-word;background:#fff;box-shadow:0 4px 14px rgba(139,30,90,.035)}
+          .auro-rx-list{display:grid;gap:6px}.auro-rx-item{border:1px solid #edf2f7;border-left:3px solid #c23b83;border-radius:12px;background:#fff;padding:7px 9px;break-inside:avoid}.auro-rx-title{display:flex;align-items:flex-start;gap:6px;color:#111827}.auro-rx-title b{font-size:12.8px;font-weight:950}.auro-rx-title em{margin-left:auto;font-style:normal;font-size:9.5px;font-weight:900;color:#166534;background:#dcfce7;border-radius:999px;padding:2px 6px}.auro-rx-num{width:20px;height:20px;border-radius:7px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;display:inline-grid;place-items:center;font-size:10px;font-weight:950;flex:0 0 auto}.auro-rx-meta{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0 0 26px;color:#475569;font-size:11.3px}.auro-rx-meta b{color:#6b7280}.auro-rx-ind{margin:3px 0 0 26px;color:#334155;font-size:11.3px;background:#f8fafc;border:1px solid #eef2f7;border-radius:9px;padding:4px 6px}.auro-rx-ind b{color:#8b1e5a}
+          .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
+          .auro-receta-footer{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:24px;align-items:end}.auro-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}.auro-firma{text-align:center;padding-top:20px;font-size:11px}.auro-linea{border-top:1px solid #111827;margin-bottom:5px}.badge-auro{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:900;margin-top:3px}.badge-ok{background:#dcfce7;color:#166534}.badge-danger{background:#fee2e2;color:#991b1b}
+          .auro-admin-alert{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:7px 9px;margin-bottom:9px;font-weight:800;font-size:11px}
+          @page{size:A4;margin:10mm}@media print{.no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-item{break-inside:avoid;page-break-inside:avoid}.auro-receta-grid{gap:4px;padding:6px}.auro-receta-grid div{padding:4px 6px}.auro-receta-footer{margin-top:18px}.auro-admin-alert{display:none}}
+          @media(max-width:700px){.auro-receta-header{grid-template-columns:auto 1fr}.auro-receta-title{grid-column:1/-1;text-align:left}.auro-receta-grid{grid-template-columns:1fr 1fr}.auro-receta-footer{grid-template-columns:1fr}.auro-rx-meta{display:grid;grid-template-columns:1fr}}
+        </style>
+        ${esAdministrativo ? '<div class="auro-admin-alert">Vista administrativa interna: contiene identificadores y datos de auditoría. No entregar al paciente.</div>' : ''}
+        <div class="auro-receta-header">
+          <div class="auro-receta-logo-wrap">${logo}</div>
+          <div class="auro-receta-brand"><h2>${safe(centro)}</h2>${cfg.subtitulo ? `<small>${safe(cfg.subtitulo)}</small>` : ''}<small>${safe(medico.nombre)}</small>${medico.especialidad ? `<small>${safe(medico.especialidad)}</small>` : ''}</div>
+          <div class="auro-receta-title"><b>RECETA MÉDICA</b><small>Fecha: ${safe(fechaVisual(r.fecha))}</small>${esAdministrativo ? `<span class="badge-auro ${estadoClass}">${safe(r.estado || 'Emitida')}</span>` : ''}</div>
         </div>
-        <div class="auro-receta-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box"><div class="auro-rp"><span>Prescripción médica</span></div>${recetaMedicamentosPremiumHTML(r.medicamento)}</div></div>
-        <div class="auro-receta-section"><h4>Indicaciones para paciente</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.indicaciones, '—')}</div></div>
-        ${r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.recomendaciones, '—')}</div></div>` : ''}
-        <div class="auro-receta-footer"><div style="font-size:10.5px;color:#6b7280;line-height:1.35;">Documento generado desde AUROSANAX Clinical ERP DEMO.<br>Esta receta debe ser validada con firma y sello del profesional tratante.<br>ID receta: ${safe(idReceta)} · ID médico: ${safe(idMedico)}</div><div class="auro-firma"><div class="auro-linea"></div><b>Dra. Aurora Andagoya Murillo</b><br><span>Ginecología y Obstetricia</span><br><span>ID médico: ${safe(idMedico)}</span><br><span>Firma y sello</span></div></div>
+        <div class="auro-receta-grid">${datosPaciente}</div>
+        <div class="auro-receta-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box">${auroRecetaMedicamentosPacienteHTML(r.medicamento)}</div></div>
+        ${r.indicaciones ? `<div class="auro-receta-section"><h4>Indicaciones para el paciente</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.indicaciones, '—')}</div></div>` : ''}
+        ${esAdministrativo && r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.recomendaciones, '—')}</div></div>` : ''}
+        <div class="auro-receta-footer">
+          <div class="auro-centro-contacto">${ubicacion ? `<div>${safe(ubicacion)}</div>` : ''}${contacto ? `<div>${safe(contacto)}</div>` : ''}${esAdministrativo ? `<div style="margin-top:5px;color:#64748b">ID receta: ${safe(idReceta)} · ID atención: ${safe(idAtencion)} · ID médico: ${safe(idMedico)}</div>` : ''}</div>
+          <div class="auro-firma"><div class="auro-linea"></div><b>${safe(medico.nombre)}</b>${medico.especialidad ? `<br><span>${safe(medico.especialidad)}</span>` : ''}${registros.map(x=>`<br><span>${safe(x)}</span>`).join('')}<br><span>Firma y sello</span></div>
+        </div>
       </div>`;
   }
 
@@ -1569,7 +1681,7 @@
       if(box) box.innerHTML = `<div class="sheet-note"><i class="bi bi-exclamation-triangle me-1"></i> Primero seleccione o abra un paciente desde Pacientes o Historia Clínica.</div>`;
       return r;
     }
-    if(box) box.innerHTML = construirHTMLReceta(r);
+    if(box) box.innerHTML = construirHTMLReceta(r, 'paciente');
     return r;
   };
 
@@ -1587,12 +1699,14 @@
       if(typeof showScreen === 'function') showScreen('pacientes');
       return;
     }
-    const html = construirHTMLReceta(r);
+    const html = construirHTMLReceta(r, 'paciente');
     const ventana = window.open('', '_blank');
     if(!ventana){ alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes para este sitio.'); return; }
     ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Receta médica AUROSANAX</title></head><body>${html}</body></html>`);
     ventana.document.close(); ventana.focus(); setTimeout(() => ventana.print(), 300);
   };
+
+  window.__auroRecetasConstruirPDFSeguro = function(datos){ return window.generarPDFReceta(datos); };
 
   function recetaDesdeFormulario(){
     auroRecetaAutocompletarDiagnosticoSiVacio();
@@ -2033,9 +2147,9 @@
           <div class="cardx p-3 bg-white mt-1 mb-2" style="border-left:4px solid #8b1e5a;">
             <div class="fw-bold mb-2">Acciones de receta</div>
             <div class="d-flex flex-column gap-2" style="max-width:220px;">
-              <button type="button" class="btn-action soft text-start" onclick="verRecetaEmitida('${id}')">👁 Ver receta</button>
+              <button type="button" class="btn-action soft text-start" onclick="verRecetaEmitida('${id}')">👁 Vista administrativa</button>
               <button type="button" class="btn-action soft text-start" onclick="editarRecetaEmitida('${id}')">✏ Editar receta</button>
-              <button type="button" class="btn-action success text-start" onclick="pdfRecetaEmitida('${id}')">📄 PDF / imprimir</button>
+              <button type="button" class="btn-action success text-start" onclick="pdfRecetaEmitida('${id}')">📄 Vista paciente / imprimir</button>
             </div>
           </div>
         </td>
@@ -2077,9 +2191,9 @@
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || '—') + '</div>' +
           '<div class="small"><b>Medicamento:</b> ' + safe(meds) + '</div>' +
           '<div class="d-grid gap-2 mt-2">' +
-            '<button type="button" class="btn-action soft" onclick="verRecetaEmitida(\'' + idSeguro + '\')">👁 Ver receta</button>' +
+            '<button type="button" class="btn-action soft" onclick="verRecetaEmitida(\'' + idSeguro + '\')">👁 Vista administrativa</button>' +
             '<button type="button" class="btn-action soft" onclick="editarRecetaEmitida(\'' + idSeguro + '\')">✏ Editar receta</button>' +
-            '<button type="button" class="btn-action success" onclick="pdfRecetaEmitida(\'' + idSeguro + '\')">📄 PDF / imprimir</button>' +
+            '<button type="button" class="btn-action success" onclick="pdfRecetaEmitida(\'' + idSeguro + '\')">📄 Vista paciente / imprimir</button>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -2131,7 +2245,7 @@
     await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
 
     const box = asegurarVistaPreviaReceta();
-    if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r));
+    if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r), 'administrativo');
 
     mostrarMensajeReceta(
       '<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.',
