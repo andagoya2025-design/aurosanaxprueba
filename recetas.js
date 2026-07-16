@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 1.9 segura JSON IDs diagnóstico
+   Versión: 2.0 contexto seguro por atención
    Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
             + guardado JSON + impresión premium compacta + edición responsive + hora local Ecuador + edición limpia sin duplicidades.
@@ -25,6 +25,7 @@
   let recetaEstadoTimer = null;
   let recetaBloqueoPostGuardadoHasta = 0;
   let recetaAtencionActualId = '';
+  let recetaPlanAtencionId = '';
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
 
@@ -303,12 +304,10 @@
   }
 
   function recetaMedicamentosListaEdicion(valor){
-    const medsPlan = Array.isArray(window.medicamentosPlanSeleccionados)
-      ? window.medicamentosPlanSeleccionados
-      : [];
+    const medsPlan = recetaMedicamentosPlanActualesSeguros();
 
     if(medsPlan.length){
-      return medsPlan.map(normalizarMedicamentoRecetaObjeto).filter(x => (x.med || '').trim());
+      return medsPlan;
     }
 
     return recetaMedicamentosALista(valor).map(item => {
@@ -571,6 +570,48 @@
     document.head.appendChild(style);
   }
 
+  function recetaMedicamentosPlanActualesSeguros(){
+    const idAtencionActual = obtenerIdAtencionActivaSeguro();
+    const idAtencionPlan = String(window.planState?.atencionActual || recetaPlanAtencionId || '').trim();
+
+    if(!idAtencionActual || !idAtencionPlan || idAtencionActual !== idAtencionPlan){
+      return [];
+    }
+
+    const meds = Array.isArray(window.medicamentosPlanSeleccionados)
+      ? window.medicamentosPlanSeleccionados
+      : [];
+
+    return meds
+      .map(normalizarMedicamentoRecetaObjeto)
+      .filter(m => String(m.med || m.texto || '').trim());
+  }
+
+  function recetaTieneMedicamentosReales(valor){
+    return recetaMedicamentosALista(valor).some(item => {
+      if(item && item.texto){
+        return String(item.texto || '').replace(/^\s*\d+\.\s*/, '').trim();
+      }
+      const m = normalizarMedicamentoRecetaObjeto(item || {});
+      return String(m.med || '').trim();
+    });
+  }
+
+  function limpiarFormularioRecetaPorCambioAtencion(){
+    recetaEditandoId = null;
+    setVal('recCie10', '');
+    setVal('recDiagnostico', '');
+    setVal('recMedicamento', '');
+    setVal('recIndicaciones', '');
+    setVal('recRecomendaciones', '');
+    actualizarBotonGuardarReceta();
+
+    const box = el('recetaPreview');
+    if(box){
+      box.innerHTML = '<div class="text-muted text-center py-4">Consulta cambiada. Cargue nuevamente el Plan de esta atención antes de guardar una receta.</div>';
+    }
+  }
+
   function medicamentoRecetaParaGuardarJSON(textoFormulario){
     const actual = String(textoFormulario || '').trim();
 
@@ -578,12 +619,10 @@
       return actual;
     }
 
-    const medsPlan = Array.isArray(window.medicamentosPlanSeleccionados)
-      ? window.medicamentosPlanSeleccionados
-      : [];
+    const medsPlan = recetaMedicamentosPlanActualesSeguros();
 
     if(medsPlan.length){
-      return JSON.stringify(medsPlan.map(normalizarMedicamentoRecetaObjeto));
+      return JSON.stringify(medsPlan);
     }
 
     if(!actual) return '';
@@ -1099,6 +1138,8 @@
 
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
+    recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     recetaEstadoVisual = '';
     recetaBloqueoPostGuardadoHasta = 0;
     if(recetaEstadoTimer){ clearTimeout(recetaEstadoTimer); recetaEstadoTimer = null; }
@@ -1133,12 +1174,14 @@
   }
 
   function verificarCambioAtencionReceta(){
-    const actual = obtenerIdAtencionActivaSeguro() || '';
+    const actual = String(obtenerIdAtencionActivaSeguro() || '').trim();
+
     if(recetaAtencionActualId && actual && recetaAtencionActualId !== actual){
-      recetaEditandoId = null;
-      actualizarBotonGuardarReceta();
+      limpiarFormularioRecetaPorCambioAtencion();
     }
-    if(actual) recetaAtencionActualId = actual;
+
+    recetaAtencionActualId = actual;
+    recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
   }
 
   window.obtenerDatosReceta = function(){
@@ -1343,6 +1386,7 @@
   }
 
   window.vistaPreviaReceta = function(){
+    verificarCambioAtencionReceta();
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     if(!recetaEditandoId && typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
     auroRecetaAutocompletarDiagnosticoSiVacio();
@@ -1358,6 +1402,7 @@
   };
 
   window.generarPDFReceta = function(recetaOpcional){
+    if(!recetaOpcional) verificarCambioAtencionReceta();
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     if(!recetaOpcional && !recetaEditandoId && typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
     if(!recetaOpcional){
@@ -1450,13 +1495,29 @@
         return;
       }
 
-      if(!String(r.medicamento || '').trim()){
-        alert('Ingrese medicamentos o prescripción antes de guardar.');
-        return;
+      if(!r.id_atencion){
+        r.id_atencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
       }
 
       if(!r.id_atencion){
-        r.id_atencion = obtenerIdAtencionActivaSeguro();
+        alert('No existe una consulta activa. Abra o seleccione una atención antes de guardar la receta.');
+        return;
+      }
+
+      const idAtencionPlan = String(window.planState?.atencionActual || '').trim();
+      if(idAtencionPlan && idAtencionPlan !== r.id_atencion){
+        alert('El Plan cargado pertenece a otra consulta. Abra nuevamente la consulta correcta antes de guardar.');
+        return;
+      }
+
+      if(recetaAtencionActualId && recetaAtencionActualId !== r.id_atencion){
+        alert('La receta pertenece a un contexto de consulta anterior. Se bloqueó el guardado.');
+        return;
+      }
+
+      if(!recetaTieneMedicamentosReales(r.medicamento)){
+        alert('No hay medicamentos reales en la receta. Agregue al menos uno antes de guardar.');
+        return;
       }
 
       if(!r.id_historia){
@@ -1924,6 +1985,8 @@
   }
 
   function inicializarRecetas(){
+    recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     instalarEstilosEdicionRecetaPremium();
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     setTimeout(function(){
@@ -1956,7 +2019,7 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'1.9 JSON listas + IDs activos + diagnóstico', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'2.0 contexto seguro por atención', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
 
 /* =====================================================
@@ -1967,4 +2030,13 @@
    - Prioriza id_atencion e id_historia de la consulta activa
    - Autocompleta descripción diagnóstica sin reemplazar datos válidos
    - Google Sheets tiene prioridad sobre localStorage
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.0 - CONTEXTO SEGURO
+   - Limpia formulario al cambiar de consulta
+   - No reutiliza medicamentos de otra atención
+   - Bloquea guardado sin id_atencion
+   - Bloquea Plan perteneciente a otra consulta
+   - Bloquea recetas sin medicamentos reales
 ===================================================== */
