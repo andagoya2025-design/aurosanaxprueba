@@ -29,6 +29,9 @@
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
   const recetaDiagnosticosPorAtencionCache = new Map();
+  let recetaMedicosActivos = [];
+  let recetaMedicosCargados = false;
+  let recetaMedicosCargando = null;
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -670,59 +673,126 @@
     return s;
   }
 
-  function obtenerIdMedicoReal(){
-    try{
-      let idMedico = '';
+  function recetaIdMedicoRegistro(m){
+    return String(m?.id_medico || m?.id || m?.codigo || '').trim();
+  }
 
-      if(typeof window.idMedicoActual === 'string' && window.idMedicoActual.trim()){
-        idMedico = window.idMedicoActual.trim();
-      }
+  function recetaNombreMedicoRegistro(m){
+    return String(
+      m?.nombre_completo ||
+      m?.nombre ||
+      ((m?.nombres || '') + ' ' + (m?.apellidos || ''))
+    ).replace(/\s+/g,' ').trim();
+  }
 
-      if(!idMedico && typeof window.getMedicoActivo === 'function'){
-        const m = window.getMedicoActivo();
-        idMedico = String((m && (m.id_medico || m.id || m.codigo)) || '').trim();
-      }
+  async function cargarMedicosActivosReceta(forzar){
+    if(recetaMedicosCargados && !forzar) return recetaMedicosActivos;
+    if(recetaMedicosCargando) return recetaMedicosCargando;
 
-      if(!idMedico && Array.isArray(window.medicos) && window.medicos.length){
-        const nombreMedico = val('recMedico') || 'Dra. Aurora Andagoya';
-        const normal = String(nombreMedico || '')
-          .trim()
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '');
+    recetaMedicosCargando = (async function(){
+      try{
+        if(typeof API_URL === 'undefined' || !API_URL){
+          throw new Error('API_URL no está definida.');
+        }
 
-        const encontrado = window.medicos.find(m => {
-          const nombreCompleto = String((m.nombres || '') + ' ' + (m.apellidos || ''))
-            .trim()
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '');
-          const id = String(m.id_medico || m.id || m.codigo || '');
-          return (
-            (nombreCompleto && normal && (nombreCompleto.includes(normal) || normal.includes(nombreCompleto))) ||
-            (normal.includes('aurora') && nombreCompleto.includes('aurora')) ||
-            id.endsWith('-397')
-          );
+        const res = await fetch(API_URL + '?accion=listarMedicosActivos&_=' + Date.now());
+        if(!res.ok) throw new Error('Error HTTP ' + res.status);
+
+        const data = await res.json();
+        recetaMedicosActivos = Array.isArray(data)
+          ? data
+          : (Array.isArray(data?.data) ? data.data : []);
+
+        recetaMedicosActivos = recetaMedicosActivos.filter(function(m){
+          return !!recetaIdMedicoRegistro(m);
         });
 
-        if(encontrado){
-          idMedico = String(encontrado.id_medico || encontrado.id || encontrado.codigo || '').trim();
-        }
+        recetaMedicosCargados = true;
+        return recetaMedicosActivos;
+      }catch(error){
+        recetaMedicosActivos = [];
+        recetaMedicosCargados = false;
+        console.warn('AUROSANAX RECETAS: no se pudieron cargar médicos activos.', error);
+        return [];
+      }finally{
+        recetaMedicosCargando = null;
+      }
+    })();
+
+    return recetaMedicosCargando;
+  }
+
+  function obtenerMedicoDesdeAtencionActiva(){
+    try{
+      const atencion = obtenerAtencionActivaSegura();
+      if(!atencion) return { id_medico:'', nombre:'', registro:null };
+
+      const idMedico = String(atencion.id_medico || atencion.medico_id || '').trim();
+      if(!idMedico) return { id_medico:'', nombre:'', registro:null };
+
+      const listas = [
+        recetaMedicosActivos,
+        window.medicos,
+        window.medicosActivos,
+        window.listaMedicos,
+        window.configuracionMedicos,
+        window.medicosConfiguracion
+      ].filter(Array.isArray);
+
+      let encontrado = null;
+      for(const lista of listas){
+        encontrado = lista.find(function(m){
+          return recetaIdMedicoRegistro(m) === idMedico;
+        }) || null;
+        if(encontrado) break;
       }
 
-      if(!idMedico || idMedico === 'MED-001' || idMedico === 'MED001'){
-        const nombreMedico = val('recMedico') || 'Dra. Aurora Andagoya';
-        const normal = String(nombreMedico || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-        if(normal.includes('aurora')){
-          idMedico = 'MED-20260623160507-397';
-        }
+      return {
+        id_medico: idMedico,
+        nombre: recetaNombreMedicoRegistro(encontrado),
+        registro: encontrado || null
+      };
+    }catch(error){
+      console.warn('AUROSANAX RECETAS: no se pudo resolver médico de la atención.', error);
+      return { id_medico:'', nombre:'', registro:null };
+    }
+  }
+
+  function sincronizarMedicoRecetaDesdeAtencion(){
+    const medico = obtenerMedicoDesdeAtencionActiva();
+    if(medico.nombre){
+      setVal('recMedico', medico.nombre);
+    }
+    return medico;
+  }
+
+  function obtenerNombreMedicoReal(){
+    const desdeAtencion = obtenerMedicoDesdeAtencionActiva();
+    if(desdeAtencion.nombre) return desdeAtencion.nombre;
+    const campo = val('recMedico');
+    if(campo) return campo;
+    return 'Profesional tratante';
+  }
+
+  function obtenerIdMedicoReal(){
+    try{
+      const desdeAtencion = obtenerMedicoDesdeAtencionActiva();
+      if(desdeAtencion.id_medico) return desdeAtencion.id_medico;
+
+      if(typeof window.idMedicoActual === 'string' && window.idMedicoActual.trim()){
+        return window.idMedicoActual.trim();
       }
 
-      if(!idMedico) idMedico = 'MED-20260623160507-397';
-      return idMedico;
+      if(typeof window.getMedicoActivo === 'function'){
+        const m = window.getMedicoActivo();
+        const id = recetaIdMedicoRegistro(m);
+        if(id) return id;
+      }
 
-    }catch(e){
-      return 'MED-20260623160507-397';
+      return '';
+    }catch(error){
+      console.warn('AUROSANAX RECETAS: no se pudo obtener id_medico real.', error);
+      return '';
     }
   }
 
@@ -733,14 +803,10 @@
       const ultimo = partes.length ? partes[partes.length - 1] : idMedico;
       const limpio = String(ultimo || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 
-      if(!limpio || limpio === '001' || limpio === 'MED001'){
-        return '397';
-      }
-
-      return limpio;
+      return limpio || 'SINMEDICO';
 
     }catch(e){
-      return '397';
+      return 'SINMEDICO';
     }
   }
 
@@ -1022,7 +1088,7 @@
         id_receta: receta.id_receta || '',
         id_paciente: receta.id_paciente || '',
         id_historia: receta.id_historia || '',
-        id_medico: receta.id_medico || obtenerIdMedicoReal(),
+        id_medico: receta.id_medico || obtenerIdMedicoReal() || '',
         fecha_receta: receta.fecha_receta || fechaHoyReceta(),
         diagnostico_cie10: receta.diagnostico_cie10 || '',
         diagnostico: receta.diagnostico || '',
@@ -1107,7 +1173,7 @@
       paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
       paciente_telefono: r.paciente_telefono || r.telefono || r.whatsapp || '',
       fecha_receta: r.fecha_receta || r.fecha || fechaHoyReceta(),
-      medico: r.medico || r.nombre_medico || val('recMedico') || 'Dra. Aurora Andagoya',
+      medico: r.medico || r.nombre_medico || obtenerNombreMedicoReal(),
       diagnostico_cie10: r.diagnostico_cie10 || r.cie10 || '',
       diagnostico: auroRecetaDiagnosticoGenerico(r.diagnostico || r.motivo || '')
         ? ''
@@ -1316,7 +1382,7 @@
     recetaBloqueoPostGuardadoHasta = 0;
     if(recetaEstadoTimer){ clearTimeout(recetaEstadoTimer); recetaEstadoTimer = null; }
     setVal('recFecha', fechaHoyReceta());
-    setVal('recMedico', 'Dra. Aurora Andagoya');
+    sincronizarMedicoRecetaDesdeAtencion();
     setVal('recCie10', '');
     setVal('recEstado', 'Emitida');
     setVal('recDiagnostico', '');
@@ -1371,7 +1437,7 @@
       id_atencion: obtenerIdAtencionActivaSeguro(),
       paciente: paciente || {},
       fecha: val('recFecha') || fechaHoyReceta(),
-      medico: val('recMedico') || 'Dra. Aurora Andagoya',
+      medico: obtenerNombreMedicoReal(),
       id_medico: obtenerIdMedicoReal(),
       codigo_medico: obtenerCodigoCortoMedico(),
       cie10: val('recCie10'),
@@ -1545,6 +1611,7 @@
       if(Array.isArray(lista) && !listas.includes(lista)) listas.push(lista);
     }
 
+    agregarLista(recetaMedicosActivos);
     agregarLista(window.medicos);
     agregarLista(window.medicosActivos);
     agregarLista(window.listaMedicos);
@@ -1757,6 +1824,7 @@
 
   window.vistaPreviaReceta = function(){
     verificarCambioAtencionReceta();
+    sincronizarMedicoRecetaDesdeAtencion();
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     if(!recetaEditandoId && typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
     auroRecetaAutocompletarDiagnosticoSiVacio();
@@ -1772,7 +1840,10 @@
   };
 
   window.generarPDFReceta = function(recetaOpcional){
-    if(!recetaOpcional) verificarCambioAtencionReceta();
+    if(!recetaOpcional){
+      verificarCambioAtencionReceta();
+      sincronizarMedicoRecetaDesdeAtencion();
+    }
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     if(!recetaOpcional && !recetaEditandoId && typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
     if(!recetaOpcional){
@@ -1810,7 +1881,7 @@
       paciente_cedula: paciente.cedula || '',
       paciente_telefono: paciente.telefono || paciente.whatsapp || '',
       paciente_edad: paciente.edad || '',
-      fecha_receta: r.fecha || fechaHoyReceta(), medico: r.medico || 'Dra. Aurora Andagoya', diagnostico_cie10: r.cie10 || '', diagnostico: r.diagnostico || '',
+      fecha_receta: r.fecha || fechaHoyReceta(), medico: r.medico || obtenerNombreMedicoReal(), diagnostico_cie10: r.cie10 || '', diagnostico: r.diagnostico || '',
       medicamento: medicamentoRecetaParaGuardarJSON(r.medicamento), presentacion: '', dosis: '', via: '', frecuencia: '', duracion: '', cantidad: '',
       indicaciones: recetaListaParaGuardarJSON(r.indicaciones || ''),
       recomendaciones: recetaListaParaGuardarJSON(r.recomendaciones || ''),
@@ -1825,7 +1896,7 @@
     recetaEditandoId = receta.id_receta || receta.id || '';
     recetaAtencionActualId = receta.id_atencion || obtenerIdAtencionActivaSeguro() || '';
     setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
-    setVal('recMedico', receta.medico || 'Dra. Aurora Andagoya');
+    setVal('recMedico', receta.medico || obtenerNombreMedicoReal());
     setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
     setVal('recEstado', receta.estado || 'Emitida');
     setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
@@ -1876,6 +1947,17 @@
         alert('No existe una consulta activa. Abra o seleccione una atención antes de guardar la receta.');
         return;
       }
+
+      const atencionMedico = obtenerMedicoDesdeAtencionActiva();
+      if(!atencionMedico.id_medico){
+        alert('La atención activa no tiene un médico asignado. Abra nuevamente la consulta correcta antes de guardar la receta.');
+        return;
+      }
+
+      r.id_medico = atencionMedico.id_medico;
+      r.codigo_medico = obtenerCodigoCortoMedico(atencionMedico.id_medico);
+      r.medico = atencionMedico.nombre || obtenerNombreMedicoReal();
+      if(atencionMedico.nombre) setVal('recMedico', atencionMedico.nombre);
 
       const idAtencionPlan = String(window.planState?.atencionActual || '').trim();
       if(idAtencionPlan && idAtencionPlan !== r.id_atencion){
@@ -2310,7 +2392,7 @@
       codigo_medico:r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
       paciente: pacienteCompleto,
       fecha:r.fecha_receta,
-      medico:r.medico || 'Dra. Aurora Andagoya',
+      medico:r.medico || obtenerNombreMedicoReal(),
       cie10:r.diagnostico_cie10,
       estado:r.estado,
       diagnostico: auroRecetaDiagnosticoGenerico(r.diagnostico)
@@ -2374,6 +2456,7 @@
       try{
         if(el('recetas') && el('recetas').classList.contains('active')){
           verificarCambioAtencionReceta();
+          sincronizarMedicoRecetaDesdeAtencion();
           asegurarHistorialRecetas();
           recetasPaginaActual = 1;
           renderHistorialRecetas();
@@ -2400,6 +2483,10 @@
     recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     instalarEstilosEdicionRecetaPremium();
+    cargarMedicosActivosReceta(false).then(function(){
+      sincronizarMedicoRecetaDesdeAtencion();
+      if(el('recetaPreview')) vistaPreviaReceta();
+    });
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     setTimeout(function(){
       auroRecetaAutocompletarDiagnosticoSiVacio();
@@ -2432,7 +2519,7 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'2.2 diagnóstico real por atención y recuperación histórica', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'2.3 médico heredado desde atención activa', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
 
 /* =====================================================
@@ -2469,4 +2556,13 @@
    - Ver / Editar / PDF recuperan la descripción por id_atencion
    - Conserva intacta la separación de Plan y Recetas por consulta
    - No modifica Apps Script, Atenciones ni JSON de medicamentos
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.3 - MÉDICO DE LA ATENCIÓN
+   - Lee id_medico directamente desde window.getAtencionActiva()
+   - Consulta listarMedicosActivos para resolver nombre y registros
+   - Sincroniza formulario, vista previa, PDF y guardado
+   - Bloquea guardado si la atención no tiene médico
+   - Elimina Aurora e ID 397 como fallback automático
 ===================================================== */
