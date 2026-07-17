@@ -16,6 +16,8 @@
 
   const STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
   let recetaEditandoId = null;
+  // ID temporal único para que Vista previa, Vista para paciente y PDF muestren el mismo N.º de receta antes de guardar.
+  let recetaIdBorrador = '';
   let recetasPaginaActual = 1;
   const RECETAS_POR_PAGINA = 5;
   let recetasHistorialVisible = true;
@@ -32,6 +34,12 @@
   let recetaMedicosActivos = [];
   let recetaMedicosCargados = false;
   let recetaMedicosCargando = null;
+
+  function asegurarIdRecetaActual(){
+    if(recetaEditandoId) return String(recetaEditandoId).trim();
+    if(!recetaIdBorrador) recetaIdBorrador = crearIdReceta();
+    return recetaIdBorrador;
+  }
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -627,6 +635,7 @@
 
   function limpiarFormularioRecetaPorCambioAtencion(){
     recetaEditandoId = null;
+    recetaIdBorrador = '';
     setVal('recCie10', '');
     setVal('recDiagnostico', '');
     setVal('recMedicamento', '');
@@ -1376,6 +1385,7 @@
 
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
+    recetaIdBorrador = '';
     recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     recetaEstadoVisual = '';
@@ -1396,6 +1406,7 @@
 
   function limpiarEstadoRecetaNuevaDespuesDeGuardar(){
     recetaEditandoId = null;
+    recetaIdBorrador = '';
     recetaAtencionActualId = obtenerIdAtencionActivaSeguro() || '';
 
     setVal('recDiagnostico', '');
@@ -1431,7 +1442,7 @@
       : null;
 
     return {
-      id_receta: recetaEditandoId || '',
+      id_receta: asegurarIdRecetaActual(),
       id_paciente: idPaciente,
       id_historia: idHistoriaActiva || ultimaHistoria?.id_historia || ultimaHistoria?.id || '',
       id_atencion: obtenerIdAtencionActivaSeguro(),
@@ -1856,13 +1867,20 @@
       if(typeof showScreen === 'function') showScreen('pacientes');
       return;
     }
+    // La salida PDF usa exactamente la misma plantilla premium de Vista para paciente.
+    // También conserva el mismo ID temporal si la receta aún no ha sido guardada.
+    if(!r.id_receta) r.id_receta = asegurarIdRecetaActual();
     const html = construirHTMLReceta(r, 'paciente');
     const ventana = window.open('', '_blank');
     if(!ventana){ alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes para este sitio.'); return; }
-    ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Receta médica AUROSANAX</title></head><body>${html}</body></html>`);
-    ventana.document.close(); ventana.focus(); setTimeout(() => ventana.print(), 300);
+    ventana.document.open();
+    ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Receta médica AUROSANAX</title><style>html,body{margin:0;padding:0;background:#fff}body{padding:10mm;box-sizing:border-box}@media print{body{padding:0}}</style></head><body>${html}</body></html>`);
+    ventana.document.close();
+    ventana.focus();
+    setTimeout(() => ventana.print(), 450);
   };
 
+  // Punto único y seguro para impresion.js y cualquier botón PDF del ERP.
   window.__auroRecetasConstruirPDFSeguro = function(datos){ return window.generarPDFReceta(datos); };
 
   function recetaDesdeFormulario(){
@@ -1871,7 +1889,7 @@
     const r = window.obtenerDatosReceta();
     const paciente = auroRecetaCompletarPacienteParaImpresion(r);
     return {
-      id_receta: recetaEditandoId || crearIdReceta(),
+      id_receta: asegurarIdRecetaActual(),
       id_paciente: r.id_paciente || paciente.id_paciente || paciente.id || '',
       id_historia: r.id_historia || '',
       id_atencion: r.id_atencion || obtenerIdAtencionActivaSeguro() || '',
@@ -1894,6 +1912,7 @@
   function cargarRecetaEnFormulario(receta){
     if(!receta) return;
     recetaEditandoId = receta.id_receta || receta.id || '';
+    recetaIdBorrador = '';
     recetaAtencionActualId = receta.id_atencion || obtenerIdAtencionActivaSeguro() || '';
     setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
     setVal('recMedico', receta.medico || obtenerNombreMedicoReal());
@@ -2520,6 +2539,22 @@
     });
   };
   window.__recetasAurosanaxDebug = function(){ return {version:'2.3 médico heredado desde atención activa', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+
+  /* AUROSANAX FIX: garantiza que el botón PDF inferior conserve la salida premium
+     aunque impresion.js se cargue antes o después de recetas.js. */
+  const generarPDFRecetaPremiumAURO = window.generarPDFReceta;
+  function reafirmarGeneradorPDFReceta(){
+    if(typeof generarPDFRecetaPremiumAURO === 'function'){
+      window.generarPDFReceta = generarPDFRecetaPremiumAURO;
+      window.__auroRecetasConstruirPDFSeguro = function(datos){
+        return generarPDFRecetaPremiumAURO(datos);
+      };
+    }
+  }
+  setTimeout(reafirmarGeneradorPDFReceta, 0);
+  setTimeout(reafirmarGeneradorPDFReceta, 500);
+  window.addEventListener('load', reafirmarGeneradorPDFReceta, {once:true});
+
 })();
 
 /* =====================================================
