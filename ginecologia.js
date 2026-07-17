@@ -15,7 +15,7 @@
 
   const MODULO = 'AUROSANAX_GINECOLOGIA_V1';
   const STORAGE_KEY = 'aurosanax_ginecologia_local_v1';
-  const VERSION = '20260717_ginecologia_v1_2_carga_consulta_corregida';
+  const VERSION = '20260717_ginecologia_v1_3_antecedentes_y_actualizacion';
 
   let registroActual = null;
   let cargando = false;
@@ -313,6 +313,7 @@
       #ginecologia .gin-status.success{background:#dcfce7;border:1px solid #bbf7d0;color:#166534}
       #ginecologia .gin-status.error{background:#fee2e2;border:1px solid #fecaca;color:#991b1b}
       #ginecologia .gin-status.info{background:#dbeafe;border:1px solid #bfdbfe;color:#1e40af}
+      #ginecologia .gin-last-update{font-size:12px;color:#64748b;text-align:right;font-weight:700}
       #ginecologia .gin-required{color:#dc2626} #ginecologia .gin-footer{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
       @media(max-width:1100px){#ginecologia .gin-context-grid,#ginecologia .gin-read-grid{grid-template-columns:repeat(2,1fr)}#ginecologia .gin-check-grid{grid-template-columns:repeat(3,1fr)}}
       @media(max-width:760px){#ginecologia .gin-head{display:block}#ginecologia .gin-actions{justify-content:flex-start;margin-top:12px}#ginecologia .gin-context-grid,#ginecologia .gin-read-grid{grid-template-columns:1fr}#ginecologia .gin-check-grid{grid-template-columns:repeat(2,1fr)}}
@@ -347,18 +348,24 @@
           <div class="gin-context-item"><small>Médico</small><b id="ginCtxMedico">—</b></div>
         </div></div>
         <div id="ginEstadoModulo" class="gin-status"></div>
+        <div id="ginUltimaActualizacion" class="gin-last-update">Última actualización: —</div>
 
         <div class="gin-panel">
-          <div class="gin-panel-title"><i class="bi bi-journal-medical"></i>Antecedentes gineco-obstétricos — solo lectura</div>
+          <div class="gin-panel-title"><i class="bi bi-journal-medical"></i>Antecedentes ginecológicos — solo lectura</div>
           <div class="gin-read-grid">
             <div class="gin-read"><small>Menarquia</small><b id="ginAntMenarquia">—</b></div>
-            <div class="gin-read"><small>Ciclos menstruales</small><b id="ginAntCiclos">—</b></div>
-            <div class="gin-read"><small>Fórmula obstétrica</small><b id="ginAntFormula">—</b></div>
-            <div class="gin-read"><small>Método anticonceptivo</small><b id="ginAntMetodo">—</b></div>
+            <div class="gin-read"><small>Menacme</small><b id="ginAntMenacme">—</b></div>
+            <div class="gin-read"><small>Menopausia</small><b id="ginAntMenopausia">—</b></div>
+            <div class="gin-read"><small>Vida sexual activa</small><b id="ginAntVidaSexual">—</b></div>
+            <div class="gin-read"><small>Planificación familiar</small><b id="ginAntPlanificacion">—</b></div>
+            <div class="gin-read"><small>Terapia hormonal</small><b id="ginAntTerapiaHormonal">—</b></div>
+            <div class="gin-read"><small>Infecciones vulvovaginales</small><b id="ginAntInfecciones">—</b></div>
+            <div class="gin-read"><small>Enfermedades de transmisión sexual (ETS)</small><b id="ginAntEts">—</b></div>
             <div class="gin-read"><small>Último PAP</small><b id="ginAntPap">—</b></div>
-            <div class="gin-read"><small>Colposcopía previa</small><b id="ginAntColpo">—</b></div>
-            <div class="gin-read"><small>Ecografía previa</small><b id="ginAntEco">—</b></div>
-            <div class="gin-read"><small>Otros antecedentes</small><b id="ginAntOtros">—</b></div>
+            <div class="gin-read"><small>Colposcopía</small><b id="ginAntColpo">—</b></div>
+            <div class="gin-read"><small>Mamografía</small><b id="ginAntMamografia">—</b></div>
+            <div class="gin-read"><small>Eco mamario</small><b id="ginAntEcoMamario">—</b></div>
+            <div class="gin-read"><small>Densitometría ósea</small><b id="ginAntDensitometria">—</b></div>
           </div>
         </div>
 
@@ -412,8 +419,9 @@
 
     $('ginBtnGuardar')?.addEventListener('click',guardar);
     $('ginBtnGuardarInferior')?.addEventListener('click',guardar);
-    $('ginBtnRecargar')?.addEventListener('click',()=>cargar(true));
+    $('ginBtnRecargar')?.addEventListener('click',()=>{ if(confirm('¿Desea recargar la información guardada? Se perderán los cambios no guardados.')) cargar(true); });
     $('ginBtnLimpiar')?.addEventListener('click',()=>{ if(confirm('¿Limpiar los campos de esta atención?')) limpiarFormulario(); });
+    actualizarEstadoRegistro();
     return true;
   }
 
@@ -624,56 +632,30 @@
       ? data.obstetricos
       : (Array.isArray(data.obstetricia) ? data.obstetricia : []);
 
-    const gesta = obstetricoPorClave(obstetricos, ['Gesta','Gestas']);
-    const partos = obstetricoPorClave(obstetricos, ['Partos','Parto']);
-    const cesareas = obstetricoPorClave(obstetricos, ['Cesareas','Cesáreas','Cesarea','Cesárea']);
-    const abortos = obstetricoPorClave(obstetricos, ['Abortos','Aborto']);
-    const vivos = obstetricoPorClave(obstetricos, ['HijosVivos','Hijos vivos','Vivos']);
-    const pap = obstetricoPorClave(obstetricos, ['Pap','PAP']);
-    const otrosObs = obstetricoPorClave(obstetricos, ['Otros']);
+    const papObs = obstetricoPorClave(obstetricos, ['Pap','PAP']);
 
-    const formula = txt(
-      valorAntecedente(g.formula_obstetrica) ||
-      h.formula_obstetrica ||
-      [
-        valorAntecedente(gesta) && `G${valorAntecedente(gesta)}`,
-        valorAntecedente(partos) && `P${valorAntecedente(partos)}`,
-        valorAntecedente(cesareas) && `C${valorAntecedente(cesareas)}`,
-        valorAntecedente(abortos) && `A${valorAntecedente(abortos)}`,
-        valorAntecedente(vivos) && `V${valorAntecedente(vivos)}`
-      ].filter(Boolean).join(' ')
-    );
-
-    const ciclos = valorAntecedente(
-      g.ciclos_menstruales ||
-      g.ciclos ||
-      g.menacme ||
-      g.ritmo_menstrual
-    );
-
-    const metodo = valorAntecedente(
-      g.metodo_anticonceptivo ||
-      g.anticoncepcion ||
-      g.planificacion_familiar
-    );
-
-    const otrosGineco = [
-      valorAntecedente(g.otros),
-      valorAntecedente(g.infecciones_vulvovaginales),
-      valorAntecedente(g.ets),
-      valorAntecedente(g.terapia_hormonal),
-      valorAntecedente(otrosObs)
-    ].filter(Boolean);
+    const leer = (...valores) => {
+      for (const valor of valores) {
+        const resuelto = valorAntecedente(valor);
+        if (resuelto) return resuelto;
+      }
+      return '';
+    };
 
     return {
-      menarquia:valorAntecedente(g.menarquia) || txt(h.menarquia || p.menarquia),
-      ciclos:ciclos || txt(h.ciclos_menstruales),
-      formula,
-      metodo:metodo || txt(h.metodo_anticonceptivo),
-      pap:combinarFechaResultado(g.ultimo_pap || g.pap || pap) || txt(h.citologia_resultado),
-      colpo:combinarFechaResultado(g.colposcopia) || txt(h.colposcopia),
-      eco:combinarFechaResultado(g.ecografia_ginecologica || g.ecografia || g.eco_ginecologica) || txt(h.eco_ginecologica),
-      otros:[...new Set(otrosGineco)].join(' · ') || txt(h.antecedentes_ginecologicos)
+      menarquia:leer(g.menarquia, h.menarquia, p.menarquia),
+      menacme:leer(g.menacme, g.ciclos_menstruales, g.ciclos, g.ritmo_menstrual, h.menacme, h.ciclos_menstruales),
+      menopausia:leer(g.menopausia, g.estado_menopausico, h.menopausia),
+      vida_sexual:leer(g.vida_sexual_activa, g.vida_sexual, g.actividad_sexual, h.vida_sexual_activa),
+      planificacion:leer(g.planificacion_familiar, g.metodo_anticonceptivo, g.anticoncepcion, h.planificacion_familiar, h.metodo_anticonceptivo),
+      terapia_hormonal:leer(g.terapia_hormonal, g.tratamiento_hormonal, h.terapia_hormonal),
+      infecciones:leer(g.infecciones_vulvovaginales, g.infecciones_vaginales, h.infecciones_vulvovaginales),
+      ets:leer(g.ets, g.enfermedades_transmision_sexual, g.infecciones_transmision_sexual, h.ets),
+      pap:combinarFechaResultado(g.ultimo_pap || g.pap || papObs) || txt(h.citologia_resultado),
+      colpo:combinarFechaResultado(g.colposcopia || g.colposcopia_previa) || txt(h.colposcopia),
+      mamografia:combinarFechaResultado(g.mamografia || g.mamografia_previa) || txt(h.mamografia),
+      eco_mamario:combinarFechaResultado(g.eco_mamario || g.ecografia_mamaria || g.eco_mamas) || txt(h.eco_mamario || h.ecografia_mamaria),
+      densitometria:combinarFechaResultado(g.densitometria_osea || g.densitometria || g.dmo) || txt(h.densitometria_osea)
     };
   }
 
@@ -682,13 +664,42 @@
     const a = antecedentesDesdeSistema(historia, contexto);
 
     setText('ginAntMenarquia',a.menarquia);
-    setText('ginAntCiclos',a.ciclos);
-    setText('ginAntFormula',a.formula);
-    setText('ginAntMetodo',a.metodo);
+    setText('ginAntMenacme',a.menacme);
+    setText('ginAntMenopausia',a.menopausia);
+    setText('ginAntVidaSexual',a.vida_sexual);
+    setText('ginAntPlanificacion',a.planificacion);
+    setText('ginAntTerapiaHormonal',a.terapia_hormonal);
+    setText('ginAntInfecciones',a.infecciones);
+    setText('ginAntEts',a.ets);
     setText('ginAntPap',a.pap);
     setText('ginAntColpo',a.colpo);
-    setText('ginAntEco',a.eco);
-    setText('ginAntOtros',a.otros);
+    setText('ginAntMamografia',a.mamografia);
+    setText('ginAntEcoMamario',a.eco_mamario);
+    setText('ginAntDensitometria',a.densitometria);
+  }
+
+  function formatearFechaHora(valor) {
+    if (!valor) return '—';
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return txt(valor) || '—';
+    return fecha.toLocaleString('es-EC', {
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', hour12:false
+    });
+  }
+
+  function actualizarEstadoRegistro() {
+    const existe = !!txt(registroActual?.id_ginecologia);
+    const texto = existe ? 'Actualizar ginecología' : 'Guardar ginecología';
+    const icono = existe ? 'bi-arrow-repeat' : 'bi-save';
+
+    [$('ginBtnGuardar'), $('ginBtnGuardarInferior')].filter(Boolean).forEach(boton => {
+      if (!guardando) boton.innerHTML = `<i class="bi ${icono} me-1"></i>${texto}`;
+    });
+
+    const ultima = registroActual?.actualizado_en || registroActual?.creado_en || '';
+    const indicador = $('ginUltimaActualizacion');
+    if (indicador) indicador.textContent = `Última actualización: ${formatearFechaHora(ultima)}`;
   }
 
   function pintarContexto(c) {
@@ -747,6 +758,7 @@
       actualizarLocal(r);
       await enviarRemoto(r,editar);
       registroActual=normalizar(r);
+      actualizarEstadoRegistro();
       notificar(editar ? 'Registro ginecológico actualizado correctamente.' : 'Registro ginecológico guardado correctamente.','success');
       window.dispatchEvent(new CustomEvent('aurosanax:ginecologia-guardada',{detail:{...r}}));
     } catch(e) {
@@ -754,7 +766,8 @@
       notificar(`Se guardó respaldo local, pero no se pudo sincronizar: ${e.message}`,'error');
     } finally {
       guardando=false;
-      botones.forEach(b=>{b.disabled=false;b.innerHTML=b.dataset.old || '<i class="bi bi-save me-1"></i>Guardar ginecología';});
+      botones.forEach(b=>{b.disabled=false;});
+      actualizarEstadoRegistro();
     }
   }
 
@@ -782,12 +795,14 @@
     setValue('ginEstPapEstado',t.pap?.estado || t.pap || ''); setValue('ginEstColpoEstado',t.colposcopia?.estado || t.colposcopia || ''); setValue('ginEstEcoEstado',t.ecografia_ginecologica?.estado || t.ecografia_ginecologica || '');
     setValue('ginEstHpvEstado',t.hpv_genotipificacion?.estado || t.hpv_genotipificacion || ''); setValue('ginEstBiopsiaEstado',t.biopsia_patologia?.estado || t.biopsia_patologia || ''); setValue('ginEstResultados',t.resultados_relevantes);
     setValue('ginImpresion',x.impresion_ginecologica); setValue('ginObservaciones',x.observaciones);
+    actualizarEstadoRegistro();
   }
 
   function limpiarFormulario() {
     registroActual=null;
     ['ginFumActual','ginTipoAtencion','ginMotivo','ginSintDescripcion','ginExGenitales','ginExEspeculo','ginExTacto','ginExMamas','ginExOtros','ginEstPapEstado','ginEstColpoEstado','ginEstEcoEstado','ginEstHpvEstado','ginEstBiopsiaEstado','ginEstResultados','ginImpresion','ginObservaciones'].forEach(id=>setValue(id,''));
     ['ginSintDolorPelvico','ginSintSangrado','ginSintLeucorrea','ginSintPrurito','ginSintDisuria','ginSintDispareunia','ginSintAmenorrea','ginSintDismenorrea','ginSintMasa','ginSintSequedad','ginSintIncontinencia','ginSintMenopausia'].forEach(id=>setValue(id,false));
+    actualizarEstadoRegistro();
   }
 
   async function cargar(forzar=false) {
