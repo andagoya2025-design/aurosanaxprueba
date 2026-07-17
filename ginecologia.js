@@ -15,12 +15,13 @@
 
   const MODULO = 'AUROSANAX_GINECOLOGIA_V1';
   const STORAGE_KEY = 'aurosanax_ginecologia_local_v1';
-  const VERSION = '20260717_ginecologia_v1_1_antecedentes_corregidos';
+  const VERSION = '20260717_ginecologia_v1_2_carga_consulta_corregida';
 
   let registroActual = null;
   let cargando = false;
   let guardando = false;
   let ultimoIdAtencion = '';
+  let contextoSeleccionado = null;
 
   const $ = (id) => document.getElementById(id);
   const txt = (v) => String(v ?? '').trim();
@@ -91,7 +92,39 @@
     return [];
   }
 
+  function leerIdAtencionDesdeDOM() {
+    const selectores = [
+      '[data-id-atencion].active', '[data-id-atencion][aria-selected="true"]',
+      '[data-id-atencion].selected', 'tr[data-id-atencion].table-active',
+      '[data-atencion-id].active', '[data-atencion-id][aria-selected="true"]',
+      '#idAtencionActiva', '#atencionActivaId', '[name="id_atencion"]'
+    ];
+
+    for (const selector of selectores) {
+      const el = document.querySelector(selector);
+      if (!el) continue;
+      const id = txt(
+        el.dataset?.idAtencion || el.dataset?.atencionId ||
+        el.value || el.getAttribute('data-id-atencion') || el.getAttribute('data-atencion-id')
+      );
+      if (id) return id;
+    }
+    return '';
+  }
+
+  function normalizarDetalleAtencion(detalle) {
+    if (!detalle || typeof detalle !== 'object') return null;
+    const candidato = detalle.atencion || detalle.data || detalle.registro || detalle;
+    if (!candidato || typeof candidato !== 'object') return null;
+    const id = txt(candidato.id_atencion || candidato.id || detalle.id_atencion || detalle.id);
+    return id ? {...candidato, id_atencion:id} : null;
+  }
+
   function resolverAtencionActiva() {
+    if (contextoSeleccionado && txt(contextoSeleccionado.id_atencion || contextoSeleccionado.id)) {
+      return contextoSeleccionado;
+    }
+
     for (const obj of [window.atencionActiva, window.atencionActual, window.currentAtencion, window.AURO_ATENCION_ACTIVA]) {
       if (obj && typeof obj === 'object' && txt(obj.id_atencion || obj.id)) return obj;
     }
@@ -101,12 +134,16 @@
       window.idAtencionActiva,
       window.currentAtencionId,
       sessionStorage.getItem('aurosanax_id_atencion_activa'),
+      sessionStorage.getItem('aurosanax_id_atencion_seleccionada'),
       localStorage.getItem('aurosanax_id_atencion_activa'),
-      localStorage.getItem('id_atencion_activa')
+      localStorage.getItem('aurosanax_id_atencion_seleccionada'),
+      localStorage.getItem('id_atencion_activa'),
+      leerIdAtencionDesdeDOM()
     ].map(txt).find(Boolean) || '';
 
     if (id) {
-      return leerAtencionesLocales().find(a => txt(a.id_atencion || a.id) === id) || { id_atencion:id };
+      const encontrada = leerAtencionesLocales().find(a => txt(a.id_atencion || a.id) === id);
+      return encontrada || { id_atencion:id };
     }
 
     return leerAtencionesLocales().find(a => {
@@ -312,10 +349,11 @@
         <div id="ginEstadoModulo" class="gin-status"></div>
 
         <div class="gin-panel">
-          <div class="gin-panel-title"><i class="bi bi-journal-medical"></i>Antecedentes ginecológicos — solo lectura</div>
+          <div class="gin-panel-title"><i class="bi bi-journal-medical"></i>Antecedentes gineco-obstétricos — solo lectura</div>
           <div class="gin-read-grid">
             <div class="gin-read"><small>Menarquia</small><b id="ginAntMenarquia">—</b></div>
             <div class="gin-read"><small>Ciclos menstruales</small><b id="ginAntCiclos">—</b></div>
+            <div class="gin-read"><small>Fórmula obstétrica</small><b id="ginAntFormula">—</b></div>
             <div class="gin-read"><small>Método anticonceptivo</small><b id="ginAntMetodo">—</b></div>
             <div class="gin-read"><small>Último PAP</small><b id="ginAntPap">—</b></div>
             <div class="gin-read"><small>Colposcopía previa</small><b id="ginAntColpo">—</b></div>
@@ -656,7 +694,7 @@
   function pintarContexto(c) {
     setText('ginCtxPaciente',c.nombre_paciente || c.id_paciente); setText('ginCtxAtencion',c.id_atencion);
     setText('ginCtxConsulta',c.numero_consulta ? `N.º ${c.numero_consulta}` : ''); setText('ginCtxMedico',c.nombre_medico || c.id_medico);
-    const sinContexto=!c.id_paciente; $('ginAlertaAtencion')?.classList.toggle('show',sinContexto);
+    $('ginAlertaAtencion')?.classList.toggle('show',!c.id_atencion || !c.id_paciente);
   }
 
   function recopilarSintomas() {
@@ -723,6 +761,20 @@
   function cargarRegistro(r) {
     registroActual=r ? normalizar(r) : null;
     const x=registroActual || {}, s=x.sintomas_json || {}, e=x.examen_ginecologico_json || {}, t=x.estudios_ginecologicos_json || {};
+
+    if (registroActual) {
+      const base = contextoActual();
+      pintarContexto({
+        ...base,
+        id_atencion:x.id_atencion || base.id_atencion,
+        numero_consulta:x.numero_consulta || base.numero_consulta,
+        id_paciente:x.id_paciente || base.id_paciente,
+        nombre_paciente:x.nombre_paciente || base.nombre_paciente,
+        id_historia:x.id_historia || base.id_historia,
+        id_medico:x.id_medico || base.id_medico,
+        nombre_medico:x.nombre_medico || base.nombre_medico
+      });
+    }
     setValue('ginFumActual',x.fum_actual); setValue('ginTipoAtencion',x.tipo_atencion); setValue('ginMotivo',x.motivo_ginecologico);
     const mapa={ginSintDolorPelvico:'dolor_pelvico',ginSintSangrado:'sangrado_anormal',ginSintLeucorrea:'leucorrea',ginSintPrurito:'prurito',ginSintDisuria:'disuria',ginSintDispareunia:'dispareunia',ginSintAmenorrea:'amenorrea',ginSintDismenorrea:'dismenorrea',ginSintMasa:'sensacion_masa',ginSintSequedad:'sequedad_vaginal',ginSintIncontinencia:'incontinencia',ginSintMenopausia:'sintomas_menopausicos'};
     Object.entries(mapa).forEach(([id,k])=>setValue(id,s[k])); setValue('ginSintDescripcion',s.descripcion);
@@ -769,8 +821,47 @@
   function inicializar() {
     if(!renderizar()) return;
     interceptarShowScreen();
-    ['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:paciente-seleccionado','aurosanax:historia-cargada'].forEach(n=>window.addEventListener(n,()=>{ultimoIdAtencion='';setTimeout(()=>cargar(true),80);}));
-    setInterval(()=>{const id=txt(resolverAtencionActiva()?.id_atencion || resolverAtencionActiva()?.id);if(id!==ultimoIdAtencion)cargar(true);},1500);
+
+    ['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada'].forEach(nombre => {
+      window.addEventListener(nombre, evento => {
+        const detalle = normalizarDetalleAtencion(evento?.detail);
+        if (detalle) {
+          contextoSeleccionado = detalle;
+          const id = txt(detalle.id_atencion || detalle.id);
+          window.atencionActiva = detalle;
+          window.atencionActual = detalle;
+          window.idAtencionActiva = id;
+          try {
+            sessionStorage.setItem('aurosanax_id_atencion_activa', id);
+            sessionStorage.setItem('aurosanax_id_atencion_seleccionada', id);
+          } catch (_) {}
+        }
+        ultimoIdAtencion='';
+        setTimeout(()=>cargar(true),80);
+      });
+    });
+
+    ['aurosanax:paciente-seleccionado','aurosanax:historia-cargada'].forEach(nombre => {
+      window.addEventListener(nombre,()=>{ultimoIdAtencion='';setTimeout(()=>cargar(true),80);});
+    });
+
+    document.addEventListener('click', evento => {
+      const el = evento.target?.closest?.('[data-id-atencion],[data-atencion-id]');
+      if (!el) return;
+      const id = txt(el.dataset?.idAtencion || el.dataset?.atencionId || el.getAttribute('data-id-atencion') || el.getAttribute('data-atencion-id'));
+      if (!id) return;
+      const encontrada = leerAtencionesLocales().find(a => txt(a.id_atencion || a.id) === id) || {id_atencion:id};
+      contextoSeleccionado = encontrada;
+      try { sessionStorage.setItem('aurosanax_id_atencion_seleccionada', id); } catch (_) {}
+      ultimoIdAtencion='';
+      setTimeout(()=>cargar(true),120);
+    }, true);
+
+    setInterval(()=>{
+      const atencion = resolverAtencionActiva();
+      const id=txt(atencion?.id_atencion || atencion?.id);
+      if(id && id!==ultimoIdAtencion)cargar(true);
+    },1500);
     cargar(true);
     console.info(`${MODULO} cargado. ${VERSION}`);
   }
