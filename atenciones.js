@@ -26,6 +26,11 @@
   const CONSULTAS_POR_PAGINA = 10;
   const RECETAS_STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
 
+  /* Catálogo único de médicos: se consulta desde Configuración mediante Apps Script. */
+  let medicosActivosAtenciones = [];
+  let medicosActivosCargados = false;
+  let medicosActivosCargando = null;
+
   function $(id){ return document.getElementById(id); }
 
   function inyectarEstilosAtenciones(){
@@ -311,6 +316,44 @@
         word-break:break-word;
       }
 
+      .auro-medico-modal{
+        position:fixed;
+        inset:0;
+        z-index:99999;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:18px;
+        background:rgba(15,23,42,.58);
+      }
+
+      .auro-medico-modal-panel{
+        width:min(520px,100%);
+        background:#fff;
+        border:1px solid #fbcfe8;
+        border-radius:22px;
+        padding:20px;
+        box-shadow:0 28px 80px rgba(15,23,42,.28);
+      }
+
+      .auro-medico-modal-panel h5{
+        margin:0 0 6px;
+        font-weight:900;
+      }
+
+      .auro-medico-modal-panel p{
+        margin:0 0 14px;
+        color:#64748b;
+        font-size:14px;
+      }
+
+      .auro-medico-modal-actions{
+        display:flex;
+        justify-content:flex-end;
+        gap:8px;
+        margin-top:14px;
+      }
+
       @media (max-width: 768px){
         #auroAtencionesBox{
           padding:12px!important;
@@ -545,110 +588,6 @@
     }
   }
 
-  function activarAtencionCentral(atencion, opciones){
-    opciones = opciones || {};
-
-    const a = atencion && atencion.id_atencion
-      ? normalizar(atencion)
-      : null;
-
-    const id = a ? String(a.id_atencion || '').trim() : '';
-
-    atencionActivaId = id;
-
-    window.planState = window.planState || {
-      atencionActual: '',
-      cache: {}
-    };
-    window.planState.atencionActual = id;
-
-    if(window.examenFisicoState){
-      window.examenFisicoState.atencionActual = id;
-    }
-
-    window.auroAtencionActivaId = id;
-    window.auroAtencionActiva = a;
-
-    try{
-      window.dispatchEvent(new CustomEvent('auro:atencion-cambiada', {
-        detail: {
-          id_atencion: id,
-          atencion: a,
-          origen: opciones.origen || 'atenciones'
-        }
-      }));
-    }catch(e){}
-
-    if(!id || opciones.cargarModulos === false){
-      return a;
-    }
-
-    setTimeout(function(){
-      if(String(atencionActivaId || '') !== id) return;
-
-      try{
-        if(typeof cambiarPlanPorAtencion === 'function'){
-          cambiarPlanPorAtencion(id);
-        }
-      }catch(error){
-        console.warn(MODULO, 'No se pudo sincronizar Plan con atención activa.', error);
-      }
-
-      try{
-        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
-          cambiarExamenFisicoPorAtencion(id);
-        }
-      }catch(error){
-        console.warn(MODULO, 'No se pudo sincronizar Examen Físico con atención activa.', error);
-      }
-
-      try{
-        if(typeof window.cambiarDiagnosticoPorAtencion === 'function'){
-          window.cambiarDiagnosticoPorAtencion(id);
-        }
-      }catch(error){
-        console.warn(MODULO, 'No se pudo sincronizar Diagnóstico con atención activa.', error);
-      }
-
-      try{
-        if(typeof window.cambiarRecetaPorAtencion === 'function'){
-          window.cambiarRecetaPorAtencion(id);
-        }else if(typeof window.prepararNuevaRecetaParaAtencion === 'function'){
-          window.prepararNuevaRecetaParaAtencion(id);
-        }
-      }catch(error){
-        console.warn(MODULO, 'No se pudo sincronizar Receta con atención activa.', error);
-      }
-    }, Number(opciones.delay || 60));
-
-    return a;
-  }
-
-  function limpiarAtencionCentral(){
-    atencionActivaId = '';
-
-    if(window.planState){
-      window.planState.atencionActual = '';
-    }
-
-    if(window.examenFisicoState){
-      window.examenFisicoState.atencionActual = '';
-    }
-
-    window.auroAtencionActivaId = '';
-    window.auroAtencionActiva = null;
-
-    try{
-      window.dispatchEvent(new CustomEvent('auro:atencion-cambiada', {
-        detail: {
-          id_atencion: '',
-          atencion: null,
-          origen: 'limpieza'
-        }
-      }));
-    }catch(e){}
-  }
-
   function mezclarAtencionesLocalesYSheets(remotas){
     const locales = leerLocal().map(normalizar);
     const mapa = new Map();
@@ -731,7 +670,7 @@
           id_paciente: atencion.id_paciente || '',
           id_cita: atencion.id_cita || '',
           id_historia: atencion.id_historia || obtenerIdHistoriaActual() || '',
-          id_medico: atencion.id_medico || medicoActual(),
+          id_medico: atencion.id_medico || '',
           fecha_atencion: atencion.fecha_atencion || fechaHoyISO(),
           hora_atencion: atencion.hora_atencion || horaActual(),
           tipo_atencion: atencion.tipo_atencion || '',
@@ -795,7 +734,164 @@
   }
 
   function medicoActual(){
-    return 'Dra. Aurora Andagoya';
+    /*
+      No existe médico predeterminado.
+      El médico debe venir de Agenda o seleccionarse manualmente.
+    */
+    return '';
+  }
+
+  function nombreCompletoMedico(m){
+    m = m || {};
+    return String(
+      m.nombre_completo ||
+      ((m.nombres || m.nombre || '') + ' ' + (m.apellidos || ''))
+    ).replace(/\s+/g,' ').trim();
+  }
+
+  function idMedicoRegistro(m){
+    return String((m || {}).id_medico || (m || {}).id || (m || {}).codigo || '').trim();
+  }
+
+  async function cargarMedicosActivosAtenciones(forzar){
+    if(medicosActivosCargados && !forzar) return medicosActivosAtenciones;
+    if(medicosActivosCargando) return medicosActivosCargando;
+
+    medicosActivosCargando = (async function(){
+      try{
+        if(typeof API_URL === 'undefined' || !API_URL){
+          throw new Error('API_URL no está definida.');
+        }
+
+        const res = await fetch(
+          API_URL + '?accion=listarMedicosActivos&_=' + Date.now()
+        );
+
+        if(!res.ok) throw new Error('Error HTTP ' + res.status);
+
+        const data = await res.json();
+        const lista = Array.isArray(data)
+          ? data
+          : (Array.isArray(data?.data) ? data.data : []);
+
+        medicosActivosAtenciones = lista.filter(function(m){
+          const id = idMedicoRegistro(m);
+          const estado = normalizarTextoSimple(m.estado || 'Activo');
+          return id && (!estado || estado === 'activo');
+        });
+
+        medicosActivosCargados = true;
+        return medicosActivosAtenciones;
+      }catch(error){
+        medicosActivosAtenciones = [];
+        medicosActivosCargados = false;
+        console.warn(MODULO, 'No se pudieron cargar médicos activos.', error);
+        return [];
+      }finally{
+        medicosActivosCargando = null;
+      }
+    })();
+
+    return medicosActivosCargando;
+  }
+
+  function leerCitaSeleccionadaAgenda(){
+    try{
+      if(window.auroCitaSeleccionadaAgenda &&
+         typeof window.auroCitaSeleccionadaAgenda === 'object'){
+        return window.auroCitaSeleccionadaAgenda;
+      }
+
+      const raw = sessionStorage.getItem('auro_cita_seleccionada_agenda');
+      if(raw){
+        const cita = JSON.parse(raw);
+        if(cita && typeof cita === 'object') return cita;
+      }
+    }catch(error){
+      console.warn(MODULO, 'No se pudo leer la cita seleccionada desde Agenda.', error);
+    }
+
+    return null;
+  }
+
+  function citaAgendaCorrespondePaciente(cita, idPaciente){
+    if(!cita) return false;
+
+    const citaPaciente = String(cita.id_paciente || cita.paciente_id || '').trim();
+    if(!citaPaciente) return true;
+
+    return citaPaciente === String(idPaciente || '').trim();
+  }
+
+  function limpiarCitaSeleccionadaAgenda(){
+    try{
+      window.auroCitaSeleccionadaAgenda = null;
+      sessionStorage.removeItem('auro_cita_seleccionada_agenda');
+    }catch(error){
+      console.warn(MODULO, 'No se pudo limpiar la cita seleccionada.', error);
+    }
+  }
+
+  function seleccionarMedicoManual(lista){
+    return new Promise(function(resolve){
+      const anteriores = document.querySelectorAll('.auro-medico-modal');
+      anteriores.forEach(function(x){ x.remove(); });
+
+      const modal = document.createElement('div');
+      modal.className = 'auro-medico-modal';
+
+      const opciones = (Array.isArray(lista) ? lista : []).map(function(m){
+        const id = idMedicoRegistro(m);
+        const nombre = nombreCompletoMedico(m) || id;
+        const especialidad = String(m.especialidad_principal || m.especialidad || '').trim();
+        return '<option value="' + safe(id) + '">' +
+          safe(nombre + (especialidad ? ' · ' + especialidad : '')) +
+        '</option>';
+      }).join('');
+
+      modal.innerHTML =
+        '<div class="auro-medico-modal-panel" role="dialog" aria-modal="true" aria-labelledby="auroMedicoModalTitulo">' +
+          '<h5 id="auroMedicoModalTitulo">Seleccione el médico</h5>' +
+          '<p>Esta atención se está iniciando manualmente. Elija el profesional responsable.</p>' +
+          '<select id="auroMedicoManualSelect" class="form-select">' +
+            '<option value="">Seleccione...</option>' +
+            opciones +
+          '</select>' +
+          '<div class="auro-medico-modal-actions">' +
+            '<button type="button" class="btn-line" id="auroCancelarMedico">Cancelar</button>' +
+            '<button type="button" class="btn-auro" id="auroAceptarMedico">Continuar</button>' +
+          '</div>' +
+        '</div>';
+
+      document.body.appendChild(modal);
+
+      const cerrar = function(valor){
+        modal.remove();
+        resolve(valor || null);
+      };
+
+      modal.querySelector('#auroCancelarMedico').addEventListener('click', function(){
+        cerrar(null);
+      });
+
+      modal.querySelector('#auroAceptarMedico').addEventListener('click', function(){
+        const id = String(modal.querySelector('#auroMedicoManualSelect').value || '').trim();
+        if(!id){
+          alert('Seleccione un médico para continuar.');
+          return;
+        }
+
+        const medico = lista.find(function(m){
+          return idMedicoRegistro(m) === id;
+        }) || null;
+
+        cerrar(medico);
+      });
+
+      modal.addEventListener('click', function(e){
+        if(e.target === modal) cerrar(null);
+      });
+    });
   }
 
   function usuarioActual(){
@@ -821,7 +917,7 @@
       id_paciente: a.id_paciente || '',
       id_cita: a.id_cita || '',
       id_historia: a.id_historia || '',
-      id_medico: a.id_medico || medicoActual(),
+      id_medico: a.id_medico || '',
       fecha_atencion: a.fecha_atencion || fechaHoyISO(),
       hora_atencion: a.hora_atencion || horaActual(),
       tipo_atencion: a.tipo_atencion || '',
@@ -947,7 +1043,7 @@
     }
   }
 
-  function crearAtencion(){
+  async function crearAtencion(){
     const p = pacienteActivo();
     const idPaciente = idPacienteActivo();
 
@@ -964,18 +1060,84 @@
       return abierta;
     }
 
-    const cita = buscarCitaAtendidaHoy(idPaciente);
+    /*
+      Prioridad obligatoria:
+      1. Cita seleccionada expresamente en Agenda.
+      2. Inicio manual con selector de médicos activos.
+      Ya no se busca una cita atendida cualquiera ni se asigna Aurora por defecto.
+    */
+    let cita = leerCitaSeleccionadaAgenda();
+
+    if(cita && !citaAgendaCorrespondePaciente(cita, idPaciente)){
+      alert(
+        'La cita seleccionada en Agenda pertenece a otro paciente. ' +
+        'Se bloqueó el inicio para proteger la historia clínica.'
+      );
+      return null;
+    }
+
+    let idMedico = '';
+    let fechaAtencion = fechaHoyISO();
+    let horaAtencion = horaActual();
+    let idCita = '';
+
+    if(cita){
+      idMedico = String(cita.id_medico || cita.medico_id || '').trim();
+      idCita = String(cita.id_cita || cita.id || cita.id_cita_web || cita.fila_origen || '').trim();
+      fechaAtencion = String(
+        cita.fecha_deseada || cita.fecha_cita || cita.fecha || fechaHoyISO()
+      ).slice(0,10);
+      horaAtencion = String(
+        cita.hora_deseada || cita.hora_inicio || cita.hora || horaActual()
+      ).trim();
+
+      if(!idMedico){
+        alert('La cita seleccionada no tiene un id_medico válido. Revise la cita en Agenda.');
+        return null;
+      }
+
+      const catalogo = await cargarMedicosActivosAtenciones(false);
+      if(catalogo.length){
+        const existeActivo = catalogo.some(function(m){
+          return idMedicoRegistro(m) === idMedico;
+        });
+
+        if(!existeActivo){
+          alert(
+            'El médico asignado a la cita no aparece como activo en Configuración. ' +
+            'Active el médico o corrija la cita antes de iniciar.'
+          );
+          return null;
+        }
+      }
+    }else{
+      const catalogo = await cargarMedicosActivosAtenciones(false);
+
+      if(!catalogo.length){
+        alert(
+          'No se pudieron cargar médicos activos desde Configuración. ' +
+          'Revise Apps Script o la conexión.'
+        );
+        return null;
+      }
+
+      const seleccionado = await seleccionarMedicoManual(catalogo);
+      if(!seleccionado) return null;
+
+      idMedico = idMedicoRegistro(seleccionado);
+    }
+
     const num = siguienteConsulta(idPaciente);
 
     const nueva = normalizar({
       id_atencion: idNuevo(),
       numero_consulta: num,
       id_paciente: idPaciente,
-      id_cita: cita ? (cita.id_cita || cita.id || cita.id_cita_web || cita.fila_origen || '') : '',
+      id_cita: idCita,
       id_historia: obtenerIdHistoriaActual(),
-      id_medico: cita ? (cita.id_medico || medicoActual()) : medicoActual(),
-      fecha_atencion: cita ? String(cita.fecha_deseada || cita.fecha_cita || fechaHoyISO()).slice(0,10) : fechaHoyISO(),
-      hora_atencion: cita ? (cita.hora_deseada || cita.hora_inicio || horaActual()) : horaActual(),
+      id_medico: idMedico,
+      fecha_atencion: fechaAtencion,
+      hora_atencion: horaAtencion,
       tipo_atencion: num === 1 ? 'Primera vez' : 'Control',
       estado_atencion: 'Abierta',
       creado_por: usuarioActual(),
@@ -987,11 +1149,32 @@
     lista.unshift(nueva);
     guardarLocal(lista);
 
-    activarAtencionCentral(nueva, {
-      origen: 'crearAtencion',
-      cargarModulos: true,
-      delay: 80
-    });
+    atencionActivaId = nueva.id_atencion;
+
+    if(cita){
+      limpiarCitaSeleccionadaAgenda();
+    }
+
+    window.planState = window.planState || {
+      atencionActual: '',
+      cache: {}
+    };
+
+    window.planState.atencionActual = nueva.id_atencion;
+
+    setTimeout(function(){
+      try{
+        if(typeof cambiarPlanPorAtencion === 'function'){
+          cambiarPlanPorAtencion(nueva.id_atencion);
+        }
+
+        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
+          cambiarExamenFisicoPorAtencion(nueva.id_atencion);
+        }
+      }catch(error){
+        console.warn('AUROSANAX PLAN: no se pudo sincronizar nueva atención con Plan.', error);
+      }
+    }, 100);
 
     renderAtencionesPaciente();
     return nueva;
@@ -1034,7 +1217,7 @@
       });
     }
 
-    limpiarAtencionCentral();
+    atencionActivaId = '';
     renderAtencionesPaciente();
 
     const resultado = await enviarAtencionGoogleSheets(atencionFinalizada);
@@ -1144,11 +1327,17 @@
     lista[idx] = actualizada;
     guardarLocal(lista);
 
-    activarAtencionCentral(actualizada, {
-      origen: 'vincularHistoria',
-      cargarModulos: true,
-      delay: 60
-    });
+    atencionActivaId = actualizada.id_atencion;
+
+    window.planState = window.planState || {
+      atencionActual:'',
+      cache:{}
+    };
+    window.planState.atencionActual = actualizada.id_atencion;
+
+    if(window.examenFisicoState){
+      window.examenFisicoState.atencionActual = actualizada.id_atencion;
+    }
 
     const resultado = await enviarAtencionGoogleSheets(actualizada);
 
@@ -1204,20 +1393,17 @@
   function mezclarRecetasLocalesYSheets(remotas){
     const mapa = new Map();
 
-    leerRecetasLocales().forEach(item => {
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
       const r = normalizarRecetaAtencion(item);
       if(r.id_receta){
         mapa.set(String(r.id_receta), r);
       }
     });
 
-    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+    leerRecetasLocales().forEach(item => {
       const r = normalizarRecetaAtencion(item);
       if(r.id_receta){
-        mapa.set(
-          String(r.id_receta),
-          Object.assign({}, mapa.get(String(r.id_receta)) || {}, r)
-        );
+        mapa.set(String(r.id_receta), Object.assign({}, mapa.get(String(r.id_receta)) || {}, r));
       }
     });
 
@@ -1528,7 +1714,9 @@
     }
 
     try{
-      const medicosLista = Array.isArray(window.medicos) ? window.medicos : [];
+      const medicosLista = medicosActivosAtenciones.length
+        ? medicosActivosAtenciones
+        : (Array.isArray(window.medicos) ? window.medicos : []);
       if(medicosLista.length){
         const rawNorm = auroAtencionNormalizarNombre(raw);
         const encontrado = medicosLista.find(m => {
@@ -1541,8 +1729,7 @@
           return (
             (id && mid && mid === id) ||
             (rawNorm && completoNorm && (completoNorm.includes(rawNorm) || rawNorm.includes(completoNorm))) ||
-            (rawNorm && nombreNorm && (nombreNorm.includes(rawNorm) || rawNorm.includes(nombreNorm))) ||
-            (rawNorm.includes('aurora') && (completoNorm.includes('aurora') || nombreNorm.includes('aurora')))
+            (rawNorm && nombreNorm && (nombreNorm.includes(rawNorm) || rawNorm.includes(nombreNorm)))
           );
         });
 
@@ -1556,14 +1743,8 @@
       console.warn(MODULO, 'No se pudo resolver médico desde catálogo.', e);
     }
 
-    const normal = auroAtencionNormalizarNombre(nombre || raw);
-    if((!id || !/^MED[-_]/i.test(id)) && normal.includes('aurora')){
-      id = 'MED-20260623160507-397';
-    }
-
     if(!nombre){
-      if(normal.includes('aurora')) nombre = 'Dra. Aurora Andagoya';
-      else nombre = raw || '—';
+      nombre = raw || '—';
     }
 
     return {
@@ -1591,6 +1772,7 @@
       box.style.display = 'none';
       box.innerHTML = '';
     }
+    atencionActivaId = '';
   }
 
   function renderDetalleAtencion(a){
@@ -1717,13 +1899,33 @@
       return;
     }
 
-    activarAtencionCentral(a, {
-      origen: 'seleccionarAtencion',
-      cargarModulos: true,
-      delay: 50
-    });
+    atencionActivaId = a.id_atencion;
+
+    /*
+      AUROSANAX FIX VER ESTABLE:
+      El botón Ver debe responder de inmediato.
+      Primero pinta el detalle de la consulta.
+      Luego carga Plan y Recetas en segundo plano.
+      Evita doble llamada a cargarPlanClinicoDesdeSheets.
+    */
+    window.planState = window.planState || { atencionActual: '', cache: {} };
+    window.planState.atencionActual = a.id_atencion;
 
     renderDetalleAtencion(normalizar(a));
+
+    setTimeout(function(){
+      try{
+        if(typeof cambiarPlanPorAtencion === 'function'){
+          cambiarPlanPorAtencion(a.id_atencion);
+        }
+
+        if(typeof cambiarExamenFisicoPorAtencion === 'function'){
+          cambiarExamenFisicoPorAtencion(a.id_atencion);
+        }
+      }catch(error){
+        console.warn('AUROSANAX PLAN: error al vincular atención con Plan.', error);
+      }
+    }, 50);
 
     setTimeout(function(){
       cargarRecetasDesdeSheetsAtenciones(true).then(function(){
@@ -1818,14 +2020,6 @@
 
     const arr = atencionesPaciente(idPaciente);
     const abierta = atencionAbierta(idPaciente);
-
-    if(abierta && !atencionActivaId){
-      activarAtencionCentral(abierta, {
-        origen: 'restaurarAtencionAbierta',
-        cargarModulos: true,
-        delay: 100
-      });
-    }
 
     if(btnToggleConsultas){
       btnToggleConsultas.disabled = false;
@@ -1977,6 +2171,10 @@
     });
 
     cargarRecetasDesdeSheetsAtenciones(false);
+
+    cargarMedicosActivosAtenciones(false).then(function(){
+      renderAtencionesPaciente();
+    });
   }
 
   function envolverFuncion(nombre, despues){
@@ -2000,7 +2198,7 @@
         if($('historia') && $('historia').classList.contains('active')) iniciarModulo();
       });
       envolverFuncion('seleccionarPacienteHistoria', function(){
-        limpiarAtencionCentral();
+        atencionActivaId = '';
         consultasPaginaActual = 1;
 
         const box = $('auroAtencionActivaBox');
@@ -2022,7 +2220,7 @@
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
-        limpiarAtencionCentral();
+        atencionActivaId = '';
         consultasPaginaActual = 1;
 
         const box = $('auroAtencionActivaBox');
@@ -2100,42 +2298,24 @@
       return leerLocal();
     });
   };
+
+  window.refrescarMedicosAtenciones = function(){
+    return cargarMedicosActivosAtenciones(true).then(function(lista){
+      renderAtencionesPaciente();
+      return lista;
+    });
+  };
   window.iniciarAtencionActual = crearAtencion;
   window.finalizarAtencionActual = finalizarAtencion;
   window.seleccionarAtencion = seleccionarAtencion;
   window.getAtencionActiva = function(){
-    const lista = leerLocal().map(normalizar);
-
-    if(atencionActivaId){
-      const seleccionada = lista.find(a =>
-        String(a.id_atencion || '') === String(atencionActivaId || '')
-      );
-
-      if(seleccionada) return seleccionada;
-    }
-
-    const idPaciente = String(idPacienteActivo() || '').trim();
-
-    const abierta = lista.find(a =>
-      String(a.id_paciente || '').trim() === idPaciente &&
-      String(a.estado_atencion || '').toLowerCase() === 'abierta'
-    ) || null;
-
-    if(abierta){
-      atencionActivaId = abierta.id_atencion;
-      window.auroAtencionActivaId = abierta.id_atencion;
-      window.auroAtencionActiva = abierta;
-    }
-
-    return abierta;
+    if(!atencionActivaId) return null;
+    return leerLocal().find(a => String(a.id_atencion) === String(atencionActivaId)) || null;
   };
   window.getIdAtencionActiva = function(){
     const a = window.getAtencionActiva();
     return a ? a.id_atencion : '';
   };
-  window.activarAtencionCentral = activarAtencionCentral;
-  window.limpiarAtencionCentral = limpiarAtencionCentral;
-
   window.__recetasPorAtencionDebug = function(idAtencion){
     const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
     return recetasPorAtencion(a ? normalizar(a) : null);
@@ -2161,6 +2341,9 @@
       recetas_sheets_cargadas: recetasSheetsCargadas,
       recetas_sheets_cargando: recetasSheetsCargando,
       recetas_locales: leerRecetasLocales().length,
+      medicos_activos_cargados: medicosActivosCargados,
+      medicos_activos: medicosActivosAtenciones.length,
+      cita_agenda_seleccionada: leerCitaSeleccionadaAgenda(),
       atencion_activa: window.getAtencionActiva()
     };
   };
@@ -2174,13 +2357,4 @@
    - No reutiliza automáticamente historias antiguas
    - Permite vincular id_historia después de crear la atención
    - Bloquea atención de otro paciente
-===================================================== */
-
-/* =====================================================
-   AUROSANAX ATENCIONES - FIX CENTRAL DE SINCRONIZACIÓN
-   - Una sola atención activa para Plan, Examen, Diagnóstico y Recetas
-   - Ocultar detalle no desactiva la consulta
-   - Restaura automáticamente la atención abierta
-   - Google Sheets tiene prioridad real sobre recetas locales
-   - Evita mezclar una misma receta entre consultas
 ===================================================== */
