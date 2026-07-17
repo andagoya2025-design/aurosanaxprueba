@@ -312,11 +312,10 @@
         <div id="ginEstadoModulo" class="gin-status"></div>
 
         <div class="gin-panel">
-          <div class="gin-panel-title"><i class="bi bi-journal-medical"></i>Antecedentes gineco-obstétricos — solo lectura</div>
+          <div class="gin-panel-title"><i class="bi bi-journal-medical"></i>Antecedentes ginecológicos — solo lectura</div>
           <div class="gin-read-grid">
             <div class="gin-read"><small>Menarquia</small><b id="ginAntMenarquia">—</b></div>
             <div class="gin-read"><small>Ciclos menstruales</small><b id="ginAntCiclos">—</b></div>
-            <div class="gin-read"><small>Fórmula obstétrica</small><b id="ginAntFormula">—</b></div>
             <div class="gin-read"><small>Método anticonceptivo</small><b id="ginAntMetodo">—</b></div>
             <div class="gin-read"><small>Último PAP</small><b id="ginAntPap">—</b></div>
             <div class="gin-read"><small>Colposcopía previa</small><b id="ginAntColpo">—</b></div>
@@ -657,7 +656,7 @@
   function pintarContexto(c) {
     setText('ginCtxPaciente',c.nombre_paciente || c.id_paciente); setText('ginCtxAtencion',c.id_atencion);
     setText('ginCtxConsulta',c.numero_consulta ? `N.º ${c.numero_consulta}` : ''); setText('ginCtxMedico',c.nombre_medico || c.id_medico);
-    $('ginAlertaAtencion')?.classList.toggle('show',!c.id_atencion || !c.id_paciente);
+    const sinContexto=!c.id_paciente; $('ginAlertaAtencion')?.classList.toggle('show',sinContexto);
   }
 
   function recopilarSintomas() {
