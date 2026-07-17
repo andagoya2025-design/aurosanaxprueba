@@ -1441,6 +1441,42 @@
       .auro-previos-mini-table{grid-template-columns:1fr}
     }
 
+
+
+    /* AUROSANAX - Agenda médica premium focalizada */
+    #agenda .cardx{overflow:hidden}
+    #agenda .section-head{padding-bottom:14px;border-bottom:1px solid #f1f5f9}
+    #agenda .auro-agenda-filtros{padding:14px;border:1px solid #f1d7e6;border-radius:18px;background:linear-gradient(135deg,#fff,#fff8fc);box-shadow:0 8px 22px rgba(139,30,90,.045)}
+    #agenda .auro-agenda-filtros .form-control,#agenda .auro-agenda-filtros .form-select,#agenda .auro-agenda-limpiar{min-height:44px}
+    #agenda .table-responsive{border:1px solid #eef2f7;border-radius:18px;overflow:auto}
+    #agenda .table-modern thead th{background:#fff8fc;color:#7a174f;padding:13px 12px;white-space:nowrap}
+    #agenda .table-modern tbody td{padding:12px;line-height:1.3}
+    #agenda .table-modern tbody tr:hover{background:#fffafd}
+    #agenda .patient-action-group{gap:7px;min-width:155px}
+    #agenda .patient-action-group .btn-action{min-height:36px}
+    #agenda .auro-agenda-estado-cerrado{display:inline-flex;align-items:center;gap:6px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:7px 9px;font-size:12px;font-weight:800}
+    #agenda .mobile-card{border:1px solid #ead5e2;border-radius:20px;padding:15px;background:linear-gradient(180deg,#fff,#fffafd);box-shadow:0 10px 24px rgba(15,23,42,.06)}
+    #agenda .mobile-card-top{align-items:flex-start;padding-bottom:8px}
+    #agenda .mobile-card .line{align-items:flex-start}
+    #agenda .mobile-card .line span:last-child{max-width:68%;word-break:break-word}
+    #agenda .auro-agenda-mobile-actions{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+    @media(max-width:980px){
+      #agenda .cardx{padding:15px!important;border-radius:20px}
+      #agenda .section-head{align-items:flex-start}
+      #agenda .section-head>div:last-child{width:100%;display:grid!important;grid-template-columns:1fr 1fr}
+      #agenda .section-head button{width:100%;min-height:44px;white-space:normal}
+      #agenda .sheet-note{font-size:12.5px;line-height:1.4}
+      #agenda .auro-agenda-filtros{padding:11px;border-radius:16px}
+      #agenda .pagination-bar{gap:10px}
+      #agenda .pagination-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}
+      #agenda .pagination-actions button{width:100%;min-height:42px}
+    }
+    @media(max-width:480px){
+      #agenda .section-head>div:last-child{grid-template-columns:1fr}
+      #agenda .mobile-card{padding:13px;border-radius:17px}
+      #agenda .mobile-card-top{display:grid;grid-template-columns:1fr;gap:7px}
+      #agenda .mobile-card-top .badge-auro{justify-self:start}
+    }
 </style>
 
 
@@ -1708,10 +1744,10 @@
 
         <div class="sheet-note mb-3"><i class="bi bi-shield-check me-1"></i> Vista médica rápida conectada a Secretaría. La gestión completa de citas, disponibilidad, confirmaciones, anulaciones y horarios se realiza desde el módulo Secretaría.</div>
 
-        <div class="row g-2 mb-3">
-          <div class="col-md-4"><input id="agendaSearch" class="form-control" placeholder="Buscar por paciente, WhatsApp o servicio" oninput="agendaPage=1; renderAgendaWeb()"></div>
-          <div class="col-md-3"><input id="agendaFecha" type="date" class="form-control" onchange="agendaPage=1; renderAgendaWeb()"></div>
-          <div class="col-md-3">
+        <div class="row g-2 mb-3 auro-agenda-filtros">
+          <div class="col-12 col-lg-3"><input id="agendaSearch" class="form-control" placeholder="Buscar paciente, WhatsApp o servicio" oninput="agendaPage=1; renderAgendaWeb()"></div>
+          <div class="col-12 col-sm-6 col-lg-2"><input id="agendaFecha" type="date" class="form-control" onchange="agendaPage=1; renderAgendaWeb()"></div>
+          <div class="col-12 col-sm-6 col-lg-2">
             <select id="agendaEstado" class="form-select" onchange="agendaPage=1; renderAgendaWeb()">
               <option value="">Todos los estados</option>
               <option value="confirmada">Confirmada</option>
@@ -1722,7 +1758,12 @@
               <option value="sin estado">Sin estado</option>
             </select>
           </div>
-          <div class="col-md-2"><button class="btn-soft w-100" onclick="limpiarFiltrosAgenda()">Limpiar</button></div>
+          <div class="col-12 col-sm-8 col-lg-3">
+            <select id="agendaMedico" class="form-select" onchange="agendaPage=1; renderAgendaWeb()">
+              <option value="">Todos los médicos</option>
+            </select>
+          </div>
+          <div class="col-12 col-sm-4 col-lg-2"><button class="btn-soft w-100 auro-agenda-limpiar" onclick="limpiarFiltrosAgenda()"><i class="bi bi-eraser me-1"></i> Limpiar</button></div>
         </div>
 
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
@@ -5372,6 +5413,7 @@ async function cargarCitasAgendaWeb(){
 
     citasAgendaWeb = data.map((c, index) => auroNormalizarCitaSecretariaParaERP(c, index));
     citasAgendaWebCargadas = true;
+    auroActualizarFiltroMedicosAgenda();
     renderAgendaWeb();
 
     const pacientesActivo = document.getElementById('pacientes')?.classList.contains('active');
@@ -5392,11 +5434,78 @@ async function cargarCitasAgendaWeb(){
   }
 }
 
+function auroNormalizarTextoAgenda(valor){
+  return String(valor || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function auroPuedeIniciarConsultaAgenda(c){
+  const estado = normalizarEstadoAgenda(auroEstadoAgenda(c));
+  return estado === 'confirmada' || estado === 'pendiente';
+}
+
+function auroActualizarFiltroMedicosAgenda(){
+  const select = document.getElementById('agendaMedico');
+  if(!select) return;
+
+  const actual = select.value || '';
+  const mapa = new Map();
+
+  (Array.isArray(medicosAgendaWeb) ? medicosAgendaWeb : []).forEach(m => {
+    const id = String(m?.id_medico || m?.id || m?.codigo || '').trim();
+    const nombre = String(m?.nombre_completo || m?.nombre || ((m?.nombres || '') + ' ' + (m?.apellidos || ''))).trim();
+    if(nombre) mapa.set(id || auroNormalizarTextoAgenda(nombre), {id, nombre});
+  });
+
+  (Array.isArray(citasAgendaWeb) ? citasAgendaWeb : []).forEach(c => {
+    const id = String(c?.id_medico || c?.medico_id || '').trim();
+    const nombre = String(c?.medico_nombre || auroNombreMedicoAgenda(c) || '').trim();
+    if(nombre) mapa.set(id || auroNormalizarTextoAgenda(nombre), {id, nombre});
+  });
+
+  const opciones = Array.from(mapa.values()).sort((a,b) => a.nombre.localeCompare(b.nombre, 'es'));
+  select.innerHTML = '<option value="">Todos los médicos</option>' + opciones.map(m =>
+    `<option value="${String(m.id || auroNormalizarTextoAgenda(m.nombre)).replace(/"/g,'&quot;')}">${m.nombre}</option>`
+  ).join('');
+
+  if(Array.from(select.options).some(o => o.value === actual)) select.value = actual;
+}
+
+function auroAccionClinicaAgendaHTML(c, modoMovil){
+  if(!auroPacienteVinculadoAgenda(c)){
+    return modoMovil
+      ? '<button class="btn-soft w-100" disabled><i class="bi bi-link-45deg me-1"></i> Paciente no vinculado</button>'
+      : '<button class="btn-action" disabled title="La cita no tiene un paciente registrado vinculado"><i class="bi bi-link-45deg me-1"></i> Sin vínculo</button>';
+  }
+
+  if(!auroHistoriaPacienteAgenda(c)){
+    return modoMovil
+      ? `<button class="btn-auro w-100" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-earmark-plus me-1"></i> Crear historia</button>`
+      : `<button class="btn-action primary" title="Crear historia clínica" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-earmark-plus me-1"></i> Crear historia</button>`;
+  }
+
+  if(auroPuedeIniciarConsultaAgenda(c)){
+    return modoMovil
+      ? `<button class="btn-auro w-100" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-play-circle me-1"></i> Iniciar consulta</button>`
+      : `<button class="btn-action primary" title="Iniciar consulta" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-play-circle me-1"></i> Iniciar consulta</button>`;
+  }
+
+  return modoMovil
+    ? '<div class="auro-agenda-estado-cerrado"><i class="bi bi-check2-circle"></i> Consulta no disponible en este estado</div>'
+    : '<span class="auro-agenda-estado-cerrado"><i class="bi bi-check2-circle"></i> Sin acción clínica</span>';
+}
+
 function renderAgendaWeb(){
   const q = (document.getElementById('agendaSearch')?.value || '').toLowerCase();
   const fecha = document.getElementById('agendaFecha')?.value || '';
   const estadoRaw = (document.getElementById('agendaEstado')?.value || '').trim();
   const estadoFiltro = estadoRaw ? normalizarEstadoAgenda(estadoRaw) : '';
+  const medicoFiltro = (document.getElementById('agendaMedico')?.value || '').trim();
+  const medicoFiltroNorm = auroNormalizarTextoAgenda(medicoFiltro);
   const sizeSelect = document.getElementById('agendaPageSize');
   if(sizeSelect) agendaPageSize = parseInt(sizeSelect.value,10) || 25;
 
@@ -5404,11 +5513,15 @@ function renderAgendaWeb(){
 
   const rows = citasAgendaWeb.map((c, originalIndex) => ({...c, originalIndex})).filter(c => {
     const estadoCita = normalizarEstadoAgenda(c.estado);
-    const txt = [c.nombre, c.whatsapp, c.servicio, c.fecha_deseada, c.hora_deseada, estadoCita].join(' ').toLowerCase();
+    const nombreMedico = String(c.medico_nombre || auroNombreMedicoAgenda(c) || '').trim();
+    const idMedico = String(c.id_medico || c.medico_id || '').trim();
+    const txt = [c.nombre, c.whatsapp, c.servicio, c.fecha_deseada, c.hora_deseada, estadoCita, nombreMedico].join(' ').toLowerCase();
+    const coincideMedico = !medicoFiltro || idMedico === medicoFiltro || auroNormalizarTextoAgenda(nombreMedico) === medicoFiltroNorm;
 
     return (!q || txt.includes(q)) &&
            (!fecha || c.fecha_deseada === fecha) &&
-           (!estadoFiltro || estadoCita === estadoFiltro);
+           (!estadoFiltro || estadoCita === estadoFiltro) &&
+           coincideMedico;
   }).sort((a, b) => {
     const fechaA = String(a.fecha_deseada || '');
     const fechaB = String(b.fecha_deseada || '');
@@ -5458,9 +5571,7 @@ function renderAgendaWeb(){
         <td>
           <div class="patient-action-group">
             <button class="btn-action success" title="WhatsApp" onclick="abrirWhatsAppCitaAgenda(${c.originalIndex})"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
-            ${auroPacienteVinculadoAgenda(c)
-              ? `<button class="btn-action primary" title="Abrir historia clínica" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-medical me-1"></i> ${auroHistoriaPacienteAgenda(c) ? 'Iniciar consulta' : 'Crear historia'}</button>`
-              : '<button class="btn-action" disabled title="La cita no tiene un paciente registrado vinculado"><i class="bi bi-link-45deg me-1"></i> Sin vínculo</button>'}
+            ${auroAccionClinicaAgendaHTML(c, false)}
           </div>
         </td>
       </tr>
@@ -5477,10 +5588,10 @@ function renderAgendaWeb(){
         <div class="line"><span>WhatsApp</span><span>${c.whatsapp || ''}</span></div>
         <div class="line"><span>Servicio</span><span>${c.servicio || ''}</span></div>
         <div class="line"><span>Historia</span><span>${auroBadgeHistoriaAgenda(c)}</span></div>
-        <button class="btn-soft w-100 mt-2" onclick="abrirWhatsAppCitaAgenda(${c.originalIndex})"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
-        ${auroPacienteVinculadoAgenda(c)
-          ? `<button class="btn-auro w-100 mt-2" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-medical me-1"></i> ${auroHistoriaPacienteAgenda(c) ? 'Iniciar consulta' : 'Crear historia'}</button>`
-          : '<button class="btn-soft w-100 mt-2" disabled><i class="bi bi-link-45deg me-1"></i> Paciente no vinculado</button>'}
+        <div class="auro-agenda-mobile-actions">
+          <button class="btn-soft w-100" onclick="abrirWhatsAppCitaAgenda(${c.originalIndex})"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
+          ${auroAccionClinicaAgendaHTML(c, true)}
+        </div>
       </div>
     `).join('') || '<div class="mobile-card text-muted">Sin citas para mostrar</div>';
   }
@@ -5498,6 +5609,7 @@ function limpiarFiltrosAgenda(){
   if(document.getElementById('agendaSearch')) document.getElementById('agendaSearch').value = '';
   if(document.getElementById('agendaFecha')) document.getElementById('agendaFecha').value = '';
   if(document.getElementById('agendaEstado')) document.getElementById('agendaEstado').value = '';
+  if(document.getElementById('agendaMedico')) document.getElementById('agendaMedico').value = '';
   agendaPage = 1;
   renderAgendaWeb();
 }
