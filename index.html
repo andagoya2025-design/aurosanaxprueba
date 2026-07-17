@@ -2165,46 +2165,8 @@
     </section>
 
 
-    <section class="screen" id="ginecologia">
-      <div class="cardx p-4">
-        <div class="section-head">
-          <div><h4>Ginecología</h4><p>Ficha ginecológica organizada para consulta, control y seguimiento.</p></div>
-          <button class="btn-auro" onclick="return validarPacienteModulo()"><i class="bi bi-save me-1"></i> Guardar</button>
-        </div>
-        <div class="module-patient-card" data-module-patient="Ginecología"></div>
-
-
-        <div class="specialty-summary">
-          <div class="specialty-card"><small>FUM</small><b id="ginResumenFUM">—</b></div>
-          <div class="specialty-card"><small>Gestas</small><b id="ginResumenGestas">—</b></div>
-          <div class="specialty-card"><small>Último PAP</small><b id="ginResumenPAP">—</b></div>
-          <div class="specialty-card"><small>Colposcopía</small><b id="ginResumenColpo">—</b></div>
-        </div>
-
-        <div class="row g-3">
-          <div class="col-md-2"><label class="form-label fw-bold">Menarquia</label><input class="form-control"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">FUM</label><input id="ginFUM" type="date" class="form-control" onchange="actualizarResumenGinecologia()"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">Ciclos</label><input class="form-control" placeholder="Regular / irregular"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">IVSA</label><input class="form-control"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">Parejas</label><input class="form-control"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">ETS</label><select class="form-select"><option>No refiere</option><option>Sí</option><option>En estudio</option></select></div>
-
-          <div class="col-md-2"><label class="form-label fw-bold">Gestas</label><input id="ginGestas" class="form-control" oninput="actualizarResumenGinecologia()"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">Partos</label><input class="form-control"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">Cesáreas</label><input class="form-control"></div>
-          <div class="col-md-2"><label class="form-label fw-bold">Abortos</label><input class="form-control"></div>
-          <div class="col-md-4"><label class="form-label fw-bold">Método anticonceptivo</label><input class="form-control"></div>
-
-          <div class="col-md-3"><label class="form-label fw-bold">Último PAP</label><input id="ginPAP" class="form-control" placeholder="Fecha / resultado" oninput="actualizarResumenGinecologia()"></div>
-          <div class="col-md-3"><label class="form-label fw-bold">HPV</label><input class="form-control"></div>
-          <div class="col-md-3"><label class="form-label fw-bold">Colposcopía</label><input id="ginColpo" class="form-control" oninput="actualizarResumenGinecologia()"></div>
-          <div class="col-md-3"><label class="form-label fw-bold">Eco transvaginal</label><input class="form-control"></div>
-
-          <div class="col-md-6"><label class="form-label fw-bold">Motivo ginecológico</label><textarea class="form-control" rows="3" placeholder="Flujo, dolor, sangrado, control, PAP, etc."></textarea></div>
-          <div class="col-md-6"><label class="form-label fw-bold">Observaciones ginecológicas</label><textarea class="form-control" rows="3"></textarea></div>
-        </div>
-      </div>
-    </section>
+    <!-- AUROSANAX - Contenedor del módulo externo de Ginecología -->
+    <section class="screen" id="ginecologia"></section>
 
     <section class="screen" id="obstetricia">
       <div class="cardx p-4">
@@ -5658,13 +5620,6 @@ function abrirHistoriaDesdeAgenda(index){
   abrirHistoriaPaciente(referencia.id_paciente);
 }
 
-function actualizarResumenGinecologia(){
-  setTextIfExists('ginResumenFUM', document.getElementById('ginFUM')?.value ? formatearFechaVisual(document.getElementById('ginFUM').value) : '—');
-  setTextIfExists('ginResumenGestas', document.getElementById('ginGestas')?.value || '—');
-  setTextIfExists('ginResumenPAP', document.getElementById('ginPAP')?.value || '—');
-  setTextIfExists('ginResumenColpo', document.getElementById('ginColpo')?.value || '—');
-}
-
 function calcObstetriciaModulo(){
   const fur = document.getElementById('obsFUR')?.value;
   if(!fur) return;
@@ -6700,6 +6655,9 @@ document.addEventListener('click',e=>{
 
 <!-- AUROSANAX - Módulo Atenciones -->
 <script src="atenciones.js?v=20260629_atenciones_v11"></script>
+
+<!-- AUROSANAX - Módulo Ginecología por atención -->
+<script src="ginecologia.js?v=20260717_ginecologia_v1"></script>
 </body>
 </html>
 <!--
