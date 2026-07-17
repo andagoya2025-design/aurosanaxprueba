@@ -406,6 +406,8 @@
   }
 
   function cargarAntecedentes() {
+    // v1.1: aquí debe incorporarse la lectura automática desde la historia clínica/BD cuando exista.
+
     const a=antecedentesDesdeSistema();
     setText('ginAntMenarquia',a.menarquia); setText('ginAntCiclos',a.ciclos); setText('ginAntFormula',a.formula); setText('ginAntMetodo',a.metodo);
     setText('ginAntPap',a.pap); setText('ginAntColpo',a.colpo); setText('ginAntEco',a.eco); setText('ginAntOtros',a.otros);
