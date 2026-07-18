@@ -15,7 +15,7 @@
 
   const MODULO = 'AUROSANAX_GINECOLOGIA_V1';
   const STORAGE_KEY = 'aurosanax_ginecologia_local_v1';
-  const VERSION = '20260717_ginecologia_v1_3_antecedentes_y_actualizacion';
+  const VERSION = '20260717_ginecologia_v1_4_flujo_por_consulta_y_estado';
 
   let registroActual = null;
   let cargando = false;
@@ -314,9 +314,14 @@
       #ginecologia .gin-status.error{background:#fee2e2;border:1px solid #fecaca;color:#991b1b}
       #ginecologia .gin-status.info{background:#dbeafe;border:1px solid #bfdbfe;color:#1e40af}
       #ginecologia .gin-last-update{font-size:12px;color:#64748b;text-align:right;font-weight:700}
-      #ginecologia .gin-required{color:#dc2626} #ginecologia .gin-footer{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+      #ginecologia .gin-actions-block{display:grid;gap:7px;justify-items:end}
+      #ginecologia .gin-record-state{font-size:12px;color:#475569;font-weight:750;text-align:right;line-height:1.35}
+      #ginecologia .gin-record-state strong{color:#111827}
+      #ginecologia .gin-required{color:#dc2626}
+      #ginecologia .gin-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+      #ginecologia .gin-footer-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
       @media(max-width:1100px){#ginecologia .gin-context-grid,#ginecologia .gin-read-grid{grid-template-columns:repeat(2,1fr)}#ginecologia .gin-check-grid{grid-template-columns:repeat(3,1fr)}}
-      @media(max-width:760px){#ginecologia .gin-head{display:block}#ginecologia .gin-actions{justify-content:flex-start;margin-top:12px}#ginecologia .gin-context-grid,#ginecologia .gin-read-grid{grid-template-columns:1fr}#ginecologia .gin-check-grid{grid-template-columns:repeat(2,1fr)}}
+      @media(max-width:760px){#ginecologia .gin-head{display:block}#ginecologia .gin-actions-block{justify-items:start;margin-top:12px}#ginecologia .gin-actions{justify-content:flex-start}#ginecologia .gin-record-state{text-align:left}#ginecologia .gin-context-grid,#ginecologia .gin-read-grid{grid-template-columns:1fr}#ginecologia .gin-check-grid{grid-template-columns:repeat(2,1fr)}}
       @media(max-width:460px){#ginecologia .gin-check-grid{grid-template-columns:1fr}}
     `;
     document.head.appendChild(s);
@@ -334,9 +339,12 @@
       <div class="cardx p-4 gin-shell">
         <div class="gin-head">
           <div><h4><i class="bi bi-gender-female me-2"></i>Ginecología</h4><p>Registro por atención. Diagnóstico y Plan se manejan en sus módulos independientes.</p></div>
-          <div class="gin-actions">
-            <button type="button" class="btn-soft" id="ginBtnRecargar"><i class="bi bi-arrow-clockwise me-1"></i>Recargar</button>
-            <button type="button" class="btn-auro" id="ginBtnGuardar"><i class="bi bi-save me-1"></i>Guardar ginecología</button>
+          <div class="gin-actions-block">
+            <div class="gin-actions">
+              <button type="button" class="btn-soft" id="ginBtnRecargar"><i class="bi bi-arrow-clockwise me-1"></i>Recargar</button>
+              <button type="button" class="btn-auro" id="ginBtnGuardar"><i class="bi bi-save me-1"></i>Guardar ginecología</button>
+            </div>
+            <div id="ginEstadoRegistroSuperior" class="gin-record-state">Consulta — · Sin registro de Ginecología</div>
           </div>
         </div>
         <div class="module-patient-card" data-module-patient="Ginecología"></div>
@@ -348,7 +356,6 @@
           <div class="gin-context-item"><small>Médico</small><b id="ginCtxMedico">—</b></div>
         </div></div>
         <div id="ginEstadoModulo" class="gin-status"></div>
-        <div id="ginUltimaActualizacion" class="gin-last-update">Última actualización: —</div>
 
         <div class="gin-panel">
           <div class="gin-panel-title"><i class="bi bi-journal-medical"></i>Antecedentes ginecológicos — solo lectura</div>
@@ -414,13 +421,26 @@
           </div>
         </div>
 
-        <div class="gin-footer"><button type="button" class="btn-soft" id="ginBtnLimpiar"><i class="bi bi-eraser me-1"></i>Limpiar</button><button type="button" class="btn-auro" id="ginBtnGuardarInferior"><i class="bi bi-save me-1"></i>Guardar ginecología</button></div>
+        <div class="gin-footer">
+          <div id="ginEstadoRegistroInferior" class="gin-record-state">Consulta — · Sin registro de Ginecología</div>
+          <div class="gin-footer-actions">
+            <button type="button" class="btn-soft" id="ginBtnRecargarInferior"><i class="bi bi-arrow-clockwise me-1"></i>Recargar</button>
+            <button type="button" class="btn-auro" id="ginBtnGuardarInferior"><i class="bi bi-save me-1"></i>Guardar ginecología</button>
+          </div>
+        </div>
       </div>`;
 
     $('ginBtnGuardar')?.addEventListener('click',guardar);
     $('ginBtnGuardarInferior')?.addEventListener('click',guardar);
-    $('ginBtnRecargar')?.addEventListener('click',()=>{ if(confirm('¿Desea recargar la información guardada? Se perderán los cambios no guardados.')) cargar(true); });
-    $('ginBtnLimpiar')?.addEventListener('click',()=>{ if(confirm('¿Limpiar los campos de esta atención?')) limpiarFormulario(); });
+
+    const recargarRegistro = () => {
+      if (confirm('¿Desea restablecer la información guardada de esta consulta? Se perderán los cambios no guardados en Ginecología.')) {
+        cargar(true);
+      }
+    };
+
+    $('ginBtnRecargar')?.addEventListener('click',recargarRegistro);
+    $('ginBtnRecargarInferior')?.addEventListener('click',recargarRegistro);
     actualizarEstadoRegistro();
     return true;
   }
@@ -689,17 +709,25 @@
   }
 
   function actualizarEstadoRegistro() {
+    const c = contextoActual();
     const existe = !!txt(registroActual?.id_ginecologia);
-    const texto = existe ? 'Actualizar ginecología' : 'Guardar ginecología';
+    const textoBoton = existe ? 'Actualizar ginecología' : 'Guardar ginecología';
     const icono = existe ? 'bi-arrow-repeat' : 'bi-save';
 
     [$('ginBtnGuardar'), $('ginBtnGuardarInferior')].filter(Boolean).forEach(boton => {
-      if (!guardando) boton.innerHTML = `<i class="bi ${icono} me-1"></i>${texto}`;
+      if (!guardando) boton.innerHTML = `<i class="bi ${icono} me-1"></i>${textoBoton}`;
     });
 
+    const consulta = c.numero_consulta ? `Consulta N.º ${c.numero_consulta}` : 'Consulta —';
     const ultima = registroActual?.actualizado_en || registroActual?.creado_en || '';
-    const indicador = $('ginUltimaActualizacion');
-    if (indicador) indicador.textContent = `Última actualización: ${formatearFechaHora(ultima)}`;
+
+    const estado = existe
+      ? `<strong>${esc(consulta)}</strong> · Ginecología guardada<br>Última actualización de Ginecología: ${esc(formatearFechaHora(ultima))}`
+      : `<strong>${esc(consulta)}</strong> · Sin registro de Ginecología`;
+
+    [$('ginEstadoRegistroSuperior'), $('ginEstadoRegistroInferior')].filter(Boolean).forEach(el => {
+      el.innerHTML = estado;
+    });
   }
 
   function pintarContexto(c) {
@@ -798,20 +826,48 @@
     actualizarEstadoRegistro();
   }
 
-  function limpiarFormulario() {
+  function limpiarDatosConsulta() {
+    /*
+      Limpia únicamente los campos propios de la consulta ginecológica.
+      No modifica paciente, atención, número de consulta, médico ni antecedentes.
+    */
     registroActual=null;
     ['ginFumActual','ginTipoAtencion','ginMotivo','ginSintDescripcion','ginExGenitales','ginExEspeculo','ginExTacto','ginExMamas','ginExOtros','ginEstPapEstado','ginEstColpoEstado','ginEstEcoEstado','ginEstHpvEstado','ginEstBiopsiaEstado','ginEstResultados','ginImpresion','ginObservaciones'].forEach(id=>setValue(id,''));
     ['ginSintDolorPelvico','ginSintSangrado','ginSintLeucorrea','ginSintPrurito','ginSintDisuria','ginSintDispareunia','ginSintAmenorrea','ginSintDismenorrea','ginSintMasa','ginSintSequedad','ginSintIncontinencia','ginSintMenopausia'].forEach(id=>setValue(id,false));
     actualizarEstadoRegistro();
   }
 
+  // Alias de compatibilidad para integraciones existentes.
+  const limpiarFormulario = limpiarDatosConsulta;
+
   async function cargar(forzar=false) {
     if(cargando) return;
     cargando=true;
     try {
-      const c=contextoActual(); pintarContexto(c); await cargarAntecedentes(c);
-      if(!c.id_atencion || !c.id_paciente){limpiarFormulario();ultimoIdAtencion='';return;}
+      const c=contextoActual();
+      const cambioAtencion = !!c.id_atencion && c.id_atencion !== ultimoIdAtencion;
+
+      pintarContexto(c);
+      await cargarAntecedentes(c);
+
+      if(!c.id_atencion || !c.id_paciente){
+        limpiarDatosConsulta();
+        ultimoIdAtencion='';
+        return;
+      }
+
       if(!forzar && ultimoIdAtencion===c.id_atencion && registroActual) return;
+
+      /*
+        Al cambiar a otra atención, limpia de inmediato solo los datos de la
+        consulta anterior. El contexto y los antecedentes permanecen visibles.
+        Si existe un registro para la nueva atención, se carga a continuación.
+      */
+      if (cambioAtencion) {
+        limpiarDatosConsulta();
+        setValue('ginTipoAtencion',c.tipo_atencion);
+      }
+
       ultimoIdAtencion=c.id_atencion;
       let lista=[];
       try {
@@ -822,7 +878,7 @@
       } catch(e) { console.warn(MODULO,'Usando respaldo local',e); lista=leerLocales(); }
       const encontrados=lista.filter(r=>txt(r.id_atencion)===c.id_atencion).sort((a,b)=>txt(b.actualizado_en || b.creado_en).localeCompare(txt(a.actualizado_en || a.creado_en)));
       if(encontrados[0]) { cargarRegistro(encontrados[0]); notificar('Registro ginecológico de esta atención cargado.','info'); }
-      else { limpiarFormulario(); setValue('ginTipoAtencion',c.tipo_atencion); }
+      else { limpiarDatosConsulta(); setValue('ginTipoAtencion',c.tipo_atencion); actualizarEstadoRegistro(); }
     } finally { cargando=false; }
   }
 
@@ -881,7 +937,7 @@
     console.info(`${MODULO} cargado. ${VERSION}`);
   }
 
-  window.AurosanaxGinecologia={version:VERSION,inicializar,cargar,guardar,limpiar:limpiarFormulario,obtenerRegistroActual:()=>registroActual?{...registroActual}:null,obtenerContexto:contextoActual};
+  window.AurosanaxGinecologia={version:VERSION,inicializar,cargar,guardar,limpiar:limpiarFormulario,limpiarDatosConsulta,obtenerRegistroActual:()=>registroActual?{...registroActual}:null,obtenerContexto:contextoActual};
   window.inicializarGinecologia=inicializar;
   window.cargarGinecologiaPorAtencion=cargar;
   window.guardarGinecologiaERP=guardar;
