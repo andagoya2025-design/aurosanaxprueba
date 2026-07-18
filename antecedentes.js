@@ -3182,6 +3182,55 @@ function auroAntecedentesMobileInyectarEstilos(){
         transform:rotate(-90deg)!important;
       }
 
+      /* Etiquetas clínicas visibles SOLO en móvil dentro de cada dosis de vacuna.
+         No mueve, reemplaza ni renombra controles: usa únicamente data-* visuales. */
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label]::before{
+        content:attr(data-auro-vacuna-mobile-label)!important;
+        display:block!important;
+        margin:0 0 6px!important;
+        color:#5f2948!important;
+        font-size:11.5px!important;
+        line-height:1.25!important;
+        font-weight:900!important;
+        letter-spacing:.01em!important;
+      }
+
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label="Fecha programada"]::before{
+        content:'📅  Fecha programada'!important;
+      }
+
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label="Fecha de administración"]::before{
+        content:'💉  Fecha de administración'!important;
+      }
+
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label="Vacuna aplicada"]::before{
+        content:'✓  Vacuna aplicada'!important;
+        margin:0 10px 0 0!important;
+      }
+
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label="Vacuna aplicada"]{
+        display:flex!important;
+        align-items:center!important;
+        min-height:38px!important;
+        padding:7px 9px!important;
+        border-radius:10px!important;
+        background:#fff8fc!important;
+        border:1px solid rgba(139,30,90,.10)!important;
+      }
+
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label="Vacuna aplicada"] input[type="checkbox"]{
+        margin:0!important;
+        flex:0 0 auto!important;
+      }
+
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label="Observación clínica"]::before{
+        content:'📝  Observación clínica'!important;
+      }
+
+      #hc_antecedentes .vacunas-table td[data-auro-vacuna-mobile-label="Nombre comercial"]::before{
+        content:'Nombre comercial'!important;
+      }
+
       /* Evita duplicar visualmente el título original dentro del acordeón */
       #hc_antecedentes .auro-ant-mobile-section > .clinical-subtitle:first-of-type,
       #hc_antecedentes .auro-ant-mobile-section > label.form-label.fw-bold:first-of-type{
@@ -3571,6 +3620,39 @@ function auroAntecedentesMobileTextoVacuna(fila, indice){
   return texto || ('Vacuna ' + (indice + 1));
 }
 
+function auroAntecedentesMobileEtiquetarCamposVacunas(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return;
+
+  panel.querySelectorAll('.vacunas-table input, .vacunas-table select, .vacunas-table textarea').forEach(control => {
+    if(!(control instanceof HTMLElement)) return;
+
+    const id = String(control.id || '');
+    const celda = control.closest('td');
+    if(!celda) return;
+
+    let etiqueta = '';
+    if(/Nombre$/i.test(id)) etiqueta = 'Nombre comercial';
+    else if(/Prog\d+$/i.test(id)) etiqueta = 'Fecha programada';
+    else if(/Adm\d+$/i.test(id)) etiqueta = 'Fecha de administración';
+    else if(/Apl\d+$/i.test(id)) etiqueta = 'Vacuna aplicada';
+    else if(/Obs\d+$/i.test(id)) etiqueta = 'Observación clínica';
+
+    if(etiqueta){
+      celda.dataset.auroVacunaMobileLabel = etiqueta;
+    }
+  });
+}
+
+function auroAntecedentesMobileQuitarEtiquetasVacunas(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return;
+
+  panel.querySelectorAll('.vacunas-table td[data-auro-vacuna-mobile-label]').forEach(celda => {
+    delete celda.dataset.auroVacunaMobileLabel;
+  });
+}
+
 function auroAntecedentesMobileCrearVacunasDesplegables(){
   const panel = document.getElementById('hc_antecedentes');
   if(!panel) return;
@@ -3634,7 +3716,9 @@ function auroAntecedentesMobileSincronizar(){
   if(movil){
     auroAntecedentesMobileCrearAcordeones();
     auroAntecedentesMobileCrearVacunasDesplegables();
+    auroAntecedentesMobileEtiquetarCamposVacunas();
   }else{
+    auroAntecedentesMobileQuitarEtiquetasVacunas();
     auroAntecedentesMobileEliminarVacunasDesplegables();
     auroAntecedentesMobileEliminarAcordeones();
   }
@@ -3666,4 +3750,4 @@ if(document.readyState === 'loading'){
   setTimeout(auroAntecedentesMobileInicializar, 420);
 }
 
-console.log('AUROSANAX antecedentes.js: RESPONSIVE PREMIUM MÓVIL v1.1 + VACUNAS DESPLEGABLES cargado');
+console.log('AUROSANAX antecedentes.js: RESPONSIVE PREMIUM MÓVIL v1.2 + VACUNAS ETIQUETADAS cargado');
