@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.1.0 corregida - montaje y eventos por atención
+ Versión: 1.3.0 - experiencia clínica, resumen limpio y ayudas
  Fecha: 2026-07-18
  -----------------------------------------------------------------------
  OBJETIVO
@@ -25,13 +25,21 @@
 (function(){
   'use strict';
 
-  if(window.auroDiagnosticosModuloCargado){
-    console.warn('AUROSANAX DIAGNÓSTICOS: el módulo ya estaba cargado.');
+  if(
+    window.auroDiagnosticosModuloCargado &&
+    window.auroDiagnosticos &&
+    typeof window.auroDiagnosticos.inicializar === 'function'
+  ){
+    console.warn('AUROSANAX DIAGNÓSTICOS: el módulo completo ya estaba cargado.');
+    window.auroDiagnosticos.inicializar();
     return;
   }
 
+  /* Recuperación ante una carga anterior incompleta o interrumpida. */
+  window.auroDiagnosticosModuloCargado = false;
+
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.1.0';
+  const VERSION = '1.3.0';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -387,8 +395,28 @@
       .auro-dx-error{padding:10px 12px;border-radius:12px;background:#fff0f0;color:#8a3030;font-size:12px}
       .auro-dx-ok{padding:10px 12px;border-radius:12px;background:#eaf8f0;color:#286043;font-size:12px}
       .auro-dx-source{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-      .auro-dx-source div{padding:9px;border-radius:10px;background:#f6f9fa;font-size:12px}
-      @media(max-width:900px){.auro-dx-grid{grid-template-columns:1fr}.auro-dx-source{grid-template-columns:1fr}.auro-dx-head{flex-direction:column}}
+      .auro-dx-source-item{padding:11px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;font-size:12px}
+      .auro-dx-source-item.available{border-color:#bbf7d0;background:#f0fdf4}
+      .auro-dx-source-item.missing{border-color:#e2e8f0;background:#f8fafc}
+      .auro-dx-source-state{display:flex;align-items:center;gap:6px;margin-top:4px;font-weight:800}
+      .auro-dx-source-item.available .auro-dx-source-state{color:#166534}
+      .auro-dx-source-item.missing .auro-dx-source-state{color:#64748b}
+      .auro-dx-card-help{font-size:12px;color:#64748b;font-weight:500;margin-top:3px}
+      .auro-dx-field-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px}
+      .auro-dx-field-actions{display:flex;gap:6px;flex-wrap:wrap}
+      .auro-dx-mini-btn{border:1px solid #dbe5e7;background:#fff;color:#42575b;border-radius:9px;padding:5px 8px;font-size:11px;font-weight:800;cursor:pointer}
+      .auro-dx-mini-btn:hover{background:#f2f7f8}
+      .auro-dx-guide{display:none;padding:10px 12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:12px;line-height:1.4}
+      #auroDiagnosticosApp.guide-on .auro-dx-guide{display:block}
+      .auro-dx-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px;z-index:99999}
+      .auro-dx-modal-backdrop.show{display:flex}
+      .auro-dx-modal{width:min(980px,100%);max-height:90vh;background:#fff;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden}
+      .auro-dx-modal-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid #e5e7eb}
+      .auro-dx-modal-head h4{margin:0;font-size:18px}
+      .auro-dx-modal-body{padding:18px;overflow:auto}
+      .auro-dx-modal-body textarea{width:100%;min-height:52vh;resize:vertical;border:1px solid #cbd5e1;border-radius:14px;padding:14px;font:inherit;line-height:1.5}
+      .auro-dx-modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:13px 18px;border-top:1px solid #e5e7eb}
+      @media(max-width:900px){.auro-dx-grid{grid-template-columns:1fr}.auro-dx-source{grid-template-columns:1fr}.auro-dx-head{flex-direction:column}.auro-dx-field-head{align-items:flex-start;flex-direction:column}}
     `;
     document.head.appendChild(style);
   }
@@ -399,44 +427,80 @@
         <div class="auro-dx-head">
           <div>
             <h3><i class="bi bi-clipboard2-pulse"></i> Diagnósticos</h3>
-            <p>Integración clínica y protocolos asistidos por atención. La decisión final siempre corresponde al profesional.</p>
+            <p>Reúne la información de la consulta, genera un análisis clínico editable y permite transferir un protocolo al Plan.</p>
           </div>
           <div class="auro-dx-status" id="auroDxStatus">Sin atención activa</div>
         </div>
 
         <div class="auro-dx-toolbar">
-          <button type="button" class="auro-dx-btn primary" id="auroDxActualizar">
-            <i class="bi bi-arrow-repeat"></i> Actualizar información
+          <button type="button" class="auro-dx-btn primary" id="auroDxActualizar" title="Vuelve a leer los datos guardados de esta atención">
+            <i class="bi bi-arrow-repeat"></i> Sincronizar datos
           </button>
-          <button type="button" class="auro-dx-btn" id="auroDxGenerar">
+          <button type="button" class="auro-dx-btn" id="auroDxGenerar" title="Construye el resumen, análisis y conducta con los datos disponibles">
             <i class="bi bi-stars"></i> Generar integración clínica
           </button>
-          <button type="button" class="auro-dx-btn success" id="auroDxAplicarPlan" disabled>
+          <button type="button" class="auro-dx-btn success" id="auroDxAplicarPlan" disabled title="Transfiere el protocolo seleccionado al módulo Plan">
             <i class="bi bi-check2-circle"></i> Aplicar protocolo al Plan
           </button>
+          <button type="button" class="auro-dx-btn" id="auroDxGuia" aria-pressed="false">
+            <i class="bi bi-question-circle"></i> Activar guía
+          </button>
+        </div>
+
+        <div class="auro-dx-guide">
+          <b>Flujo recomendado:</b> sincronice los datos, genere la integración clínica, revise o edite los textos y, finalmente, aplique el protocolo seleccionado al Plan.
         </div>
 
         <div id="auroDxMensaje"></div>
 
         <div class="auro-dx-grid">
           <div class="auro-dx-card">
-            <div class="auro-dx-card-head">Diagnósticos de la atención</div>
+            <div class="auro-dx-card-head">
+              Diagnósticos de la atención
+              <div class="auro-dx-card-help">Provienen del Examen físico y están vinculados a la consulta activa.</div>
+            </div>
             <div class="auro-dx-card-body" id="auroDxLista"></div>
           </div>
 
           <div class="auro-dx-card">
-            <div class="auro-dx-card-head">Integración clínica</div>
+            <div class="auro-dx-card-head">
+              Integración clínica
+              <div class="auro-dx-card-help">Estos textos son editables. Por ahora permanecen temporalmente en esta sesión y no se guardan como registro independiente.</div>
+            </div>
             <div class="auro-dx-card-body">
               <div class="auro-dx-section">
-                <label class="auro-dx-label" for="auroDxResumen">Resumen clínico integrado</label>
-                <textarea id="auroDxResumen" class="auro-dx-textarea" placeholder="Se generará a partir de los datos disponibles de la atención."></textarea>
+                <div class="auro-dx-field-head">
+                  <label class="auro-dx-label" for="auroDxResumen">Resumen clínico integrado</label>
+                  <div class="auro-dx-field-actions">
+                    <button type="button" class="auro-dx-mini-btn" data-copy-field="auroDxResumen"><i class="bi bi-clipboard"></i> Copiar</button>
+                    <button type="button" class="auro-dx-mini-btn" data-expand-field="auroDxResumen" data-title="Resumen clínico integrado"><i class="bi bi-arrows-fullscreen"></i> Ampliar</button>
+                  </div>
+                </div>
+                <div class="auro-dx-guide">Describe de forma objetiva los datos relevantes de la consulta: motivo, antecedentes, hallazgos y diagnósticos.</div>
+                <textarea id="auroDxResumen" class="auro-dx-textarea" placeholder="Se generará a partir de los datos clínicos disponibles de esta atención."></textarea>
               </div>
+
               <div class="auro-dx-section">
-                <label class="auro-dx-label" for="auroDxAnalisis">Análisis / impresión clínica</label>
-                <textarea id="auroDxAnalisis" class="auro-dx-textarea" placeholder="Revisión e interpretación clínica editable por el profesional."></textarea>
+                <div class="auro-dx-field-head">
+                  <label class="auro-dx-label" for="auroDxAnalisis">Análisis / impresión clínica</label>
+                  <div class="auro-dx-field-actions">
+                    <button type="button" class="auro-dx-mini-btn" data-copy-field="auroDxAnalisis"><i class="bi bi-clipboard"></i> Copiar</button>
+                    <button type="button" class="auro-dx-mini-btn" data-expand-field="auroDxAnalisis" data-title="Análisis / impresión clínica"><i class="bi bi-arrows-fullscreen"></i> Ampliar</button>
+                  </div>
+                </div>
+                <div class="auro-dx-guide">Expresa la interpretación clínica del profesional, la coherencia diagnóstica y los aspectos que deben confirmarse.</div>
+                <textarea id="auroDxAnalisis" class="auro-dx-textarea" placeholder="Interpretación clínica editable por el profesional."></textarea>
               </div>
+
               <div class="auro-dx-section">
-                <label class="auro-dx-label" for="auroDxConducta">Conducta sugerida</label>
+                <div class="auro-dx-field-head">
+                  <label class="auro-dx-label" for="auroDxConducta">Conducta sugerida</label>
+                  <div class="auro-dx-field-actions">
+                    <button type="button" class="auro-dx-mini-btn" data-copy-field="auroDxConducta"><i class="bi bi-clipboard"></i> Copiar</button>
+                    <button type="button" class="auro-dx-mini-btn" data-expand-field="auroDxConducta" data-title="Conducta sugerida"><i class="bi bi-arrows-fullscreen"></i> Ampliar</button>
+                  </div>
+                </div>
+                <div class="auro-dx-guide">Resume las acciones propuestas a partir del protocolo seleccionado. Debe revisarse antes de enviarla al Plan.</div>
                 <textarea id="auroDxConducta" class="auro-dx-textarea" placeholder="Conducta editable antes de transferir al Plan."></textarea>
               </div>
             </div>
@@ -444,14 +508,20 @@
         </div>
 
         <div class="auro-dx-card">
-          <div class="auro-dx-card-head">Protocolos clínicos disponibles</div>
+          <div class="auro-dx-card-head">
+            Protocolos clínicos disponibles
+            <div class="auro-dx-card-help">Son plantillas de apoyo vinculadas al CIE-10. No se aplican automáticamente.</div>
+          </div>
           <div class="auro-dx-card-body" id="auroDxProtocolos">
             <div class="auro-dx-empty">Seleccione una atención con diagnósticos para consultar protocolos.</div>
           </div>
         </div>
 
         <div class="auro-dx-card">
-          <div class="auro-dx-card-head">Fuentes clínicas integradas</div>
+          <div class="auro-dx-card-head">
+            Información utilizada para el análisis clínico
+            <div class="auro-dx-card-help">Indica qué módulos tienen datos vinculados a esta atención. “No registrado” no significa error.</div>
+          </div>
           <div class="auro-dx-card-body">
             <div class="auro-dx-source" id="auroDxFuentes"></div>
           </div>
@@ -461,43 +531,99 @@
           Las sugerencias no sustituyen el criterio médico. Revise indicaciones, contraindicaciones, alergias,
           embarazo, lactancia, función renal/hepática, interacciones y contexto clínico antes de aplicar al Plan.
         </div>
+
+        <div class="auro-dx-modal-backdrop" id="auroDxModal" aria-hidden="true">
+          <div class="auro-dx-modal" role="dialog" aria-modal="true" aria-labelledby="auroDxModalTitle">
+            <div class="auro-dx-modal-head">
+              <h4 id="auroDxModalTitle">Texto clínico</h4>
+              <button type="button" class="auro-dx-mini-btn" id="auroDxModalCerrar"><i class="bi bi-x-lg"></i> Cerrar</button>
+            </div>
+            <div class="auro-dx-modal-body">
+              <textarea id="auroDxModalTexto"></textarea>
+            </div>
+            <div class="auro-dx-modal-foot">
+              <button type="button" class="auro-dx-btn" id="auroDxModalCopiar"><i class="bi bi-clipboard"></i> Copiar</button>
+              <button type="button" class="auro-dx-btn primary" id="auroDxModalAplicar"><i class="bi bi-check2"></i> Aplicar cambios</button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   }
 
   function asegurarApp(){
     instalarEstilos();
-    const panel = asegurarPanel();
+
+    const panel = document.getElementById('hc_diagnostico') || asegurarPanel();
     if(!panel){
-      console.error(MODULO + ': no se encontró el panel hc_diagnostico.');
+      console.error(MODULO + ': no existe #hc_diagnostico.');
       return null;
     }
 
     /*
-      AUROSANAX FIX 1.1.0:
-      El index corregido dispone de un punto de montaje exclusivo.
-      Si no existe, se usa directamente el panel. Nunca se inserta detrás
-      de un título ambiguo ni dentro de un contenedor oculto heredado.
+      MONTAJE DETERMINISTA:
+      Diagnósticos se pinta exclusivamente dentro de #auroDiagnosticosMount.
+      El punto de montaje se crea si el index todavía no lo contiene.
     */
-    const mount = document.getElementById('auroDiagnosticosMount') || panel;
-    let app = document.getElementById('auroDiagnosticosApp');
+    let mount = document.getElementById('auroDiagnosticosMount');
+    if(!mount){
+      mount = document.createElement('div');
+      mount.id = 'auroDiagnosticosMount';
+      panel.appendChild(mount);
+    }
 
+    mount.style.display = 'block';
+    mount.style.width = '100%';
+    mount.style.minHeight = '220px';
+
+    let app = document.getElementById('auroDiagnosticosApp');
     if(!app){
       app = document.createElement('div');
       app.id = 'auroDiagnosticosApp';
-      app.innerHTML = appHTML();
     }
 
-    /* Reubicar el módulo si una versión anterior lo insertó en otro nodo. */
     if(app.parentElement !== mount){
-      mount.appendChild(app);
+      mount.replaceChildren(app);
     }
 
-    /* Evita listeners duplicados aunque inicializar() se invoque varias veces. */
+    /*
+      Siempre reconstruye la estructura si está vacía o incompleta.
+      Esto corrige el caso observado: pestaña activa pero panel en blanco.
+    */
+    if(
+      !app.querySelector('#auroDxStatus') ||
+      !app.querySelector('#auroDxLista') ||
+      !app.querySelector('#auroDxResumen')
+    ){
+      app.innerHTML = appHTML();
+      delete app.dataset.eventosInstalados;
+    }
+
+    app.style.display = 'block';
+    app.style.visibility = 'visible';
+    app.style.opacity = '1';
+    app.style.width = '100%';
+
     if(app.dataset.eventosInstalados !== '1'){
       app.querySelector('#auroDxActualizar')?.addEventListener('click', () => cargarAtencionActual(true));
       app.querySelector('#auroDxGenerar')?.addEventListener('click', generarIntegracion);
       app.querySelector('#auroDxAplicarPlan')?.addEventListener('click', aplicarAlPlan);
+      app.querySelector('#auroDxGuia')?.addEventListener('click', alternarGuia);
+
+      app.querySelectorAll('[data-copy-field]').forEach(btn => {
+        btn.addEventListener('click', () => copiarCampo(btn.dataset.copyField));
+      });
+
+      app.querySelectorAll('[data-expand-field]').forEach(btn => {
+        btn.addEventListener('click', () => abrirCampoAmpliado(btn.dataset.expandField, btn.dataset.title));
+      });
+
+      app.querySelector('#auroDxModalCerrar')?.addEventListener('click', cerrarCampoAmpliado);
+      app.querySelector('#auroDxModalAplicar')?.addEventListener('click', aplicarCampoAmpliado);
+      app.querySelector('#auroDxModalCopiar')?.addEventListener('click', () => copiarCampo('auroDxModalTexto'));
+      app.querySelector('#auroDxModal')?.addEventListener('click', e => {
+        if(e.target?.id === 'auroDxModal') cerrarCampoAmpliado();
+      });
 
       ['auroDxResumen','auroDxAnalisis','auroDxConducta'].forEach(id => {
         app.querySelector('#' + id)?.addEventListener('input', guardarEstadoTemporal);
@@ -662,38 +788,165 @@
     if(!box) return;
 
     const fuentes = [
-      ['Atención activa', atencionActiva()],
+      ['Atención actual', atencionActiva()],
       ['Historia clínica', state.historia],
-      ['Examen físico', state.detalleExamen?.examen],
-      ['Examen por sistemas', state.detalleExamen?.sistemas],
+      ['Examen físico general', state.detalleExamen?.examen],
+      ['Revisión por sistemas', state.detalleExamen?.sistemas],
       ['Examen regional', state.detalleExamen?.regionales],
       ['Ginecología', state.especialidades.ginecologia],
       ['Obstetricia', state.especialidades.obstetricia],
       ['Estética', state.especialidades.estetica]
     ];
 
-    box.innerHTML = fuentes.map(([nombre, valor]) => `
-      <div><b>${escapeHtml(nombre)}</b><br>${fuenteTieneDatos(valor) ? 'Información disponible' : 'Sin registro para esta atención'}</div>
-    `).join('');
+    box.innerHTML = fuentes.map(([nombre, valor]) => {
+      const disponible = fuenteTieneDatos(valor);
+      return `
+        <div class="auro-dx-source-item ${disponible ? 'available' : 'missing'}">
+          <b>${escapeHtml(nombre)}</b>
+          <div class="auro-dx-source-state">
+            <i class="bi ${disponible ? 'bi-check-circle-fill' : 'bi-dash-circle'}"></i>
+            ${disponible ? 'Disponible para el análisis' : 'No registrado en esta atención'}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const CLAVES_TECNICAS = new Set([
+    'id','id_atencion','id_paciente','id_historia','id_medico','id_cita',
+    'id_ginecologia','id_obstetricia','id_estetica','id_examen',
+    'estado','estado_registro','creado_en','actualizado_en','fecha_creacion',
+    'fecha_actualizacion','creado_por','actualizado_por','usuario','version'
+  ]);
+
+  function etiquetaClinica(clave){
+    return texto(clave)
+      .replace(/_/g,' ')
+      .replace(/\b\w/g, letra => letra.toUpperCase());
+  }
+
+  function valorClinicoPlano(valor, profundidad){
+    profundidad = profundidad || 0;
+    if(profundidad > 4 || valor === null || valor === undefined) return '';
+
+    if(typeof valor === 'string'){
+      const limpio = texto(valor);
+      if(!limpio || limpio === '{}' || limpio === '[]') return '';
+      const parseado = parseJsonSeguro(limpio, null);
+      if(parseado && typeof parseado === 'object'){
+        return valorClinicoPlano(parseado, profundidad + 1);
+      }
+      return limpio;
+    }
+
+    if(typeof valor === 'number') return String(valor);
+    if(typeof valor === 'boolean') return valor ? 'Sí' : 'No';
+
+    if(Array.isArray(valor)){
+      return valor
+        .map(item => valorClinicoPlano(item, profundidad + 1))
+        .filter(Boolean)
+        .join('; ');
+    }
+
+    if(typeof valor === 'object'){
+      const partes = [];
+      Object.entries(valor).forEach(([clave, dato]) => {
+        if(CLAVES_TECNICAS.has(normalizar(clave))) return;
+        const plano = valorClinicoPlano(dato, profundidad + 1);
+        if(!plano) return;
+        partes.push(etiquetaClinica(clave) + ': ' + plano);
+      });
+      return partes.join(' | ');
+    }
+
+    return '';
   }
 
   function resumenObjeto(obj, exclusiones){
     if(!obj || typeof obj !== 'object') return '';
-    const omitir = new Set(exclusiones || []);
-    const partes = [];
 
-    Object.keys(obj).forEach(k => {
-      if(omitir.has(k)) return;
-      const v = obj[k];
-      if(v === null || v === undefined || v === '' || typeof v === 'function') return;
-      if(Array.isArray(v)){
-        if(v.length) partes.push(k.replace(/_/g,' ') + ': ' + v.map(x => typeof x === 'object' ? JSON.stringify(x) : x).join(', '));
-      }else if(typeof v !== 'object'){
-        partes.push(k.replace(/_/g,' ') + ': ' + texto(v));
-      }
+    const omitir = new Set([
+      ...Array.from(CLAVES_TECNICAS),
+      ...(exclusiones || []).map(normalizar)
+    ]);
+
+    const partes = [];
+    Object.entries(obj).forEach(([clave, valor]) => {
+      if(omitir.has(normalizar(clave))) return;
+      const plano = valorClinicoPlano(valor, 0);
+      if(!plano) return;
+      partes.push(etiquetaClinica(clave) + ': ' + plano);
     });
 
     return partes.join(' | ');
+  }
+
+  async function copiarCampo(id){
+    const campo = document.getElementById(id);
+    const contenido = texto(campo?.value);
+    if(!contenido){
+      mensaje('aviso','No hay contenido para copiar.');
+      return;
+    }
+
+    try{
+      await navigator.clipboard.writeText(contenido);
+      mensaje('ok','Texto copiado al portapapeles.');
+    }catch(error){
+      campo.focus();
+      campo.select();
+      document.execCommand('copy');
+      mensaje('ok','Texto copiado al portapapeles.');
+    }
+  }
+
+  let campoModalActivo = '';
+
+  function abrirCampoAmpliado(id, titulo){
+    const campo = document.getElementById(id);
+    const modal = document.getElementById('auroDxModal');
+    const modalTexto = document.getElementById('auroDxModalTexto');
+    if(!campo || !modal || !modalTexto) return;
+
+    campoModalActivo = id;
+    document.getElementById('auroDxModalTitle').textContent = titulo || 'Texto clínico';
+    modalTexto.value = campo.value || '';
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden','false');
+    setTimeout(() => modalTexto.focus(), 30);
+  }
+
+  function cerrarCampoAmpliado(){
+    const modal = document.getElementById('auroDxModal');
+    if(!modal) return;
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden','true');
+    campoModalActivo = '';
+  }
+
+  function aplicarCampoAmpliado(){
+    if(!campoModalActivo) return cerrarCampoAmpliado();
+    const origen = document.getElementById(campoModalActivo);
+    const modalTexto = document.getElementById('auroDxModalTexto');
+    if(origen && modalTexto){
+      origen.value = modalTexto.value;
+      origen.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+    cerrarCampoAmpliado();
+    mensaje('ok','Cambios aplicados al texto clínico.');
+  }
+
+  function alternarGuia(){
+    const app = document.getElementById('auroDiagnosticosApp');
+    const btn = document.getElementById('auroDxGuia');
+    if(!app || !btn) return;
+    const activa = !app.classList.contains('guide-on');
+    app.classList.toggle('guide-on', activa);
+    btn.setAttribute('aria-pressed', activa ? 'true' : 'false');
+    btn.innerHTML = activa
+      ? '<i class="bi bi-question-circle-fill"></i> Ocultar guía'
+      : '<i class="bi bi-question-circle"></i> Activar guía';
   }
 
   function construirResumenClinico(){
@@ -815,6 +1068,22 @@
       return;
     }
 
+    const campos = ['auroDxResumen','auroDxAnalisis','auroDxConducta']
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+
+    const hayContenido = campos.some(campo => texto(campo.value));
+    if(hayContenido){
+      const continuar = window.confirm(
+        'Ya existe contenido en la integración clínica.\\n\\n' +
+        'Al generar nuevamente se reemplazarán los textos actuales.\\n\\n' +
+        '¿Desea continuar?'
+      );
+      if(!continuar) return;
+    }
+
+    mensaje('aviso','Generando integración clínica con la información disponible…');
+
     state.resumenClinico = construirResumenClinico();
     state.analisisClinico = construirAnalisis();
     state.conducta = construirConducta();
@@ -827,7 +1096,7 @@
     if(c) c.value = state.conducta;
 
     guardarEstadoTemporal();
-    mensaje('ok','Integración clínica generada. Revise y edite el contenido antes de aplicarlo al Plan.');
+    mensaje('ok','Integración clínica generada. Revise o edite los textos antes de aplicar el protocolo al Plan.');
   }
 
   async function consultarDetalleExamen(idAtencion){
@@ -1037,7 +1306,12 @@
       restaurarEstadoTemporal(idAtencion);
 
       state.ultimaActualizacion = new Date().toISOString();
-      status('Atención ' + idAtencion + ' · ' + state.diagnosticos.length + ' diagnóstico(s)');
+      const atencion = atencionActiva() || {};
+      const numeroConsulta = texto(atencion.numero_consulta || atencion.numero_atencion || atencion.numero);
+      status(
+        (numeroConsulta ? 'Consulta #' + numeroConsulta + ' · ' : '') +
+        'Atención ' + idAtencion + ' · ' + state.diagnosticos.length + ' diagnóstico(s)'
+      );
 
       if(!state.diagnosticos.length){
         mensaje('aviso','La atención está activa, pero todavía no tiene diagnósticos guardados.');
@@ -1285,7 +1559,11 @@
     limpiar: limpiarVisual,
     obtenerDiagnosticos: () => clonar(state.diagnosticos, []),
     obtenerProtocolos: () => clonar(state.protocolos, []),
-    obtenerEstado: () => clonar(state, {})
+    obtenerEstado: () => clonar(state, {}),
+    montarInterfaz: asegurarApp,
+    copiarCampo,
+    abrirCampoAmpliado,
+    alternarGuia
   };
 
   window.cambiarDiagnosticosPorAtencion = cambiarPorAtencion;
@@ -1296,9 +1574,31 @@
 
   window.auroDiagnosticosModuloCargado = true;
 
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', inicializar);
-  }else{
-    inicializar();
+  function arrancarDiagnosticos(){
+    try{
+      asegurarApp();
+      inicializar();
+    }catch(error){
+      console.error(MODULO + ': fallo de arranque.', error);
+      setTimeout(arrancarDiagnosticos, 300);
+    }
   }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', arrancarDiagnosticos, {once:true});
+  }else{
+    arrancarDiagnosticos();
+  }
+
+  /* Segundo intento después de terminar de cargar todos los scripts externos. */
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      try{
+        asegurarApp();
+        inicializar();
+      }catch(error){
+        console.error(MODULO + ': fallo en segundo montaje.', error);
+      }
+    }, 120);
+  }, {once:true});
 })();
