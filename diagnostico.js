@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.0.0 estable y desacoplada
+ Versión: 1.1.0 corregida - montaje y eventos por atención
  Fecha: 2026-07-18
  -----------------------------------------------------------------------
  OBJETIVO
@@ -31,7 +31,7 @@
   }
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -200,6 +200,23 @@
     try{
       if(window.atencionesState && window.atencionesState.atencionActual){
         return window.atencionesState.atencionActual;
+      }
+    }catch(e){}
+
+    /* Respaldo real usado por Atenciones/Plan/Examen Físico. */
+    try{
+      const id = texto(
+        window.examenFisicoState?.atencionActual ||
+        window.planState?.atencionActual ||
+        state.atencionActual
+      );
+      if(id){
+        const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+        const lista = raw ? JSON.parse(raw) : [];
+        if(Array.isArray(lista)){
+          const encontrada = lista.find(a => texto(a?.id_atencion) === id);
+          if(encontrada) return encontrada;
+        }
       }
     }catch(e){}
 
@@ -451,33 +468,43 @@
   function asegurarApp(){
     instalarEstilos();
     const panel = asegurarPanel();
-    if(!panel) return null;
-
-    let app = document.getElementById('auroDiagnosticosApp');
-    if(app) return app;
-
-    app = document.createElement('div');
-    app.id = 'auroDiagnosticosApp';
-    app.innerHTML = appHTML();
-
-    if(panel.dataset.auroCreado === '1'){
-      panel.appendChild(app);
-    }else{
-      const titulo = panel.querySelector('.clinical-subtitle,h2,h3');
-      if(titulo && titulo.parentNode){
-        titulo.parentNode.insertBefore(app, titulo.nextSibling);
-      }else{
-        panel.appendChild(app);
-      }
+    if(!panel){
+      console.error(MODULO + ': no se encontró el panel hc_diagnostico.');
+      return null;
     }
 
-    document.getElementById('auroDxActualizar')?.addEventListener('click', () => cargarAtencionActual(true));
-    document.getElementById('auroDxGenerar')?.addEventListener('click', generarIntegracion);
-    document.getElementById('auroDxAplicarPlan')?.addEventListener('click', aplicarAlPlan);
+    /*
+      AUROSANAX FIX 1.1.0:
+      El index corregido dispone de un punto de montaje exclusivo.
+      Si no existe, se usa directamente el panel. Nunca se inserta detrás
+      de un título ambiguo ni dentro de un contenedor oculto heredado.
+    */
+    const mount = document.getElementById('auroDiagnosticosMount') || panel;
+    let app = document.getElementById('auroDiagnosticosApp');
 
-    ['auroDxResumen','auroDxAnalisis','auroDxConducta'].forEach(id => {
-      document.getElementById(id)?.addEventListener('input', guardarEstadoTemporal);
-    });
+    if(!app){
+      app = document.createElement('div');
+      app.id = 'auroDiagnosticosApp';
+      app.innerHTML = appHTML();
+    }
+
+    /* Reubicar el módulo si una versión anterior lo insertó en otro nodo. */
+    if(app.parentElement !== mount){
+      mount.appendChild(app);
+    }
+
+    /* Evita listeners duplicados aunque inicializar() se invoque varias veces. */
+    if(app.dataset.eventosInstalados !== '1'){
+      app.querySelector('#auroDxActualizar')?.addEventListener('click', () => cargarAtencionActual(true));
+      app.querySelector('#auroDxGenerar')?.addEventListener('click', generarIntegracion);
+      app.querySelector('#auroDxAplicarPlan')?.addEventListener('click', aplicarAlPlan);
+
+      ['auroDxResumen','auroDxAnalisis','auroDxConducta'].forEach(id => {
+        app.querySelector('#' + id)?.addEventListener('input', guardarEstadoTemporal);
+      });
+
+      app.dataset.eventosInstalados = '1';
+    }
 
     return app;
   }
@@ -1178,14 +1205,22 @@
     window.__auroDiagnosticosEventosInstalados = true;
 
     ['aurosanax:atencion-iniciada','aurosanax:atencion-seleccionada','aurosanax:atencion-actualizada'].forEach(nombre => {
-      document.addEventListener(nombre, e => {
+      const receptor = e => {
         const id = texto(
           e?.detail?.id_atencion ||
           e?.detail?.atencion?.id_atencion ||
           idAtencionActiva()
         );
         if(id) cambiarPorAtencion(id);
-      });
+      };
+
+      /*
+        ATENCIONES emite estos CustomEvent con window.dispatchEvent().
+        La versión anterior escuchaba únicamente document y nunca recibía
+        el cambio de consulta. Se escucha window y document por compatibilidad.
+      */
+      window.addEventListener(nombre, receptor);
+      document.addEventListener(nombre, receptor);
     });
 
     document.addEventListener('aurosanax:diagnosticos-actualizados', () => {
@@ -1206,13 +1241,33 @@
   }
 
   function inicializar(){
-    if(state.inicializado) return;
-    asegurarApp();
+    /*
+      AUROSANAX FIX 1.1.0:
+      Asegurar siempre el montaje. Antes, si la primera inicialización ocurría
+      cuando el panel todavía no existía, state.inicializado quedaba en true
+      y la interfaz nunca volvía a construirse.
+    */
+    const app = asegurarApp();
     instalarEventos();
+
+    if(!app){
+      state.inicializado = false;
+      setTimeout(inicializar, 250);
+      return;
+    }
+
     state.inicializado = true;
 
     const id = idAtencionActiva();
-    if(id) cargarAtencion(id, false);
+    if(id){
+      cargarAtencion(id, false);
+    }else{
+      status('Sin atención activa');
+      renderDiagnosticos();
+      renderProtocolos();
+      renderFuentes();
+      mensaje('aviso','Seleccione o inicie una consulta para cargar la información diagnóstica.');
+    }
 
     console.log(MODULO + ' v' + VERSION + ' cargado correctamente.');
   }
