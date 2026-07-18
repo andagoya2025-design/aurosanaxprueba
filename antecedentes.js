@@ -2949,7 +2949,7 @@ function auroRenderPrevioItemsPremium(label, items){
 
 console.log('AUROSANAX antecedentes.js: UI PREMIUM tarjetas limpias cargado');
 /* ==========================================================
-   AUROSANAX ANTECEDENTES - RESPONSIVE PREMIUM MÓVIL v1.0
+   AUROSANAX ANTECEDENTES - RESPONSIVE PREMIUM MÓVIL v1.1
    Alcance EXCLUSIVO: teléfonos (hasta 760 px).
    - No cambia escritorio.
    - No cambia IDs, nombres, data-attributes ni funciones clínicas.
@@ -3085,6 +3085,101 @@ function auroAntecedentesMobileInyectarEstilos(){
 
       #hc_antecedentes .auro-ant-mobile-section.auro-ant-mobile-collapsed > :not(.auro-ant-mobile-toggle){
         display:none!important;
+      }
+
+
+      /* Vacunas premium: cada biológico funciona como miniacordeón SOLO en teléfono */
+      #hc_antecedentes .vacunas-table tr.auro-vacuna-mobile-item{
+        padding:0!important;
+        gap:0!important;
+        overflow:hidden!important;
+        background:#fff!important;
+        border:1px solid rgba(139,30,90,.13)!important;
+        box-shadow:0 5px 14px rgba(15,23,42,.045)!important;
+      }
+
+      #hc_antecedentes .auro-vacuna-mobile-toggle{
+        width:100%!important;
+        min-height:48px!important;
+        display:flex!important;
+        align-items:center!important;
+        justify-content:space-between!important;
+        gap:10px!important;
+        border:0!important;
+        background:linear-gradient(135deg,#fff7fb 0%,#ffffff 100%)!important;
+        color:#721447!important;
+        padding:11px 12px!important;
+        text-align:left!important;
+        font-size:13px!important;
+        font-weight:900!important;
+        line-height:1.25!important;
+        cursor:pointer!important;
+      }
+
+      #hc_antecedentes .auro-vacuna-mobile-toggle-main{
+        display:flex!important;
+        align-items:center!important;
+        gap:9px!important;
+        min-width:0!important;
+      }
+
+      #hc_antecedentes .auro-vacuna-mobile-toggle-main > i{
+        width:31px!important;
+        height:31px!important;
+        flex:0 0 31px!important;
+        display:inline-flex!important;
+        align-items:center!important;
+        justify-content:center!important;
+        border-radius:10px!important;
+        background:rgba(178,29,114,.09)!important;
+        color:#b21d72!important;
+        font-size:15px!important;
+      }
+
+      #hc_antecedentes .auro-vacuna-mobile-toggle-text{
+        min-width:0!important;
+        display:grid!important;
+        gap:2px!important;
+      }
+
+      #hc_antecedentes .auro-vacuna-mobile-toggle-title{
+        display:block!important;
+        overflow:hidden!important;
+        text-overflow:ellipsis!important;
+        white-space:nowrap!important;
+      }
+
+      #hc_antecedentes .auro-vacuna-mobile-toggle-hint{
+        display:block!important;
+        color:#7c8798!important;
+        font-size:10.5px!important;
+        font-weight:700!important;
+      }
+
+      #hc_antecedentes .auro-vacuna-mobile-toggle-chevron{
+        flex:0 0 auto!important;
+        color:#9b2c68!important;
+        transition:transform .2s ease!important;
+      }
+
+      #hc_antecedentes .vacunas-table tr.auro-vacuna-mobile-item:not(.auro-vacuna-mobile-collapsed) > .auro-vacuna-mobile-toggle{
+        border-bottom:1px solid rgba(139,30,90,.10)!important;
+      }
+
+      #hc_antecedentes .vacunas-table tr.auro-vacuna-mobile-item:not(.auro-vacuna-mobile-collapsed) > td{
+        padding:10px 11px 0!important;
+      }
+
+      #hc_antecedentes .vacunas-table tr.auro-vacuna-mobile-item:not(.auro-vacuna-mobile-collapsed) > td:last-child{
+        padding-bottom:11px!important;
+      }
+
+      #hc_antecedentes .vacunas-table tr.auro-vacuna-mobile-collapsed > td{
+        display:none!important;
+      }
+
+      #hc_antecedentes .vacunas-table tr.auro-vacuna-mobile-collapsed .auro-vacuna-mobile-toggle-chevron{
+        transform:rotate(-90deg)!important;
       }
 
       /* Evita duplicar visualmente el título original dentro del acordeón */
@@ -3462,6 +3557,67 @@ function auroAntecedentesMobileCrearAcordeones(){
   });
 }
 
+
+function auroAntecedentesMobileTextoVacuna(fila, indice){
+  const candidato = fila.querySelector('.vacuna-nombre, .biologico-nombre, td:first-of-type');
+  let texto = String(candidato?.textContent || '').replace(/\s+/g,' ').trim();
+
+  if(!texto){
+    const control = fila.querySelector('input[data-vacuna], select[data-vacuna], input[name*="vacuna" i], select[name*="vacuna" i]');
+    texto = String(control?.dataset?.vacuna || control?.getAttribute('aria-label') || control?.placeholder || '').trim();
+  }
+
+  texto = texto.replace(/^(vacuna|biológico|biologico)\s*[:\-]?\s*/i,'').trim();
+  return texto || ('Vacuna ' + (indice + 1));
+}
+
+function auroAntecedentesMobileCrearVacunasDesplegables(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return;
+
+  const filas = panel.querySelectorAll('.vacunas-table tbody tr');
+  filas.forEach((fila, indice) => {
+    if(!(fila instanceof HTMLElement)) return;
+    if(fila.dataset.auroVacunaMobileReady === '1') return;
+
+    const titulo = auroAntecedentesMobileTextoVacuna(fila, indice);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'auro-vacuna-mobile-toggle';
+    btn.setAttribute('aria-expanded','false');
+    btn.innerHTML = `
+      <span class="auro-vacuna-mobile-toggle-main">
+        <i class="bi bi-shield-check"></i>
+        <span class="auro-vacuna-mobile-toggle-text">
+          <span class="auro-vacuna-mobile-toggle-title">${typeof auroEscapeHtml === 'function' ? auroEscapeHtml(titulo) : titulo}</span>
+          <small class="auro-vacuna-mobile-toggle-hint">Tocar para ver o registrar dosis</small>
+        </span>
+      </span>
+      <i class="bi bi-chevron-down auro-vacuna-mobile-toggle-chevron"></i>
+    `;
+
+    btn.addEventListener('click', () => {
+      const cerrado = fila.classList.toggle('auro-vacuna-mobile-collapsed');
+      btn.setAttribute('aria-expanded', cerrado ? 'false' : 'true');
+    });
+
+    fila.classList.add('auro-vacuna-mobile-item','auro-vacuna-mobile-collapsed');
+    fila.insertBefore(btn, fila.firstChild);
+    fila.dataset.auroVacunaMobileReady = '1';
+  });
+}
+
+function auroAntecedentesMobileEliminarVacunasDesplegables(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return;
+
+  panel.querySelectorAll('.vacunas-table tr.auro-vacuna-mobile-item').forEach(fila => {
+    fila.classList.remove('auro-vacuna-mobile-item','auro-vacuna-mobile-collapsed');
+    delete fila.dataset.auroVacunaMobileReady;
+    fila.querySelector(':scope > .auro-vacuna-mobile-toggle')?.remove();
+  });
+}
+
 function auroAntecedentesMobileEliminarAcordeones(){
   const panel = document.getElementById('hc_antecedentes');
   if(!panel) return;
@@ -3475,13 +3631,22 @@ function auroAntecedentesMobileEliminarAcordeones(){
 
 function auroAntecedentesMobileSincronizar(){
   const movil = window.matchMedia('(max-width:760px)').matches;
-  if(movil) auroAntecedentesMobileCrearAcordeones();
-  else auroAntecedentesMobileEliminarAcordeones();
+  if(movil){
+    auroAntecedentesMobileCrearAcordeones();
+    auroAntecedentesMobileCrearVacunasDesplegables();
+  }else{
+    auroAntecedentesMobileEliminarVacunasDesplegables();
+    auroAntecedentesMobileEliminarAcordeones();
+  }
 }
 
 function auroAntecedentesMobileInicializar(){
   auroAntecedentesMobileInyectarEstilos();
   auroAntecedentesMobileSincronizar();
+
+  // Reintentos seguros por si la tabla de vacunas se renderiza después del panel.
+  setTimeout(auroAntecedentesMobileSincronizar, 700);
+  setTimeout(auroAntecedentesMobileSincronizar, 1400);
 
   if(window.__auroAntecedentesMobileResizeReady !== true){
     window.__auroAntecedentesMobileResizeReady = true;
@@ -3501,4 +3666,4 @@ if(document.readyState === 'loading'){
   setTimeout(auroAntecedentesMobileInicializar, 420);
 }
 
-console.log('AUROSANAX antecedentes.js: RESPONSIVE PREMIUM MÓVIL v1.0 cargado');
+console.log('AUROSANAX antecedentes.js: RESPONSIVE PREMIUM MÓVIL v1.1 + VACUNAS DESPLEGABLES cargado');
