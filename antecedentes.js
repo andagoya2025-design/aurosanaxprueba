@@ -2948,3 +2948,557 @@ function auroRenderPrevioItemsPremium(label, items){
 }
 
 console.log('AUROSANAX antecedentes.js: UI PREMIUM tarjetas limpias cargado');
+/* ==========================================================
+   AUROSANAX ANTECEDENTES - RESPONSIVE PREMIUM MÓVIL v1.0
+   Alcance EXCLUSIVO: teléfonos (hasta 760 px).
+   - No cambia escritorio.
+   - No cambia IDs, nombres, data-attributes ni funciones clínicas.
+   - No modifica lectura, guardado, Google Sheets ni Apps Script.
+   - Los acordeones solo ocultan visualmente; los campos siguen en el DOM.
+   ========================================================== */
+
+function auroAntecedentesMobileInyectarEstilos(){
+  if(document.getElementById('auroAntecedentesMobileResponsiveStyle')) return;
+
+  const style = document.createElement('style');
+  style.id = 'auroAntecedentesMobileResponsiveStyle';
+  style.textContent = `
+    @media (max-width:760px){
+      html,body{max-width:100%!important;overflow-x:hidden!important;}
+
+      #hc_antecedentes{
+        width:100%!important;
+        max-width:100%!important;
+        min-width:0!important;
+        overflow-x:hidden!important;
+        padding-left:10px!important;
+        padding-right:10px!important;
+      }
+
+      #hc_antecedentes > .clinical-subtitle{
+        font-size:16px!important;
+        line-height:1.25!important;
+        margin-bottom:10px!important;
+        gap:7px!important;
+      }
+
+      #hc_antecedentes .row,
+      #hc_antecedentes [class*="col-"]{
+        min-width:0!important;
+        max-width:100%!important;
+      }
+
+      #hc_antecedentes > .row.g-3{
+        --bs-gutter-x:0!important;
+        --bs-gutter-y:10px!important;
+        margin-left:0!important;
+        margin-right:0!important;
+      }
+
+      #hc_antecedentes > .row.g-3 > [class*="col-"]{
+        width:100%!important;
+        flex:0 0 100%!important;
+        padding-left:0!important;
+        padding-right:0!important;
+      }
+
+      #hc_antecedentes input.form-control,
+      #hc_antecedentes select.form-select,
+      #hc_antecedentes textarea.form-control,
+      #hc_antecedentes .input-group-text{
+        font-size:16px!important;
+      }
+
+      #hc_antecedentes input.form-control,
+      #hc_antecedentes select.form-select{
+        min-height:44px!important;
+        border-radius:11px!important;
+      }
+
+      #hc_antecedentes textarea.form-control{
+        min-height:88px!important;
+        border-radius:12px!important;
+        line-height:1.4!important;
+      }
+
+      #hc_antecedentes input[type="checkbox"],
+      #hc_antecedentes input[type="radio"]{
+        width:20px!important;
+        height:20px!important;
+        min-width:20px!important;
+        margin:0!important;
+      }
+
+      /* Acordeón móvil seguro: no mueve ni elimina controles */
+      #hc_antecedentes .auro-ant-mobile-section{
+        background:#fff!important;
+        border:1px solid rgba(139,30,90,.12)!important;
+        border-radius:16px!important;
+        padding:10px!important;
+        box-shadow:0 7px 18px rgba(15,23,42,.045)!important;
+        overflow:hidden!important;
+      }
+
+      #hc_antecedentes .auro-ant-mobile-toggle{
+        width:100%!important;
+        min-height:46px!important;
+        display:flex!important;
+        align-items:center!important;
+        justify-content:space-between!important;
+        gap:10px!important;
+        border:0!important;
+        background:linear-gradient(135deg,#fff7fb 0%,#fff 100%)!important;
+        color:#7a174f!important;
+        border-radius:12px!important;
+        padding:10px 12px!important;
+        text-align:left!important;
+        font-size:14px!important;
+        line-height:1.25!important;
+        font-weight:900!important;
+        box-shadow:none!important;
+      }
+
+      #hc_antecedentes .auro-ant-mobile-toggle-title{
+        display:flex!important;
+        align-items:center!important;
+        gap:8px!important;
+        min-width:0!important;
+      }
+
+      #hc_antecedentes .auro-ant-mobile-toggle-title i{
+        flex:0 0 auto!important;
+        color:#b21d72!important;
+      }
+
+      #hc_antecedentes .auro-ant-mobile-toggle-chevron{
+        flex:0 0 auto!important;
+        transition:transform .2s ease!important;
+      }
+
+      #hc_antecedentes .auro-ant-mobile-section:not(.auro-ant-mobile-collapsed) > .auro-ant-mobile-toggle{
+        margin-bottom:10px!important;
+      }
+
+      #hc_antecedentes .auro-ant-mobile-section.auro-ant-mobile-collapsed > .auro-ant-mobile-toggle .auro-ant-mobile-toggle-chevron{
+        transform:rotate(-90deg)!important;
+      }
+
+      #hc_antecedentes .auro-ant-mobile-section.auro-ant-mobile-collapsed > :not(.auro-ant-mobile-toggle){
+        display:none!important;
+      }
+
+      /* Evita duplicar visualmente el título original dentro del acordeón */
+      #hc_antecedentes .auro-ant-mobile-section > .clinical-subtitle:first-of-type,
+      #hc_antecedentes .auro-ant-mobile-section > label.form-label.fw-bold:first-of-type{
+        margin-top:2px!important;
+      }
+
+      /* Ayudas rápidas */
+      #auroV21AntecedentesHelp{
+        display:block!important;
+        padding:12px!important;
+        border-radius:15px!important;
+        margin:8px 0 12px!important;
+      }
+
+      #auroV21AntecedentesHelp > div:first-child b{
+        font-size:14px!important;
+      }
+
+      #auroV21AntecedentesHelp > div:first-child small{
+        font-size:11px!important;
+        line-height:1.3!important;
+      }
+
+      #auroV21AntecedentesHelp .auro-v21-help-actions{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:7px!important;
+        margin-top:10px!important;
+      }
+
+      #auroV21AntecedentesHelp .auro-v21-helper-btn{
+        width:100%!important;
+        min-height:42px!important;
+        justify-content:flex-start!important;
+        text-align:left!important;
+        white-space:normal!important;
+        font-size:13px!important;
+        border-radius:11px!important;
+      }
+
+      /* Tablas convertidas en tarjetas legibles en teléfono */
+      #hc_antecedentes .antecedentes-table-wrap,
+      #hc_antecedentes .vacunas-table-wrap,
+      #hc_antecedentes .habitos-table-wrap,
+      #hc_antecedentes .estilo-vida-table-wrap,
+      #hc_antecedentes .obstetricos-table-wrap,
+      #hc_antecedentes .ginecologicos-table-wrap{
+        width:100%!important;
+        max-width:100%!important;
+        overflow:visible!important;
+        border:0!important;
+        box-shadow:none!important;
+      }
+
+      #hc_antecedentes .antecedentes-table,
+      #hc_antecedentes .vacunas-table,
+      #hc_antecedentes .habitos-table,
+      #hc_antecedentes .estilo-vida-table,
+      #hc_antecedentes .obstetricos-table,
+      #hc_antecedentes .ginecologicos-table{
+        display:block!important;
+        width:100%!important;
+        min-width:0!important;
+        border-collapse:separate!important;
+      }
+
+      #hc_antecedentes .antecedentes-table thead,
+      #hc_antecedentes .vacunas-table thead,
+      #hc_antecedentes .habitos-table thead,
+      #hc_antecedentes .estilo-vida-table thead,
+      #hc_antecedentes .obstetricos-table thead,
+      #hc_antecedentes .ginecologicos-table thead{
+        display:none!important;
+      }
+
+      #hc_antecedentes .antecedentes-table tbody,
+      #hc_antecedentes .vacunas-table tbody,
+      #hc_antecedentes .habitos-table tbody,
+      #hc_antecedentes .estilo-vida-table tbody,
+      #hc_antecedentes .obstetricos-table tbody,
+      #hc_antecedentes .ginecologicos-table tbody{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:9px!important;
+        width:100%!important;
+      }
+
+      #hc_antecedentes .antecedentes-table tr,
+      #hc_antecedentes .vacunas-table tr,
+      #hc_antecedentes .habitos-table tr,
+      #hc_antecedentes .estilo-vida-table tr,
+      #hc_antecedentes .obstetricos-table tr,
+      #hc_antecedentes .ginecologicos-table tr{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:7px!important;
+        width:100%!important;
+        padding:11px!important;
+        background:linear-gradient(180deg,#fff 0%,#fffafd 100%)!important;
+        border:1px solid rgba(139,30,90,.11)!important;
+        border-radius:13px!important;
+        box-shadow:0 4px 12px rgba(15,23,42,.035)!important;
+      }
+
+      #hc_antecedentes .antecedentes-table td,
+      #hc_antecedentes .vacunas-table td,
+      #hc_antecedentes .habitos-table td,
+      #hc_antecedentes .estilo-vida-table td,
+      #hc_antecedentes .obstetricos-table td,
+      #hc_antecedentes .ginecologicos-table td{
+        display:block!important;
+        width:100%!important;
+        min-width:0!important;
+        max-width:100%!important;
+        padding:0!important;
+        border:0!important;
+        white-space:normal!important;
+      }
+
+      #hc_antecedentes td.patologia-nombre,
+      #hc_antecedentes td.cirugia-nombre,
+      #hc_antecedentes td.alergia-nombre,
+      #hc_antecedentes td.obstetrico-descripcion,
+      #hc_antecedentes td.ginecologico-descripcion{
+        font-size:14px!important;
+        font-weight:900!important;
+        color:#172033!important;
+        line-height:1.3!important;
+        padding-bottom:2px!important;
+      }
+
+      #hc_antecedentes td.check-cell,
+      #hc_antecedentes td.obstetrico-no-aplica{
+        display:flex!important;
+        align-items:center!important;
+        justify-content:flex-start!important;
+        min-height:30px!important;
+      }
+
+      #hc_antecedentes td.check-cell::before{
+        content:'Marcar antecedente'!important;
+        margin-right:10px!important;
+        color:#64748b!important;
+        font-size:12px!important;
+        font-weight:700!important;
+      }
+
+      #hc_antecedentes td.obstetrico-no-aplica::before{
+        content:'No aplica'!important;
+        margin-right:10px!important;
+        color:#64748b!important;
+        font-size:12px!important;
+        font-weight:700!important;
+      }
+
+      #hc_antecedentes .campo-corto{
+        width:100%!important;
+        max-width:none!important;
+      }
+
+      #hc_antecedentes .auro-v21-unit-wrap{
+        display:grid!important;
+        grid-template-columns:minmax(0,1fr) 118px!important;
+        gap:7px!important;
+        width:100%!important;
+      }
+
+      #hc_antecedentes .auro-v21-unit-select{
+        width:100%!important;
+        min-width:0!important;
+        font-size:16px!important;
+      }
+
+      #hc_antecedentes .gine-radio{
+        display:flex!important;
+        flex-wrap:wrap!important;
+        gap:8px!important;
+      }
+
+      #hc_antecedentes .gine-radio label{
+        min-height:42px!important;
+        display:inline-flex!important;
+        align-items:center!important;
+        gap:8px!important;
+        padding:8px 12px!important;
+        border:1px solid rgba(139,30,90,.14)!important;
+        border-radius:11px!important;
+        background:#fff!important;
+      }
+
+      /* COVID, alimentación y tarjetas especiales */
+      #hc_antecedentes .covid-card,
+      #hc_antecedentes .alimentacion-card,
+      #hc_antecedentes [class*="vacuna-card"],
+      #hc_antecedentes [class*="habito-card"],
+      #hc_antecedentes [class*="estilo-card"]{
+        width:100%!important;
+        max-width:100%!important;
+        min-width:0!important;
+        border-radius:14px!important;
+      }
+
+      #hc_antecedentes .alimentacion-grid,
+      #hc_antecedentes .alimentacion-grid-secondary,
+      #hc_antecedentes [class*="covid-grid"],
+      #hc_antecedentes [class*="vacuna-grid"],
+      #hc_antecedentes [class*="habito-grid"],
+      #hc_antecedentes [class*="estilo-grid"]{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:9px!important;
+      }
+
+      #hc_antecedentes .alimentacion-card-body,
+      #hc_antecedentes .covid-card-body{
+        padding:11px!important;
+      }
+
+      #hc_antecedentes .clinical-note{
+        font-size:11px!important;
+        line-height:1.35!important;
+        padding:8px 9px!important;
+        overflow-wrap:anywhere!important;
+      }
+
+      /* Resumen de antecedentes previos */
+      #hc_antecedentes .auro-previos-box{
+        width:100%!important;
+        max-width:100%!important;
+        padding:12px!important;
+        margin:10px 0 12px!important;
+        border-radius:16px!important;
+      }
+
+      #hc_antecedentes .auro-previos-head{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:8px!important;
+      }
+
+      #hc_antecedentes .auro-previos-head b{
+        font-size:14px!important;
+        line-height:1.3!important;
+      }
+
+      #hc_antecedentes .auro-previos-hide{
+        width:100%!important;
+        min-height:40px!important;
+        margin-top:0!important;
+      }
+
+      #hc_antecedentes .auro-previos-mini-table{
+        grid-template-columns:1fr!important;
+      }
+
+      #hc_antecedentes .auro-previos-mini-row{
+        min-width:0!important;
+        padding:11px 12px!important;
+        border-radius:13px!important;
+      }
+
+      #hc_antecedentes .auro-previos-detail-pill{
+        white-space:normal!important;
+        overflow-wrap:anywhere!important;
+        border-radius:9px!important;
+        align-items:flex-start!important;
+      }
+    }
+
+    @media (max-width:390px){
+      #hc_antecedentes{padding-left:7px!important;padding-right:7px!important;}
+      #hc_antecedentes .auro-v21-unit-wrap{grid-template-columns:1fr!important;}
+      #hc_antecedentes .auro-ant-mobile-toggle{font-size:13px!important;padding:9px 10px!important;}
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function auroAntecedentesMobileTituloSeccion(columna, indice){
+  const subtitle = columna.querySelector(':scope > .clinical-subtitle');
+  const label = columna.querySelector(':scope > label.form-label');
+  const cardHead = columna.querySelector(':scope > .alimentacion-card .alimentacion-card-head, :scope > .covid-card .covid-card-head');
+
+  const texto = String(
+    subtitle?.textContent ||
+    label?.textContent ||
+    cardHead?.textContent ||
+    ('Sección ' + (indice + 1))
+  ).replace(/\s+/g,' ').trim();
+
+  return texto || ('Sección ' + (indice + 1));
+}
+
+function auroAntecedentesMobileIcono(titulo){
+  const n = typeof auroNormalizarClaveClinica === 'function'
+    ? auroNormalizarClaveClinica(titulo)
+    : String(titulo || '').toLowerCase();
+
+  if(n.includes('patolog')) return 'bi-heart-pulse';
+  if(n.includes('quir')) return 'bi-scissors';
+  if(n.includes('alerg')) return 'bi-exclamation-triangle';
+  if(n.includes('covid')) return 'bi-virus';
+  if(n.includes('vacun')) return 'bi-shield-check';
+  if(n.includes('habito')) return 'bi-person-lines-fill';
+  if(n.includes('actividad') || n.includes('estilo')) return 'bi-activity';
+  if(n.includes('obst')) return 'bi-person-hearts';
+  if(n.includes('gine')) return 'bi-gender-female';
+  if(n.includes('alimenta')) return 'bi-egg-fried';
+  if(n.includes('medic')) return 'bi-capsule-pill';
+  if(n.includes('famil')) return 'bi-people';
+  return 'bi-journal-medical';
+}
+
+function auroAntecedentesMobileTieneDato(columna){
+  const controles = columna.querySelectorAll('input,select,textarea');
+
+  return [...controles].some(el => {
+    if(el.type === 'hidden') return false;
+    if(el.type === 'checkbox' || el.type === 'radio') return !!el.checked;
+    return String(el.value || '').trim() !== '';
+  });
+}
+
+function auroAntecedentesMobileDebeAbrir(titulo, columna, indice){
+  if(auroAntecedentesMobileTieneDato(columna)) return true;
+
+  const n = typeof auroNormalizarClaveClinica === 'function'
+    ? auroNormalizarClaveClinica(titulo)
+    : String(titulo || '').toLowerCase();
+
+  // Mantiene visible la primera sección clínica para orientar el llenado.
+  if(n.includes('patolog')) return true;
+  if(indice === 0) return true;
+  return false;
+}
+
+function auroAntecedentesMobileCrearAcordeones(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return;
+
+  const filaPrincipal = panel.querySelector(':scope > .row.g-3');
+  if(!filaPrincipal) return;
+
+  [...filaPrincipal.children].forEach((columna, indice) => {
+    if(!(columna instanceof HTMLElement)) return;
+    if(columna.dataset.auroAntMobileReady === '1') return;
+
+    const titulo = auroAntecedentesMobileTituloSeccion(columna, indice);
+    const icono = auroAntecedentesMobileIcono(titulo);
+    const btn = document.createElement('button');
+
+    btn.type = 'button';
+    btn.className = 'auro-ant-mobile-toggle';
+    btn.setAttribute('aria-expanded','true');
+    btn.innerHTML = `
+      <span class="auro-ant-mobile-toggle-title"><i class="bi ${icono}"></i><span>${typeof auroEscapeHtml === 'function' ? auroEscapeHtml(titulo) : titulo}</span></span>
+      <i class="bi bi-chevron-down auro-ant-mobile-toggle-chevron"></i>
+    `;
+
+    btn.addEventListener('click', () => {
+      const cerrado = columna.classList.toggle('auro-ant-mobile-collapsed');
+      btn.setAttribute('aria-expanded', cerrado ? 'false' : 'true');
+    });
+
+    columna.classList.add('auro-ant-mobile-section');
+    columna.insertBefore(btn, columna.firstChild);
+    columna.dataset.auroAntMobileReady = '1';
+
+    const abrir = auroAntecedentesMobileDebeAbrir(titulo, columna, indice);
+    columna.classList.toggle('auro-ant-mobile-collapsed', !abrir);
+    btn.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+  });
+}
+
+function auroAntecedentesMobileEliminarAcordeones(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return;
+
+  panel.querySelectorAll('.auro-ant-mobile-section').forEach(columna => {
+    columna.classList.remove('auro-ant-mobile-section','auro-ant-mobile-collapsed');
+    delete columna.dataset.auroAntMobileReady;
+    columna.querySelector(':scope > .auro-ant-mobile-toggle')?.remove();
+  });
+}
+
+function auroAntecedentesMobileSincronizar(){
+  const movil = window.matchMedia('(max-width:760px)').matches;
+  if(movil) auroAntecedentesMobileCrearAcordeones();
+  else auroAntecedentesMobileEliminarAcordeones();
+}
+
+function auroAntecedentesMobileInicializar(){
+  auroAntecedentesMobileInyectarEstilos();
+  auroAntecedentesMobileSincronizar();
+
+  if(window.__auroAntecedentesMobileResizeReady !== true){
+    window.__auroAntecedentesMobileResizeReady = true;
+    let timer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(timer);
+      timer = setTimeout(auroAntecedentesMobileSincronizar, 120);
+    }, {passive:true});
+  }
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(auroAntecedentesMobileInicializar, 420);
+  });
+}else{
+  setTimeout(auroAntecedentesMobileInicializar, 420);
+}
+
+console.log('AUROSANAX antecedentes.js: RESPONSIVE PREMIUM MÓVIL v1.0 cargado');
