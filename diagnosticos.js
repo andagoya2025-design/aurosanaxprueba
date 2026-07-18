@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.3.0 - experiencia clínica, resumen limpio y ayudas
+ Versión: 1.4.0 - responsive premium para iPhone y móviles
  Fecha: 2026-07-18
  -----------------------------------------------------------------------
  OBJETIVO
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -363,7 +363,7 @@
       .auro-dx-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px;border:1px solid #dbe6e8;border-radius:16px;background:linear-gradient(135deg,#ffffff,#f5fbfb)}
       .auro-dx-head h3{margin:0;font-size:20px}
       .auro-dx-head p{margin:5px 0 0;color:#62767b;font-size:13px}
-      .auro-dx-status{font-size:12px;padding:7px 10px;border-radius:999px;background:#edf7f7;color:#28626a;white-space:nowrap}
+      .auro-dx-status{font-size:12px;padding:7px 10px;border-radius:999px;background:#edf7f7;color:#28626a;white-space:nowrap;max-width:100%;overflow-wrap:anywhere}
       .auro-dx-toolbar{display:flex;flex-wrap:wrap;gap:8px}
       .auro-dx-btn{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer;background:#eef4f5;color:#29474b}
       .auro-dx-btn.primary{background:#1d6670;color:#fff}
@@ -417,6 +417,183 @@
       .auro-dx-modal-body textarea{width:100%;min-height:52vh;resize:vertical;border:1px solid #cbd5e1;border-radius:14px;padding:14px;font:inherit;line-height:1.5}
       .auro-dx-modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:13px 18px;border-top:1px solid #e5e7eb}
       @media(max-width:900px){.auro-dx-grid{grid-template-columns:1fr}.auro-dx-source{grid-template-columns:1fr}.auro-dx-head{flex-direction:column}.auro-dx-field-head{align-items:flex-start;flex-direction:column}}
+
+      @media(max-width:600px){
+        html,body{
+          max-width:100%;
+          overflow-x:hidden;
+        }
+        #hc_diagnostico,
+        #auroDiagnosticosMount,
+        #auroDiagnosticosApp,
+        .auro-dx-shell{
+          width:100%!important;
+          max-width:100%!important;
+          min-width:0!important;
+          overflow-x:hidden!important;
+        }
+        .auro-dx-shell{gap:10px}
+        .auro-dx-head{
+          display:block;
+          padding:12px;
+          border-radius:14px;
+        }
+        .auro-dx-head h3{
+          font-size:18px;
+          line-height:1.25;
+        }
+        .auro-dx-head p{
+          font-size:12px;
+          line-height:1.4;
+          overflow-wrap:anywhere;
+        }
+        .auro-dx-status{
+          display:block;
+          width:100%;
+          max-width:100%;
+          margin-top:10px;
+          white-space:normal;
+          overflow-wrap:anywhere;
+          line-height:1.35;
+          text-align:left;
+          border-radius:12px;
+        }
+        .auro-dx-toolbar{
+          display:grid;
+          grid-template-columns:1fr;
+          gap:8px;
+          width:100%;
+        }
+        .auro-dx-btn{
+          width:100%;
+          min-width:0;
+          min-height:46px;
+          padding:10px 12px;
+          font-size:15px;
+          white-space:normal;
+          line-height:1.25;
+          text-align:center;
+        }
+        .auro-dx-grid{
+          grid-template-columns:1fr!important;
+          gap:10px;
+        }
+        .auro-dx-card{
+          width:100%;
+          min-width:0;
+          border-radius:14px;
+        }
+        .auro-dx-card-head{
+          padding:11px 12px;
+          font-size:14px;
+          line-height:1.35;
+          overflow-wrap:anywhere;
+        }
+        .auro-dx-card-help{
+          font-size:11px;
+          line-height:1.35;
+        }
+        .auro-dx-card-body{
+          padding:11px;
+          min-width:0;
+        }
+        .auro-dx-item{
+          padding:10px;
+          min-width:0;
+        }
+        .auro-dx-item-main{
+          display:grid;
+          grid-template-columns:auto minmax(0,1fr);
+          gap:8px;
+        }
+        .auro-dx-code{min-width:0}
+        .auro-dx-name{
+          min-width:0;
+          overflow-wrap:anywhere;
+        }
+        .auro-dx-field-head{
+          display:block;
+          margin-bottom:8px;
+        }
+        .auro-dx-field-actions{
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          width:100%;
+          margin-top:7px;
+        }
+        .auro-dx-mini-btn{
+          width:100%;
+          min-height:40px;
+          font-size:12px;
+        }
+        .auro-dx-textarea,
+        .auro-dx-modal-body textarea{
+          width:100%;
+          min-width:0;
+          max-width:100%;
+          font-size:16px!important;
+          line-height:1.45;
+        }
+        .auro-dx-textarea{min-height:140px}
+        .auro-dx-source{
+          grid-template-columns:1fr!important;
+          gap:7px;
+        }
+        .auro-dx-source-item{padding:10px}
+        .auro-dx-source-state{
+          align-items:flex-start;
+          line-height:1.35;
+        }
+        .auro-dx-protocolo{
+          padding:10px;
+          overflow-wrap:anywhere;
+        }
+        .auro-dx-protocolo > div:first-child{
+          display:block!important;
+        }
+        .auro-dx-protocolo [data-seleccionar-protocolo]{
+          width:100%;
+          margin-top:9px;
+        }
+        .auro-dx-list{
+          padding-left:20px;
+          overflow-wrap:anywhere;
+        }
+        .auro-dx-warning,
+        .auro-dx-guide,
+        .auro-dx-error,
+        .auro-dx-ok{
+          font-size:12px;
+          line-height:1.45;
+          overflow-wrap:anywhere;
+        }
+        .auro-dx-modal-backdrop{
+          padding:0;
+          align-items:flex-end;
+        }
+        .auro-dx-modal{
+          width:100%;
+          max-width:100%;
+          max-height:94dvh;
+          border-radius:18px 18px 0 0;
+        }
+        .auro-dx-modal-head{
+          padding:12px;
+          align-items:flex-start;
+        }
+        .auro-dx-modal-head h4{
+          font-size:17px;
+          line-height:1.3;
+        }
+        .auro-dx-modal-body{padding:12px}
+        .auro-dx-modal-body textarea{min-height:56dvh}
+        .auro-dx-modal-foot{
+          display:grid;
+          grid-template-columns:1fr;
+          padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+        }
+        .auro-dx-modal-foot .auro-dx-btn{width:100%}
+      }
     `;
     document.head.appendChild(style);
   }
