@@ -1151,6 +1151,17 @@
 
     atencionActivaId = nueva.id_atencion;
 
+    /*
+      AUROSANAX FIX QUIRÚRGICO:
+      Notifica la nueva atención a los módulos clínicos que trabajan por
+      id_atencion. Ginecología recibe el contexto nuevo, limpia únicamente
+      los datos de la consulta anterior y después intenta cargar el registro
+      correspondiente a esta atención.
+    */
+    window.dispatchEvent(new CustomEvent('aurosanax:atencion-iniciada', {
+      detail: { ...nueva }
+    }));
+
     if(cita){
       limpiarCitaSeleccionadaAgenda();
     }
@@ -1900,6 +1911,15 @@
     }
 
     atencionActivaId = a.id_atencion;
+
+    /*
+      AUROSANAX FIX QUIRÚRGICO:
+      Informa a Ginecología cuál consulta fue seleccionada para que cargue
+      exclusivamente el registro asociado a este id_atencion.
+    */
+    window.dispatchEvent(new CustomEvent('aurosanax:atencion-seleccionada', {
+      detail: { ...normalizar(a) }
+    }));
 
     /*
       AUROSANAX FIX VER ESTABLE:
