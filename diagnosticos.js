@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.3 - mejora exclusiva de resumen y análisis clínico
+ Versión: 1.4.4 - intérprete clínico profesional de antecedentes
  Fecha: 2026-07-18
  -----------------------------------------------------------------------
  OBJETIVO
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.3';
+  const VERSION = '1.4.4';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1437,6 +1437,221 @@
     return auroPunto(frase);
   }
 
+  /* ==========================================================
+     AUROSANAX DIAGNÓSTICOS v1.4.4
+     Intérprete clínico profesional de antecedentes.
+     - Lee el formato estructurado generado por antecedentes.js.
+     - No modifica ni reescribe los datos de origen.
+     - Evita exponer key, número, dosis, JSON o metadatos internos.
+     ========================================================== */
+
+  const AURO_DX_ANT_PERSONALES_MARKER = 'AUROSANAX_ANT_PERSONALES_V1::';
+
+  function auroDxParseAntecedentesPersonales(valor){
+    const raw = texto(valor);
+    if(!raw) return {estructurado:false, data:null, patologicos:''};
+
+    if(raw.startsWith(AURO_DX_ANT_PERSONALES_MARKER)){
+      try{
+        const data = JSON.parse(raw.substring(AURO_DX_ANT_PERSONALES_MARKER.length));
+        return {
+          estructurado:true,
+          data: data && typeof data === 'object' ? data : {},
+          patologicos: texto(data?.patologicos)
+        };
+      }catch(error){
+        console.warn(MODULO + ': no se pudo interpretar antecedentes personales estructurados.', error);
+      }
+    }
+
+    return {estructurado:false, data:null, patologicos:raw};
+  }
+
+  function auroDxLimpiarElementoAntecedente(valor){
+    return texto(valor)
+      .replace(/^(patol[oó]gicos?|quir[uú]rgicos?|alergias?|medicaci[oó]n actual|tratamiento)\s*:\s*/i,'')
+      .replace(/\b(key|n[uú]mero|numero|dosis)\s*:\s*[^;|,]*/gi,'')
+      .replace(/\s+/g,' ')
+      .replace(/^[:;,|.\-\s]+|[:;,|.\-\s]+$/g,'')
+      .trim();
+  }
+
+  function auroDxSepararRegistros(valor){
+    if(Array.isArray(valor)) return valor;
+    const raw = texto(valor);
+    if(!raw) return [];
+    return raw.split(/\s*;\s*|\r?\n+/).map(texto).filter(Boolean);
+  }
+
+  function auroDxNarrarPatologicos(valor){
+    const frases = [];
+
+    auroDxSepararRegistros(valor).forEach(registro => {
+      if(registro && typeof registro === 'object'){
+        const nombre = auroDxLimpiarElementoAntecedente(
+          registro.descripcion || registro.patologia || registro.nombre || registro.titulo
+        );
+        const tiempo = auroDxLimpiarElementoAntecedente(
+          registro.tiempo || registro.evolucion || registro.tiempo_diagnostico
+        );
+        const medicamento = auroDxLimpiarElementoAntecedente(
+          registro.medicamento || registro.medicacion || registro.tratamiento
+        );
+        if(!nombre) return;
+        let frase = nombre;
+        if(tiempo && !/^(no aplica|n\/a)$/i.test(tiempo)) frase += ' de ' + tiempo + ' de evolución';
+        if(medicamento && !/^no (usa|recuerda)/i.test(medicamento)) frase += ', en tratamiento con ' + medicamento;
+        frases.push(frase);
+        return;
+      }
+
+      const limpio = auroDxLimpiarElementoAntecedente(registro);
+      if(!limpio) return;
+      if(/^niega antecedentes patol[oó]gicos/i.test(limpio)){
+        frases.push('niega antecedentes patológicos personales relevantes');
+        return;
+      }
+
+      const partes = limpio.split('|').map(auroDxLimpiarElementoAntecedente).filter(Boolean);
+      const nombre = partes[0] || '';
+      const tiempo = (partes[1] || '').replace(/^Tiempo\s*:\s*/i,'').trim();
+      const medicamento = partes.slice(2).join(' | ')
+        .replace(/^(Medicamento|Medicaci[oó]n|Tratamiento)\s*:\s*/i,'').trim();
+      if(!nombre) return;
+
+      let frase = nombre;
+      if(tiempo && !/^(no aplica|n\/a)$/i.test(tiempo)) frase += ' de ' + tiempo + ' de evolución';
+      if(medicamento && !/^no (usa|recuerda)/i.test(medicamento)) frase += ', en tratamiento con ' + medicamento;
+      frases.push(frase);
+    });
+
+    return auroListaNatural(frases);
+  }
+
+  function auroDxNarrarQuirurgicos(valor){
+    const items = auroDxSepararRegistros(valor).map(registro => {
+      const partes = texto(registro).split('|').map(auroDxLimpiarElementoAntecedente).filter(Boolean);
+      if(!partes.length) return '';
+      if(/^niega antecedentes quir[uú]rgicos/i.test(partes[0])) return 'niega antecedentes quirúrgicos';
+      const nombre = partes[0];
+      const fecha = partes.slice(1).join(' ')
+        .replace(/^(Fecha|Año)\s*:\s*/i,'').trim();
+      return fecha ? nombre + ' (' + fecha + ')' : nombre;
+    }).filter(Boolean);
+    return auroListaNatural(items);
+  }
+
+  function auroDxNarrarAlergias(valor){
+    const items = auroDxSepararRegistros(valor).map(registro => {
+      const partes = texto(registro).split('|').map(auroDxLimpiarElementoAntecedente).filter(Boolean);
+      if(!partes.length) return '';
+      if(/^niega alergias/i.test(partes[0])) return 'niega alergias conocidas';
+      const agente = partes[0];
+      const reaccion = partes.slice(1).join(' ').replace(/^Reacci[oó]n\s*:\s*/i,'').trim();
+      return reaccion ? agente + ', con reacción referida de ' + reaccion : agente;
+    }).filter(Boolean);
+    return auroListaNatural(items);
+  }
+
+  function auroDxVacunaTieneDatoReal(vacuna){
+    if(!vacuna || typeof vacuna !== 'object') return false;
+    if(texto(vacuna.nombre_comercial)) return true;
+    return Array.isArray(vacuna.dosis) && vacuna.dosis.some(d =>
+      d?.aplicada === true || texto(d?.administracion) || texto(d?.observacion)
+    );
+  }
+
+  function auroDxNombreVacuna(valor){
+    return texto(valor)
+      .replace(/Virus Papiloma Humano\s*\(HPV\)/i,'VPH')
+      .replace(/Virus Papiloma Humano/i,'VPH')
+      .replace(/COVID-19/i,'COVID-19')
+      .replace(/Hepatitis B/i,'hepatitis B')
+      .trim();
+  }
+
+  function auroDxNarrarVacunacion(data){
+    if(!data || typeof data !== 'object') return '';
+    const vacunas = Array.isArray(data.vacunas) ? data.vacunas : [];
+    const nombres = vacunas
+      .filter(auroDxVacunaTieneDatoReal)
+      .map(v => auroDxNombreVacuna(v.biologico || v.key))
+      .filter(Boolean);
+
+    const covid = data.covid && typeof data.covid === 'object' ? data.covid : null;
+    if(covid && auroSi(covid.vacunado) && !nombres.some(x => normalizar(x).includes('covid'))){
+      nombres.unshift('COVID-19');
+    }
+
+    if(!nombres.length) return '';
+    return 'vacunación registrada contra ' + auroListaNatural(nombres);
+  }
+
+  function auroDxNarrarCovid(data){
+    const c = data?.covid;
+    if(!c || typeof c !== 'object') return '';
+    if(auroNo(c.presento)) return 'niega antecedente de COVID-19';
+    if(!auroSi(c.presento)) return '';
+
+    let frase = 'antecedente de COVID-19';
+    const fecha = auroDxLimpiarElementoAntecedente(c.fecha || c.anio_referencia);
+    const clasificacion = auroDxLimpiarElementoAntecedente(c.clasificacion);
+    if(fecha) frase += ' en ' + fecha;
+    if(clasificacion) frase += ', clasificado como ' + clasificacion.toLowerCase();
+    if(auroSi(c.hospitalizacion)){
+      frase += ', con hospitalización';
+      const tiempo = auroDxLimpiarElementoAntecedente(c.tiempo_hospitalizado);
+      if(tiempo) frase += ' durante ' + tiempo;
+    }
+    return frase;
+  }
+
+  function auroDxConstruirNarrativaAntecedentes(historia){
+    const h = historia || {};
+    const personales = auroDxParseAntecedentesPersonales(
+      h.antecedentes_personales || h.antecedentes_patologicos
+    );
+    const bloques = [];
+
+    const patologicos = auroDxNarrarPatologicos(personales.patologicos);
+    if(patologicos){
+      if(/^niega antecedentes patol[oó]gicos/i.test(patologicos)) bloques.push(auroPunto(patologicos));
+      else bloques.push(auroPunto('Antecedentes patológicos personales de ' + patologicos));
+    }
+
+    const quirurgicos = auroDxNarrarQuirurgicos(h.antecedentes_quirurgicos);
+    if(quirurgicos){
+      if(/^niega antecedentes quir[uú]rgicos/i.test(quirurgicos)) bloques.push(auroPunto(quirurgicos));
+      else bloques.push(auroPunto('Antecedentes quirúrgicos de ' + quirurgicos));
+    }
+
+    const alergias = auroDxNarrarAlergias(h.alergias);
+    if(alergias){
+      if(/^niega alergias/i.test(alergias)) bloques.push(auroPunto(alergias));
+      else bloques.push(auroPunto('Refiere alergia a ' + alergias));
+    }
+
+    const medicacion = auroDxLimpiarElementoAntecedente(h.medicacion_actual);
+    if(medicacion && !/^no usa medicaci[oó]n/i.test(medicacion)){
+      bloques.push(auroPunto('Como medicación habitual refiere ' + medicacion));
+    }else if(/^no usa medicaci[oó]n/i.test(medicacion)){
+      bloques.push(auroPunto('No utiliza medicación habitual según refiere'));
+    }
+
+    const familiares = auroDxLimpiarElementoAntecedente(h.antecedentes_familiares);
+    if(familiares) bloques.push(auroPunto('Antecedentes familiares de ' + familiares));
+
+    if(personales.estructurado){
+      const covid = auroDxNarrarCovid(personales.data);
+      if(covid) bloques.push(auroPunto(covid));
+
+      const vacunacion = auroDxNarrarVacunacion(personales.data);
+      if(vacunacion) bloques.push(auroPunto('Se documenta ' + vacunacion));
+    }
+
+    return bloques.join(' ');
+  }
+
   function construirResumenClinico(){
     const at = atencionActiva() || {};
     const h = state.historia || {};
@@ -1466,19 +1681,8 @@
     }else if(motivo) add('Consulta por ' + motivo);
     else if(enfermedad) add('En la anamnesis se describe ' + enfermedad);
 
-    const antecedentes = [];
-    const ap = limpiarTextoClinico(h.antecedentes_personales || h.antecedentes_patologicos);
-    const aq = limpiarTextoClinico(h.antecedentes_quirurgicos);
-    const af = limpiarTextoClinico(h.antecedentes_familiares);
-    const al = limpiarTextoClinico(h.alergias);
-    const med = limpiarTextoClinico(h.medicacion_actual);
-
-    if(ap) antecedentes.push('antecedentes personales de ' + ap);
-    if(aq) antecedentes.push('antecedente quirúrgico de ' + aq);
-    if(af) antecedentes.push('antecedentes familiares de ' + af);
-    if(al) antecedentes.push('alergias a ' + al);
-    if(med) antecedentes.push('tratamiento habitual con ' + med);
-    if(antecedentes.length) add('Se registran ' + auroListaNatural(antecedentes));
+    const narrativaAntecedentes = auroDxConstruirNarrativaAntecedentes(h);
+    if(narrativaAntecedentes) add(narrativaAntecedentes);
 
     const vitales = [];
     if(ex.presion_arterial) vitales.push('presión arterial de ' + limpiarTextoClinico(ex.presion_arterial));
