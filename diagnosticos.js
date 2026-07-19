@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.0 FASE 1 - motor universal de redacción clínica premium
+ Versión: 1.5.1 FASE 1.1 - intérprete clínico reforzado
  Fecha: 2026-07-19
  -----------------------------------------------------------------------
  OBJETIVO
@@ -41,7 +41,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.0-fase1';
+  const VERSION = '1.5.1-fase1.1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1260,16 +1260,24 @@
     mensaje('ok','Integración confirmada temporalmente para esta atención. No se modificó Google Sheets ni la base de datos.');
   }
 
+  const CLAVES_ADMINISTRATIVAS_EXTRA = [
+    'numero consulta','número consulta','numero atencion','número atención',
+    'numero historia','número historia','nombre paciente','nombres paciente',
+    'apellidos paciente','paciente nombre','tipo atencion','tipo atención',
+    'modalidad atencion','modalidad atención','motivo ginecologico',
+    'motivo ginecológico','motivo obstetrico','motivo obstétrico',
+    'sintomas json','síntomas json','embarazo actual json',
+    'antecedentes json','examen json','datos json','json de',
+    'covid dosis numero','covid dosis número','dosis numero','dosis número'
+  ];
+
   function claveTecnicaOAdministrativa(clave){
     const k = normalizar(clave);
     if(!k) return true;
     if(CLAVES_TECNICAS.has(k)) return true;
+    if(CLAVES_ADMINISTRATIVAS_EXTRA.includes(k)) return true;
 
-    /*
-      Se excluyen solamente identificadores, metadatos y datos administrativos.
-      No se modifican los objetos originales ni su almacenamiento.
-    */
-    return /(^id\b|\bid$|_id\b|\bid_|\bjson\b|timestamp|fecha creacion|fecha actualizacion|hora atencion|creado|actualizado|usuario|version|token|uuid|hash|accion|success|mensaje sistema|numero consulta|numero atencion|numero historia|tipo atencion|modalidad atencion|nombre paciente|nombres paciente|apellidos paciente|paciente nombre|^paciente$|documento paciente|cedula|correo|email|telefono|direccion|estado civil|responsable|acompanante|profesional|medico tratante|sede|sucursal)/.test(k);
+    return /(^id\b|\bid$|_id\b|\bid_|\bjson\b|timestamp|fecha creacion|fecha actualizacion|hora atencion|creado|actualizado|usuario|version|token|uuid|hash|accion|success|mensaje sistema|numero consulta|número consulta|numero atencion|número atención|numero historia|número historia|tipo atencion|tipo atención|modalidad atencion|modalidad atención|nombre paciente|nombres paciente|apellidos paciente|paciente nombre|^paciente$|documento paciente|cedula|cédula|correo|email|telefono|teléfono|direccion|dirección|estado civil|responsable|acompanante|acompañante|profesional|medico tratante|médico tratante|sede|sucursal|covid dosis|dosis numero|dosis número|^numero \d+$|^número \d+$)/.test(k);
   }
 
   function pareceFechaTecnica(valor){
@@ -1317,6 +1325,67 @@
     }
 
     return v;
+  }
+
+
+  function limpiarEtiquetaContenedor(clave){
+    let k = texto(clave)
+      .replace(/_/g,' ')
+      .replace(/\bjson\b/gi,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+
+    if(/^(sintomas|síntomas|signos|hallazgos|datos|detalle|contenido|items|valores)$/i.test(k)){
+      return '';
+    }
+    return k;
+  }
+
+  function limpiarValorAdministrativo(valor){
+    let v = limpiarTextoClinico(valor);
+    if(!v) return '';
+
+    v = v
+      .replace(/\b(?:numero|número)\s*\d+\b/gi,' ')
+      .replace(/\bjson\b/gi,' ')
+      .replace(/\s*[:;,-]\s*$/g,'')
+      .replace(/\s+/g,' ')
+      .trim();
+
+    if(!v) return '';
+    if(/^(primera vez|subsecuente|control|si|sí|no|true|false)$/i.test(v)) return '';
+    if(/^(?:numero|número)(?:\s+\d+)?$/i.test(v)) return '';
+    return v;
+  }
+
+  function contieneSoloRuidoAdministrativo(valor){
+    const v = normalizar(valor);
+    if(!v) return true;
+    return /^(primera vez|subsecuente|control|numero|número|numero \d+|número \d+|si|sí|no|true|false)$/.test(v);
+  }
+
+  function extraerDesdeCadenaSerializada(valor, profundidad){
+    profundidad = profundidad || 0;
+    if(profundidad > 5) return null;
+
+    const limpio = quitarPrefijoSerializado(valor);
+    if(!limpio) return null;
+
+    const parseado = parseJsonSeguro(limpio, null);
+    if(parseado && typeof parseado === 'object') return parseado;
+
+    if(limpio.includes(':')){
+      const obj = {};
+      limpio.split(/\s*;\s*|\s*\|\s*/).forEach(fragmento => {
+        const pos = fragmento.indexOf(':');
+        if(pos <= 0) return;
+        const clave = texto(fragmento.slice(0,pos));
+        const dato = texto(fragmento.slice(pos+1));
+        if(clave && dato) obj[clave] = dato;
+      });
+      if(Object.keys(obj).length) return obj;
+    }
+    return null;
   }
 
   /*
@@ -1431,53 +1500,98 @@
 
   function extraerElementosClinicos(obj, maximo, profundidad){
     profundidad = profundidad || 0;
-    if(!obj || typeof obj !== 'object' || profundidad > 5) return [];
+    if(!obj || profundidad > 6) return [];
 
     const salida = [];
     const limite = maximo || 12;
 
+    if(typeof obj === 'string'){
+      const serializado = extraerDesdeCadenaSerializada(obj, profundidad);
+      if(serializado) return extraerElementosClinicos(serializado, limite, profundidad + 1);
+      return [];
+    }
+
+    if(Array.isArray(obj)){
+      obj.forEach(item => {
+        if(salida.length >= limite) return;
+        if(item && typeof item === 'object'){
+          salida.push(...extraerElementosClinicos(item, limite - salida.length, profundidad + 1));
+        }
+      });
+      return salida.slice(0, limite);
+    }
+
+    if(typeof obj !== 'object') return [];
+
     Object.entries(obj).forEach(([clave, valor]) => {
       if(salida.length >= limite || claveTecnicaOAdministrativa(clave) || esValorVacioClinico(valor)) return;
 
-      const etiqueta = singularizarEtiquetaClinica(claveClinicaLegible(clave));
+      const claveLimpia = limpiarEtiquetaContenedor(clave);
+      const etiqueta = singularizarEtiquetaClinica(claveClinicaLegible(claveLimpia || clave));
+
+      if(typeof valor === 'string'){
+        const serializado = extraerDesdeCadenaSerializada(valor, profundidad);
+        if(serializado){
+          salida.push(...extraerElementosClinicos(serializado, limite - salida.length, profundidad + 1));
+          return;
+        }
+      }
 
       if(esAfirmativoClinico(valor)){
-        salida.push({tipo:'positivo', etiqueta, valor:'', clave});
+        if(etiqueta && !contieneSoloRuidoAdministrativo(etiqueta)){
+          salida.push({tipo:'positivo', etiqueta, valor:'', clave});
+        }
         return;
       }
 
       if(esNegativoClinico(valor)){
-        salida.push({tipo:'negativo', etiqueta, valor:'', clave});
+        if(etiqueta && !contieneSoloRuidoAdministrativo(etiqueta)){
+          salida.push({tipo:'negativo', etiqueta, valor:'', clave});
+        }
         return;
       }
 
       if(Array.isArray(valor)){
+        const objetos = valor.filter(item => item && typeof item === 'object');
+        if(objetos.length){
+          objetos.forEach(item => {
+            salida.push(...extraerElementosClinicos(item, limite - salida.length, profundidad + 1));
+          });
+          return;
+        }
+
         const lista = valor
-          .map(item => typeof item === 'object'
-            ? limpiarTextoClinico(valorClinicoPlano(item, profundidad + 1))
-            : limpiarTextoClinico(item))
-          .filter(Boolean);
-        if(lista.length){
+          .map(item => limpiarValorAdministrativo(item))
+          .filter(item => item && !contieneSoloRuidoAdministrativo(item));
+
+        if(lista.length && etiqueta){
           salida.push({tipo:'dato', etiqueta, valor:unirListaNatural(lista), clave});
         }
         return;
       }
 
       if(typeof valor === 'object'){
-        const hijos = extraerElementosClinicos(valor, limite - salida.length, profundidad + 1);
-        if(hijos.length){
-          hijos.forEach(hijo => salida.push(hijo));
-        }
+        salida.push(...extraerElementosClinicos(valor, limite - salida.length, profundidad + 1));
         return;
       }
 
-      const plano = limpiarTextoClinico(valor);
-      if(plano){
-        salida.push({tipo:'dato', etiqueta, valor:plano, clave});
+      const plano = limpiarValorAdministrativo(valor);
+      if(!plano || contieneSoloRuidoAdministrativo(plano) || !etiqueta) return;
+
+      if(/motivo ginecologico|motivo ginecológico|motivo obstetrico|motivo obstétrico/.test(normalizar(clave))){
+        return;
       }
+
+      salida.push({tipo:'dato', etiqueta, valor:plano, clave});
     });
 
-    return salida.slice(0, limite);
+    const vistos = new Set();
+    return salida.filter(item => {
+      const firma = normalizar(item.tipo + '|' + item.etiqueta + '|' + item.valor);
+      if(!firma || vistos.has(firma)) return false;
+      vistos.add(firma);
+      return true;
+    }).slice(0, limite);
   }
 
   function narrarElementosClinicos(obj, opciones){
@@ -1485,10 +1599,17 @@
     const elementos = extraerElementosClinicos(obj, opciones.maximo || 12, 0);
     if(!elementos.length) return '';
 
-    const positivos = elementos.filter(x => x.tipo === 'positivo').map(x => x.etiqueta);
-    const negativos = elementos.filter(x => x.tipo === 'negativo').map(x => x.etiqueta);
-    const datos = elementos.filter(x => x.tipo === 'dato');
+    const positivos = elementos
+      .filter(x => x.tipo === 'positivo')
+      .map(x => x.etiqueta)
+      .filter(Boolean);
 
+    const negativos = elementos
+      .filter(x => x.tipo === 'negativo')
+      .map(x => x.etiqueta)
+      .filter(Boolean);
+
+    const datos = elementos.filter(x => x.tipo === 'dato');
     const frases = [];
 
     if(positivos.length){
@@ -1497,11 +1618,11 @@
     }
 
     if(negativos.length){
-      const negacion = 'sin ' + unirListaNatural(negativos);
+      const negativosRelevantes = negativos.slice(0, 6);
       if(frases.length){
-        frases[frases.length - 1] += ', ' + negacion;
+        frases[frases.length - 1] += '; niega ' + unirListaNatural(negativosRelevantes);
       }else{
-        frases.push('No se documenta ' + unirListaNatural(negativos));
+        frases.push('Niega ' + unirListaNatural(negativosRelevantes));
       }
     }
 
@@ -1511,49 +1632,70 @@
       if(!etiqueta || !valor) return;
 
       const k = normalizar(item.clave);
+      const e = normalizar(etiqueta);
+
       if(/tiempo|evolucion|duracion/.test(k)){
         frases.push('El cuadro presenta una evolución de ' + valor);
       }else if(/tratamiento|medicacion|farmaco/.test(k)){
         frases.push('Se encuentra en tratamiento con ' + valor);
-      }else if(/fecha de ultima menstruacion|fur/.test(normalizar(etiqueta))){
+      }else if(/fecha de ultima menstruacion|fur/.test(e)){
         frases.push('La fecha de última menstruación registrada es ' + valor);
-      }else if(/edad gestacional/.test(normalizar(etiqueta))){
+      }else if(/edad gestacional/.test(e)){
         frases.push('La edad gestacional corresponde a ' + valor);
+      }else if(/presion arterial|frecuencia cardiaca|frecuencia respiratoria|temperatura|saturacion/.test(e)){
+        frases.push(etiqueta + ': ' + valor);
       }else{
         frases.push('Se registra ' + etiqueta + ' de ' + valor);
       }
     });
 
-    return frases.map(cerrarOracion).join(' ');
+    return frases
+      .map(limpiarPuntuacionClinica)
+      .filter(Boolean)
+      .map(cerrarOracion)
+      .join(' ');
   }
 
   function narrarAntecedentes(historia){
     historia = historia || {};
-    const grupos = [
-      ['antecedentes_personales','antecedentes_patologicos'],
-      ['antecedentes_quirurgicos'],
-      ['antecedentes_familiares'],
-      ['alergias','alergia'],
-      ['medicacion_actual','medicamentos_actuales','tratamiento_actual']
-    ];
-
     const partes = [];
 
-    grupos.forEach((claves, indice) => {
+    function obtener(claves){
       const valores = [];
       claves.forEach(clave => {
-        const valor = limpiarTextoClinico(valorClinicoPlano(historia[clave],0));
-        if(valor) valores.push(valor);
-      });
-      const unido = unirListaNatural(valores);
-      if(!unido) return;
+        const valor = historia[clave];
+        if(esValorVacioClinico(valor)) return;
 
-      if(indice === 0) partes.push('Como antecedentes personales relevantes refiere ' + unido);
-      if(indice === 1) partes.push('Presenta antecedente quirúrgico de ' + unido);
-      if(indice === 2) partes.push('En los antecedentes familiares se registra ' + unido);
-      if(indice === 3) partes.push('Se consignan alergias a ' + unido);
-      if(indice === 4) partes.push('Mantiene tratamiento habitual con ' + unido);
-    });
+        if(valor && typeof valor === 'object'){
+          const narrativa = narrarElementosClinicos(valor, {maximo:10, inicioPositivo:'Presenta'});
+          if(narrativa) valores.push(narrativa.replace(/[.\s]+$/,''));
+          return;
+        }
+
+        const serializado = typeof valor === 'string' ? extraerDesdeCadenaSerializada(valor,0) : null;
+        if(serializado){
+          const narrativa = narrarElementosClinicos(serializado, {maximo:10, inicioPositivo:'Presenta'});
+          if(narrativa) valores.push(narrativa.replace(/[.\s]+$/,''));
+          return;
+        }
+
+        const limpio = limpiarValorAdministrativo(valor);
+        if(limpio) valores.push(limpio);
+      });
+      return unirListaNatural(valores);
+    }
+
+    const personales = obtener(['antecedentes_personales','antecedentes_patologicos']);
+    const quirurgicos = obtener(['antecedentes_quirurgicos']);
+    const familiares = obtener(['antecedentes_familiares']);
+    const alergias = obtener(['alergias','alergia']);
+    const medicacion = obtener(['medicacion_actual','medicamentos_actuales','tratamiento_actual']);
+
+    if(personales) partes.push('Como antecedentes personales relevantes refiere ' + personales);
+    if(quirurgicos) partes.push('Presenta antecedente quirúrgico de ' + quirurgicos);
+    if(familiares) partes.push('En los antecedentes familiares se registra ' + familiares);
+    if(alergias) partes.push('Se consignan alergias a ' + alergias);
+    if(medicacion) partes.push('Mantiene tratamiento habitual con ' + medicacion);
 
     return partes.map(cerrarOracion).join(' ');
   }
