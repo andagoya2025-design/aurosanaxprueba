@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.0 - responsive premium para iPhone y móviles
+ Versión: 1.4.1 - integración clínica segura, editable y responsive premium
  Fecha: 2026-07-18
  -----------------------------------------------------------------------
  OBJETIVO
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -55,7 +55,11 @@
     cache: {},
     cargando: false,
     inicializado: false,
-    ultimaActualizacion: ''
+    ultimaActualizacion: '',
+    modoEdicion: false,
+    cambiosPendientes: false,
+    guardadoTemporalConfirmado: false,
+    ultimaEdicionLocal: ''
   };
 
   const IDS_PANEL_CANDIDATOS = [
@@ -616,6 +620,12 @@
           <button type="button" class="auro-dx-btn" id="auroDxGenerar" title="Construye el resumen, análisis y conducta con los datos disponibles">
             <i class="bi bi-stars"></i> Generar integración clínica
           </button>
+          <button type="button" class="auro-dx-btn" id="auroDxEditar" disabled title="Habilita la revisión y edición médica de la integración">
+            <i class="bi bi-pencil-square"></i> Editar integración
+          </button>
+          <button type="button" class="auro-dx-btn" id="auroDxGuardar" disabled title="Confirma los cambios únicamente en el estado temporal de esta atención">
+            <i class="bi bi-save2"></i> Guardar temporalmente
+          </button>
           <button type="button" class="auro-dx-btn success" id="auroDxAplicarPlan" disabled title="Transfiere el protocolo seleccionado al módulo Plan">
             <i class="bi bi-check2-circle"></i> Aplicar protocolo al Plan
           </button>
@@ -642,7 +652,8 @@
           <div class="auro-dx-card">
             <div class="auro-dx-card-head">
               Integración clínica
-              <div class="auro-dx-card-help">Estos textos son editables. Por ahora permanecen temporalmente en esta sesión y no se guardan como registro independiente.</div>
+              <div class="auro-dx-card-help">La integración se genera en modo protegido. Presione “Editar integración” para revisión médica. El guardado disponible es temporal y no modifica Google Sheets.</div>
+              <div class="auro-dx-card-help" id="auroDxEdicionEstado">Sin integración generada.</div>
             </div>
             <div class="auro-dx-card-body">
               <div class="auro-dx-section">
@@ -654,7 +665,7 @@
                   </div>
                 </div>
                 <div class="auro-dx-guide">Describe de forma objetiva los datos relevantes de la consulta: motivo, antecedentes, hallazgos y diagnósticos.</div>
-                <textarea id="auroDxResumen" class="auro-dx-textarea" placeholder="Se generará a partir de los datos clínicos disponibles de esta atención."></textarea>
+                <textarea id="auroDxResumen" class="auro-dx-textarea" readonly placeholder="Se generará a partir de los datos clínicos disponibles de esta atención."></textarea>
               </div>
 
               <div class="auro-dx-section">
@@ -666,7 +677,7 @@
                   </div>
                 </div>
                 <div class="auro-dx-guide">Expresa la interpretación clínica del profesional, la coherencia diagnóstica y los aspectos que deben confirmarse.</div>
-                <textarea id="auroDxAnalisis" class="auro-dx-textarea" placeholder="Interpretación clínica editable por el profesional."></textarea>
+                <textarea id="auroDxAnalisis" class="auro-dx-textarea" readonly placeholder="Interpretación clínica editable por el profesional."></textarea>
               </div>
 
               <div class="auro-dx-section">
@@ -678,7 +689,7 @@
                   </div>
                 </div>
                 <div class="auro-dx-guide">Resume las acciones propuestas a partir del protocolo seleccionado. Debe revisarse antes de enviarla al Plan.</div>
-                <textarea id="auroDxConducta" class="auro-dx-textarea" placeholder="Conducta editable antes de transferir al Plan."></textarea>
+                <textarea id="auroDxConducta" class="auro-dx-textarea" readonly placeholder="Conducta editable antes de transferir al Plan."></textarea>
               </div>
             </div>
           </div>
@@ -784,6 +795,8 @@
     if(app.dataset.eventosInstalados !== '1'){
       app.querySelector('#auroDxActualizar')?.addEventListener('click', () => cargarAtencionActual(true));
       app.querySelector('#auroDxGenerar')?.addEventListener('click', generarIntegracion);
+      app.querySelector('#auroDxEditar')?.addEventListener('click', alternarEdicionClinica);
+      app.querySelector('#auroDxGuardar')?.addEventListener('click', guardarIntegracionTemporal);
       app.querySelector('#auroDxAplicarPlan')?.addEventListener('click', aplicarAlPlan);
       app.querySelector('#auroDxGuia')?.addEventListener('click', alternarGuia);
 
@@ -803,7 +816,13 @@
       });
 
       ['auroDxResumen','auroDxAnalisis','auroDxConducta'].forEach(id => {
-        app.querySelector('#' + id)?.addEventListener('input', guardarEstadoTemporal);
+        app.querySelector('#' + id)?.addEventListener('input', () => {
+          state.cambiosPendientes = true;
+          state.guardadoTemporalConfirmado = false;
+          state.ultimaEdicionLocal = new Date().toISOString();
+          guardarEstadoTemporal();
+          actualizarEstadoEdicion();
+        });
       });
 
       app.dataset.eventosInstalados = '1';
@@ -1089,6 +1108,9 @@
     campoModalActivo = id;
     document.getElementById('auroDxModalTitle').textContent = titulo || 'Texto clínico';
     modalTexto.value = campo.value || '';
+    modalTexto.readOnly = !state.modoEdicion;
+    const btnAplicar = document.getElementById('auroDxModalAplicar');
+    if(btnAplicar) btnAplicar.disabled = !state.modoEdicion;
     modal.classList.add('show');
     modal.setAttribute('aria-hidden','false');
     setTimeout(() => modalTexto.focus(), 30);
@@ -1103,6 +1125,10 @@
   }
 
   function aplicarCampoAmpliado(){
+    if(!state.modoEdicion){
+      mensaje('aviso','Active “Editar integración” antes de modificar el texto.');
+      return;
+    }
     if(!campoModalActivo) return cerrarCampoAmpliado();
     const origen = document.getElementById(campoModalActivo);
     const modalTexto = document.getElementById('auroDxModalTexto');
@@ -1126,111 +1152,243 @@
       : '<i class="bi bi-question-circle"></i> Activar guía';
   }
 
+  function tieneIntegracionClinica(){
+    return ['auroDxResumen','auroDxAnalisis','auroDxConducta']
+      .some(id => texto(document.getElementById(id)?.value));
+  }
+
+  function formatearFechaLocal(valor){
+    const raw = texto(valor);
+    if(!raw) return '';
+    const fecha = new Date(raw);
+    if(Number.isNaN(fecha.getTime())) return '';
+    try{
+      return fecha.toLocaleString('es-EC', {
+        year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit'
+      });
+    }catch(e){
+      return fecha.toLocaleString();
+    }
+  }
+
+  function actualizarEstadoEdicion(){
+    const hayIntegracion = tieneIntegracionClinica();
+    const btnEditar = document.getElementById('auroDxEditar');
+    const btnGuardar = document.getElementById('auroDxGuardar');
+    const estado = document.getElementById('auroDxEdicionEstado');
+
+    ['auroDxResumen','auroDxAnalisis','auroDxConducta'].forEach(id => {
+      const campo = document.getElementById(id);
+      if(campo) campo.readOnly = !state.modoEdicion;
+    });
+
+    if(btnEditar){
+      btnEditar.disabled = !hayIntegracion;
+      btnEditar.innerHTML = state.modoEdicion
+        ? '<i class="bi bi-lock"></i> Finalizar edición'
+        : '<i class="bi bi-pencil-square"></i> Editar integración';
+    }
+    if(btnGuardar) btnGuardar.disabled = !hayIntegracion || !state.cambiosPendientes;
+
+    if(!estado) return;
+    if(!hayIntegracion) estado.textContent = 'Sin integración generada.';
+    else if(state.modoEdicion && state.cambiosPendientes) estado.textContent = 'En edición · Cambios pendientes de confirmación temporal.';
+    else if(state.modoEdicion) estado.textContent = 'Edición médica habilitada.';
+    else if(state.guardadoTemporalConfirmado){
+      const fecha = formatearFechaLocal(state.ultimaEdicionLocal);
+      estado.textContent = 'Guardado temporal confirmado' + (fecha ? ' · ' + fecha : '') + '. No enviado a Google Sheets.';
+    }else if(state.cambiosPendientes) estado.textContent = 'Cambios pendientes de confirmación temporal.';
+    else estado.textContent = 'Integración generada en modo protegido.';
+  }
+
+  function alternarEdicionClinica(){
+    if(!tieneIntegracionClinica()){
+      mensaje('aviso','Primero genere la integración clínica.');
+      return;
+    }
+    state.modoEdicion = !state.modoEdicion;
+    actualizarEstadoEdicion();
+    if(state.modoEdicion){
+      document.getElementById('auroDxResumen')?.focus();
+      mensaje('aviso','Edición médica habilitada. Revise los textos y confirme con “Guardar temporalmente”.');
+    }else{
+      mensaje('ok','Edición finalizada. Los textos quedaron protegidos contra cambios accidentales.');
+    }
+  }
+
+  function guardarIntegracionTemporal(){
+    if(!state.atencionActual || !tieneIntegracionClinica()){
+      mensaje('error','No existe una integración clínica para guardar temporalmente.');
+      return;
+    }
+    state.cambiosPendientes = false;
+    state.guardadoTemporalConfirmado = true;
+    state.ultimaEdicionLocal = new Date().toISOString();
+    state.modoEdicion = false;
+    guardarEstadoTemporal();
+    actualizarEstadoEdicion();
+    mensaje('ok','Integración confirmada temporalmente para esta atención. No se modificó Google Sheets ni la base de datos.');
+  }
+
+  function claveTecnicaOAdministrativa(clave){
+    const k = normalizar(clave);
+    if(CLAVES_TECNICAS.has(k)) return true;
+    return /(^id\b|\bid$|json|timestamp|fecha creacion|fecha actualizacion|hora atencion|creado|actualizado|usuario|version|token|uuid|hash|accion|success|mensaje sistema)/.test(k);
+  }
+
+  function pareceFechaTecnica(valor){
+    const v = texto(valor);
+    if(!v) return false;
+    if(/^1899-12-3[01]t/i.test(v)) return true;
+    return /^\d{4}-\d{2}-\d{2}t\d{2}:\d{2}:\d{2}(\.\d+)?z?$/i.test(v);
+  }
+
+  function limpiarTextoClinico(valor){
+    let v = texto(valor);
+    if(!v || v === '{}' || v === '[]' || /^(null|undefined|nan)$/i.test(v)) return '';
+    if(pareceFechaTecnica(v)) return '';
+    v = v
+      .replace(/AUROSANAX_[A-Z0-9_]+_V\d+::/g,'')
+      .replace(/\s+/g,' ')
+      .replace(/\s*\|\s*/g,' · ')
+      .trim();
+    return v;
+  }
+
+  function resumenClinicoDeObjeto(obj, maximo){
+    if(!obj || typeof obj !== 'object') return [];
+    const salida = [];
+    const vistos = new Set();
+    Object.entries(obj).forEach(([clave, valor]) => {
+      if(salida.length >= (maximo || 8) || claveTecnicaOAdministrativa(clave)) return;
+      const plano = limpiarTextoClinico(valorClinicoPlano(valor, 0));
+      if(!plano) return;
+      const item = etiquetaClinica(clave) + ': ' + plano;
+      const firma = normalizar(item);
+      if(vistos.has(firma)) return;
+      vistos.add(firma);
+      salida.push(item);
+    });
+    return salida;
+  }
+
   function construirResumenClinico(){
     const a = atencionActiva() || {};
     const h = state.historia || {};
-    const ex = state.detalleExamen?.examen || {};
+    const detalle = state.detalleExamen || {};
+    const ex = detalle.examen || {};
     const principal = state.diagnosticos.find(d => d.principal) || state.diagnosticos[0];
     const secundarios = state.diagnosticos.filter(d => d !== principal);
-
     const bloques = [];
+    const firmas = new Set();
 
-    const motivo = texto(
-      a.motivo_consulta ||
-      h.motivo_consulta ||
-      getValue('hcMotivoConsulta') ||
-      getValue('hcMotivo')
-    );
-    if(motivo) bloques.push('Motivo de consulta: ' + motivo + '.');
+    function agregar(titulo, contenido){
+      const limpio = limpiarTextoClinico(contenido);
+      if(!limpio) return;
+      const frase = titulo ? titulo + ': ' + limpio : limpio;
+      const firma = normalizar(frase);
+      if(firmas.has(firma)) return;
+      firmas.add(firma);
+      bloques.push(frase.replace(/[.\s]+$/, '') + '.');
+    }
 
-    const enfermedad = texto(
-      h.enfermedad_actual ||
-      h.anamnesis ||
-      getValue('hcEnfermedadActual') ||
-      getValue('hcAnamnesis')
-    );
-    if(enfermedad) bloques.push('Enfermedad actual/anamnesis: ' + enfermedad + '.');
+    agregar('Motivo de consulta', a.motivo_consulta || h.motivo_consulta || getValue('hcMotivoConsulta') || getValue('hcMotivo'));
+    agregar('Enfermedad actual', h.enfermedad_actual || h.anamnesis || a.enfermedad_actual || getValue('hcEnfermedadActual') || getValue('hcAnamnesis'));
+
+    const antecedentes = [];
+    ['antecedentes_personales','antecedentes_patologicos','antecedentes_quirurgicos','antecedentes_familiares','alergias','medicacion_actual'].forEach(clave => {
+      const valor = limpiarTextoClinico(valorClinicoPlano(h[clave],0));
+      if(valor) antecedentes.push(etiquetaClinica(clave) + ': ' + valor);
+    });
+    if(antecedentes.length) agregar('Antecedentes relevantes', antecedentes.join('; '));
 
     const vitales = [
-      ex.presion_arterial ? 'PA ' + ex.presion_arterial : '',
-      ex.frecuencia_cardiaca ? 'FC ' + ex.frecuencia_cardiaca : '',
-      ex.temperatura ? 'T ' + ex.temperatura : '',
-      ex.saturacion ? 'SatO₂ ' + ex.saturacion : '',
-      ex.peso_kg ? 'peso ' + ex.peso_kg + ' kg' : '',
-      ex.imc ? 'IMC ' + ex.imc : ''
+      ex.presion_arterial ? 'PA ' + limpiarTextoClinico(ex.presion_arterial) : '',
+      ex.frecuencia_cardiaca ? 'FC ' + limpiarTextoClinico(ex.frecuencia_cardiaca) + ' lpm' : '',
+      ex.frecuencia_respiratoria ? 'FR ' + limpiarTextoClinico(ex.frecuencia_respiratoria) + ' rpm' : '',
+      ex.temperatura ? 'T ' + limpiarTextoClinico(ex.temperatura) + ' °C' : '',
+      ex.saturacion ? 'SatO₂ ' + limpiarTextoClinico(ex.saturacion) + '%' : '',
+      ex.peso_kg ? 'peso ' + limpiarTextoClinico(ex.peso_kg) + ' kg' : '',
+      ex.imc ? 'IMC ' + limpiarTextoClinico(ex.imc) : ''
     ].filter(Boolean);
-    if(vitales.length) bloques.push('Signos vitales: ' + vitales.join(', ') + '.');
+    if(vitales.length) agregar('Signos vitales', vitales.join(', '));
 
-    if(texto(ex.examen_fisico)){
-      bloques.push('Examen físico: ' + texto(ex.examen_fisico) + '.');
-    }
+    agregar('Examen físico', ex.examen_fisico || ex.hallazgos || ex.observaciones);
+    const sistemas = resumenClinicoDeObjeto(detalle.sistemas, 5);
+    if(sistemas.length) agregar('Revisión por sistemas relevante', sistemas.join('; '));
+    const regionales = resumenClinicoDeObjeto(detalle.regionales, 5);
+    if(regionales.length) agregar('Examen regional relevante', regionales.join('; '));
+    const gine = resumenClinicoDeObjeto(state.especialidades.ginecologia, 8);
+    if(gine.length) agregar('Hallazgos ginecológicos relevantes', gine.join('; '));
+    const obst = resumenClinicoDeObjeto(state.especialidades.obstetricia, 8);
+    if(obst.length) agregar('Hallazgos obstétricos relevantes', obst.join('; '));
+    const est = resumenClinicoDeObjeto(state.especialidades.estetica, 6);
+    if(est.length) agregar('Hallazgos estéticos/funcionales relevantes', est.join('; '));
 
-    if(principal){
-      bloques.push('Diagnóstico principal: ' + [principal.codigo_cie10, principal.descripcion, '(' + principal.tipo_diagnostico + ')'].filter(Boolean).join(' ') + '.');
-    }
-
-    if(secundarios.length){
-      bloques.push('Diagnósticos secundarios: ' + secundarios.map(d => [d.codigo_cie10,d.descripcion,'(' + d.tipo_diagnostico + ')'].filter(Boolean).join(' ')).join('; ') + '.');
-    }
-
-    const gine = resumenObjeto(state.especialidades.ginecologia, ['id_atencion','id_paciente','id_historia','id_medico','fecha_creacion','fecha_actualizacion']);
-    if(gine) bloques.push('Ginecología: ' + gine + '.');
-
-    const obst = resumenObjeto(state.especialidades.obstetricia, ['id_atencion','id_paciente','id_historia','id_medico','fecha_creacion','fecha_actualizacion']);
-    if(obst) bloques.push('Obstetricia: ' + obst + '.');
-
-    const est = resumenObjeto(state.especialidades.estetica, ['id_atencion','id_paciente','id_historia','id_medico','fecha_creacion','fecha_actualizacion']);
-    if(est) bloques.push('Estética/funcional: ' + est + '.');
-
+    if(principal) agregar('Diagnóstico principal', [principal.codigo_cie10, principal.descripcion, principal.tipo_diagnostico ? '(' + principal.tipo_diagnostico + ')' : ''].filter(Boolean).join(' '));
+    if(secundarios.length) agregar('Diagnósticos asociados', secundarios.map(d => [d.codigo_cie10,d.descripcion,d.tipo_diagnostico ? '(' + d.tipo_diagnostico + ')' : ''].filter(Boolean).join(' ')).join('; '));
     return bloques.join('\n');
   }
 
   function construirAnalisis(){
     const principal = state.diagnosticos.find(d => d.principal) || state.diagnosticos[0];
     const secundarios = state.diagnosticos.filter(d => d !== principal);
+    const a = atencionActiva() || {};
+    const h = state.historia || {};
+    const ex = state.detalleExamen?.examen || {};
     const lineas = [];
+    const motivo = limpiarTextoClinico(a.motivo_consulta || h.motivo_consulta || getValue('hcMotivoConsulta') || getValue('hcMotivo'));
+    const enfermedad = limpiarTextoClinico(h.enfermedad_actual || h.anamnesis || getValue('hcEnfermedadActual') || getValue('hcAnamnesis'));
+    const hallazgo = limpiarTextoClinico(ex.examen_fisico || ex.hallazgos || ex.observaciones);
 
     if(principal){
-      lineas.push(
-        'Impresión diagnóstica principal: ' +
-        [principal.codigo_cie10, principal.descripcion].filter(Boolean).join(' - ') +
-        '. Clasificación registrada: ' + (principal.tipo_diagnostico || 'Presuntivo') + '.'
-      );
+      const dx = [principal.codigo_cie10, principal.descripcion].filter(Boolean).join(' - ');
+      lineas.push('La impresión clínica principal corresponde a ' + dx + ', registrada como ' + (principal.tipo_diagnostico || 'presuntiva').toLowerCase() + '.');
     }
+    const correlaciones = [];
+    if(motivo) correlaciones.push('motivo de consulta');
+    if(enfermedad) correlaciones.push('evolución clínica referida');
+    if(hallazgo) correlaciones.push('hallazgos del examen físico');
+    if(correlaciones.length && principal) lineas.push('El diagnóstico debe correlacionarse con ' + correlaciones.join(', ') + ' y con los antecedentes relevantes registrados en esta atención.');
+    if(secundarios.length) lineas.push('Se identifican diagnósticos asociados que pueden modificar el enfoque clínico: ' + secundarios.map(d => [d.codigo_cie10,d.descripcion].filter(Boolean).join(' - ')).join('; ') + '.');
 
-    if(secundarios.length){
-      lineas.push(
-        'Diagnósticos asociados: ' +
-        secundarios.map(d => [d.codigo_cie10,d.descripcion].filter(Boolean).join(' - ')).join('; ') + '.'
-      );
-    }
-
-    if(state.detalleExamen?.examen?.examen_fisico){
-      lineas.push('Los hallazgos del examen físico deben correlacionarse con la anamnesis, antecedentes y estudios complementarios disponibles.');
-    }
-
-    if(state.protocolos.length){
-      lineas.push('Existen ' + state.protocolos.length + ' protocolo(s) clínico(s) activo(s) disponible(s) para revisión.');
-    }else{
-      lineas.push('No se encontró un protocolo activo específico; la conducta deberá individualizarse según valoración clínica.');
-    }
-
-    lineas.push('Confirmar coherencia diagnóstica, severidad, diagnósticos diferenciales, comorbilidades, alergias, embarazo/lactancia, interacciones y signos de alarma antes de definir conducta.');
-
+    const faltantes = [];
+    if(!motivo) faltantes.push('motivo de consulta');
+    if(!enfermedad) faltantes.push('descripción de la enfermedad actual');
+    if(!hallazgo) faltantes.push('hallazgos del examen físico');
+    if(!state.historia) faltantes.push('historia clínica vinculada');
+    if(faltantes.length) lineas.push('Antes de cerrar la impresión clínica conviene completar o verificar: ' + faltantes.join(', ') + '.');
+    if(state.protocolos.length) lineas.push('Se encontraron ' + state.protocolos.length + ' protocolo(s) de apoyo relacionado(s) con los diagnósticos registrados; su contenido requiere validación e individualización médica.');
+    else lineas.push('No existe un protocolo activo específico disponible; la conducta debe individualizarse según el contexto clínico y los resultados complementarios.');
+    lineas.push('Verificar diagnósticos diferenciales, gravedad, comorbilidades, alergias, embarazo o lactancia, función renal/hepática, interacciones y signos de alarma antes de definir el plan definitivo.');
     return lineas.join('\n');
   }
 
   function construirConducta(){
     const p = state.protocoloSeleccionado !== null ? state.protocolos[state.protocoloSeleccionado] : null;
     if(!p){
-      return 'Definir conducta individualizada según valoración clínica, evolución, resultados de estudios y criterio del profesional tratante.';
+      return [
+        'Estudios: definir exámenes complementarios según hallazgos clínicos y diagnósticos diferenciales.',
+        'Tratamiento: individualizar de acuerdo con diagnóstico confirmado, antecedentes, alergias y contraindicaciones.',
+        'Educación: explicar evolución esperada, adherencia y medidas generales pertinentes.',
+        'Seguimiento: establecer control según respuesta clínica y resultados.',
+        'Signos de alarma: indicar consulta inmediata ante deterioro clínico o síntomas de alarma relacionados con el cuadro.'
+      ].join('\n');
     }
-
     const partes = [];
-    if(p.conducta) partes.push(p.conducta);
-    if(p.indicaciones.length) partes.push('Indicaciones: ' + p.indicaciones.join('; ') + '.');
-    if(p.controles.length) partes.push('Control/seguimiento: ' + p.controles.join('; ') + '.');
-    if(p.alertas.length) partes.push('Alertas a considerar: ' + p.alertas.join('; ') + '.');
+    const estudios = [...(p.ordenes || []), ...(p.imagenes || []), ...(p.procedimientos || [])].map(limpiarTextoClinico).filter(Boolean);
+    const tratamiento = (p.medicamentos || []).map(limpiarTextoClinico).filter(Boolean);
+    const indicaciones = (p.indicaciones || []).map(limpiarTextoClinico).filter(Boolean);
+    const controles = (p.controles || []).map(limpiarTextoClinico).filter(Boolean);
+    const alertas = (p.alertas || []).map(limpiarTextoClinico).filter(Boolean);
+    if(limpiarTextoClinico(p.conducta)) partes.push('Conducta general: ' + limpiarTextoClinico(p.conducta) + '.');
+    if(estudios.length) partes.push('Estudios/procedimientos sugeridos: ' + estudios.join('; ') + '.');
+    if(tratamiento.length) partes.push('Tratamiento propuesto para revisión: ' + tratamiento.join('; ') + '.');
+    if(indicaciones.length) partes.push('Educación e indicaciones: ' + indicaciones.join('; ') + '.');
+    if(controles.length) partes.push('Seguimiento: ' + controles.join('; ') + '.');
+    if(alertas.length) partes.push('Signos de alarma/precauciones: ' + alertas.join('; ') + '.');
+    partes.push('Validar toda la conducta con criterio médico antes de transferirla al Plan.');
     return partes.join('\n');
   }
 
@@ -1272,8 +1430,13 @@
     if(a) a.value = state.analisisClinico;
     if(c) c.value = state.conducta;
 
+    state.modoEdicion = false;
+    state.cambiosPendientes = true;
+    state.guardadoTemporalConfirmado = false;
+    state.ultimaEdicionLocal = new Date().toISOString();
     guardarEstadoTemporal();
-    mensaje('ok','Integración clínica generada. Revise o edite los textos antes de aplicar el protocolo al Plan.');
+    actualizarEstadoEdicion();
+    mensaje('ok','Integración clínica generada en modo protegido. Presione “Editar integración” para revisión médica.');
   }
 
   async function consultarDetalleExamen(idAtencion){
@@ -1369,7 +1532,11 @@
       analisisClinico: state.analisisClinico,
       conducta: state.conducta,
       protocoloSeleccionado: state.protocoloSeleccionado,
-      ultimaActualizacion: new Date().toISOString()
+      ultimaActualizacion: new Date().toISOString(),
+      modoEdicion: state.modoEdicion,
+      cambiosPendientes: state.cambiosPendientes,
+      guardadoTemporalConfirmado: state.guardadoTemporalConfirmado,
+      ultimaEdicionLocal: state.ultimaEdicionLocal
     };
   }
 
@@ -1381,6 +1548,10 @@
     state.analisisClinico = texto(cache.analisisClinico);
     state.conducta = texto(cache.conducta);
     state.protocoloSeleccionado = Number.isInteger(cache.protocoloSeleccionado) ? cache.protocoloSeleccionado : null;
+    state.modoEdicion = cache.modoEdicion === true;
+    state.cambiosPendientes = cache.cambiosPendientes === true;
+    state.guardadoTemporalConfirmado = cache.guardadoTemporalConfirmado === true;
+    state.ultimaEdicionLocal = texto(cache.ultimaEdicionLocal || cache.ultimaActualizacion);
 
     const r = document.getElementById('auroDxResumen');
     const a = document.getElementById('auroDxAnalisis');
@@ -1388,6 +1559,7 @@
     if(r) r.value = state.resumenClinico;
     if(a) a.value = state.analisisClinico;
     if(c) c.value = state.conducta;
+    actualizarEstadoEdicion();
   }
 
   function limpiarVisual(){
@@ -1400,6 +1572,10 @@
     state.resumenClinico = '';
     state.analisisClinico = '';
     state.conducta = '';
+    state.modoEdicion = false;
+    state.cambiosPendientes = false;
+    state.guardadoTemporalConfirmado = false;
+    state.ultimaEdicionLocal = '';
 
     ['auroDxResumen','auroDxAnalisis','auroDxConducta'].forEach(id => {
       const el = document.getElementById(id);
@@ -1411,6 +1587,7 @@
     renderFuentes();
     const btn = document.getElementById('auroDxAplicarPlan');
     if(btn) btn.disabled = true;
+    actualizarEstadoEdicion();
   }
 
   async function cargarAtencion(idAtencion, forzar){
@@ -1481,6 +1658,7 @@
       renderProtocolos();
       renderFuentes();
       restaurarEstadoTemporal(idAtencion);
+      actualizarEstadoEdicion();
 
       state.ultimaActualizacion = new Date().toISOString();
       const atencion = atencionActiva() || {};
@@ -1584,6 +1762,10 @@
   }
 
   function aplicarAlPlan(){
+    if(state.cambiosPendientes){
+      const continuarPendiente = window.confirm('La integración tiene cambios pendientes de confirmación temporal.\n\nPuede aplicarlos al Plan, pero se recomienda guardarlos temporalmente primero.\n\n¿Desea continuar?');
+      if(!continuarPendiente) return;
+    }
     const p = state.protocoloSeleccionado !== null ? state.protocolos[state.protocoloSeleccionado] : null;
     if(!p){
       mensaje('error','Seleccione un protocolo antes de aplicarlo al Plan.');
@@ -1732,6 +1914,8 @@
     cambiarPorAtencion,
     actualizar: () => cargarAtencionActual(true),
     generarIntegracion,
+    alternarEdicionClinica,
+    guardarIntegracionTemporal,
     aplicarAlPlan,
     limpiar: limpiarVisual,
     obtenerDiagnosticos: () => clonar(state.diagnosticos, []),
