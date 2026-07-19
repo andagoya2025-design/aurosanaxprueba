@@ -2,8 +2,8 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.2 - corrección puntual de limpieza del resumen clínico
- Fecha: 2026-07-18
+ Versión: 1.5.0 FASE 1 - motor universal de redacción clínica premium
+ Fecha: 2026-07-19
  -----------------------------------------------------------------------
  OBJETIVO
  - Leer los diagnósticos ya registrados desde Examen Físico.
@@ -20,6 +20,8 @@
  - NO aplica protocolos automáticamente.
  - Si falta un módulo, continúa funcionando con degradación segura.
  - Cada atención conserva su estado independiente.
+ - FASE 1: mejora exclusiva de redacción, interpretación y agrupación clínica.
+ - La adaptación avanzada por especialidad y el conector IA quedan para FASE 2.
 ************************************************************************/
 
 (function(){
@@ -39,7 +41,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.2';
+  const VERSION = '1.5.0-fase1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1317,21 +1319,301 @@
     return v;
   }
 
-  function resumenClinicoDeObjeto(obj, maximo){
-    if(!obj || typeof obj !== 'object') return [];
+  /*
+    MOTOR CLÍNICO UNIVERSAL – FASE 1
+    --------------------------------
+    Convierte objetos heterogéneos de los distintos módulos en narrativa
+    clínica legible. Opera únicamente sobre copias para presentación y no
+    modifica la estructura, persistencia ni sincronización del ERP.
+  */
+
+  const DICCIONARIO_CLINICO = {
+    leucorrea: 'leucorrea',
+    flujo_vaginal: 'flujo vaginal',
+    secrecion_vaginal: 'secreción vaginal',
+    prurito: 'prurito',
+    prurito_vulvar: 'prurito vulvar',
+    prurito_vaginal: 'prurito vaginal',
+    ardor: 'sensación de ardor',
+    ardor_vaginal: 'ardor vaginal',
+    disuria: 'disuria',
+    polaquiuria: 'polaquiuria',
+    urgencia_miccional: 'urgencia miccional',
+    dolor_pelvico: 'dolor pélvico',
+    dolor_abdominal: 'dolor abdominal',
+    dispareunia: 'dispareunia',
+    sangrado: 'sangrado',
+    sangrado_vaginal: 'sangrado vaginal',
+    fiebre: 'fiebre',
+    nauseas: 'náuseas',
+    vomitos: 'vómitos',
+    cefalea: 'cefalea',
+    mareo: 'mareo',
+    edema: 'edema',
+    tos: 'tos',
+    disnea: 'disnea',
+    dolor_toracico: 'dolor torácico',
+    palpitaciones: 'palpitaciones',
+    estreñimiento: 'estreñimiento',
+    diarrea: 'diarrea',
+    alergias: 'alergias conocidas',
+    alergia: 'alergias conocidas',
+    antecedente_htA: 'hipertensión arterial',
+    hipertension: 'hipertensión arterial',
+    diabetes: 'diabetes mellitus'
+  };
+
+  function claveClinicaLegible(clave){
+    const k = normalizar(clave).replace(/\s+/g,'_');
+    if(DICCIONARIO_CLINICO[k]) return DICCIONARIO_CLINICO[k];
+    return texto(clave)
+      .replace(/_/g,' ')
+      .replace(/\bhta\b/gi,'hipertensión arterial')
+      .replace(/\bdm\b/gi,'diabetes mellitus')
+      .replace(/\bfur\b/gi,'fecha de última menstruación')
+      .replace(/\bfpp\b/gi,'fecha probable de parto')
+      .replace(/\bfcf\b/gi,'frecuencia cardíaca fetal')
+      .replace(/\bimc\b/gi,'índice de masa corporal')
+      .toLowerCase()
+      .trim();
+  }
+
+  function esAfirmativoClinico(valor){
+    if(valor === true || valor === 1) return true;
+    const v = normalizar(valor);
+    return ['si','sí','true','positivo','positiva','presente','presenta','activo','activa','1','x'].includes(v);
+  }
+
+  function esNegativoClinico(valor){
+    if(valor === false || valor === 0) return true;
+    const v = normalizar(valor);
+    return ['no','false','negativo','negativa','ausente','niega','0'].includes(v);
+  }
+
+  function esValorVacioClinico(valor){
+    if(valor === null || valor === undefined) return true;
+    if(Array.isArray(valor)) return valor.length === 0;
+    if(typeof valor === 'object') return Object.keys(valor).length === 0;
+    const v = normalizar(valor);
+    return !v || ['null','undefined','nan','no aplica','n/a','sin dato','no registrado'].includes(v);
+  }
+
+  function singularizarEtiquetaClinica(valor){
+    return texto(valor)
+      .replace(/^antecedentes?\s+/i,'')
+      .replace(/^presencia de\s+/i,'')
+      .replace(/^tiene\s+/i,'')
+      .trim();
+  }
+
+  function unirListaNatural(items){
+    const lista = [...new Set((items || []).map(texto).filter(Boolean))];
+    if(!lista.length) return '';
+    if(lista.length === 1) return lista[0];
+    if(lista.length === 2) return lista[0] + ' y ' + lista[1];
+    return lista.slice(0,-1).join(', ') + ' y ' + lista[lista.length - 1];
+  }
+
+  function cerrarOracion(valor){
+    const v = texto(valor).replace(/\s+/g,' ').trim();
+    if(!v) return '';
+    return /[.!?]$/.test(v) ? v : v + '.';
+  }
+
+  function limpiarPuntuacionClinica(valor){
+    return texto(valor)
+      .replace(/\s+/g,' ')
+      .replace(/\s+([,.;:])/g,'$1')
+      .replace(/([,;:])([^\s])/g,'$1 $2')
+      .replace(/\.{2,}/g,'.')
+      .trim();
+  }
+
+  function extraerElementosClinicos(obj, maximo, profundidad){
+    profundidad = profundidad || 0;
+    if(!obj || typeof obj !== 'object' || profundidad > 5) return [];
+
     const salida = [];
-    const vistos = new Set();
+    const limite = maximo || 12;
+
     Object.entries(obj).forEach(([clave, valor]) => {
-      if(salida.length >= (maximo || 8) || claveTecnicaOAdministrativa(clave)) return;
-      const plano = limpiarTextoClinico(valorClinicoPlano(valor, 0));
-      if(!plano) return;
-      const item = etiquetaClinica(clave) + ': ' + plano;
-      const firma = normalizar(item);
-      if(vistos.has(firma)) return;
-      vistos.add(firma);
-      salida.push(item);
+      if(salida.length >= limite || claveTecnicaOAdministrativa(clave) || esValorVacioClinico(valor)) return;
+
+      const etiqueta = singularizarEtiquetaClinica(claveClinicaLegible(clave));
+
+      if(esAfirmativoClinico(valor)){
+        salida.push({tipo:'positivo', etiqueta, valor:'', clave});
+        return;
+      }
+
+      if(esNegativoClinico(valor)){
+        salida.push({tipo:'negativo', etiqueta, valor:'', clave});
+        return;
+      }
+
+      if(Array.isArray(valor)){
+        const lista = valor
+          .map(item => typeof item === 'object'
+            ? limpiarTextoClinico(valorClinicoPlano(item, profundidad + 1))
+            : limpiarTextoClinico(item))
+          .filter(Boolean);
+        if(lista.length){
+          salida.push({tipo:'dato', etiqueta, valor:unirListaNatural(lista), clave});
+        }
+        return;
+      }
+
+      if(typeof valor === 'object'){
+        const hijos = extraerElementosClinicos(valor, limite - salida.length, profundidad + 1);
+        if(hijos.length){
+          hijos.forEach(hijo => salida.push(hijo));
+        }
+        return;
+      }
+
+      const plano = limpiarTextoClinico(valor);
+      if(plano){
+        salida.push({tipo:'dato', etiqueta, valor:plano, clave});
+      }
     });
-    return salida;
+
+    return salida.slice(0, limite);
+  }
+
+  function narrarElementosClinicos(obj, opciones){
+    opciones = opciones || {};
+    const elementos = extraerElementosClinicos(obj, opciones.maximo || 12, 0);
+    if(!elementos.length) return '';
+
+    const positivos = elementos.filter(x => x.tipo === 'positivo').map(x => x.etiqueta);
+    const negativos = elementos.filter(x => x.tipo === 'negativo').map(x => x.etiqueta);
+    const datos = elementos.filter(x => x.tipo === 'dato');
+
+    const frases = [];
+
+    if(positivos.length){
+      const inicio = opciones.inicioPositivo || 'Se documenta';
+      frases.push(inicio + ' ' + unirListaNatural(positivos));
+    }
+
+    if(negativos.length){
+      const negacion = 'sin ' + unirListaNatural(negativos);
+      if(frases.length){
+        frases[frases.length - 1] += ', ' + negacion;
+      }else{
+        frases.push('No se documenta ' + unirListaNatural(negativos));
+      }
+    }
+
+    datos.forEach(item => {
+      const etiqueta = item.etiqueta;
+      const valor = item.valor;
+      if(!etiqueta || !valor) return;
+
+      const k = normalizar(item.clave);
+      if(/tiempo|evolucion|duracion/.test(k)){
+        frases.push('El cuadro presenta una evolución de ' + valor);
+      }else if(/tratamiento|medicacion|farmaco/.test(k)){
+        frases.push('Se encuentra en tratamiento con ' + valor);
+      }else if(/fecha de ultima menstruacion|fur/.test(normalizar(etiqueta))){
+        frases.push('La fecha de última menstruación registrada es ' + valor);
+      }else if(/edad gestacional/.test(normalizar(etiqueta))){
+        frases.push('La edad gestacional corresponde a ' + valor);
+      }else{
+        frases.push('Se registra ' + etiqueta + ' de ' + valor);
+      }
+    });
+
+    return frases.map(cerrarOracion).join(' ');
+  }
+
+  function narrarAntecedentes(historia){
+    historia = historia || {};
+    const grupos = [
+      ['antecedentes_personales','antecedentes_patologicos'],
+      ['antecedentes_quirurgicos'],
+      ['antecedentes_familiares'],
+      ['alergias','alergia'],
+      ['medicacion_actual','medicamentos_actuales','tratamiento_actual']
+    ];
+
+    const partes = [];
+
+    grupos.forEach((claves, indice) => {
+      const valores = [];
+      claves.forEach(clave => {
+        const valor = limpiarTextoClinico(valorClinicoPlano(historia[clave],0));
+        if(valor) valores.push(valor);
+      });
+      const unido = unirListaNatural(valores);
+      if(!unido) return;
+
+      if(indice === 0) partes.push('Como antecedentes personales relevantes refiere ' + unido);
+      if(indice === 1) partes.push('Presenta antecedente quirúrgico de ' + unido);
+      if(indice === 2) partes.push('En los antecedentes familiares se registra ' + unido);
+      if(indice === 3) partes.push('Se consignan alergias a ' + unido);
+      if(indice === 4) partes.push('Mantiene tratamiento habitual con ' + unido);
+    });
+
+    return partes.map(cerrarOracion).join(' ');
+  }
+
+  function narrarSignosVitales(ex){
+    ex = ex || {};
+    const datos = [];
+
+    const pa = limpiarTextoClinico(ex.presion_arterial || ex.tension_arterial);
+    const fc = limpiarTextoClinico(ex.frecuencia_cardiaca || ex.pulso);
+    const fr = limpiarTextoClinico(ex.frecuencia_respiratoria);
+    const temp = limpiarTextoClinico(ex.temperatura);
+    const sat = limpiarTextoClinico(ex.saturacion || ex.saturacion_oxigeno);
+    const peso = limpiarTextoClinico(ex.peso_kg || ex.peso);
+    const talla = limpiarTextoClinico(ex.talla_cm || ex.talla);
+    const imc = limpiarTextoClinico(ex.imc);
+
+    if(pa) datos.push('presión arterial de ' + pa);
+    if(fc) datos.push('frecuencia cardíaca de ' + fc + ' lpm');
+    if(fr) datos.push('frecuencia respiratoria de ' + fr + ' rpm');
+    if(temp) datos.push('temperatura de ' + temp + ' °C');
+    if(sat) datos.push('saturación de oxígeno de ' + sat + '%');
+    if(peso) datos.push('peso de ' + peso + ' kg');
+    if(talla) datos.push('talla de ' + talla + (/\bcm\b/i.test(talla) ? '' : ' cm'));
+    if(imc) datos.push('índice de masa corporal de ' + imc);
+
+    if(!datos.length) return '';
+    return cerrarOracion('En la valoración se registran ' + unirListaNatural(datos));
+  }
+
+  function narrarDiagnosticos(){
+    const principal = state.diagnosticos.find(d => d.principal) || state.diagnosticos[0];
+    const secundarios = state.diagnosticos.filter(d => d !== principal);
+    const partes = [];
+
+    if(principal){
+      const nombre = [principal.codigo_cie10, principal.descripcion].filter(Boolean).join(' - ');
+      partes.push(
+        'Como diagnóstico principal se registra ' + nombre +
+        (principal.tipo_diagnostico ? ', de carácter ' + principal.tipo_diagnostico.toLowerCase() : '')
+      );
+    }
+
+    if(secundarios.length){
+      partes.push(
+        'Se asocian ' +
+        unirListaNatural(secundarios.map(d => [d.codigo_cie10,d.descripcion].filter(Boolean).join(' - ')))
+      );
+    }
+
+    return partes.map(cerrarOracion).join(' ');
+  }
+
+  function resumenClinicoDeObjeto(obj, maximo){
+    /*
+      Se conserva la firma pública por compatibilidad interna, pero ahora
+      devuelve frases clínicas y no listas "Campo: valor".
+    */
+    const narrativa = narrarElementosClinicos(obj, {maximo:maximo || 8});
+    return narrativa ? [narrativa] : [];
   }
 
   function construirResumenClinico(){
@@ -1339,57 +1621,82 @@
     const h = state.historia || {};
     const detalle = state.detalleExamen || {};
     const ex = detalle.examen || {};
-    const principal = state.diagnosticos.find(d => d.principal) || state.diagnosticos[0];
-    const secundarios = state.diagnosticos.filter(d => d !== principal);
-    const bloques = [];
-    const firmas = new Set();
+    const parrafos = [];
+    const vistos = new Set();
 
-    function agregar(titulo, contenido){
-      const limpio = limpiarTextoClinico(contenido);
+    function agregar(contenido){
+      const limpio = limpiarPuntuacionClinica(contenido);
       if(!limpio) return;
-      const frase = titulo ? titulo + ': ' + limpio : limpio;
-      const firma = normalizar(frase);
-      if(firmas.has(firma)) return;
-      firmas.add(firma);
-      bloques.push(frase.replace(/[.\s]+$/, '') + '.');
+      const firma = normalizar(limpio);
+      if(!firma || vistos.has(firma)) return;
+      vistos.add(firma);
+      parrafos.push(cerrarOracion(limpio));
     }
 
-    agregar('Motivo de consulta', a.motivo_consulta || h.motivo_consulta || getValue('hcMotivoConsulta') || getValue('hcMotivo'));
-    agregar('Enfermedad actual', h.enfermedad_actual || h.anamnesis || a.enfermedad_actual || getValue('hcEnfermedadActual') || getValue('hcAnamnesis'));
+    const motivo = limpiarTextoClinico(
+      a.motivo_consulta ||
+      h.motivo_consulta ||
+      getValue('hcMotivoConsulta') ||
+      getValue('hcMotivo')
+    );
 
-    const antecedentes = [];
-    ['antecedentes_personales','antecedentes_patologicos','antecedentes_quirurgicos','antecedentes_familiares','alergias','medicacion_actual'].forEach(clave => {
-      const valor = limpiarTextoClinico(valorClinicoPlano(h[clave],0));
-      if(valor) antecedentes.push(etiquetaClinica(clave) + ': ' + valor);
+    const enfermedad = limpiarTextoClinico(
+      h.enfermedad_actual ||
+      h.anamnesis ||
+      a.enfermedad_actual ||
+      getValue('hcEnfermedadActual') ||
+      getValue('hcAnamnesis')
+    );
+
+    if(motivo && enfermedad){
+      agregar('Consulta por ' + motivo.replace(/[.\s]+$/,'') + '. En la anamnesis se describe ' + enfermedad);
+    }else if(motivo){
+      agregar('Consulta por ' + motivo);
+    }else if(enfermedad){
+      agregar('En la anamnesis se describe ' + enfermedad);
+    }
+
+    agregar(narrarAntecedentes(h));
+    agregar(narrarSignosVitales(ex));
+
+    const examenDirecto = limpiarTextoClinico(ex.examen_fisico || ex.hallazgos || ex.observaciones);
+    if(examenDirecto){
+      agregar('Al examen físico se documenta ' + examenDirecto);
+    }
+
+    const sistemas = narrarElementosClinicos(detalle.sistemas, {
+      maximo:10,
+      inicioPositivo:'En la revisión por sistemas se identifica'
     });
-    if(antecedentes.length) agregar('Antecedentes relevantes', antecedentes.join('; '));
+    if(sistemas) agregar(sistemas);
 
-    const vitales = [
-      ex.presion_arterial ? 'PA ' + limpiarTextoClinico(ex.presion_arterial) : '',
-      ex.frecuencia_cardiaca ? 'FC ' + limpiarTextoClinico(ex.frecuencia_cardiaca) + ' lpm' : '',
-      ex.frecuencia_respiratoria ? 'FR ' + limpiarTextoClinico(ex.frecuencia_respiratoria) + ' rpm' : '',
-      ex.temperatura ? 'T ' + limpiarTextoClinico(ex.temperatura) + ' °C' : '',
-      ex.saturacion ? 'SatO₂ ' + limpiarTextoClinico(ex.saturacion) + '%' : '',
-      ex.peso_kg ? 'peso ' + limpiarTextoClinico(ex.peso_kg) + ' kg' : '',
-      ex.imc ? 'IMC ' + limpiarTextoClinico(ex.imc) : ''
-    ].filter(Boolean);
-    if(vitales.length) agregar('Signos vitales', vitales.join(', '));
+    const regionales = narrarElementosClinicos(detalle.regionales, {
+      maximo:10,
+      inicioPositivo:'En el examen regional se evidencia'
+    });
+    if(regionales) agregar(regionales);
 
-    agregar('Examen físico', ex.examen_fisico || ex.hallazgos || ex.observaciones);
-    const sistemas = resumenClinicoDeObjeto(detalle.sistemas, 5);
-    if(sistemas.length) agregar('Revisión por sistemas relevante', sistemas.join('; '));
-    const regionales = resumenClinicoDeObjeto(detalle.regionales, 5);
-    if(regionales.length) agregar('Examen regional relevante', regionales.join('; '));
-    const gine = resumenClinicoDeObjeto(state.especialidades.ginecologia, 8);
-    if(gine.length) agregar('Hallazgos ginecológicos relevantes', gine.join('; '));
-    const obst = resumenClinicoDeObjeto(state.especialidades.obstetricia, 8);
-    if(obst.length) agregar('Hallazgos obstétricos relevantes', obst.join('; '));
-    const est = resumenClinicoDeObjeto(state.especialidades.estetica, 6);
-    if(est.length) agregar('Hallazgos estéticos/funcionales relevantes', est.join('; '));
+    const gine = narrarElementosClinicos(state.especialidades.ginecologia, {
+      maximo:14,
+      inicioPositivo:'En la valoración ginecológica se documenta'
+    });
+    if(gine) agregar(gine);
 
-    if(principal) agregar('Diagnóstico principal', [principal.codigo_cie10, principal.descripcion, principal.tipo_diagnostico ? '(' + principal.tipo_diagnostico + ')' : ''].filter(Boolean).join(' '));
-    if(secundarios.length) agregar('Diagnósticos asociados', secundarios.map(d => [d.codigo_cie10,d.descripcion,d.tipo_diagnostico ? '(' + d.tipo_diagnostico + ')' : ''].filter(Boolean).join(' ')).join('; '));
-    return bloques.join('\n');
+    const obst = narrarElementosClinicos(state.especialidades.obstetricia, {
+      maximo:14,
+      inicioPositivo:'En la valoración obstétrica se registra'
+    });
+    if(obst) agregar(obst);
+
+    const est = narrarElementosClinicos(state.especialidades.estetica, {
+      maximo:10,
+      inicioPositivo:'En la valoración estética y funcional se observa'
+    });
+    if(est) agregar(est);
+
+    agregar(narrarDiagnosticos());
+
+    return parrafos.join('\n\n');
   }
 
   function construirAnalisis(){
@@ -1398,32 +1705,82 @@
     const a = atencionActiva() || {};
     const h = state.historia || {};
     const ex = state.detalleExamen?.examen || {};
-    const lineas = [];
-    const motivo = limpiarTextoClinico(a.motivo_consulta || h.motivo_consulta || getValue('hcMotivoConsulta') || getValue('hcMotivo'));
-    const enfermedad = limpiarTextoClinico(h.enfermedad_actual || h.anamnesis || getValue('hcEnfermedadActual') || getValue('hcAnamnesis'));
+
+    const motivo = limpiarTextoClinico(
+      a.motivo_consulta ||
+      h.motivo_consulta ||
+      getValue('hcMotivoConsulta') ||
+      getValue('hcMotivo')
+    );
+
+    const enfermedad = limpiarTextoClinico(
+      h.enfermedad_actual ||
+      h.anamnesis ||
+      getValue('hcEnfermedadActual') ||
+      getValue('hcAnamnesis')
+    );
+
     const hallazgo = limpiarTextoClinico(ex.examen_fisico || ex.hallazgos || ex.observaciones);
+    const parrafos = [];
 
     if(principal){
       const dx = [principal.codigo_cie10, principal.descripcion].filter(Boolean).join(' - ');
-      lineas.push('La impresión clínica principal corresponde a ' + dx + ', registrada como ' + (principal.tipo_diagnostico || 'presuntiva').toLowerCase() + '.');
+      const tipo = normalizar(principal.tipo_diagnostico || 'presuntivo');
+
+      let frase = 'La integración de la información disponible orienta principalmente a ' + dx;
+      if(tipo) frase += ', registrado como diagnóstico ' + tipo;
+      frase += '.';
+
+      const bases = [];
+      if(motivo) bases.push('el motivo de consulta');
+      if(enfermedad) bases.push('la evolución clínica referida');
+      if(hallazgo) bases.push('los hallazgos del examen físico');
+
+      if(bases.length){
+        frase += ' Esta impresión debe correlacionarse con ' + unirListaNatural(bases) + '.';
+      }
+
+      parrafos.push(frase);
     }
-    const correlaciones = [];
-    if(motivo) correlaciones.push('motivo de consulta');
-    if(enfermedad) correlaciones.push('evolución clínica referida');
-    if(hallazgo) correlaciones.push('hallazgos del examen físico');
-    if(correlaciones.length && principal) lineas.push('El diagnóstico debe correlacionarse con ' + correlaciones.join(', ') + ' y con los antecedentes relevantes registrados en esta atención.');
-    if(secundarios.length) lineas.push('Se identifican diagnósticos asociados que pueden modificar el enfoque clínico: ' + secundarios.map(d => [d.codigo_cie10,d.descripcion].filter(Boolean).join(' - ')).join('; ') + '.');
+
+    if(secundarios.length){
+      parrafos.push(
+        'Los diagnósticos asociados —' +
+        secundarios.map(d => [d.codigo_cie10,d.descripcion].filter(Boolean).join(' - ')).join('; ') +
+        '— deben considerarse al individualizar el abordaje y el seguimiento.'
+      );
+    }
 
     const faltantes = [];
     if(!motivo) faltantes.push('motivo de consulta');
-    if(!enfermedad) faltantes.push('descripción de la enfermedad actual');
+    if(!enfermedad) faltantes.push('enfermedad actual');
     if(!hallazgo) faltantes.push('hallazgos del examen físico');
     if(!state.historia) faltantes.push('historia clínica vinculada');
-    if(faltantes.length) lineas.push('Antes de cerrar la impresión clínica conviene completar o verificar: ' + faltantes.join(', ') + '.');
-    if(state.protocolos.length) lineas.push('Se encontraron ' + state.protocolos.length + ' protocolo(s) de apoyo relacionado(s) con los diagnósticos registrados; su contenido requiere validación e individualización médica.');
-    else lineas.push('No existe un protocolo activo específico disponible; la conducta debe individualizarse según el contexto clínico y los resultados complementarios.');
-    lineas.push('Verificar diagnósticos diferenciales, gravedad, comorbilidades, alergias, embarazo o lactancia, función renal/hepática, interacciones y signos de alarma antes de definir el plan definitivo.');
-    return lineas.join('\n');
+
+    if(faltantes.length){
+      parrafos.push(
+        'La interpretación se encuentra limitada por información pendiente o no disponible en ' +
+        unirListaNatural(faltantes) +
+        '; conviene verificarla antes de cerrar la impresión clínica.'
+      );
+    }
+
+    if(state.protocolos.length){
+      parrafos.push(
+        'Se dispone de ' + state.protocolos.length +
+        ' protocolo(s) de apoyo relacionado(s) con los diagnósticos registrados. Su contenido es orientativo y requiere validación e individualización médica.'
+      );
+    }else{
+      parrafos.push(
+        'No se encontró un protocolo activo específico para esta atención; la conducta deberá definirse según el contexto clínico, los diagnósticos diferenciales y los resultados complementarios.'
+      );
+    }
+
+    parrafos.push(
+      'Antes de establecer el plan definitivo deben verificarse gravedad, comorbilidades, alergias, embarazo o lactancia cuando corresponda, función renal y hepática, interacciones farmacológicas y signos de alarma.'
+    );
+
+    return parrafos.map(cerrarOracion).join('\n\n');
   }
 
   function construirConducta(){
