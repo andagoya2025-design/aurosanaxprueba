@@ -4557,6 +4557,70 @@ function auroHistoriaRegistrarActualizacionVisual(fechaHora){
 }
 
 
+/* =====================================================
+   AUROSANAX - Médico real de la historia clínica
+   Prioridad segura:
+   1. Médico de la atención activa.
+   2. Médico ya guardado en la historia que se está editando.
+   3. Médico activo expuesto por el sistema.
+   Nunca utiliza IDs fijos o legacy.
+===================================================== */
+function auroHistoriaObtenerIdMedicoSeguro(){
+  try{
+    if(typeof window.getAtencionActiva === 'function'){
+      const atencion = window.getAtencionActiva();
+      const idAtencion = String(
+        atencion?.id_medico ||
+        atencion?.medico_id ||
+        ''
+      ).trim();
+      if(idAtencion) return idAtencion;
+    }
+  }catch(error){
+    console.warn('AUROSANAX HISTORIA: no se pudo obtener el médico de la atención activa.', error);
+  }
+
+  try{
+    if(editingHistoryId && Array.isArray(window.historiasClinicas)){
+      const historia = window.historiasClinicas.find(h =>
+        String(h.id_historia || '').trim() === String(editingHistoryId).trim()
+      );
+      const idHistoria = String(
+        historia?.id_medico ||
+        historia?.medico_id ||
+        ''
+      ).trim();
+      if(idHistoria) return idHistoria;
+    }
+  }catch(error){
+    console.warn('AUROSANAX HISTORIA: no se pudo conservar el médico de la historia existente.', error);
+  }
+
+  try{
+    const idGlobal = String(window.idMedicoActual || '').trim();
+    if(idGlobal) return idGlobal;
+  }catch(error){}
+
+  try{
+    if(typeof window.getMedicoActivo === 'function'){
+      const medico = window.getMedicoActivo();
+      const idActivo = String(
+        medico?.id_medico ||
+        medico?.medico_id ||
+        medico?.id ||
+        medico?.codigo ||
+        ''
+      ).trim();
+      if(idActivo) return idActivo;
+    }
+  }catch(error){
+    console.warn('AUROSANAX HISTORIA: no se pudo obtener el médico activo del sistema.', error);
+  }
+
+  return '';
+}
+
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -4648,7 +4712,7 @@ async function guardarHistoriaClinicaERP(){
     diagnosticos_cie10: recopilarDiagnosticosCie10(),
     observaciones: observaciones,
     estado: getValueIfExists('hcEstadoHistoria') || 'Activo',
-    id_medico: 'MED-001'
+    id_medico: auroHistoriaObtenerIdMedicoSeguro()
   };
 
   auroAplicarProteccionAntecedentesEdicion(data);
