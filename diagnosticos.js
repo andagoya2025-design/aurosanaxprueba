@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.1 - integración clínica segura, editable y responsive premium
+ Versión: 1.4.2 - corrección puntual de limpieza del resumen clínico
  Fecha: 2026-07-18
  -----------------------------------------------------------------------
  OBJETIVO
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.1';
+  const VERSION = '1.4.2';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1021,39 +1021,66 @@
       .replace(/\b\w/g, letra => letra.toUpperCase());
   }
 
+  function quitarPrefijoSerializado(valor){
+    return texto(valor)
+      .replace(/^\s*AUROSANAX_[A-Z0-9_]+_V\d+::\s*/i,'')
+      .trim();
+  }
+
   function valorClinicoPlano(valor, profundidad){
     profundidad = profundidad || 0;
-    if(profundidad > 4 || valor === null || valor === undefined) return '';
+    if(profundidad > 6 || valor === null || valor === undefined) return '';
 
     if(typeof valor === 'string'){
-      const limpio = texto(valor);
-      if(!limpio || limpio === '{}' || limpio === '[]') return '';
+      const limpio = quitarPrefijoSerializado(valor);
+      if(!limpio || limpio === '{}' || limpio === '[]' || /^(null|undefined|nan)$/i.test(limpio)) return '';
+
+      /*
+        CORRECCIÓN 1.4.2:
+        Algunos módulos guardan objetos serializados con el prefijo
+        AUROSANAX_...:: antes del JSON. En la versión anterior se intentaba
+        interpretar el JSON antes de retirar ese prefijo, por lo que el
+        contenido completo terminaba visible en el resumen.
+      */
       const parseado = parseJsonSeguro(limpio, null);
       if(parseado && typeof parseado === 'object'){
         return valorClinicoPlano(parseado, profundidad + 1);
       }
+
+      if(pareceFechaTecnica(limpio)) return '';
       return limpio;
     }
 
-    if(typeof valor === 'number') return String(valor);
+    if(typeof valor === 'number') return Number.isFinite(valor) ? String(valor) : '';
     if(typeof valor === 'boolean') return valor ? 'Sí' : 'No';
 
     if(Array.isArray(valor)){
-      return valor
+      const items = valor
         .map(item => valorClinicoPlano(item, profundidad + 1))
-        .filter(Boolean)
-        .join('; ');
+        .filter(Boolean);
+
+      return [...new Set(items.map(texto))].join('; ');
     }
 
     if(typeof valor === 'object'){
       const partes = [];
+      const vistos = new Set();
+
       Object.entries(valor).forEach(([clave, dato]) => {
-        if(CLAVES_TECNICAS.has(normalizar(clave))) return;
+        if(claveTecnicaOAdministrativa(clave)) return;
+
         const plano = valorClinicoPlano(dato, profundidad + 1);
         if(!plano) return;
-        partes.push(etiquetaClinica(clave) + ': ' + plano);
+
+        const parte = etiquetaClinica(clave) + ': ' + plano;
+        const firma = normalizar(parte);
+        if(vistos.has(firma)) return;
+
+        vistos.add(firma);
+        partes.push(parte);
       });
-      return partes.join(' | ');
+
+      return partes.join('; ');
     }
 
     return '';
@@ -1233,8 +1260,14 @@
 
   function claveTecnicaOAdministrativa(clave){
     const k = normalizar(clave);
+    if(!k) return true;
     if(CLAVES_TECNICAS.has(k)) return true;
-    return /(^id\b|\bid$|json|timestamp|fecha creacion|fecha actualizacion|hora atencion|creado|actualizado|usuario|version|token|uuid|hash|accion|success|mensaje sistema)/.test(k);
+
+    /*
+      Se excluyen solamente identificadores, metadatos y datos administrativos.
+      No se modifican los objetos originales ni su almacenamiento.
+    */
+    return /(^id\b|\bid$|_id\b|\bid_|\bjson\b|timestamp|fecha creacion|fecha actualizacion|hora atencion|creado|actualizado|usuario|version|token|uuid|hash|accion|success|mensaje sistema|numero consulta|numero atencion|numero historia|tipo atencion|modalidad atencion|nombre paciente|nombres paciente|apellidos paciente|paciente nombre|^paciente$|documento paciente|cedula|correo|email|telefono|direccion|estado civil|responsable|acompanante|profesional|medico tratante|sede|sucursal)/.test(k);
   }
 
   function pareceFechaTecnica(valor){
@@ -1245,14 +1278,42 @@
   }
 
   function limpiarTextoClinico(valor){
-    let v = texto(valor);
+    if(valor === null || valor === undefined) return '';
+
+    /*
+      Acepta tanto texto simple como objetos serializados.
+      Esta función solo transforma una copia para presentación; nunca escribe
+      ni modifica la información recibida desde otros módulos.
+    */
+    if(typeof valor === 'object'){
+      return valorClinicoPlano(valor, 0);
+    }
+
+    let v = quitarPrefijoSerializado(valor);
     if(!v || v === '{}' || v === '[]' || /^(null|undefined|nan)$/i.test(v)) return '';
     if(pareceFechaTecnica(v)) return '';
+
+    const parseado = parseJsonSeguro(v, null);
+    if(parseado && typeof parseado === 'object'){
+      return valorClinicoPlano(parseado, 0);
+    }
+
     v = v
-      .replace(/AUROSANAX_[A-Z0-9_]+_V\d+::/g,'')
+      .replace(/AUROSANAX_[A-Z0-9_]+_V\d+::/gi,'')
+      .replace(/[{}\[\]"]/g, caracter => caracter)
       .replace(/\s+/g,' ')
       .replace(/\s*\|\s*/g,' · ')
+      .replace(/\s*;\s*/g,'; ')
       .trim();
+
+    /*
+      Protección final: si todavía parece JSON crudo, no se muestra.
+      Es preferible omitir un valor técnico antes que exponerlo al médico.
+    */
+    if((v.startsWith('{') && v.endsWith('}')) || (v.startsWith('[') && v.endsWith(']'))){
+      return '';
+    }
+
     return v;
   }
 
