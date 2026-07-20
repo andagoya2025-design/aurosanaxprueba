@@ -15,7 +15,7 @@
 
   const MODULO = 'AUROSANAX_GINECOLOGIA_V1';
   const STORAGE_KEY = 'aurosanax_ginecologia_local_v1';
-  const VERSION = '20260717_ginecologia_v1_4_flujo_por_consulta_y_estado';
+  const VERSION = '20260720_ginecologia_v1_5_sintomas_movidos_anamnesis';
 
   let registroActual = null;
   let cargando = false;
@@ -382,15 +382,6 @@
             <div class="col-md-3"><label class="form-label fw-bold">Tipo de atención</label><select id="ginTipoAtencion" class="form-select"><option value="">Seleccionar</option><option>Primera consulta</option><option>Control</option><option>Urgencia</option><option>Seguimiento</option><option>Teleconsulta</option></select></div>
             <div class="col-md-6"><label class="form-label fw-bold">Motivo ginecológico <span class="gin-required">*</span></label><textarea id="ginMotivo" class="form-control" rows="2"></textarea></div>
           </div>
-        </div>
-
-        <div class="gin-panel"><div class="gin-panel-title"><i class="bi bi-activity"></i>Síntomas actuales</div>
-          <div class="gin-check-grid mb-3">
-            ${check('ginSintDolorPelvico','Dolor pélvico')}${check('ginSintSangrado','Sangrado anormal')}${check('ginSintLeucorrea','Leucorrea')}${check('ginSintPrurito','Prurito')}
-            ${check('ginSintDisuria','Disuria')}${check('ginSintDispareunia','Dispareunia')}${check('ginSintAmenorrea','Amenorrea')}${check('ginSintDismenorrea','Dismenorrea')}
-            ${check('ginSintMasa','Sensación de masa')}${check('ginSintSequedad','Sequedad vaginal')}${check('ginSintIncontinencia','Incontinencia')}${check('ginSintMenopausia','Síntomas menopáusicos')}
-          </div>
-          <label class="form-label fw-bold">Descripción, evolución y características</label><textarea id="ginSintDescripcion" class="form-control" rows="3"></textarea>
         </div>
 
         <div class="gin-panel"><div class="gin-panel-title"><i class="bi bi-clipboard2-pulse"></i>Examen ginecológico</div>
