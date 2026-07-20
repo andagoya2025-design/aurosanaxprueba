@@ -1742,11 +1742,7 @@
 
     <section class="screen" id="pacientes">
       <div class="cardx p-4">
-        <div class="section-head">
-          <div>
-            <h4>Pacientes</h4>
-            <p>Registro principal de pacientes del centro médico.</p>
-          </div>
+        <div class="section-head justify-content-end">
           <button class="btn-auro" onclick="openPatientModal()"><i class="bi bi-person-plus me-1"></i> Nuevo paciente</button>
         </div>
 
@@ -1786,8 +1782,7 @@
 
     <section class="screen" id="agenda">
       <div class="cardx p-4">
-        <div class="section-head">
-          <div><h4>Agenda médica</h4><p>Vista médica rápida conectada a Secretaría AUROSANAX.</p></div>
+        <div class="section-head justify-content-end">
           <div class="d-flex gap-2 flex-wrap">
             <button class="btn-soft" onclick="abrirSecretaria()"><i class="bi bi-building me-1"></i> Secretaría</button>
             <button class="btn-auro" onclick="cargarCitasAgendaWeb()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar agenda</button>
@@ -1865,7 +1860,7 @@
 
     <section class="screen" id="historia">
       <div class="cardx p-4">
-        <div class="section-head"><div><h4>Historia clínica electrónica</h4><p>Gestión clínica multiespecialidad con base de datos integrada y sincronización segura.</p></div><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button class="btn-soft" onclick="imprimirHistoriaClinica()"><i class="bi bi-filetype-pdf me-1"></i> PDF</button></div></div>
+        <div class="section-head justify-content-end"><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button class="btn-soft" onclick="imprimirHistoriaClinica()"><i class="bi bi-filetype-pdf me-1"></i> PDF</button></div></div>
         <div class="patient-profile-card" id="hcPatientCard">
           <div class="patient-avatar" id="hcAvatar">A</div>
           <div>
@@ -2752,6 +2747,26 @@ function showClinicalTab(id,btn){
   document.querySelectorAll('.clinical-tabs button').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
 
+  /* Jerarquía visual superficial: mantiene Historia clínica como título principal
+     y muestra como subtítulo la sección clínica activa. No altera datos ni guardado. */
+  const clinicalSectionTitles={
+    hc_datos:'Datos generales',
+    hc_anamnesis:'Anamnesis',
+    hc_antecedentes:'Antecedentes',
+    hc_examen:'Examen físico',
+    hc_gineco:'Ginecología',
+    hc_obstetricia:'Obstetricia',
+    hc_estetica:'Estética',
+    hc_diagnostico:'Diagnóstico',
+    hc_plan:'Plan médico',
+    hc_docs:'Documentos'
+  };
+  const historiaActiva=document.getElementById('historia')?.classList.contains('active');
+  if(historiaActiva){
+    setTextIfExists('screenTitle','Historia clínica');
+    setTextIfExists('screenSubtitle',clinicalSectionTitles[id] || 'Datos generales');
+  }
+
   /* ETAPA 1: sincronización exclusivamente visual del acceso lateral.
      No modifica datos, atenciones, consultas, guardado ni carga clínica. */
   document.querySelectorAll('.menu-attention button').forEach(sideButton=>{
@@ -2826,7 +2841,7 @@ function showScreen(id, btn){
     dashboard:['Dashboard','Resumen general del centro médico AUROSANAX'],
     pacientes:['Pacientes','Registro, búsqueda y seguimiento de pacientes'],
     agenda:['Agenda médica','Citas por médico y especialidad'],
-    historia:['Historia clínica','Registro clínico general del paciente'],
+    historia:['Historia clínica','Datos generales'],
     ginecologia:['Ginecología','Ficha especializada ginecológica'],
     obstetricia:['Obstetricia','Control prenatal y seguimiento obstétrico'],
     estetica:['Estética funcional','Protocolos estéticos y regenerativos'],
