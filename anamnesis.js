@@ -1,20 +1,21 @@
 /*
 AUROSANAX ERP - MÓDULO ANAMNESIS INTELIGENTE
 Archivo: anamnesis.js
-Versión: 1.0.0
+Versión: 1.1.0
 
 Función:
 - Detectar "dolor pélvico" en #hcMotivoConsulta.
 - Mostrar formulario semiológico.
 - Generar texto editable en #hcEnfermedadActual.
-- Completar, cuando estén vacíos, #hcRevisionSistemas y #hcSintomasAlarma.
+- Ocultar en Anamnesis los campos #hcRevisionSistemas y #hcSintomasAlarma para evitar duplicidad.
+- No escribir información en esos campos.
 - No modifica el guardado ni la base de datos existente.
 */
 
 (function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   let inicializado = false;
 
   const $ = id => document.getElementById(id);
@@ -58,6 +59,33 @@ Función:
     if (!el) return;
     el.className = 'auro-anamnesis-estado ' + tipo;
     el.textContent = mensaje;
+  }
+
+
+  function ocultarCamposDuplicadosAnamnesis() {
+    const campos = [
+      document.getElementById('hcRevisionSistemas'),
+      document.getElementById('hcSintomasAlarma')
+    ];
+
+    campos.forEach(campo => {
+      if (!campo) return;
+
+      const bloque = campo.closest('.col-md-6, .col-md-12') || campo.parentElement;
+      if (bloque) {
+        bloque.style.display = 'none';
+        bloque.setAttribute('aria-hidden', 'true');
+        bloque.dataset.auroOcultoAnamnesis = '1';
+      }
+
+      /*
+        Se conserva el elemento en el DOM para no romper:
+        - lectura de historias antiguas,
+        - compatibilidad con funciones existentes,
+        - estructura de Google Sheets.
+        El módulo Anamnesis ya no escribe datos en estos campos.
+      */
+    });
   }
 
   function instalarEstilos() {
@@ -425,34 +453,6 @@ Función:
     return partes.join(' ').replace(/\s+/g, ' ').replace(/\.\./g, '.').trim();
   }
 
-  function revisionSistemas(d) {
-    const bloques = [];
-    if (d.ginecologicos.length) bloques.push('Ginecológico: ' + unir(d.ginecologicos) + '.');
-    if (d.urinarios.length) bloques.push('Urinario: ' + unir(d.urinarios) + '.');
-    if (d.digestivos.length) bloques.push('Digestivo: ' + unir(d.digestivos) + '.');
-    if (d.generales.length) bloques.push('General: ' + unir(d.generales) + '.');
-    return bloques.join(' ');
-  }
-
-  function alertas(d) {
-    const a = [];
-
-    if (d.generales.includes('fiebre')) a.push('fiebre asociada');
-    if (d.generales.includes('mareo')) a.push('mareo');
-    if (d.ginecologicos.includes('sangrado vaginal anormal')) a.push('sangrado vaginal anormal');
-    if (d.eva !== '' && Number(d.eva) >= 8) a.push('dolor intenso EVA ' + d.eva + '/10');
-
-    if ([
-      'refiere posibilidad de embarazo',
-      'embarazo confirmado',
-      'estado gestacional por confirmar'
-    ].includes(d.embarazo)) {
-      a.push(d.embarazo);
-    }
-
-    return a.length ? 'Datos que requieren valoración clínica prioritaria: ' + unir(a) + '.' : '';
-  }
-
   function generar() {
     const enfermedad = $('hcEnfermedadActual');
     if (!enfermedad) {
@@ -473,21 +473,6 @@ Función:
     enfermedad.value = texto;
     enfermedad.dispatchEvent(new Event('input', { bubbles: true }));
     enfermedad.dispatchEvent(new Event('change', { bubbles: true }));
-
-    const rev = revisionSistemas(d);
-    const revEl = $('hcRevisionSistemas');
-    if (rev && revEl && !txt(revEl.value)) {
-      revEl.value = rev;
-      revEl.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    const alarma = alertas(d);
-    const alarmaEl = $('hcSintomasAlarma');
-    if (alarma && alarmaEl && !txt(alarmaEl.value)) {
-      alarmaEl.value = alarma;
-      alarmaEl.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
     estado('Enfermedad actual generada. Revise y corrija antes de guardar.', 'ok');
     enfermedad.focus();
     enfermedad.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -513,8 +498,8 @@ Función:
     return {
       motivo_consulta: txt($('hcMotivoConsulta')?.value),
       enfermedad_actual: txt($('hcEnfermedadActual')?.value),
-      revision_sistemas: txt($('hcRevisionSistemas')?.value),
-      sintomas_alarma: txt($('hcSintomasAlarma')?.value),
+      revision_sistemas: '',
+      sintomas_alarma: '',
       semiologia_dolor_pelvico: datos(),
       modulo_version: VERSION
     };
@@ -529,6 +514,7 @@ Función:
     }
 
     instalarEstilos();
+    ocultarCamposDuplicadosAnamnesis();
     crearInterfaz();
     inicializado = true;
 
