@@ -181,7 +181,7 @@ Función:
     bloque.innerHTML = `
       <div class="gin-panel-title">
         <i class="bi bi-activity"></i>
-        Síntomas ginecológicos
+        Síntomas actuales
       </div>
 
       <div class="gin-check-grid mb-3">
