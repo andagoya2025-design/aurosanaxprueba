@@ -2587,6 +2587,338 @@ if(document.readyState === 'loading'){
 }
 
 
+
+/* ==========================================================
+   AUROSANAX FIX 2026-07-20
+   GUARDADO AUTÓNOMO DE DIAGNÓSTICOS POR ATENCIÓN
+   ----------------------------------------------------------
+   Motivo:
+   - El editor CIE-10 fue trasladado desde Examen físico a Diagnóstico.
+   - La persistencia seguía dependiendo de "Actualizar historia".
+   - El Plan podía recibir protocolos sin que el diagnóstico quedara en Sheets.
+
+   Resultado:
+   - Permite guardar los diagnósticos de la atención activa sin exigir
+     que el usuario abra o actualice manualmente Examen físico.
+   - Reutiliza las funciones y el endpoint existentes.
+   - Si todavía no existe id_examen, crea automáticamente el registro técnico
+     necesario y luego guarda el detalle/diagnósticos.
+   ========================================================== */
+
+async function auroGuardarDiagnosticosAtencionActual(){
+  const idAtencion = String(
+    (typeof auroExamenFisicoIdAtencionActual === 'function'
+      ? auroExamenFisicoIdAtencionActual()
+      : window.examenFisicoState?.atencionActual) || ''
+  ).trim();
+
+  const diagnosticos = typeof auroRecopilarDiagnosticosEstructurados === 'function'
+    ? auroRecopilarDiagnosticosEstructurados()
+    : [];
+
+  if(!idAtencion){
+    return {
+      success:false,
+      message:'No existe una atención activa para guardar el diagnóstico.'
+    };
+  }
+
+  if(!Array.isArray(diagnosticos) || !diagnosticos.length){
+    return {
+      success:false,
+      message:'No existen diagnósticos seleccionados para esta atención.'
+    };
+  }
+
+  try{
+    window.examenFisicoState = window.examenFisicoState || {
+      atencionActual:idAtencion,
+      cache:{}
+    };
+    window.examenFisicoState.examenesSheets =
+      window.examenFisicoState.examenesSheets || {};
+
+    let examen = window.examenFisicoState.examenesSheets[idAtencion] || null;
+
+    if(!examen || !String(examen.id_examen || '').trim()){
+      examen = await auroBuscarExamenFisicoPorAtencion(idAtencion);
+    }
+
+    let idExamen = String(examen?.id_examen || '').trim();
+
+    /*
+      Si la consulta todavía no tiene fila técnica en examenes_fisicos,
+      se crea automáticamente usando el flujo estable ya existente.
+      Esto no obliga al médico a abrir ni actualizar Examen físico.
+    */
+    if(!idExamen){
+      const guardadoExamen = await auroGuardarExamenFisicoSheets();
+
+      if(!guardadoExamen || guardadoExamen.success === false){
+        return {
+          success:false,
+          message:guardadoExamen?.message ||
+            'No se pudo crear el registro técnico del examen físico.'
+        };
+      }
+
+      idExamen = String(
+        guardadoExamen?.data?.id_examen ||
+        guardadoExamen?.id_examen ||
+        guardadoExamen?.id ||
+        window.examenFisicoState?.examenesSheets?.[idAtencion]?.id_examen ||
+        ''
+      ).trim();
+
+      /*
+        auroGuardarExamenFisicoSheets ya intenta guardar el detalle.
+        Si el backend no devolvió el id en el primer resultado, se vuelve
+        a consultar para confirmar el registro creado.
+      */
+      if(!idExamen){
+        const confirmado = await auroBuscarExamenFisicoPorAtencion(idAtencion);
+        idExamen = String(confirmado?.id_examen || '').trim();
+      }
+    }
+
+    if(!idExamen){
+      return {
+        success:false,
+        message:'No se pudo identificar el id_examen necesario para guardar el diagnóstico.'
+      };
+    }
+
+    const resultado = await auroGuardarDetalleExamenFisicoSheets(idExamen);
+
+    if(!resultado || resultado.success === false){
+      return {
+        success:false,
+        message:resultado?.message ||
+          'Apps Script no confirmó el guardado del diagnóstico.'
+      };
+    }
+
+    /*
+      Se invalida cualquier lectura antigua para que Diagnóstico y Recetas
+      consulten nuevamente los datos persistidos de esta atención.
+    */
+    try{
+      if(window.auroDiagnosticosState?.cache){
+        delete window.auroDiagnosticosState.cache[idAtencion];
+      }
+      if(window.recetaDiagnosticosPorAtencionCache){
+        delete window.recetaDiagnosticosPorAtencionCache[idAtencion];
+      }
+    }catch(e){}
+
+    return {
+      success:true,
+      id_atencion:idAtencion,
+      id_examen:idExamen,
+      diagnosticos:
+        Number(resultado.diagnosticos ?? resultado.total_guardados ?? diagnosticos.length),
+      data:resultado
+    };
+  }catch(error){
+    console.error('AUROSANAX DIAGNÓSTICOS: error guardando por atención.', error);
+    return {
+      success:false,
+      message:error?.message || String(error)
+    };
+  }
+}
+
+window.auroGuardarDiagnosticosAtencionActual =
+  auroGuardarDiagnosticosAtencionActual;
+
+
+
+/* ==========================================================
+   AUROSANAX FIX DEFINITIVO 2026-07-20
+   UN SOLO BOTÓN OFICIAL: PROTOCOLO CLÍNICO SUGERIDO
+   ----------------------------------------------------------
+   Botón que se conserva:
+   - Botón morado "Aplicar al Plan" del CIE-10 inteligente.
+   - Ejecuta auroCie10InteligenteAplicarAlPlan().
+
+   Botón que se desactiva visual y funcionalmente:
+   - #auroDxAplicarPlan del módulo Integración clínica.
+   - Se mantiene oculto en el DOM para no romper referencias internas
+     de diagnosticos.js, pero no puede verse, enfocarse ni ejecutarse.
+
+   Flujo único:
+   1. El usuario pulsa el botón morado.
+   2. Se guarda el diagnóstico de la atención activa en Google Sheets.
+   3. Solo si el guardado se confirma, se aplica el protocolo al Plan.
+   ========================================================== */
+
+function auroDesactivarBotonSecundarioIntegracion(){
+  const botonSecundario = document.getElementById('auroDxAplicarPlan');
+  if(!botonSecundario) return false;
+
+  botonSecundario.disabled = true;
+  botonSecundario.hidden = true;
+  botonSecundario.style.setProperty('display', 'none', 'important');
+  botonSecundario.setAttribute('aria-hidden', 'true');
+  botonSecundario.setAttribute('tabindex', '-1');
+  botonSecundario.dataset.auroDesactivado = '1';
+
+  return true;
+}
+
+function auroInstalarOcultamientoBotonSecundario(){
+  auroDesactivarBotonSecundarioIntegracion();
+
+  /*
+    diagnosticos.js puede volver a renderizar su panel.
+    El observador garantiza que el botón secundario permanezca oculto
+    sin eliminar nodos que ese módulo todavía pueda consultar internamente.
+  */
+  if(window.__auroObserverBotonSecundario) return;
+
+  const observer = new MutationObserver(function(){
+    auroDesactivarBotonSecundarioIntegracion();
+  });
+
+  observer.observe(document.documentElement, {
+    childList:true,
+    subtree:true
+  });
+
+  window.__auroObserverBotonSecundario = observer;
+}
+
+function auroEsBotonOficialAplicarPlan(boton){
+  if(!boton) return false;
+
+  const onclick = String(boton.getAttribute('onclick') || '');
+  if(onclick.includes('auroCie10InteligenteAplicarAlPlan')) return true;
+
+  /*
+    Respaldo por si el motor cambia de onclick a listener:
+    solo se acepta un botón dentro del protocolo inteligente cuyo texto
+    sea exactamente "Aplicar al Plan". No afecta otros botones del ERP.
+  */
+  const textoBoton = String(boton.textContent || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  const contenedorProtocolo = boton.closest(
+    '#auroCie10InteligentePanel, .auro-cie10-panel, .cie10-inteligente-panel, [data-auro-cie10-inteligente]'
+  );
+
+  return !!contenedorProtocolo && textoBoton === 'aplicar al plan';
+}
+
+async function auroEjecutarBotonOficialAplicarPlan(boton){
+  if(!boton || boton.dataset.auroProcesando === '1') return;
+
+  boton.dataset.auroProcesando = '1';
+
+  const textoOriginal = boton.innerHTML;
+  const disabledOriginal = !!boton.disabled;
+
+  boton.disabled = true;
+  boton.setAttribute('aria-busy', 'true');
+
+  try{
+    if(typeof window.auroGuardarDiagnosticosAtencionActual !== 'function'){
+      throw new Error(
+        'No está disponible la función de guardado autónomo del diagnóstico.'
+      );
+    }
+
+    const resultado = await window.auroGuardarDiagnosticosAtencionActual();
+
+    if(!resultado || resultado.success !== true){
+      throw new Error(
+        resultado?.message ||
+        'No se pudo confirmar el guardado del diagnóstico de esta atención.'
+      );
+    }
+
+    /*
+      Se llama directamente a la función original del botón morado.
+      No se genera un segundo clic y no se ejecuta el botón secundario.
+    */
+    if(typeof window.auroCie10InteligenteAplicarAlPlan !== 'function'){
+      throw new Error(
+        'No está disponible la función del protocolo clínico sugerido.'
+      );
+    }
+
+    await Promise.resolve(
+      window.auroCie10InteligenteAplicarAlPlan()
+    );
+
+    console.log(
+      'AUROSANAX: diagnóstico guardado y protocolo aplicado mediante el botón oficial.',
+      {
+        id_atencion: resultado.id_atencion,
+        id_examen: resultado.id_examen,
+        diagnosticos: resultado.diagnosticos
+      }
+    );
+  }catch(error){
+    console.error(
+      'AUROSANAX: no se completó el flujo único Diagnóstico → Plan.',
+      error
+    );
+
+    alert(
+      'No se pudo aplicar el protocolo al Plan.\n\n' +
+      (error?.message || String(error))
+    );
+  }finally{
+    boton.innerHTML = textoOriginal;
+    boton.disabled = disabledOriginal;
+    boton.removeAttribute('aria-busy');
+    delete boton.dataset.auroProcesando;
+  }
+}
+
+function auroInstalarFlujoUnicoDiagnosticoPlan(){
+  if(window.__auroFlujoUnicoDiagnosticoPlanInstalado) return;
+  window.__auroFlujoUnicoDiagnosticoPlanInstalado = true;
+
+  auroInstalarOcultamientoBotonSecundario();
+
+  /*
+    Captura el clic antes del onclick original para asegurar este orden:
+    guardar diagnóstico → confirmar → aplicar protocolo.
+  */
+  document.addEventListener('click', function(evento){
+    const boton = evento.target?.closest?.('button, a');
+    if(!auroEsBotonOficialAplicarPlan(boton)) return;
+
+    evento.preventDefault();
+    evento.stopPropagation();
+    evento.stopImmediatePropagation();
+
+    auroEjecutarBotonOficialAplicarPlan(boton);
+  }, true);
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener(
+    'DOMContentLoaded',
+    auroInstalarFlujoUnicoDiagnosticoPlan
+  );
+}else{
+  auroInstalarFlujoUnicoDiagnosticoPlan();
+}
+
+window.auroDesactivarBotonSecundarioIntegracion =
+  auroDesactivarBotonSecundarioIntegracion;
+
+window.auroInstalarFlujoUnicoDiagnosticoPlan =
+  auroInstalarFlujoUnicoDiagnosticoPlan;
+
+
+
 /* AUROSANAX - Confirmación de carga del módulo */
 window.auroExamenFisicoModuloCargado = true;
 console.log('AUROSANAX examenfisico.js cargado correctamente');
