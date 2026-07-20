@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MÓDULO ANAMNESIS INTELIGENTE
 Archivo: anamnesis.js
-Versión: 1.3.0
+Versión: 1.1.0
 
 Función:
 - Detectar "dolor pélvico" en #hcMotivoConsulta.
@@ -9,14 +9,13 @@ Función:
 - Generar texto editable en #hcEnfermedadActual.
 - Ocultar en Anamnesis los campos #hcRevisionSistemas y #hcSintomasAlarma para evitar duplicidad.
 - No escribir información en esos campos.
-- Integra en Anamnesis los síntomas ginecológicos y obstétricos usando los IDs originales.
 - No modifica el guardado ni la base de datos existente.
 */
 
 (function () {
   'use strict';
 
-  const VERSION = '1.3.0';
+  const VERSION = '1.1.0';
   let inicializado = false;
 
   const $ = id => document.getElementById(id);
@@ -121,31 +120,6 @@ Función:
       .auro-clinical-warning{margin-top:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:9px 10px;font-size:12px}
       @media(max-width:980px){.auro-semiologia-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media(max-width:560px){.auro-semiologia-grid{grid-template-columns:1fr}.auro-semiologia-field.span-2,.auro-semiologia-field.span-4{grid-column:auto}.auro-anamnesis-btn{width:100%}}
-
-      #hc_anamnesis .gin-panel{border:1px solid #e5e7eb;border-radius:20px;padding:16px;background:#fff;margin-top:16px}
-      #hc_anamnesis .gin-panel-title{font-weight:900;color:#111827;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-      #hc_anamnesis .gin-panel-title i{color:#8b1e5a}
-      #hc_anamnesis .gin-check-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-      #hc_anamnesis .gin-check{border:1px solid #e5e7eb;border-radius:14px;padding:9px 10px;display:flex;align-items:center;gap:8px;background:#fff;cursor:pointer;min-width:0}
-      #hc_anamnesis .gin-check:hover{border-color:#f9a8d4;background:#fff7fb}
-      #hc_anamnesis .gin-check input{width:17px;height:17px;accent-color:#8b1e5a;flex:0 0 auto}
-      #hc_anamnesis .gin-check span{min-width:0;line-height:1.25}
-      @media(max-width:1100px){#hc_anamnesis .gin-check-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:760px){#hc_anamnesis .gin-check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-      @media(max-width:460px){#hc_anamnesis .gin-check-grid{grid-template-columns:1fr}}
-
-
-      #hc_anamnesis .obs-panel{border:1px solid #e5e7eb;border-radius:20px;padding:16px;background:#fff;margin-top:16px}
-      #hc_anamnesis .obs-panel-title{font-weight:900;color:#111827;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-      #hc_anamnesis .obs-panel-title i{color:#8b1e5a}
-      #hc_anamnesis .obs-check-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-      #hc_anamnesis .obs-check{border:1px solid #e5e7eb;border-radius:14px;padding:9px 10px;display:flex;align-items:center;gap:8px;background:#fff;cursor:pointer;min-width:0}
-      #hc_anamnesis .obs-check:hover{border-color:#f9a8d4;background:#fff7fb}
-      #hc_anamnesis .obs-check input{width:17px;height:17px;accent-color:#8b1e5a;flex:0 0 auto}
-      #hc_anamnesis .obs-check span{min-width:0;line-height:1.25}
-      @media(max-width:1100px){#hc_anamnesis .obs-check-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      @media(max-width:760px){#hc_anamnesis .obs-check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-      @media(max-width:460px){#hc_anamnesis .obs-check-grid{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
   }
@@ -155,124 +129,6 @@ Función:
       '<label class="auro-check-item"><input type="checkbox" class="' +
       clase + '" value="' + v + '"> ' + v + '</label>'
     ).join('');
-  }
-
-
-  function checkSintomaActual(id, label) {
-    return `<label class="gin-check"><input id="${id}" type="checkbox"><span>${label}</span></label>`;
-  }
-
-  function crearBloqueSintomasActuales() {
-    if ($('auroAnamnesisSintomasActuales')) return;
-
-    const enfermedad = $('hcEnfermedadActual');
-    if (!enfermedad) return;
-
-    const bloqueEnfermedad =
-      enfermedad.closest('.col-md-12, .col-12, .form-group') ||
-      enfermedad.parentElement;
-
-    if (!bloqueEnfermedad) return;
-
-    const bloque = document.createElement('div');
-    bloque.id = 'auroAnamnesisSintomasActuales';
-    bloque.className = 'gin-panel';
-
-    bloque.innerHTML = `
-      <div class="gin-panel-title">
-        <i class="bi bi-activity"></i>
-        Síntomas ginecológicos
-      </div>
-
-      <div class="gin-check-grid mb-3">
-        ${checkSintomaActual('ginSintDolorPelvico','Dolor pélvico')}
-        ${checkSintomaActual('ginSintSangrado','Sangrado anormal')}
-        ${checkSintomaActual('ginSintLeucorrea','Leucorrea')}
-        ${checkSintomaActual('ginSintPrurito','Prurito')}
-        ${checkSintomaActual('ginSintDisuria','Disuria')}
-        ${checkSintomaActual('ginSintDispareunia','Dispareunia')}
-        ${checkSintomaActual('ginSintAmenorrea','Amenorrea')}
-        ${checkSintomaActual('ginSintDismenorrea','Dismenorrea')}
-        ${checkSintomaActual('ginSintMasa','Sensación de masa')}
-        ${checkSintomaActual('ginSintSequedad','Sequedad vaginal')}
-        ${checkSintomaActual('ginSintIncontinencia','Incontinencia')}
-        ${checkSintomaActual('ginSintMenopausia','Síntomas menopáusicos')}
-      </div>
-
-      <label class="form-label fw-bold" for="ginSintDescripcion">
-        Descripción, evolución y características
-      </label>
-      <textarea id="ginSintDescripcion" class="form-control" rows="3"></textarea>
-    `;
-
-    bloqueEnfermedad.insertAdjacentElement('afterend', bloque);
-  }
-
-
-  function checkSintomaObstetrico(id, label) {
-    return `<label class="obs-check"><input id="${id}" type="checkbox"><span>${label}</span></label>`;
-  }
-
-  function crearBloqueSintomasObstetricos() {
-    if ($('auroAnamnesisSintomasObstetricos')) return;
-
-    const referencia = $('auroAnamnesisSintomasActuales');
-    const enfermedad = $('hcEnfermedadActual');
-    if (!referencia && !enfermedad) return;
-
-    const bloque = document.createElement('div');
-    bloque.id = 'auroAnamnesisSintomasObstetricos';
-    bloque.className = 'obs-panel';
-
-    bloque.innerHTML = `
-      <div class="obs-panel-title">
-        <i class="bi bi-activity"></i>
-        Síntomas obstétricos
-      </div>
-
-      <div class="obs-check-grid mb-3">
-        ${checkSintomaObstetrico('obsSintSangrado','Sangrado vaginal')}
-        ${checkSintomaObstetrico('obsSintPerdidaLiquido','Pérdida de líquido')}
-        ${checkSintomaObstetrico('obsSintDolorPelvico','Dolor pélvico')}
-        ${checkSintomaObstetrico('obsSintContracciones','Contracciones')}
-        ${checkSintomaObstetrico('obsSintCefalea','Cefalea')}
-        ${checkSintomaObstetrico('obsSintFosfenos','Fosfenos')}
-        ${checkSintomaObstetrico('obsSintTinnitus','Tinnitus')}
-        ${checkSintomaObstetrico('obsSintEpigastralgia','Epigastralgia')}
-        ${checkSintomaObstetrico('obsSintDisuria','Disuria')}
-      </div>
-
-      <div class="row g-3">
-        <div class="col-md-6">
-          <label class="form-label fw-bold" for="obsSintOtros">Otros síntomas</label>
-          <input id="obsSintOtros" class="form-control">
-        </div>
-        <div class="col-md-6">
-          <label class="form-label fw-bold" for="obsSintDescripcion">Descripción y evolución</label>
-          <textarea id="obsSintDescripcion" rows="2" class="form-control"></textarea>
-        </div>
-      </div>
-    `;
-
-    if (referencia) referencia.insertAdjacentElement('afterend', bloque);
-    else {
-      const contenedor = enfermedad.closest('.col-md-12, .col-12, .form-group') || enfermedad.parentElement;
-      contenedor?.insertAdjacentElement('afterend', bloque);
-    }
-  }
-
-  function retirarBloqueSintomasObstetricosOriginal() {
-    const original = document.querySelector('#obstetricia .obs-panel #obsSintSangrado')?.closest('.obs-panel');
-    if (original) original.remove();
-  }
-
-  function vigilarRenderObstetricia() {
-    if (window.__auroAnamnesisObsObserver) return;
-
-    const observer = new MutationObserver(() => retirarBloqueSintomasObstetricosOriginal());
-    observer.observe(document.body, { childList: true, subtree: true });
-    window.__auroAnamnesisObsObserver = observer;
-    retirarBloqueSintomasObstetricosOriginal();
   }
 
   function crearInterfaz() {
@@ -660,9 +516,6 @@ Función:
     instalarEstilos();
     ocultarCamposDuplicadosAnamnesis();
     crearInterfaz();
-    crearBloqueSintomasActuales();
-    crearBloqueSintomasObstetricos();
-    vigilarRenderObstetricia();
     inicializado = true;
 
     console.info('AUROSANAX Anamnesis v' + VERSION + ': inicializado.');
