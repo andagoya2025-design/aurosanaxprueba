@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.5 - montaje exclusivo y estable en pestaña Diagnóstico
+ Versión: 1.4.4 - intérprete clínico profesional de antecedentes
  Fecha: 2026-07-18
  -----------------------------------------------------------------------
  OBJETIVO
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.5';
+  const VERSION = '1.4.4';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -362,8 +362,6 @@
     style.id = 'auroDiagnosticosStyles';
     style.textContent = `
       #auroDiagnosticosApp{font-family:inherit;color:#263238}
-      #hc_diagnostico:not(.active) #auroDiagnosticosMount{display:none!important}
-      #hc_diagnostico.active #auroDiagnosticosMount{display:block!important}
       #auroDiagnosticosApp *{box-sizing:border-box}
       .auro-dx-shell{display:grid;gap:14px}
       .auro-dx-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px;border:1px solid #dbe6e8;border-radius:16px;background:linear-gradient(135deg,#ffffff,#f5fbfb)}
@@ -697,15 +695,10 @@
           </div>
         </div>
 
-        <div class="auro-dx-card">
-          <div class="auro-dx-card-head">
-            Protocolos clínicos disponibles
-            <div class="auro-dx-card-help">Son plantillas de apoyo vinculadas al CIE-10. No se aplican automáticamente.</div>
-          </div>
-          <div class="auro-dx-card-body" id="auroDxProtocolos">
-            <div class="auro-dx-empty">Seleccione una atención con diagnósticos para consultar protocolos.</div>
-          </div>
-        </div>
+        <!-- AUROSANAX: contenedor técnico oculto.
+             Conserva el motor de protocolos sin duplicar su visualización,
+             porque el protocolo clínico ya se presenta en el módulo CIE-10 inteligente. -->
+        <div id="auroDxProtocolos" hidden aria-hidden="true"></div>
 
         <div class="auro-dx-card">
           <div class="auro-dx-card-head">
@@ -751,44 +744,29 @@
     }
 
     /*
-      MONTAJE EXCLUSIVO Y AUTOCORRECTIVO 1.4.5:
-      - El módulo sólo puede existir dentro de #hc_diagnostico.
-      - Si el mount quedó accidentalmente fuera, se mueve al panel correcto.
-      - Si existen duplicados, se conserva uno solo dentro de Diagnóstico.
-      - No se destruye el contenido del mount en reinicializaciones.
+      MONTAJE DETERMINISTA:
+      Diagnósticos se pinta exclusivamente dentro de #auroDiagnosticosMount.
+      El punto de montaje se crea si el index todavía no lo contiene.
     */
-    const mounts = Array.from(document.querySelectorAll('[id="auroDiagnosticosMount"]'));
-    let mount = mounts.find(el => panel.contains(el)) || mounts[0] || null;
-
+    let mount = document.getElementById('auroDiagnosticosMount');
     if(!mount){
       mount = document.createElement('div');
       mount.id = 'auroDiagnosticosMount';
-    }
-
-    if(mount.parentElement !== panel){
       panel.appendChild(mount);
     }
 
-    mounts.forEach(extra => {
-      if(extra === mount) return;
-      const appDuplicada = extra.querySelector('#auroDiagnosticosApp');
-      if(appDuplicada && !mount.querySelector('#auroDiagnosticosApp')){
-        mount.appendChild(appDuplicada);
-      }
-      extra.remove();
-    });
-
+    mount.style.display = 'block';
     mount.style.width = '100%';
     mount.style.minHeight = '220px';
 
-    let app = mount.querySelector('#auroDiagnosticosApp') || document.getElementById('auroDiagnosticosApp');
+    let app = document.getElementById('auroDiagnosticosApp');
     if(!app){
       app = document.createElement('div');
       app.id = 'auroDiagnosticosApp';
     }
 
     if(app.parentElement !== mount){
-      mount.appendChild(app);
+      mount.replaceChildren(app);
     }
 
     /*
@@ -2102,7 +2080,11 @@
       state.protocolos = await consultarProtocolos();
       if(state.atencionActual !== idAtencion) return null;
 
-      if(state.protocolos.length === 1){
+      /* AUROSANAX: selección técnica automática.
+         El bloque visual de protocolos se mantiene oculto para evitar duplicación,
+         por lo que se selecciona el primer protocolo disponible para conservar
+         la generación de conducta y la transferencia al Plan. */
+      if(state.protocolos.length && state.protocoloSeleccionado === null){
         state.protocoloSeleccionado = 0;
       }
 
@@ -2327,22 +2309,18 @@
 
   function inicializar(){
     /*
-      INICIALIZACIÓN IDempotente 1.4.5:
-      asegura el montaje correcto, instala eventos una sola vez y evita
-      repetir sincronizaciones cuando el módulo ya está listo.
+      AUROSANAX FIX 1.1.0:
+      Asegurar siempre el montaje. Antes, si la primera inicialización ocurría
+      cuando el panel todavía no existía, state.inicializado quedaba en true
+      y la interfaz nunca volvía a construirse.
     */
     const app = asegurarApp();
     instalarEventos();
 
     if(!app){
       state.inicializado = false;
-      clearTimeout(window.__auroDxReintentoInicializacion);
-      window.__auroDxReintentoInicializacion = setTimeout(inicializar, 250);
+      setTimeout(inicializar, 250);
       return;
-    }
-
-    if(state.inicializado){
-      return app;
     }
 
     state.inicializado = true;
@@ -2393,11 +2371,11 @@
 
   function arrancarDiagnosticos(){
     try{
+      asegurarApp();
       inicializar();
     }catch(error){
       console.error(MODULO + ': fallo de arranque.', error);
-      clearTimeout(window.__auroDxReintentoArranque);
-      window.__auroDxReintentoArranque = setTimeout(arrancarDiagnosticos, 300);
+      setTimeout(arrancarDiagnosticos, 300);
     }
   }
 
@@ -2406,4 +2384,16 @@
   }else{
     arrancarDiagnosticos();
   }
+
+  /* Segundo intento después de terminar de cargar todos los scripts externos. */
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      try{
+        asegurarApp();
+        inicializar();
+      }catch(error){
+        console.error(MODULO + ': fallo en segundo montaje.', error);
+      }
+    }, 120);
+  }, {once:true});
 })();
