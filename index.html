@@ -110,6 +110,25 @@
       background:rgba(255,255,255,.16);
     }
 
+
+    /* AUROSANAX - Accesos espejo de la atención clínica activa */
+    .menu-attention{
+      margin:0 0 8px;
+      padding-left:8px;
+      border-left:1px solid rgba(255,255,255,.22);
+    }
+    .menu-attention button{
+      padding:8px 10px;
+      margin-bottom:2px;
+      border-radius:11px;
+      font-size:12px;
+      font-weight:650;
+      opacity:.94;
+    }
+    .menu-attention button i{
+      font-size:13px;
+    }
+
     .main{
       margin-left:280px;
       width:calc(100% - 280px);
@@ -1589,6 +1608,20 @@
       <button onclick="showScreen('agenda', this)"><i class="bi bi-calendar-check"></i> Agenda médica</button>
       <button onclick="showScreen('historia', this)"><i class="bi bi-file-medical"></i> Historia clínica</button>
 
+      <div class="menu-title">Atención activa</div>
+      <div class="menu-attention">
+        <button type="button" onclick="navegarAtencionActiva('hc_datos', this)"><i class="bi bi-person-vcard"></i> Datos generales</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_anamnesis', this)"><i class="bi bi-chat-square-text"></i> Anamnesis</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_antecedentes', this)"><i class="bi bi-journal-medical"></i> Antecedentes</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_examen', this)"><i class="bi bi-activity"></i> Examen físico</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_gineco', this)"><i class="bi bi-gender-female"></i> Ginecología</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_obstetricia', this)"><i class="bi bi-person-hearts"></i> Obstetricia</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_estetica', this)"><i class="bi bi-stars"></i> Estética</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_diagnostico', this)"><i class="bi bi-clipboard2-check"></i> Diagnóstico</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_plan', this)"><i class="bi bi-list-check"></i> Plan</button>
+        <button type="button" onclick="navegarAtencionActiva('hc_docs', this)"><i class="bi bi-folder2-open"></i> Documentos</button>
+      </div>
+
       <div class="menu-title">Módulos por paciente</div>
       <button onclick="showScreen('estetica', this)"><i class="bi bi-stars"></i> Estética funcional</button>
       <button onclick="showScreen('bioimpedancia', this)"><i class="bi bi-graph-up-arrow"></i> Bioimpedancia</button>
@@ -2784,6 +2817,26 @@ function showScreen(id, btn){
   if(id === 'pacientes') cargarCitasAgendaWeb();
   if(['ginecologia','obstetricia','estetica','bioimpedancia','procedimientos','consentimientos','recetas'].includes(id)) renderModulePatientCards();
 }
+
+/* AUROSANAX - Navegación espejo de Atención activa
+   Abre Historia clínica y reutiliza las pestañas existentes.
+   No crea paneles, no duplica módulos y no modifica la lógica de guardado. */
+function navegarAtencionActiva(panelId, sidebarButton){
+  showScreen('historia', sidebarButton);
+
+  const tabButton = Array.from(document.querySelectorAll('.clinical-tabs button')).find(button => {
+    const onclick = String(button.getAttribute('onclick') || '');
+    return onclick.includes("'" + panelId + "'") || onclick.includes('\"' + panelId + '\"');
+  });
+
+  showClinicalTab(panelId, tabButton || null);
+
+  const historia = document.getElementById('historia');
+  if(historia){
+    historia.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+}
+window.navegarAtencionActiva = navegarAtencionActiva;
 
 function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('show');
