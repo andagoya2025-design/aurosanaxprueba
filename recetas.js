@@ -431,6 +431,7 @@
     const idPaciente = String(paciente?.id_paciente || paciente?.id || '').trim();
 
     const fuentes = [
+      window.hcDiagnosticosSeleccionados,
       window.diagnosticos,
       window.diagnosticosClinicos,
       window.examenFisicoState?.diagnosticos
@@ -439,7 +440,7 @@
     for(const lista of fuentes){
       const encontrados = lista.filter(dx => {
         const codigo = auroRecetaCodigoNormalizado(
-          dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || ''
+          dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || dx.codigo || ''
         );
         const coincideAtencion = !idAtencion || !dx.id_atencion ||
           String(dx.id_atencion) === String(idAtencion);
@@ -1187,8 +1188,8 @@
       id_paciente: r.id_paciente || r.paciente_id || '',
       id_historia: r.id_historia || '',
       id_atencion: r.id_atencion || '',
-      id_medico: medicoAtencion?.id_medico || r.id_medico || obtenerIdMedicoReal(),
-      codigo_medico: medicoAtencion?.id_medico ? obtenerCodigoCortoMedico(medicoAtencion.id_medico) : (r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal())),
+      id_medico: r.id_medico || obtenerIdMedicoReal(),
+      codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
       paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || '',
       paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
       paciente_telefono: r.paciente_telefono || r.telefono || r.whatsapp || '',
