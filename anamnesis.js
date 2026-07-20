@@ -121,16 +121,17 @@ Función:
       @media(max-width:980px){.auro-semiologia-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media(max-width:560px){.auro-semiologia-grid{grid-template-columns:1fr}.auro-semiologia-field.span-2,.auro-semiologia-field.span-4{grid-column:auto}.auro-anamnesis-btn{width:100%}}
 
-      #anamnesis .auro-anam-sintomas-panel{border:1px solid #e5e7eb;border-radius:18px;padding:16px;background:#fff;margin-top:16px}
-      #anamnesis .auro-anam-sintomas-title{font-weight:900;color:#111827;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-      #anamnesis .auro-anam-sintomas-title i{color:#8b1e5a}
-      #anamnesis .auro-anam-sintomas-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-      #anamnesis .auro-anam-sintoma{border:1px solid #e5e7eb;border-radius:14px;padding:9px 10px;display:flex;align-items:center;gap:8px;background:#fff;cursor:pointer}
-      #anamnesis .auro-anam-sintoma:hover{border-color:#f9a8d4;background:#fff7fb}
-      #anamnesis .auro-anam-sintoma input{width:17px;height:17px;accent-color:#8b1e5a}
-      @media(max-width:1100px){#anamnesis .auro-anam-sintomas-grid{grid-template-columns:repeat(3,1fr)}}
-      @media(max-width:760px){#anamnesis .auro-anam-sintomas-grid{grid-template-columns:repeat(2,1fr)}}
-      @media(max-width:460px){#anamnesis .auro-anam-sintomas-grid{grid-template-columns:1fr}}
+      #hc_anamnesis .gin-panel{border:1px solid #e5e7eb;border-radius:20px;padding:16px;background:#fff;margin-top:16px}
+      #hc_anamnesis .gin-panel-title{font-weight:900;color:#111827;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+      #hc_anamnesis .gin-panel-title i{color:#8b1e5a}
+      #hc_anamnesis .gin-check-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+      #hc_anamnesis .gin-check{border:1px solid #e5e7eb;border-radius:14px;padding:9px 10px;display:flex;align-items:center;gap:8px;background:#fff;cursor:pointer;min-width:0}
+      #hc_anamnesis .gin-check:hover{border-color:#f9a8d4;background:#fff7fb}
+      #hc_anamnesis .gin-check input{width:17px;height:17px;accent-color:#8b1e5a;flex:0 0 auto}
+      #hc_anamnesis .gin-check span{min-width:0;line-height:1.25}
+      @media(max-width:1100px){#hc_anamnesis .gin-check-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:760px){#hc_anamnesis .gin-check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:460px){#hc_anamnesis .gin-check-grid{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
   }
@@ -143,40 +144,45 @@ Función:
   }
 
 
-  function crearBloqueSintomasActuales() {
-    if (document.getElementById('auroAnamnesisSintomasActuales')) return;
+  function checkSintomaActual(id, label) {
+    return `<label class="gin-check"><input id="${id}" type="checkbox"><span>${label}</span></label>`;
+  }
 
-    const enfermedad = document.getElementById('hcEnfermedadActual');
+  function crearBloqueSintomasActuales() {
+    if ($('auroAnamnesisSintomasActuales')) return;
+
+    const enfermedad = $('hcEnfermedadActual');
     if (!enfermedad) return;
 
-    const contenedorBase =
-      enfermedad.closest('.col-md-12, .col-12, .row, .form-group') ||
+    const bloqueEnfermedad =
+      enfermedad.closest('.col-md-12, .col-12, .form-group') ||
       enfermedad.parentElement;
 
-    if (!contenedorBase || !contenedorBase.parentElement) return;
+    if (!bloqueEnfermedad) return;
 
     const bloque = document.createElement('div');
     bloque.id = 'auroAnamnesisSintomasActuales';
-    bloque.className = 'auro-anam-sintomas-panel';
+    bloque.className = 'gin-panel';
+
     bloque.innerHTML = `
-      <div class="auro-anam-sintomas-title">
+      <div class="gin-panel-title">
         <i class="bi bi-activity"></i>
-        <span>Síntomas actuales</span>
+        Síntomas actuales
       </div>
 
-      <div class="auro-anam-sintomas-grid mb-3">
-        <label class="auro-anam-sintoma"><input id="ginSintDolorPelvico" type="checkbox"><span>Dolor pélvico</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintSangrado" type="checkbox"><span>Sangrado anormal</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintLeucorrea" type="checkbox"><span>Leucorrea</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintPrurito" type="checkbox"><span>Prurito</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintDisuria" type="checkbox"><span>Disuria</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintDispareunia" type="checkbox"><span>Dispareunia</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintAmenorrea" type="checkbox"><span>Amenorrea</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintDismenorrea" type="checkbox"><span>Dismenorrea</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintMasa" type="checkbox"><span>Sensación de masa</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintSequedad" type="checkbox"><span>Sequedad vaginal</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintIncontinencia" type="checkbox"><span>Incontinencia</span></label>
-        <label class="auro-anam-sintoma"><input id="ginSintMenopausia" type="checkbox"><span>Síntomas menopáusicos</span></label>
+      <div class="gin-check-grid mb-3">
+        ${checkSintomaActual('ginSintDolorPelvico','Dolor pélvico')}
+        ${checkSintomaActual('ginSintSangrado','Sangrado anormal')}
+        ${checkSintomaActual('ginSintLeucorrea','Leucorrea')}
+        ${checkSintomaActual('ginSintPrurito','Prurito')}
+        ${checkSintomaActual('ginSintDisuria','Disuria')}
+        ${checkSintomaActual('ginSintDispareunia','Dispareunia')}
+        ${checkSintomaActual('ginSintAmenorrea','Amenorrea')}
+        ${checkSintomaActual('ginSintDismenorrea','Dismenorrea')}
+        ${checkSintomaActual('ginSintMasa','Sensación de masa')}
+        ${checkSintomaActual('ginSintSequedad','Sequedad vaginal')}
+        ${checkSintomaActual('ginSintIncontinencia','Incontinencia')}
+        ${checkSintomaActual('ginSintMenopausia','Síntomas menopáusicos')}
       </div>
 
       <label class="form-label fw-bold" for="ginSintDescripcion">
@@ -185,7 +191,7 @@ Función:
       <textarea id="ginSintDescripcion" class="form-control" rows="3"></textarea>
     `;
 
-    contenedorBase.insertAdjacentElement('afterend', bloque);
+    bloqueEnfermedad.insertAdjacentElement('afterend', bloque);
   }
 
   function crearInterfaz() {
