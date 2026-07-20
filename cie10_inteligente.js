@@ -101,26 +101,37 @@
   }
 
   function obtenerContenedor(){
+    /*
+      AUROSANAX FIX QUIRÚRGICO:
+      El protocolo inteligente CIE-10 debe existir únicamente dentro de la
+      pestaña Diagnóstico, inmediatamente después del editor CIE-10 y antes
+      del centro de integración clínica. Nunca se monta junto a Examen físico
+      ni en un contenedor global compartido por otras pestañas.
+    */
+    const panel = document.getElementById('hc_diagnostico');
+    const editor = document.getElementById('hcDiagnosticoCieGrupo');
+    const integracion = document.getElementById('auroDiagnosticosMount');
+
     let box = document.getElementById('auroCie10InteligenteBox');
-    if(box) return box;
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'auroCie10InteligenteBox';
+      box.className = 'auro-cie10-inteligente-box';
+      box.style.display = 'none';
+    }
 
-    box = document.createElement('div');
-    box.id = 'auroCie10InteligenteBox';
-    box.className = 'auro-cie10-inteligente-box';
-    box.style.display = 'none';
-
-    const destino =
-      document.getElementById('hcDiagnosticosSeleccionadosBox') ||
-      document.getElementById('hcDiagnosticosTableBody')?.closest('.cardx') ||
-      document.getElementById('hc_diagnosticos') ||
-      document.getElementById('hc_examen') ||
-      document.querySelector('[data-module-patient="Examen Físico"]')?.parentElement;
-
-    if(destino && destino.parentNode){
-      destino.parentNode.insertBefore(box, destino.nextSibling);
+    if(panel){
+      /* Orden obligatorio: Editor CIE-10 -> Protocolo sugerido -> Integración. */
+      if(integracion && integracion.parentElement === panel){
+        panel.insertBefore(box, integracion);
+      }else if(editor && editor.parentElement === panel){
+        editor.insertAdjacentElement('afterend', box);
+      }else if(box.parentElement !== panel){
+        panel.appendChild(box);
+      }
     }else{
-      const historia = document.getElementById('historia') || document.body;
-      historia.appendChild(box);
+      /* Degradación segura: se conserva oculto hasta que exista la pestaña. */
+      box.style.display = 'none';
     }
 
     instalarEstilos();
