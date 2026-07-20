@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MÓDULO ANAMNESIS INTELIGENTE
 Archivo: anamnesis.js
-Versión: 1.1.0
+Versión: 1.2.0
 
 Función:
 - Detectar "dolor pélvico" en #hcMotivoConsulta.
@@ -15,7 +15,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   let inicializado = false;
 
   const $ = id => document.getElementById(id);
@@ -120,6 +120,17 @@ Función:
       .auro-clinical-warning{margin-top:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:9px 10px;font-size:12px}
       @media(max-width:980px){.auro-semiologia-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media(max-width:560px){.auro-semiologia-grid{grid-template-columns:1fr}.auro-semiologia-field.span-2,.auro-semiologia-field.span-4{grid-column:auto}.auro-anamnesis-btn{width:100%}}
+
+      #anamnesis .auro-anam-sintomas-panel{border:1px solid #e5e7eb;border-radius:18px;padding:16px;background:#fff;margin-top:16px}
+      #anamnesis .auro-anam-sintomas-title{font-weight:900;color:#111827;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+      #anamnesis .auro-anam-sintomas-title i{color:#8b1e5a}
+      #anamnesis .auro-anam-sintomas-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+      #anamnesis .auro-anam-sintoma{border:1px solid #e5e7eb;border-radius:14px;padding:9px 10px;display:flex;align-items:center;gap:8px;background:#fff;cursor:pointer}
+      #anamnesis .auro-anam-sintoma:hover{border-color:#f9a8d4;background:#fff7fb}
+      #anamnesis .auro-anam-sintoma input{width:17px;height:17px;accent-color:#8b1e5a}
+      @media(max-width:1100px){#anamnesis .auro-anam-sintomas-grid{grid-template-columns:repeat(3,1fr)}}
+      @media(max-width:760px){#anamnesis .auro-anam-sintomas-grid{grid-template-columns:repeat(2,1fr)}}
+      @media(max-width:460px){#anamnesis .auro-anam-sintomas-grid{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
   }
@@ -129,6 +140,52 @@ Función:
       '<label class="auro-check-item"><input type="checkbox" class="' +
       clase + '" value="' + v + '"> ' + v + '</label>'
     ).join('');
+  }
+
+
+  function crearBloqueSintomasActuales() {
+    if (document.getElementById('auroAnamnesisSintomasActuales')) return;
+
+    const enfermedad = document.getElementById('hcEnfermedadActual');
+    if (!enfermedad) return;
+
+    const contenedorBase =
+      enfermedad.closest('.col-md-12, .col-12, .row, .form-group') ||
+      enfermedad.parentElement;
+
+    if (!contenedorBase || !contenedorBase.parentElement) return;
+
+    const bloque = document.createElement('div');
+    bloque.id = 'auroAnamnesisSintomasActuales';
+    bloque.className = 'auro-anam-sintomas-panel';
+    bloque.innerHTML = `
+      <div class="auro-anam-sintomas-title">
+        <i class="bi bi-activity"></i>
+        <span>Síntomas actuales</span>
+      </div>
+
+      <div class="auro-anam-sintomas-grid mb-3">
+        <label class="auro-anam-sintoma"><input id="ginSintDolorPelvico" type="checkbox"><span>Dolor pélvico</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintSangrado" type="checkbox"><span>Sangrado anormal</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintLeucorrea" type="checkbox"><span>Leucorrea</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintPrurito" type="checkbox"><span>Prurito</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintDisuria" type="checkbox"><span>Disuria</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintDispareunia" type="checkbox"><span>Dispareunia</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintAmenorrea" type="checkbox"><span>Amenorrea</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintDismenorrea" type="checkbox"><span>Dismenorrea</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintMasa" type="checkbox"><span>Sensación de masa</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintSequedad" type="checkbox"><span>Sequedad vaginal</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintIncontinencia" type="checkbox"><span>Incontinencia</span></label>
+        <label class="auro-anam-sintoma"><input id="ginSintMenopausia" type="checkbox"><span>Síntomas menopáusicos</span></label>
+      </div>
+
+      <label class="form-label fw-bold" for="ginSintDescripcion">
+        Descripción, evolución y características
+      </label>
+      <textarea id="ginSintDescripcion" class="form-control" rows="3"></textarea>
+    `;
+
+    contenedorBase.insertAdjacentElement('afterend', bloque);
   }
 
   function crearInterfaz() {
@@ -516,6 +573,7 @@ Función:
     instalarEstilos();
     ocultarCamposDuplicadosAnamnesis();
     crearInterfaz();
+    crearBloqueSintomasActuales();
     inicializado = true;
 
     console.info('AUROSANAX Anamnesis v' + VERSION + ': inicializado.');
