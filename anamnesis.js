@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.4.0
+Versión: 3.5.0
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.4.0';
+  const VERSION = '3.5.0';
   const state = {
     inicializado: false,
     cargando: false,
@@ -1122,7 +1122,7 @@ Función:
     }
 
     if (Array.isArray(estructura)) {
-      return estructura
+      const narrativaExplicita = estructura
         .map(item => {
           if (typeof item === 'string') return reemplazarVariables(item, respuestas);
           if (item && typeof item === 'object') {
@@ -1138,16 +1138,11 @@ Función:
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
+
+      if (narrativaExplicita) return narrativaExplicita;
     }
 
     if (estructura && typeof estructura === 'object') {
-      /*
-        Solo se usa una narrativa explícita cuando la estructura contiene
-        texto clínico real. Campos técnicos como:
-        - orden
-        - salida: "narrativa_clinica"
-        describen el formato, pero no son la redacción final.
-      */
       const base = texto(
         estructura.plantilla ||
         estructura.texto ||
@@ -1156,96 +1151,83 @@ Función:
         estructura.template ||
         ''
       );
-
       if (base) return reemplazarVariables(base, respuestas);
-
-      /*
-        Cuando no existe una plantilla textual explícita, continúa al
-        generador clínico automático situado debajo.
-      */
     }
 
-    const motivo = texto($('hcMotivoConsulta')?.value);
+    const motivo = texto($('hcMotivoConsulta')?.value) || nombrePlantilla(plantilla).toLowerCase();
+    const valores = {};
 
-    const valores = Object.fromEntries(
-      state.preguntas
-        .filter(pregunta => pregunta.type !== 'section')
-        .map(pregunta => {
-          const valor = respuestas[pregunta.id];
-          const contenido = Array.isArray(valor) ? unirNatural(valor) : texto(valor);
-          return [pregunta.id, contenido];
-        })
-    );
+    state.preguntas
+      .filter(pregunta => pregunta.type !== 'section')
+      .forEach(pregunta => {
+        const valor = respuestas[pregunta.id];
+        valores[pregunta.id] = Array.isArray(valor) ? unirNatural(valor) : texto(valor);
+      });
 
-    const partes = [];
-    partes.push(`Paciente consulta por ${motivo || nombrePlantilla(plantilla).toLowerCase()}.`);
+    const partes = [`Paciente consulta por ${motivo}.`];
 
-    const inicio = valores.inicio || valores.fecha_inicio || '';
-    const tiempo = valores.tiempo_evolucion || valores.duracion || '';
-    const evolucion = valores.evolucion || '';
+    const cronologia = [];
+    if (valores.inicio) cronologia.push(`inicio ${valores.inicio.toLowerCase()}`);
+    if (valores.tiempo_evolucion) cronologia.push(`${valores.tiempo_evolucion} de evolución`);
+    if (valores.evolucion) cronologia.push(`curso ${valores.evolucion.toLowerCase()}`);
+    if (cronologia.length) partes.push(`Cuadro de ${unirNatural(cronologia)}.`);
 
-    if (inicio || tiempo || evolucion) {
-      const cronologia = [
-        inicio ? `inicio ${inicio.toLowerCase()}` : '',
-        tiempo ? `${tiempo} de evolución` : '',
-        evolucion ? `curso ${evolucion.toLowerCase()}` : ''
-      ].filter(Boolean);
-      partes.push(`Cuadro de ${unirNatural(cronologia)}.`);
+    const caracteristicas = [];
+    const color = normalizar(valores.color);
+    const coloresClinicos = {
+      blanco: 'blanquecino',
+      transparente: 'transparente',
+      amarillo: 'amarillento',
+      verdoso: 'verdoso',
+      grisaceo: 'grisáceo',
+      marron: 'marronáceo',
+      sanguinolento: 'sanguinolento'
+    };
+
+    if (valores.color) caracteristicas.push(`flujo ${coloresClinicos[color] || valores.color.toLowerCase()}`);
+    if (valores.cantidad) caracteristicas.push(`de ${valores.cantidad.toLowerCase()} cantidad`);
+    if (valores.consistencia) caracteristicas.push(`de consistencia ${valores.consistencia.toLowerCase()}`);
+    if (valores.olor) {
+      const olor = normalizar(valores.olor);
+      caracteristicas.push(olor === 'sin olor' ? 'sin olor' : `de olor ${valores.olor.toLowerCase()}`);
     }
+    if (caracteristicas.length) partes.push(`Refiere ${caracteristicas.join(', ')}.`);
 
-    const caracteristicasPreferidas = [
-      ['localizacion', 'localización'],
-      ['color', 'color'],
-      ['olor', 'olor'],
-      ['cantidad', 'cantidad'],
-      ['consistencia', 'consistencia'],
-      ['caracter', 'carácter'],
-      ['intensidad_0_10', 'intensidad'],
-      ['frecuencia', 'frecuencia'],
-      ['irradiacion', 'irradiación'],
-      ['patron', 'patrón']
-    ];
-
-    const caracteristicas = caracteristicasPreferidas
-      .map(([id, etiqueta]) => valores[id] ? `${etiqueta} ${valores[id]}` : '')
-      .filter(Boolean);
-
-    if (caracteristicas.length) {
-      partes.push(`Se caracteriza por ${unirNatural(caracteristicas)}.`);
-    }
+    const etiquetasClinicas = {
+      prurito: 'prurito vulvovaginal',
+      ardor: 'ardor vulvovaginal',
+      disuria: 'disuria',
+      dolor_pelvico: 'dolor pélvico',
+      sangrado_postcoital: 'sangrado postcoital',
+      fiebre: 'fiebre',
+      relaciones_sin_proteccion: 'relaciones sexuales sin protección',
+      nueva_pareja: 'nueva pareja sexual'
+    };
 
     const positivos = [];
     const negativos = [];
 
-    state.preguntas.forEach(pregunta => {
-      if (pregunta.type === 'section') return;
-      if ([
-        'inicio','fecha_inicio','tiempo_evolucion','duracion','evolucion',
-        'localizacion','color','olor','cantidad','consistencia','caracter',
-        'intensidad_0_10','frecuencia','irradiacion','patron'
-      ].includes(pregunta.id)) return;
-
-      const valor = valores[pregunta.id];
-      if (!valor) return;
-
-      const normal = normalizar(valor);
-      const etiqueta = humanizarClave(pregunta.label).toLowerCase();
-
-      if (['si', 'presente', 'presentes', 'positivo'].includes(normal)) {
-        positivos.push(etiqueta);
-      } else if (['no', 'ausente', 'ausentes', 'negativo'].includes(normal)) {
-        negativos.push(etiqueta);
-      } else {
-        positivos.push(`${etiqueta}: ${valor}`);
-      }
+    Object.entries(etiquetasClinicas).forEach(([id, etiqueta]) => {
+      const valor = normalizar(valores[id]);
+      if (['si', 'presente', 'presentes', 'positivo'].includes(valor)) positivos.push(etiqueta);
+      if (['no', 'ausente', 'ausentes', 'negativo'].includes(valor)) negativos.push(etiqueta);
     });
 
-    if (positivos.length) {
-      partes.push(`Se asocia con ${unirNatural(positivos)}.`);
+    if (positivos.length) partes.push(`Se acompaña de ${unirNatural(positivos)}.`);
+    if (negativos.length) partes.push(`Niega ${unirNatural(negativos)}.`);
+
+    if (valores.tratamientos_previos) {
+      const tratamiento = normalizar(valores.tratamientos_previos);
+      if (!['no', 'ninguno', 'sin tratamiento'].includes(tratamiento)) {
+        partes.push(`Refiere tratamientos previos: ${valores.tratamientos_previos}.`);
+      }
     }
 
-    if (negativos.length) {
-      partes.push(`Niega ${unirNatural(negativos)}.`);
+    if (valores.embarazo_posible) {
+      const embarazo = normalizar(valores.embarazo_posible);
+      if (embarazo === 'si') partes.push('Refiere posibilidad de embarazo.');
+      else if (embarazo === 'por confirmar') partes.push('Posibilidad de embarazo por confirmar.');
+      else if (embarazo === 'no') partes.push('Niega posibilidad de embarazo.');
     }
 
     return partes
