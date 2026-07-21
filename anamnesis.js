@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.3.0
+Versión: 3.4.0
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.3.0';
+  const VERSION = '3.4.0';
   const state = {
     inicializado: false,
     cargando: false,
@@ -1141,23 +1141,28 @@ Función:
     }
 
     if (estructura && typeof estructura === 'object') {
+      /*
+        Solo se usa una narrativa explícita cuando la estructura contiene
+        texto clínico real. Campos técnicos como:
+        - orden
+        - salida: "narrativa_clinica"
+        describen el formato, pero no son la redacción final.
+      */
       const base = texto(
         estructura.plantilla ||
         estructura.texto ||
         estructura.narrativa ||
         estructura.formato ||
+        estructura.template ||
         ''
       );
 
       if (base) return reemplazarVariables(base, respuestas);
 
-      const fragmentos = Object.values(estructura)
-        .filter(valor => typeof valor === 'string')
-        .map(valor => reemplazarVariables(valor, respuestas))
-        .map(texto)
-        .filter(Boolean);
-
-      if (fragmentos.length) return fragmentos.join(' ');
+      /*
+        Cuando no existe una plantilla textual explícita, continúa al
+        generador clínico automático situado debajo.
+      */
     }
 
     const motivo = texto($('hcMotivoConsulta')?.value);
