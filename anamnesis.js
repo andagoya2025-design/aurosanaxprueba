@@ -162,7 +162,7 @@ Función:
     return `<label class="gin-check"><input id="${id}" type="checkbox"><span>${label}</span></label>`;
   }
 
-  function crearBloqueSintomasGinecologicos() {
+  function crearBloqueSintomasActuales() {
     if ($('auroAnamnesisSintomasActuales')) return;
 
     const enfermedad = $('hcEnfermedadActual');
