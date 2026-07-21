@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.2.0
+Versión: 3.3.0
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.2.0';
+  const VERSION = '3.3.0';
   const state = {
     inicializado: false,
     cargando: false,
@@ -580,15 +580,108 @@ Función:
     motivo.addEventListener('input', detectar);
   }
 
+
+  function opcionesRapidasPorCampo(id) {
+    const clave = normalizar(id).replace(/\s+/g, '_');
+
+    const catalogo = {
+      inicio: ['Súbito', 'Gradual', 'Insidioso'],
+      evolucion: ['Estable', 'Progresiva', 'Intermitente', 'Recurrente', 'En mejoría'],
+      color: ['Blanco', 'Transparente', 'Amarillo', 'Verdoso', 'Grisáceo', 'Marrón', 'Sanguinolento'],
+      olor: ['Sin olor', 'Leve', 'Fétido', 'A pescado', 'Otro'],
+      cantidad: ['Escasa', 'Moderada', 'Abundante'],
+      consistencia: ['Acuosa', 'Cremosa', 'Espesa', 'Grumosa', 'Mucosa', 'Espumosa'],
+      patron: ['Continuo', 'Intermitente', 'Cíclico', 'Irregular'],
+      caracter: ['Cólico', 'Punzante', 'Opresivo', 'Urente', 'Sordo', 'Pulsátil'],
+      intensidad_0_10: Array.from({ length: 11 }, (_, i) => String(i)),
+      prurito: ['No', 'Sí'],
+      ardor: ['No', 'Sí'],
+      disuria: ['No', 'Sí'],
+      fiebre: ['No', 'Sí'],
+      dolor_pelvico: ['No', 'Sí'],
+      sangrado_vaginal: ['No', 'Sí'],
+      sangrado_postcoital: ['No', 'Sí'],
+      relaciones_sin_proteccion: ['No', 'Sí'],
+      nueva_pareja: ['No', 'Sí'],
+      tratamientos_previos: ['No', 'Sí'],
+      embarazo_posible: ['No', 'Sí', 'Por confirmar'],
+      posibilidad_embarazo: ['No', 'Sí', 'Por confirmar'],
+      coágulos: ['No', 'Sí'],
+      mareo_o_sincope: ['No', 'Sí'],
+      palpitaciones: ['No', 'Sí'],
+      anticoncepcion: ['No', 'Sí'],
+      medicacion_anticoagulante: ['No', 'Sí'],
+      movimientos_fetales: ['Presentes', 'Disminuidos', 'No percibidos', 'No aplica'],
+      perdida_liquido: ['No', 'Sí'],
+      contracciones: ['No', 'Sí'],
+      cefalea: ['No', 'Sí'],
+      fosfenos: ['No', 'Sí'],
+      epigastralgia: ['No', 'Sí'],
+      edema: ['No', 'Sí'],
+      adherencia_suplementos: ['Adecuada', 'Parcial', 'No cumple'],
+      laxitud_percibida: ['Leve', 'Moderada', 'Severa'],
+      sequedad: ['No', 'Sí'],
+      dolor_relaciones: ['No', 'Sí'],
+      incontinencia: ['No', 'Sí'],
+      infecciones_recurrentes: ['No', 'Sí'],
+      contraindicaciones: ['No', 'Sí']
+    };
+
+    return (catalogo[clave] || []).map(valor => ({ value: valor, label: valor }));
+  }
+
+  function tipoRapidoPorCampo(id) {
+    const opciones = opcionesRapidasPorCampo(id);
+    if (opciones.length) return 'select';
+
+    const clave = normalizar(id).replace(/\s+/g, '_');
+    if (clave.includes('fecha') || clave === 'fum' || clave === 'fpp') return 'date';
+    if (clave.includes('descripcion') || clave.includes('observacion') || clave.includes('antecedentes')) return 'textarea';
+    return 'text';
+  }
+
+  function placeholderRapidoPorCampo(id) {
+    const clave = normalizar(id).replace(/\s+/g, '_');
+    const ayudas = {
+      tiempo_evolucion: 'Ej. 3 días',
+      duracion: 'Ej. horas o días',
+      frecuencia: 'Ej. diaria o intermitente',
+      localizacion: 'Especifique localización',
+      irradiacion: 'Especifique o indique sin irradiación',
+      factores_agravantes: 'Ej. actividad, menstruación, relaciones',
+      factores_aliviantes: 'Ej. reposo, analgésicos',
+      medicacion_actual: 'Medicamento, dosis y frecuencia',
+      tratamientos_previos: 'Especifique tratamiento y respuesta',
+      signos_de_alarma: 'Describa signos de alarma presentes',
+      sintomas_asociados: 'Describa síntomas asociados'
+    };
+    return ayudas[clave] || '';
+  }
+
+  function aplicarSugerenciasPregunta(pregunta) {
+    if (pregunta.options?.length) return pregunta;
+
+    const opciones = opcionesRapidasPorCampo(pregunta.id);
+    if (opciones.length) {
+      pregunta.type = 'select';
+      pregunta.options = opciones;
+    } else if (!pregunta.placeholder) {
+      pregunta.placeholder = placeholderRapidoPorCampo(pregunta.id);
+    }
+
+    return pregunta;
+  }
+
   function normalizarPregunta(valor, indice, seccion = '') {
     if (typeof valor === 'string') {
+      const idTexto = normalizar(valor).replace(/\s+/g, '_') || `pregunta_${indice}`;
       return {
-        id: `pregunta_${indice}`,
-        label: valor,
-        type: 'text',
+        id: idTexto,
+        label: humanizarClave(valor),
+        type: tipoRapidoPorCampo(idTexto),
         required: false,
-        options: [],
-        placeholder: '',
+        options: opcionesRapidasPorCampo(idTexto),
+        placeholder: placeholderRapidoPorCampo(idTexto),
         span: 1,
         section: seccion
       };
@@ -657,7 +750,7 @@ Función:
     const columnas = Number(pregunta.span || pregunta.columnas || pregunta.cols || 1);
     const span = columnas >= 4 ? 4 : columnas >= 2 ? 2 : 1;
 
-    return {
+    return aplicarSugerenciasPregunta({
       id: normalizar(idBase).replace(/\s+/g, '_') || `pregunta_${indice}`,
       label: texto(
         pregunta.label ||
@@ -683,7 +776,7 @@ Función:
       step: pregunta.step ?? pregunta.paso ?? '',
       suffix: texto(pregunta.sufijo || ''),
       narrative: texto(pregunta.narrativa || pregunta.plantilla_narrativa || '')
-    };
+    });
   }
 
   function extraerPreguntas(plantilla) {
@@ -1068,19 +1161,93 @@ Función:
     }
 
     const motivo = texto($('hcMotivoConsulta')?.value);
-    const detalles = state.preguntas
-      .filter(pregunta => pregunta.type !== 'section')
-      .map(pregunta => {
-        const valor = respuestas[pregunta.id];
-        const contenido = Array.isArray(valor) ? unirNatural(valor) : texto(valor);
-        return contenido ? `${pregunta.label}: ${contenido}` : '';
-      })
+
+    const valores = Object.fromEntries(
+      state.preguntas
+        .filter(pregunta => pregunta.type !== 'section')
+        .map(pregunta => {
+          const valor = respuestas[pregunta.id];
+          const contenido = Array.isArray(valor) ? unirNatural(valor) : texto(valor);
+          return [pregunta.id, contenido];
+        })
+    );
+
+    const partes = [];
+    partes.push(`Paciente consulta por ${motivo || nombrePlantilla(plantilla).toLowerCase()}.`);
+
+    const inicio = valores.inicio || valores.fecha_inicio || '';
+    const tiempo = valores.tiempo_evolucion || valores.duracion || '';
+    const evolucion = valores.evolucion || '';
+
+    if (inicio || tiempo || evolucion) {
+      const cronologia = [
+        inicio ? `inicio ${inicio.toLowerCase()}` : '',
+        tiempo ? `${tiempo} de evolución` : '',
+        evolucion ? `curso ${evolucion.toLowerCase()}` : ''
+      ].filter(Boolean);
+      partes.push(`Cuadro de ${unirNatural(cronologia)}.`);
+    }
+
+    const caracteristicasPreferidas = [
+      ['localizacion', 'localización'],
+      ['color', 'color'],
+      ['olor', 'olor'],
+      ['cantidad', 'cantidad'],
+      ['consistencia', 'consistencia'],
+      ['caracter', 'carácter'],
+      ['intensidad_0_10', 'intensidad'],
+      ['frecuencia', 'frecuencia'],
+      ['irradiacion', 'irradiación'],
+      ['patron', 'patrón']
+    ];
+
+    const caracteristicas = caracteristicasPreferidas
+      .map(([id, etiqueta]) => valores[id] ? `${etiqueta} ${valores[id]}` : '')
       .filter(Boolean);
 
-    return [
-      motivo ? `Paciente consulta por ${motivo}.` : '',
-      detalles.length ? `${detalles.join('. ')}.` : ''
-    ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    if (caracteristicas.length) {
+      partes.push(`Se caracteriza por ${unirNatural(caracteristicas)}.`);
+    }
+
+    const positivos = [];
+    const negativos = [];
+
+    state.preguntas.forEach(pregunta => {
+      if (pregunta.type === 'section') return;
+      if ([
+        'inicio','fecha_inicio','tiempo_evolucion','duracion','evolucion',
+        'localizacion','color','olor','cantidad','consistencia','caracter',
+        'intensidad_0_10','frecuencia','irradiacion','patron'
+      ].includes(pregunta.id)) return;
+
+      const valor = valores[pregunta.id];
+      if (!valor) return;
+
+      const normal = normalizar(valor);
+      const etiqueta = humanizarClave(pregunta.label).toLowerCase();
+
+      if (['si', 'presente', 'presentes', 'positivo'].includes(normal)) {
+        positivos.push(etiqueta);
+      } else if (['no', 'ausente', 'ausentes', 'negativo'].includes(normal)) {
+        negativos.push(etiqueta);
+      } else {
+        positivos.push(`${etiqueta}: ${valor}`);
+      }
+    });
+
+    if (positivos.length) {
+      partes.push(`Se asocia con ${unirNatural(positivos)}.`);
+    }
+
+    if (negativos.length) {
+      partes.push(`Niega ${unirNatural(negativos)}.`);
+    }
+
+    return partes
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\.\./g, '.')
+      .trim();
   }
 
   function generar() {
