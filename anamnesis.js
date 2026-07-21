@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.5.0
+Versión: 3.6.0
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.5.0';
+  const VERSION = '3.6.0';
   const state = {
     inicializado: false,
     cargando: false,
@@ -23,7 +23,13 @@ Función:
     plantillaActiva: null,
     preguntas: [],
     respuestas: {},
-    narrativa: ''
+    narrativa: '',
+    idAtencionActual: '',
+    idPacienteActual: '',
+    idHistoriaActual: '',
+    cacheAtenciones: {},
+    restaurandoAtencion: false,
+    guardadoPendiente: null
   };
 
   const $ = id => document.getElementById(id);
@@ -1376,8 +1382,423 @@ Función:
     }
   }
 
+
+  /* ============================================================
+     AUROSANAX ANAMNESIS v3.6.0
+     CONEXIÓN QUIRÚRGICA POR id_atencion
+     ------------------------------------------------------------
+     Este bloque agrega aislamiento, guardado y restauración por
+     consulta sin modificar:
+     - el asistente sindrómico;
+     - el buscador y reconocimiento del motivo;
+     - las plantillas dinámicas;
+     - generarNarrativa();
+     - crearBloqueSintomasActuales();
+     - crearBloqueSintomasObstetricos();
+     - botones, diseño o funcionamiento clínico ya existente.
+  ============================================================ */
+
+  const AURO_ANAMNESIS_STORAGE_KEY = 'aurosanax_anamnesis_por_atencion_v1';
+
+  function auroClonarAnamnesis(valor) {
+    try {
+      return JSON.parse(JSON.stringify(valor));
+    } catch (error) {
+      return valor;
+    }
+  }
+
+  function auroLeerCacheAnamnesisLocal() {
+    try {
+      const raw = localStorage.getItem(AURO_ANAMNESIS_STORAGE_KEY);
+      const data = raw ? JSON.parse(raw) : {};
+      return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: no se pudo leer el respaldo local.', error);
+      return {};
+    }
+  }
+
+  function auroGuardarCacheAnamnesisLocal(cache) {
+    try {
+      localStorage.setItem(
+        AURO_ANAMNESIS_STORAGE_KEY,
+        JSON.stringify(cache && typeof cache === 'object' ? cache : {})
+      );
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: no se pudo guardar el respaldo local.', error);
+    }
+  }
+
+  function auroObtenerIdAtencionAnamnesis() {
+    const candidatos = [
+      state.idAtencionActual,
+      window.auroAtencionSeleccionadaId,
+      window.atencionActivaId,
+      window.planState?.atencionActual,
+      window.examenFisicoState?.atencionActual,
+      window.__auroPlanAtencionRenderizada
+    ];
+
+    for (const valor of candidatos) {
+      const id = texto(valor);
+      if (id) return id;
+    }
+
+    try {
+      if (typeof window.obtenerAtencionActiva === 'function') {
+        const atencion = window.obtenerAtencionActiva();
+        const id = texto(atencion?.id_atencion);
+        if (id) return id;
+      }
+    } catch (error) {}
+
+    return '';
+  }
+
+  function auroClaveControlAnamnesis(control, indice) {
+    if (!control) return '';
+    if (control.id) return 'id:' + control.id;
+    if (control.dataset?.auroQuestion) {
+      const valor = control.type === 'radio' || control.type === 'checkbox'
+        ? ':' + texto(control.value)
+        : '';
+      return 'question:' + control.dataset.auroQuestion + valor;
+    }
+    if (control.name) {
+      const valor = control.type === 'radio' || control.type === 'checkbox'
+        ? ':' + texto(control.value)
+        : '';
+      return 'name:' + control.name + valor;
+    }
+    return 'index:' + indice;
+  }
+
+  function auroCapturarControlesAnamnesis() {
+    const panel = $('hc_anamnesis');
+    if (!panel) return {};
+
+    const salida = {};
+    [...panel.querySelectorAll('input, select, textarea')].forEach((control, indice) => {
+      if (!control || control.disabled || control.type === 'button' ||
+          control.type === 'submit' || control.type === 'reset') return;
+
+      const clave = auroClaveControlAnamnesis(control, indice);
+      if (!clave) return;
+
+      salida[clave] = {
+        tipo: control.type || control.tagName.toLowerCase(),
+        valor: control.type === 'checkbox' || control.type === 'radio'
+          ? texto(control.value)
+          : control.value,
+        checked: !!control.checked
+      };
+    });
+
+    return salida;
+  }
+
+  function auroAplicarControlesAnamnesis(controles) {
+    const panel = $('hc_anamnesis');
+    if (!panel || !controles || typeof controles !== 'object') return;
+
+    [...panel.querySelectorAll('input, select, textarea')].forEach((control, indice) => {
+      const clave = auroClaveControlAnamnesis(control, indice);
+      const dato = controles[clave];
+      if (!dato) return;
+
+      if (control.type === 'checkbox' || control.type === 'radio') {
+        control.checked = !!dato.checked;
+      } else {
+        control.value = dato.valor ?? '';
+      }
+
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  function auroCapturarAnamnesisActual() {
+    const idAtencion = auroObtenerIdAtencionAnamnesis();
+
+    return {
+      id_atencion: idAtencion,
+      id_paciente: texto(state.idPacienteActual),
+      id_historia: texto(state.idHistoriaActual),
+      motivo_consulta: texto($('hcMotivoConsulta')?.value),
+      enfermedad_actual: texto($('hcEnfermedadActual')?.value),
+      id_plantilla_anamnesis: state.plantillaActiva
+        ? idPlantilla(state.plantillaActiva)
+        : texto($('auroPlantillaAnamnesisSelect')?.value),
+      nombre_plantilla: state.plantillaActiva
+        ? nombrePlantilla(state.plantillaActiva)
+        : '',
+      respuestas_json: state.plantillaActiva ? leerRespuestas() : {},
+      narrativa_generada: texto(state.narrativa),
+      controles_json: auroCapturarControlesAnamnesis(),
+      panel_abierto: !!$('auroDynamicAnamnesisPanel')?.classList.contains('show'),
+      modulo_version: VERSION,
+      actualizado_en: new Date().toISOString()
+    };
+  }
+
+  function auroTieneContenidoAnamnesis(data) {
+    if (!data) return false;
+    return !!(
+      texto(data.motivo_consulta) ||
+      texto(data.enfermedad_actual) ||
+      texto(data.id_plantilla_anamnesis) ||
+      Object.keys(data.respuestas_json || {}).length ||
+      Object.values(data.controles_json || {}).some(item =>
+        !!item?.checked || texto(item?.valor)
+      )
+    );
+  }
+
+  function guardarAnamnesisTemporal() {
+    const idAtencion = auroObtenerIdAtencionAnamnesis();
+    if (!idAtencion || state.restaurandoAtencion) return null;
+
+    const data = auroCapturarAnamnesisActual();
+    data.id_atencion = idAtencion;
+
+    state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(data);
+
+    const cacheLocal = auroLeerCacheAnamnesisLocal();
+    cacheLocal[idAtencion] = auroClonarAnamnesis(data);
+    auroGuardarCacheAnamnesisLocal(cacheLocal);
+
+    return data;
+  }
+
+  function limpiarAnamnesisTemporal() {
+    state.restaurandoAtencion = true;
+
+    try {
+      const motivo = $('hcMotivoConsulta');
+      const enfermedad = $('hcEnfermedadActual');
+
+      if (motivo) motivo.value = '';
+      if (enfermedad) enfermedad.value = '';
+
+      $('auroPlantillaAnamnesisSelect') && ($('auroPlantillaAnamnesisSelect').value = '');
+      seleccionarPlantilla('', false);
+
+      /*
+        Se limpian únicamente controles dentro de Anamnesis.
+        No se elimina, reemplaza ni reconstruye ningún bloque visual.
+      */
+      $('hc_anamnesis')
+        ?.querySelectorAll('input, select, textarea')
+        .forEach(control => {
+          if (control.id === 'auroPlantillaAnamnesisSelect') return;
+          if (control.type === 'button' || control.type === 'submit') return;
+
+          if (control.type === 'checkbox' || control.type === 'radio') {
+            control.checked = false;
+          } else {
+            control.value = '';
+          }
+        });
+
+      state.respuestas = {};
+      state.narrativa = '';
+      $('auroDynamicAnamnesisPanel')?.classList.remove('show');
+    } finally {
+      state.restaurandoAtencion = false;
+    }
+  }
+
+  async function auroEnviarAnamnesisSheets(data) {
+    const api = obtenerApiUrl();
+    if (!api || !data?.id_atencion || !auroTieneContenidoAnamnesis(data)) {
+      return { success: false, omitido: true };
+    }
+
+    try {
+      await fetch(api, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          accion: 'guardarAnamnesisAtencion',
+          data: {
+            ...data,
+            respuestas_json: JSON.stringify(data.respuestas_json || {}),
+            controles_json: JSON.stringify(data.controles_json || {})
+          }
+        })
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: respaldo remoto no disponible.', error);
+      return { success: false, error };
+    }
+  }
+
+  async function guardarAnamnesisPorAtencion() {
+    const data = guardarAnamnesisTemporal();
+    if (!data) return { success: false, message: 'No existe una atención activa.' };
+    await auroEnviarAnamnesisSheets(data);
+    return { success: true, data };
+  }
+
+  async function auroBuscarAnamnesisSheets(idAtencion) {
+    try {
+      const respuesta = await consultarAccion(
+        'buscarAnamnesisPorAtencion',
+        { id_atencion: idAtencion }
+      );
+
+      const registro = respuesta?.data || respuesta?.anamnesis || respuesta;
+      if (!registro || Array.isArray(registro) || !texto(registro.id_atencion)) {
+        return null;
+      }
+
+      return {
+        ...registro,
+        respuestas_json: parsearJsonSeguro(registro.respuestas_json, {}),
+        controles_json: parsearJsonSeguro(registro.controles_json, {})
+      };
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: se usará respaldo local.', error);
+      return null;
+    }
+  }
+
+  async function cargarAnamnesisTemporal(idAtencion) {
+    idAtencion = texto(idAtencion);
+    if (!idAtencion) return false;
+
+    let data = state.cacheAtenciones[idAtencion] || null;
+
+    if (!data) {
+      const cacheLocal = auroLeerCacheAnamnesisLocal();
+      data = cacheLocal[idAtencion] || null;
+    }
+
+    const remoto = await auroBuscarAnamnesisSheets(idAtencion);
+    if (remoto) data = remoto;
+
+    if (!data) return false;
+
+    state.restaurandoAtencion = true;
+
+    try {
+      if (!state.cargado) {
+        await cargarPlantillas(false);
+      }
+
+      const idPlantillaGuardada = texto(data.id_plantilla_anamnesis);
+
+      if (idPlantillaGuardada) {
+        const selector = $('auroPlantillaAnamnesisSelect');
+        if (selector) selector.value = idPlantillaGuardada;
+        seleccionarPlantilla(idPlantillaGuardada, !!data.panel_abierto);
+      } else {
+        seleccionarPlantilla('', false);
+      }
+
+      if ($('hcMotivoConsulta')) $('hcMotivoConsulta').value = texto(data.motivo_consulta);
+      if ($('hcEnfermedadActual')) $('hcEnfermedadActual').value = texto(data.enfermedad_actual);
+
+      /*
+        La restauración se hace sobre los controles existentes.
+        No altera las funciones que crean síntomas ni el asistente.
+      */
+      auroAplicarControlesAnamnesis(data.controles_json || {});
+
+      state.respuestas = auroClonarAnamnesis(data.respuestas_json || {});
+      state.narrativa = texto(data.narrativa_generada);
+
+      if (data.panel_abierto) {
+        $('auroDynamicAnamnesisPanel')?.classList.add('show');
+      }
+
+      state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(data);
+
+      const cacheLocal = auroLeerCacheAnamnesisLocal();
+      cacheLocal[idAtencion] = auroClonarAnamnesis(data);
+      auroGuardarCacheAnamnesisLocal(cacheLocal);
+
+      return true;
+    } finally {
+      state.restaurandoAtencion = false;
+    }
+  }
+
+  async function cambiarAnamnesisPorAtencion(idAtencion, detalle = {}) {
+    idAtencion = texto(idAtencion || detalle.id_atencion);
+    if (!idAtencion) return false;
+
+    const anterior = texto(state.idAtencionActual);
+
+    if (anterior && anterior !== idAtencion) {
+      const dataAnterior = guardarAnamnesisTemporal();
+      if (dataAnterior && auroTieneContenidoAnamnesis(dataAnterior)) {
+        auroEnviarAnamnesisSheets(dataAnterior);
+      }
+    }
+
+    if (anterior === idAtencion) return true;
+
+    state.idAtencionActual = idAtencion;
+    state.idPacienteActual = texto(detalle.id_paciente || state.idPacienteActual);
+    state.idHistoriaActual = texto(detalle.id_historia || state.idHistoriaActual);
+
+    window.auroAtencionSeleccionadaId = idAtencion;
+
+    limpiarAnamnesisTemporal();
+    const cargada = await cargarAnamnesisTemporal(idAtencion);
+
+    estado(
+      cargada
+        ? 'Anamnesis restaurada para la atención seleccionada.'
+        : 'Nueva atención: anamnesis lista para registrar.',
+      cargada ? 'ok' : 'info'
+    );
+
+    return cargada;
+  }
+
+  function auroProgramarGuardadoAnamnesis() {
+    if (state.restaurandoAtencion || !auroObtenerIdAtencionAnamnesis()) return;
+
+    clearTimeout(state.guardadoPendiente);
+    state.guardadoPendiente = setTimeout(() => {
+      const data = guardarAnamnesisTemporal();
+      if (data && auroTieneContenidoAnamnesis(data)) {
+        auroEnviarAnamnesisSheets(data);
+      }
+    }, 900);
+  }
+
+  function auroInstalarSincronizacionAtencion() {
+    if (window.__auroAnamnesisEventosAtencionInstalados) return;
+    window.__auroAnamnesisEventosAtencionInstalados = true;
+
+    const manejar = evento => {
+      const detalle = evento?.detail || {};
+      cambiarAnamnesisPorAtencion(detalle.id_atencion, detalle);
+    };
+
+    window.addEventListener('aurosanax:atencion-iniciada', manejar);
+    window.addEventListener('aurosanax:atencion-seleccionada', manejar);
+
+    $('hc_anamnesis')?.addEventListener('input', auroProgramarGuardadoAnamnesis);
+    $('hc_anamnesis')?.addEventListener('change', auroProgramarGuardadoAnamnesis);
+
+    window.addEventListener('beforeunload', () => {
+      guardarAnamnesisTemporal();
+    });
+  }
+
   function obtenerDatosAnamnesis() {
     return {
+      id_atencion: auroObtenerIdAtencionAnamnesis(),
+      id_paciente: texto(state.idPacienteActual),
+      id_historia: texto(state.idHistoriaActual),
       motivo_consulta: texto($('hcMotivoConsulta')?.value),
       enfermedad_actual: texto($('hcEnfermedadActual')?.value),
       revision_sistemas: '',
@@ -1412,6 +1833,7 @@ Función:
     crearBloqueSintomasObstetricos();
 
     state.inicializado = true;
+    auroInstalarSincronizacionAtencion();
     cargarPlantillas(false);
 
     console.info(`AUROSANAX Anamnesis v${VERSION}: inicializado.`);
@@ -1430,11 +1852,18 @@ Función:
     limpiar,
     crearBloqueSintomasActuales,
     crearBloqueSintomasObstetricos,
-    obtenerDatosAnamnesis
+    obtenerDatosAnamnesis,
+    cambiarAnamnesisPorAtencion,
+    guardarAnamnesisTemporal,
+    cargarAnamnesisTemporal,
+    limpiarAnamnesisTemporal,
+    guardarAnamnesisPorAtencion
   };
 
   window.inicializarAnamnesis = inicializar;
   window.auroObtenerDatosAnamnesis = obtenerDatosAnamnesis;
+  window.cambiarAnamnesisPorAtencion = cambiarAnamnesisPorAtencion;
+  window.guardarAnamnesisPorAtencion = guardarAnamnesisPorAtencion;
 
   if (!inicializar()) {
     let intentos = 0;
