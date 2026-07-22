@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 2.2 resumen premium + paginación segura
+   Versión: 2.3 contexto clínico compatible + resumen premium + paginación segura
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -2335,6 +2335,85 @@
   window.getIdAtencionActiva = function(){
     const a = window.getAtencionActiva();
     return a ? a.id_atencion : '';
+  };
+
+  /* =====================================================
+     AUROSANAX - CONTEXTO CLÍNICO CENTRAL COMPATIBLE
+     Intervención quirúrgica y aditiva.
+
+     OBJETIVO:
+     - Entregar a Plan, Recetas, Diagnósticos y Examen Físico
+       una referencia única de la atención actualmente seleccionada.
+     - Conservar el flujo desde Agenda y el flujo manual sin cita.
+     - No reemplazar ni eliminar variables, eventos o funciones existentes.
+
+     REGLA:
+     - id_cita es opcional.
+     - id_atencion, id_paciente, id_historia e id_medico se informan
+       exactamente como están registrados en la atención activa.
+  ===================================================== */
+  window.obtenerContextoAtencionActual = function(){
+    try{
+      const atencion = typeof window.getAtencionActiva === 'function'
+        ? window.getAtencionActiva()
+        : null;
+
+      if(!atencion || !String(atencion.id_atencion || '').trim()){
+        return null;
+      }
+
+      const contexto = {
+        id_atencion: String(atencion.id_atencion || '').trim(),
+        id_paciente: String(atencion.id_paciente || '').trim(),
+        id_historia: String(atencion.id_historia || '').trim(),
+        id_cita: String(atencion.id_cita || '').trim(),
+        id_medico: String(atencion.id_medico || '').trim(),
+        numero_consulta: Number(atencion.numero_consulta || 0),
+        fecha_atencion: String(atencion.fecha_atencion || '').trim(),
+        hora_atencion: String(atencion.hora_atencion || '').trim(),
+        tipo_atencion: String(atencion.tipo_atencion || '').trim(),
+        estado_atencion: String(atencion.estado_atencion || '').trim(),
+        origen_atencion: String(atencion.id_cita || '').trim() ? 'agenda' : 'manual'
+      };
+
+      return Object.freeze(contexto);
+    }catch(error){
+      console.warn(MODULO, 'No se pudo obtener el contexto de la atención actual.', error);
+      return null;
+    }
+  };
+
+  /* Alias descriptivo para integración gradual, sin retirar compatibilidad. */
+  window.getContextoAtencionActual = window.obtenerContextoAtencionActual;
+
+  /* Diagnóstico de solo lectura para pruebas controladas. */
+  window.validarContextoAtencionActual = function(){
+    const contexto = window.obtenerContextoAtencionActual();
+
+    if(!contexto){
+      return {
+        valido:false,
+        motivo:'No existe una atención activa seleccionada.',
+        contexto:null,
+        faltantes:['id_atencion']
+      };
+    }
+
+    const requeridos = ['id_atencion','id_paciente','id_historia','id_medico'];
+    const faltantes = requeridos.filter(function(campo){
+      return !String(contexto[campo] || '').trim();
+    });
+
+    return {
+      valido:faltantes.length === 0,
+      motivo:faltantes.length
+        ? 'La atención activa tiene identificadores clínicos pendientes.'
+        : 'Contexto clínico válido.',
+      contexto:contexto,
+      faltantes:faltantes,
+      admite_agenda:Boolean(contexto.id_cita),
+      admite_atencion_manual:!contexto.id_cita
+    };
   };
   window.__recetasPorAtencionDebug = function(idAtencion){
     const a = leerLocal().find(x => String(x.id_atencion) === String(idAtencion));
