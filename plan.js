@@ -1,6 +1,7 @@
 /****************************************************************
  AUROSANAX ERP
  plan.js
+ ACTUALIZACIÓN QUIRÚRGICA: CONTEXTO UNIFICADO POR ATENCIÓN v20
  MODULACIÓN PLAN - FASE 5 EVALUACIONES / NAVEGACIÓN SEGURA
  ---------------------------------------------------------------
  OBJETIVO:
@@ -2112,8 +2113,59 @@ async function auroPlanApiPost(accion, data){
     return await res.json();
 }
 
+function auroPlanObtenerContextoAtencionSeguro(){
+    /*
+      AUROSANAX - integración quirúrgica con atenciones.js
+      Fuente preferente: obtenerContextoAtencionActual().
+      Mantiene compatibilidad total con la lógica anterior.
+    */
+    try{
+        if(typeof window.obtenerContextoAtencionActual === 'function'){
+            const contexto = window.obtenerContextoAtencionActual();
+            if(contexto && contexto.id_atencion){
+                return contexto;
+            }
+        }
+    }catch(error){
+        console.warn('AUROSANAX PLAN: no se pudo leer el contexto unificado de la atención.', error);
+    }
+
+    try{
+        if(typeof window.getContextoAtencionActual === 'function'){
+            const contexto = window.getContextoAtencionActual();
+            if(contexto && contexto.id_atencion){
+                return contexto;
+            }
+        }
+    }catch(error){}
+
+    try{
+        if(typeof window.getAtencionActiva === 'function'){
+            const atencion = window.getAtencionActiva();
+            if(atencion && atencion.id_atencion){
+                return {
+                    id_atencion: String(atencion.id_atencion || '').trim(),
+                    id_paciente: String(atencion.id_paciente || '').trim(),
+                    id_historia: String(atencion.id_historia || '').trim(),
+                    id_cita: String(atencion.id_cita || '').trim(),
+                    id_medico: String(atencion.id_medico || '').trim(),
+                    numero_consulta: String(atencion.numero_consulta || '').trim(),
+                    origen_atencion: String(atencion.id_cita || '').trim() ? 'agenda' : 'manual'
+                };
+            }
+        }
+    }catch(error){}
+
+    return null;
+}
+
 function auroPlanObtenerIdAtencionActivaSeguro(){
     let idReal = '';
+
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
+    if(contexto && contexto.id_atencion){
+        idReal = String(contexto.id_atencion || '').trim();
+    }
 
     try{
         if(typeof window.getAtencionActiva === 'function'){
@@ -2184,6 +2236,11 @@ function auroPlanObtenerPacienteActivoSeguro(){
 
 function auroPlanObtenerHistoriaIdSeguro(){
 
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
+    if(contexto && contexto.id_historia){
+        return String(contexto.id_historia || '').trim();
+    }
+
     try{
         if(typeof editingHistoryId !== 'undefined' && editingHistoryId){
             return editingHistoryId;
@@ -2195,6 +2252,11 @@ function auroPlanObtenerHistoriaIdSeguro(){
 }
 
 function auroPlanObtenerMedicoIdSeguro(){
+
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
+    if(contexto && contexto.id_medico){
+        return String(contexto.id_medico || '').trim();
+    }
 
     try{
         if(typeof obtenerIdMedicoReal === 'function'){
@@ -2215,6 +2277,7 @@ function auroPlanPrepararDatosSheets(){
 
     auroSincronizarPlanAntesGuardar();
 
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
     const paciente = auroPlanObtenerPacienteActivoSeguro();
 
     return {
@@ -2222,15 +2285,21 @@ function auroPlanPrepararDatosSheets(){
             idAtencionReal,
 
         id_paciente:
+            String(contexto?.id_paciente || '').trim() ||
             paciente?.id_paciente ||
             document.getElementById('hcPacienteSelect')?.value ||
             '',
 
         id_historia:
+            String(contexto?.id_historia || '').trim() ||
             auroPlanObtenerHistoriaIdSeguro(),
 
         id_medico:
+            String(contexto?.id_medico || '').trim() ||
             auroPlanObtenerMedicoIdSeguro(),
+
+        id_cita:
+            String(contexto?.id_cita || '').trim(),
 
         fecha_plan:
             new Date().toISOString(),
