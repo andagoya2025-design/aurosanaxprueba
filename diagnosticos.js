@@ -2,8 +2,8 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.4 - intérprete clínico profesional de antecedentes
- Fecha: 2026-07-18
+ Versión: 1.4.5 - integración clínica independiente del diagnóstico
+ Fecha: 2026-07-22
  -----------------------------------------------------------------------
  OBJETIVO
  - Leer los diagnósticos ya registrados desde Examen Físico.
@@ -39,13 +39,14 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.4';
+  const VERSION = '1.4.5';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
     diagnosticos: [],
     detalleExamen: null,
     historia: null,
+    anamnesis: null,
     especialidades: {},
     protocolos: [],
     protocoloSeleccionado: null,
@@ -607,8 +608,8 @@
       <div class="auro-dx-shell">
         <div class="auro-dx-head">
           <div>
-            <h3><i class="bi bi-clipboard2-pulse"></i> Diagnósticos</h3>
-            <p>Reúne la información de la consulta, genera un análisis clínico editable y permite transferir un protocolo al Plan.</p>
+            <h3><i class="bi bi-clipboard2-pulse"></i> Integración clínica</h3>
+            <p>Reúne la información clínica disponible de la consulta y genera un resumen y análisis editable para apoyar la impresión diagnóstica y el plan terapéutico.</p>
           </div>
           <div class="auro-dx-status" id="auroDxStatus">Sin atención activa</div>
         </div>
@@ -618,7 +619,7 @@
             <i class="bi bi-arrow-repeat"></i> Sincronizar datos
           </button>
           <button type="button" class="auro-dx-btn" id="auroDxGenerar" title="Construye el resumen, análisis y conducta con los datos disponibles">
-            <i class="bi bi-stars"></i> Generar integración clínica
+            <i class="bi bi-stars"></i> Generar resumen clínico
           </button>
           <button type="button" class="auro-dx-btn" id="auroDxEditar" disabled title="Habilita la revisión y edición médica de la integración">
             <i class="bi bi-pencil-square"></i> Editar integración
@@ -635,7 +636,7 @@
         </div>
 
         <div class="auro-dx-guide">
-          <b>Flujo recomendado:</b> sincronice los datos, genere la integración clínica, revise o edite los textos y, finalmente, aplique el protocolo seleccionado al Plan.
+          <b>Flujo recomendado:</b> sincronice los datos y genere el resumen clínico. Puede hacerlo antes de registrar diagnósticos; cuando existan, actualice la integración para incorporar la correlación diagnóstica y los protocolos.
         </div>
 
         <div id="auroDxMensaje"></div>
@@ -643,8 +644,8 @@
         <div class="auro-dx-grid">
           <div class="auro-dx-card">
             <div class="auro-dx-card-head">
-              Diagnósticos de la atención
-              <div class="auro-dx-card-help">Provienen del Examen físico y están vinculados a la consulta activa.</div>
+              Diagnósticos registrados
+              <div class="auro-dx-card-help">Provienen del Examen físico y complementan la integración clínica de la consulta activa.</div>
             </div>
             <div class="auro-dx-card-body" id="auroDxLista"></div>
           </div>
@@ -664,7 +665,7 @@
                     <button type="button" class="auro-dx-mini-btn" data-expand-field="auroDxResumen" data-title="Resumen clínico integrado"><i class="bi bi-arrows-fullscreen"></i> Ampliar</button>
                   </div>
                 </div>
-                <div class="auro-dx-guide">Describe de forma objetiva los datos relevantes de la consulta: motivo, antecedentes, hallazgos y diagnósticos.</div>
+                <div class="auro-dx-guide">Describe de forma objetiva los datos relevantes de la consulta: anamnesis, antecedentes, revisión por sistemas, hallazgos y diagnósticos cuando estén disponibles.</div>
                 <textarea id="auroDxResumen" class="auro-dx-textarea" readonly placeholder="Se generará a partir de los datos clínicos disponibles de esta atención."></textarea>
               </div>
 
@@ -676,7 +677,7 @@
                     <button type="button" class="auro-dx-mini-btn" data-expand-field="auroDxAnalisis" data-title="Análisis / impresión clínica"><i class="bi bi-arrows-fullscreen"></i> Ampliar</button>
                   </div>
                 </div>
-                <div class="auro-dx-guide">Expresa la interpretación clínica del profesional, la coherencia diagnóstica y los aspectos que deben confirmarse.</div>
+                <div class="auro-dx-guide">Expresa un razonamiento clínico preliminar antes del diagnóstico y, posteriormente, la correlación diagnóstica que debe revisar el profesional.</div>
                 <textarea id="auroDxAnalisis" class="auro-dx-textarea" readonly placeholder="Interpretación clínica editable por el profesional."></textarea>
               </div>
 
@@ -688,7 +689,7 @@
                     <button type="button" class="auro-dx-mini-btn" data-expand-field="auroDxConducta" data-title="Conducta sugerida"><i class="bi bi-arrows-fullscreen"></i> Ampliar</button>
                   </div>
                 </div>
-                <div class="auro-dx-guide">Resume las acciones propuestas a partir del protocolo seleccionado. Debe revisarse antes de enviarla al Plan.</div>
+                <div class="auro-dx-guide">Resume las acciones clínicas sugeridas. Cuando exista un diagnóstico y protocolo, incorpora sus recomendaciones para revisión antes de enviarlas al Plan.</div>
                 <textarea id="auroDxConducta" class="auro-dx-textarea" readonly placeholder="Conducta editable antes de transferir al Plan."></textarea>
               </div>
             </div>
@@ -842,12 +843,26 @@
     if(el) el.textContent = contenido;
   }
 
+  function actualizarBotonGeneracion(){
+    const btn = document.getElementById('auroDxGenerar');
+    if(!btn) return;
+    const conDiagnosticos = state.diagnosticos.length > 0;
+    btn.innerHTML = conDiagnosticos
+      ? '<i class="bi bi-stars"></i> Actualizar integración clínica'
+      : '<i class="bi bi-stars"></i> Generar resumen clínico';
+    btn.title = conDiagnosticos
+      ? 'Regenera el resumen, el análisis y la conducta incorporando los diagnósticos registrados'
+      : 'Genera el resumen y el razonamiento clínico preliminar con la información disponible';
+  }
+
   function renderDiagnosticos(){
     const box = document.getElementById('auroDxLista');
     if(!box) return;
 
+    actualizarBotonGeneracion();
+
     if(!state.diagnosticos.length){
-      box.innerHTML = '<div class="auro-dx-empty">No existen diagnósticos registrados para esta atención.</div>';
+      box.innerHTML = '<div class="auro-dx-empty"><b>Aún no se han registrado diagnósticos para esta atención.</b><br><span style="display:block;margin-top:6px">Puede generar primero el resumen clínico con la anamnesis y la información disponible.</span></div>';
       return;
     }
 
@@ -978,16 +993,22 @@
     const box = document.getElementById('auroDxFuentes');
     if(!box) return;
 
-    const fuentes = [
+    const fuentesBase = [
       ['Atención actual', atencionActiva()],
-      ['Historia clínica', state.historia],
-      ['Examen físico general', state.detalleExamen?.examen],
+      ['Anamnesis', state.anamnesis],
+      ['Historia clínica y antecedentes', state.historia],
       ['Revisión por sistemas', state.detalleExamen?.sistemas],
-      ['Examen regional', state.detalleExamen?.regionales],
+      ['Examen físico general', state.detalleExamen?.examen],
+      ['Examen regional', state.detalleExamen?.regionales]
+    ];
+
+    const fuentesEspecialidad = [
       ['Ginecología', state.especialidades.ginecologia],
       ['Obstetricia', state.especialidades.obstetricia],
       ['Estética', state.especialidades.estetica]
-    ];
+    ].filter(([, valor]) => fuenteTieneDatos(valor));
+
+    const fuentes = [...fuentesBase, ...fuentesEspecialidad];
 
     box.innerHTML = fuentes.map(([nombre, valor]) => {
       const disponible = fuenteTieneDatos(valor);
@@ -1647,6 +1668,17 @@
     return bloques.join(' ');
   }
 
+  function contenidoAnamnesis(){
+    const a = state.anamnesis || {};
+    return limpiarTextoClinico(
+      a.enfermedad_actual || a.anamnesis || a.descripcion || a.relato_clinico ||
+      a.historia_enfermedad_actual || a.contenido || a.texto ||
+      state.historia?.enfermedad_actual || state.historia?.anamnesis ||
+      atencionActiva()?.enfermedad_actual ||
+      getValue('hcEnfermedadActual') || getValue('hcAnamnesis')
+    );
+  }
+
   function construirResumenClinico(){
     const at = atencionActiva() || {};
     const h = state.historia || {};
@@ -1665,10 +1697,7 @@
       at.motivo_consulta || h.motivo_consulta ||
       getValue('hcMotivoConsulta') || getValue('hcMotivo')
     );
-    const enfermedad = limpiarTextoClinico(
-      h.enfermedad_actual || h.anamnesis || at.enfermedad_actual ||
-      getValue('hcEnfermedadActual') || getValue('hcAnamnesis')
-    );
+    const enfermedad = contenidoAnamnesis();
 
     if(motivo && enfermedad){
       add('Consulta por ' + motivo.replace(/[.\s]+$/,'') +
@@ -1715,6 +1744,10 @@
         )));
     }
 
+    if(!principal){
+      add('La impresión diagnóstica se encuentra pendiente de establecer y deberá definirse mediante correlación clínica');
+    }
+
     return parrafos.join('\n\n');
   }
 
@@ -1732,10 +1765,7 @@
       at.motivo_consulta || h.motivo_consulta ||
       getValue('hcMotivoConsulta') || getValue('hcMotivo')
     );
-    const enfermedad = limpiarTextoClinico(
-      h.enfermedad_actual || h.anamnesis ||
-      getValue('hcEnfermedadActual') || getValue('hcAnamnesis')
-    );
+    const enfermedad = contenidoAnamnesis();
     const hallazgo = limpiarTextoClinico(ex.examen_fisico || ex.hallazgos || ex.observaciones);
 
     const gineCont = gine.sintomas_json || gine.sintomas ||
@@ -1747,6 +1777,26 @@
     const so = auroSintomas(obstCont, AURO_OBST);
     const positivos = [...sg.positivos, ...so.positivos];
     const negativos = [...sg.negativos, ...so.negativos];
+
+    if(!principal){
+      const bases = [];
+      if(motivo) bases.push('el motivo de consulta');
+      if(enfermedad) bases.push('la anamnesis y evolución clínica referida');
+      if(hallazgo) bases.push('los hallazgos del examen físico');
+      if(positivos.length) bases.push('la presencia de ' + auroListaNatural(positivos.slice(0,6)));
+
+      if(bases.length){
+        parrafos.push('Con la información disponible se establece un razonamiento clínico preliminar basado en ' +
+          auroListaNatural(bases) + '. Estos elementos permiten orientar la impresión diagnóstica, que permanece pendiente de confirmación y registro por el profesional.');
+      }else{
+        parrafos.push('La atención está activa, pero la información clínica disponible aún es insuficiente para formular un razonamiento clínico preliminar.');
+      }
+
+      if(negativos.length){
+        parrafos.push('Se documenta ausencia de ' + auroListaNatural(negativos.slice(0,5)) +
+          ', hallazgo que debe interpretarse dentro del contexto clínico y no excluye otros diagnósticos diferenciales.');
+      }
+    }
 
     if(principal){
       const dx = [principal.codigo_cie10, principal.descripcion].filter(Boolean).join(' - ');
@@ -1786,8 +1836,10 @@
     if(state.protocolos.length){
       parrafos.push('Se dispone de ' + state.protocolos.length +
         ' protocolo(s) de apoyo vinculado(s) al diagnóstico registrado. Su contenido es orientativo y requiere validación e individualización médica.');
+    }else if(principal){
+      parrafos.push('No se encontró un protocolo clínico activo específico para el diagnóstico registrado; la conducta deberá individualizarse según los diagnósticos diferenciales y los resultados complementarios.');
     }else{
-      parrafos.push('No se encontró un protocolo clínico activo específico; la conducta deberá individualizarse según los diagnósticos diferenciales y los resultados complementarios.');
+      parrafos.push('Al no existir todavía un diagnóstico registrado, no se realiza vinculación automática con protocolos. Esta etapa podrá completarse al actualizar la integración clínica.');
     }
 
     parrafos.push('Antes de definir el plan deben verificarse gravedad, comorbilidades, alergias, embarazo o lactancia cuando corresponda, función renal y hepática, interacciones farmacológicas y signos de alarma.');
@@ -1828,11 +1880,6 @@
       return;
     }
 
-    if(!state.diagnosticos.length){
-      mensaje('error','No existen diagnósticos registrados para integrar.');
-      return;
-    }
-
     const campos = ['auroDxResumen','auroDxAnalisis','auroDxConducta']
       .map(id => document.getElementById(id))
       .filter(Boolean);
@@ -1847,7 +1894,7 @@
       if(!continuar) return;
     }
 
-    mensaje('aviso','Generando integración clínica con la información disponible…');
+    mensaje('aviso', state.diagnosticos.length ? 'Actualizando integración clínica con diagnósticos y datos disponibles…' : 'Generando resumen y razonamiento clínico preliminar con la información disponible…');
 
     state.resumenClinico = construirResumenClinico();
     state.analisisClinico = construirAnalisis();
@@ -1866,7 +1913,7 @@
     state.ultimaEdicionLocal = new Date().toISOString();
     guardarEstadoTemporal();
     actualizarEstadoEdicion();
-    mensaje('ok','Integración clínica generada en modo protegido. Presione “Editar integración” para revisión médica.');
+    mensaje('ok', state.diagnosticos.length ? 'Integración clínica actualizada en modo protegido. Presione “Editar integración” para revisión médica.' : 'Resumen clínico preliminar generado en modo protegido. Podrá actualizarlo cuando registre los diagnósticos.');
   }
 
   async function consultarDetalleExamen(idAtencion){
@@ -1888,6 +1935,46 @@
       console.warn(MODULO + ': no se pudieron consultar diagnósticos.', e);
       return [];
     }
+  }
+
+  async function consultarAnamnesis(idAtencion){
+    const id = texto(idAtencion);
+
+    try{
+      const candidatos = [
+        window.auroAnamnesisState?.registroActual,
+        window.auroAnamnesisState?.anamnesisActual,
+        window.anamnesisState?.registroActual,
+        window.anamnesisState?.anamnesisActual,
+        window.anamnesisActual
+      ].filter(Boolean);
+      const local = candidatos.find(x => !id || texto(x?.id_atencion) === id) || candidatos[0];
+      if(local && fuenteTieneDatos(local)) return clonar(local, local);
+    }catch(e){}
+
+    const acciones = [
+      ['listarAnamnesisPorAtencion', {id_atencion:id}],
+      ['obtenerAnamnesisPorAtencion', {id_atencion:id}],
+      ['listarAnamnesisAtenciones', {id_atencion:id}]
+    ];
+
+    for(const [accion, parametros] of acciones){
+      try{
+        const data = await getJSON(accion, parametros);
+        if(data && data.success === false) continue;
+        const lista = arraySeguro(data);
+        const registro = lista.find(x => texto(x?.id_atencion) === id) ||
+          (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
+        if(registro && fuenteTieneDatos(registro)) return registro;
+      }catch(e){}
+    }
+
+    const dom = {
+      id_atencion:id,
+      enfermedad_actual:getValue('hcEnfermedadActual'),
+      anamnesis:getValue('hcAnamnesis')
+    };
+    return fuenteTieneDatos(dom.enfermedad_actual) || fuenteTieneDatos(dom.anamnesis) ? dom : null;
   }
 
   async function consultarHistoria(idPaciente, idAtencion){
@@ -1996,6 +2083,7 @@
     state.diagnosticos = [];
     state.detalleExamen = null;
     state.historia = null;
+    state.anamnesis = null;
     state.especialidades = {};
     state.protocolos = [];
     state.protocoloSeleccionado = null;
@@ -2033,7 +2121,7 @@
     }
 
     if(state.cargando) return null;
-    if(!forzar && state.atencionActual === idAtencion && state.diagnosticos.length){
+    if(!forzar && state.atencionActual === idAtencion && state.ultimaActualizacion){
       return state;
     }
 
@@ -2055,6 +2143,7 @@
         dxServidor,
         detalle,
         historia,
+        anamnesis,
         ginecologia,
         obstetricia,
         estetica
@@ -2062,6 +2151,7 @@
         consultarDiagnosticos(idAtencion),
         consultarDetalleExamen(idAtencion),
         consultarHistoria(idPaciente, idAtencion),
+        consultarAnamnesis(idAtencion),
         consultarEspecialidad('listarGinecologia', idAtencion),
         consultarEspecialidad('listarObstetricia', idAtencion),
         consultarEspecialidad('listarEstetica', idAtencion)
@@ -2071,6 +2161,7 @@
 
       state.detalleExamen = detalle;
       state.historia = historia;
+      state.anamnesis = anamnesis;
       state.especialidades = {ginecologia, obstetricia, estetica};
       state.diagnosticos = fusionarDiagnosticos(
         dxServidor.length ? dxServidor : normalizarDiagnosticosServidor(detalle?.diagnosticos),
@@ -2103,9 +2194,9 @@
       );
 
       if(!state.diagnosticos.length){
-        mensaje('aviso','La atención está activa, pero todavía no tiene diagnósticos guardados.');
+        mensaje('aviso','Aún no se han registrado diagnósticos. Puede generar el resumen clínico con la anamnesis y los datos disponibles.');
       }else{
-        mensaje('ok','Información clínica sincronizada correctamente.');
+        mensaje('ok','Información clínica sincronizada correctamente. La integración puede actualizarse con los diagnósticos registrados.');
       }
 
       return state;
@@ -2353,6 +2444,7 @@
     aplicarAlPlan,
     limpiar: limpiarVisual,
     obtenerDiagnosticos: () => clonar(state.diagnosticos, []),
+    obtenerAnamnesis: () => clonar(state.anamnesis, null),
     obtenerProtocolos: () => clonar(state.protocolos, []),
     obtenerEstado: () => clonar(state, {}),
     montarInterfaz: asegurarApp,
