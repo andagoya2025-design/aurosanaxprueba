@@ -2752,10 +2752,13 @@ function auroPlanUXFechaHoraAhora(){
             month:'2-digit',
             day:'2-digit',
             hour:'2-digit',
-            minute:'2-digit'
+            minute:'2-digit',
+            hour12:false
         });
     }catch(e){
-        return new Date().toLocaleString();
+        return new Date().toLocaleString('es-EC', {
+            hour12:false
+        });
     }
 }
 
