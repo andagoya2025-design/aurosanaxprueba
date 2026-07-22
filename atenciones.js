@@ -570,6 +570,51 @@
     return s;
   }
 
+  function fechaHoraVisualAtencion(valor){
+    if(!valor) return '—';
+
+    if(Object.prototype.toString.call(valor) === '[object Date]' && !isNaN(valor)){
+      return new Intl.DateTimeFormat('es-EC', {
+        timeZone:'America/Guayaquil',
+        year:'numeric',
+        month:'2-digit',
+        day:'2-digit',
+        hour:'2-digit',
+        minute:'2-digit',
+        hourCycle:'h23'
+      }).format(valor);
+    }
+
+    const s = String(valor).trim();
+    if(!s) return '—';
+
+    /*
+      Corrección quirúrgica:
+      Google Apps Script serializa las fechas reales de Sheets como ISO UTC.
+      Solo esos valores con zona horaria se convierten a America/Guayaquil.
+      Los textos ya formateados por el ERP se conservan sin reinterpretarlos.
+    */
+    const esISOConZona =
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})$/i.test(s);
+
+    if(esISOConZona){
+      const d = new Date(s);
+      if(!isNaN(d)){
+        return new Intl.DateTimeFormat('es-EC', {
+          timeZone:'America/Guayaquil',
+          year:'numeric',
+          month:'2-digit',
+          day:'2-digit',
+          hour:'2-digit',
+          minute:'2-digit',
+          hourCycle:'h23'
+        }).format(d);
+      }
+    }
+
+    return s;
+  }
+
   function leerLocal(){
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -1876,7 +1921,7 @@
         auroAtencionDato('ID historia', a.id_historia || '—') +
         auroAtencionDato('ID cita', auroAtencionCitaTexto(a)) +
         auroAtencionDato('Paciente', a.id_paciente || idPacienteActivo() || '—') +
-        auroAtencionDato('Actualizado', a.actualizado_en || '—') +
+        auroAtencionDato('Actualizado', fechaHoraVisualAtencion(a.actualizado_en)) +
       '</div>' +
       recetasHTML;
 
