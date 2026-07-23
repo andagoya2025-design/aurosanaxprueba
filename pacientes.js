@@ -837,6 +837,7 @@ function seleccionarPacienteHistoria(){
 
   if(!p){
     activePatientId = '';
+    window.activePatientId = '';
     ['hcCedula','hcNacimiento','hcEdad','hcOcupacion','hcTelefono','hcCorreo','hcDireccion','hcSeguro','hcContactoEmergencia','hcTelefonoEmergencia','hcTipoSangre','hcAlergiasPaciente'].forEach(id => setValueIfExists(id, ''));
     setValueIfExists('hcSexo', '');
     setValueIfExists('hcEstadoCivil', '');
@@ -846,6 +847,7 @@ function seleccionarPacienteHistoria(){
   }
 
   activePatientId = p.id_paciente || idPaciente;
+  window.activePatientId = activePatientId;
   const fechaNacimiento = normalizarFechaInput(p.fecha_nacimiento || '');
   const edad = p.edad || calcularEdadDesdeFecha(fechaNacimiento) || '';
 
