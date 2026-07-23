@@ -2747,6 +2747,13 @@ function showClinicalTab(id,btn){
   document.querySelectorAll('.clinical-tabs button').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
 
+  /* AUROSANAX FIX QUIRÚRGICO - Datos Generales
+     La fecha visible de este panel pertenece exclusivamente al registro maestro
+     del paciente. No utiliza actualizado_en de Historia, Anamnesis ni Atención. */
+  if(id === 'hc_datos' && typeof auroDatosGeneralesRefrescarUltimaActualizacion === 'function'){
+    auroDatosGeneralesRefrescarUltimaActualizacion();
+  }
+
   /* Jerarquía visual superficial: mantiene Historia clínica como título principal
      y muestra como subtítulo la sección clínica activa. No altera datos ni guardado. */
   const clinicalSectionTitles={
@@ -2804,6 +2811,83 @@ function updateClinicalSummary(){
   actualizarTarjetaPacienteHistoria(paciente);
 }
 
+/* =====================================================
+   AUROSANAX FIX QUIRÚRGICO - FECHA DE DATOS GENERALES
+   - Datos Generales pertenece al registro maestro del paciente.
+   - Solo lee la fecha propia del paciente.
+   - No lee historiaActual, currentHistoria, atención ni anamnesis.
+   - No modifica botones, responsive, guardado ni módulos externos.
+===================================================== */
+function auroDatosGeneralesFechaPropiaPaciente(paciente){
+  if(!paciente || typeof paciente !== 'object') return '';
+
+  return String(
+    paciente.actualizado_en ||
+    paciente.updated_at ||
+    paciente.fecha_actualizacion ||
+    paciente.modificado_en ||
+    paciente.creado_en ||
+    paciente.fecha_registro ||
+    ''
+  ).trim();
+}
+
+function auroDatosGeneralesFormatearFecha(fecha){
+  const raw = String(fecha || '').trim();
+  if(!raw) return '';
+
+  const d = new Date(raw);
+  if(!Number.isNaN(d.getTime())){
+    return d.toLocaleString('es-EC', {
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit'
+    });
+  }
+
+  return raw;
+}
+
+function auroDatosGeneralesStatusBox(){
+  const panel = document.getElementById('hc_datos');
+  if(!panel) return null;
+
+  let box = document.getElementById('hcDatosGeneralesActualizacion');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'hcDatosGeneralesActualizacion';
+    box.className = 'clinical-note mb-3';
+    box.setAttribute('aria-live', 'polite');
+
+    const titulo = panel.querySelector('.clinical-subtitle');
+    if(titulo) titulo.insertAdjacentElement('afterend', box);
+    else panel.insertAdjacentElement('afterbegin', box);
+  }
+
+  return box;
+}
+
+function auroDatosGeneralesRefrescarUltimaActualizacion(pacienteForzado){
+  const paciente = pacienteForzado ||
+    (typeof getPacienteActivo === 'function' ? getPacienteActivo() : null) ||
+    patients.find(p => String(p.id_paciente || p.id || '') === String(activePatientId || '')) ||
+    null;
+
+  const box = auroDatosGeneralesStatusBox();
+  if(!box) return;
+
+  if(!paciente){
+    box.innerHTML = '<i class="bi bi-clock-history me-1"></i> Datos Generales: seleccione un paciente para consultar su actualización.';
+    return;
+  }
+
+  const fecha = auroDatosGeneralesFormatearFecha(auroDatosGeneralesFechaPropiaPaciente(paciente));
+  box.innerHTML = fecha
+    ? '<i class="bi bi-clock-history me-1"></i> Última actualización de Datos Generales: <b>' + fecha + '</b>'
+    : '<i class="bi bi-clock-history me-1"></i> Datos Generales sin fecha de actualización independiente registrada.';
+}
+
+window.auroDatosGeneralesRefrescarUltimaActualizacion = auroDatosGeneralesRefrescarUltimaActualizacion;
+
 function actualizarTarjetaPacienteHistoria(paciente){
   const nombre = paciente?.nombre || 'Seleccione un paciente';
   const iniciales = nombre !== 'Seleccione un paciente' ? nombre.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase() : 'A';
@@ -2824,6 +2908,9 @@ function actualizarTarjetaPacienteHistoria(paciente){
     ['Sexo: ' + (paciente.sexo || 'No registrado'), 'Ciudad: ' + (paciente.ciudad || 'No registrada'), 'Correo: ' + (paciente.email || 'No registrado')].join('  ·  ')
     : 'Los datos clínicos aparecerán aquí al elegir un paciente registrado.'
   );
+
+  /* Refresca solo la fecha propia de Datos Generales. */
+  auroDatosGeneralesRefrescarUltimaActualizacion(paciente || null);
 }
 
 function calcAge(){const v=document.getElementById('hcNacimiento')?.value;if(!v)return;const n=new Date(v);const h=new Date();let e=h.getFullYear()-n.getFullYear();const m=h.getMonth()-n.getMonth();if(m<0||(m===0&&h.getDate()<n.getDate()))e--;document.getElementById('hcEdad').value=e>=0?e:''}
