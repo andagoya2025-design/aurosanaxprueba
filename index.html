@@ -4261,6 +4261,16 @@ function auroHistoriaAtencionActivaObjetoSeguro(){
 }
 
 function auroHistoriaIdAtencionActivaSeguro(){
+  /*
+    AUROSANAX FIX QUIRÚRGICO 2026-07-22:
+    Una historia abierta directamente desde Pacientes no debe heredar
+    una atención o cita que haya quedado activa de una apertura anterior.
+    El flujo desde Agenda conserva su atención normalmente.
+  */
+  if(String(window.auroHistoriaOrigenActual || '').trim() === 'paciente'){
+    return '';
+  }
+
   const atencion = auroHistoriaAtencionActivaObjetoSeguro();
   if(atencion?.id_atencion){
     return String(atencion.id_atencion).trim();
@@ -4303,7 +4313,10 @@ function auroHistoriaValidarCoherenciaAntesGuardar(){
     };
   }
 
-  const atencion = auroHistoriaAtencionActivaObjetoSeguro();
+  const origenHistoria = String(window.auroHistoriaOrigenActual || '').trim();
+  const atencion = origenHistoria === 'paciente'
+    ? null
+    : auroHistoriaAtencionActivaObjetoSeguro();
 
   if(atencion){
     const pacienteAtencion = String(atencion.id_paciente || '').trim();
@@ -4895,6 +4908,7 @@ async function guardarHistoriaClinicaERP(){
     */
     if(esEdicion && data.id_historia){
       editingHistoryId = String(data.id_historia).trim();
+      window.editingHistoryId = editingHistoryId;
       window.auroHistoriaSeleccionadaId = editingHistoryId;
 
       const historiaRefrescada = historiasClinicas.find(h =>
@@ -4904,6 +4918,24 @@ async function guardarHistoriaClinicaERP(){
       if(historiaRefrescada){
         window.historiaActual = historiaRefrescada;
         window.currentHistoria = historiaRefrescada;
+      }
+    }else if(!esEdicion){
+      /*
+        Tras crear una historia nueva, fija exclusivamente la historia
+        recién recargada del paciente activo. Evita que otro clic reutilice
+        un ID anterior y deja preparado el modo edición posterior.
+      */
+      const historiaNueva = historiasClinicas
+        .filter(h => String(h.id_paciente || h.paciente_id || '').trim() === String(idPaciente).trim())
+        .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_apertura || '')
+          .localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_apertura || '')))[0] || null;
+
+      if(historiaNueva?.id_historia){
+        editingHistoryId = String(historiaNueva.id_historia).trim();
+        window.editingHistoryId = editingHistoryId;
+        window.auroHistoriaSeleccionadaId = editingHistoryId;
+        window.historiaActual = historiaNueva;
+        window.currentHistoria = historiaNueva;
       }
     }
 
@@ -6672,6 +6704,17 @@ document.addEventListener('click',e=>{
 <script src="pacientes.js?v=20260629_fase2_final"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
 <script src="agenda.js?v=20260719_agenda_v1"></script>
+<script>
+/* ==========================================================
+   AUROSANAX - APERTURA DE HISTORIA SIN INTERCEPTOR GLOBAL
+   Corrección quirúrgica:
+   - pacientes.js conserva el control de abrirHistoriaPaciente().
+   - agenda.js conserva el control de abrirHistoriaDesdeAgenda().
+   - El index no reasigna editingHistoryId, historiaActual,
+     currentHistoria ni auroHistoriaSeleccionadaId.
+   - No modifica módulos clínicos independientes ni el guardado.
+   ========================================================== */
+</script>
 <script>
   /* AUROSANAX: inicialización segura después de cargar pacientes.js */
   if(typeof cargarPacientesDesdeSheets !== "function" || typeof renderPatients !== "function"){
