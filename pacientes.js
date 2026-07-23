@@ -602,11 +602,51 @@ async function savePatient(){
   }
 }
 
+function auroLimpiarHistoriaDeOtroPaciente(idPacienteNuevo){
+  const nuevoId = String(idPacienteNuevo || '').trim();
+  if(!nuevoId) return;
+
+  const idHistoriaActiva = String(
+    (typeof editingHistoryId !== 'undefined' && editingHistoryId) ||
+    window.editingHistoryId ||
+    window.auroHistoriaSeleccionadaId ||
+    window.historiaActual?.id_historia ||
+    window.currentHistoria?.id_historia ||
+    ''
+  ).trim();
+
+  let historiaActiva = null;
+
+  if(window.historiaActual && String(window.historiaActual.id_paciente || '').trim()){
+    historiaActiva = window.historiaActual;
+  }else if(window.currentHistoria && String(window.currentHistoria.id_paciente || '').trim()){
+    historiaActiva = window.currentHistoria;
+  }else if(idHistoriaActiva && typeof historiasClinicas !== 'undefined' && Array.isArray(historiasClinicas)){
+    historiaActiva = historiasClinicas.find((h, idx) =>
+      String(h?.id_historia || h?.id || idx).trim() === idHistoriaActiva
+    ) || null;
+  }
+
+  const pacienteHistoria = String(historiaActiva?.id_paciente || '').trim();
+
+  // Solo se limpia cuando está comprobado que la historia activa pertenece a otro paciente.
+  // Si corresponde al mismo paciente, se conserva intacto el modo “Actualizar historia”.
+  if(pacienteHistoria && pacienteHistoria !== nuevoId){
+    if(typeof editingHistoryId !== 'undefined') editingHistoryId = null;
+    window.editingHistoryId = null;
+    window.auroHistoriaSeleccionadaId = '';
+    window.historiaActual = null;
+    window.currentHistoria = null;
+  }
+}
+
 function abrirHistoriaPaciente(idPaciente){
   if(!idPaciente){
     alert('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
     return;
   }
+
+  auroLimpiarHistoriaDeOtroPaciente(idPaciente);
 
   activePatientId = idPaciente;
   window.activePatientId = idPaciente;
