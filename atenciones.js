@@ -751,6 +751,24 @@
 
   function idPacienteActivo(){
     try{
+      /*
+        AUROSANAX FIX QUIRÚRGICO:
+        Dentro de Historia Clínica, el selector visible es la fuente principal.
+        Si existe y está vacío, no se reutiliza un paciente residual conservado
+        en variables globales de una navegación anterior.
+      */
+      const sel = $('hcPacienteSelect');
+      if(sel){
+        const idSeleccionado = String(sel.value || '').trim();
+        if(!idSeleccionado) return '';
+        return idSeleccionado;
+      }
+
+      /*
+        Compatibilidad:
+        Si el selector de Historia Clínica no existe en la pantalla actual,
+        se conservan exactamente las fuentes globales anteriores.
+      */
       const p = pacienteActivo();
 
       if(p && (p.id_paciente || p.id || p.cedula)){
@@ -768,9 +786,6 @@
          (window.currentHistoria.id_paciente || window.currentHistoria.paciente_id)){
         return String(window.currentHistoria.id_paciente || window.currentHistoria.paciente_id);
       }
-
-      const sel = $('hcPacienteSelect');
-      if(sel && sel.value) return String(sel.value);
 
     }catch(e){
       console.warn(MODULO,'Error obteniendo paciente activo',e);
