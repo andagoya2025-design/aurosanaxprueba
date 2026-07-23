@@ -25,6 +25,7 @@
   let recetaEstadoTimer = null;
   let recetaBloqueoPostGuardadoHasta = 0;
   let recetaAtencionActualId = '';
+  let recetaNuevaForzada = false;
   let recetaPlanAtencionId = '';
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
@@ -634,6 +635,7 @@
 
   function limpiarFormularioRecetaPorCambioAtencion(){
     recetaEditandoId = null;
+    recetaNuevaForzada = false;
     recetaEstadoVisual = '';
     recetaBloqueoPostGuardadoHasta = 0;
     if(recetaEstadoTimer){ clearTimeout(recetaEstadoTimer); recetaEstadoTimer = null; }
@@ -1126,7 +1128,8 @@
         estado: receta.estado || 'Emitida',
         creado_en: receta.creado_en || fechaHoraEcuadorISO(),
         actualizado_en: fechaHoraEcuadorISO(),
-        id_atencion: receta.id_atencion || obtenerIdAtencionActivaSeguro() || ''
+        id_atencion: receta.id_atencion || obtenerIdAtencionActivaSeguro() || '',
+        forzar_nueva_receta: receta.forzar_nueva_receta || 'NO'
       };
 
       await fetch(API_URL, {
@@ -1395,8 +1398,24 @@
     });
   }
 
+  function buscarRecetaActivaPorAtencion(idAtencion){
+    const id = String(idAtencion || '').trim();
+    if(!id) return null;
+
+    return leerRecetasStorage()
+      .filter(r =>
+        String(r.id_atencion || '').trim() === id &&
+        !String(r.estado || '').toLowerCase().includes('anulada')
+      )
+      .sort((a,b) =>
+        String(b.actualizado_en || b.creado_en || b.fecha_receta || '')
+          .localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || ''))
+      )[0] || null;
+  }
+
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
+    recetaNuevaForzada = true;
     recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     recetaEstadoVisual = '';
@@ -1417,6 +1436,7 @@
 
   function limpiarEstadoRecetaNuevaDespuesDeGuardar(){
     recetaEditandoId = null;
+    recetaNuevaForzada = false;
     recetaAtencionActualId = obtenerIdAtencionActivaSeguro() || '';
 
     setVal('recDiagnostico', '');
@@ -1908,12 +1928,14 @@
       recomendaciones: recetaListaParaGuardarJSON(r.recomendaciones || ''),
       id_documento: '',
       estado: r.estado || 'Emitida',
+      forzar_nueva_receta: recetaNuevaForzada ? 'SI' : 'NO',
       creado_en: '', actualizado_en: fechaHoraEcuadorISO()
     };
   }
 
   function cargarRecetaEnFormulario(receta){
     if(!receta) return;
+    recetaNuevaForzada = false;
     recetaEditandoId = receta.id_receta || receta.id || '';
     recetaAtencionActualId = receta.id_atencion || obtenerIdAtencionActivaSeguro() || '';
     setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
@@ -1945,7 +1967,7 @@
 
     verificarCambioAtencionReceta();
 
-    const estabaEditando = !!recetaEditandoId;
+    let estabaEditando = false;
 
     recetaGuardando = true;
     actualizarBotonGuardarReceta();
@@ -1953,6 +1975,28 @@
     try{
       await auroRecetaResolverDiagnosticoEstructurado();
       await cargarMedicosActivosReceta(false);
+
+      const idAtencionGuardar = String(obtenerIdAtencionActivaSeguro() || '').trim();
+      if(!idAtencionGuardar){
+        alert('No existe una consulta activa. Abra o seleccione una atención antes de guardar la receta.');
+        return;
+      }
+
+      /*
+        CORRECCIÓN QUIRÚRGICA:
+        - Si la atención ya tiene una receta activa, se reutiliza su id_receta.
+        - Solo el botón “Nueva receta” permite crear otra receta intencional.
+        - No modifica Plan, Atenciones, medicamentos, diagnóstico ni PDF.
+      */
+      if(!recetaEditandoId && !recetaNuevaForzada){
+        await cargarRecetasDesdeSheets(true);
+        const existenteAtencion = buscarRecetaActivaPorAtencion(idAtencionGuardar);
+        if(existenteAtencion && existenteAtencion.id_receta){
+          recetaEditandoId = String(existenteAtencion.id_receta);
+        }
+      }
+
+      estabaEditando = !!recetaEditandoId;
 
       const atencionMedico = obtenerMedicoDesdeAtencionActiva();
       if(!atencionMedico.id_medico){
@@ -2049,6 +2093,8 @@
         mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '');
         alert('Receta guardada localmente, pero no se pudo enviar a Google Sheets.');
       }
+
+      recetaNuevaForzada = false;
 
       if(!estabaEditando){
         limpiarEstadoRecetaNuevaDespuesDeGuardar();
@@ -2566,7 +2612,7 @@
       return leerRecetasStorage();
     });
   };
-  window.__recetasAurosanaxDebug = function(){ return {version:'2.4 contexto de atención y médico reforzado', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
+  window.__recetasAurosanaxDebug = function(){ return {version:'2.4 contexto de atención y médico reforzado', totalLocal: leerRecetasStorage().length, sheetsCargadas: recetasSheetsCargadas, sheetsCargando: recetasSheetsCargando, recetaEditandoId, recetaNuevaForzada, recetaGuardando, recetaAtencionActualId, pacienteActivo: obtenerPacienteActivoSeguro()?.nombre || '', codigoMedico: obtenerCodigoCortoMedico(), idMedico: obtenerIdMedicoReal(), storageKey: STORAGE_KEY}; };
 })();
 
 /* =====================================================
@@ -2612,4 +2658,12 @@
    - Sincroniza formulario, vista previa, PDF y guardado
    - Bloquea guardado si la atención no tiene médico
    - Elimina Aurora e ID 397 como fallback automático
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.4 - CORRECCIÓN QUIRÚRGICA DUPLICIDAD
+   - Reutiliza la receta activa de la misma id_atencion.
+   - “Nueva receta” es la única acción que fuerza otra receta.
+   - Conserva edición por id_receta, Plan → Receta, PDF e historial.
+   - Agrega respaldo de intención al Apps Script con forzar_nueva_receta.
 ===================================================== */
