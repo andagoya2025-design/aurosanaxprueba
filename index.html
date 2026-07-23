@@ -4834,8 +4834,12 @@ async function guardarHistoriaClinicaERP(){
       })
     });
 
-    /* AUROSANAX: guardar Plan clínico en planes_clinicos sin bloquear Historia */
-    await auroGuardarPlanClinicoSeguroDesdeIndex();
+    /* =====================================================
+       AUROSANAX FIX QUIRÚRGICO DE FECHAS
+       Guardar historia actualiza únicamente historias_clinicas.
+       El Plan se guarda exclusivamente desde su botón propio en plan.js,
+       evitando modificar su actualizado_en al guardar la historia.
+    ===================================================== */
 
     const fechaGuardadoUX = auroHistoriaFechaHoraVisualAhora();
     const atencionFinalUX = auroHistoriaAtencionResumen();
@@ -4844,9 +4848,9 @@ async function guardarHistoriaClinicaERP(){
     auroHistoriaRegistrarActualizacionVisual(fechaGuardadoUX);
 
     auroHistoriaMostrarEstado(
-      atencionFinalUX.id
-        ? 'Consulta ' + atencionFinalUX.consulta + ' actualizada correctamente · Última actualización: ' + fechaGuardadoUX
-        : (esEdicion ? 'Historia clínica actualizada correctamente · Última actualización: ' + fechaGuardadoUX : 'Historia clínica guardada correctamente · ' + fechaGuardadoUX),
+      esEdicion
+        ? 'Historia clínica actualizada correctamente · Última actualización de la historia: ' + fechaGuardadoUX
+        : 'Historia clínica guardada correctamente · ' + fechaGuardadoUX,
       'ok'
     );
 
