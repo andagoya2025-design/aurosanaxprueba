@@ -2747,13 +2747,6 @@ function showClinicalTab(id,btn){
   document.querySelectorAll('.clinical-tabs button').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
 
-  /* AUROSANAX FIX QUIRÚRGICO - Datos Generales
-     La fecha visible de este panel pertenece exclusivamente al registro maestro
-     del paciente. No utiliza actualizado_en de Historia, Anamnesis ni Atención. */
-  if(id === 'hc_datos' && typeof auroDatosGeneralesRefrescarUltimaActualizacion === 'function'){
-    auroDatosGeneralesRefrescarUltimaActualizacion();
-  }
-
   /* Jerarquía visual superficial: mantiene Historia clínica como título principal
      y muestra como subtítulo la sección clínica activa. No altera datos ni guardado. */
   const clinicalSectionTitles={
@@ -2780,6 +2773,11 @@ function showClinicalTab(id,btn){
     const action=String(sideButton.getAttribute('onclick')||'');
     sideButton.classList.toggle('active', action.includes("'"+id+"'") || action.includes('"'+id+'"'));
   });
+
+  /* AUROSANAX: cada pestaña conserva y muestra únicamente su propia fecha visual. */
+  if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+    window.auroHistoriaRefrescarEstadoConsultaActiva(id);
+  }
 
   if(id==='hc_gineco' && typeof window.cargarGinecologiaPorAtencion==='function'){
     setTimeout(()=>window.cargarGinecologiaPorAtencion(true),60);
@@ -2811,83 +2809,6 @@ function updateClinicalSummary(){
   actualizarTarjetaPacienteHistoria(paciente);
 }
 
-/* =====================================================
-   AUROSANAX FIX QUIRÚRGICO - FECHA DE DATOS GENERALES
-   - Datos Generales pertenece al registro maestro del paciente.
-   - Solo lee la fecha propia del paciente.
-   - No lee historiaActual, currentHistoria, atención ni anamnesis.
-   - No modifica botones, responsive, guardado ni módulos externos.
-===================================================== */
-function auroDatosGeneralesFechaPropiaPaciente(paciente){
-  if(!paciente || typeof paciente !== 'object') return '';
-
-  return String(
-    paciente.actualizado_en ||
-    paciente.updated_at ||
-    paciente.fecha_actualizacion ||
-    paciente.modificado_en ||
-    paciente.creado_en ||
-    paciente.fecha_registro ||
-    ''
-  ).trim();
-}
-
-function auroDatosGeneralesFormatearFecha(fecha){
-  const raw = String(fecha || '').trim();
-  if(!raw) return '';
-
-  const d = new Date(raw);
-  if(!Number.isNaN(d.getTime())){
-    return d.toLocaleString('es-EC', {
-      year:'numeric', month:'2-digit', day:'2-digit',
-      hour:'2-digit', minute:'2-digit'
-    });
-  }
-
-  return raw;
-}
-
-function auroDatosGeneralesStatusBox(){
-  const panel = document.getElementById('hc_datos');
-  if(!panel) return null;
-
-  let box = document.getElementById('hcDatosGeneralesActualizacion');
-  if(!box){
-    box = document.createElement('div');
-    box.id = 'hcDatosGeneralesActualizacion';
-    box.className = 'clinical-note mb-3';
-    box.setAttribute('aria-live', 'polite');
-
-    const titulo = panel.querySelector('.clinical-subtitle');
-    if(titulo) titulo.insertAdjacentElement('afterend', box);
-    else panel.insertAdjacentElement('afterbegin', box);
-  }
-
-  return box;
-}
-
-function auroDatosGeneralesRefrescarUltimaActualizacion(pacienteForzado){
-  const paciente = pacienteForzado ||
-    (typeof getPacienteActivo === 'function' ? getPacienteActivo() : null) ||
-    patients.find(p => String(p.id_paciente || p.id || '') === String(activePatientId || '')) ||
-    null;
-
-  const box = auroDatosGeneralesStatusBox();
-  if(!box) return;
-
-  if(!paciente){
-    box.innerHTML = '<i class="bi bi-clock-history me-1"></i> Datos Generales: seleccione un paciente para consultar su actualización.';
-    return;
-  }
-
-  const fecha = auroDatosGeneralesFormatearFecha(auroDatosGeneralesFechaPropiaPaciente(paciente));
-  box.innerHTML = fecha
-    ? '<i class="bi bi-clock-history me-1"></i> Última actualización de Datos Generales: <b>' + fecha + '</b>'
-    : '<i class="bi bi-clock-history me-1"></i> Datos Generales sin fecha de actualización independiente registrada.';
-}
-
-window.auroDatosGeneralesRefrescarUltimaActualizacion = auroDatosGeneralesRefrescarUltimaActualizacion;
-
 function actualizarTarjetaPacienteHistoria(paciente){
   const nombre = paciente?.nombre || 'Seleccione un paciente';
   const iniciales = nombre !== 'Seleccione un paciente' ? nombre.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase() : 'A';
@@ -2908,9 +2829,6 @@ function actualizarTarjetaPacienteHistoria(paciente){
     ['Sexo: ' + (paciente.sexo || 'No registrado'), 'Ciudad: ' + (paciente.ciudad || 'No registrada'), 'Correo: ' + (paciente.email || 'No registrado')].join('  ·  ')
     : 'Los datos clínicos aparecerán aquí al elegir un paciente registrado.'
   );
-
-  /* Refresca solo la fecha propia de Datos Generales. */
-  auroDatosGeneralesRefrescarUltimaActualizacion(paciente || null);
 }
 
 function calcAge(){const v=document.getElementById('hcNacimiento')?.value;if(!v)return;const n=new Date(v);const h=new Date();let e=h.getFullYear()-n.getFullYear();const m=h.getMonth()-n.getMonth();if(m<0||(m===0&&h.getDate()<n.getDate()))e--;document.getElementById('hcEdad').value=e>=0?e:''}
@@ -4623,7 +4541,32 @@ function auroHistoriaMostrarEstado(mensaje, tipo){
    - Al presionar Ver en Consulta #1, #2, #3... se recalcula el mensaje inferior.
    - No toca Plan médico, recetas ni mensajes superiores.
 ===================================================== */
-const AURO_HISTORIA_ESTADO_CONSULTA_KEY = 'auro_historia_ultimas_actualizaciones_por_atencion_v1';
+const AURO_HISTORIA_ESTADO_CONSULTA_KEY = 'auro_historia_ultimas_actualizaciones_por_atencion_modulo_v2';
+
+function auroHistoriaModuloActivo(){
+  const panel = document.querySelector('#historia .clinical-panel.active');
+  return String(panel?.id || 'hc_datos').trim() || 'hc_datos';
+}
+
+function auroHistoriaNombreModulo(idModulo){
+  const nombres = {
+    hc_datos:'Datos generales',
+    hc_anamnesis:'Anamnesis',
+    hc_antecedentes:'Antecedentes',
+    hc_examen:'Examen físico',
+    hc_gineco:'Ginecología',
+    hc_obstetricia:'Obstetricia',
+    hc_estetica:'Estética',
+    hc_diagnostico:'Diagnóstico',
+    hc_plan:'Plan médico',
+    hc_docs:'Documentos'
+  };
+  return nombres[String(idModulo || '').trim()] || 'Historia clínica';
+}
+
+function auroHistoriaClaveActualizacion(idAtencion, idModulo){
+  return String(idAtencion || '').trim() + '::' + String(idModulo || 'hc_datos').trim();
+}
 
 function auroHistoriaLeerMapaActualizacionesConsulta(){
   try{
@@ -4641,47 +4584,56 @@ function auroHistoriaGuardarMapaActualizacionesConsulta(mapa){
   }catch(e){}
 }
 
-function auroHistoriaGuardarActualizacionConsulta(atencion, fechaHora){
+function auroHistoriaGuardarActualizacionConsulta(atencion, fechaHora, idModulo){
   try{
     const atn = atencion || auroHistoriaAtencionResumen();
     if(!atn || !atn.id) return;
 
+    const modulo = String(idModulo || auroHistoriaModuloActivo()).trim() || 'hc_datos';
     const mapa = auroHistoriaLeerMapaActualizacionesConsulta();
-    mapa[String(atn.id)] = {
+    const clave = auroHistoriaClaveActualizacion(atn.id, modulo);
+
+    mapa[clave] = {
       id_atencion: String(atn.id),
+      id_modulo: modulo,
+      modulo: auroHistoriaNombreModulo(modulo),
       consulta: atn.consulta || 'activa',
       fechaHora: fechaHora || auroHistoriaFechaHoraVisualAhora(),
       guardado_en: new Date().toISOString()
     };
     auroHistoriaGuardarMapaActualizacionesConsulta(mapa);
   }catch(e){
-    console.warn('AUROSANAX UX: no se pudo guardar estado visual por consulta.', e);
+    console.warn('AUROSANAX UX: no se pudo guardar estado visual por módulo y consulta.', e);
   }
 }
 
-function auroHistoriaLeerActualizacionConsulta(idAtencion){
+function auroHistoriaLeerActualizacionConsulta(idAtencion, idModulo){
   const id = String(idAtencion || '').trim();
   if(!id) return null;
+  const modulo = String(idModulo || auroHistoriaModuloActivo()).trim() || 'hc_datos';
   const mapa = auroHistoriaLeerMapaActualizacionesConsulta();
-  return mapa[id] || null;
+  return mapa[auroHistoriaClaveActualizacion(id, modulo)] || null;
 }
 
-function auroHistoriaRefrescarEstadoConsultaActiva(){
+function auroHistoriaRefrescarEstadoConsultaActiva(idModulo){
   const atn = auroHistoriaAtencionResumen();
+  const modulo = String(idModulo || auroHistoriaModuloActivo()).trim() || 'hc_datos';
+  const nombreModulo = auroHistoriaNombreModulo(modulo);
+
   if(!atn || !atn.id){
-    auroHistoriaMostrarEstado('Sin consulta activa. Presione Ver en una consulta para trabajar por atención.', '');
+    auroHistoriaMostrarEstado(nombreModulo + ': sin consulta activa. Presione Ver en una consulta para trabajar por atención.', '');
     return;
   }
 
-  const item = auroHistoriaLeerActualizacionConsulta(atn.id);
+  const item = auroHistoriaLeerActualizacionConsulta(atn.id, modulo);
   if(item && item.fechaHora){
     auroHistoriaMostrarEstado(
-      'Consulta ' + (atn.consulta || item.consulta || 'activa') + ' actualizada correctamente · Última actualización: ' + item.fechaHora,
+      nombreModulo + ' · Consulta ' + (atn.consulta || item.consulta || 'activa') + ' · Última actualización: ' + item.fechaHora,
       'ok'
     );
   }else{
     auroHistoriaMostrarEstado(
-      'Consulta ' + (atn.consulta || 'activa') + ' activa. Pendiente de actualizar historia.',
+      nombreModulo + ' · Consulta ' + (atn.consulta || 'activa') + ' · Sin actualización registrada en este módulo.',
       ''
     );
   }
@@ -4689,6 +4641,7 @@ function auroHistoriaRefrescarEstadoConsultaActiva(){
 
 window.auroHistoriaRefrescarEstadoConsultaActiva = auroHistoriaRefrescarEstadoConsultaActiva;
 window.auroHistoriaGuardarActualizacionConsulta = auroHistoriaGuardarActualizacionConsulta;
+window.auroHistoriaModuloActivo = auroHistoriaModuloActivo;
 
 function auroHistoriaSetBotonesGuardando(guardando){
   document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(btn => {
@@ -4717,26 +4670,17 @@ function auroHistoriaSetBotonesGuardando(guardando){
   });
 }
 
-function auroHistoriaRegistrarActualizacionVisual(fechaHora){
+function auroHistoriaRegistrarActualizacionVisual(fechaHora, idModulo){
   try{
-    if(window.historiaActual) window.historiaActual.actualizado_en = fechaHora;
-    if(window.currentHistoria) window.currentHistoria.actualizado_en = fechaHora;
-
-    if(editingHistoryId && Array.isArray(window.historiasClinicas)){
-      const h = window.historiasClinicas.find(x => String(x.id_historia || '') === String(editingHistoryId));
-      if(h) h.actualizado_en = fechaHora;
-    }
-
-    if(typeof actualizarTarjetaPacienteHistoria === 'function'){
-      const paciente = typeof getPacienteActivo === 'function' ? getPacienteActivo() : null;
-      actualizarTarjetaPacienteHistoria(paciente);
-    }
-
-    if(typeof updateClinicalSummary === 'function'){
-      updateClinicalSummary();
-    }
+    /*
+      Corrección quirúrgica:
+      la fecha visual pertenece al módulo activo y a la atención activa.
+      No se sobrescribe actualizado_en de la historia global, porque ese valor
+      provocaba que Datos generales heredara la fecha guardada desde Anamnesis.
+    */
+    auroHistoriaRefrescarEstadoConsultaActiva(idModulo || auroHistoriaModuloActivo());
   }catch(error){
-    console.warn('AUROSANAX UX: no se pudo refrescar actualización visual.', error);
+    console.warn('AUROSANAX UX: no se pudo refrescar actualización visual del módulo.', error);
   }
 }
 
@@ -4930,14 +4874,16 @@ async function guardarHistoriaClinicaERP(){
 
     const fechaGuardadoUX = auroHistoriaFechaHoraVisualAhora();
     const atencionFinalUX = auroHistoriaAtencionResumen();
+    const moduloGuardadoUX = auroHistoriaModuloActivo();
 
-    auroHistoriaGuardarActualizacionConsulta(atencionFinalUX, fechaGuardadoUX);
-    auroHistoriaRegistrarActualizacionVisual(fechaGuardadoUX);
+    /* La fecha se registra únicamente para la pestaña desde la que se guardó. */
+    auroHistoriaGuardarActualizacionConsulta(atencionFinalUX, fechaGuardadoUX, moduloGuardadoUX);
+    auroHistoriaRegistrarActualizacionVisual(fechaGuardadoUX, moduloGuardadoUX);
 
     auroHistoriaMostrarEstado(
-      esEdicion
-        ? 'Historia clínica actualizada correctamente · Última actualización de la historia: ' + fechaGuardadoUX
-        : 'Historia clínica guardada correctamente · ' + fechaGuardadoUX,
+      auroHistoriaNombreModulo(moduloGuardadoUX) +
+      (esEdicion ? ' actualizado correctamente' : ' guardado correctamente') +
+      ' · Última actualización: ' + fechaGuardadoUX,
       'ok'
     );
 
