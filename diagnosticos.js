@@ -2,8 +2,8 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.5 - integración clínica independiente del diagnóstico
- Fecha: 2026-07-22
+ Versión: 1.5.0 - resumen diagnóstico premium y visor seguro de protocolos
+ Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
  - Leer los diagnósticos ya registrados desde Examen Físico.
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.5';
+  const VERSION = '1.5.0';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -60,7 +60,10 @@
     modoEdicion: false,
     cambiosPendientes: false,
     guardadoTemporalConfirmado: false,
-    ultimaEdicionLocal: ''
+    ultimaEdicionLocal: '',
+    diagnosticoProtocoloActivo: '',
+    visorProtocoloAbierto: false,
+    resumenSuperiorVisible: true
   };
 
   const IDS_PANEL_CANDIDATOS = [
@@ -421,7 +424,40 @@
       .auro-dx-modal-body{padding:18px;overflow:auto}
       .auro-dx-modal-body textarea{width:100%;min-height:52vh;resize:vertical;border:1px solid #cbd5e1;border-radius:14px;padding:14px;font:inherit;line-height:1.5}
       .auro-dx-modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:13px 18px;border-top:1px solid #e5e7eb}
-      @media(max-width:900px){.auro-dx-grid{grid-template-columns:1fr}.auro-dx-source{grid-template-columns:1fr}.auro-dx-head{flex-direction:column}.auro-dx-field-head{align-items:flex-start;flex-direction:column}}
+      .auro-dx-context{display:grid;grid-template-columns:minmax(0,1.25fr) repeat(3,minmax(130px,.55fr));gap:10px;padding:14px;border:1px solid #dbe6e8;border-radius:16px;background:#fff}
+      .auro-dx-context-main{min-width:0}
+      .auro-dx-context-kicker{font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#6b2d68}
+      .auro-dx-context-title{margin-top:4px;font-size:17px;font-weight:900;color:#263238;overflow-wrap:anywhere}
+      .auro-dx-context-sub{margin-top:4px;font-size:12px;color:#64748b;overflow-wrap:anywhere}
+      .auro-dx-metric{display:flex;flex-direction:column;justify-content:center;padding:10px 12px;border-radius:13px;background:#f8fafc;border:1px solid #e2e8f0;min-width:0}
+      .auro-dx-metric b{font-size:17px;color:#1f2937;overflow-wrap:anywhere}
+      .auro-dx-metric span{font-size:11px;color:#64748b;margin-top:2px}
+      .auro-dx-summary-actions{display:flex;justify-content:flex-end;margin-top:8px}
+      .auro-dx-linkbtn{border:0;background:transparent;color:#6b2d68;font-weight:800;cursor:pointer;padding:5px 0}
+      .auro-dx-dx-list{display:grid;gap:9px}
+      .auro-dx-dx-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}
+      .auro-dx-dx-row.principal{border-color:#b8dfd0;background:#f4fbf7}
+      .auro-dx-dx-main{min-width:0}
+      .auro-dx-dx-title{display:flex;align-items:flex-start;gap:8px;font-weight:800;line-height:1.35;min-width:0}
+      .auro-dx-dx-title span:last-child{overflow-wrap:anywhere}
+      .auro-dx-dx-role{font-size:10px;border-radius:999px;padding:4px 7px;background:#eef2f7;color:#475569;white-space:nowrap}
+      .auro-dx-dx-row.principal .auro-dx-dx-role{background:#dff3ea;color:#256146}
+      .auro-dx-dx-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+      .auro-dx-type{font-size:11px;padding:4px 8px;border-radius:999px;background:#fff4cc;color:#7c5b00}
+      .auro-dx-type.definitivo{background:#dcfce7;color:#166534}
+      .auro-dx-eye{border:1px solid #d7c2d4;background:#fff;color:#6b2d68;border-radius:10px;min-width:42px;min-height:38px;cursor:pointer;font-weight:900}
+      .auro-dx-eye:hover{background:#faf5fa}
+      .auro-dx-protocol-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px;z-index:100000}
+      .auro-dx-protocol-backdrop.show{display:flex}
+      .auro-dx-protocol-modal{width:min(980px,100%);max-height:92vh;background:#fff;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+      .auro-dx-protocol-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:15px 18px;border-bottom:1px solid #e5e7eb}
+      .auro-dx-protocol-head h4{margin:0;font-size:18px}
+      .auro-dx-protocol-context{font-size:12px;color:#64748b;margin-top:4px;overflow-wrap:anywhere}
+      .auro-dx-protocol-body{padding:16px 18px;overflow:auto}
+      .auro-dx-protocol-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid #e5e7eb}
+      .auro-dx-readonly{font-size:12px;color:#7c2d12;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:8px 10px}
+      .auro-dx-table-eye{margin-left:6px;border:1px solid #d7c2d4;background:#fff;color:#6b2d68;border-radius:8px;width:34px;height:34px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+      @media(max-width:900px){.auro-dx-grid{grid-template-columns:1fr}.auro-dx-source{grid-template-columns:1fr}.auro-dx-head{flex-direction:column}.auro-dx-field-head{align-items:flex-start;flex-direction:column}.auro-dx-context{grid-template-columns:1fr 1fr}.auro-dx-context-main{grid-column:1/-1}}{.auro-dx-grid{grid-template-columns:1fr}.auro-dx-source{grid-template-columns:1fr}.auro-dx-head{flex-direction:column}.auro-dx-field-head{align-items:flex-start;flex-direction:column}}
 
       @media(max-width:600px){
         html,body{
@@ -598,6 +634,18 @@
           padding:10px 12px calc(10px + env(safe-area-inset-bottom));
         }
         .auro-dx-modal-foot .auro-dx-btn{width:100%}
+        .auro-dx-context{grid-template-columns:1fr;padding:11px}
+        .auro-dx-context-main{grid-column:auto}
+        .auro-dx-metric{padding:9px 10px}
+        .auro-dx-dx-row{grid-template-columns:minmax(0,1fr) auto;padding:10px}
+        .auro-dx-dx-title{display:block}
+        .auro-dx-dx-role{display:inline-block;margin-bottom:6px}
+        .auro-dx-protocol-backdrop{padding:0;align-items:flex-end}
+        .auro-dx-protocol-modal{width:100%;max-width:100%;max-height:95dvh;border-radius:18px 18px 0 0}
+        .auro-dx-protocol-head{padding:12px}
+        .auro-dx-protocol-body{padding:12px}
+        .auro-dx-protocol-foot{display:grid;grid-template-columns:1fr;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+        .auro-dx-protocol-foot .auro-dx-btn{width:100%}
       }
     `;
     document.head.appendChild(style);
@@ -612,6 +660,17 @@
             <p>Reúne la información clínica disponible de la consulta y genera un resumen y análisis editable para apoyar la impresión diagnóstica y el plan terapéutico.</p>
           </div>
           <div class="auro-dx-status" id="auroDxStatus">Sin atención activa</div>
+        </div>
+
+        <div class="auro-dx-context" id="auroDxContexto" aria-live="polite">
+          <div class="auro-dx-context-main">
+            <div class="auro-dx-context-kicker">Impresión diagnóstica</div>
+            <div class="auro-dx-context-title" id="auroDxContextoTitulo">Sin atención seleccionada</div>
+            <div class="auro-dx-context-sub" id="auroDxContextoDetalle">Seleccione una consulta para visualizar su resumen diagnóstico.</div>
+          </div>
+          <div class="auro-dx-metric"><b id="auroDxMetricaTotal">0</b><span>Diagnósticos</span></div>
+          <div class="auro-dx-metric"><b id="auroDxMetricaPrincipal">0</b><span>Principal</span></div>
+          <div class="auro-dx-metric"><b id="auroDxMetricaSecundarios">0</b><span>Asociados</span></div>
         </div>
 
         <div class="auro-dx-toolbar">
@@ -696,10 +755,29 @@
           </div>
         </div>
 
-        <!-- AUROSANAX: contenedor técnico oculto.
-             Conserva el motor de protocolos sin duplicar su visualización,
-             porque el protocolo clínico ya se presenta en el módulo CIE-10 inteligente. -->
+        <!-- Contenedor técnico del motor existente. Permanece fuera de la vista
+             y se reutiliza dentro del visor cuando el médico pulsa el ojo. -->
         <div id="auroDxProtocolos" hidden aria-hidden="true"></div>
+
+        <div class="auro-dx-protocol-backdrop" id="auroDxProtocoloModal" aria-hidden="true">
+          <div class="auro-dx-protocol-modal" role="dialog" aria-modal="true" aria-labelledby="auroDxProtocoloTitulo">
+            <div class="auro-dx-protocol-head">
+              <div>
+                <h4 id="auroDxProtocoloTitulo">Protocolo clínico</h4>
+                <div class="auro-dx-protocol-context" id="auroDxProtocoloContexto"></div>
+              </div>
+              <button type="button" class="auro-dx-mini-btn" id="auroDxProtocoloCerrar"><i class="bi bi-x-lg"></i> Cerrar</button>
+            </div>
+            <div class="auro-dx-protocol-body" id="auroDxProtocoloVista"></div>
+            <div class="auro-dx-protocol-foot">
+              <div id="auroDxProtocoloModo" class="auro-dx-readonly" hidden>Consulta histórica: protocolo disponible únicamente en modo lectura.</div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+                <button type="button" class="auro-dx-btn" id="auroDxProtocoloCopiar"><i class="bi bi-clipboard"></i> Copiar resumen</button>
+                <button type="button" class="auro-dx-btn success" id="auroDxProtocoloAplicar"><i class="bi bi-check2-circle"></i> Aplicar al Plan</button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div class="auro-dx-card">
           <div class="auro-dx-card-head">
@@ -795,6 +873,12 @@
       app.querySelector('#auroDxGuardar')?.addEventListener('click', guardarIntegracionTemporal);
       app.querySelector('#auroDxAplicarPlan')?.addEventListener('click', aplicarAlPlan);
       app.querySelector('#auroDxGuia')?.addEventListener('click', alternarGuia);
+      app.querySelector('#auroDxProtocoloCerrar')?.addEventListener('click', cerrarVisorProtocolo);
+      app.querySelector('#auroDxProtocoloAplicar')?.addEventListener('click', aplicarAlPlan);
+      app.querySelector('#auroDxProtocoloCopiar')?.addEventListener('click', copiarResumenProtocolo);
+      app.querySelector('#auroDxProtocoloModal')?.addEventListener('click', e => {
+        if(e.target?.id === 'auroDxProtocoloModal') cerrarVisorProtocolo();
+      });
 
       app.querySelectorAll('[data-copy-field]').forEach(btn => {
         btn.addEventListener('click', () => copiarCampo(btn.dataset.copyField));
@@ -855,31 +939,92 @@
       : 'Genera el resumen y el razonamiento clínico preliminar con la información disponible';
   }
 
+  function contextoAtencion(){
+    const at = atencionActiva() || {};
+    const numero = texto(at.numero_consulta || at.numero_atencion || at.numero);
+    const fecha = texto(at.fecha_atencion || at.fecha || at.fecha_consulta);
+    const total = state.diagnosticos.length;
+    const principal = state.diagnosticos.find(d => d.principal) || (total ? state.diagnosticos[0] : null);
+    const secundarios = principal ? Math.max(0, total - 1) : total;
+    return {at, numero, fecha, total, principal, secundarios};
+  }
+
+  function renderContextoDiagnostico(){
+    const ctx = contextoAtencion();
+    const titulo = document.getElementById('auroDxContextoTitulo');
+    const detalle = document.getElementById('auroDxContextoDetalle');
+    const total = document.getElementById('auroDxMetricaTotal');
+    const principal = document.getElementById('auroDxMetricaPrincipal');
+    const secundarios = document.getElementById('auroDxMetricaSecundarios');
+
+    if(titulo){
+      titulo.textContent = state.atencionActual
+        ? (ctx.numero ? 'Consulta #' + ctx.numero : 'Consulta seleccionada')
+        : 'Sin atención seleccionada';
+    }
+    if(detalle){
+      const partes = [];
+      if(state.atencionActual) partes.push('Atención ' + state.atencionActual);
+      const fecha = formatearFechaLocal(ctx.fecha);
+      if(fecha) partes.push(fecha);
+      detalle.textContent = partes.length
+        ? partes.join(' · ')
+        : 'Seleccione una consulta para visualizar su resumen diagnóstico.';
+    }
+    if(total) total.textContent = String(ctx.total);
+    if(principal) principal.textContent = ctx.principal ? '1' : '0';
+    if(secundarios) secundarios.textContent = String(ctx.secundarios);
+  }
+
   function renderDiagnosticos(){
     const box = document.getElementById('auroDxLista');
     if(!box) return;
 
     actualizarBotonGeneracion();
+    renderContextoDiagnostico();
 
     if(!state.diagnosticos.length){
       box.innerHTML = '<div class="auro-dx-empty"><b>Aún no se han registrado diagnósticos para esta atención.</b><br><span style="display:block;margin-top:6px">Puede generar primero el resumen clínico con la anamnesis y la información disponible.</span></div>';
+      mejorarResumenExterno();
+      instalarOjosTablaDiagnosticos();
       return;
     }
 
     const ordenados = [...state.diagnosticos].sort((a,b) => Number(b.principal) - Number(a.principal));
-    box.innerHTML = ordenados.map(d => `
-      <div class="auro-dx-item">
-        <div class="auro-dx-item-main">
-          <div class="auro-dx-code">${escapeHtml(d.codigo_cie10 || 'S/C')}</div>
-          <div class="auro-dx-name">${escapeHtml(d.descripcion || 'Sin descripción')}</div>
-        </div>
-        <div class="auro-dx-tags">
-          ${d.principal ? '<span class="auro-dx-tag principal">Principal</span>' : '<span class="auro-dx-tag">Secundario</span>'}
-          <span class="auro-dx-tag">${escapeHtml(d.tipo_diagnostico || 'Presuntivo')}</span>
-          <span class="auro-dx-tag">${escapeHtml(d.origen || '')}</span>
-        </div>
+    box.innerHTML = `
+      <div class="auro-dx-dx-list">
+        ${ordenados.map(d => {
+          const tipo = normalizar(d.tipo_diagnostico) === 'definitivo' ? 'definitivo' : '';
+          return `
+            <div class="auro-dx-dx-row ${d.principal ? 'principal' : ''}">
+              <div class="auro-dx-dx-main">
+                <div class="auro-dx-dx-title">
+                  <span class="auro-dx-dx-role">${d.principal ? 'Principal' : 'Asociado'}</span>
+                  <span>${escapeHtml(d.codigo_cie10 || 'S/C')} · ${escapeHtml(d.descripcion || 'Sin descripción')}</span>
+                </div>
+                <div class="auro-dx-dx-meta">
+                  <span class="auro-dx-type ${tipo}">${escapeHtml(d.tipo_diagnostico || 'Presuntivo')}</span>
+                  ${d.origen ? `<span class="auro-dx-tag">${escapeHtml(d.origen)}</span>` : ''}
+                </div>
+              </div>
+              <button type="button" class="auro-dx-eye" data-auro-abrir-protocolo="${escapeHtml(d.codigo_cie10)}" title="Ver protocolo de ${escapeHtml(d.descripcion || d.codigo_cie10)}" aria-label="Ver protocolo">
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
+          `;
+        }).join('')}
       </div>
-    `).join('');
+      <div class="auro-dx-card-help" style="margin-top:10px">
+        El primer diagnóstico se establece como principal por defecto. Al seleccionar otro en la tabla CIE-10, el anterior pasa automáticamente a asociado.
+      </div>
+    `;
+
+    box.querySelectorAll('[data-auro-abrir-protocolo]').forEach(btn => {
+      btn.addEventListener('click', () => abrirVisorProtocolo(btn.dataset.auroAbrirProtocolo));
+    });
+
+    mejorarResumenExterno();
+    instalarOjosTablaDiagnosticos();
   }
 
   function protocoloLista(valor){
@@ -976,7 +1121,297 @@
       });
     });
 
-    if(btn) btn.disabled = state.protocoloSeleccionado === null;
+    if(btn) btn.disabled = state.protocoloSeleccionado === null || !atencionEsEditableYActual();
+  }
+
+
+  function protocolosDelDiagnostico(codigo){
+    const c = texto(codigo).replace(/\./g,'').toUpperCase();
+    return state.protocolos
+      .map((p,index) => ({p,index}))
+      .filter(x => texto(x.p.codigo_cie10).replace(/\./g,'').toUpperCase() === c);
+  }
+
+  function atencionEsEditableYActual(){
+    const idEstado = texto(state.atencionActual);
+    const idActivo = texto(idAtencionActiva());
+    if(!idEstado || !idActivo || idEstado !== idActivo) return false;
+
+    const at = atencionActiva() || {};
+    const estado = normalizar(at.estado || at.estado_atencion || at.estado_consulta);
+    if(/finalizada|finalizado|cerrada|cerrado|anulada|anulado|cancelada|cancelado/.test(estado)) return false;
+
+    const idsRelacionados = [
+      texto(window.examenFisicoState?.atencionActual),
+      texto(window.planState?.atencionActual)
+    ].filter(Boolean);
+    if(idsRelacionados.some(id => id !== idEstado)) return false;
+
+    try{
+      const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+      const lista = raw ? JSON.parse(raw) : [];
+      const paciente = texto(at.id_paciente || idPacienteActual());
+      if(Array.isArray(lista) && paciente){
+        const delPaciente = lista.filter(x => texto(x?.id_paciente) === paciente);
+        if(delPaciente.length > 1){
+          const valorOrden = x => {
+            const fecha = new Date(x?.fecha_atencion || x?.fecha || x?.creado_en || 0).getTime();
+            const numero = Number(x?.numero_consulta || x?.numero_atencion || x?.numero || 0);
+            return {fecha:Number.isFinite(fecha) ? fecha : 0, numero:Number.isFinite(numero) ? numero : 0};
+          };
+          const ultima = [...delPaciente].sort((a,b) => {
+            const va = valorOrden(a), vb = valorOrden(b);
+            return (vb.fecha - va.fecha) || (vb.numero - va.numero);
+          })[0];
+          if(ultima && texto(ultima.id_atencion) !== idEstado) return false;
+        }
+      }
+    }catch(e){}
+
+    return true;
+  }
+
+  function protocoloHtml(p, index, seleccionable){
+    const secciones = [
+      ['Medicamentos', p.medicamentos],
+      ['Órdenes', p.ordenes],
+      ['Imágenes', p.imagenes],
+      ['Procedimientos', p.procedimientos],
+      ['Indicaciones', p.indicaciones],
+      ['Controles', p.controles],
+      ['Alertas', p.alertas]
+    ].filter(x => x[1] && x[1].length);
+
+    const seleccionado = state.protocoloSeleccionado === index;
+    return `
+      <div class="auro-dx-protocolo ${seleccionado ? 'selected' : ''}" data-protocolo-index="${index}">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+          <div>
+            <h5>${escapeHtml(p.nombre)}</h5>
+            <small>${escapeHtml(p.codigo_cie10)} · ${escapeHtml(p.especialidad)} ${p.version ? '· v' + escapeHtml(p.version) : ''}</small>
+          </div>
+          ${seleccionable ? `
+            <button type="button" class="auro-dx-btn ${seleccionado ? 'primary' : ''}" data-vis-select-protocolo="${index}">
+              ${seleccionado ? 'Seleccionado' : 'Seleccionar'}
+            </button>` : ''}
+        </div>
+        ${p.conducta ? `<p style="margin:9px 0 0">${escapeHtml(p.conducta)}</p>` : ''}
+        ${secciones.map(([titulo, lista]) => `
+          <div style="margin-top:9px">
+            <b style="font-size:12px">${escapeHtml(titulo)}</b>
+            <ul class="auro-dx-list">${lista.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+          </div>
+        `).join('')}
+        ${p.fuente ? `<div class="auro-dx-card-help" style="margin-top:9px">Fuente: ${escapeHtml(p.fuente)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function abrirVisorProtocolo(codigo){
+    const dx = state.diagnosticos.find(d =>
+      texto(d.codigo_cie10).replace(/\./g,'').toUpperCase() === texto(codigo).replace(/\./g,'').toUpperCase()
+    );
+    if(!dx){
+      mensaje('error','No se encontró el diagnóstico seleccionado.');
+      return;
+    }
+
+    const modal = document.getElementById('auroDxProtocoloModal');
+    const vista = document.getElementById('auroDxProtocoloVista');
+    const titulo = document.getElementById('auroDxProtocoloTitulo');
+    const contexto = document.getElementById('auroDxProtocoloContexto');
+    const aplicar = document.getElementById('auroDxProtocoloAplicar');
+    const modo = document.getElementById('auroDxProtocoloModo');
+    if(!modal || !vista) return;
+
+    const encontrados = protocolosDelDiagnostico(dx.codigo_cie10);
+    state.diagnosticoProtocoloActivo = dx.codigo_cie10;
+    state.visorProtocoloAbierto = true;
+
+    if(titulo) titulo.textContent = 'Protocolo clínico sugerido';
+    if(contexto){
+      const ctx = contextoAtencion();
+      contexto.textContent = [
+        dx.codigo_cie10 + ' · ' + dx.descripcion,
+        dx.principal ? 'Diagnóstico principal' : 'Diagnóstico asociado',
+        dx.tipo_diagnostico || '',
+        ctx.numero ? 'Consulta #' + ctx.numero : '',
+        state.atencionActual ? 'Atención ' + state.atencionActual : ''
+      ].filter(Boolean).join(' · ');
+    }
+
+    const editable = atencionEsEditableYActual();
+    if(modo){
+      modo.hidden = editable;
+      modo.textContent = editable
+        ? ''
+        : 'Consulta histórica o no editable: protocolo disponible únicamente en modo lectura.';
+    }
+    if(aplicar){
+      aplicar.hidden = !editable;
+      aplicar.disabled = !editable || !encontrados.length;
+    }
+
+    if(!encontrados.length){
+      vista.innerHTML = '<div class="auro-dx-empty">No se encontró un protocolo activo para este diagnóstico.</div>';
+    }else{
+      if(!encontrados.some(x => x.index === state.protocoloSeleccionado)){
+        state.protocoloSeleccionado = encontrados[0].index;
+      }
+      vista.innerHTML = encontrados.map(x => protocoloHtml(x.p, x.index, editable)).join('');
+      vista.querySelectorAll('[data-vis-select-protocolo]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.protocoloSeleccionado = Number(btn.dataset.visSelectProtocolo);
+          abrirVisorProtocolo(dx.codigo_cie10);
+          guardarEstadoTemporal();
+        });
+      });
+    }
+
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden','false');
+  }
+
+  function cerrarVisorProtocolo(){
+    const modal = document.getElementById('auroDxProtocoloModal');
+    if(!modal) return;
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden','true');
+    state.visorProtocoloAbierto = false;
+  }
+
+  async function copiarResumenProtocolo(){
+    const codigo = state.diagnosticoProtocoloActivo;
+    const encontrados = protocolosDelDiagnostico(codigo);
+    if(!encontrados.length){
+      mensaje('aviso','No hay protocolo para copiar.');
+      return;
+    }
+    const seleccionado = encontrados.find(x => x.index === state.protocoloSeleccionado) || encontrados[0];
+    const p = seleccionado.p;
+    const lineas = [
+      p.nombre,
+      [p.codigo_cie10,p.diagnostico].filter(Boolean).join(' · '),
+      p.conducta ? 'Conducta: ' + p.conducta : '',
+      p.medicamentos?.length ? 'Medicamentos:\n- ' + p.medicamentos.join('\n- ') : '',
+      p.ordenes?.length ? 'Órdenes:\n- ' + p.ordenes.join('\n- ') : '',
+      p.imagenes?.length ? 'Imágenes:\n- ' + p.imagenes.join('\n- ') : '',
+      p.procedimientos?.length ? 'Procedimientos:\n- ' + p.procedimientos.join('\n- ') : '',
+      p.indicaciones?.length ? 'Indicaciones:\n- ' + p.indicaciones.join('\n- ') : '',
+      p.controles?.length ? 'Controles:\n- ' + p.controles.join('\n- ') : '',
+      p.alertas?.length ? 'Alertas:\n- ' + p.alertas.join('\n- ') : ''
+    ].filter(Boolean).join('\n\n');
+
+    try{
+      await navigator.clipboard.writeText(lineas);
+      mensaje('ok','Resumen del protocolo copiado.');
+    }catch(e){
+      const tmp = document.createElement('textarea');
+      tmp.value = lineas;
+      document.body.appendChild(tmp);
+      tmp.select();
+      document.execCommand('copy');
+      tmp.remove();
+      mensaje('ok','Resumen del protocolo copiado.');
+    }
+  }
+
+  function codigoDesdeFila(fila){
+    const txt = texto(fila?.textContent).toUpperCase();
+    const codigos = state.diagnosticos
+      .map(d => texto(d.codigo_cie10).replace(/\./g,'').toUpperCase())
+      .filter(Boolean);
+    return codigos.find(c => txt.replace(/\./g,'').includes(c)) || '';
+  }
+
+  function instalarOjosTablaDiagnosticos(){
+    const candidatos = Array.from(document.querySelectorAll('tr, .diagnostico-row, [data-diagnostico-index]'));
+    candidatos.forEach(fila => {
+      if(fila.querySelector('[data-auro-ojo-tabla]')) return;
+      const codigo = codigoDesdeFila(fila);
+      if(!codigo) return;
+
+      const botonEliminar = Array.from(fila.querySelectorAll('button')).find(btn => {
+        const t = normalizar(btn.title || btn.getAttribute('aria-label') || btn.textContent);
+        return /eliminar|trash|borrar/.test(t) || btn.querySelector('.bi-trash,.bi-trash3');
+      });
+      if(!botonEliminar) return;
+
+      const ojo = document.createElement('button');
+      ojo.type = 'button';
+      ojo.className = 'auro-dx-table-eye';
+      ojo.dataset.auroOjoTabla = '1';
+      ojo.dataset.codigoCie10 = codigo;
+      ojo.title = 'Ver protocolo';
+      ojo.setAttribute('aria-label','Ver protocolo');
+      ojo.innerHTML = '<i class="bi bi-eye"></i>';
+      ojo.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        abrirVisorProtocolo(codigo);
+      });
+      botonEliminar.insertAdjacentElement('beforebegin', ojo);
+    });
+  }
+
+  function mejorarResumenExterno(){
+    const elementos = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,strong,b,div,span'));
+    const titulo = elementos.find(el =>
+      el.children.length === 0 &&
+      normalizar(el.textContent) === 'diagnosticos cie-10 previos guardados'
+    );
+    if(titulo && !titulo.dataset.auroOptimizado){
+      titulo.textContent = 'Resumen diagnóstico de la consulta';
+      titulo.dataset.auroOptimizado = '1';
+    }
+
+    const subtitulo = elementos.find(el =>
+      el.children.length === 0 &&
+      normalizar(el.textContent).includes('informacion leida desde google sheets')
+    );
+    if(subtitulo && !subtitulo.dataset.auroOptimizado){
+      subtitulo.textContent = 'Información diagnóstica registrada para la consulta seleccionada.';
+      subtitulo.dataset.auroOptimizado = '1';
+    }
+
+    const listado = elementos.find(el =>
+      el.children.length === 0 &&
+      normalizar(el.textContent) === 'listado cie-10 estructurado'
+    );
+    if(listado && !listado.dataset.auroOptimizado){
+      listado.textContent = 'Diagnósticos registrados';
+      listado.dataset.auroOptimizado = '1';
+    }
+
+    const ocultar = Array.from(document.querySelectorAll('button,a')).find(el =>
+      normalizar(el.textContent) === 'ocultar' &&
+      titulo && titulo.closest('section,div')?.contains(el)
+    );
+    if(ocultar && !ocultar.dataset.auroOptimizado){
+      ocultar.dataset.auroOptimizado = '1';
+      ocultar.textContent = 'Ocultar resumen';
+      ocultar.addEventListener('click', () => {
+        setTimeout(() => {
+          if(!document.body.contains(ocultar)) return;
+          const oculto = ocultar.getAttribute('aria-expanded') === 'false' ||
+            /mostrar/.test(normalizar(ocultar.textContent));
+          ocultar.textContent = oculto ? 'Mostrar resumen' : 'Ocultar resumen';
+        }, 0);
+      });
+    }
+  }
+
+  let observadorDiagnosticosDom = null;
+  function instalarObservadorDiagnosticosDom(){
+    if(observadorDiagnosticosDom) return;
+    observadorDiagnosticosDom = new MutationObserver(() => {
+      window.clearTimeout(instalarObservadorDiagnosticosDom._t);
+      instalarObservadorDiagnosticosDom._t = window.setTimeout(() => {
+        mejorarResumenExterno();
+        instalarOjosTablaDiagnosticos();
+      }, 80);
+    });
+    observadorDiagnosticosDom.observe(document.body,{childList:true,subtree:true});
   }
 
   function fuenteTieneDatos(obj){
@@ -2103,6 +2538,7 @@
     renderDiagnosticos();
     renderProtocolos();
     renderFuentes();
+    cerrarVisorProtocolo();
     const btn = document.getElementById('auroDxAplicarPlan');
     if(btn) btn.disabled = true;
     actualizarEstadoEdicion();
@@ -2192,6 +2628,9 @@
         (numeroConsulta ? 'Consulta #' + numeroConsulta + ' · ' : '') +
         'Atención ' + idAtencion + ' · ' + state.diagnosticos.length + ' diagnóstico(s)'
       );
+      renderContextoDiagnostico();
+      mejorarResumenExterno();
+      instalarOjosTablaDiagnosticos();
 
       if(!state.diagnosticos.length){
         mensaje('aviso','Aún no se han registrado diagnósticos. Puede generar el resumen clínico con la anamnesis y los datos disponibles.');
@@ -2287,6 +2726,11 @@
   }
 
   function aplicarAlPlan(){
+    if(!atencionEsEditableYActual()){
+      mensaje('error','El protocolo solo puede aplicarse al Plan de la última atención activa, editable y vinculada al mismo id_atencion.');
+      abrirVisorProtocolo(state.diagnosticoProtocoloActivo || state.protocolos[state.protocoloSeleccionado]?.codigo_cie10 || '');
+      return;
+    }
     if(state.cambiosPendientes){
       const continuarPendiente = window.confirm('La integración tiene cambios pendientes de confirmación temporal.\n\nPuede aplicarlos al Plan, pero se recomienda guardarlos temporalmente primero.\n\n¿Desea continuar?');
       if(!continuarPendiente) return;
@@ -2350,6 +2794,7 @@
     );
 
     guardarEstadoTemporal();
+    cerrarVisorProtocolo();
   }
 
   function cambiarPorAtencion(idAtencion){
@@ -2359,6 +2804,7 @@
   }
 
   function instalarEventos(){
+    instalarObservadorDiagnosticosDom();
     if(window.__auroDiagnosticosEventosInstalados) return;
     window.__auroDiagnosticosEventosInstalados = true;
 
@@ -2450,7 +2896,11 @@
     montarInterfaz: asegurarApp,
     copiarCampo,
     abrirCampoAmpliado,
-    alternarGuia
+    alternarGuia,
+    abrirVisorProtocolo,
+    cerrarVisorProtocolo,
+    renderContextoDiagnostico,
+    instalarOjosTablaDiagnosticos
   };
 
   window.cambiarDiagnosticosPorAtencion = cambiarPorAtencion;
