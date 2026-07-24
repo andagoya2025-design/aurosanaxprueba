@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.4.5 - integración clínica independiente del diagnóstico
+ Versión: 1.4.6 - visor de protocolos por atención y modo histórico seguro
  Fecha: 2026-07-22
  -----------------------------------------------------------------------
  OBJETIVO
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.4.5';
+  const VERSION = '1.4.6';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -60,7 +60,9 @@
     modoEdicion: false,
     cambiosPendientes: false,
     guardadoTemporalConfirmado: false,
-    ultimaEdicionLocal: ''
+    ultimaEdicionLocal: '',
+    visorProtocolosAbierto: false,
+    protocoloVisibleCodigo: ''
   };
 
   const IDS_PANEL_CANDIDATOS = [
@@ -265,6 +267,137 @@
     );
   }
 
+  function listaAtencionesDisponibles(){
+    const acumulado = [];
+    const agregar = lista => {
+      if(!Array.isArray(lista)) return;
+      lista.forEach(a => {
+        if(!a || !texto(a.id_atencion)) return;
+        if(!acumulado.some(x => texto(x.id_atencion) === texto(a.id_atencion))){
+          acumulado.push(a);
+        }
+      });
+    };
+
+    try{ agregar(window.atencionesState?.atenciones); }catch(e){}
+    try{ agregar(window.atencionesState?.lista); }catch(e){}
+    try{ agregar(window.atenciones || window.listaAtenciones); }catch(e){}
+    try{
+      const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+      agregar(raw ? JSON.parse(raw) : []);
+    }catch(e){}
+
+    return acumulado;
+  }
+
+  function buscarAtencionPorId(idAtencion){
+    const id = texto(idAtencion);
+    if(!id) return null;
+    return listaAtencionesDisponibles().find(a => texto(a?.id_atencion) === id) || null;
+  }
+
+  function fechaOrdenAtencion(a){
+    const numero = Number(a?.numero_consulta || 0);
+    const fecha = texto(a?.fecha_atencion || a?.fecha || '');
+    const hora = texto(a?.hora_atencion || a?.hora || '');
+    const tiempo = Date.parse((fecha || '1900-01-01') + 'T' + (hora || '00:00')) || 0;
+    return {numero, tiempo};
+  }
+
+  function ultimaAtencionPaciente(idPaciente){
+    const id = texto(idPaciente);
+    if(!id) return null;
+    return listaAtencionesDisponibles()
+      .filter(a => texto(a?.id_paciente) === id)
+      .sort((a,b) => {
+        const oa = fechaOrdenAtencion(a);
+        const ob = fechaOrdenAtencion(b);
+        return (ob.numero - oa.numero) || (ob.tiempo - oa.tiempo);
+      })[0] || null;
+  }
+
+  function validarAplicacionPlan(){
+    const idModulo = texto(state.atencionActual);
+    const atencion = buscarAtencionPorId(idModulo) || atencionActiva();
+    const idPaciente = texto(atencion?.id_paciente || idPacienteActual());
+    const ultima = ultimaAtencionPaciente(idPaciente);
+    const estado = normalizar(atencion?.estado_atencion || atencion?.estado || '');
+    const idActivo = texto(idAtencionActiva());
+    const idPlan = texto(window.planState?.atencionActual || '');
+    const idExamen = texto(window.examenFisicoState?.atencionActual || '');
+
+    if(!idModulo) return {ok:false, motivo:'No existe una atención seleccionada.'};
+    if(!atencion) return {ok:false, motivo:'No se pudo validar la atención seleccionada.'};
+    if(!idPaciente) return {ok:false, motivo:'No se pudo validar el paciente de la atención.'};
+    if(idActivo && idActivo !== idModulo){
+      return {ok:false, motivo:'El protocolo pertenece a una atención histórica.'};
+    }
+    if(estado && estado !== 'abierta' && estado !== 'activo' && estado !== 'activa'){
+      return {ok:false, motivo:'La atención está finalizada y el protocolo es solo de lectura.'};
+    }
+    if(ultima && texto(ultima.id_atencion) !== idModulo){
+      return {ok:false, motivo:'Solo la última atención del paciente puede aplicar protocolos al Plan.'};
+    }
+    if(idPlan && idPlan !== idModulo){
+      return {ok:false, motivo:'El Plan visible corresponde a otra atención.'};
+    }
+    if(idExamen && idExamen !== idModulo){
+      return {ok:false, motivo:'El Examen físico visible corresponde a otra atención.'};
+    }
+
+    return {ok:true, motivo:''};
+  }
+
+  function actualizarDisponibilidadAplicarPlan(){
+    const btn = document.getElementById('auroDxAplicarPlan');
+    if(!btn) return false;
+    const validacion = validarAplicacionPlan();
+    const tieneProtocolo = state.protocoloSeleccionado !== null && !!state.protocolos[state.protocoloSeleccionado];
+    btn.disabled = !validacion.ok || !tieneProtocolo;
+    btn.hidden = !state.visorProtocolosAbierto || !validacion.ok;
+    btn.setAttribute('aria-hidden', btn.hidden ? 'true' : 'false');
+    btn.title = validacion.ok
+      ? 'Transfiere el protocolo seleccionado al módulo Plan de esta atención'
+      : validacion.motivo;
+    return validacion.ok;
+  }
+
+  function cerrarVisorProtocolos(){
+    state.visorProtocolosAbierto = false;
+    state.protocoloVisibleCodigo = '';
+    const box = document.getElementById('auroDxProtocolos');
+    if(box){
+      box.hidden = true;
+      box.setAttribute('aria-hidden','true');
+    }
+    actualizarDisponibilidadAplicarPlan();
+  }
+
+  function verProtocoloDiagnostico(codigoCie10){
+    const codigo = texto(codigoCie10).replace(/\./g,'').toUpperCase();
+    const index = state.protocolos.findIndex(p =>
+      texto(p?.codigo_cie10).replace(/\./g,'').toUpperCase() === codigo
+    );
+
+    state.visorProtocolosAbierto = true;
+    state.protocoloVisibleCodigo = codigo;
+    state.protocoloSeleccionado = index >= 0 ? index : null;
+    renderProtocolos();
+
+    const box = document.getElementById('auroDxProtocolos');
+    if(box){
+      box.hidden = false;
+      box.setAttribute('aria-hidden','false');
+      setTimeout(() => box.scrollIntoView({behavior:'smooth', block:'start'}), 20);
+    }
+
+    if(index < 0){
+      mensaje('aviso','No existe un protocolo activo vinculado al diagnóstico ' + (codigo || 'seleccionado') + '.');
+    }else{
+      mensaje('','');
+    }
+  }
+
   function diagnosticosLocales(){
     let lista = [];
 
@@ -385,6 +518,12 @@
       .auro-dx-code{font-weight:900;color:#1d6670;min-width:54px}
       .auro-dx-name{font-weight:700;line-height:1.35}
       .auro-dx-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+      .auro-dx-item-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;justify-content:flex-end}
+      .auro-dx-view-btn{padding:7px 10px;font-size:12px}
+      .auro-dx-protocol-viewer{margin-top:14px;border:1px solid #dce7e9;border-radius:14px;background:#fff;overflow:hidden}
+      .auro-dx-protocol-viewer-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 14px;background:#f4f8f9;border-bottom:1px solid #dce7e9}
+      .auro-dx-protocol-viewer-body{padding:12px}
+      .auro-dx-readonly-note{font-size:12px;color:#6b7c80;margin-top:4px}
       .auro-dx-tag{font-size:10px;padding:4px 7px;border-radius:999px;background:#edf4f5;color:#52676b}
       .auro-dx-tag.principal{background:#dff3ea;color:#256146}
       .auro-dx-textarea{width:100%;min-height:112px;resize:vertical;border:1px solid #cedbdd;border-radius:12px;padding:11px;font:inherit;line-height:1.45}
@@ -696,10 +835,9 @@
           </div>
         </div>
 
-        <!-- AUROSANAX: contenedor técnico oculto.
-             Conserva el motor de protocolos sin duplicar su visualización,
-             porque el protocolo clínico ya se presenta en el módulo CIE-10 inteligente. -->
-        <div id="auroDxProtocolos" hidden aria-hidden="true"></div>
+        <!-- AUROSANAX 1.4.6: visor recuperado bajo demanda.
+             Permanece oculto hasta pulsar “Ver protocolo”. -->
+        <div id="auroDxProtocolos" class="auro-dx-protocol-viewer" hidden aria-hidden="true"></div>
 
         <div class="auro-dx-card">
           <div class="auro-dx-card-head">
@@ -863,6 +1001,7 @@
 
     if(!state.diagnosticos.length){
       box.innerHTML = '<div class="auro-dx-empty"><b>Aún no se han registrado diagnósticos para esta atención.</b><br><span style="display:block;margin-top:6px">Puede generar primero el resumen clínico con la anamnesis y la información disponible.</span></div>';
+      cerrarVisorProtocolos();
       return;
     }
 
@@ -878,8 +1017,17 @@
           <span class="auro-dx-tag">${escapeHtml(d.tipo_diagnostico || 'Presuntivo')}</span>
           <span class="auro-dx-tag">${escapeHtml(d.origen || '')}</span>
         </div>
+        <div class="auro-dx-item-actions">
+          <button type="button" class="auro-dx-btn auro-dx-view-btn" data-ver-protocolo="${escapeHtml(d.codigo_cie10 || '')}" title="Ver el protocolo clínico asociado a este diagnóstico">
+            <i class="bi bi-eye"></i> Ver protocolo
+          </button>
+        </div>
       </div>
     `).join('');
+
+    box.querySelectorAll('[data-ver-protocolo]').forEach(btn => {
+      btn.addEventListener('click', () => verProtocoloDiagnostico(btn.dataset.verProtocolo));
+    });
   }
 
   function protocoloLista(valor){
@@ -920,16 +1068,43 @@
 
   function renderProtocolos(){
     const box = document.getElementById('auroDxProtocolos');
-    const btn = document.getElementById('auroDxAplicarPlan');
     if(!box) return;
 
-    if(!state.protocolos.length){
-      box.innerHTML = '<div class="auro-dx-empty">No se encontraron protocolos activos para los diagnósticos de esta atención.</div>';
-      if(btn) btn.disabled = true;
+    if(!state.visorProtocolosAbierto){
+      box.hidden = true;
+      box.setAttribute('aria-hidden','true');
+      actualizarDisponibilidadAplicarPlan();
       return;
     }
 
-    box.innerHTML = state.protocolos.map((p, index) => {
+    const validacion = validarAplicacionPlan();
+    const codigoFiltro = texto(state.protocoloVisibleCodigo).replace(/\./g,'').toUpperCase();
+    const protocolosVisibles = codigoFiltro
+      ? state.protocolos.map((p,index) => ({p,index})).filter(x => texto(x.p?.codigo_cie10).replace(/\./g,'').toUpperCase() === codigoFiltro)
+      : state.protocolos.map((p,index) => ({p,index}));
+
+    box.hidden = false;
+    box.setAttribute('aria-hidden','false');
+
+    const encabezado = `
+      <div class="auro-dx-protocol-viewer-head">
+        <div>
+          <b><i class="bi bi-journal-medical"></i> Protocolo clínico</b>
+          <div class="auro-dx-readonly-note">${validacion.ok
+            ? 'Atención activa y editable. Puede revisar y aplicar el protocolo al Plan.'
+            : 'Consulta histórica: visualización en modo lectura. No se permite aplicar al Plan.'}</div>
+        </div>
+        <button type="button" class="auro-dx-btn" id="auroDxCerrarProtocolos" title="Cerrar visor"><i class="bi bi-x-lg"></i> Cerrar</button>
+      </div>`;
+
+    if(!protocolosVisibles.length){
+      box.innerHTML = encabezado + '<div class="auro-dx-protocol-viewer-body"><div class="auro-dx-empty">No se encontró un protocolo activo para este diagnóstico.</div></div>';
+      box.querySelector('#auroDxCerrarProtocolos')?.addEventListener('click', cerrarVisorProtocolos);
+      actualizarDisponibilidadAplicarPlan();
+      return;
+    }
+
+    box.innerHTML = encabezado + '<div class="auro-dx-protocol-viewer-body">' + protocolosVisibles.map(({p,index}) => {
       const seleccionado = state.protocoloSeleccionado === index;
       const secciones = [
         ['Medicamentos', p.medicamentos],
@@ -948,9 +1123,10 @@
               <h5>${escapeHtml(p.nombre)}</h5>
               <small>${escapeHtml(p.codigo_cie10)} · ${escapeHtml(p.especialidad)} ${p.version ? '· v' + escapeHtml(p.version) : ''}</small>
             </div>
-            <button type="button" class="auro-dx-btn ${seleccionado ? 'primary' : ''}" data-seleccionar-protocolo="${index}">
-              ${seleccionado ? 'Seleccionado' : 'Seleccionar'}
-            </button>
+            ${validacion.ok ? `
+              <button type="button" class="auro-dx-btn ${seleccionado ? 'primary' : ''}" data-seleccionar-protocolo="${index}">
+                ${seleccionado ? 'Seleccionado' : 'Seleccionar'}
+              </button>` : '<span class="auro-dx-tag">Solo lectura</span>'}
           </div>
           ${p.conducta ? `<p style="margin:9px 0 0">${escapeHtml(p.conducta)}</p>` : ''}
           ${secciones.map(([titulo, lista]) => `
@@ -961,10 +1137,12 @@
           `).join('')}
         </div>
       `;
-    }).join('');
+    }).join('') + '</div>';
 
+    box.querySelector('#auroDxCerrarProtocolos')?.addEventListener('click', cerrarVisorProtocolos);
     box.querySelectorAll('[data-seleccionar-protocolo]').forEach(btnSel => {
       btnSel.addEventListener('click', () => {
+        if(!validarAplicacionPlan().ok) return;
         state.protocoloSeleccionado = Number(btnSel.dataset.seleccionarProtocolo);
         const p = state.protocolos[state.protocoloSeleccionado];
         if(p && p.conducta){
@@ -976,7 +1154,7 @@
       });
     });
 
-    if(btn) btn.disabled = state.protocoloSeleccionado === null;
+    actualizarDisponibilidadAplicarPlan();
   }
 
   function fuenteTieneDatos(obj){
@@ -2094,6 +2272,8 @@
     state.cambiosPendientes = false;
     state.guardadoTemporalConfirmado = false;
     state.ultimaEdicionLocal = '';
+    state.visorProtocolosAbierto = false;
+    state.protocoloVisibleCodigo = '';
 
     ['auroDxResumen','auroDxAnalisis','auroDxConducta'].forEach(id => {
       const el = document.getElementById(id);
@@ -2103,8 +2283,7 @@
     renderDiagnosticos();
     renderProtocolos();
     renderFuentes();
-    const btn = document.getElementById('auroDxAplicarPlan');
-    if(btn) btn.disabled = true;
+    actualizarDisponibilidadAplicarPlan();
     actualizarEstadoEdicion();
   }
 
@@ -2287,6 +2466,13 @@
   }
 
   function aplicarAlPlan(){
+    const validacion = validarAplicacionPlan();
+    if(!validacion.ok){
+      mensaje('aviso', validacion.motivo || 'Este protocolo está disponible únicamente en modo lectura.');
+      actualizarDisponibilidadAplicarPlan();
+      return;
+    }
+
     if(state.cambiosPendientes){
       const continuarPendiente = window.confirm('La integración tiene cambios pendientes de confirmación temporal.\n\nPuede aplicarlos al Plan, pero se recomienda guardarlos temporalmente primero.\n\n¿Desea continuar?');
       if(!continuarPendiente) return;
@@ -2442,6 +2628,9 @@
     alternarEdicionClinica,
     guardarIntegracionTemporal,
     aplicarAlPlan,
+    verProtocolo: verProtocoloDiagnostico,
+    cerrarVisorProtocolos,
+    validarAplicacionPlan,
     limpiar: limpiarVisual,
     obtenerDiagnosticos: () => clonar(state.diagnosticos, []),
     obtenerAnamnesis: () => clonar(state.anamnesis, null),
