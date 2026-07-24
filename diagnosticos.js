@@ -2,8 +2,8 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.1 - optimización quirúrgica de contexto, resumen y protocolos
- Fecha: 2026-07-22
+ Versión: 1.5.2 - integración quirúrgica con Apoyo Cognitivo con IA
+ Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
  - Leer los diagnósticos ya registrados desde Examen Físico.
@@ -12,6 +12,8 @@
  - Integrar información visible de la atención sin modificar otros módulos.
  - Mostrar sugerencias para revisión médica.
  - Aplicar al Plan únicamente por acción expresa del usuario.
+ - Preparar y transferir temporalmente el contexto clínico a apoyoIA.html.
+ - Mantener la futura persistencia de Apoyo IA independiente y vinculada por id_atencion.
 
  REGLAS DE SEGURIDAD
  - NO elimina ni modifica funciones de examenfisico.js.
@@ -20,6 +22,8 @@
  - NO aplica protocolos automáticamente.
  - Si falta un módulo, continúa funcionando con degradación segura.
  - Cada atención conserva su estado independiente.
+ - La apertura de Apoyo IA no guarda, duplica ni modifica registros clínicos.
+ - No altera fechas, horas ni formatos JSON de los módulos existentes.
 ************************************************************************/
 
 (function(){
@@ -39,7 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.1';
+  const VERSION = '1.5.2';
+  const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
+  const RELEASE = '20260724_apoyo_ia_v1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -654,6 +660,14 @@
       .auro-dx-mini-btn{border:1px solid #dbe5e7;background:#fff;color:#42575b;border-radius:9px;padding:5px 8px;font-size:11px;font-weight:800;cursor:pointer}
       .auro-dx-mini-btn:hover{background:#f2f7f8}
       .auro-dx-guide{display:none;padding:10px 12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:12px;line-height:1.4}
+      .auro-dx-ia-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 15px;border:1px solid #e7d6e1;border-radius:16px;background:linear-gradient(135deg,#fff,#fff8fc);box-shadow:0 8px 22px rgba(108,29,82,.06)}
+      .auro-dx-ia-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#6c1d52,#b76a93);color:#fff;font-size:19px}
+      .auro-dx-ia-title{font-size:14px;font-weight:900;color:#491137}
+      .auro-dx-ia-copy{margin-top:3px;color:#6f6874;font-size:12px;line-height:1.35}
+      .auro-dx-ia-state{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;font-weight:800;color:#64748b}
+      .auro-dx-ia-state.ready{color:#198754}
+      .auro-dx-ia-btn{border:0;border-radius:12px;padding:10px 13px;background:linear-gradient(135deg,#6c1d52,#491137);color:#fff;font-size:12px;font-weight:850;cursor:pointer;white-space:nowrap}
+      .auro-dx-ia-btn:disabled{opacity:.5;cursor:not-allowed}
       #auroDiagnosticosApp.guide-on .auro-dx-guide{display:block}
       .auro-dx-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.58);display:none;align-items:center;justify-content:center;padding:18px;z-index:99999}
       .auro-dx-modal-backdrop.show{display:flex}
@@ -848,6 +862,8 @@
           padding:10px 12px calc(10px + env(safe-area-inset-bottom));
         }
         .auro-dx-modal-foot .auro-dx-btn{width:100%}
+        .auro-dx-ia-card{grid-template-columns:auto minmax(0,1fr);padding:12px}
+        .auro-dx-ia-btn{grid-column:1/-1;width:100%;min-height:44px}
       }
     `;
     document.head.appendChild(style);
@@ -944,6 +960,21 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="auro-dx-ia-card" id="auroDxApoyoIACard">
+          <div class="auro-dx-ia-icon"><i class="bi bi-brain"></i></div>
+          <div>
+            <div class="auro-dx-ia-title">Apoyo Cognitivo con IA</div>
+            <div class="auro-dx-ia-copy">Abre el módulo auxiliar con el contexto clínico integrado de esta atención.</div>
+            <div class="auro-dx-ia-state" id="auroDxApoyoIAEstado">
+              <i class="bi bi-circle-fill"></i>
+              <span>Genere o sincronice la integración clínica.</span>
+            </div>
+          </div>
+          <button type="button" class="auro-dx-ia-btn" id="auroDxAbrirApoyoIA" disabled>
+            <i class="bi bi-box-arrow-up-right"></i> Abrir Apoyo Cognitivo
+          </button>
         </div>
 
         <!-- AUROSANAX: contenedor técnico oculto.
@@ -1048,6 +1079,7 @@
       app.querySelector('#auroDxGuardar')?.addEventListener('click', guardarIntegracionTemporal);
       app.querySelector('#auroDxAplicarPlan')?.addEventListener('click', aplicarAlPlan);
       app.querySelector('#auroDxGuia')?.addEventListener('click', alternarGuia);
+      app.querySelector('#auroDxAbrirApoyoIA')?.addEventListener('click', abrirApoyoIA);
 
       app.querySelectorAll('[data-copy-field]').forEach(btn => {
         btn.addEventListener('click', () => copiarCampo(btn.dataset.copyField));
@@ -2152,6 +2184,165 @@
     return partes.join('\n');
   }
 
+
+  function valorPrimero(objeto, claves){
+    for(const clave of claves || []){
+      const valor = texto(objeto?.[clave]);
+      if(valor) return valor;
+    }
+    return '';
+  }
+
+  function fechaHoraEcuador(){
+    const ahora = new Date();
+    const fecha = new Intl.DateTimeFormat('es-EC',{
+      timeZone:'America/Guayaquil',
+      day:'2-digit',
+      month:'2-digit',
+      year:'numeric'
+    }).format(ahora);
+    const hora = new Intl.DateTimeFormat('es-EC',{
+      timeZone:'America/Guayaquil',
+      hour:'2-digit',
+      minute:'2-digit',
+      second:'2-digit',
+      hour12:false
+    }).format(ahora);
+    const partes = new Intl.DateTimeFormat('en-CA',{
+      timeZone:'America/Guayaquil',
+      year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',minute:'2-digit',second:'2-digit',
+      hour12:false
+    }).formatToParts(ahora);
+    const mapa = {};
+    partes.forEach(p => { if(p.type !== 'literal') mapa[p.type] = p.value; });
+    return {
+      fecha,
+      hora,
+      iso: `${mapa.year}-${mapa.month}-${mapa.day}T${mapa.hour}:${mapa.minute}:${mapa.second}-05:00`
+    };
+  }
+
+  function construirContextoApoyoIA(){
+    const ctx = contextoAtencionSeleccionada();
+    const atencion = ctx.atencion || atencionActiva() || {};
+    const historia = state.historia || {};
+    const anamnesis = state.anamnesis || {};
+    const principal = state.diagnosticos.find(d => d.principal) || state.diagnosticos[0] || {};
+    const asociados = state.diagnosticos.filter(d => d !== principal);
+    const marcaTiempo = fechaHoraEcuador();
+
+    const paciente = {
+      id_paciente: texto(atencion.id_paciente || idPacienteActual()),
+      nombre: valorPrimero(atencion,['nombre_paciente','paciente','nombre_completo']) ||
+              valorPrimero(historia,['nombre_paciente','paciente','nombre_completo','nombres']),
+      identificacion: valorPrimero(atencion,['identificacion','cedula','documento']) ||
+                      valorPrimero(historia,['identificacion','cedula','documento']),
+      edad: valorPrimero(atencion,['edad']) || valorPrimero(historia,['edad']),
+      sexo: valorPrimero(atencion,['sexo','genero']) || valorPrimero(historia,['sexo','genero']),
+      historiaClinica: valorPrimero(atencion,['numero_historia','historia_clinica']) ||
+                       valorPrimero(historia,['numero_historia','historia_clinica','id_historia'])
+    };
+
+    const profesional = {
+      nombre: valorPrimero(atencion,['profesional','nombre_profesional','medico','doctor']),
+      especialidad: valorPrimero(atencion,['especialidad']) ||
+                    texto(document.getElementById('hcEspecialidad')?.value) ||
+                    'Ginecología y Obstetricia'
+    };
+
+    const motivo = valorPrimero(anamnesis,['motivo_consulta','motivo','consulta_principal']) ||
+                   valorPrimero(historia,['motivo_consulta','motivo']);
+
+    return {
+      version: '1.0.0',
+      modulo: 'Apoyo Cognitivo con IA',
+      origen: 'diagnosticos.js',
+      id_atencion: texto(ctx.id || state.atencionActual),
+      id_paciente: paciente.id_paciente,
+      numero_consulta: texto(ctx.numeroConsulta),
+      zonaHoraria: 'America/Guayaquil',
+      creadoEn: marcaTiempo.iso,
+      fecha: marcaTiempo.fecha,
+      hora: marcaTiempo.hora,
+      paciente,
+      profesional,
+      consulta: {
+        id_atencion: texto(ctx.id || state.atencionActual),
+        numero: texto(ctx.numeroConsulta),
+        especialidad: profesional.especialidad,
+        tipo: valorPrimero(atencion,['tipo_consulta','tipo_atencion','tipo']),
+        motivo,
+        resumenClinico: texto(document.getElementById('auroDxResumen')?.value || state.resumenClinico),
+        analisisClinico: texto(document.getElementById('auroDxAnalisis')?.value || state.analisisClinico),
+        conducta: texto(document.getElementById('auroDxConducta')?.value || state.conducta)
+      },
+      diagnostico: {
+        principal: [principal.codigo_cie10, principal.descripcion].filter(Boolean).join(' - '),
+        cie10: state.diagnosticos.map(d => texto(d.codigo_cie10)).filter(Boolean).join(', '),
+        diferenciales: asociados.map(d => [d.codigo_cie10,d.descripcion].filter(Boolean).join(' - ')).filter(Boolean).join('\n'),
+        lista: clonar(state.diagnosticos, [])
+      },
+      integracionClinica: {
+        resumen: texto(document.getElementById('auroDxResumen')?.value || state.resumenClinico),
+        analisis: texto(document.getElementById('auroDxAnalisis')?.value || state.analisisClinico),
+        conducta: texto(document.getElementById('auroDxConducta')?.value || state.conducta),
+        ultimaActualizacion: texto(state.ultimaActualizacion),
+        ultimaEdicionLocal: texto(state.ultimaEdicionLocal)
+      },
+      fuentes: {
+        historiaDisponible: !!state.historia,
+        anamnesisDisponible: !!state.anamnesis,
+        examenFisicoDisponible: !!state.detalleExamen,
+        especialidadesDisponibles: Object.keys(state.especialidades || {}).filter(k => !!state.especialidades[k])
+      },
+      persistencia: {
+        estado: 'temporal',
+        guardadoBaseDatos: false,
+        hojaFutura: 'APOYO_IA'
+      }
+    };
+  }
+
+  function actualizarTarjetaApoyoIA(){
+    const btn = document.getElementById('auroDxAbrirApoyoIA');
+    const estado = document.getElementById('auroDxApoyoIAEstado');
+    if(!btn || !estado) return;
+
+    const hayAtencion = !!texto(state.atencionActual || idAtencionActiva());
+    const hayContexto = !!texto(document.getElementById('auroDxResumen')?.value || state.resumenClinico);
+    btn.disabled = !(hayAtencion && hayContexto);
+    estado.classList.toggle('ready', hayAtencion && hayContexto);
+    estado.innerHTML = hayAtencion && hayContexto
+      ? '<i class="bi bi-check-circle-fill"></i><span>Contexto clínico integrado listo.</span>'
+      : '<i class="bi bi-circle-fill"></i><span>Genere o sincronice la integración clínica.</span>';
+  }
+
+  function abrirApoyoIA(){
+    if(!texto(state.atencionActual || idAtencionActiva())){
+      mensaje('error','Seleccione o inicie una atención antes de abrir el apoyo cognitivo.');
+      return;
+    }
+
+    const resumen = texto(document.getElementById('auroDxResumen')?.value || state.resumenClinico);
+    if(!resumen){
+      mensaje('aviso','Genere primero el resumen clínico integrado para preparar el contexto de IA.');
+      document.getElementById('auroDxGenerar')?.focus();
+      return;
+    }
+
+    try{
+      const contexto = construirContextoApoyoIA();
+      sessionStorage.setItem(APOYO_IA_SESSION_KEY, JSON.stringify(contexto));
+      sessionStorage.setItem('aurosanax_url_diagnostico', window.location.href);
+      sessionStorage.setItem('aurosanax_abrir_modulo', 'diagnostico');
+      window.location.href = 'apoyoIA.html';
+    }catch(error){
+      console.error(MODULO + ': no se pudo preparar el contexto para Apoyo IA.', error);
+      mensaje('error','No fue posible abrir el módulo de Apoyo Cognitivo.');
+    }
+  }
+
   function generarIntegracion(){
     if(!state.atencionActual){
       mensaje('error','No existe una atención activa.');
@@ -2191,6 +2382,7 @@
     state.ultimaEdicionLocal = new Date().toISOString();
     guardarEstadoTemporal();
     actualizarEstadoEdicion();
+    actualizarTarjetaApoyoIA();
     mensaje('ok', state.diagnosticos.length ? 'Integración clínica actualizada en modo protegido. Presione “Editar integración” para revisión médica.' : 'Resumen clínico preliminar generado en modo protegido. Podrá actualizarlo cuando registre los diagnósticos.');
   }
 
@@ -2384,6 +2576,7 @@
     const btn = document.getElementById('auroDxAplicarPlan');
     if(btn) btn.disabled = true;
     actualizarEstadoEdicion();
+    actualizarTarjetaApoyoIA();
     renderContextoSuperior();
     optimizarTitulosResumenExistente();
   }
@@ -2464,6 +2657,7 @@
       renderFuentes();
       restaurarEstadoTemporal(idAtencion);
       actualizarEstadoEdicion();
+      actualizarTarjetaApoyoIA();
 
       state.ultimaActualizacion = new Date().toISOString();
       const atencion = atencionActiva() || {};
@@ -2720,10 +2914,11 @@
       renderDiagnosticos();
       renderProtocolos();
       renderFuentes();
+      actualizarTarjetaApoyoIA();
       mensaje('aviso','Seleccione o inicie una consulta para cargar la información diagnóstica.');
     }
 
-    console.log(MODULO + ' v' + VERSION + ' cargado correctamente.');
+    console.log(MODULO + ' v' + VERSION + ' [' + RELEASE + '] cargado correctamente.');
   }
 
   window.auroDiagnosticos = {
@@ -2749,7 +2944,10 @@
     alternarGuia,
     abrirProtocoloMaestro,
     renderContextoSuperior,
-    puedeAplicarAlPlan
+    puedeAplicarAlPlan,
+    construirContextoApoyoIA,
+    abrirApoyoIA,
+    actualizarTarjetaApoyoIA
   };
 
   window.cambiarDiagnosticosPorAtencion = cambiarPorAtencion;
@@ -2757,6 +2955,7 @@
   window.auroActualizarDiagnosticos = () => cargarAtencionActual(true);
   window.auroGenerarIntegracionDiagnostica = generarIntegracion;
   window.auroAplicarDiagnosticoAlPlan = aplicarAlPlan;
+  window.auroAbrirApoyoIA = abrirApoyoIA;
 
   window.auroDiagnosticosModuloCargado = true;
 
