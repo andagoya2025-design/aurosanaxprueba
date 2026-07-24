@@ -1902,6 +1902,7 @@
       let toastInstance = null;
       let modalDatosInstance = null;
       let autosaveTimer = null;
+      let contextoEntradaActual = {};
 
       function normalizarTexto(valor) {
         if (valor === null || valor === undefined) return "";
@@ -2054,6 +2055,7 @@
       function hidratarDesdeContexto() {
         const contexto = leerContextoSesion();
         const datos = contexto.datos || {};
+        contextoEntradaActual = datos;
 
         const paciente = datos.paciente || datos.patient || {};
         const profesional = datos.profesional || datos.medico || datos.doctor || {};
@@ -2177,7 +2179,9 @@
             "consulta.resumenClinico",
             "datos.resumenClinico",
             "datos.resumen",
-            "datos.integracionClinica"
+            "datos.integracionClinica.resumen",
+            "datos.integracionClinica",
+            "consulta.analisisClinico"
           ]
         );
 
@@ -2399,6 +2403,22 @@
           modulo: "Apoyo Cognitivo con IA",
           zonaHoraria: "America/Guayaquil",
           actualizadoEn: ahora.iso,
+          identificacionRegistro: {
+            id_atencion: normalizarTexto(
+              contextoEntradaActual.id_atencion ||
+              contextoEntradaActual.consulta?.id_atencion
+            ),
+            id_paciente: normalizarTexto(
+              contextoEntradaActual.id_paciente ||
+              contextoEntradaActual.paciente?.id_paciente
+            ),
+            numero_consulta: normalizarTexto(
+              contextoEntradaActual.numero_consulta ||
+              contextoEntradaActual.consulta?.numero
+            ),
+            estado: "borrador",
+            guardadoBaseDatos: false
+          },
           paciente: {
             nombre: refs.pacienteNombre.textContent === "No disponible"
               ? ""
@@ -2426,6 +2446,14 @@
             tipo: refs.tipoConsulta.value,
             motivo: escaparTextoPlano(refs.motivoConsulta.value),
             resumenClinico: escaparTextoPlano(refs.resumenClinico.value),
+            analisisClinico: escaparTextoPlano(
+              contextoEntradaActual.consulta?.analisisClinico ||
+              contextoEntradaActual.integracionClinica?.analisis
+            ),
+            conducta: escaparTextoPlano(
+              contextoEntradaActual.consulta?.conducta ||
+              contextoEntradaActual.integracionClinica?.conducta
+            ),
             alertasClinicas: escaparTextoPlano(refs.alertasClinicas.value)
           },
           diagnostico: {
@@ -2453,6 +2481,16 @@
             privacidadRevisada: refs.checkPrivacidad.checked,
             respuestaSeraVerificada: refs.checkVerificacion.checked,
             responsabilidadProfesionalAceptada: refs.checkResponsabilidad.checked
+          },
+          auditoria: {
+            zonaHoraria: "America/Guayaquil",
+            creadoEn: normalizarTexto(
+              contextoEntradaActual.creadoEn ||
+              contextoEntradaActual.auditoria?.creadoEn
+            ) || ahora.iso,
+            actualizadoEn: ahora.iso,
+            origen: normalizarTexto(contextoEntradaActual.origen) || "apoyoIA.html",
+            versionEsquema: "1.0.0"
           }
         };
       }
