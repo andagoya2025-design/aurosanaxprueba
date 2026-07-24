@@ -1,1 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .boton {
+      display: block;
+      width: 100%;
+      max-width: 360px;
+      margin: 14px auto;
+      padding: 16px;
+      border: 0;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>Apoyo con ChatGPT</h2>
+
+  <p>
+    Copie el texto desde el ERP, abra ChatGPT,
+    péguelo manualmente y copie la respuesta de regreso.
+  </p>
+
+  <button
+    class="boton"
+    onclick="window.open('https://chatgpt.com/', '_blank')">
+    Abrir ChatGPT
+  </button>
+
+  <button class="boton" onclick="window.close()">
+    Cerrar
+  </button>
+</body>
+</html>
