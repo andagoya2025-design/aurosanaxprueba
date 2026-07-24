@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.1 - optimización quirúrgica de contexto, resumen y protocolos
+ Versión: 1.5.2 - pulido visual final de títulos y jerarquía
  Fecha: 2026-07-22
  -----------------------------------------------------------------------
  OBJETIVO
@@ -39,7 +39,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.1';
+  const VERSION = '1.5.2';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -408,17 +408,21 @@
       if(el.children.length && el.tagName !== 'BUTTON') return;
       const t = texto(el.textContent);
       if(t === 'Diagnósticos CIE-10 previos guardados'){
-        el.textContent = 'Resumen diagnóstico de la consulta';
+        el.textContent = 'Resumen de la consulta';
       }else if(/^Información leída desde Google Sheets/i.test(t)){
-        el.textContent = 'Información diagnóstica registrada para esta atención.';
+        el.textContent = 'Información clínica registrada para esta atención.';
       }else if(t === 'LISTADO CIE-10 ESTRUCTURADO' || t === 'Listado CIE-10 estructurado'){
-        el.textContent = 'Detalle diagnóstico registrado';
+        el.textContent = 'Registros CIE-10';
+      }else if(t === 'Diagnóstico(s)' || t === 'Diagnostico(s)'){
+        el.textContent = 'Ingreso de diagnósticos CIE-10';
+      }else if(t === 'Ingreso de diagnósticos CIE-10'){
+        el.textContent = 'Buscar y agregar códigos CIE-10';
       }else if(t === 'Ocultar'){
         el.textContent = 'Ocultar resumen';
-        el.setAttribute('aria-label','Ocultar resumen diagnóstico');
+        el.setAttribute('aria-label','Ocultar resumen de la consulta');
       }else if(t === 'Mostrar'){
         el.textContent = 'Mostrar resumen';
-        el.setAttribute('aria-label','Mostrar resumen diagnóstico');
+        el.setAttribute('aria-label','Mostrar resumen de la consulta');
       }
     });
   }
