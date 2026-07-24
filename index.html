@@ -2197,11 +2197,11 @@
         <div class="clinical-panel" id="hc_estetica"><div class="clinical-subtitle"><i class="bi bi-stars"></i> Evaluación estética funcional</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Área</label><select class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Procedimiento sugerido</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Sesión</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Consentimiento</label><select class="form-select"><option>Pendiente</option><option>Firmado</option><option>No aplica</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación facial</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación corporal</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación íntima</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Evolución fotográfica / observaciones</label><textarea class="form-control" rows="3"></textarea></div></div></div>
         <!-- AUROSANAX: Diagnósticos integrado como módulo externo por atención -->
         <div class="clinical-panel" id="hc_diagnostico" data-auro-module="diagnosticos">
-          <div class="clinical-subtitle mt-4"><i class="bi bi-clipboard2-check"></i> Diagnóstico(s)</div>
+          <div class="clinical-subtitle mt-4"><i class="bi bi-clipboard2-check"></i> Diagnósticos registrados</div>
           <div class="diagnostico-cie-card" id="hcDiagnosticoCieGrupo">
-            <div class="diagnostico-cie-head"><i class="bi bi-clipboard2-check"></i> Diagnóstico(s)</div>
+            <div class="diagnostico-cie-head"><i class="bi bi-clipboard2-check"></i> Agregar códigos CIE-10</div>
             <div class="diagnostico-cie-body">
-              <div class="diagnostico-cie-subtitle">Ingreso de diagnósticos CIE-10</div>
+              <div class="diagnostico-cie-subtitle">Buscar código CIE-10</div>
               <div class="diagnostico-cie-search-grid">
                 <div><label class="form-label fw-bold">Código</label><input id="hcDxCodigoBuscar" class="form-control" placeholder="Ej. I10 / N760" oninput="buscarDiagnosticoCie10()"></div>
                 <div><label class="form-label fw-bold">Nombre de Diagnóstico</label><input id="hcDxNombreBuscar" class="form-control" placeholder="Buscar por nombre" oninput="buscarDiagnosticoCie10()"></div>
@@ -3605,7 +3605,7 @@ function auroAsegurarCajaDiagnosticosPrevios(){
   box.innerHTML = `
     <div class="auro-previos-head">
       <div>
-        <b><i class="bi bi-clipboard2-pulse me-1"></i> Diagnósticos CIE-10 previos guardados</b>
+        <b><i class="bi bi-clipboard2-pulse me-1"></i> Resumen de la consulta</b>
         <small>Información recuperada de la base de datos clínica. El bloque CIE-10 se conserva intacto.</small>
       </div>
       <button type="button" class="btn-soft auro-previos-hide" onclick="document.getElementById('auroDiagnosticosPreviosBox').style.display='none'">Ocultar</button>
@@ -3631,7 +3631,7 @@ function auroMostrarDiagnosticosPrevios(h){
   const lineas = [
     ['Diagnóstico principal', [h.diagnostico_cie10, h.diagnostico_principal].filter(Boolean).join(' - ')],
     ['Diagnósticos secundarios', [h.cie10_secundario, h.diagnostico_secundario].filter(Boolean).join(' - ')],
-    ['Listado CIE-10 estructurado', h.diagnosticos_cie10]
+    ['Registros CIE-10', h.diagnosticos_cie10]
   ].filter(x => String(x[1] || '').trim());
 
   content.innerHTML = lineas.map(([label, value]) => `
