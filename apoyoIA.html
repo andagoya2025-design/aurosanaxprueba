@@ -617,6 +617,91 @@
       line-height: 1.25;
     }
 
+    .workflow-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      margin-bottom: 14px;
+      padding: 13px 14px;
+      border: 1px solid #ead9ad;
+      border-radius: 14px;
+      color: #61470d;
+      background: #fff9e9;
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .workflow-note i {
+      margin-top: 1px;
+      color: var(--au-warning);
+      font-size: 1.05rem;
+    }
+
+    .synthesis-box {
+      margin-top: 18px;
+      padding: 16px;
+      border: 1px solid rgba(108, 29, 82, 0.20);
+      border-radius: 18px;
+      background: linear-gradient(180deg, #fff, #fcf7fa);
+    }
+
+    .synthesis-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .synthesis-title {
+      margin: 0;
+      color: var(--au-primary-dark);
+      font-size: 0.98rem;
+      font-weight: 850;
+    }
+
+    .synthesis-subtitle {
+      margin: 4px 0 0;
+      color: var(--au-muted);
+      font-size: 0.79rem;
+      line-height: 1.4;
+    }
+
+    .synthesis-area {
+      min-height: 190px !important;
+    }
+
+    .advanced-panel {
+      border: 0;
+      background: transparent;
+    }
+
+    .advanced-panel > summary {
+      list-style: none;
+      cursor: pointer;
+    }
+
+    .advanced-panel > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .advanced-panel .panel-header {
+      border-bottom: 0;
+    }
+
+    .advanced-panel[open] .panel-header {
+      border-bottom: 1px solid var(--au-line);
+    }
+
+    .advanced-chevron {
+      color: var(--au-muted);
+      transition: transform var(--au-transition);
+    }
+
+    .advanced-panel[open] .advanced-chevron {
+      transform: rotate(180deg);
+    }
+
     .privacy-box {
       display: flex;
       align-items: flex-start;
@@ -1533,7 +1618,7 @@
                 </div>
               </article>
 
-              <!-- Respuesta IA -->
+              <!-- Respuesta IA y síntesis clínica -->
               <article class="panel-card">
                 <header class="panel-header">
                   <div class="panel-icon" aria-hidden="true">
@@ -1541,55 +1626,118 @@
                   </div>
 
                   <div class="panel-heading">
-                    <h3 class="panel-title">Respuesta recibida de la IA</h3>
+                    <h3 class="panel-title">Respuesta y revisión clínica</h3>
                     <p class="panel-subtitle">
-                      Pegue el resultado para revisarlo, contextualizarlo y dejar observaciones.
+                      Revise la respuesta completa y prepare una síntesis breve antes de continuar al Plan.
                     </p>
                   </div>
                 </header>
 
                 <div class="panel-body">
+                  <div class="workflow-note">
+                    <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+                    <div>
+                      <strong>Contenido temporal para apoyo médico.</strong>
+                      La respuesta completa no se incorporará automáticamente a la historia clínica ni al Plan.
+                      Solo una síntesis revisada y validada por el profesional podrá utilizarse posteriormente.
+                    </div>
+                  </div>
+
                   <div class="toolbar">
                     <button type="button" class="btn-au btn-outline-au" id="btnPegarRespuesta">
                       <i class="bi bi-clipboard-plus"></i>
-                      Pegar
+                      Pegar respuesta de IA
                     </button>
 
                     <button type="button" class="btn-au btn-soft-au" id="btnCopiarRespuesta">
                       <i class="bi bi-copy"></i>
-                      Copiar
+                      Copiar respuesta
                     </button>
 
                     <button type="button" class="btn-au btn-danger-soft" id="btnLimpiarRespuesta">
                       <i class="bi bi-trash3"></i>
-                      Limpiar
+                      Limpiar respuesta
                     </button>
                   </div>
 
-                  <label class="form-label" for="respuestaIA">Contenido de la respuesta</label>
+                  <label class="form-label" for="respuestaIA">Respuesta completa de la IA</label>
                   <textarea
                     class="form-control response-area"
                     id="respuestaIA"
                     maxlength="40000"
-                    placeholder="Pegue aquí la respuesta generada por la herramienta de IA..."
+                    placeholder="Pegue aquí la respuesta completa generada por ChatGPT, Gemini o Copilot..."
                   ></textarea>
 
                   <div class="d-flex justify-content-between mt-1">
                     <span class="form-text">
-                      La respuesta debe revisarse antes de incorporarla a una decisión clínica.
+                      Úsela para lectura, contraste y toma de decisiones. No constituye una decisión clínica autónoma.
                     </span>
                     <span class="counter"><span id="contadorRespuesta">0</span>/40000</span>
                   </div>
 
+                  <section class="synthesis-box" aria-labelledby="tituloSintesisValidada">
+                    <div class="synthesis-head">
+                      <div>
+                        <h4 class="synthesis-title" id="tituloSintesisValidada">Síntesis clínica validada</h4>
+                        <p class="synthesis-subtitle">
+                          Texto breve, editable y revisado por el profesional. Máximo 2.000 caracteres, aproximadamente media página.
+                        </p>
+                      </div>
+                      <span class="status-badge">
+                        <i class="bi bi-file-earmark-check"></i>
+                        Preparado para revisión
+                      </span>
+                    </div>
+
+                    <div class="toolbar">
+                      <button type="button" class="btn-au btn-primary-au" id="btnCrearPromptSintesis">
+                        <i class="bi bi-stars"></i>
+                        Crear prompt de síntesis
+                      </button>
+
+                      <button type="button" class="btn-au btn-outline-au" id="btnCopiarPromptSintesis">
+                        <i class="bi bi-clipboard"></i>
+                        Copiar prompt de síntesis
+                      </button>
+
+                      <button type="button" class="btn-au btn-soft-au" id="btnPegarSintesis">
+                        <i class="bi bi-clipboard-check"></i>
+                        Pegar síntesis
+                      </button>
+
+                      <button type="button" class="btn-au btn-danger-soft" id="btnLimpiarSintesis">
+                        <i class="bi bi-eraser"></i>
+                        Limpiar síntesis
+                      </button>
+                    </div>
+
+                    <textarea
+                      class="form-control synthesis-area"
+                      id="sintesisValidada"
+                      maxlength="2000"
+                      placeholder="Pegue o redacte aquí la síntesis clínica breve. Debe ser revisada y ajustada por el profesional antes de utilizarla en el Plan..."
+                    ></textarea>
+
+                    <div class="d-flex justify-content-between mt-1">
+                      <span class="form-text">
+                        Este será el único contenido preparado para una futura transferencia controlada al Plan.
+                      </span>
+                      <span class="counter"><span id="contadorSintesis">0</span>/2000</span>
+                    </div>
+                  </section>
+
                   <div class="mt-3">
-                    <label class="form-label" for="observacionesMedicas">Observaciones y criterio médico</label>
+                    <label class="form-label" for="observacionesMedicas">Observaciones y criterio del profesional</label>
                     <textarea
                       class="form-control"
                       id="observacionesMedicas"
                       rows="5"
                       maxlength="12000"
-                      placeholder="Registre concordancias, discrepancias, decisiones, ajustes y conclusiones propias..."
+                      placeholder="Registre concordancias, discrepancias, ajustes, decisiones propias y elementos descartados..."
                     ></textarea>
+                    <div class="form-text mt-1">
+                      Este espacio corresponde al juicio clínico del profesional y no debe confundirse con la respuesta generada por IA.
+                    </div>
                   </div>
                 </div>
               </article>
@@ -1598,17 +1746,18 @@
             <!-- Columna lateral -->
             <div class="col-12 col-xl-4">
               <div class="sticky-side">
-                <article class="panel-card">
-                  <header class="panel-header">
+                <details class="panel-card advanced-panel">
+                  <summary class="panel-header">
                     <div class="panel-icon" aria-hidden="true">
                       <i class="bi bi-sliders"></i>
                     </div>
 
                     <div class="panel-heading">
-                      <h3 class="panel-title">Configuración del análisis</h3>
-                      <p class="panel-subtitle">Preferencias para estructurar el prompt.</p>
+                      <h3 class="panel-title">Configuración avanzada del análisis</h3>
+                      <p class="panel-subtitle">Opciones secundarias para ajustar profundidad, lenguaje y referencias.</p>
                     </div>
-                  </header>
+                                      <i class="bi bi-chevron-down advanced-chevron" aria-hidden="true"></i>
+                  </summary>
 
                   <div class="panel-body">
                     <div class="mb-3">
@@ -1674,21 +1823,22 @@
                       </label>
                     </div>
                   </div>
-                </article>
+                </details>
 
-                <article class="panel-card">
-                  <header class="panel-header">
+                <details class="panel-card advanced-panel">
+                  <summary class="panel-header">
                     <div class="panel-icon" aria-hidden="true">
                       <i class="bi bi-database-check"></i>
                     </div>
 
                     <div class="panel-heading">
-                      <h3 class="panel-title">Gestión del borrador</h3>
+                      <h3 class="panel-title">Opciones temporales</h3>
                       <p class="panel-subtitle">
-                        Persistencia temporal en este navegador.
+                        Borradores y herramientas técnicas de esta sesión.
                       </p>
                     </div>
-                  </header>
+                                      <i class="bi bi-chevron-down advanced-chevron" aria-hidden="true"></i>
+                  </summary>
 
                   <div class="panel-body">
                     <div class="d-grid gap-2">
@@ -1714,12 +1864,11 @@
                     </div>
 
                     <p class="small-note">
-                      El borrador se guarda en <strong>localStorage</strong> del dispositivo.
-                      No sustituye el registro formal en la historia clínica ni constituye una
-                      auditoría permanente.
+                      El borrador es temporal y se conserva únicamente en este dispositivo.
+                      No sustituye el registro oficial de la historia clínica ni debe utilizarse como almacenamiento clínico permanente.
                     </p>
                   </div>
-                </article>
+                </details>
 
                 <article class="panel-card">
                   <header class="panel-header">
@@ -1783,7 +1932,7 @@
             <div class="footer-actions-group">
               <button type="button" class="btn-au btn-outline-au" id="btnGuardarSesion">
                 <i class="bi bi-box-arrow-in-down"></i>
-                Guardar en sesión
+                Guardar temporalmente
               </button>
 
               <button type="button" class="btn-au btn-primary-au" id="btnContinuarPlan">
