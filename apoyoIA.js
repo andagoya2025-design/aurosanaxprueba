@@ -1,14 +1,15 @@
 /****************************************************************
  AUROSANAX ERP DEMO
  Archivo: apoyoIA.js
- Versión: 1.1.0
+ Versión: 1.2.0
  Responsabilidad: lógica funcional del módulo Apoyo Cognitivo con IA.
  Fecha/hora clínica: America/Guayaquil.
 ****************************************************************/
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "aurosanax_apoyoIA_borrador_v1";
+  const STORAGE_KEY_BASE = "aurosanax_apoyoIA_borrador_v2";
+  const LIMITE_SINTESIS = 2000;
   const SESSION_INPUT_KEYS = [
     "aurosanax_apoyoIA_contexto",
     "apoyoIA_contexto",
@@ -26,6 +27,21 @@
   let modalDatosInstance = null;
   let autosaveTimer = null;
   let contextoEntradaActual = {};
+
+  function obtenerIdAtencionActual() {
+    return normalizarTexto(
+      contextoEntradaActual.id_atencion ||
+      contextoEntradaActual.identificacionRegistro?.id_atencion ||
+      contextoEntradaActual.consulta?.id_atencion
+    );
+  }
+
+  function obtenerClaveBorrador() {
+    const idAtencion = obtenerIdAtencionActual();
+    return idAtencion
+      ? `${STORAGE_KEY_BASE}_${idAtencion}`
+      : `${STORAGE_KEY_BASE}_sin_atencion`;
+  }
 
   function normalizarTexto(valor) {
     if (valor === null || valor === undefined) return "";
@@ -518,6 +534,112 @@
     }
   }
 
+
+  function construirPromptSintesis() {
+    const respuesta = normalizarTexto(refs.respuestaIA?.value);
+
+    if (!respuesta) {
+      return "";
+    }
+
+    return [
+      "ACTÚA COMO ASISTENTE DE REDACCIÓN CLÍNICA PARA UN PROFESIONAL DE LA SALUD.",
+      "",
+      "A partir de la respuesta clínica incluida al final, redacta una síntesis breve para revisión profesional.",
+      "",
+      "REGLAS OBLIGATORIAS:",
+      "- Máximo 2.000 caracteres, incluyendo espacios.",
+      "- Extensión aproximada máxima de media página.",
+      "- No inventes datos, resultados, antecedentes, diagnósticos ni tratamientos.",
+      "- No conviertas sugerencias en decisiones definitivas.",
+      "- Conserva únicamente la información clínicamente relevante.",
+      "- Diferencia los datos del caso de las inferencias.",
+      "- Incluye incertidumbres, información faltante y banderas rojas solo cuando sean pertinentes.",
+      "- No incluyas nombres, cédulas ni otros datos identificativos.",
+      "- Redacta en lenguaje técnico, claro, continuo y listo para ser revisado y editado por el profesional.",
+      "",
+      "ESTRUCTURA SUGERIDA:",
+      "1. Síntesis clínica del problema.",
+      "2. Impresión o diagnósticos diferenciales prioritarios.",
+      "3. Riesgos, datos faltantes o puntos por verificar.",
+      "4. Consideraciones generales para la decisión profesional.",
+      "",
+      "RESPUESTA CLÍNICA A SINTETIZAR:",
+      respuesta
+    ].join("\n");
+  }
+
+  function crearPromptSintesis() {
+    const prompt = construirPromptSintesis();
+
+    if (!prompt) {
+      mostrarToast(
+        "Pegue primero la respuesta completa de la IA para crear el prompt de síntesis.",
+        "warning"
+      );
+      refs.respuestaIA?.focus();
+      return "";
+    }
+
+    mostrarToast("Prompt de síntesis preparado.", "success");
+    return prompt;
+  }
+
+  async function copiarPromptSintesis() {
+    const prompt = crearPromptSintesis();
+    if (!prompt) return false;
+
+    return copiarAlPortapapeles(
+      prompt,
+      "Prompt de síntesis copiado al portapapeles."
+    );
+  }
+
+  async function pegarSintesisDesdePortapapeles() {
+    try {
+      const texto = await navigator.clipboard.readText();
+      const limpio = escaparTextoPlano(texto);
+
+      if (!limpio) {
+        mostrarToast("El portapapeles está vacío.", "warning");
+        return;
+      }
+
+      refs.sintesisValidada.value = limpio.slice(0, LIMITE_SINTESIS);
+      actualizarContadores();
+      programarAutoguardado();
+
+      if (limpio.length > LIMITE_SINTESIS) {
+        mostrarToast(
+          "La síntesis fue recortada al límite de 2.000 caracteres.",
+          "warning"
+        );
+      } else {
+        mostrarToast("Síntesis pegada correctamente.", "success");
+      }
+    } catch (_error) {
+      mostrarToast(
+        "No se concedió permiso para leer el portapapeles. Pegue manualmente.",
+        "warning"
+      );
+      refs.sintesisValidada?.focus();
+    }
+  }
+
+  function limitarSintesis() {
+    if (!refs.sintesisValidada) return;
+
+    if (refs.sintesisValidada.value.length > LIMITE_SINTESIS) {
+      refs.sintesisValidada.value =
+        refs.sintesisValidada.value.slice(0, LIMITE_SINTESIS);
+
+      mostrarToast(
+        "La síntesis admite un máximo de 2.000 caracteres.",
+        "warning"
+      );
+    }
+  }
+
   function recopilarDatos() {
     const ahora = ahoraEcuador();
 
@@ -597,6 +719,10 @@
       contenido: {
         prompt: escaparTextoPlano(refs.promptClinico.value),
         respuestaIA: escaparTextoPlano(refs.respuestaIA.value),
+        sintesisValidada: escaparTextoPlano(refs.sintesisValidada.value).slice(
+          0,
+          LIMITE_SINTESIS
+        ),
         observacionesMedicas: escaparTextoPlano(refs.observacionesMedicas.value)
       },
       controlCalidad: {
@@ -666,6 +792,9 @@
 
     refs.promptClinico.value = contenido.prompt || "";
     refs.respuestaIA.value = contenido.respuestaIA || "";
+    refs.sintesisValidada.value = normalizarTexto(
+      contenido.sintesisValidada
+    ).slice(0, LIMITE_SINTESIS);
     refs.observacionesMedicas.value = contenido.observacionesMedicas || "";
 
     refs.checkDatosMinimos.checked = control.datosMinimosRevisados === true;
@@ -682,14 +811,17 @@
   function guardarBorrador(mostrarConfirmacion = true) {
     try {
       const datos = recopilarDatos();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(datos));
+      localStorage.setItem(obtenerClaveBorrador(), JSON.stringify(datos));
 
       refs.estadoBorrador.innerHTML =
         '<i class="bi bi-cloud-check"></i> Guardado ' +
         ahoraEcuador().hora.slice(0, 5);
 
       if (mostrarConfirmacion) {
-        mostrarToast("Borrador guardado en este navegador.", "success");
+        mostrarToast(
+          "Borrador temporal guardado para esta atención.",
+          "success"
+        );
       }
 
       return true;
@@ -701,12 +833,82 @@
     }
   }
 
+  function aplicarBorradorSobreContexto(datos) {
+    if (!datos || typeof datos !== "object") return false;
+
+    const configuracion = datos.configuracion || {};
+    const contenido = datos.contenido || {};
+    const control = datos.controlCalidad || {};
+
+    $$("#objetivosGrupo input[type='checkbox']").forEach((input) => {
+      input.checked = Array.isArray(configuracion.objetivos)
+        ? configuracion.objetivos.includes(input.value)
+        : input.checked;
+    });
+
+    if (configuracion.objetivoPersonalizado !== undefined) {
+      refs.objetivoPersonalizado.value =
+        configuracion.objetivoPersonalizado || "";
+    }
+
+    if (configuracion.profundidad) {
+      refs.nivelProfundidad.value = configuracion.profundidad;
+    }
+
+    if (configuracion.lenguaje) {
+      refs.tipoLenguaje.value = configuracion.lenguaje;
+    }
+
+    if (configuracion.marcoReferencia) {
+      refs.marcoReferencia.value = configuracion.marcoReferencia;
+    }
+
+    if (configuracion.incluirLimitaciones !== undefined) {
+      refs.incluirLimitaciones.checked =
+        configuracion.incluirLimitaciones !== false;
+    }
+
+    if (configuracion.incluirBanderasRojas !== undefined) {
+      refs.incluirBanderasRojas.checked =
+        configuracion.incluirBanderasRojas !== false;
+    }
+
+    if (configuracion.incluirFuentes !== undefined) {
+      refs.incluirFuentes.checked =
+        configuracion.incluirFuentes === true;
+    }
+
+    refs.promptClinico.value = contenido.prompt || "";
+    refs.respuestaIA.value = contenido.respuestaIA || "";
+    refs.sintesisValidada.value = normalizarTexto(
+      contenido.sintesisValidada
+    ).slice(0, LIMITE_SINTESIS);
+    refs.observacionesMedicas.value =
+      contenido.observacionesMedicas || "";
+
+    refs.checkDatosMinimos.checked =
+      control.datosMinimosRevisados === true;
+    refs.checkPrivacidad.checked =
+      control.privacidadRevisada === true;
+    refs.checkVerificacion.checked =
+      control.respuestaSeraVerificada === true;
+    refs.checkResponsabilidad.checked =
+      control.responsabilidadProfesionalAceptada === true;
+
+    promptBaseGenerado = refs.promptClinico.value;
+    actualizarContadores();
+    return true;
+  }
+
   function cargarBorrador(mostrarConfirmacion = true) {
-    const bruto = localStorage.getItem(STORAGE_KEY);
+    const bruto = localStorage.getItem(obtenerClaveBorrador());
 
     if (!bruto) {
       if (mostrarConfirmacion) {
-        mostrarToast("No existe un borrador guardado.", "warning");
+        mostrarToast(
+          "No existe un borrador para esta atención.",
+          "warning"
+        );
       }
       return false;
     }
@@ -720,10 +922,28 @@
       return false;
     }
 
-    aplicarDatos(datos);
+    const idBorrador = normalizarTexto(
+      datos.identificacionRegistro?.id_atencion
+    );
+    const idActual = obtenerIdAtencionActual();
+
+    if (idActual && idBorrador && idActual !== idBorrador) {
+      if (mostrarConfirmacion) {
+        mostrarToast(
+          "El borrador pertenece a otra atención y no fue cargado.",
+          "warning"
+        );
+      }
+      return false;
+    }
+
+    aplicarBorradorSobreContexto(datos);
 
     if (mostrarConfirmacion) {
-      mostrarToast("Borrador cargado correctamente.", "success");
+      mostrarToast(
+        "Borrador de esta atención cargado correctamente.",
+        "success"
+      );
     }
 
     return true;
@@ -731,15 +951,15 @@
 
   function eliminarBorrador() {
     const confirmar = window.confirm(
-      "¿Desea eliminar el borrador local de este módulo?"
+      "¿Desea eliminar el borrador temporal de esta atención?"
     );
 
     if (!confirmar) return;
 
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(obtenerClaveBorrador());
     refs.estadoBorrador.innerHTML =
       '<i class="bi bi-cloud-slash"></i> Sin borrador';
-    mostrarToast("Borrador local eliminado.", "success");
+    mostrarToast("Borrador de esta atención eliminado.", "success");
   }
 
   function programarAutoguardado() {
@@ -763,6 +983,7 @@
     actualizarContador(refs.resumenClinico, refs.contadorResumen);
     actualizarContador(refs.promptClinico, refs.contadorPrompt);
     actualizarContador(refs.respuestaIA, refs.contadorRespuesta);
+    actualizarContador(refs.sintesisValidada, refs.contadorSintesis);
   }
 
   function exportarJson() {
@@ -802,9 +1023,35 @@
 
   function guardarEnSesion() {
     try {
-      const datos = recopilarDatos();
+      const ahora = ahoraEcuador();
+      const datos = {
+        version: "2.0.0",
+        modulo: "Apoyo Cognitivo con IA",
+        id_atencion: obtenerIdAtencionActual(),
+        id_paciente: normalizarTexto(
+          contextoEntradaActual.id_paciente ||
+          contextoEntradaActual.paciente?.id_paciente
+        ),
+        sintesis_validada: escaparTextoPlano(
+          refs.sintesisValidada.value
+        ).slice(0, LIMITE_SINTESIS),
+        criterio_profesional: escaparTextoPlano(
+          refs.observacionesMedicas.value
+        ),
+        validado_por_profesional:
+          refs.checkVerificacion.checked === true &&
+          refs.checkResponsabilidad.checked === true,
+        temporal: true,
+        guardadoBaseDatos: false,
+        actualizadoEn: ahora.iso,
+        origen: "apoyoIA.html"
+      };
+
       sessionStorage.setItem(SESSION_OUTPUT_KEY, JSON.stringify(datos));
-      mostrarToast("Datos guardados en la sesión del ERP.", "success");
+      mostrarToast(
+        "Síntesis y criterio profesional guardados temporalmente en sesión.",
+        "success"
+      );
       return true;
     } catch (_error) {
       mostrarToast("No fue posible guardar los datos en sesión.", "danger");
@@ -824,25 +1071,17 @@
   }
 
   function continuarAlPlan() {
-    const checksObligatorios = [
-      refs.checkDatosMinimos,
-      refs.checkPrivacidad,
-      refs.checkVerificacion,
-      refs.checkResponsabilidad
-    ];
+    const sintesis = normalizarTexto(refs.sintesisValidada.value);
 
-    const completos = checksObligatorios.every((check) => check.checked);
-
-    if (!completos) {
-      mostrarToast(
-        "Complete el control de calidad antes de continuar al Plan.",
-        "warning"
+    if (!sintesis) {
+      const continuarSinSintesis = window.confirm(
+        "La síntesis clínica está vacía. ¿Desea continuar al Plan sin transferir contenido de apoyo?"
       );
-      refs.checkDatosMinimos.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-      return;
+
+      if (!continuarSinSintesis) {
+        refs.sintesisValidada.focus();
+        return;
+      }
     }
 
     guardarEnSesion();
@@ -865,6 +1104,7 @@
 
     refs.promptClinico.value = "";
     refs.respuestaIA.value = "";
+    refs.sintesisValidada.value = "";
     refs.observacionesMedicas.value = "";
     promptBaseGenerado = "";
     actualizarContadores();
@@ -928,6 +1168,33 @@
       mostrarToast("Respuesta limpiada.", "success");
     });
 
+    refs.btnCrearPromptSintesis.addEventListener(
+      "click",
+      copiarPromptSintesis
+    );
+
+    refs.btnCopiarPromptSintesis.addEventListener(
+      "click",
+      copiarPromptSintesis
+    );
+
+    refs.btnPegarSintesis.addEventListener(
+      "click",
+      pegarSintesisDesdePortapapeles
+    );
+
+    refs.btnLimpiarSintesis.addEventListener("click", () => {
+      const confirmar = window.confirm(
+        "¿Desea limpiar la síntesis clínica validada?"
+      );
+      if (!confirmar) return;
+
+      refs.sintesisValidada.value = "";
+      actualizarContadores();
+      programarAutoguardado();
+      mostrarToast("Síntesis limpiada.", "success");
+    });
+
     refs.btnGuardarBorrador.addEventListener("click", () => guardarBorrador(true));
     refs.btnCargarBorrador.addEventListener("click", () => cargarBorrador(true));
     refs.btnEliminarBorrador.addEventListener("click", eliminarBorrador);
@@ -976,6 +1243,7 @@
       refs.incluirFuentes,
       refs.promptClinico,
       refs.respuestaIA,
+      refs.sintesisValidada,
       refs.observacionesMedicas,
       refs.checkDatosMinimos,
       refs.checkPrivacidad,
@@ -985,7 +1253,12 @@
     ];
 
     elementosConAutoguardado.forEach((elemento) => {
+      if (!elemento) return;
+
       elemento.addEventListener("input", () => {
+        if (elemento === refs.sintesisValidada) {
+          limitarSintesis();
+        }
         actualizarContadores();
         programarAutoguardado();
       });
@@ -1054,6 +1327,7 @@
       "incluirFuentes",
       "promptClinico",
       "respuestaIA",
+      "sintesisValidada",
       "observacionesMedicas",
       "checkDatosMinimos",
       "checkPrivacidad",
@@ -1066,6 +1340,10 @@
       "btnPegarRespuesta",
       "btnCopiarRespuesta",
       "btnLimpiarRespuesta",
+      "btnCrearPromptSintesis",
+      "btnCopiarPromptSintesis",
+      "btnPegarSintesis",
+      "btnLimpiarSintesis",
       "btnGuardarBorrador",
       "btnCargarBorrador",
       "btnExportarJson",
@@ -1078,6 +1356,7 @@
       "contadorResumen",
       "contadorPrompt",
       "contadorRespuesta",
+      "contadorSintesis",
       "modalDatos",
       "vistaJson",
       "btnCopiarJson",
@@ -1116,7 +1395,7 @@
   }
 
   window.AurosanaxApoyoIA = {
-    version: "1.1.0",
+    version: "1.2.0",
     init,
     recopilarDatos,
     aplicarDatos,
