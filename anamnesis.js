@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.6.0
+Versión: 3.6.1
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.0';
+  const VERSION = '3.6.1';
   const state = {
     inicializado: false,
     cargando: false,
@@ -1384,7 +1384,7 @@ Función:
 
 
   /* ============================================================
-     AUROSANAX ANAMNESIS v3.6.0
+     AUROSANAX ANAMNESIS v3.6.1
      CONEXIÓN QUIRÚRGICA POR id_atencion
      ------------------------------------------------------------
      Este bloque agrega aislamiento, guardado y restauración por
@@ -1645,6 +1645,9 @@ Función:
   }
 
   async function auroBuscarAnamnesisSheets(idAtencion) {
+    idAtencion = texto(idAtencion);
+    if (!idAtencion) return null;
+
     try {
       const respuesta = await consultarAccion(
         'buscarAnamnesisPorAtencion',
@@ -1652,7 +1655,19 @@ Función:
       );
 
       const registro = respuesta?.data || respuesta?.anamnesis || respuesta;
-      if (!registro || Array.isArray(registro) || !texto(registro.id_atencion)) {
+      const idRegistro = texto(registro?.id_atencion);
+
+      /*
+        SEGURIDAD CLÍNICA:
+        El backend puede devolver un objeto válido pero perteneciente a otra
+        atención. Solo se acepta una coincidencia exacta por id_atencion.
+      */
+      if (
+        !registro ||
+        Array.isArray(registro) ||
+        !idRegistro ||
+        idRegistro !== idAtencion
+      ) {
         return null;
       }
 
@@ -1673,15 +1688,39 @@ Función:
 
     let data = state.cacheAtenciones[idAtencion] || null;
 
+    /*
+      Una entrada local solo es válida cuando declara la misma atención.
+      Si fue contaminada por una carga anterior, se descarta.
+    */
+    if (data && texto(data.id_atencion) !== idAtencion) {
+      delete state.cacheAtenciones[idAtencion];
+      data = null;
+    }
+
     if (!data) {
       const cacheLocal = auroLeerCacheAnamnesisLocal();
-      data = cacheLocal[idAtencion] || null;
+      const local = cacheLocal[idAtencion] || null;
+
+      if (local && texto(local.id_atencion) === idAtencion) {
+        data = local;
+      } else if (local) {
+        delete cacheLocal[idAtencion];
+        auroGuardarCacheAnamnesisLocal(cacheLocal);
+      }
     }
 
     const remoto = await auroBuscarAnamnesisSheets(idAtencion);
     if (remoto) data = remoto;
 
-    if (!data) return false;
+    /*
+      Evita que una respuesta asíncrona atrasada se aplique después de que
+      el usuario ya cambió a otra consulta.
+    */
+    if (texto(state.idAtencionActual) !== idAtencion) {
+      return false;
+    }
+
+    if (!data || texto(data.id_atencion) !== idAtencion) return false;
 
     state.restaurandoAtencion = true;
 
