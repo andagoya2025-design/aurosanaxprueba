@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.5 - aislamiento de anamnesis por atención
+ Versión: 1.5.5 - aislamiento clínico de anamnesis por atención
  Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
@@ -45,7 +45,7 @@
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
   const VERSION = '1.5.5';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260725_anamnesis_por_atencion_v1';
+  const RELEASE = '20260725_anamnesis_clinica_aislada_v1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1299,6 +1299,63 @@
     });
   }
 
+  function anamnesisTieneDatosClinicos(obj, idAtencion){
+    if(!obj || typeof obj !== 'object') return false;
+
+    const idEsperado = texto(idAtencion || state.atencionActual);
+    const idRegistro = texto(obj.id_atencion);
+
+    if(idEsperado && idRegistro && idRegistro !== idEsperado){
+      return false;
+    }
+
+    const camposDirectos = [
+      'motivo_consulta',
+      'enfermedad_actual',
+      'anamnesis',
+      'descripcion',
+      'relato_clinico',
+      'historia_enfermedad_actual',
+      'contenido',
+      'texto',
+      'revision_sistemas',
+      'sintomas_alarma',
+      'narrativa_generada'
+    ];
+
+    if(camposDirectos.some(clave => texto(obj[clave]))){
+      return true;
+    }
+
+    const respuestas = parseJsonSeguro(obj.respuestas_json, obj.respuestas_json || {});
+    if(
+      respuestas &&
+      typeof respuestas === 'object' &&
+      !Array.isArray(respuestas) &&
+      Object.values(respuestas).some(valor => {
+        if(Array.isArray(valor)) return valor.some(item => !!texto(item));
+        if(valor && typeof valor === 'object') return fuenteTieneDatos(valor);
+        return !!texto(valor);
+      })
+    ){
+      return true;
+    }
+
+    const controles = parseJsonSeguro(obj.controles_json, obj.controles_json || {});
+    if(
+      controles &&
+      typeof controles === 'object' &&
+      !Array.isArray(controles) &&
+      Object.values(controles).some(item =>
+        !!item?.checked || !!texto(item?.valor)
+      )
+    ){
+      return true;
+    }
+
+    return false;
+  }
+
   function renderFuentes(){
     const box = document.getElementById('auroDxFuentes');
     if(!box) return;
@@ -1321,7 +1378,10 @@
     const fuentes = [...fuentesBase, ...fuentesEspecialidad];
 
     box.innerHTML = fuentes.map(([nombre, valor]) => {
-      const disponible = fuenteTieneDatos(valor);
+      const disponible = nombre === 'Anamnesis'
+        ? anamnesisTieneDatosClinicos(valor, state.atencionActual)
+        : fuenteTieneDatos(valor);
+
       return `
         <div class="auro-dx-source-item ${disponible ? 'available' : 'missing'}">
           <b>${escapeHtml(nombre)}</b>
@@ -1980,12 +2040,26 @@
 
   function contenidoAnamnesis(){
     const a = state.anamnesis || {};
+
+    /*
+      SEGURIDAD CLÍNICA:
+      La anamnesis actual solo puede provenir del registro vinculado con la
+      misma id_atencion. No se reutilizan campos de Historia Clínica, DOM ni
+      Atención como respaldo, porque pueden corresponder a otra consulta.
+    */
+    if(!anamnesisTieneDatosClinicos(a, state.atencionActual)){
+      return '';
+    }
+
     return limpiarTextoClinico(
-      a.enfermedad_actual || a.anamnesis || a.descripcion || a.relato_clinico ||
-      a.historia_enfermedad_actual || a.contenido || a.texto ||
-      state.historia?.enfermedad_actual || state.historia?.anamnesis ||
-      atencionActiva()?.enfermedad_actual ||
-      getValue('hcEnfermedadActual') || getValue('hcAnamnesis')
+      a.enfermedad_actual ||
+      a.anamnesis ||
+      a.descripcion ||
+      a.relato_clinico ||
+      a.historia_enfermedad_actual ||
+      a.contenido ||
+      a.texto ||
+      a.narrativa_generada
     );
   }
 
@@ -2003,9 +2077,22 @@
       if(t && !parrafos.some(x => normalizar(x) === normalizar(t))) parrafos.push(t);
     }
 
+    const anamnesisActual =
+      anamnesisTieneDatosClinicos(state.anamnesis, state.atencionActual)
+        ? state.anamnesis
+        : {};
+
+    const atencionCoincide =
+      !texto(at.id_atencion) ||
+      texto(at.id_atencion) === texto(state.atencionActual);
+
+    /*
+      El motivo de la consulta actual no se toma de Historia Clínica ni del DOM,
+      porque ambos pueden conservar datos históricos o visuales de otra atención.
+    */
     const motivo = limpiarTextoClinico(
-      at.motivo_consulta || h.motivo_consulta ||
-      getValue('hcMotivoConsulta') || getValue('hcMotivo')
+      anamnesisActual.motivo_consulta ||
+      (atencionCoincide ? at.motivo_consulta : '')
     );
     const enfermedad = contenidoAnamnesis();
 
@@ -2670,10 +2757,9 @@
     if(!id) return null;
 
     /*
-     CORRECCIÓN QUIRÚRGICA DE SEGURIDAD CLÍNICA:
-     Nunca reutilizar una anamnesis local, de servidor o visible en pantalla
-     si no está vinculada explícitamente con la atención solicitada.
-     Esto evita que una consulta nueva herede datos de la consulta anterior.
+      AISLAMIENTO ESTRICTO:
+      Solo se acepta una anamnesis que declare exactamente la id_atencion
+      solicitada y que contenga información clínica real.
     */
     try{
       const candidatos = [
@@ -2688,7 +2774,7 @@
         x => texto(x?.id_atencion) === id
       );
 
-      if(local && fuenteTieneDatos(local)){
+      if(local && anamnesisTieneDatosClinicos(local, id)){
         return clonar(local, local);
       }
     }catch(e){}
@@ -2709,20 +2795,16 @@
           x => texto(x?.id_atencion) === id
         );
 
-        if(registroLista && fuenteTieneDatos(registroLista)){
+        if(registroLista && anamnesisTieneDatosClinicos(registroLista, id)){
           return registroLista;
         }
 
-        /*
-         Algunos endpoints pueden devolver directamente un registro.
-         Solo se acepta cuando declara la misma id_atencion.
-        */
         if(
           data &&
           typeof data === 'object' &&
           !Array.isArray(data) &&
           texto(data.id_atencion) === id &&
-          fuenteTieneDatos(data)
+          anamnesisTieneDatosClinicos(data, id)
         ){
           return data;
         }
@@ -2730,9 +2812,8 @@
     }
 
     /*
-     No se usa el DOM como respaldo.
-     Los campos visibles pueden conservar temporalmente la consulta anterior
-     mientras Anamnesis termina de cambiar de atención.
+      No se usa el DOM como respaldo. Los campos visibles pueden conservar
+      temporalmente datos de otra consulta mientras cambia la atención.
     */
     return null;
   }
