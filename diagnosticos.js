@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.2 - integración quirúrgica con Apoyo Cognitivo con IA
+ Versión: 1.5.3 - contexto clínico completo para Apoyo Cognitivo con IA
  Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.2';
+  const VERSION = '1.5.3';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260724_apoyo_ia_v1';
+  const RELEASE = '20260724_apoyo_ia_contexto_v2';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -2232,34 +2232,166 @@
     const asociados = state.diagnosticos.filter(d => d !== principal);
     const marcaTiempo = fechaHoraEcuador();
 
+    /*
+     MEJORA QUIRÚRGICA:
+     Diagnóstico conserva su lógica original, pero completa el contexto
+     de Apoyo IA con los datos que ya están cargados en el ERP.
+     No modifica pacientes, historias, atenciones ni persistencia.
+    */
+    const idPaciente = texto(atencion.id_paciente || idPacienteActual());
+
+    let pacienteRegistro = {};
+    try{
+      const listaPacientes =
+        (typeof patients !== 'undefined' && Array.isArray(patients))
+          ? patients
+          : (Array.isArray(window.patients) ? window.patients : []);
+
+      pacienteRegistro = listaPacientes.find(p =>
+        texto(p?.id_paciente || p?.id) === idPaciente
+      ) || {};
+    }catch(e){
+      pacienteRegistro = {};
+    }
+
+    const valorCampo = (...ids) => {
+      for(const id of ids){
+        const el = document.getElementById(id);
+        if(!el) continue;
+        const valor = texto(
+          el.value !== undefined ? el.value : el.textContent
+        );
+        if(valor) return valor;
+      }
+      return '';
+    };
+
+    const textoOpcionPaciente = (() => {
+      const select = document.getElementById('hcPacienteSelect');
+      const opcion = select?.selectedOptions?.[0];
+      return texto(opcion?.dataset?.nombre || opcion?.textContent);
+    })();
+
+    const nombrePaciente =
+      valorPrimero(pacienteRegistro,[
+        'nombre_completo','nombreCompleto','nombre','nombres',
+        'nombre_paciente','paciente'
+      ]) ||
+      valorPrimero(atencion,[
+        'nombre_paciente','paciente_nombre','nombre_completo',
+        'nombreCompleto','nombre','nombres'
+      ]) ||
+      valorPrimero(historia,[
+        'nombre_paciente','paciente_nombre','paciente',
+        'nombre_completo','nombreCompleto','nombre','nombres'
+      ]) ||
+      textoOpcionPaciente;
+
+    const identificacionPaciente =
+      valorPrimero(pacienteRegistro,[
+        'cedula','identificacion','documento','numero_documento'
+      ]) ||
+      valorPrimero(atencion,[
+        'cedula','identificacion','documento','numero_documento'
+      ]) ||
+      valorPrimero(historia,[
+        'cedula','identificacion','documento','numero_documento'
+      ]) ||
+      valorCampo('hcCedula');
+
+    const edadPaciente =
+      valorPrimero(pacienteRegistro,['edad']) ||
+      valorPrimero(atencion,['edad']) ||
+      valorPrimero(historia,['edad']) ||
+      valorCampo('hcEdad');
+
+    const sexoPaciente =
+      valorPrimero(pacienteRegistro,['sexo','genero']) ||
+      valorPrimero(atencion,['sexo','genero']) ||
+      valorPrimero(historia,['sexo','genero']) ||
+      valorCampo('hcSexo');
+
+    const historiaClinica =
+      valorPrimero(atencion,[
+        'numero_historia','historia_clinica','id_historia'
+      ]) ||
+      valorPrimero(historia,[
+        'numero_historia','historia_clinica','id_historia','id'
+      ]) ||
+      texto(window.auroHistoriaSeleccionadaId);
+
+    const nombreProfesional =
+      valorPrimero(atencion,[
+        'nombre_profesional','profesional_nombre',
+        'nombre_medico','medico_nombre',
+        'medico','profesional','doctor'
+      ]) ||
+      valorCampo(
+        'hcProfesional',
+        'hcMedico',
+        'atencionProfesional',
+        'atencionMedico'
+      );
+
+    const especialidadProfesional =
+      valorPrimero(atencion,[
+        'especialidad','especialidad_clinica','nombre_especialidad'
+      ]) ||
+      valorCampo(
+        'hcEspecialidad',
+        'atencionEspecialidad',
+        'especialidadClinica'
+      ) ||
+      'Ginecología y Obstetricia';
+
+    const tipoConsulta =
+      valorPrimero(atencion,[
+        'tipo_consulta','tipo_atencion','tipo',
+        'modalidad_consulta','clase_consulta'
+      ]) ||
+      valorCampo(
+        'hcTipoConsulta',
+        'atencionTipoConsulta',
+        'tipoConsulta'
+      );
+
+    const motivo =
+      valorPrimero(anamnesis,[
+        'motivo_consulta','motivo','consulta_principal'
+      ]) ||
+      valorPrimero(atencion,[
+        'motivo_consulta','motivo','razon_consulta'
+      ]) ||
+      valorPrimero(historia,[
+        'motivo_consulta','motivo'
+      ]) ||
+      valorCampo(
+        'hcMotivoConsulta',
+        'anamnesisMotivoConsulta',
+        'motivoConsulta'
+      );
+
     const paciente = {
-      id_paciente: texto(atencion.id_paciente || idPacienteActual()),
-      nombre: valorPrimero(atencion,['nombre_paciente','paciente','nombre_completo']) ||
-              valorPrimero(historia,['nombre_paciente','paciente','nombre_completo','nombres']),
-      identificacion: valorPrimero(atencion,['identificacion','cedula','documento']) ||
-                      valorPrimero(historia,['identificacion','cedula','documento']),
-      edad: valorPrimero(atencion,['edad']) || valorPrimero(historia,['edad']),
-      sexo: valorPrimero(atencion,['sexo','genero']) || valorPrimero(historia,['sexo','genero']),
-      historiaClinica: valorPrimero(atencion,['numero_historia','historia_clinica']) ||
-                       valorPrimero(historia,['numero_historia','historia_clinica','id_historia'])
+      id_paciente: idPaciente,
+      nombre: nombrePaciente,
+      identificacion: identificacionPaciente,
+      edad: edadPaciente,
+      sexo: sexoPaciente,
+      historiaClinica
     };
 
     const profesional = {
-      nombre: valorPrimero(atencion,['profesional','nombre_profesional','medico','doctor']),
-      especialidad: valorPrimero(atencion,['especialidad']) ||
-                    texto(document.getElementById('hcEspecialidad')?.value) ||
-                    'Ginecología y Obstetricia'
+      nombre: nombreProfesional,
+      especialidad: especialidadProfesional
     };
 
-    const motivo = valorPrimero(anamnesis,['motivo_consulta','motivo','consulta_principal']) ||
-                   valorPrimero(historia,['motivo_consulta','motivo']);
-
     return {
-      version: '1.0.0',
+      version: '1.0.1',
       modulo: 'Apoyo Cognitivo con IA',
       origen: 'diagnosticos.js',
       id_atencion: texto(ctx.id || state.atencionActual),
       id_paciente: paciente.id_paciente,
+      id_historia: historiaClinica,
       numero_consulta: texto(ctx.numeroConsulta),
       zonaHoraria: 'America/Guayaquil',
       creadoEn: marcaTiempo.iso,
@@ -2271,7 +2403,7 @@
         id_atencion: texto(ctx.id || state.atencionActual),
         numero: texto(ctx.numeroConsulta),
         especialidad: profesional.especialidad,
-        tipo: valorPrimero(atencion,['tipo_consulta','tipo_atencion','tipo']),
+        tipo: tipoConsulta,
         motivo,
         resumenClinico: texto(document.getElementById('auroDxResumen')?.value || state.resumenClinico),
         analisisClinico: texto(document.getElementById('auroDxAnalisis')?.value || state.analisisClinico),
@@ -2291,6 +2423,7 @@
         ultimaEdicionLocal: texto(state.ultimaEdicionLocal)
       },
       fuentes: {
+        pacienteDisponible: !!Object.keys(pacienteRegistro || {}).length,
         historiaDisponible: !!state.historia,
         anamnesisDisponible: !!state.anamnesis,
         examenFisicoDisponible: !!state.detalleExamen,
