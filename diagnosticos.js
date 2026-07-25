@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.3 - contexto clínico completo para Apoyo Cognitivo con IA
+ Versión: 1.5.4 - profesional, tipo y motivo para Apoyo Cognitivo con IA
  Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.3';
+  const VERSION = '1.5.4';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260724_apoyo_ia_contexto_v2';
+  const RELEASE = '20260725_apoyo_ia_contexto_v3';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -2254,6 +2254,102 @@
       pacienteRegistro = {};
     }
 
+    /*
+     Fuentes complementarias, solo lectura:
+     - contexto unificado de Atenciones;
+     - cita vinculada de Agenda;
+     - catálogo de médicos ya cargado;
+     - estado público de Anamnesis para la misma atención.
+    */
+    let contextoAtencion = {};
+    try{
+      if(typeof window.obtenerContextoAtencionActual === 'function'){
+        contextoAtencion = window.obtenerContextoAtencionActual() || {};
+      }else if(typeof window.getContextoAtencionActual === 'function'){
+        contextoAtencion = window.getContextoAtencionActual() || {};
+      }
+    }catch(e){
+      contextoAtencion = {};
+    }
+
+    const idAtencionContexto = texto(
+      ctx.id ||
+      state.atencionActual ||
+      contextoAtencion.id_atencion ||
+      atencion.id_atencion
+    );
+
+    const idCita = texto(
+      atencion.id_cita ||
+      contextoAtencion.id_cita ||
+      window.auroCitaSeleccionadaAgenda?.id_cita
+    );
+
+    let citaRegistro = {};
+    try{
+      const listaCitas = Array.isArray(window.citasAgendaWeb)
+        ? window.citasAgendaWeb
+        : (typeof citasAgendaWeb !== 'undefined' && Array.isArray(citasAgendaWeb)
+            ? citasAgendaWeb
+            : []);
+
+      citaRegistro = listaCitas.find(c =>
+        texto(c?.id_cita || c?.id) === idCita
+      ) || {};
+
+      if(!Object.keys(citaRegistro).length){
+        const raw = sessionStorage.getItem('auro_cita_seleccionada_agenda');
+        const temporal = raw ? JSON.parse(raw) : {};
+        if(
+          temporal &&
+          (!idCita || texto(temporal.id_cita) === idCita)
+        ){
+          citaRegistro = temporal;
+        }
+      }
+    }catch(e){
+      citaRegistro = {};
+    }
+
+    let anamnesisPublica = {};
+    try{
+      if(
+        window.auroAnamnesis &&
+        typeof window.auroAnamnesis.obtenerDatosAnamnesis === 'function'
+      ){
+        const candidata = window.auroAnamnesis.obtenerDatosAnamnesis() || {};
+        if(
+          !texto(candidata.id_atencion) ||
+          texto(candidata.id_atencion) === idAtencionContexto
+        ){
+          anamnesisPublica = candidata;
+        }
+      }
+    }catch(e){
+      anamnesisPublica = {};
+    }
+
+    let medicoRegistro = {};
+    try{
+      const idMedico = texto(
+        atencion.id_medico ||
+        contextoAtencion.id_medico ||
+        citaRegistro.id_medico ||
+        citaRegistro.medico_id
+      );
+
+      const listaMedicos =
+        (typeof medicosAgendaWeb !== 'undefined' && Array.isArray(medicosAgendaWeb))
+          ? medicosAgendaWeb
+          : (Array.isArray(window.medicosAgendaWeb) ? window.medicosAgendaWeb : []);
+
+      medicoRegistro = listaMedicos.find(m =>
+        texto(m?.id_medico || m?.id || m?.codigo) === idMedico
+      ) || {};
+    }catch(e){
+      medicoRegistro = {};
+    }
+
     const valorCampo = (...ids) => {
       for(const id of ids){
         const el = document.getElementById(id);
@@ -2323,8 +2419,21 @@
     const nombreProfesional =
       valorPrimero(atencion,[
         'nombre_profesional','profesional_nombre',
-        'nombre_medico','medico_nombre',
+        'nombre_medico','medico_nombre','doctor_nombre',
         'medico','profesional','doctor'
+      ]) ||
+      valorPrimero(contextoAtencion,[
+        'nombre_profesional','profesional_nombre',
+        'nombre_medico','medico_nombre','doctor_nombre',
+        'medico','profesional','doctor'
+      ]) ||
+      valorPrimero(citaRegistro,[
+        'nombre_medico','medico_nombre','doctor_nombre',
+        'medico','doctor'
+      ]) ||
+      valorPrimero(medicoRegistro,[
+        'nombre_completo','nombreCompleto','nombre',
+        'nombres','medico_nombre'
       ]) ||
       valorCampo(
         'hcProfesional',
@@ -2347,7 +2456,15 @@
     const tipoConsulta =
       valorPrimero(atencion,[
         'tipo_consulta','tipo_atencion','tipo',
-        'modalidad_consulta','clase_consulta'
+        'modalidad_consulta','clase_consulta',
+        'servicio','tipo_cita'
+      ]) ||
+      valorPrimero(contextoAtencion,[
+        'tipo_consulta','tipo_atencion','tipo',
+        'servicio','tipo_cita'
+      ]) ||
+      valorPrimero(citaRegistro,[
+        'servicio','tipo_cita','tipo_consulta','motivo'
       ]) ||
       valorCampo(
         'hcTipoConsulta',
@@ -2356,20 +2473,23 @@
       );
 
     const motivo =
-      valorPrimero(anamnesis,[
+      valorPrimero(anamnesisPublica,[
         'motivo_consulta','motivo','consulta_principal'
       ]) ||
-      valorPrimero(atencion,[
-        'motivo_consulta','motivo','razon_consulta'
-      ]) ||
-      valorPrimero(historia,[
-        'motivo_consulta','motivo'
+      valorPrimero(anamnesis,[
+        'motivo_consulta','motivo','consulta_principal'
       ]) ||
       valorCampo(
         'hcMotivoConsulta',
         'anamnesisMotivoConsulta',
         'motivoConsulta'
-      );
+      ) ||
+      valorPrimero(atencion,[
+        'motivo_consulta','motivo','razon_consulta'
+      ]) ||
+      valorPrimero(historia,[
+        'motivo_consulta','motivo'
+      ]);
 
     const paciente = {
       id_paciente: idPaciente,
@@ -2386,7 +2506,7 @@
     };
 
     return {
-      version: '1.0.1',
+      version: '1.0.2',
       modulo: 'Apoyo Cognitivo con IA',
       origen: 'diagnosticos.js',
       id_atencion: texto(ctx.id || state.atencionActual),
@@ -2424,8 +2544,13 @@
       },
       fuentes: {
         pacienteDisponible: !!Object.keys(pacienteRegistro || {}).length,
+        atencionDisponible: !!Object.keys(contextoAtencion || {}).length,
+        citaDisponible: !!Object.keys(citaRegistro || {}).length,
+        medicoDisponible: !!Object.keys(medicoRegistro || {}).length,
         historiaDisponible: !!state.historia,
-        anamnesisDisponible: !!state.anamnesis,
+        anamnesisDisponible:
+          !!state.anamnesis ||
+          !!Object.keys(anamnesisPublica || {}).length,
         examenFisicoDisponible: !!state.detalleExamen,
         especialidadesDisponibles: Object.keys(state.especialidades || {}).filter(k => !!state.especialidades[k])
       },
