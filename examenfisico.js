@@ -1514,6 +1514,9 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   setValueIfExists('hcExamenGinecologico', auroExtraerSeccionExamen(ex, 'Ginecológico'));
 
   auroActualizarAyudaIMC();
+  if(typeof auroActualizarApoyoSignosVitales === 'function'){
+    auroActualizarApoyoSignosVitales();
+  }
 }
 
 function auroExtraerObservacionSistema(texto){
@@ -1664,9 +1667,62 @@ function auroCargarDiagnosticosDesdeHistoria(h){
   }
 }
 
+/* ==========================================================
+   AUROSANAX - APOYO CLÍNICO DE SIGNOS VITALES V1
+   MODIFICACIÓN QUIRÚRGICA Y NO BLOQUEANTE
+   ----------------------------------------------------------
+   ALCANCE EXCLUSIVO:
+   - Peso, talla e IMC.
+   - Presión arterial, frecuencia cardíaca y respiratoria.
+   - Temperatura y saturación de oxígeno.
+   - Interpretaciones visuales orientativas para adultos.
+   - Alertas de plausibilidad y valores que requieren revisión.
+
+   PROTECCIONES:
+   - No modifica IDs existentes.
+   - No cambia la estructura del objeto de guardado.
+   - No crea columnas ni escribe interpretaciones en Google Sheets.
+   - No altera fechas, id_atencion, id_examen ni actualización.
+   - No toca examen por sistemas, regionales ni diagnósticos.
+   - No bloquea el guardado: toda alerta es informativa.
+   ========================================================== */
+
+function auroVitalTexto(valor){
+  return String(valor === null || valor === undefined ? '' : valor).trim();
+}
+
+function auroVitalNumero(valor){
+  const txt = auroVitalTexto(valor)
+    .replace(',', '.')
+    .replace(/[^0-9.+-]/g, '');
+  if(!txt) return null;
+  const numero = Number(txt);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+function auroVitalNumeroLimpio(valor, decimales){
+  const numero = auroVitalNumero(valor);
+  if(numero === null) return '';
+  const n = Number(numero.toFixed(Number.isInteger(decimales) ? decimales : 1));
+  return String(n);
+}
+
+function auroVitalPresion(valor){
+  const txt = auroVitalTexto(valor)
+    .replace(/mmhg/ig, '')
+    .replace(/\s+/g, '')
+    .replace('-', '/');
+  const match = txt.match(/^(\d{2,3})\/(\d{2,3})$/);
+  if(!match) return null;
+  const sistolica = Number(match[1]);
+  const diastolica = Number(match[2]);
+  if(!Number.isFinite(sistolica) || !Number.isFinite(diastolica)) return null;
+  return { sistolica, diastolica, texto: sistolica + '/' + diastolica };
+}
+
 function auroInterpretarIMC(valor){
-  const imc = parseFloat(String(valor || '').replace(',','.'));
-  if(!imc) return '';
+  const imc = auroVitalNumero(valor);
+  if(imc === null || imc <= 0) return '';
   if(imc < 18.5) return 'Bajo peso';
   if(imc < 25) return 'Normopeso';
   if(imc < 30) return 'Sobrepeso';
@@ -1675,36 +1731,315 @@ function auroInterpretarIMC(valor){
   return 'Obesidad grado III';
 }
 
+function auroInterpretarPA(valor){
+  const pa = auroVitalPresion(valor);
+  if(!pa) return {nivel:'pendiente', texto:'Ingrese PA como 120/80', alerta:false};
+  const s = pa.sistolica;
+  const d = pa.diastolica;
+
+  if(s < 50 || s > 260 || d < 30 || d > 160 || d >= s){
+    return {nivel:'invalido', texto:'Valor improbable; verifique la medición', alerta:true};
+  }
+  if(s >= 180 || d >= 120){
+    return {nivel:'critico', texto:'PA muy elevada; repetir y valorar de inmediato según el contexto clínico', alerta:true};
+  }
+  if(s < 90 || d < 60){
+    return {nivel:'alerta', texto:'PA baja; correlacionar con síntomas y condición clínica', alerta:true};
+  }
+  if(s >= 140 || d >= 90){
+    return {nivel:'alerta', texto:'PA elevada; confirmar con técnica adecuada y mediciones repetidas', alerta:true};
+  }
+  if(s >= 130 || d >= 80){
+    return {nivel:'precaucion', texto:'PA por encima del rango óptimo; confirmar y correlacionar', alerta:false};
+  }
+  if(s >= 120 && d < 80){
+    return {nivel:'precaucion', texto:'PA sistólica elevada; confirmar medición', alerta:false};
+  }
+  return {nivel:'normal', texto:'PA dentro de rango habitual en adulto', alerta:false};
+}
+
+function auroInterpretarFC(valor){
+  const fc = auroVitalNumero(valor);
+  if(fc === null) return {nivel:'pendiente', texto:'Pendiente', alerta:false};
+  if(fc < 20 || fc > 250) return {nivel:'invalido', texto:'Valor improbable; verifique', alerta:true};
+  if(fc < 40) return {nivel:'critico', texto:'Bradicardia marcada; correlacionar y valorar', alerta:true};
+  if(fc < 60) return {nivel:'precaucion', texto:'Bradicardia', alerta:false};
+  if(fc <= 100) return {nivel:'normal', texto:'Frecuencia cardíaca en rango habitual adulto', alerta:false};
+  if(fc <= 120) return {nivel:'precaucion', texto:'Taquicardia', alerta:false};
+  return {nivel:'alerta', texto:'Taquicardia marcada; correlacionar y valorar', alerta:true};
+}
+
+function auroInterpretarFR(valor){
+  const fr = auroVitalNumero(valor);
+  if(fr === null) return {nivel:'pendiente', texto:'Pendiente', alerta:false};
+  if(fr < 3 || fr > 80) return {nivel:'invalido', texto:'Valor improbable; verifique', alerta:true};
+  if(fr < 8) return {nivel:'critico', texto:'Bradipnea marcada; correlacionar y valorar', alerta:true};
+  if(fr < 12) return {nivel:'precaucion', texto:'Frecuencia respiratoria baja', alerta:false};
+  if(fr <= 20) return {nivel:'normal', texto:'Frecuencia respiratoria en rango habitual adulto', alerta:false};
+  if(fr <= 30) return {nivel:'precaucion', texto:'Taquipnea', alerta:false};
+  return {nivel:'alerta', texto:'Taquipnea marcada; correlacionar y valorar', alerta:true};
+}
+
+function auroInterpretarTemperatura(valor){
+  const t = auroVitalNumero(valor);
+  if(t === null) return {nivel:'pendiente', texto:'Pendiente', alerta:false};
+  if(t < 25 || t > 45) return {nivel:'invalido', texto:'Valor improbable; verifique', alerta:true};
+  if(t < 35) return {nivel:'critico', texto:'Hipotermia; correlacionar y valorar', alerta:true};
+  if(t < 36) return {nivel:'precaucion', texto:'Temperatura baja', alerta:false};
+  if(t < 37.5) return {nivel:'normal', texto:'Temperatura en rango habitual', alerta:false};
+  if(t < 38) return {nivel:'precaucion', texto:'Temperatura elevada / febrícula', alerta:false};
+  if(t < 40) return {nivel:'alerta', texto:'Fiebre; correlacionar con evaluación clínica', alerta:true};
+  return {nivel:'critico', texto:'Hipertermia marcada; valoración inmediata', alerta:true};
+}
+
+function auroInterpretarSaturacion(valor){
+  const sat = auroVitalNumero(valor);
+  if(sat === null) return {nivel:'pendiente', texto:'Pendiente', alerta:false};
+  if(sat < 40 || sat > 100) return {nivel:'invalido', texto:'Valor improbable; verifique', alerta:true};
+  if(sat < 90) return {nivel:'critico', texto:'Saturación muy baja; confirmar señal y valorar de inmediato', alerta:true};
+  if(sat < 94) return {nivel:'alerta', texto:'Saturación disminuida; confirmar medición y correlacionar', alerta:true};
+  if(sat < 95) return {nivel:'precaucion', texto:'Saturación limítrofe', alerta:false};
+  return {nivel:'normal', texto:'Saturación en rango habitual', alerta:false};
+}
+
+function auroInterpretarPeso(valor){
+  const n = auroVitalNumero(valor);
+  if(n === null) return {nivel:'pendiente', texto:'', alerta:false};
+  if(n < 1 || n > 400) return {nivel:'invalido', texto:'Peso improbable; verifique', alerta:true};
+  return {nivel:'normal', texto:'', alerta:false};
+}
+
+function auroInterpretarTalla(valor){
+  const n = auroVitalNumero(valor);
+  if(n === null) return {nivel:'pendiente', texto:'', alerta:false};
+  if(n < 30 || n > 250) return {nivel:'invalido', texto:'Talla improbable; verifique', alerta:true};
+  return {nivel:'normal', texto:'', alerta:false};
+}
+
+function auroVitalClaseNivel(nivel){
+  return 'auro-vital-nivel-' + (nivel || 'pendiente');
+}
+
+function auroCrearEstilosVitales(){
+  if(document.getElementById('auroVitalesClinicosCSS')) return;
+  const style = document.createElement('style');
+  style.id = 'auroVitalesClinicosCSS';
+  style.textContent = `
+    .auro-vital-wrap{position:relative}
+    .auro-vital-ayuda{display:block;min-height:18px;margin-top:5px;font-size:11px;font-weight:750;line-height:1.25;color:#64748b}
+    .auro-vital-ayuda.auro-vital-nivel-normal{color:#166534}
+    .auro-vital-ayuda.auro-vital-nivel-precaucion{color:#92400e}
+    .auro-vital-ayuda.auro-vital-nivel-alerta{color:#b45309}
+    .auro-vital-ayuda.auro-vital-nivel-critico,.auro-vital-ayuda.auro-vital-nivel-invalido{color:#b91c1c}
+    .auro-vital-input-normal{border-color:#bbf7d0!important;background:#f0fdf4!important}
+    .auro-vital-input-precaucion{border-color:#fde68a!important;background:#fffbeb!important}
+    .auro-vital-input-alerta{border-color:#fdba74!important;background:#fff7ed!important}
+    .auro-vital-input-critico,.auro-vital-input-invalido{border-color:#fecaca!important;background:#fef2f2!important}
+    #auroVitalesAlertaGeneral{display:none;margin:10px 0 4px;border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:14px;padding:9px 11px;font-size:12px;font-weight:750;line-height:1.4}
+    #auroVitalesAlertaGeneral.show{display:block}
+    #auroVitalesAlertaGeneral.critica{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+    @media(max-width:560px){.auro-vital-ayuda{font-size:10.5px}}
+  `;
+  document.head.appendChild(style);
+}
+
+function auroObtenerAyudaVital(id){
+  const input = document.getElementById(id);
+  if(!input) return null;
+  let ayuda = document.getElementById(id + 'AuroAyuda');
+  if(!ayuda){
+    ayuda = document.createElement('small');
+    ayuda.id = id + 'AuroAyuda';
+    ayuda.className = 'auro-vital-ayuda';
+    ayuda.setAttribute('aria-live', 'polite');
+    input.insertAdjacentElement('afterend', ayuda);
+  }
+  return ayuda;
+}
+
+function auroAplicarResultadoVital(id, resultado){
+  const input = document.getElementById(id);
+  const ayuda = auroObtenerAyudaVital(id);
+  if(!input || !ayuda) return;
+
+  ['normal','precaucion','alerta','critico','invalido'].forEach(nivel => {
+    input.classList.remove('auro-vital-input-' + nivel);
+    ayuda.classList.remove('auro-vital-nivel-' + nivel);
+  });
+
+  const valor = auroVitalTexto(input.value);
+  if(!valor){
+    ayuda.textContent = '';
+    return;
+  }
+
+  const nivel = resultado?.nivel || 'pendiente';
+  ayuda.textContent = resultado?.texto || '';
+  ayuda.classList.add(auroVitalClaseNivel(nivel));
+  if(nivel !== 'pendiente') input.classList.add('auro-vital-input-' + nivel);
+}
+
 function auroActualizarAyudaIMC(){
-  const imc = getValueIfExists('hcIMC');
-  const box = document.getElementById('auroImcAyuda');
-  if(box) box.textContent = imc ? ('Interpretación IMC: ' + auroInterpretarIMC(imc)) : 'Interpretación IMC pendiente';
+  const input = document.getElementById('hcIMC');
+  if(!input) return;
+  const imc = auroVitalNumero(input.value);
+  let resultado = {nivel:'pendiente', texto:'', alerta:false};
+
+  if(imc !== null){
+    if(imc < 5 || imc > 100){
+      resultado = {nivel:'invalido', texto:'IMC improbable; verifique peso y talla', alerta:true};
+    }else{
+      const texto = auroInterpretarIMC(imc);
+      const nivel = imc >= 30 || imc < 18.5 ? 'precaucion' : (imc >= 25 ? 'precaucion' : 'normal');
+      resultado = {nivel, texto:'IMC: ' + texto, alerta:false};
+    }
+  }
+
+  auroAplicarResultadoVital('hcIMC', resultado);
+  return resultado;
+}
+
+function calcIMC(){
+  const pesoEl = document.getElementById('hcPeso');
+  const tallaEl = document.getElementById('hcTalla');
+  const imcEl = document.getElementById('hcIMC');
+  if(!pesoEl || !tallaEl || !imcEl) return;
+
+  const peso = auroVitalNumero(pesoEl.value);
+  const tallaCm = auroVitalNumero(tallaEl.value);
+  const pesoValido = peso !== null && peso >= 1 && peso <= 400;
+  const tallaValida = tallaCm !== null && tallaCm >= 30 && tallaCm <= 250;
+
+  if(!pesoValido || !tallaValida){
+    imcEl.value = '';
+    if(typeof setTextIfExists === 'function'){
+      setTextIfExists('hcImcResumen', '—');
+      setTextIfExists('hcCardIMC', '—');
+    }
+    auroActualizarAyudaIMC();
+    auroActualizarApoyoSignosVitales();
+    return;
+  }
+
+  const tallaM = tallaCm / 100;
+  const imc = Number((peso / (tallaM * tallaM)).toFixed(1));
+  imcEl.value = String(imc);
+
+  if(typeof setTextIfExists === 'function'){
+    setTextIfExists('hcImcResumen', String(imc));
+    setTextIfExists('hcCardIMC', String(imc));
+  }else{
+    const resumen = document.getElementById('hcImcResumen');
+    const card = document.getElementById('hcCardIMC');
+    if(resumen) resumen.textContent = String(imc);
+    if(card) card.textContent = String(imc);
+  }
+
+  auroActualizarAyudaIMC();
+  auroActualizarApoyoSignosVitales();
 }
 
 function auroNormalizarVitalesExamen(){
-  const pa = getValueIfExists('hcPA').trim();
-  if(pa && /^\d{2,3}\s*[-]\s*\d{2,3}$/.test(pa)){
-    setValueIfExists('hcPA', pa.replace(/\s*-\s*/, '/'));
+  const paEl = document.getElementById('hcPA');
+  if(paEl){
+    const pa = auroVitalPresion(paEl.value);
+    if(pa) paEl.value = pa.texto;
   }
 
   [
-    ['hcFC','lpm'],
-    ['hcFR','rpm'],
-    ['hcTemperatura','°C'],
-    ['hcSaturacion','%'],
-    ['hcCadera','cm'],
-    ['hcPorcentajeGrasa','%'],
-    ['hcMasaMuscular','kg'],
-    ['hcPerimetroCefalico','cm'],
-    ['hcPerimetroToracico','cm'],
-    ['hcPerimetroAbdominal','cm']
-  ].forEach(([id, unidad]) => {
+    ['hcPeso',1],
+    ['hcTalla',1],
+    ['hcFC',0],
+    ['hcFR',0],
+    ['hcTemperatura',1],
+    ['hcSaturacion',0],
+    ['hcCadera',1],
+    ['hcPorcentajeGrasa',1],
+    ['hcMasaMuscular',1],
+    ['hcPerimetroCefalico',1],
+    ['hcPerimetroToracico',1],
+    ['hcPerimetroAbdominal',1]
+  ].forEach(([id, decimales]) => {
     const el = document.getElementById(id);
     if(!el) return;
-    const v = String(el.value || '').trim();
-    if(/^\d+([.,]\d+)?$/.test(v)){
-      el.value = v + ' ' + unidad;
-    }
+    const original = auroVitalTexto(el.value);
+    if(!original) return;
+    const limpio = auroVitalNumeroLimpio(original, decimales);
+    if(limpio !== '') el.value = limpio;
+  });
+
+  calcIMC();
+  auroActualizarApoyoSignosVitales();
+}
+
+function auroCrearAlertaGeneralVitales(){
+  let alerta = document.getElementById('auroVitalesAlertaGeneral');
+  if(alerta) return alerta;
+
+  const panel = document.getElementById('hc_examen');
+  if(!panel) return null;
+  const titulo = Array.from(panel.querySelectorAll('.clinical-subtitle')).find(el =>
+    String(el.textContent || '').toLowerCase().includes('signos vitales')
+  );
+  if(!titulo) return null;
+
+  alerta = document.createElement('div');
+  alerta.id = 'auroVitalesAlertaGeneral';
+  alerta.setAttribute('role', 'status');
+  alerta.setAttribute('aria-live', 'polite');
+  titulo.insertAdjacentElement('afterend', alerta);
+  return alerta;
+}
+
+function auroActualizarApoyoSignosVitales(){
+  const resultados = [
+    ['hcPeso', auroInterpretarPeso(document.getElementById('hcPeso')?.value)],
+    ['hcTalla', auroInterpretarTalla(document.getElementById('hcTalla')?.value)],
+    ['hcPA', auroInterpretarPA(document.getElementById('hcPA')?.value)],
+    ['hcFC', auroInterpretarFC(document.getElementById('hcFC')?.value)],
+    ['hcFR', auroInterpretarFR(document.getElementById('hcFR')?.value)],
+    ['hcTemperatura', auroInterpretarTemperatura(document.getElementById('hcTemperatura')?.value)],
+    ['hcSaturacion', auroInterpretarSaturacion(document.getElementById('hcSaturacion')?.value)]
+  ];
+
+  resultados.forEach(([id, resultado]) => auroAplicarResultadoVital(id, resultado));
+  const imcResultado = auroActualizarAyudaIMC();
+  if(imcResultado) resultados.push(['hcIMC', imcResultado]);
+
+  const conContenido = resultados.filter(([id]) => auroVitalTexto(document.getElementById(id)?.value));
+  const alertas = conContenido.filter(([,r]) => r && r.alerta);
+  const criticas = conContenido.filter(([,r]) => r && (r.nivel === 'critico' || r.nivel === 'invalido'));
+  const alertaGeneral = auroCrearAlertaGeneralVitales();
+  if(!alertaGeneral) return;
+
+  alertaGeneral.classList.remove('show','critica');
+  alertaGeneral.textContent = '';
+
+  if(alertas.length){
+    alertaGeneral.classList.add('show');
+    if(criticas.length) alertaGeneral.classList.add('critica');
+    alertaGeneral.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> Existen signos vitales que requieren verificación o correlación clínica. Las alertas son orientativas y no bloquean el guardado.';
+  }
+}
+
+function auroPrepararCampoVital(id, configuracion){
+  const el = document.getElementById(id);
+  if(!el || el.dataset.auroVitalV1 === '1') return;
+  el.dataset.auroVitalV1 = '1';
+  el.setAttribute('autocomplete','off');
+  el.setAttribute('inputmode', configuracion?.inputmode || 'decimal');
+  if(configuracion?.placeholder && !auroVitalTexto(el.getAttribute('placeholder'))){
+    el.setAttribute('placeholder', configuracion.placeholder);
+  }
+  if(configuracion?.ariaLabel) el.setAttribute('aria-label', configuracion.ariaLabel);
+
+  el.addEventListener('input', function(){
+    if(id === 'hcPeso' || id === 'hcTalla') calcIMC();
+    else auroActualizarApoyoSignosVitales();
+  });
+
+  el.addEventListener('blur', function(){
+    auroNormalizarVitalesExamen();
   });
 }
 
@@ -1734,39 +2069,38 @@ function auroMarcarSistemasNoValorados(){
 }
 
 function auroInicializarAyudasExamenFisicoV32(){
-  /*
-    AUROSANAX v3.2.1
-    Corrección visual solicitada:
-    - No inserta barra superior de ayudas clínicas.
-    - No agrega botones "Examen general sin hallazgos aparentes", "Sistemas no valorados" ni "Normalizar unidades".
-    - No agrega textos guía debajo de los signos vitales.
-    - Conserva la estructura original del bloque Signos vitales.
-    - Mantiene solo lógica invisible necesaria: cálculo/actualización de IMC y normalización técnica al perder foco.
-  */
-
   const panel = document.getElementById('hc_examen');
   if(!panel) return;
 
-  const ayudaAnterior = document.getElementById('auroExamenHelpBox');
-  if(ayudaAnterior) ayudaAnterior.remove();
+  auroCrearEstilosVitales();
+  auroCrearAlertaGeneralVitales();
 
-  const imcAyudaAnterior = document.getElementById('auroImcAyuda');
-  if(imcAyudaAnterior) imcAyudaAnterior.remove();
+  const campos = {
+    hcPeso:{placeholder:'Ej. 60', ariaLabel:'Peso en kilogramos'},
+    hcTalla:{placeholder:'Ej. 154', ariaLabel:'Talla en centímetros'},
+    hcPA:{placeholder:'Ej. 120/80', inputmode:'text', ariaLabel:'Presión arterial sistólica sobre diastólica'},
+    hcFC:{placeholder:'Ej. 72', ariaLabel:'Frecuencia cardíaca por minuto'},
+    hcFR:{placeholder:'Ej. 16', ariaLabel:'Frecuencia respiratoria por minuto'},
+    hcTemperatura:{placeholder:'Ej. 36.5', ariaLabel:'Temperatura en grados Celsius'},
+    hcSaturacion:{placeholder:'Ej. 98', ariaLabel:'Saturación de oxígeno en porcentaje'}
+  };
 
-  ['hcPA','hcFC','hcFR','hcTemperatura','hcSaturacion'].forEach(id => {
-    const hint = document.getElementById(id + 'Hint');
-    if(hint) hint.remove();
-  });
+  Object.keys(campos).forEach(id => auroPrepararCampoVital(id, campos[id]));
+  auroObtenerAyudaVital('hcIMC');
 
+  /* Compatibilidad con listeners históricos del mismo módulo. */
   ['hcPeso','hcTalla'].forEach(id => {
     const el = document.getElementById(id);
-    if(el && !el.dataset.auroImcListenerV321){
-      el.addEventListener('input', () => setTimeout(calcIMC, 0));
-      el.addEventListener('blur', () => setTimeout(calcIMC, 0));
-      el.dataset.auroImcListenerV321 = '1';
-    }
+    if(el) el.dataset.auroImcListenerV321 = '1';
   });
+
+  calcIMC();
+  auroActualizarApoyoSignosVitales();
 }
+
+/* Permite refrescar ayudas después de cargar o cambiar una atención. */
+window.auroActualizarApoyoSignosVitales = auroActualizarApoyoSignosVitales;
+window.auroNormalizarVitalesExamen = auroNormalizarVitalesExamen;
 
 
 /* ==========================================================
@@ -1859,6 +2193,10 @@ function auroExamenFisicoAplicarCampos(data){
       el.value = item.value || '';
     }
   });
+
+  if(typeof auroActualizarApoyoSignosVitales === 'function'){
+    auroActualizarApoyoSignosVitales();
+  }
 }
 
 function auroExamenFisicoLimpiarCampos(){
@@ -1873,6 +2211,10 @@ function auroExamenFisicoLimpiarCampos(){
       el.value = '';
     }
   });
+
+  if(typeof auroActualizarApoyoSignosVitales === 'function'){
+    auroActualizarApoyoSignosVitales();
+  }
 }
 
 function auroExamenFisicoCapturarDiagnosticos(){
