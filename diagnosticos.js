@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.4 - profesional, tipo y motivo para Apoyo Cognitivo con IA
+ Versión: 1.5.5 - aislamiento de anamnesis por atención
  Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.4';
+  const VERSION = '1.5.5';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260725_apoyo_ia_contexto_v3';
+  const RELEASE = '20260725_anamnesis_por_atencion_v1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -2667,7 +2667,14 @@
 
   async function consultarAnamnesis(idAtencion){
     const id = texto(idAtencion);
+    if(!id) return null;
 
+    /*
+     CORRECCIÓN QUIRÚRGICA DE SEGURIDAD CLÍNICA:
+     Nunca reutilizar una anamnesis local, de servidor o visible en pantalla
+     si no está vinculada explícitamente con la atención solicitada.
+     Esto evita que una consulta nueva herede datos de la consulta anterior.
+    */
     try{
       const candidatos = [
         window.auroAnamnesisState?.registroActual,
@@ -2676,8 +2683,14 @@
         window.anamnesisState?.anamnesisActual,
         window.anamnesisActual
       ].filter(Boolean);
-      const local = candidatos.find(x => !id || texto(x?.id_atencion) === id) || candidatos[0];
-      if(local && fuenteTieneDatos(local)) return clonar(local, local);
+
+      const local = candidatos.find(
+        x => texto(x?.id_atencion) === id
+      );
+
+      if(local && fuenteTieneDatos(local)){
+        return clonar(local, local);
+      }
     }catch(e){}
 
     const acciones = [
@@ -2690,19 +2703,38 @@
       try{
         const data = await getJSON(accion, parametros);
         if(data && data.success === false) continue;
+
         const lista = arraySeguro(data);
-        const registro = lista.find(x => texto(x?.id_atencion) === id) ||
-          (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
-        if(registro && fuenteTieneDatos(registro)) return registro;
+        const registroLista = lista.find(
+          x => texto(x?.id_atencion) === id
+        );
+
+        if(registroLista && fuenteTieneDatos(registroLista)){
+          return registroLista;
+        }
+
+        /*
+         Algunos endpoints pueden devolver directamente un registro.
+         Solo se acepta cuando declara la misma id_atencion.
+        */
+        if(
+          data &&
+          typeof data === 'object' &&
+          !Array.isArray(data) &&
+          texto(data.id_atencion) === id &&
+          fuenteTieneDatos(data)
+        ){
+          return data;
+        }
       }catch(e){}
     }
 
-    const dom = {
-      id_atencion:id,
-      enfermedad_actual:getValue('hcEnfermedadActual'),
-      anamnesis:getValue('hcAnamnesis')
-    };
-    return fuenteTieneDatos(dom.enfermedad_actual) || fuenteTieneDatos(dom.anamnesis) ? dom : null;
+    /*
+     No se usa el DOM como respaldo.
+     Los campos visibles pueden conservar temporalmente la consulta anterior
+     mientras Anamnesis termina de cambiar de atención.
+    */
+    return null;
   }
 
   async function consultarHistoria(idPaciente, idAtencion){
