@@ -6755,29 +6755,45 @@ document.addEventListener('click',e=>{
 <script>
 /****************************************************************
  AUROSANAX ERP DEMO
- Corrección quirúrgica: retorno desde Apoyo Cognitivo con IA
- Responsabilidad:
- - Leer únicamente la instrucción temporal aurosanax_abrir_modulo.
- - Restaurar Historia clínica > Diagnóstico o Plan.
- - No modificar atención, paciente, datos clínicos ni arquitectura.
+ Retorno clínico desde Apoyo Cognitivo con IA
+ Versión quirúrgica:
+ - Restaura paciente.
+ - Restaura historia clínica.
+ - Restaura atención activa usando seleccionarAtencion().
+ - Finalmente abre Historia clínica > Diagnóstico.
+ - No modifica la lógica clínica ni la persistencia.
 ****************************************************************/
-(function auroRestaurarModuloDesdeApoyoIA(){
+(function auroRestaurarContextoDesdeApoyoIA(){
   'use strict';
 
-  function obtenerModuloPendiente(){
+  const CLAVE_MODULO = 'aurosanax_abrir_modulo';
+  const CLAVE_CONTEXTO = 'aurosanax_apoyoIA_contexto';
+  const MAX_INTENTOS = 24;
+  let intentos = 0;
+
+  function leerSesion(clave){
     try{
-      return String(
-        sessionStorage.getItem('aurosanax_abrir_modulo') || ''
-      ).trim().toLowerCase();
+      return sessionStorage.getItem(clave);
     }catch(error){
-      console.warn('AUROSANAX: no se pudo leer el módulo pendiente.', error);
-      return '';
+      console.warn('AUROSANAX: no se pudo leer sessionStorage.', error);
+      return null;
     }
   }
 
-  function limpiarModuloPendiente(){
+  function leerContexto(){
     try{
-      sessionStorage.removeItem('aurosanax_abrir_modulo');
+      const raw = leerSesion(CLAVE_CONTEXTO);
+      const data = raw ? JSON.parse(raw) : null;
+      return data && typeof data === 'object' ? data : {};
+    }catch(error){
+      console.warn('AUROSANAX: contexto de Apoyo IA inválido.', error);
+      return {};
+    }
+  }
+
+  function limpiarInstruccionRetorno(){
+    try{
+      sessionStorage.removeItem(CLAVE_MODULO);
     }catch(error){}
   }
 
@@ -6791,77 +6807,176 @@ document.addEventListener('click',e=>{
     }) || null;
   }
 
+  function abrirModulo(panelId){
+    if(typeof window.navegarAtencionActiva === 'function'){
+      window.navegarAtencionActiva(
+        panelId,
+        document.querySelector(
+          '.menu-attention button[onclick*="' + panelId + '"]'
+        ) || null
+      );
+      return;
+    }
+
+    if(typeof window.showScreen === 'function'){
+      window.showScreen('historia');
+    }else{
+      document.querySelectorAll('.screen').forEach(function(pantalla){
+        pantalla.classList.remove('active');
+      });
+      document.getElementById('historia')?.classList.add('active');
+    }
+
+    const boton = buscarBotonPestana(panelId);
+
+    if(typeof window.showClinicalTab === 'function'){
+      window.showClinicalTab(panelId, boton);
+    }else{
+      document.querySelectorAll('.clinical-panel').forEach(function(panel){
+        panel.classList.remove('active');
+      });
+      document.getElementById(panelId)?.classList.add('active');
+
+      document.querySelectorAll('.clinical-tabs button').forEach(function(item){
+        item.classList.remove('active');
+      });
+      boton?.classList.add('active');
+    }
+  }
+
+  function obtenerIds(contexto){
+    const idAtencion = String(
+      contexto.id_atencion ||
+      contexto.consulta?.id_atencion ||
+      ''
+    ).trim();
+
+    const idPaciente = String(
+      contexto.id_paciente ||
+      contexto.paciente?.id_paciente ||
+      ''
+    ).trim();
+
+    const idHistoria = String(
+      contexto.id_historia ||
+      contexto.paciente?.id_historia ||
+      contexto.paciente?.historiaClinica ||
+      ''
+    ).trim();
+
+    return { idAtencion, idPaciente, idHistoria };
+  }
+
+  function restaurarHistoria(idHistoria, idPaciente){
+    if(!idHistoria) return;
+
+    try{
+      const lista = Array.isArray(historiasClinicas)
+        ? historiasClinicas
+        : [];
+
+      const historia = lista.find(function(item){
+        return String(item?.id_historia || item?.id || '').trim() === idHistoria &&
+          (!idPaciente ||
+           String(item?.id_paciente || item?.paciente_id || '').trim() === idPaciente);
+      }) || null;
+
+      editingHistoryId = idHistoria;
+      window.auroHistoriaSeleccionadaId = idHistoria;
+
+      if(historia){
+        window.historiaActual = historia;
+        window.currentHistoria = historia;
+      }
+    }catch(error){
+      console.warn('AUROSANAX: no se pudo restaurar la historia activa.', error);
+    }
+  }
+
   function restaurar(){
-    const modulo = obtenerModuloPendiente();
+    const modulo = String(leerSesion(CLAVE_MODULO) || '')
+      .trim()
+      .toLowerCase();
 
     if(modulo !== 'diagnostico' && modulo !== 'plan'){
       return;
     }
 
-    const panelId = modulo === 'plan'
-      ? 'hc_plan'
-      : 'hc_diagnostico';
+    const contexto = leerContexto();
+    const ids = obtenerIds(contexto);
+    const selector = document.getElementById('hcPacienteSelect');
+
+    const dependenciasListas =
+      selector &&
+      typeof window.seleccionarAtencion === 'function' &&
+      typeof window.seleccionarPacienteHistoria === 'function';
+
+    const pacienteDisponible =
+      !ids.idPaciente ||
+      Array.from(selector?.options || []).some(function(opcion){
+        return String(opcion.value || '').trim() === ids.idPaciente;
+      });
+
+    if((!dependenciasListas || !pacienteDisponible) && intentos < MAX_INTENTOS){
+      intentos += 1;
+      setTimeout(restaurar, 250);
+      return;
+    }
 
     try{
-      if(typeof window.navegarAtencionActiva === 'function'){
-        window.navegarAtencionActiva(
-          panelId,
-          document.querySelector(
-            '.menu-attention button[onclick*="' + panelId + '"]'
-          ) || null
-        );
-      }else{
-        if(typeof window.showScreen === 'function'){
-          window.showScreen('historia');
-        }else{
-          document.querySelectorAll('.screen').forEach(function(pantalla){
-            pantalla.classList.remove('active');
-          });
-          document.getElementById('historia')?.classList.add('active');
-        }
-
-        const botonPestana = buscarBotonPestana(panelId);
-
-        if(typeof window.showClinicalTab === 'function'){
-          window.showClinicalTab(panelId, botonPestana);
-        }else{
-          document.querySelectorAll('.clinical-panel').forEach(function(panel){
-            panel.classList.remove('active');
-          });
-          document.getElementById(panelId)?.classList.add('active');
-
-          document.querySelectorAll('.clinical-tabs button').forEach(function(boton){
-            boton.classList.remove('active');
-          });
-          botonPestana?.classList.add('active');
-        }
-      }
-
-      if(modulo === 'diagnostico'){
-        setTimeout(function(){
-          try{
-            if(typeof window.auroMontarDiagnosticosIndex === 'function'){
-              window.auroMontarDiagnosticosIndex();
-            }else if(typeof window.auroActualizarDiagnosticos === 'function'){
-              window.auroActualizarDiagnosticos();
-            }
-          }catch(error){
-            console.warn(
-              'AUROSANAX: no se pudo refrescar Diagnóstico después del retorno.',
-              error
-            );
-          }
-        }, 120);
-      }
-
       /*
-       La clave se elimina solamente después de ejecutar la restauración,
-       para evitar que cada recarga vuelva a abrir el mismo módulo.
+       Orden obligatorio:
+       1. Paciente.
+       2. Historia.
+       3. Atención.
+       4. Módulo clínico.
       */
-      limpiarModuloPendiente();
+      if(ids.idPaciente && selector){
+        selector.value = ids.idPaciente;
+        activePatientId = ids.idPaciente;
+        window.seleccionarPacienteHistoria();
+      }
+
+      restaurarHistoria(ids.idHistoria, ids.idPaciente);
+
+      if(ids.idAtencion){
+        window.seleccionarAtencion(ids.idAtencion);
+      }
+
+      const panelId = modulo === 'plan'
+        ? 'hc_plan'
+        : 'hc_diagnostico';
+
+      setTimeout(function(){
+        abrirModulo(panelId);
+
+        if(modulo === 'diagnostico'){
+          setTimeout(function(){
+            try{
+              if(typeof window.auroMontarDiagnosticosIndex === 'function'){
+                window.auroMontarDiagnosticosIndex();
+              }else if(typeof window.auroActualizarDiagnosticos === 'function'){
+                window.auroActualizarDiagnosticos();
+              }
+            }catch(error){
+              console.warn(
+                'AUROSANAX: no se pudo refrescar Diagnóstico.',
+                error
+              );
+            }
+          }, 120);
+        }
+
+        /*
+         Se elimina únicamente la instrucción de navegación.
+         El contexto clínico continúa disponible para Apoyo IA.
+        */
+        limpiarInstruccionRetorno();
+      }, 180);
+
     }catch(error){
       console.error(
-        'AUROSANAX: no se pudo restaurar el módulo solicitado.',
+        'AUROSANAX: no se pudo restaurar el contexto clínico.',
         error
       );
     }
@@ -6869,10 +6984,10 @@ document.addEventListener('click',e=>{
 
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', function(){
-      setTimeout(restaurar, 220);
+      setTimeout(restaurar, 250);
     }, {once:true});
   }else{
-    setTimeout(restaurar, 220);
+    setTimeout(restaurar, 250);
   }
 })();
 </script>
