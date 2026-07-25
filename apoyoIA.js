@@ -1,7 +1,7 @@
 /****************************************************************
  AUROSANAX ERP DEMO
  Archivo: apoyoIA.js
- Versión: 1.2.0
+ Versión: 1.2.1
  Responsabilidad: lógica funcional del módulo Apoyo Cognitivo con IA.
  Fecha/hora clínica: America/Guayaquil.
 ****************************************************************/
@@ -1061,6 +1061,13 @@
 
   function volverADiagnostico() {
     guardarEnSesion();
+
+    /*
+     AUROSANAX FIX QUIRÚRGICO:
+     El ERP principal lee esta clave al cargar y restaura directamente
+     Historia clínica > Diagnóstico, conservando la atención activa.
+    */
+    sessionStorage.setItem("aurosanax_abrir_modulo", "diagnostico");
 
     const destino =
       document.body.dataset.diagnosticoUrl ||
