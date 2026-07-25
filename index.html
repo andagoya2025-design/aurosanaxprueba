@@ -3545,11 +3545,12 @@ function auroAsegurarCajaExamenFisicoPrevio(){
     <div class="auro-previos-content" id="auroExamenFisicoPrevioContent"></div>
   `;
 
-  /* AUROSANAX - Corrección quirúrgica de jerarquía visual
-     El resumen previo pertenece al inicio del módulo Examen físico,
-     antes de Signos vitales y antes de todos los demás grupos.
-     No se altera el contenido, guardado, IDs ni eventos de los grupos. */
-  panel.insertBefore(box, panel.firstChild);
+  const titulo = panel.querySelector('.clinical-subtitle');
+  if(titulo && titulo.nextSibling){
+    titulo.parentNode.insertBefore(box, titulo.nextSibling);
+  }else{
+    panel.insertBefore(box, panel.firstChild);
+  }
   return box;
 }
 
