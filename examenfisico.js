@@ -1019,7 +1019,21 @@ function auroAsegurarCajaExamenFisicoPrevio(){
   if(!panel) return null;
 
   let box = document.getElementById('auroExamenFisicoPrevioBox');
-  if(box) return box;
+
+  /*
+    AUROSANAX FIX QUIRÚRGICO 2026-07-25
+    El resumen previo pertenece al inicio del módulo Examen físico,
+    antes de Signos vitales y de todos los grupos editables.
+
+    La función también corrige su posición si la caja ya fue creada
+    previamente por una versión anterior del módulo.
+  */
+  if(box){
+    if(panel.firstElementChild !== box){
+      panel.insertBefore(box, panel.firstChild);
+    }
+    return box;
+  }
 
   box = document.createElement('div');
   box.id = 'auroExamenFisicoPrevioBox';
@@ -1036,12 +1050,7 @@ function auroAsegurarCajaExamenFisicoPrevio(){
     <div class="auro-previos-content" id="auroExamenFisicoPrevioContent"></div>
   `;
 
-  const titulo = panel.querySelector('.clinical-subtitle');
-  if(titulo && titulo.nextSibling){
-    titulo.parentNode.insertBefore(box, titulo.nextSibling);
-  }else{
-    panel.insertBefore(box, panel.firstChild);
-  }
+  panel.insertBefore(box, panel.firstChild);
   return box;
 }
 
