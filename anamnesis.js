@@ -1544,14 +1544,31 @@ Función:
 
   function auroTieneContenidoAnamnesis(data) {
     if (!data) return false;
+
+    const controlesConContenido = Object.values(data.controles_json || {}).some(item => {
+      if (!item || typeof item !== 'object') return false;
+
+      const tipo = texto(item.tipo).toLowerCase();
+
+      /*
+        CORRECCIÓN QUIRÚRGICA AUROSANAX:
+        Los checkbox y radio desmarcados conservan el valor técnico "on".
+        Ese valor no representa información clínica y no debe provocar
+        el guardado o restauración de una anamnesis vacía.
+      */
+      if (tipo === 'checkbox' || tipo === 'radio') {
+        return item.checked === true;
+      }
+
+      return !!texto(item.valor);
+    });
+
     return !!(
       texto(data.motivo_consulta) ||
       texto(data.enfermedad_actual) ||
       texto(data.id_plantilla_anamnesis) ||
       Object.keys(data.respuestas_json || {}).length ||
-      Object.values(data.controles_json || {}).some(item =>
-        !!item?.checked || texto(item?.valor)
-      )
+      controlesConContenido
     );
   }
 
@@ -1681,7 +1698,7 @@ Función:
     const remoto = await auroBuscarAnamnesisSheets(idAtencion);
     if (remoto) data = remoto;
 
-    if (!data) return false;
+    if (!data || !auroTieneContenidoAnamnesis(data)) return false;
 
     state.restaurandoAtencion = true;
 
