@@ -1019,21 +1019,7 @@ function auroAsegurarCajaExamenFisicoPrevio(){
   if(!panel) return null;
 
   let box = document.getElementById('auroExamenFisicoPrevioBox');
-
-  /*
-    AUROSANAX FIX QUIRÚRGICO 2026-07-25
-    El resumen previo pertenece al inicio del módulo Examen físico,
-    antes de Signos vitales y de todos los grupos editables.
-
-    La función también corrige su posición si la caja ya fue creada
-    previamente por una versión anterior del módulo.
-  */
-  if(box){
-    if(panel.firstElementChild !== box){
-      panel.insertBefore(box, panel.firstChild);
-    }
-    return box;
-  }
+  if(box) return box;
 
   box = document.createElement('div');
   box.id = 'auroExamenFisicoPrevioBox';
@@ -1050,7 +1036,12 @@ function auroAsegurarCajaExamenFisicoPrevio(){
     <div class="auro-previos-content" id="auroExamenFisicoPrevioContent"></div>
   `;
 
-  panel.insertBefore(box, panel.firstChild);
+  const titulo = panel.querySelector('.clinical-subtitle');
+  if(titulo && titulo.nextSibling){
+    titulo.parentNode.insertBefore(box, titulo.nextSibling);
+  }else{
+    panel.insertBefore(box, panel.firstChild);
+  }
   return box;
 }
 
@@ -2692,6 +2683,50 @@ function auroExamenFisicoPayload(){
   };
 }
 
+
+/* ==========================================================
+   AUROSANAX FIX QUIRÚRGICO - EXAMEN FÍSICO SIN FILAS VACÍAS
+   Alcance:
+   - Solo valida contenido clínico antes de guardar o restaurar.
+   - No modifica HTML, CSS, responsive, IDs ni estructura de interfaz.
+   - No elimina registros previos ni altera Apps Script.
+   - Metadatos como id_atencion, fechas y estado no cuentan como contenido.
+   ========================================================== */
+function auroTieneContenidoExamenFisico(data){
+  data = data || {};
+
+  const valorClinico = valor => {
+    const texto = String(valor === null || valor === undefined ? '' : valor).trim();
+    if(!texto) return false;
+
+    const normal = texto.toLowerCase();
+    return ![
+      'undefined',
+      'null',
+      'nan',
+      '0',
+      '0.0',
+      '0.00'
+    ].includes(normal);
+  };
+
+  return [
+    data.peso_kg,
+    data.talla_cm,
+    data.imc,
+    data.presion_arterial,
+    data.frecuencia_cardiaca,
+    data.temperatura,
+    data.saturacion,
+    data.examen_fisico,
+    data.diagnosticos_cie10,
+    data.diagnostico_cie10,
+    data.diagnostico_principal,
+    data.cie10_secundario,
+    data.diagnostico_secundario
+  ].some(valorClinico);
+}
+
 async function auroBuscarExamenFisicoPorAtencion(idAtencion){
   const API = auroExamenFisicoApiUrl();
   idAtencion = String(idAtencion || auroExamenFisicoIdAtencionActual() || '').trim();
@@ -2720,7 +2755,11 @@ async function auroBuscarExamenFisicoPorAtencion(idAtencion){
 function auroCargarExamenFisicoDesdeSheet(registro){
   limpiarExamenFisicoTemporal();
 
-  if(!registro || !registro.id_examen){
+  if(
+    !registro ||
+    !registro.id_examen ||
+    !auroTieneContenidoExamenFisico(registro)
+  ){
     return false;
   }
 
@@ -2783,6 +2822,20 @@ async function auroGuardarExamenFisicoSheets(){
   if(!payloadData || !payloadData.id_atencion){
     console.warn('AUROSANAX EXAMEN: no hay id_atencion activa. No se guardó examen físico.');
     return { success:false, message:'No hay id_atencion activa' };
+  }
+
+  /*
+    AUROSANAX FIX QUIRÚRGICO:
+    No crear una fila cuando el formulario solo contiene metadatos de la atención.
+    Se devuelve success:true para no interrumpir el guardado general de la historia.
+  */
+  if(!auroTieneContenidoExamenFisico(payloadData)){
+    console.log('AUROSANAX EXAMEN: formulario sin contenido clínico. No se creó fila.');
+    return {
+      success: true,
+      omitido: true,
+      message: 'Examen físico sin contenido clínico; no se creó registro'
+    };
   }
 
   const payload = {
