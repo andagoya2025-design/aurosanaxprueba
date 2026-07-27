@@ -1,1 +1,71 @@
+AUROSANAX - examenfisico.css
 
+FASE 1 - SIGNOS VITALES (Extracción Quirúrgica)
+
+    /* ==========================================================
+       AUROSANAX
+       examenfisico.css
+       FASE 1 - SIGNOS VITALES
+
+       OBJETIVO:
+       - Contener exclusivamente el CSS del bloque Signos Vitales.
+       - No modificar HTML.
+       - No modificar JavaScript.
+       - No modificar guardado.
+       - No modificar sincronización.
+       - No modificar cálculos clínicos.
+       - Compatible con la extracción progresiva desde index.
+       ========================================================== */
+
+
+    /* ==========================================================
+       PLACEHOLDERS
+       ========================================================== */
+
+    #hc_examen .auro-vital-field .form-control::placeholder{
+        color:#aeb6c2;
+        opacity:.58;
+        font-weight:500;
+    }
+
+
+    /* ==========================================================
+       DATOS REALES
+       ========================================================== */
+
+    #hc_examen .auro-vital-field .form-control{
+        color:#111827;
+        font-weight:800;
+    }
+
+
+    /* ==========================================================
+       UNIDADES
+       ========================================================== */
+
+    #hc_examen .auro-vital-unit{
+        color:#8b95a5;
+        opacity:.82;
+    }
+
+
+    /* ==========================================================
+       IMPORTANTE
+
+       Aquí debe copiarse, SIN MODIFICAR,
+       todo el bloque CSS correspondiente
+       a Signos Vitales que actualmente está
+       dentro del index.
+
+       Una vez validado visualmente:
+          1. Desktop
+          2. Tablet
+          3. iPad
+          4. Android
+          5. Historia nueva
+          6. Historia en edición
+
+       recién podrá eliminarse el bloque
+       original del index.
+
+       ========================================================== */
