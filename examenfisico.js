@@ -2247,69 +2247,6 @@ function auroExamenFisicoAplicarDiagnosticos(lista){
   }
 }
 
-/* ==========================================================
-   AUROSANAX FIX QUIRÚRGICO - CONTENIDO REAL EXAMEN FÍSICO
-   Evita crear/restaurar filas que solo contienen metadatos.
-   No modifica interfaz, responsive, Apps Script ni arquitectura.
-   ========================================================== */
-function auroTieneContenidoRealExamenFisico(data){
-  data = data || {};
-
-  const texto = valor => String(
-    valor === null || valor === undefined ? '' : valor
-  ).trim();
-
-  const examenLimpio = texto(data.examen_fisico)
-    .replace(/(?:^|\||\|\|)\s*[^:|]+:\s*(?:no valorado|no valorada|sin valorar|n\/v)\s*(?=\||$)/gi, ' ')
-    .replace(/\b(?:no valorado|no valorada|sin valorar|n\/v)\b/gi, ' ')
-    .replace(/[|\s]+/g, ' ')
-    .trim();
-
-  const camposClinicos = [
-    data.peso_kg,
-    data.talla_cm,
-    data.imc,
-    data.presion_arterial,
-    data.frecuencia_cardiaca,
-    data.temperatura,
-    data.saturacion,
-    examenLimpio,
-    data.diagnosticos_cie10,
-    data.diagnostico_cie10,
-    data.diagnostico_principal,
-    data.cie10_secundario,
-    data.diagnostico_secundario
-  ];
-
-  if(camposClinicos.some(valor => !!texto(valor))){
-    return true;
-  }
-
-  /* Compatibilidad con la caché temporal del propio módulo. */
-  const camposTemporales = data.campos || {};
-  const controlesConContenido = Object.values(camposTemporales).some(item => {
-    if(!item || typeof item !== 'object') return false;
-
-    const tipo = texto(item.tipo).toLowerCase();
-
-    if(tipo === 'checkbox' || tipo === 'radio'){
-      return item.checked === true;
-    }
-
-    return !!texto(item.value);
-  });
-
-  if(controlesConContenido) return true;
-
-  const diagnosticosTemporales = Array.isArray(data.diagnosticos)
-    ? data.diagnosticos
-    : [];
-
-  return diagnosticosTemporales.some(dx =>
-    !!texto(dx && (dx.codigo || dx.nombre || dx.descripcion))
-  );
-}
-
 function guardarExamenFisicoTemporal(){
   window.examenFisicoState = window.examenFisicoState || {
     atencionActual: '',
@@ -2443,7 +2380,7 @@ function cargarExamenFisicoTemporal(idAtencion){
   limpiarExamenFisicoTemporal();
 
   const data = window.examenFisicoState.cache[idAtencion];
-  if(!data || !auroTieneContenidoRealExamenFisico(data)){
+  if(!data){
     return null;
   }
 
@@ -2774,7 +2711,7 @@ async function auroBuscarExamenFisicoPorAtencion(idAtencion){
 function auroCargarExamenFisicoDesdeSheet(registro){
   limpiarExamenFisicoTemporal();
 
-  if(!registro || !registro.id_examen || !auroTieneContenidoRealExamenFisico(registro)){
+  if(!registro || !registro.id_examen){
     return false;
   }
 
@@ -2839,19 +2776,6 @@ async function auroGuardarExamenFisicoSheets(){
     return { success:false, message:'No hay id_atencion activa' };
   }
 
-  /* AUROSANAX FIX QUIRÚRGICO:
-     Igual que en Anamnesis, no se llama al Apps Script cuando el módulo
-     solo contiene id_atencion, fecha y estado, sin información clínica real.
-     Se devuelve success:true para no interrumpir el guardado general. */
-  if(!auroTieneContenidoRealExamenFisico(payloadData)){
-    console.log('AUROSANAX EXAMEN: formulario vacío; no se crea fila en examenes_fisicos.');
-    return {
-      success: true,
-      omitido: true,
-      message: 'Examen físico sin contenido clínico; no se creó registro.'
-    };
-  }
-
   const payload = {
     accion: 'guardarExamenFisico',
     data: payloadData
@@ -2909,7 +2833,18 @@ function cambiarExamenFisicoPorAtencion(idAtencion){
   };
 
   idAtencion = String(idAtencion || '').trim();
-  if(!idAtencion) return;
+
+  /*
+    AUROSANAX - CORRECCIÓN QUIRÚRGICA HISTORIA NUEVA
+    Si todavía no existe id_atencion, se limpia únicamente el estado
+    temporal del Examen físico y la selección CIE-10 heredada.
+    No elimina registros guardados ni modifica Apps Script.
+  */
+  if(!idAtencion){
+    window.examenFisicoState.atencionActual = '';
+    limpiarExamenFisicoTemporal();
+    return;
+  }
 
   const anterior = String(window.examenFisicoState.atencionActual || '').trim();
 
@@ -2997,6 +2932,46 @@ window.auroRecopilarRegionalesEstructurados = auroRecopilarRegionalesEstructurad
 window.auroRecopilarDiagnosticosEstructurados = auroRecopilarDiagnosticosEstructurados;
 window.auroGuardarDetalleExamenFisicoSheets = auroGuardarDetalleExamenFisicoSheets;
 window.auroInstalarAutoGuardadoExamenFisicoPorAtencion = auroInstalarAutoGuardadoExamenFisicoPorAtencion;
+
+/*
+  AUROSANAX - LIMPIEZA CIE-10 AL INICIAR HISTORIA NUEVA
+  Escucha únicamente la señal emitida por Pacientes/Agenda.
+  Mantiene intactas las consultas existentes y sus diagnósticos guardados.
+*/
+if(!window.__auroExamenHistoriaNuevaListenerInstalado){
+  window.__auroExamenHistoriaNuevaListenerInstalado = true;
+
+  const auroLimpiarExamenHistoriaNueva = function(){
+    try{
+      window.examenFisicoState = window.examenFisicoState || {
+        atencionActual: '',
+        cache: {}
+      };
+      window.examenFisicoState.atencionActual = '';
+
+      if(typeof limpiarExamenFisicoTemporal === 'function'){
+        limpiarExamenFisicoTemporal();
+      }else{
+        window.hcDiagnosticosSeleccionados = [];
+        try{ hcDiagnosticosSeleccionados = window.hcDiagnosticosSeleccionados; }catch(_e){}
+        if(typeof renderDiagnosticosSeleccionados === 'function'){
+          renderDiagnosticosSeleccionados();
+        }
+        if(typeof sincronizarDiagnosticosConCamposHistoria === 'function'){
+          sincronizarDiagnosticosConCamposHistoria();
+        }
+      }
+    }catch(error){
+      console.warn(
+        'AUROSANAX EXAMEN: no se pudo limpiar CIE-10 al iniciar historia nueva.',
+        error
+      );
+    }
+  };
+
+  window.addEventListener('aurosanax:historia-nueva', auroLimpiarExamenHistoriaNueva);
+  document.addEventListener('aurosanax:historia-nueva', auroLimpiarExamenHistoriaNueva);
+}
 
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', auroInstalarAutoGuardadoExamenFisicoPorAtencion);
@@ -3335,119 +3310,6 @@ window.auroDesactivarBotonSecundarioIntegracion =
 window.auroInstalarFlujoUnicoDiagnosticoPlan =
   auroInstalarFlujoUnicoDiagnosticoPlan;
 
-
-
-
-/* ==========================================================
-   AUROSANAX - FASE 2 QUIRÚRGICA: TARJETAS SUPERIORES DE IMC
-   ----------------------------------------------------------
-   ALCANCE EXCLUSIVO:
-   - Sincroniza #hcImcResumen y #hcCardIMC con el IMC clínico actual.
-   - Recalcula desde peso/talla cuando el campo IMC contiene un dato
-     histórico inválido, por ejemplo una fecha serializada.
-   - Muestra "Pendiente" cuando no existen datos suficientes.
-
-   PROTECCIONES:
-   - No modifica guardado, payload, Apps Script ni Google Sheets.
-   - No modifica IDs, estructura HTML, signos vitales, alertas,
-     examen por sistemas, regional, diagnósticos ni Plan.
-   ========================================================== */
-
-function auroObtenerIMCValidoParaTarjeta(){
-  const imcCampo = document.getElementById('hcIMC');
-  const imcDirecto = typeof auroVitalNumero === 'function'
-    ? auroVitalNumero(imcCampo ? imcCampo.value : '')
-    : Number(imcCampo ? imcCampo.value : NaN);
-
-  if(Number.isFinite(imcDirecto) && imcDirecto >= 5 && imcDirecto <= 100){
-    return Number(imcDirecto.toFixed(1));
-  }
-
-  const pesoCampo = document.getElementById('hcPeso');
-  const tallaCampo = document.getElementById('hcTalla');
-
-  const peso = typeof auroVitalNumero === 'function'
-    ? auroVitalNumero(pesoCampo ? pesoCampo.value : '')
-    : Number(pesoCampo ? pesoCampo.value : NaN);
-
-  const tallaCm = typeof auroVitalNumero === 'function'
-    ? auroVitalNumero(tallaCampo ? tallaCampo.value : '')
-    : Number(tallaCampo ? tallaCampo.value : NaN);
-
-  if(
-    !Number.isFinite(peso) || peso < 1 || peso > 400 ||
-    !Number.isFinite(tallaCm) || tallaCm < 30 || tallaCm > 250
-  ){
-    return null;
-  }
-
-  const tallaM = tallaCm / 100;
-  return Number((peso / (tallaM * tallaM)).toFixed(1));
-}
-
-function auroSincronizarTarjetasSuperioresIMC(){
-  const valor = auroObtenerIMCValidoParaTarjeta();
-  const textoResumen = valor === null ? 'Pendiente' : String(valor);
-  const textoFicha = valor === null ? '—' : String(valor);
-
-  const resumen = document.getElementById('hcImcResumen');
-  const ficha = document.getElementById('hcCardIMC');
-
-  if(resumen && resumen.textContent !== textoResumen){
-    resumen.textContent = textoResumen;
-  }
-
-  if(ficha && ficha.textContent !== textoFicha){
-    ficha.textContent = textoFicha;
-  }
-}
-
-function auroInstalarSincronizacionTarjetasIMC(){
-  if(window.__auroTarjetasIMCInstaladas) return;
-  window.__auroTarjetasIMCInstaladas = true;
-
-  ['hcPeso','hcTalla','hcIMC'].forEach(id => {
-    const campo = document.getElementById(id);
-    if(!campo || campo.dataset.auroTarjetaImc === '1') return;
-
-    campo.dataset.auroTarjetaImc = '1';
-    campo.addEventListener('input', auroSincronizarTarjetasSuperioresIMC);
-    campo.addEventListener('change', auroSincronizarTarjetasSuperioresIMC);
-  });
-
-  const objetivos = [
-    document.getElementById('hcImcResumen'),
-    document.getElementById('hcCardIMC')
-  ].filter(Boolean);
-
-  if(objetivos.length && typeof MutationObserver !== 'undefined'){
-    const observer = new MutationObserver(function(){
-      auroSincronizarTarjetasSuperioresIMC();
-    });
-
-    objetivos.forEach(el => observer.observe(el, {
-      childList:true,
-      characterData:true,
-      subtree:true
-    }));
-
-    window.__auroTarjetasIMCObserver = observer;
-  }
-
-  auroSincronizarTarjetasSuperioresIMC();
-}
-
-window.auroSincronizarTarjetasSuperioresIMC =
-  auroSincronizarTarjetasSuperioresIMC;
-
-if(document.readyState === 'loading'){
-  document.addEventListener(
-    'DOMContentLoaded',
-    auroInstalarSincronizacionTarjetasIMC
-  );
-}else{
-  auroInstalarSincronizacionTarjetasIMC();
-}
 
 
 /* AUROSANAX - Confirmación de carga del módulo */
