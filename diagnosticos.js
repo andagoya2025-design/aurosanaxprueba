@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.3 - aislamiento quirúrgico de anamnesis por atención
+ Versión: 1.5.4 - profesional, tipo y motivo para Apoyo Cognitivo con IA
  Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.3';
+  const VERSION = '1.5.4';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260725_anamnesis_exacta_por_atencion_v1';
+  const RELEASE = '20260725_apoyo_ia_contexto_v3';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1299,56 +1299,6 @@
     });
   }
 
-  function anamnesisValidaParaAtencion(obj, idAtencion){
-    if(!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
-
-    const idEsperado = texto(idAtencion);
-    const idRegistro = texto(obj.id_atencion);
-
-    /* Nunca aceptar una anamnesis sin vínculo exacto con la atención solicitada. */
-    if(!idEsperado || idRegistro !== idEsperado) return false;
-
-    const camposClinicos = [
-      'motivo_consulta',
-      'enfermedad_actual',
-      'anamnesis',
-      'descripcion',
-      'relato_clinico',
-      'historia_enfermedad_actual',
-      'contenido',
-      'texto',
-      'revision_sistemas',
-      'sintomas_alarma',
-      'narrativa_generada'
-    ];
-
-    if(camposClinicos.some(campo => !!texto(obj[campo]))) return true;
-
-    const respuestas = parseJsonSeguro(obj.respuestas_json, {});
-    if(
-      respuestas &&
-      typeof respuestas === 'object' &&
-      !Array.isArray(respuestas) &&
-      Object.values(respuestas).some(valor => {
-        if(Array.isArray(valor)) return valor.some(item => !!texto(item));
-        if(valor && typeof valor === 'object') return fuenteTieneDatos(valor);
-        return !!texto(valor);
-      })
-    ) return true;
-
-    const controles = parseJsonSeguro(obj.controles_json, {});
-    if(
-      controles &&
-      typeof controles === 'object' &&
-      !Array.isArray(controles) &&
-      Object.values(controles).some(item =>
-        item && (item.checked === true || !!texto(item.valor))
-      )
-    ) return true;
-
-    return false;
-  }
-
   function renderFuentes(){
     const box = document.getElementById('auroDxFuentes');
     if(!box) return;
@@ -1371,9 +1321,7 @@
     const fuentes = [...fuentesBase, ...fuentesEspecialidad];
 
     box.innerHTML = fuentes.map(([nombre, valor]) => {
-      const disponible = nombre === 'Anamnesis'
-        ? anamnesisValidaParaAtencion(valor, state.atencionActual)
-        : fuenteTieneDatos(valor);
+      const disponible = fuenteTieneDatos(valor);
       return `
         <div class="auro-dx-source-item ${disponible ? 'available' : 'missing'}">
           <b>${escapeHtml(nombre)}</b>
@@ -2032,23 +1980,12 @@
 
   function contenidoAnamnesis(){
     const a = state.anamnesis || {};
-
-    /*
-      La enfermedad actual pertenece a una atención concreta.
-      No se usan Historia Clínica ni campos DOM como respaldo porque pueden
-      conservar información visible de una consulta anterior.
-    */
-    if(!anamnesisValidaParaAtencion(a, state.atencionActual)) return '';
-
     return limpiarTextoClinico(
-      a.enfermedad_actual ||
-      a.anamnesis ||
-      a.descripcion ||
-      a.relato_clinico ||
-      a.historia_enfermedad_actual ||
-      a.contenido ||
-      a.texto ||
-      a.narrativa_generada
+      a.enfermedad_actual || a.anamnesis || a.descripcion || a.relato_clinico ||
+      a.historia_enfermedad_actual || a.contenido || a.texto ||
+      state.historia?.enfermedad_actual || state.historia?.anamnesis ||
+      atencionActiva()?.enfermedad_actual ||
+      getValue('hcEnfermedadActual') || getValue('hcAnamnesis')
     );
   }
 
@@ -2066,17 +2003,9 @@
       if(t && !parrafos.some(x => normalizar(x) === normalizar(t))) parrafos.push(t);
     }
 
-    const anamnesisActual = anamnesisValidaParaAtencion(
-      state.anamnesis,
-      state.atencionActual
-    ) ? state.anamnesis : {};
-
-    const atencionCoincide =
-      texto(at.id_atencion) === texto(state.atencionActual);
-
     const motivo = limpiarTextoClinico(
-      anamnesisActual.motivo_consulta ||
-      (atencionCoincide ? at.motivo_consulta : '')
+      at.motivo_consulta || h.motivo_consulta ||
+      getValue('hcMotivoConsulta') || getValue('hcMotivo')
     );
     const enfermedad = contenidoAnamnesis();
 
@@ -2142,17 +2071,9 @@
     const obst = state.especialidades.obstetricia || {};
     const parrafos = [];
 
-    const anamnesisActual = anamnesisValidaParaAtencion(
-      state.anamnesis,
-      state.atencionActual
-    ) ? state.anamnesis : {};
-
-    const atencionCoincide =
-      texto(at.id_atencion) === texto(state.atencionActual);
-
     const motivo = limpiarTextoClinico(
-      anamnesisActual.motivo_consulta ||
-      (atencionCoincide ? at.motivo_consulta : '')
+      at.motivo_consulta || h.motivo_consulta ||
+      getValue('hcMotivoConsulta') || getValue('hcMotivo')
     );
     const enfermedad = contenidoAnamnesis();
     const hallazgo = limpiarTextoClinico(ex.examen_fisico || ex.hallazgos || ex.observaciones);
@@ -2311,34 +2232,286 @@
     const asociados = state.diagnosticos.filter(d => d !== principal);
     const marcaTiempo = fechaHoraEcuador();
 
+    /*
+     MEJORA QUIRÚRGICA:
+     Diagnóstico conserva su lógica original, pero completa el contexto
+     de Apoyo IA con los datos que ya están cargados en el ERP.
+     No modifica pacientes, historias, atenciones ni persistencia.
+    */
+    const idPaciente = texto(atencion.id_paciente || idPacienteActual());
+
+    let pacienteRegistro = {};
+    try{
+      const listaPacientes =
+        (typeof patients !== 'undefined' && Array.isArray(patients))
+          ? patients
+          : (Array.isArray(window.patients) ? window.patients : []);
+
+      pacienteRegistro = listaPacientes.find(p =>
+        texto(p?.id_paciente || p?.id) === idPaciente
+      ) || {};
+    }catch(e){
+      pacienteRegistro = {};
+    }
+
+    /*
+     Fuentes complementarias, solo lectura:
+     - contexto unificado de Atenciones;
+     - cita vinculada de Agenda;
+     - catálogo de médicos ya cargado;
+     - estado público de Anamnesis para la misma atención.
+    */
+    let contextoAtencion = {};
+    try{
+      if(typeof window.obtenerContextoAtencionActual === 'function'){
+        contextoAtencion = window.obtenerContextoAtencionActual() || {};
+      }else if(typeof window.getContextoAtencionActual === 'function'){
+        contextoAtencion = window.getContextoAtencionActual() || {};
+      }
+    }catch(e){
+      contextoAtencion = {};
+    }
+
+    const idAtencionContexto = texto(
+      ctx.id ||
+      state.atencionActual ||
+      contextoAtencion.id_atencion ||
+      atencion.id_atencion
+    );
+
+    const idCita = texto(
+      atencion.id_cita ||
+      contextoAtencion.id_cita ||
+      window.auroCitaSeleccionadaAgenda?.id_cita
+    );
+
+    let citaRegistro = {};
+    try{
+      const listaCitas = Array.isArray(window.citasAgendaWeb)
+        ? window.citasAgendaWeb
+        : (typeof citasAgendaWeb !== 'undefined' && Array.isArray(citasAgendaWeb)
+            ? citasAgendaWeb
+            : []);
+
+      citaRegistro = listaCitas.find(c =>
+        texto(c?.id_cita || c?.id) === idCita
+      ) || {};
+
+      if(!Object.keys(citaRegistro).length){
+        const raw = sessionStorage.getItem('auro_cita_seleccionada_agenda');
+        const temporal = raw ? JSON.parse(raw) : {};
+        if(
+          temporal &&
+          (!idCita || texto(temporal.id_cita) === idCita)
+        ){
+          citaRegistro = temporal;
+        }
+      }
+    }catch(e){
+      citaRegistro = {};
+    }
+
+    let anamnesisPublica = {};
+    try{
+      if(
+        window.auroAnamnesis &&
+        typeof window.auroAnamnesis.obtenerDatosAnamnesis === 'function'
+      ){
+        const candidata = window.auroAnamnesis.obtenerDatosAnamnesis() || {};
+        if(
+          !texto(candidata.id_atencion) ||
+          texto(candidata.id_atencion) === idAtencionContexto
+        ){
+          anamnesisPublica = candidata;
+        }
+      }
+    }catch(e){
+      anamnesisPublica = {};
+    }
+
+    let medicoRegistro = {};
+    try{
+      const idMedico = texto(
+        atencion.id_medico ||
+        contextoAtencion.id_medico ||
+        citaRegistro.id_medico ||
+        citaRegistro.medico_id
+      );
+
+      const listaMedicos =
+        (typeof medicosAgendaWeb !== 'undefined' && Array.isArray(medicosAgendaWeb))
+          ? medicosAgendaWeb
+          : (Array.isArray(window.medicosAgendaWeb) ? window.medicosAgendaWeb : []);
+
+      medicoRegistro = listaMedicos.find(m =>
+        texto(m?.id_medico || m?.id || m?.codigo) === idMedico
+      ) || {};
+    }catch(e){
+      medicoRegistro = {};
+    }
+
+    const valorCampo = (...ids) => {
+      for(const id of ids){
+        const el = document.getElementById(id);
+        if(!el) continue;
+        const valor = texto(
+          el.value !== undefined ? el.value : el.textContent
+        );
+        if(valor) return valor;
+      }
+      return '';
+    };
+
+    const textoOpcionPaciente = (() => {
+      const select = document.getElementById('hcPacienteSelect');
+      const opcion = select?.selectedOptions?.[0];
+      return texto(opcion?.dataset?.nombre || opcion?.textContent);
+    })();
+
+    const nombrePaciente =
+      valorPrimero(pacienteRegistro,[
+        'nombre_completo','nombreCompleto','nombre','nombres',
+        'nombre_paciente','paciente'
+      ]) ||
+      valorPrimero(atencion,[
+        'nombre_paciente','paciente_nombre','nombre_completo',
+        'nombreCompleto','nombre','nombres'
+      ]) ||
+      valorPrimero(historia,[
+        'nombre_paciente','paciente_nombre','paciente',
+        'nombre_completo','nombreCompleto','nombre','nombres'
+      ]) ||
+      textoOpcionPaciente;
+
+    const identificacionPaciente =
+      valorPrimero(pacienteRegistro,[
+        'cedula','identificacion','documento','numero_documento'
+      ]) ||
+      valorPrimero(atencion,[
+        'cedula','identificacion','documento','numero_documento'
+      ]) ||
+      valorPrimero(historia,[
+        'cedula','identificacion','documento','numero_documento'
+      ]) ||
+      valorCampo('hcCedula');
+
+    const edadPaciente =
+      valorPrimero(pacienteRegistro,['edad']) ||
+      valorPrimero(atencion,['edad']) ||
+      valorPrimero(historia,['edad']) ||
+      valorCampo('hcEdad');
+
+    const sexoPaciente =
+      valorPrimero(pacienteRegistro,['sexo','genero']) ||
+      valorPrimero(atencion,['sexo','genero']) ||
+      valorPrimero(historia,['sexo','genero']) ||
+      valorCampo('hcSexo');
+
+    const historiaClinica =
+      valorPrimero(atencion,[
+        'numero_historia','historia_clinica','id_historia'
+      ]) ||
+      valorPrimero(historia,[
+        'numero_historia','historia_clinica','id_historia','id'
+      ]) ||
+      texto(window.auroHistoriaSeleccionadaId);
+
+    const nombreProfesional =
+      valorPrimero(atencion,[
+        'nombre_profesional','profesional_nombre',
+        'nombre_medico','medico_nombre','doctor_nombre',
+        'medico','profesional','doctor'
+      ]) ||
+      valorPrimero(contextoAtencion,[
+        'nombre_profesional','profesional_nombre',
+        'nombre_medico','medico_nombre','doctor_nombre',
+        'medico','profesional','doctor'
+      ]) ||
+      valorPrimero(citaRegistro,[
+        'nombre_medico','medico_nombre','doctor_nombre',
+        'medico','doctor'
+      ]) ||
+      valorPrimero(medicoRegistro,[
+        'nombre_completo','nombreCompleto','nombre',
+        'nombres','medico_nombre'
+      ]) ||
+      valorCampo(
+        'hcProfesional',
+        'hcMedico',
+        'atencionProfesional',
+        'atencionMedico'
+      );
+
+    const especialidadProfesional =
+      valorPrimero(atencion,[
+        'especialidad','especialidad_clinica','nombre_especialidad'
+      ]) ||
+      valorCampo(
+        'hcEspecialidad',
+        'atencionEspecialidad',
+        'especialidadClinica'
+      ) ||
+      'Ginecología y Obstetricia';
+
+    const tipoConsulta =
+      valorPrimero(atencion,[
+        'tipo_consulta','tipo_atencion','tipo',
+        'modalidad_consulta','clase_consulta',
+        'servicio','tipo_cita'
+      ]) ||
+      valorPrimero(contextoAtencion,[
+        'tipo_consulta','tipo_atencion','tipo',
+        'servicio','tipo_cita'
+      ]) ||
+      valorPrimero(citaRegistro,[
+        'servicio','tipo_cita','tipo_consulta','motivo'
+      ]) ||
+      valorCampo(
+        'hcTipoConsulta',
+        'atencionTipoConsulta',
+        'tipoConsulta'
+      );
+
+    const motivo =
+      valorPrimero(anamnesisPublica,[
+        'motivo_consulta','motivo','consulta_principal'
+      ]) ||
+      valorPrimero(anamnesis,[
+        'motivo_consulta','motivo','consulta_principal'
+      ]) ||
+      valorCampo(
+        'hcMotivoConsulta',
+        'anamnesisMotivoConsulta',
+        'motivoConsulta'
+      ) ||
+      valorPrimero(atencion,[
+        'motivo_consulta','motivo','razon_consulta'
+      ]) ||
+      valorPrimero(historia,[
+        'motivo_consulta','motivo'
+      ]);
+
     const paciente = {
-      id_paciente: texto(atencion.id_paciente || idPacienteActual()),
-      nombre: valorPrimero(atencion,['nombre_paciente','paciente','nombre_completo']) ||
-              valorPrimero(historia,['nombre_paciente','paciente','nombre_completo','nombres']),
-      identificacion: valorPrimero(atencion,['identificacion','cedula','documento']) ||
-                      valorPrimero(historia,['identificacion','cedula','documento']),
-      edad: valorPrimero(atencion,['edad']) || valorPrimero(historia,['edad']),
-      sexo: valorPrimero(atencion,['sexo','genero']) || valorPrimero(historia,['sexo','genero']),
-      historiaClinica: valorPrimero(atencion,['numero_historia','historia_clinica']) ||
-                       valorPrimero(historia,['numero_historia','historia_clinica','id_historia'])
+      id_paciente: idPaciente,
+      nombre: nombrePaciente,
+      identificacion: identificacionPaciente,
+      edad: edadPaciente,
+      sexo: sexoPaciente,
+      historiaClinica
     };
 
     const profesional = {
-      nombre: valorPrimero(atencion,['profesional','nombre_profesional','medico','doctor']),
-      especialidad: valorPrimero(atencion,['especialidad']) ||
-                    texto(document.getElementById('hcEspecialidad')?.value) ||
-                    'Ginecología y Obstetricia'
+      nombre: nombreProfesional,
+      especialidad: especialidadProfesional
     };
 
-    const motivo = valorPrimero(anamnesis,['motivo_consulta','motivo','consulta_principal']) ||
-                   valorPrimero(historia,['motivo_consulta','motivo']);
-
     return {
-      version: '1.0.0',
+      version: '1.0.2',
       modulo: 'Apoyo Cognitivo con IA',
       origen: 'diagnosticos.js',
       id_atencion: texto(ctx.id || state.atencionActual),
       id_paciente: paciente.id_paciente,
+      id_historia: historiaClinica,
       numero_consulta: texto(ctx.numeroConsulta),
       zonaHoraria: 'America/Guayaquil',
       creadoEn: marcaTiempo.iso,
@@ -2350,7 +2523,7 @@
         id_atencion: texto(ctx.id || state.atencionActual),
         numero: texto(ctx.numeroConsulta),
         especialidad: profesional.especialidad,
-        tipo: valorPrimero(atencion,['tipo_consulta','tipo_atencion','tipo']),
+        tipo: tipoConsulta,
         motivo,
         resumenClinico: texto(document.getElementById('auroDxResumen')?.value || state.resumenClinico),
         analisisClinico: texto(document.getElementById('auroDxAnalisis')?.value || state.analisisClinico),
@@ -2370,8 +2543,14 @@
         ultimaEdicionLocal: texto(state.ultimaEdicionLocal)
       },
       fuentes: {
+        pacienteDisponible: !!Object.keys(pacienteRegistro || {}).length,
+        atencionDisponible: !!Object.keys(contextoAtencion || {}).length,
+        citaDisponible: !!Object.keys(citaRegistro || {}).length,
+        medicoDisponible: !!Object.keys(medicoRegistro || {}).length,
         historiaDisponible: !!state.historia,
-        anamnesisDisponible: !!state.anamnesis,
+        anamnesisDisponible:
+          !!state.anamnesis ||
+          !!Object.keys(anamnesisPublica || {}).length,
         examenFisicoDisponible: !!state.detalleExamen,
         especialidadesDisponibles: Object.keys(state.especialidades || {}).filter(k => !!state.especialidades[k])
       },
@@ -2488,23 +2667,7 @@
 
   async function consultarAnamnesis(idAtencion){
     const id = texto(idAtencion);
-    if(!id) return null;
 
-    /*
-      FUENTE LOCAL OFICIAL DEL MÓDULO:
-      anamnesis.js expone obtenerDatosAnamnesis(). Se consulta primero y solo
-      se acepta si su id_atencion coincide exactamente y posee contenido clínico.
-    */
-    try{
-      if(typeof window.auroAnamnesis?.obtenerDatosAnamnesis === 'function'){
-        const actual = window.auroAnamnesis.obtenerDatosAnamnesis();
-        if(anamnesisValidaParaAtencion(actual, id)){
-          return clonar(actual, actual);
-        }
-      }
-    }catch(e){}
-
-    /* Compatibilidad con estados antiguos, sin usar nunca candidatos[0]. */
     try{
       const candidatos = [
         window.auroAnamnesisState?.registroActual,
@@ -2513,22 +2676,11 @@
         window.anamnesisState?.anamnesisActual,
         window.anamnesisActual
       ].filter(Boolean);
-
-      const local = candidatos.find(
-        x => texto(x?.id_atencion) === id &&
-             anamnesisValidaParaAtencion(x, id)
-      );
-
-      if(local) return clonar(local, local);
+      const local = candidatos.find(x => !id || texto(x?.id_atencion) === id) || candidatos[0];
+      if(local && fuenteTieneDatos(local)) return clonar(local, local);
     }catch(e){}
 
-    /*
-      La acción real utilizada por anamnesis.js es buscarAnamnesisPorAtencion.
-      Se conserva compatibilidad con nombres anteriores, pero toda respuesta
-      debe resolverse a un registro con la misma id_atencion.
-    */
     const acciones = [
-      ['buscarAnamnesisPorAtencion', {id_atencion:id}],
       ['listarAnamnesisPorAtencion', {id_atencion:id}],
       ['obtenerAnamnesisPorAtencion', {id_atencion:id}],
       ['listarAnamnesisAtenciones', {id_atencion:id}]
@@ -2538,38 +2690,19 @@
       try{
         const data = await getJSON(accion, parametros);
         if(data && data.success === false) continue;
-
-        const directos = [
-          data?.data,
-          data?.anamnesis,
-          data?.registro,
-          data?.resultado,
-          data
-        ];
-
-        for(const candidato of directos){
-          if(
-            candidato &&
-            !Array.isArray(candidato) &&
-            anamnesisValidaParaAtencion(candidato, id)
-          ){
-            return candidato;
-          }
-        }
-
         const lista = arraySeguro(data);
-        const registro = lista.find(
-          x => anamnesisValidaParaAtencion(x, id)
-        );
-        if(registro) return registro;
+        const registro = lista.find(x => texto(x?.id_atencion) === id) ||
+          (data && typeof data === 'object' && !Array.isArray(data) ? data : null);
+        if(registro && fuenteTieneDatos(registro)) return registro;
       }catch(e){}
     }
 
-    /*
-      No existe respaldo por DOM: los controles pueden conservar datos de la
-      consulta anterior durante el cambio de atención y producir contaminación.
-    */
-    return null;
+    const dom = {
+      id_atencion:id,
+      enfermedad_actual:getValue('hcEnfermedadActual'),
+      anamnesis:getValue('hcAnamnesis')
+    };
+    return fuenteTieneDatos(dom.enfermedad_actual) || fuenteTieneDatos(dom.anamnesis) ? dom : null;
   }
 
   async function consultarHistoria(idPaciente, idAtencion){
