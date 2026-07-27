@@ -206,6 +206,18 @@ async function cargarCitasAgendaWeb(){
 
     citasAgendaWeb = data.map((c, index) => auroNormalizarCitaSecretariaParaERP(c, index));
     citasAgendaWebCargadas = true;
+
+    try{
+      if(typeof window.refrescarAtencionesDesdeSheets === 'function'){
+        await window.refrescarAtencionesDesdeSheets();
+      }
+    }catch(errorAtenciones){
+      console.warn(
+        'AUROSANAX AGENDA: no se pudo refrescar Atenciones antes de renderizar.',
+        errorAtenciones
+      );
+    }
+
     auroActualizarFiltroMedicosAgenda();
     renderAgendaWeb();
 
@@ -236,7 +248,48 @@ function auroNormalizarTextoAgenda(valor){
     .replace(/\s+/g, ' ');
 }
 
+/*
+  AUROSANAX - CONTROL QUIRÚRGICO DE CITA YA UTILIZADA
+  --------------------------------------------------
+  La acción clínica se bloquea únicamente cuando ya existe una atención
+  vinculada al mismo id_cita. No se compara solo por paciente, fecha o nombre.
+*/
+function auroAtencionesLocalesAgenda(){
+  try{
+    const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+    const lista = raw ? JSON.parse(raw) : [];
+    return Array.isArray(lista) ? lista : [];
+  }catch(error){
+    console.warn('AUROSANAX AGENDA: no se pudieron leer las atenciones locales.', error);
+    return [];
+  }
+}
+
+function auroIdCitaAgenda(c){
+  return String(
+    c?.id_cita ||
+    c?.id ||
+    c?.id_cita_web ||
+    c?.fila_origen ||
+    ''
+  ).trim();
+}
+
+function auroAtencionVinculadaACitaAgenda(c){
+  const idCita = auroIdCitaAgenda(c);
+  if(!idCita) return null;
+
+  return auroAtencionesLocalesAgenda().find(function(atencion){
+    return String(atencion?.id_cita || '').trim() === idCita &&
+           String(atencion?.id_atencion || '').trim();
+  }) || null;
+}
+
 function auroPuedeIniciarConsultaAgenda(c){
+  if(auroAtencionVinculadaACitaAgenda(c)){
+    return false;
+  }
+
   const estado = normalizarEstadoAgenda(auroEstadoAgenda(c));
   return estado === 'confirmada' || estado === 'pendiente';
 }
@@ -497,6 +550,16 @@ function abrirHistoriaDesdeAgenda(index){
   const idPaciente = String(paciente.id_paciente || '').trim();
   const historia = auroHistoriaPacienteAgenda(c);
   const idHistoria = String(historia?.id_historia || historia?.id || '').trim();
+  const atencionCita = auroAtencionVinculadaACitaAgenda(c);
+
+  if(atencionCita && historia){
+    alert(
+      'Esta cita ya tiene una consulta iniciada. ' +
+      'No se creará una segunda atención desde Agenda.'
+    );
+    renderAgendaWeb();
+    return;
+  }
 
   if(historia){
     const idPacienteHistoria = String(historia.id_paciente || historia.paciente_id || '').trim();
