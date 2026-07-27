@@ -5,10 +5,10 @@
            Cambio únicamente visual.
            ========================================================== */
 
-        /* Placeholders aproximadamente 40% más tenues */
+        /* Placeholders en gris medio: visibles, pero distintos de los datos reales */
         #hc_examen .auro-vital-field .form-control::placeholder{
-            color:#d4dbe5;
-            opacity:.40;
+            color:#7f8794;
+            opacity:1;
             font-weight:500;
         }
 
