@@ -989,6 +989,53 @@ function auroEscapeHtml(valor){
     .replace(/'/g,'&#039;');
 }
 
+
+/* ==========================================================
+   AUROSANAX FIX QUIRÚRGICO IMC 2026-07-27
+   Alcance exclusivo:
+   - Valida el valor IMC antes de mostrarlo o restaurarlo.
+   - Si llega una fecha ISO, objeto Date o serial de Google Sheets
+     como 46254, lo descarta.
+   - Si existen peso y talla válidos, recalcula el IMC.
+   - No modifica guardado, diagnóstico, agenda, plan ni otros módulos.
+   ========================================================== */
+function auroIMCClinicoSeguro(valor, peso, tallaCm){
+  const esFecha = Object.prototype.toString.call(valor) === '[object Date]';
+
+  if(!esFecha){
+    const texto = String(valor === null || valor === undefined ? '' : valor).trim();
+
+    if(texto && !/^\d{4}-\d{2}-\d{2}T/i.test(texto)){
+      const numero = Number(texto.replace(',', '.'));
+
+      if(Number.isFinite(numero) && numero >= 5 && numero <= 100){
+        return String(Number(numero.toFixed(1)));
+      }
+    }
+  }
+
+  const pesoNumero = Number(String(peso === null || peso === undefined ? '' : peso).replace(',', '.'));
+  const tallaNumero = Number(String(tallaCm === null || tallaCm === undefined ? '' : tallaCm).replace(',', '.'));
+
+  if(
+    Number.isFinite(pesoNumero) &&
+    Number.isFinite(tallaNumero) &&
+    pesoNumero >= 1 &&
+    pesoNumero <= 400 &&
+    tallaNumero >= 30 &&
+    tallaNumero <= 250
+  ){
+    const tallaM = tallaNumero / 100;
+    const calculado = pesoNumero / (tallaM * tallaM);
+
+    if(Number.isFinite(calculado) && calculado >= 5 && calculado <= 100){
+      return String(Number(calculado.toFixed(1)));
+    }
+  }
+
+  return '';
+}
+
 function auroHistoriaTieneExamenFisico(h){
   if(!h) return false;
   return [
@@ -1272,7 +1319,7 @@ function auroMostrarExamenFisicoPrevio(h){
   const signos = [
     h.peso_kg ? 'Peso: ' + h.peso_kg + ' kg' : '',
     h.talla_cm ? 'Talla: ' + h.talla_cm + ' cm' : '',
-    h.imc ? 'IMC: ' + h.imc : '',
+    auroIMCClinicoSeguro(h.imc, h.peso_kg, h.talla_cm) ? 'IMC: ' + auroIMCClinicoSeguro(h.imc, h.peso_kg, h.talla_cm) : '',
     h.presion_arterial ? 'PA: ' + h.presion_arterial : '',
     h.frecuencia_cardiaca ? 'FC: ' + h.frecuencia_cardiaca : '',
     h.temperatura ? 'Temperatura: ' + h.temperatura + ' °C' : '',
@@ -1454,7 +1501,7 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
 
   setValueIfExists('hcPeso', h.peso_kg || '');
   setValueIfExists('hcTalla', h.talla_cm || '');
-  setValueIfExists('hcIMC', h.imc || '');
+  setValueIfExists('hcIMC', auroIMCClinicoSeguro(h.imc, h.peso_kg, h.talla_cm));
   setValueIfExists('hcPA', h.presion_arterial || '');
   setValueIfExists('hcFC', h.frecuencia_cardiaca || '');
   setValueIfExists('hcTemperatura', h.temperatura || '');
@@ -2720,7 +2767,7 @@ function auroCargarExamenFisicoDesdeSheet(registro){
   }else{
     setValueIfExists('hcPeso', registro.peso_kg || '');
     setValueIfExists('hcTalla', registro.talla_cm || '');
-    setValueIfExists('hcIMC', registro.imc || '');
+    setValueIfExists('hcIMC', auroIMCClinicoSeguro(registro.imc, registro.peso_kg, registro.talla_cm));
     setValueIfExists('hcPA', registro.presion_arterial || '');
     setValueIfExists('hcFC', registro.frecuencia_cardiaca || '');
     setValueIfExists('hcTemperatura', registro.temperatura || '');
