@@ -1374,29 +1374,86 @@
     });
   }
 
+  /*
+    AUROSANAX - FUENTES CLÍNICAS SEPARADAS
+    Cambio exclusivo de la tarjeta visual del módulo Diagnóstico.
+  */
+  function datosGeneralesDisponibles(historia){
+    const h = historia || {};
+    const paciente = atencionActiva() || {};
+
+    const claves = [
+      'id_historia','id_paciente','numero_historia','historia_clinica',
+      'nombre_paciente','paciente_nombre','nombre_completo','nombre','nombres',
+      'cedula','identificacion','documento','numero_documento',
+      'fecha_nacimiento','nacimiento','edad','sexo','genero',
+      'telefono','whatsapp','correo','email','direccion','ciudad'
+    ];
+
+    return claves.some(clave =>
+      !!texto(h?.[clave]) || !!texto(paciente?.[clave])
+    );
+  }
+
+  function antecedentesDisponibles(historia){
+    const h = historia || {};
+
+    const claves = [
+      'antecedentes_personales','antecedentes_patologicos',
+      'antecedentes_quirurgicos','antecedentes_familiares',
+      'antecedentes_gineco_obstetricos','antecedentes_ginecologicos',
+      'antecedentes_obstetricos','alergias','medicacion_actual',
+      'medicamentos_actuales','habitos','habitos_toxicos',
+      'vacunas','vacunacion','inmunizaciones','covid','transfusiones'
+    ];
+
+    return claves.some(clave => {
+      const valor = h?.[clave];
+      if(valor === null || valor === undefined) return false;
+
+      if(typeof valor === 'string'){
+        const limpio = quitarPrefijoSerializado(valor);
+        if(!limpio || limpio === '{}' || limpio === '[]') return false;
+
+        const parseado = parseJsonSeguro(limpio, null);
+        if(parseado && typeof parseado === 'object'){
+          return fuenteTieneDatos(parseado);
+        }
+
+        return !!texto(limpio);
+      }
+
+      return fuenteTieneDatos(valor);
+    });
+  }
+
   function renderFuentes(){
     const box = document.getElementById('auroDxFuentes');
     if(!box) return;
 
     const fuentesBase = [
-      ['Atención actual', atencionActiva()],
-      ['Anamnesis', state.anamnesis],
-      ['Historia clínica y antecedentes', state.historia],
-      ['Revisión por sistemas', state.detalleExamen?.sistemas],
-      ['Examen físico general', state.detalleExamen?.examen],
-      ['Examen regional', state.detalleExamen?.regionales]
+      ['Atención actual', atencionActiva(), null],
+      ['Datos generales', state.historia, datosGeneralesDisponibles(state.historia)],
+      ['Antecedentes', state.historia, antecedentesDisponibles(state.historia)],
+      ['Anamnesis', state.anamnesis, null],
+      ['Revisión por sistemas', state.detalleExamen?.sistemas, null],
+      ['Examen físico general', state.detalleExamen?.examen, null],
+      ['Examen regional', state.detalleExamen?.regionales, null]
     ];
 
     const fuentesEspecialidad = [
-      ['Ginecología', state.especialidades.ginecologia],
-      ['Obstetricia', state.especialidades.obstetricia],
-      ['Estética', state.especialidades.estetica]
+      ['Ginecología', state.especialidades.ginecologia, null],
+      ['Obstetricia', state.especialidades.obstetricia, null],
+      ['Estética', state.especialidades.estetica, null]
     ].filter(([, valor]) => fuenteTieneDatos(valor));
 
     const fuentes = [...fuentesBase, ...fuentesEspecialidad];
 
-    box.innerHTML = fuentes.map(([nombre, valor]) => {
-      const disponible = fuenteTieneDatos(valor);
+    box.innerHTML = fuentes.map(([nombre, valor, disponibleForzado]) => {
+      const disponible = typeof disponibleForzado === 'boolean'
+        ? disponibleForzado
+        : fuenteTieneDatos(valor);
+
       return `
         <div class="auro-dx-source-item ${disponible ? 'available' : 'missing'}">
           <b>${escapeHtml(nombre)}</b>
