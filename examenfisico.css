@@ -8,7 +8,7 @@
         /* Placeholders en gris medio: visibles, pero distintos de los datos reales */
         #hc_examen .auro-vital-field .form-control::placeholder{
             color:#7f8794;
-            opacity:1;
+            opacity:0,90;
             font-weight:500;
         }
 
