@@ -2,7 +2,7 @@
    AUROSANAX ERP - MÓDULO AGENDA MÉDICA
    Extraído quirúrgicamente desde index.
    Conserva los nombres públicos para compatibilidad.
-============================================================ */
+============================================================ */ 
 
 /* AUROSANAX: función normalizarEstadoAgenda movida a pacientes.js */
 
