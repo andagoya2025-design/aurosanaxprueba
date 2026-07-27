@@ -534,14 +534,29 @@ function abrirHistoriaDesdeAgenda(index){
     origen: 'agenda_medica'
   };
 
+  /*
+    AUROSANAX - MODO EXPLÍCITO DESDE AGENDA
+    Agenda ya conoce si esta cita tiene una historia vinculada.
+    No se deja que Pacientes lo deduzca usando otras historias del paciente.
+  */
+  const modoHistoria = idHistoria ? 'existente' : 'nueva';
+  referencia.modo_historia = modoHistoria;
+  window.auroModoAperturaHistoria = modoHistoria;
+
   window.auroCitaSeleccionadaAgenda = referencia;
   try{
-    sessionStorage.setItem('auro_cita_seleccionada_agenda', JSON.stringify(referencia));
+    sessionStorage.setItem(
+      'auro_cita_seleccionada_agenda',
+      JSON.stringify(referencia)
+    );
   }catch(_e){
-    console.warn('No se pudo conservar temporalmente la cita seleccionada.', _e);
+    console.warn(
+      'No se pudo conservar temporalmente la cita seleccionada.',
+      _e
+    );
   }
 
-  abrirHistoriaPaciente(referencia.id_paciente);
+  abrirHistoriaPaciente(referencia.id_paciente, modoHistoria);
 
   /* Refuerzo posterior: conserva solo la historia verificada del paciente. */
   if(idHistoria){
