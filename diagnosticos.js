@@ -576,6 +576,57 @@
     return salida;
   }
 
+  /*
+    AUROSANAX - RESTAURACIÓN QUIRÚRGICA DEL EDITOR CIE-10
+    Sincroniza únicamente la tabla superior con los diagnósticos ya cargados
+    para la atención actual. No guarda ni consulta Apps Script.
+  */
+  function sincronizarEditorCie10DesdeDiagnosticos(){
+    if(historiaNuevaSinAtencion()) return false;
+
+    const id = texto(state.atencionActual || idAtencionActiva());
+    if(!id) return false;
+
+    const lista = (state.diagnosticos || []).map((d, index) => ({
+      codigo: texto(d.codigo_cie10 || d.codigo || d.cie10)
+        .replace(/\./g,'')
+        .toUpperCase(),
+      nombre: texto(d.descripcion || d.nombre || d.diagnostico),
+      principal: d.principal === true || normalizar(d.principal) === 'si' || index === 0,
+      tipo: texto(d.tipo_diagnostico || d.tipo || 'Presuntivo') === 'Definitivo'
+        ? 'Definitivo'
+        : 'Presuntivo'
+    })).filter(d => d.codigo || d.nombre);
+
+    window.hcDiagnosticosSeleccionados = clonar(lista, []);
+
+    try{
+      hcDiagnosticosSeleccionados = window.hcDiagnosticosSeleccionados;
+    }catch(_e){}
+
+    try{
+      if(typeof window.renderDiagnosticosSeleccionados === 'function'){
+        window.renderDiagnosticosSeleccionados();
+      }else if(typeof renderDiagnosticosSeleccionados === 'function'){
+        renderDiagnosticosSeleccionados();
+      }
+    }catch(error){
+      console.warn(MODULO + ': no se pudo actualizar la tabla superior CIE-10.', error);
+    }
+
+    try{
+      if(typeof window.sincronizarDiagnosticosConCamposHistoria === 'function'){
+        window.sincronizarDiagnosticosConCamposHistoria();
+      }else if(typeof sincronizarDiagnosticosConCamposHistoria === 'function'){
+        sincronizarDiagnosticosConCamposHistoria();
+      }
+    }catch(error){
+      console.warn(MODULO + ': no se pudieron sincronizar los campos CIE-10.', error);
+    }
+
+    return true;
+  }
+
   function buscarPanelExistente(){
     for(const id of IDS_PANEL_CANDIDATOS){
       const el = document.getElementById(id);
@@ -2980,6 +3031,7 @@
       }
 
       renderDiagnosticos();
+      sincronizarEditorCie10DesdeDiagnosticos();
       renderProtocolos();
       renderFuentes();
       restaurarEstadoTemporal(idAtencion);
@@ -3158,6 +3210,7 @@
       (algunaCaja ? '.' : '. El Plan no expuso campos de texto compatibles; revise las tablas del Plan.')
     );
 
+    sincronizarEditorCie10DesdeDiagnosticos();
     guardarEstadoTemporal();
   }
 
@@ -3303,7 +3356,8 @@
     construirContextoApoyoIA,
     abrirApoyoIA,
     actualizarTarjetaApoyoIA,
-    limpiarContextoHistoriaNueva
+    limpiarContextoHistoriaNueva,
+    sincronizarEditorCie10DesdeDiagnosticos
   };
 
   window.cambiarDiagnosticosPorAtencion = cambiarPorAtencion;
@@ -3313,6 +3367,8 @@
   window.auroAplicarDiagnosticoAlPlan = aplicarAlPlan;
   window.auroAbrirApoyoIA = abrirApoyoIA;
   window.auroLimpiarDiagnosticosParaHistoriaNueva = limpiarContextoHistoriaNueva;
+  window.auroSincronizarEditorCie10DesdeDiagnosticos =
+    sincronizarEditorCie10DesdeDiagnosticos;
 
   window.auroDiagnosticosModuloCargado = true;
 
