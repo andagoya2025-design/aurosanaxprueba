@@ -1310,6 +1310,28 @@ function auroMostrarExamenFisicoPrevio(h){
   const content = document.getElementById('auroExamenFisicoPrevioContent');
   if(!box || !content) return;
 
+  /*
+    AUROSANAX VALIDACIÓN ESTRICTA POR ATENCIÓN:
+    Si hay una atención activa, la tarjeta solo acepta un registro que
+    traiga exactamente el mismo id_atencion. Un objeto de historias_clinicas
+    no tiene ese vínculo y se rechaza sin afectar la tarjeta superior.
+  */
+  const idAtencionActiva = String(
+    window.examenFisicoState?.atencionActual ||
+    (typeof window.getIdAtencionActiva === 'function'
+      ? window.getIdAtencionActiva()
+      : '') ||
+    ''
+  ).trim();
+
+  const idAtencionRegistro = String(h?.id_atencion || '').trim();
+
+  if(idAtencionActiva && idAtencionRegistro !== idAtencionActiva){
+    box.style.display = 'none';
+    content.innerHTML = '';
+    return;
+  }
+
   if(!auroHistoriaTieneExamenFisico(h)){
     box.style.display = 'none';
     content.innerHTML = '';
@@ -1456,9 +1478,30 @@ function auroMostrarDiagnosticosPrevios(h){
 }
 
 function auroCargarExamenFisicoPrevioPaciente(idPaciente){
-  const h = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneExamenFisico) || null;
-  auroMostrarExamenFisicoPrevio(h);
-  const dx = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneDiagnosticos) || null;
+  /*
+    AUROSANAX FIX QUIRÚRGICO:
+    La caja "Examen físico previo guardado" no debe cargarse desde
+    historias_clinicas cuando ya existe una atención seleccionada.
+    Los diagnósticos previos conservan su flujo original.
+  */
+  const idAtencionActiva = String(
+    window.examenFisicoState?.atencionActual ||
+    (typeof window.getIdAtencionActiva === 'function'
+      ? window.getIdAtencionActiva()
+      : '') ||
+    ''
+  ).trim();
+
+  if(!idAtencionActiva){
+    const h = auroHistoriasPacienteOrdenadas(idPaciente)
+      .find(auroHistoriaTieneExamenFisico) || null;
+
+    auroMostrarExamenFisicoPrevio(h);
+  }
+
+  const dx = auroHistoriasPacienteOrdenadas(idPaciente)
+    .find(auroHistoriaTieneDiagnosticos) || null;
+
   auroMostrarDiagnosticosPrevios(dx);
 }
 
