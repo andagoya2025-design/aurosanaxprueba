@@ -2941,23 +2941,6 @@ function showClinicalTab(id,btn){
     window.auroHistoriaRefrescarEstadoConsultaActiva(id);
   }
 
-  /*
-    AUROSANAX - Protección de historia nueva:
-    Si todavía no existe una atención nueva, se muestra el módulo limpio
-    y se bloquea únicamente la restauración de la atención anterior.
-  */
-  if(typeof window.auroHistoriaNuevaSinAtencion === 'function' &&
-     window.auroHistoriaNuevaSinAtencion()){
-    if(typeof window.auroNeutralizarModulosHistoriaNueva === 'function'){
-      window.auroNeutralizarModulosHistoriaNueva(id);
-    }
-    return;
-  }
-
-  if(typeof window.auroRestaurarVisualModulosClinicos === 'function'){
-    window.auroRestaurarVisualModulosClinicos();
-  }
-
   if(id==='hc_gineco' && typeof window.cargarGinecologiaPorAtencion==='function'){
     setTimeout(()=>window.cargarGinecologiaPorAtencion(true),60);
   }
@@ -3824,9 +3807,32 @@ function auroMostrarDiagnosticosPrevios(h){
 }
 
 function auroCargarExamenFisicoPrevioPaciente(idPaciente){
-  const h = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneExamenFisico) || null;
+  /*
+    AUROSANAX FIX QUIRÚRGICO:
+    Si existe una atención activa, la tarjeta de Examen físico pertenece
+    exclusivamente a examenes_fisicos por id_atencion.
+    Se bloquea el respaldo antiguo desde historias_clinicas.
+  */
+  const idAtencionActiva = String(
+    window.examenFisicoState?.atencionActual ||
+    (typeof window.getIdAtencionActiva === 'function'
+      ? window.getIdAtencionActiva()
+      : '') ||
+    ''
+  ).trim();
+
+  if(idAtencionActiva){
+    return;
+  }
+
+  const h = auroHistoriasPacienteOrdenadas(idPaciente)
+    .find(auroHistoriaTieneExamenFisico) || null;
+
   auroMostrarExamenFisicoPrevio(h);
-  const dx = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneDiagnosticos) || null;
+
+  const dx = auroHistoriasPacienteOrdenadas(idPaciente)
+    .find(auroHistoriaTieneDiagnosticos) || null;
+
   auroMostrarDiagnosticosPrevios(dx);
 }
 
@@ -3865,6 +3871,26 @@ function auroSetCheckboxesPorTexto(selector, texto){
 
 function auroCargarExamenFisicoDesdeHistoria(h, modo){
   if(!h) return;
+
+  /*
+    AUROSANAX FIX QUIRÚRGICO:
+    Con atención activa, el formulario y la tarjeta de Examen físico
+    solo pueden ser cargados por examenfisico.js mediante id_atencion.
+    Este flujo histórico queda disponible únicamente cuando no existe
+    ninguna atención seleccionada.
+  */
+  const idAtencionActiva = String(
+    window.examenFisicoState?.atencionActual ||
+    (typeof window.getIdAtencionActiva === 'function'
+      ? window.getIdAtencionActiva()
+      : '') ||
+    ''
+  ).trim();
+
+  if(idAtencionActiva){
+    return;
+  }
+
   auroMostrarExamenFisicoPrevio(h);
 
   setValueIfExists('hcPeso', h.peso_kg || '');
@@ -6876,293 +6902,10 @@ document.addEventListener('click',e=>{
      Carga al final, después de Plan, Atenciones, Ginecología y Obstetricia. -->
 <script src="diagnosticos.js?v=20260720_mount_fix_v2"></script>
 <script>
-/* ============================================================
-   AUROSANAX - PROTECCIÓN QUIRÚRGICA DE HISTORIA NUEVA
-   Objetivo:
-   - Impedir que módulos por atención restauren la consulta anterior.
-   - Solo actúa cuando pacientes.js marcó modo "nueva".
-   - Se desactiva automáticamente cuando aparece un ID de atención nuevo.
-   - No modifica CSS, IDs, guardado ni información persistida.
-============================================================ */
-(function(){
-  'use strict';
-
-  const PLACEHOLDER_ID = 'auroHistoriaNuevaSinAtencionAviso';
-
-  function texto(valor){
-    return String(valor || '').trim();
-  }
-
-  function idAtencionNuevaExplicita(){
-    const candidatos = [
-      window.planState?.atencionActual,
-      window.examenFisicoState?.atencionActual,
-      window.auroAtencionNuevaId,
-      window.auroAtencionSeleccionadaId,
-      window.currentAttention?.id_atencion,
-      window.atencionActual?.id_atencion
-    ];
-
-    return candidatos.map(texto).find(Boolean) || '';
-  }
-
-  window.auroHistoriaNuevaSinAtencion = function(){
-    return texto(window.auroModoAperturaHistoria).toLowerCase() === 'nueva' &&
-           !idAtencionNuevaExplicita();
-  };
-
-  function obtenerAviso(panel){
-    let aviso = panel?.querySelector('#' + PLACEHOLDER_ID);
-    if(aviso) return aviso;
-
-    aviso = document.createElement('div');
-    aviso.id = PLACEHOLDER_ID;
-    aviso.className = 'clinical-note mb-3';
-    aviso.innerHTML =
-      '<i class="bi bi-info-circle me-1"></i>' +
-      'Historia nueva: este módulo permanecerá limpio hasta crear o seleccionar una atención para este paciente.';
-
-    panel?.prepend(aviso);
-    return aviso;
-  }
-
-  function ocultarContenidoDinamico(contenedor, excepciones){
-    if(!contenedor) return;
-
-    Array.from(contenedor.children).forEach(function(hijo){
-      if(excepciones && excepciones.includes(hijo.id)) return;
-      if(hijo.id === PLACEHOLDER_ID) return;
-
-      if(!hijo.hasAttribute('data-auro-estado-previo-display')){
-        hijo.setAttribute(
-          'data-auro-estado-previo-display',
-          hijo.style.display || ''
-        );
-      }
-
-      hijo.setAttribute('data-auro-oculto-historia-nueva', '1');
-      hijo.style.display = 'none';
-    });
-  }
-
-  function restaurarOcultos(){
-    document
-      .querySelectorAll('[data-auro-oculto-historia-nueva="1"]')
-      .forEach(function(elemento){
-        const anterior = elemento.getAttribute('data-auro-estado-previo-display') || '';
-        elemento.style.display = anterior;
-        elemento.removeAttribute('data-auro-oculto-historia-nueva');
-        elemento.removeAttribute('data-auro-estado-previo-display');
-      });
-
-    document.querySelectorAll('#' + PLACEHOLDER_ID).forEach(function(aviso){
-      aviso.remove();
-    });
-  }
-
-  function limpiarExamenFisicoCalculado(){
-    const panel = document.getElementById('hc_examen');
-    if(!panel) return;
-
-    panel.querySelectorAll('.auro-vital-ayuda').forEach(function(ayuda){
-      ayuda.textContent = '';
-      ayuda.className = 'auro-vital-ayuda';
-    });
-
-    panel.querySelectorAll(
-      '.alert, [data-auro-alerta-clinica], .auro-alerta-clinica, ' +
-      '.auro-examen-alertas, .auro-examen-resumen-previo'
-    ).forEach(function(elemento){
-      if(!elemento.hasAttribute('data-auro-estado-previo-display')){
-        elemento.setAttribute(
-          'data-auro-estado-previo-display',
-          elemento.style.display || ''
-        );
-      }
-      elemento.setAttribute('data-auro-oculto-historia-nueva', '1');
-      elemento.style.display = 'none';
-    });
-
-    const imc = document.getElementById('hcIMC');
-    if(imc) imc.value = '';
-
-    ['hcImcResumen', 'hcCardIMC'].forEach(function(id){
-      const elemento = document.getElementById(id);
-      if(elemento) elemento.textContent = id === 'hcImcResumen' ? '—' : '—';
-    });
-  }
-
-  function limpiarEstetica(){
-    const panel = document.getElementById('hc_estetica');
-    if(!panel) return;
-
-    panel.querySelectorAll('input, textarea, select').forEach(function(elemento){
-      if(elemento.type === 'checkbox' || elemento.type === 'radio'){
-        elemento.checked = false;
-      }else if(elemento.tagName === 'SELECT'){
-        elemento.selectedIndex = 0;
-      }else if(elemento.type !== 'file'){
-        elemento.value = '';
-      }
-    });
-  }
-
-  function neutralizarGinecologia(){
-    const panel = document.getElementById('hc_gineco');
-    const mount = document.getElementById('ginecologia');
-    if(!panel || !mount) return;
-
-    obtenerAviso(panel);
-    ocultarContenidoDinamico(mount);
-  }
-
-  function neutralizarObstetricia(){
-    const panel = document.getElementById('hc_obstetricia');
-    const mount = document.getElementById('obstetricia');
-    if(!panel || !mount) return;
-
-    obtenerAviso(panel);
-    ocultarContenidoDinamico(mount);
-  }
-
-  function neutralizarDiagnostico(){
-    const panel = document.getElementById('hc_diagnostico');
-    if(!panel) return;
-
-    obtenerAviso(panel);
-
-    const app = document.getElementById('auroDiagnosticosApp');
-    if(app){
-      if(!app.hasAttribute('data-auro-estado-previo-display')){
-        app.setAttribute('data-auro-estado-previo-display', app.style.display || '');
-      }
-      app.setAttribute('data-auro-oculto-historia-nueva', '1');
-      app.style.display = 'none';
-    }
-
-    const seleccionados = document.getElementById('hcDxSeleccionadosBody');
-    if(seleccionados){
-      seleccionados.innerHTML =
-        '<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';
-    }
-
-    const resultados = document.getElementById('hcDxResultadosBody');
-    if(resultados){
-      resultados.innerHTML =
-        '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
-    }
-
-    ['hcDxCodigoBuscar', 'hcDxNombreBuscar'].forEach(function(id){
-      const campo = document.getElementById(id);
-      if(campo) campo.value = '';
-    });
-  }
-
-  function neutralizarPlan(){
-    const panel = document.getElementById('hc_plan');
-    if(!panel) return;
-
-    obtenerAviso(panel);
-
-    panel.querySelectorAll('button').forEach(function(boton){
-      const contenido = texto(boton.textContent).toLowerCase();
-      if(contenido.includes('actualizar plan')){
-        boton.innerHTML = '<i class="bi bi-save me-1"></i> Guardar plan clínico';
-      }
-    });
-
-    panel.querySelectorAll(
-      '.auro-plan-mini-status, .auro-save-status, ' +
-      '[data-auro-plan-resumen], [data-auro-consulta-resumen]'
-    ).forEach(function(elemento){
-      if(!elemento.hasAttribute('data-auro-estado-previo-display')){
-        elemento.setAttribute(
-          'data-auro-estado-previo-display',
-          elemento.style.display || ''
-        );
-      }
-      elemento.setAttribute('data-auro-oculto-historia-nueva', '1');
-      elemento.style.display = 'none';
-    });
-
-    panel.querySelectorAll('div, span, small, p').forEach(function(elemento){
-      const contenido = texto(elemento.textContent);
-      if(
-        /^consulta\s*#\s*\d+/i.test(contenido) ||
-        /plan actualizado:/i.test(contenido) ||
-        /receta guardada:/i.test(contenido)
-      ){
-        if(!elemento.hasAttribute('data-auro-estado-previo-display')){
-          elemento.setAttribute(
-            'data-auro-estado-previo-display',
-            elemento.style.display || ''
-          );
-        }
-        elemento.setAttribute('data-auro-oculto-historia-nueva', '1');
-        elemento.style.display = 'none';
-      }
-    });
-  }
-
-  window.auroNeutralizarModulosHistoriaNueva = function(panelId){
-    if(!window.auroHistoriaNuevaSinAtencion()) return false;
-
-    limpiarExamenFisicoCalculado();
-    limpiarEstetica();
-
-    if(!panelId || panelId === 'hc_gineco') neutralizarGinecologia();
-    if(!panelId || panelId === 'hc_obstetricia') neutralizarObstetricia();
-    if(!panelId || panelId === 'hc_diagnostico') neutralizarDiagnostico();
-    if(!panelId || panelId === 'hc_plan') neutralizarPlan();
-
-    return true;
-  };
-
-  window.auroRestaurarVisualModulosClinicos = function(){
-    if(window.auroHistoriaNuevaSinAtencion()) return false;
-    restaurarOcultos();
-    return true;
-  };
-
-  function aplicarProteccion(){
-    if(window.auroHistoriaNuevaSinAtencion()){
-      window.auroNeutralizarModulosHistoriaNueva();
-    }else{
-      window.auroRestaurarVisualModulosClinicos();
-    }
-  }
-
-  window.addEventListener('aurosanax:historia-nueva', function(){
-    aplicarProteccion();
-    setTimeout(aplicarProteccion, 120);
-    setTimeout(aplicarProteccion, 450);
-    setTimeout(aplicarProteccion, 900);
-  });
-
-  window.addEventListener('aurosanax:atencion-limpiada', aplicarProteccion);
-
-  document.addEventListener('click', function(evento){
-    const boton = evento.target?.closest?.('.clinical-tabs button, .menu-attention button');
-    if(!boton) return;
-    setTimeout(aplicarProteccion, 20);
-    setTimeout(aplicarProteccion, 140);
-  }, true);
-})();
-</script>
-
-<script>
 (function auroConectarDiagnosticosIndex(){
   'use strict';
 
   function montarDiagnosticos(){
-    if(typeof window.auroHistoriaNuevaSinAtencion === 'function' &&
-       window.auroHistoriaNuevaSinAtencion()){
-      if(typeof window.auroNeutralizarModulosHistoriaNueva === 'function'){
-        window.auroNeutralizarModulosHistoriaNueva('hc_diagnostico');
-      }
-      return;
-    }
-
     const panel = document.getElementById('hc_diagnostico');
     const mount = document.getElementById('auroDiagnosticosMount');
 
@@ -7356,19 +7099,6 @@ document.addEventListener('click',e=>{
   }
 
   function restaurar(){
-    /*
-      Nunca restaurar paciente, historia o atención anterior si el usuario
-      ya abrió explícitamente una historia nueva sin atención.
-    */
-    if(typeof window.auroHistoriaNuevaSinAtencion === 'function' &&
-       window.auroHistoriaNuevaSinAtencion()){
-      limpiarInstruccionRetorno();
-      if(typeof window.auroNeutralizarModulosHistoriaNueva === 'function'){
-        window.auroNeutralizarModulosHistoriaNueva();
-      }
-      return;
-    }
-
     const modulo = String(leerSesion(CLAVE_MODULO) || '')
       .trim()
       .toLowerCase();
