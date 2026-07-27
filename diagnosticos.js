@@ -92,6 +92,26 @@
     return String(valor === null || valor === undefined ? '' : valor).trim();
   }
 
+  /*
+    AUROSANAX - Protección quirúrgica de historia nueva.
+    Solo bloquea la reutilización de una atención anterior cuando
+    Pacientes/Agenda marcaron explícitamente modo "nueva" y todavía
+    no existe un nuevo id_atencion.
+  */
+  function historiaNuevaSinAtencion(){
+    const modo = texto(window.auroModoAperturaHistoria).toLowerCase();
+    if(modo !== 'nueva') return false;
+
+    const idNuevo = texto(
+      window.auroAtencionNuevaId ||
+      window.auroAtencionSeleccionadaId ||
+      window.currentAttention?.id_atencion ||
+      window.atencionActual?.id_atencion
+    );
+
+    return !idNuevo;
+  }
+
   function normalizar(valor){
     return texto(valor)
       .normalize('NFD')
@@ -211,6 +231,8 @@
   }
 
   function atencionActiva(){
+    if(historiaNuevaSinAtencion()) return null;
+
     try{
       if(typeof window.getAtencionActiva === 'function'){
         const a = window.getAtencionActiva();
@@ -245,6 +267,8 @@
   }
 
   function idAtencionActiva(){
+    if(historiaNuevaSinAtencion()) return '';
+
     try{
       if(typeof window.getIdAtencionActiva === 'function'){
         const id = texto(window.getIdAtencionActiva());
@@ -2839,8 +2863,53 @@
     optimizarTitulosResumenExistente();
   }
 
+
+  function limpiarContextoHistoriaNueva(){
+    /*
+      Limpieza exclusivamente en memoria y visual.
+      No elimina cache histórico de otras atenciones, no llama Apps Script
+      y no modifica diagnósticos persistidos.
+    */
+    state.atencionActual = '';
+    state.cargando = false;
+    state.ultimaActualizacion = '';
+    limpiarVisual();
+
+    status('Sin atención activa');
+    mensaje(
+      'aviso',
+      'Historia nueva: Diagnóstico permanecerá limpio hasta crear o seleccionar una atención.'
+    );
+
+    const contexto = document.getElementById('auroDxContextoSuperior');
+    if(contexto){
+      contexto.innerHTML = `
+        <div class="auro-dx-contexto-main">
+          <div class="auro-dx-contexto-icon"><i class="bi bi-journal-medical"></i></div>
+          <div class="auro-dx-contexto-copy">
+            <div class="auro-dx-contexto-kicker">DIAGNÓSTICO DE LA CONSULTA</div>
+            <div class="auro-dx-contexto-title">Historia nueva</div>
+            <div class="auro-dx-contexto-id">Sin atención seleccionada</div>
+          </div>
+          <div class="auro-dx-contexto-state historica">
+            <i class="bi bi-hourglass-split"></i>
+            Pendiente de crear atención
+          </div>
+        </div>
+      `;
+    }
+
+    actualizarTarjetaApoyoIA();
+  }
+
+
   async function cargarAtencion(idAtencion, forzar){
     asegurarApp();
+
+    if(historiaNuevaSinAtencion()){
+      limpiarContextoHistoriaNueva();
+      return null;
+    }
 
     idAtencion = texto(idAtencion || idAtencionActiva());
     if(!idAtencion){
@@ -3093,6 +3162,11 @@
   }
 
   function cambiarPorAtencion(idAtencion){
+    if(historiaNuevaSinAtencion()){
+      limpiarContextoHistoriaNueva();
+      return null;
+    }
+
     idAtencion = texto(idAtencion);
     if(!idAtencion) return;
     return cargarAtencion(idAtencion, true);
@@ -3122,8 +3196,21 @@
     });
 
     document.addEventListener('aurosanax:diagnosticos-actualizados', () => {
+      if(historiaNuevaSinAtencion()){
+        limpiarContextoHistoriaNueva();
+        return;
+      }
       cargarAtencionActual(true);
     });
+
+    /*
+      Señales emitidas por Pacientes/Atenciones al abrir una historia nueva.
+      Diagnóstico se limpia y queda bloqueado hasta que exista id_atencion.
+    */
+    window.addEventListener('aurosanax:historia-nueva', limpiarContextoHistoriaNueva);
+    document.addEventListener('aurosanax:historia-nueva', limpiarContextoHistoriaNueva);
+    window.addEventListener('aurosanax:atencion-limpiada', limpiarContextoHistoriaNueva);
+    document.addEventListener('aurosanax:atencion-limpiada', limpiarContextoHistoriaNueva);
 
     document.addEventListener('click', e => {
       const btn = e.target?.closest?.('button,a,[role="tab"]');
@@ -3131,6 +3218,10 @@
       const label = normalizar(btn.textContent || btn.getAttribute('aria-label') || btn.title);
       const target = normalizar(btn.dataset?.target || btn.getAttribute('href') || '');
       if(label.includes('diagnost') || target.includes('diagnost')){
+        if(historiaNuevaSinAtencion()){
+          setTimeout(limpiarContextoHistoriaNueva, 20);
+          return;
+        }
         setTimeout(() => cargarAtencionActual(false), 50);
       }
     }, true);
@@ -3163,6 +3254,12 @@
     }
 
     state.inicializado = true;
+
+    if(historiaNuevaSinAtencion()){
+      limpiarContextoHistoriaNueva();
+      console.log(MODULO + ' v' + VERSION + ' [' + RELEASE + '] cargado en modo historia nueva.');
+      return;
+    }
 
     const id = idAtencionActiva();
     if(id){
@@ -3205,7 +3302,8 @@
     puedeAplicarAlPlan,
     construirContextoApoyoIA,
     abrirApoyoIA,
-    actualizarTarjetaApoyoIA
+    actualizarTarjetaApoyoIA,
+    limpiarContextoHistoriaNueva
   };
 
   window.cambiarDiagnosticosPorAtencion = cambiarPorAtencion;
@@ -3214,6 +3312,7 @@
   window.auroGenerarIntegracionDiagnostica = generarIntegracion;
   window.auroAplicarDiagnosticoAlPlan = aplicarAlPlan;
   window.auroAbrirApoyoIA = abrirApoyoIA;
+  window.auroLimpiarDiagnosticosParaHistoriaNueva = limpiarContextoHistoriaNueva;
 
   window.auroDiagnosticosModuloCargado = true;
 
