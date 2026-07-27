@@ -3337,6 +3337,119 @@ window.auroInstalarFlujoUnicoDiagnosticoPlan =
 
 
 
+
+/* ==========================================================
+   AUROSANAX - FASE 2 QUIRÚRGICA: TARJETAS SUPERIORES DE IMC
+   ----------------------------------------------------------
+   ALCANCE EXCLUSIVO:
+   - Sincroniza #hcImcResumen y #hcCardIMC con el IMC clínico actual.
+   - Recalcula desde peso/talla cuando el campo IMC contiene un dato
+     histórico inválido, por ejemplo una fecha serializada.
+   - Muestra "Pendiente" cuando no existen datos suficientes.
+
+   PROTECCIONES:
+   - No modifica guardado, payload, Apps Script ni Google Sheets.
+   - No modifica IDs, estructura HTML, signos vitales, alertas,
+     examen por sistemas, regional, diagnósticos ni Plan.
+   ========================================================== */
+
+function auroObtenerIMCValidoParaTarjeta(){
+  const imcCampo = document.getElementById('hcIMC');
+  const imcDirecto = typeof auroVitalNumero === 'function'
+    ? auroVitalNumero(imcCampo ? imcCampo.value : '')
+    : Number(imcCampo ? imcCampo.value : NaN);
+
+  if(Number.isFinite(imcDirecto) && imcDirecto >= 5 && imcDirecto <= 100){
+    return Number(imcDirecto.toFixed(1));
+  }
+
+  const pesoCampo = document.getElementById('hcPeso');
+  const tallaCampo = document.getElementById('hcTalla');
+
+  const peso = typeof auroVitalNumero === 'function'
+    ? auroVitalNumero(pesoCampo ? pesoCampo.value : '')
+    : Number(pesoCampo ? pesoCampo.value : NaN);
+
+  const tallaCm = typeof auroVitalNumero === 'function'
+    ? auroVitalNumero(tallaCampo ? tallaCampo.value : '')
+    : Number(tallaCampo ? tallaCampo.value : NaN);
+
+  if(
+    !Number.isFinite(peso) || peso < 1 || peso > 400 ||
+    !Number.isFinite(tallaCm) || tallaCm < 30 || tallaCm > 250
+  ){
+    return null;
+  }
+
+  const tallaM = tallaCm / 100;
+  return Number((peso / (tallaM * tallaM)).toFixed(1));
+}
+
+function auroSincronizarTarjetasSuperioresIMC(){
+  const valor = auroObtenerIMCValidoParaTarjeta();
+  const textoResumen = valor === null ? 'Pendiente' : String(valor);
+  const textoFicha = valor === null ? '—' : String(valor);
+
+  const resumen = document.getElementById('hcImcResumen');
+  const ficha = document.getElementById('hcCardIMC');
+
+  if(resumen && resumen.textContent !== textoResumen){
+    resumen.textContent = textoResumen;
+  }
+
+  if(ficha && ficha.textContent !== textoFicha){
+    ficha.textContent = textoFicha;
+  }
+}
+
+function auroInstalarSincronizacionTarjetasIMC(){
+  if(window.__auroTarjetasIMCInstaladas) return;
+  window.__auroTarjetasIMCInstaladas = true;
+
+  ['hcPeso','hcTalla','hcIMC'].forEach(id => {
+    const campo = document.getElementById(id);
+    if(!campo || campo.dataset.auroTarjetaImc === '1') return;
+
+    campo.dataset.auroTarjetaImc = '1';
+    campo.addEventListener('input', auroSincronizarTarjetasSuperioresIMC);
+    campo.addEventListener('change', auroSincronizarTarjetasSuperioresIMC);
+  });
+
+  const objetivos = [
+    document.getElementById('hcImcResumen'),
+    document.getElementById('hcCardIMC')
+  ].filter(Boolean);
+
+  if(objetivos.length && typeof MutationObserver !== 'undefined'){
+    const observer = new MutationObserver(function(){
+      auroSincronizarTarjetasSuperioresIMC();
+    });
+
+    objetivos.forEach(el => observer.observe(el, {
+      childList:true,
+      characterData:true,
+      subtree:true
+    }));
+
+    window.__auroTarjetasIMCObserver = observer;
+  }
+
+  auroSincronizarTarjetasSuperioresIMC();
+}
+
+window.auroSincronizarTarjetasSuperioresIMC =
+  auroSincronizarTarjetasSuperioresIMC;
+
+if(document.readyState === 'loading'){
+  document.addEventListener(
+    'DOMContentLoaded',
+    auroInstalarSincronizacionTarjetasIMC
+  );
+}else{
+  auroInstalarSincronizacionTarjetasIMC();
+}
+
+
 /* AUROSANAX - Confirmación de carga del módulo */
 window.auroExamenFisicoModuloCargado = true;
 console.log('AUROSANAX examenfisico.js cargado correctamente');
