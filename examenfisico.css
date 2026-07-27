@@ -1,25 +1,25 @@
 
-    /* ==========================================================
-       AUROSANAX - examenfisico.css
-       PRUEBA VISUAL FASE 1
-       Cambio únicamente visual.
-       ========================================================== */
+        /* ==========================================================
+           AUROSANAX - examenfisico.css
+           PRUEBA VISUAL FASE 1
+           Cambio únicamente visual.
+           ========================================================== */
 
-    /* Placeholders aproximadamente 40% más tenues */
-    #hc_examen .auro-vital-field .form-control::placeholder{
-        color:#d4dbe5;
-        opacity:.40;
-        font-weight:500;
-    }
+        /* Placeholders aproximadamente 40% más tenues */
+        #hc_examen .auro-vital-field .form-control::placeholder{
+            color:#d4dbe5;
+            opacity:.40;
+            font-weight:500;
+        }
 
-    /* Datos reales */
-    #hc_examen .auro-vital-field .form-control{
-        color:#111827;
-        font-weight:800;
-    }
+        /* Datos reales */
+        #hc_examen .auro-vital-field .form-control{
+            color:#111827;
+            font-weight:800;
+        }
 
-    /* Unidades */
-    #hc_examen .auro-vital-unit{
-        color:#97a3b3;
-        opacity:.75;
-    }
+        /* Unidades */
+        #hc_examen .auro-vital-unit{
+            color:#97a3b3;
+            opacity:.75;
+        }
