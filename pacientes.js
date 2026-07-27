@@ -602,6 +602,158 @@ async function savePatient(){
   }
 }
 
+/* ============================================================
+   AUROSANAX - CONTROL SEGURO DE APERTURA DE HISTORIA CLÍNICA
+   - Compatible con llamadas antiguas: abrirHistoriaPaciente(idPaciente)
+   - Admite modo opcional: 'nueva', 'existente' o 'auto'
+   - No crea ni modifica IDs de historia.
+   - El ID HCL continúa generándose únicamente al guardar.
+============================================================ */
+
+function auroHistoriaPacientePorId(idPaciente){
+  const id = String(idPaciente || '').trim();
+  if(!id || typeof historiasClinicas === 'undefined' || !Array.isArray(historiasClinicas)){
+    return null;
+  }
+
+  const historias = historiasClinicas
+    .filter(function(h){
+      return String(h?.id_paciente || h?.paciente_id || '').trim() === id;
+    })
+    .sort(function(a,b){
+      return String(b?.actualizado_en || b?.fecha_apertura || b?.creado_en || '')
+        .localeCompare(String(a?.actualizado_en || a?.fecha_apertura || a?.creado_en || ''));
+    });
+
+  return historias[0] || null;
+}
+
+function auroActualizarBotonHistoriaNueva(){
+  document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(function(btn){
+    btn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar historia';
+  });
+
+  const estado = document.getElementById('auroEstadoGuardadoHistoria') ||
+                 document.getElementById('hcEstadoHistoria') ||
+                 document.getElementById('historiaSaveStatus');
+
+  if(estado){
+    estado.textContent = 'Historia nueva · pendiente de guardar';
+  }
+}
+
+function auroLimpiarFormularioClinicoParaHistoriaNueva(){
+  const historia = document.getElementById('historia');
+  if(!historia) return;
+
+  historia.querySelectorAll('.clinical-panel input, .clinical-panel textarea, .clinical-panel select').forEach(function(el){
+    if(el.id === 'hcPacienteSelect') return;
+
+    if(el.type === 'checkbox' || el.type === 'radio'){
+      el.checked = false;
+      return;
+    }
+
+    if(el.tagName === 'SELECT'){
+      el.selectedIndex = 0;
+      return;
+    }
+
+    el.value = '';
+  });
+
+  historia.querySelectorAll('.clinical-panel [contenteditable="true"]').forEach(function(el){
+    el.innerHTML = '';
+  });
+}
+
+function auroPrepararHistoriaNuevaPaciente(idPaciente){
+  const id = String(idPaciente || '').trim();
+
+  /*
+    Limpia exclusivamente el contexto de edición de la historia anterior.
+    No genera ID, no guarda y no modifica Google Sheets.
+  */
+  try{
+    if(typeof editingHistoryId !== 'undefined') editingHistoryId = null;
+  }catch(_e){}
+
+  window.editingHistoryId = null;
+  window.auroHistoriaSeleccionadaId = '';
+  window.historiaActual = null;
+  window.currentHistoria = null;
+  window.auroModoAperturaHistoria = 'nueva';
+  window.auroPacienteHistoriaNuevaId = id;
+
+  auroLimpiarFormularioClinicoParaHistoriaNueva();
+
+  /*
+    Estados internos conocidos. Solo se reinicia la atención seleccionada;
+    no se eliminan registros ni cachés históricos de otros pacientes.
+  */
+  if(window.planState){
+    window.planState.atencionActual = '';
+  }
+
+  if(window.examenFisicoState){
+    window.examenFisicoState.atencionActual = '';
+    window.examenFisicoState.idExamenActual = '';
+  }
+
+  if(window.diagnosticosSeleccionados && Array.isArray(window.diagnosticosSeleccionados)){
+    window.diagnosticosSeleccionados.length = 0;
+  }
+
+  /*
+    Funciones públicas opcionales de los módulos.
+    Se llaman únicamente si existen, preservando compatibilidad.
+  */
+  [
+    'auroLimpiarPlanVisualAntesDeCambiarAtencion',
+    'auroLimpiarDiagnosticos',
+    'auroExamenFisicoLimpiarFormulario',
+    'limpiarFormularioGinecologia',
+    'limpiarFormularioObstetricia',
+    'limpiarFormularioEstetica',
+    'limpiarFormularioDocumentos'
+  ].forEach(function(nombre){
+    try{
+      if(typeof window[nombre] === 'function'){
+        window[nombre]();
+      }
+    }catch(error){
+      console.warn('AUROSANAX PACIENTES: limpieza opcional no completada en ' + nombre, error);
+    }
+  });
+
+  auroActualizarBotonHistoriaNueva();
+
+  window.dispatchEvent(new CustomEvent('aurosanax:historia-nueva', {
+    detail: {
+      id_paciente: id,
+      origen: 'pacientes'
+    }
+  }));
+}
+
+function auroPrepararHistoriaExistentePaciente(idPaciente, historia){
+  window.auroModoAperturaHistoria = 'existente';
+  window.auroPacienteHistoriaNuevaId = '';
+
+  /*
+    No se fuerza aquí el modo edición ni se reemplaza el ID.
+    La carga normal de la historia existente conserva la lógica actual.
+  */
+  if(historia){
+    window.auroHistoriaObjetivoPaciente = {
+      id_paciente: String(idPaciente || '').trim(),
+      id_historia: String(historia.id_historia || historia.id || '').trim()
+    };
+  }else{
+    window.auroHistoriaObjetivoPaciente = null;
+  }
+}
+
 function auroLimpiarHistoriaDeOtroPaciente(idPacienteNuevo){
   const nuevoId = String(idPacienteNuevo || '').trim();
   if(!nuevoId) return;
@@ -629,10 +781,10 @@ function auroLimpiarHistoriaDeOtroPaciente(idPacienteNuevo){
 
   const pacienteHistoria = String(historiaActiva?.id_paciente || '').trim();
 
-  // Solo se limpia cuando está comprobado que la historia activa pertenece a otro paciente.
-  // Si corresponde al mismo paciente, se conserva intacto el modo “Actualizar historia”.
   if(pacienteHistoria && pacienteHistoria !== nuevoId){
-    if(typeof editingHistoryId !== 'undefined') editingHistoryId = null;
+    try{
+      if(typeof editingHistoryId !== 'undefined') editingHistoryId = null;
+    }catch(_e){}
     window.editingHistoryId = null;
     window.auroHistoriaSeleccionadaId = '';
     window.historiaActual = null;
@@ -640,23 +792,42 @@ function auroLimpiarHistoriaDeOtroPaciente(idPacienteNuevo){
   }
 }
 
-function abrirHistoriaPaciente(idPaciente){
+function abrirHistoriaPaciente(idPaciente, modoApertura){
   if(!idPaciente){
     alert('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
     return;
   }
 
-  auroLimpiarHistoriaDeOtroPaciente(idPaciente);
+  const id = String(idPaciente || '').trim();
+  const historiaExistente = auroHistoriaPacientePorId(id);
+  const modoSolicitado = String(modoApertura || 'auto').trim().toLowerCase();
 
-  activePatientId = idPaciente;
-  window.activePatientId = idPaciente;
+  /*
+    Resolución compatible:
+    - 'nueva': limpieza integral.
+    - 'existente': conserva carga actual.
+    - 'auto' o llamada antigua: nueva solo cuando el paciente no tiene historia.
+  */
+  const esHistoriaNueva = modoSolicitado === 'nueva' ||
+    (modoSolicitado !== 'existente' && !historiaExistente);
+
+  auroLimpiarHistoriaDeOtroPaciente(id);
+
+  if(esHistoriaNueva){
+    auroPrepararHistoriaNuevaPaciente(id);
+  }else{
+    auroPrepararHistoriaExistentePaciente(id, historiaExistente);
+  }
+
+  activePatientId = id;
+  window.activePatientId = id;
 
   showScreen('historia');
   actualizarSelectorPacientesHistoria();
 
   const select = document.getElementById('hcPacienteSelect');
   if(select){
-    select.value = idPaciente;
+    select.value = id;
     seleccionarPacienteHistoria();
   }
 
