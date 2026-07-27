@@ -418,6 +418,69 @@ function abrirWhatsAppCitaAgenda(index){
   abrirWhatsApp(c.whatsapp, mensaje);
 }
 
+
+/* ============================================================
+   AUROSANAX - LIMPIEZA SEGURA PARA HISTORIA NUEVA DESDE AGENDA
+   Se ejecuta únicamente cuando la cita aún no tiene historia.
+   No se aplica al abrir una historia existente.
+============================================================ */
+function auroLimpiarHistoriaNuevaDesdeAgenda(){
+  try{
+    const historia = document.getElementById('historia');
+    if(historia){
+      historia.querySelectorAll('.clinical-panel input, .clinical-panel textarea, .clinical-panel select').forEach(function(el){
+        if(el.id === 'hcPacienteSelect') return;
+
+        if(el.type === 'checkbox' || el.type === 'radio'){
+          el.checked = false;
+          return;
+        }
+
+        if(el.tagName === 'SELECT'){
+          el.selectedIndex = 0;
+          return;
+        }
+
+        if(!el.readOnly && !el.disabled){
+          el.value = '';
+        }
+      });
+    }
+
+    try{ editingHistoryId = null; }catch(_e){}
+    window.editingHistoryId = null;
+    window.auroHistoriaSeleccionadaId = '';
+    window.historiaActual = null;
+    window.currentHistoria = null;
+
+    if(window.planState) window.planState.atencionActual = '';
+    if(window.examenFisicoState) window.examenFisicoState.atencionActual = '';
+
+    if(typeof window.auroLimpiarPlanVisualAntesDeCambiarAtencion === 'function'){
+      window.auroLimpiarPlanVisualAntesDeCambiarAtencion();
+    }
+    if(typeof window.auroLimpiarDiagnosticos === 'function'){
+      window.auroLimpiarDiagnosticos();
+    }
+    if(typeof window.auroExamenFisicoLimpiarFormulario === 'function'){
+      window.auroExamenFisicoLimpiarFormulario();
+    }
+
+    [
+      ['hcPacienteResumen', 'Sin seleccionar'],
+      ['hcAlergiasResumen', 'No registradas'],
+      ['hcImcResumen', '—'],
+      ['hcControlResumen', 'Pendiente']
+    ].forEach(function(item){
+      const el = document.getElementById(item[0]);
+      if(el) el.textContent = item[1];
+    });
+
+  }catch(error){
+    console.warn('AUROSANAX AGENDA: no se pudo completar la limpieza de historia nueva.', error);
+  }
+}
+
 function abrirHistoriaDesdeAgenda(index){
   const c = citasAgendaWeb[index];
   if(!c){
@@ -451,6 +514,14 @@ function abrirHistoriaDesdeAgenda(index){
     window.historiaActual = null;
     window.currentHistoria = null;
   }catch(_e){}
+
+  /*
+    Si la cita todavía no tiene historia, el formulario debe comenzar vacío.
+    Una historia existente nunca se limpia aquí.
+  */
+  if(!historia){
+    auroLimpiarHistoriaNuevaDesdeAgenda();
+  }
 
   const referencia = {
     id_cita: String(c.id_cita || c.id || '').trim(),
