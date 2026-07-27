@@ -1497,6 +1497,18 @@ function auroSetCheckboxesPorTexto(selector, texto){
 
 function auroCargarExamenFisicoDesdeHistoria(h, modo){
   if(!h) return;
+
+  /*
+    AUROSANAX FIX QUIRÚRGICO POR ATENCIÓN
+    La tarjeta inferior y los campos del formulario solo se cargan
+    cuando el registro proviene de examenes_fisicos para la atención activa.
+    La historia clínica general no alimenta esta tarjeta.
+  */
+  if(modo !== 'atencion'){
+    auroMostrarExamenFisicoPrevio(null);
+    return;
+  }
+
   auroMostrarExamenFisicoPrevio(h);
 
   setValueIfExists('hcPeso', h.peso_kg || '');
@@ -2799,6 +2811,7 @@ async function auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion){
       console.log('AUROSANAX EXAMEN: cargado desde examenes_fisicos:', idAtencion);
     }else{
       limpiarExamenFisicoTemporal();
+      auroMostrarExamenFisicoPrevio(null);
       console.log('AUROSANAX EXAMEN: sin examen físico guardado para esta atención:', idAtencion);
     }
 
@@ -2890,6 +2903,7 @@ function cambiarExamenFisicoPorAtencion(idAtencion){
   if(!idAtencion){
     window.examenFisicoState.atencionActual = '';
     limpiarExamenFisicoTemporal();
+    auroMostrarExamenFisicoPrevio(null);
     return;
   }
 
@@ -2912,6 +2926,7 @@ function cambiarExamenFisicoPorAtencion(idAtencion){
     de sistemas/regionales de una consulta anterior.
   */
   limpiarExamenFisicoTemporal();
+  auroMostrarExamenFisicoPrevio(null);
 
   try{
     if(window.examenFisicoState.cache){
