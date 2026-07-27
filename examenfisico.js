@@ -2787,10 +2787,29 @@ async function auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion){
   idAtencion = String(idAtencion || auroExamenFisicoIdAtencionActual() || '').trim();
   if(!idAtencion) return null;
 
+  window.examenFisicoState = window.examenFisicoState || {
+    atencionActual: '',
+    cache: {}
+  };
+
+  /*
+    AUROSANAX FIX QUIRÚRGICO TARJETA POR ATENCIÓN 2026-07-27
+    Cada consulta genera un número de carga. Si una respuesta anterior
+    llega tarde, se ignora para que nunca pinte la tarjeta de otra atención.
+  */
+  const secuenciaCarga = Number(window.examenFisicoState.secuenciaCarga || 0) + 1;
+  window.examenFisicoState.secuenciaCarga = secuenciaCarga;
+
   try{
     const registro = await auroBuscarExamenFisicoPorAtencion(idAtencion);
 
-    if(String(window.examenFisicoState?.atencionActual || '') !== idAtencion){
+    const sigueSiendoLaAtencion =
+      String(window.examenFisicoState?.atencionActual || '') === idAtencion;
+
+    const sigueSiendoLaCarga =
+      Number(window.examenFisicoState?.secuenciaCarga || 0) === secuenciaCarga;
+
+    if(!sigueSiendoLaAtencion || !sigueSiendoLaCarga){
       return registro;
     }
 
@@ -2799,11 +2818,23 @@ async function auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion){
       console.log('AUROSANAX EXAMEN: cargado desde examenes_fisicos:', idAtencion);
     }else{
       limpiarExamenFisicoTemporal();
+      auroMostrarExamenFisicoPrevio(null);
       console.log('AUROSANAX EXAMEN: sin examen físico guardado para esta atención:', idAtencion);
     }
 
     return registro || null;
   }catch(error){
+    const sigueSiendoLaAtencion =
+      String(window.examenFisicoState?.atencionActual || '') === idAtencion;
+
+    const sigueSiendoLaCarga =
+      Number(window.examenFisicoState?.secuenciaCarga || 0) === secuenciaCarga;
+
+    if(sigueSiendoLaAtencion && sigueSiendoLaCarga){
+      limpiarExamenFisicoTemporal();
+      auroMostrarExamenFisicoPrevio(null);
+    }
+
     console.warn('AUROSANAX EXAMEN: no se pudo cargar desde examenes_fisicos.', error);
     return null;
   }
@@ -2889,7 +2920,10 @@ function cambiarExamenFisicoPorAtencion(idAtencion){
   */
   if(!idAtencion){
     window.examenFisicoState.atencionActual = '';
+    window.examenFisicoState.secuenciaCarga =
+      Number(window.examenFisicoState.secuenciaCarga || 0) + 1;
     limpiarExamenFisicoTemporal();
+    auroMostrarExamenFisicoPrevio(null);
     return;
   }
 
@@ -2912,6 +2946,7 @@ function cambiarExamenFisicoPorAtencion(idAtencion){
     de sistemas/regionales de una consulta anterior.
   */
   limpiarExamenFisicoTemporal();
+  auroMostrarExamenFisicoPrevio(null);
 
   try{
     if(window.examenFisicoState.cache){
