@@ -3807,32 +3807,9 @@ function auroMostrarDiagnosticosPrevios(h){
 }
 
 function auroCargarExamenFisicoPrevioPaciente(idPaciente){
-  /*
-    AUROSANAX FIX QUIRÚRGICO:
-    Si existe una atención activa, la tarjeta de Examen físico pertenece
-    exclusivamente a examenes_fisicos por id_atencion.
-    Se bloquea el respaldo antiguo desde historias_clinicas.
-  */
-  const idAtencionActiva = String(
-    window.examenFisicoState?.atencionActual ||
-    (typeof window.getIdAtencionActiva === 'function'
-      ? window.getIdAtencionActiva()
-      : '') ||
-    ''
-  ).trim();
-
-  if(idAtencionActiva){
-    return;
-  }
-
-  const h = auroHistoriasPacienteOrdenadas(idPaciente)
-    .find(auroHistoriaTieneExamenFisico) || null;
-
+  const h = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneExamenFisico) || null;
   auroMostrarExamenFisicoPrevio(h);
-
-  const dx = auroHistoriasPacienteOrdenadas(idPaciente)
-    .find(auroHistoriaTieneDiagnosticos) || null;
-
+  const dx = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneDiagnosticos) || null;
   auroMostrarDiagnosticosPrevios(dx);
 }
 
@@ -3871,26 +3848,6 @@ function auroSetCheckboxesPorTexto(selector, texto){
 
 function auroCargarExamenFisicoDesdeHistoria(h, modo){
   if(!h) return;
-
-  /*
-    AUROSANAX FIX QUIRÚRGICO:
-    Con atención activa, el formulario y la tarjeta de Examen físico
-    solo pueden ser cargados por examenfisico.js mediante id_atencion.
-    Este flujo histórico queda disponible únicamente cuando no existe
-    ninguna atención seleccionada.
-  */
-  const idAtencionActiva = String(
-    window.examenFisicoState?.atencionActual ||
-    (typeof window.getIdAtencionActiva === 'function'
-      ? window.getIdAtencionActiva()
-      : '') ||
-    ''
-  ).trim();
-
-  if(idAtencionActiva){
-    return;
-  }
-
   auroMostrarExamenFisicoPrevio(h);
 
   setValueIfExists('hcPeso', h.peso_kg || '');
