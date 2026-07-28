@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.6.0
+Versión: 3.6.1
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.0';
+  const VERSION = '3.6.1';
   const state = {
     inicializado: false,
     cargando: false,
@@ -1178,6 +1178,34 @@ Función:
     if (valores.evolucion) cronologia.push(`curso ${valores.evolucion.toLowerCase()}`);
     if (cronologia.length) partes.push(`Cuadro de ${unirNatural(cronologia)}.`);
 
+    /* AUROSANAX 3.6.1: bloque semiológico general, sin alterar guardado ni navegación. */
+    const dolor = [];
+    if (valores.localizacion) dolor.push(`localizado en ${valores.localizacion.toLowerCase()}`);
+    if (valores.intensidad_0_10 !== '') dolor.push(`de intensidad ${valores.intensidad_0_10}/10`);
+    if (valores.caracter) dolor.push(`de carácter ${valores.caracter.toLowerCase()}`);
+    if (valores.irradiacion) dolor.push(`con irradiación a ${valores.irradiacion}`);
+    if (valores.duracion_episodios) dolor.push(`con episodios de ${valores.duracion_episodios}`);
+    if (valores.frecuencia) dolor.push(`de presentación ${valores.frecuencia.toLowerCase()}`);
+    if (dolor.length) partes.push(`Dolor ${unirNatural(dolor)}.`);
+
+    const factores = [];
+    if (valores.factores_agravantes) factores.push(`se exacerba con ${valores.factores_agravantes}`);
+    if (valores.factores_aliviantes) factores.push(`mejora con ${valores.factores_aliviantes}`);
+    if (factores.length) partes.push(`${unirNatural(factores)}.`);
+
+    if (valores.relacion_menstruacion) {
+      const relacion = normalizar(valores.relacion_menstruacion);
+      if (relacion === 'sin relacion') partes.push('Sin relación aparente con la menstruación.');
+      else if (relacion !== 'no puede precisar') partes.push(`Refiere relación con la menstruación: ${valores.relacion_menstruacion.toLowerCase()}.`);
+      else partes.push('No puede precisar relación con la menstruación.');
+    }
+
+    if (valores.relacion_sexual) {
+      const relacion = normalizar(valores.relacion_sexual);
+      if (relacion === 'sin relacion') partes.push('Sin relación aparente con las relaciones sexuales.');
+      else if (!['no aplica', 'no puede precisar'].includes(relacion)) partes.push(`Refiere relación con las relaciones sexuales: ${valores.relacion_sexual.toLowerCase()}.`);
+    }
+
     const caracteristicas = [];
     const color = normalizar(valores.color);
     const coloresClinicos = {
@@ -1199,13 +1227,25 @@ Función:
     }
     if (caracteristicas.length) partes.push(`Refiere ${caracteristicas.join(', ')}.`);
 
+    if (valores.sintomas_asociados) {
+      const asociados = normalizar(valores.sintomas_asociados);
+      if (!['no', 'ninguno', 'niega', 'sin sintomas asociados'].includes(asociados)) {
+        partes.push(`Síntomas asociados: ${valores.sintomas_asociados}.`);
+      } else {
+        partes.push('Niega síntomas asociados relevantes.');
+      }
+    }
+
     const etiquetasClinicas = {
       prurito: 'prurito vulvovaginal',
       ardor: 'ardor vulvovaginal',
       disuria: 'disuria',
       dolor_pelvico: 'dolor pélvico',
+      flujo_vaginal: 'flujo vaginal anormal',
+      sangrado_vaginal: 'sangrado vaginal',
       sangrado_postcoital: 'sangrado postcoital',
       fiebre: 'fiebre',
+      mareo_sincope: 'mareo intenso o síncope',
       relaciones_sin_proteccion: 'relaciones sexuales sin protección',
       nueva_pareja: 'nueva pareja sexual'
     };
@@ -1222,24 +1262,32 @@ Función:
     if (positivos.length) partes.push(`Se acompaña de ${unirNatural(positivos)}.`);
     if (negativos.length) partes.push(`Niega ${unirNatural(negativos)}.`);
 
-    if (valores.tratamientos_previos) {
-      const tratamiento = normalizar(valores.tratamientos_previos);
-      if (!['no', 'ninguno', 'sin tratamiento'].includes(tratamiento)) {
-        partes.push(`Refiere tratamientos previos: ${valores.tratamientos_previos}.`);
-      }
+    const embarazoValor = valores.posibilidad_embarazo || valores.embarazo_posible;
+    if (embarazoValor) {
+      const embarazo = normalizar(embarazoValor);
+      if (embarazo === 'si') partes.push('Refiere posibilidad de embarazo.');
+      else if (['por confirmar', 'no sabe', 'desconoce'].includes(embarazo)) partes.push('Posibilidad de embarazo no definida, pendiente de confirmación.');
+      else if (embarazo === 'no') partes.push('Niega posibilidad de embarazo.');
     }
 
-    if (valores.embarazo_posible) {
-      const embarazo = normalizar(valores.embarazo_posible);
-      if (embarazo === 'si') partes.push('Refiere posibilidad de embarazo.');
-      else if (embarazo === 'por confirmar') partes.push('Posibilidad de embarazo por confirmar.');
-      else if (embarazo === 'no') partes.push('Niega posibilidad de embarazo.');
+    if (valores.fecha_ultima_menstruacion) {
+      partes.push(`Fecha de última menstruación: ${valores.fecha_ultima_menstruacion}.`);
+    }
+
+    if (valores.tratamientos_previos) {
+      const tratamiento = normalizar(valores.tratamientos_previos);
+      if (['no', 'ninguno', 'sin tratamiento'].includes(tratamiento)) {
+        partes.push('Niega tratamientos previos.');
+      } else {
+        partes.push(`Refiere tratamientos previos: ${valores.tratamientos_previos}.`);
+      }
     }
 
     return partes
       .join(' ')
       .replace(/\s+/g, ' ')
       .replace(/\.\./g, '.')
+      .replace(/\s+\./g, '.')
       .trim();
   }
 
