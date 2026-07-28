@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.10';
+  const VERSION = '3.6.11';
   const state = {
     inicializado: false,
     cargando: false,
@@ -369,13 +369,11 @@ Función:
     };
   }
 
-  const AURO_ESPECIALIDADES_TEMPORALES = [
-    'Medicina Estética',
-    'Medicina Funcional',
-    'Estética Íntima',
-    'Ginecología Estética y Regenerativa'
-  ];
-
+  /*
+    AUROSANAX 3.6.11 - CABECERA CLÍNICA SEGURA
+    Fecha, médico y especialidad permanecen sincronizados y bloqueados.
+    Únicamente el tipo de atención es editable mediante catálogo controlado.
+  */
   const AURO_TIPOS_ATENCION = [
     'Primera vez',
     'Control',
@@ -436,10 +434,6 @@ Función:
     auroPrepararControlCabeceraEditable(control, alias);
 
     if (control.tagName === 'SELECT') {
-      if (alias === 'especialidad') {
-        auroAsegurarOpcionesSelector(control, [...candidatos, ...AURO_ESPECIALIDADES_TEMPORALES]);
-      }
-
       if (alias === 'tipo') {
         auroAsegurarOpcionesSelector(control, [...candidatos, ...AURO_TIPOS_ATENCION]);
       }
@@ -475,9 +469,7 @@ Función:
 
     if (editable) {
       control.removeAttribute('aria-readonly');
-      control.title = alias === 'especialidad'
-        ? 'Especialidad clínica de esta atención. Puede confirmarla o cambiarla.'
-        : 'Tipo de atención. Puede confirmarlo o cambiarlo.';
+      control.title = 'Tipo de atención. Puede confirmarlo o cambiarlo.';
     } else {
       control.setAttribute('aria-readonly', 'true');
       control.title = 'Dato sincronizado desde la atención activa';
@@ -532,7 +524,7 @@ Función:
       contexto.especialidad,
       false,
       true,
-      true,
+      false,
       'especialidad'
     );
     auroAsignarValorContexto(
