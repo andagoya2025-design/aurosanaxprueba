@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.6.1
+Versión: 3.6.2
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.1';
+  const VERSION = '3.6.2';
   const state = {
     inicializado: false,
     cargando: false,
@@ -1178,7 +1178,7 @@ Función:
     if (valores.evolucion) cronologia.push(`curso ${valores.evolucion.toLowerCase()}`);
     if (cronologia.length) partes.push(`Cuadro de ${unirNatural(cronologia)}.`);
 
-    /* AUROSANAX 3.6.1: bloque semiológico general, sin alterar guardado ni navegación. */
+    /* AUROSANAX 3.6.2: refinamiento lingüístico clínico, sin alterar guardado ni navegación. */
     const dolor = [];
     if (valores.localizacion) dolor.push(`localizado en ${valores.localizacion.toLowerCase()}`);
     if (valores.intensidad_0_10 !== '') dolor.push(`de intensidad ${valores.intensidad_0_10}/10`);
@@ -1195,9 +1195,19 @@ Función:
 
     if (valores.relacion_menstruacion) {
       const relacion = normalizar(valores.relacion_menstruacion);
+      const frasesMenstruales = {
+        antes: 'El dolor presenta predominio premenstrual.',
+        'antes de la menstruacion': 'El dolor presenta predominio premenstrual.',
+        durante: 'El dolor se presenta durante la menstruación.',
+        'durante la menstruacion': 'El dolor se presenta durante la menstruación.',
+        despues: 'El dolor se presenta posterior a la menstruación.',
+        'despues de la menstruacion': 'El dolor se presenta posterior a la menstruación.'
+      };
+
       if (relacion === 'sin relacion') partes.push('Sin relación aparente con la menstruación.');
-      else if (relacion !== 'no puede precisar') partes.push(`Refiere relación con la menstruación: ${valores.relacion_menstruacion.toLowerCase()}.`);
-      else partes.push('No puede precisar relación con la menstruación.');
+      else if (relacion === 'no puede precisar') partes.push('No puede precisar relación con la menstruación.');
+      else if (frasesMenstruales[relacion]) partes.push(frasesMenstruales[relacion]);
+      else partes.push(`Refiere relación con la menstruación: ${valores.relacion_menstruacion.toLowerCase()}.`);
     }
 
     if (valores.relacion_sexual) {
@@ -1229,11 +1239,19 @@ Función:
 
     if (valores.sintomas_asociados) {
       const asociados = normalizar(valores.sintomas_asociados);
-      if (!['no', 'ninguno', 'niega', 'sin sintomas asociados'].includes(asociados)) {
-        partes.push(`Síntomas asociados: ${valores.sintomas_asociados}.`);
-      } else {
-        partes.push('Niega síntomas asociados relevantes.');
-      }
+      const niegaAsociados = [
+        'no',
+        'ninguno',
+        'ninguna',
+        'niega',
+        'niega asociados',
+        'niega sintomas asociados',
+        'sin asociados',
+        'sin sintomas asociados'
+      ].includes(asociados);
+
+      if (niegaAsociados) partes.push('Niega síntomas asociados relevantes.');
+      else partes.push(`Refiere como síntomas asociados ${valores.sintomas_asociados}.`);
     }
 
     const etiquetasClinicas = {
@@ -1276,10 +1294,12 @@ Función:
 
     if (valores.tratamientos_previos) {
       const tratamiento = normalizar(valores.tratamientos_previos);
-      if (['no', 'ninguno', 'sin tratamiento'].includes(tratamiento)) {
+      if (['no', 'ninguno', 'ninguna', 'sin tratamiento', 'sin tratamientos'].includes(tratamiento)) {
         partes.push('Niega tratamientos previos.');
+      } else if (['si', 'presente', 'presentes'].includes(tratamiento)) {
+        partes.push('Ha recibido tratamiento previo, sin detalle consignado.');
       } else {
-        partes.push(`Refiere tratamientos previos: ${valores.tratamientos_previos}.`);
+        partes.push(`Refiere tratamiento previo: ${valores.tratamientos_previos}.`);
       }
     }
 
