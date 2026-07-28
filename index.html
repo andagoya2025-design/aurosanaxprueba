@@ -7188,6 +7188,109 @@ document.addEventListener('click',e=>{
 })();
 </script>
 
+<script id="auro-imc-resumen-por-atencion-fix">
+(() => {
+  "use strict";
+
+  if (window.__auroImcResumenPorAtencionFix) return;
+  window.__auroImcResumenPorAtencionFix = true;
+
+  const LIMITE_INTENTOS = 120;
+  let intentos = 0;
+
+  function texto(valor) {
+    return String(valor ?? "").trim();
+  }
+
+  function imcClinicoSeguro(valor, peso, talla) {
+    const bruto = texto(valor).replace(",", ".");
+
+    if (bruto && !/^\d{4}-\d{2}-\d{2}(?:T|$)/i.test(bruto)) {
+      const numero = Number(bruto);
+      if (Number.isFinite(numero) && numero >= 5 && numero <= 100) {
+        return numero.toFixed(1);
+      }
+    }
+
+    const p = Number(texto(peso).replace(",", "."));
+    const tCm = Number(texto(talla).replace(",", "."));
+
+    if (Number.isFinite(p) && Number.isFinite(tCm) && p > 0 && tCm > 0) {
+      const tM = tCm / 100;
+      const calculado = p / (tM * tM);
+      if (Number.isFinite(calculado) && calculado >= 5 && calculado <= 100) {
+        return calculado.toFixed(1);
+      }
+    }
+
+    return "";
+  }
+
+  function idAtencionActiva() {
+    return texto(window.examenFisicoState?.atencionActual);
+  }
+
+  function pintarResumen(idAtencion, registro) {
+    if (!idAtencion || idAtencionActiva() !== texto(idAtencion)) return;
+
+    const destino = document.getElementById("hcImcResumen");
+    if (!destino) return;
+
+    const imc = registro && registro.id_examen
+      ? imcClinicoSeguro(registro.imc, registro.peso_kg, registro.talla_cm)
+      : "";
+
+    destino.textContent = imc || "—";
+  }
+
+  function instalar() {
+    const cargarOriginal = window.auroCargarExamenFisicoDesdeSheetsPorAtencion;
+    const cambiarOriginal = window.cambiarExamenFisicoPorAtencion;
+
+    if (typeof cargarOriginal !== "function" || typeof cambiarOriginal !== "function") {
+      if (++intentos < LIMITE_INTENTOS) setTimeout(instalar, 100);
+      return;
+    }
+
+    if (cargarOriginal.__auroImcResumenEnvuelto) return;
+
+    const cargarCorregido = async function (idAtencion) {
+      const idSolicitado = texto(idAtencion || idAtencionActiva());
+      const registro = await cargarOriginal.apply(this, arguments);
+
+      /*
+        La respuesta solo puede escribir en la tarjeta intermedia si todavía
+        pertenece a la misma atención seleccionada con el botón Ver.
+      */
+      pintarResumen(idSolicitado, registro);
+      return registro;
+    };
+
+    cargarCorregido.__auroImcResumenEnvuelto = true;
+    cargarCorregido.__auroOriginal = cargarOriginal;
+    window.auroCargarExamenFisicoDesdeSheetsPorAtencion = cargarCorregido;
+
+    const cambiarCorregido = function (idAtencion) {
+      const idSolicitado = texto(idAtencion);
+
+      /* Limpieza visual inmediata; no modifica campos ni datos guardados. */
+      const destino = document.getElementById("hcImcResumen");
+      if (destino) destino.textContent = "—";
+
+      return cambiarOriginal.apply(this, arguments);
+    };
+
+    cambiarCorregido.__auroImcResumenEnvuelto = true;
+    cambiarCorregido.__auroOriginal = cambiarOriginal;
+    window.cambiarExamenFisicoPorAtencion = cambiarCorregido;
+
+    console.log("AUROSANAX: sincronización quirúrgica de hcImcResumen instalada.");
+  }
+
+  instalar();
+})();
+</script>
+
 </body>
 </html>
 <!--
