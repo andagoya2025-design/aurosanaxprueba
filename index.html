@@ -2959,6 +2959,52 @@ function showClinicalTab(id,btn){
     },60);
   }
 }
+/* ============================================================
+   AUROSANAX - SINCRONIZACIÓN QUIRÚRGICA DEL IMC EN TARJETA MEDIA
+   Alcance exclusivo:
+   - Protege #hcImcResumen contra fechas ISO o valores desplazados.
+   - Toma el IMC válido de la atención actualmente cargada.
+   - No modifica guardado, Google Sheets, Atenciones ni Examen Físico.
+============================================================ */
+function auroNormalizarImcResumen(valor){
+  const bruto=String(valor??'').trim().replace(',','.');
+  if(!bruto)return '';
+  if(/^\d{4}-\d{2}-\d{2}(?:T|$)/i.test(bruto))return '';
+  if(!/^\d{1,3}(?:\.\d{1,2})?$/.test(bruto))return '';
+  const numero=Number(bruto);
+  if(!Number.isFinite(numero)||numero<5||numero>100)return '';
+  return numero.toFixed(1);
+}
+
+function auroCalcularImcResumenDesdeCampos(){
+  const peso=Number(String(document.getElementById('hcPeso')?.value||'').replace(',','.'));
+  const tallaCm=Number(String(document.getElementById('hcTalla')?.value||'').replace(',','.'));
+  if(!Number.isFinite(peso)||!Number.isFinite(tallaCm)||peso<=0||tallaCm<=0)return '';
+  const talla=tallaCm/100;
+  return auroNormalizarImcResumen(peso/(talla*talla));
+}
+
+function auroActualizarImcResumenSeguro(){
+  const resumen=document.getElementById('hcImcResumen');
+  if(!resumen)return '—';
+  const desdeCampo=auroNormalizarImcResumen(document.getElementById('hcIMC')?.value);
+  const calculado=auroCalcularImcResumenDesdeCampos();
+  const valor=desdeCampo||calculado||'—';
+  resumen.textContent=valor;
+  return valor;
+}
+
+function auroProgramarSincronizacionImcResumen(){
+  const token=String(Date.now())+'-'+Math.random();
+  window.__auroImcResumenToken=token;
+  [0,80,180,400,850,1500].forEach(function(ms){
+    setTimeout(function(){
+      if(window.__auroImcResumenToken!==token)return;
+      auroActualizarImcResumenSeguro();
+    },ms);
+  });
+}
+
 function updateClinicalSummary(){
   const sel=document.getElementById('hcPacienteSelect');
   const paciente=patients.find(p=>p.id_paciente===(sel?.value||''));
@@ -2968,6 +3014,7 @@ function updateClinicalSummary(){
   if(document.getElementById('hcPacienteResumen'))document.getElementById('hcPacienteResumen').textContent=n;
   if(document.getElementById('hcAlergiasResumen'))document.getElementById('hcAlergiasResumen').textContent=a.length>18?a.slice(0,18)+'...':a;
   if(document.getElementById('hcControlResumen'))document.getElementById('hcControlResumen').textContent=c;
+  auroActualizarImcResumenSeguro();
   actualizarTarjetaPacienteHistoria(paciente);
 }
 
@@ -2986,7 +3033,7 @@ function actualizarTarjetaPacienteHistoria(paciente){
   setTextIfExists('hcCardNacimiento', fechaNacimiento ? formatearFechaVisual(fechaNacimiento) : '—');
   setTextIfExists('hcCardEdad', edad === '—' ? '—' : edad + ' años');
   setTextIfExists('hcCardTelefono', paciente?.telefono || '—');
-  /* AUROSANAX FIX QUIRÚRGICO: hcCardIMC queda bajo control exclusivo de examenfisico.js */
+  setTextIfExists('hcCardIMC', imc);
   setTextIfExists('hcCardDetalle', paciente ? 
     ['Sexo: ' + (paciente.sexo || 'No registrado'), 'Ciudad: ' + (paciente.ciudad || 'No registrada'), 'Correo: ' + (paciente.email || 'No registrado')].join('  ·  ')
     : 'Los datos clínicos aparecerán aquí al elegir un paciente registrado.'
@@ -2994,7 +3041,7 @@ function actualizarTarjetaPacienteHistoria(paciente){
 }
 
 function calcAge(){const v=document.getElementById('hcNacimiento')?.value;if(!v)return;const n=new Date(v);const h=new Date();let e=h.getFullYear()-n.getFullYear();const m=h.getMonth()-n.getMonth();if(m<0||(m===0&&h.getDate()<n.getDate()))e--;document.getElementById('hcEdad').value=e>=0?e:''}
-function calcIMC(){const p=parseFloat((document.getElementById('hcPeso')?.value||'').replace(',','.'));const tc=parseFloat((document.getElementById('hcTalla')?.value||'').replace(',','.'));if(!p||!tc)return;const t=tc/100;const imc=(p/(t*t)).toFixed(1);document.getElementById('hcIMC').value=imc;document.getElementById('hcImcResumen').textContent=imc;setTextIfExists('hcCardIMC', imc)}
+function calcIMC(){const p=parseFloat((document.getElementById('hcPeso')?.value||'').replace(',','.'));const tc=parseFloat((document.getElementById('hcTalla')?.value||'').replace(',','.'));const campo=document.getElementById('hcIMC');if(!p||!tc){if(campo)campo.value='';auroActualizarImcResumenSeguro();return;}const t=tc/100;const imc=(p/(t*t)).toFixed(1);if(campo)campo.value=imc;auroActualizarImcResumenSeguro();setTextIfExists('hcCardIMC', imc)}
 function calcObstetricia(){const fur=document.getElementById('hcFUR')?.value;if(!fur)return;const d=new Date(fur+'T00:00:00');const f=new Date(d);f.setDate(f.getDate()+280);document.getElementById('hcFPP').value=f.toISOString().slice(0,10);const h=new Date();const diff=Math.floor((h-d)/(1000*60*60*24));if(diff>=0){document.getElementById('hcEG').value=Math.floor(diff/7)+' sem + '+(diff%7)+' días'}}
 
 function showScreen(id, btn){
@@ -3857,6 +3904,7 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   setValueIfExists('hcFC', h.frecuencia_cardiaca || '');
   setValueIfExists('hcTemperatura', h.temperatura || '');
   setValueIfExists('hcSaturacion', h.saturacion || '');
+  auroActualizarImcResumenSeguro();
 
   const ex = h.examen_fisico || '';
   setValueIfExists('hcFR', auroExtraerSeccionExamen(ex, 'Frecuencia respiratoria'));
@@ -5688,7 +5736,8 @@ async function editarHistoriaClinicaModal(idHistoria){
     );
     auroCargarPlanDesdeHistoria(h, 'edicion');
 
-    if(h.imc) setTextIfExists('hcImcResumen', h.imc);
+    auroActualizarImcResumenSeguro();
+    auroProgramarSincronizacionImcResumen();
     updateClinicalSummary();
 
     const botonesGuardar = [
@@ -6848,6 +6897,27 @@ document.addEventListener('click',e=>{
 
 <!-- AUROSANAX - Módulo Atenciones -->
 <script src="atenciones.js?v=20260629_atenciones_v11"></script>
+<script>
+/* AUROSANAX - Puente mínimo: atención seleccionada -> IMC tarjeta media */
+(function(){
+  'use strict';
+  function sincronizar(){
+    if(typeof window.auroProgramarSincronizacionImcResumen==='function'){
+      window.auroProgramarSincronizacionImcResumen();
+    }
+  }
+  window.addEventListener('aurosanax:atencion-seleccionada', sincronizar);
+  window.addEventListener('aurosanax:atencion-iniciada', sincronizar);
+  window.addEventListener('aurosanax:atencion-limpiada', sincronizar);
+  document.addEventListener('input', function(evento){
+    if(['hcPeso','hcTalla','hcIMC'].includes(evento.target?.id)){
+      if(typeof window.auroActualizarImcResumenSeguro==='function'){
+        window.auroActualizarImcResumenSeguro();
+      }
+    }
+  });
+})();
+</script>
 
 <!-- AUROSANAX - Módulo Ginecología por atención -->
 <script src="ginecologia.js?v=20260717_ginecologia_v1"></script>
