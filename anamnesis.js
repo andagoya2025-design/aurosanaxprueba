@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.9';
+  const VERSION = '3.6.10';
   const state = {
     inicializado: false,
     cargando: false,
@@ -369,24 +369,86 @@ Función:
     };
   }
 
-  function auroAsignarValorContexto(control, valores, esFecha = false, permitirOpcionContexto = false) {
+  const AURO_ESPECIALIDADES_TEMPORALES = [
+    'Medicina Estética',
+    'Medicina Funcional',
+    'Estética Íntima',
+    'Ginecología Estética y Regenerativa'
+  ];
+
+  const AURO_TIPOS_ATENCION = [
+    'Primera vez',
+    'Control',
+    'Procedimiento',
+    'Seguimiento',
+    'Urgencia',
+    'Valoración'
+  ];
+
+  function auroAsegurarOpcionesSelector(control, opciones) {
+    if (!control || control.tagName !== 'SELECT') return;
+
+    convertirArray(opciones).map(texto).filter(Boolean).forEach(valor => {
+      const existe = [...control.options].some(item =>
+        normalizar(item.value) === normalizar(valor) ||
+        normalizar(item.textContent) === normalizar(valor)
+      );
+
+      if (!existe) {
+        const opcion = document.createElement('option');
+        opcion.value = valor;
+        opcion.textContent = valor;
+        opcion.dataset.auroOpcionTemporal = 'true';
+        control.appendChild(opcion);
+      }
+    });
+  }
+
+  function auroPrepararControlCabeceraEditable(control, alias) {
+    if (!control) return;
+
+    control.dataset.auroContextoAtencion = 'true';
+    control.dataset.auroCabeceraContexto = 'true';
+    control.dataset.auroCabeceraAlias = alias;
+
+    if (control.dataset.auroEdicionCabeceraInstalada !== 'true') {
+      control.dataset.auroEdicionCabeceraInstalada = 'true';
+      control.addEventListener('change', function () {
+        if (control.dataset.auroAsignandoContexto === 'true') return;
+        control.dataset.auroValorConfirmadoAtencion = 'true';
+      });
+    }
+  }
+
+  function auroAsignarValorContexto(
+    control,
+    valores,
+    esFecha = false,
+    permitirOpcionContexto = false,
+    editable = false,
+    alias = ''
+  ) {
     if (!control) return false;
 
     const candidatos = convertirArray(valores).map(texto).filter(Boolean);
     if (!candidatos.length) return false;
 
+    auroPrepararControlCabeceraEditable(control, alias);
+
     if (control.tagName === 'SELECT') {
-      const opciones = [...control.options];
-      let opcion = opciones.find(item => candidatos.some(valor => {
+      if (alias === 'especialidad') {
+        auroAsegurarOpcionesSelector(control, [...candidatos, ...AURO_ESPECIALIDADES_TEMPORALES]);
+      }
+
+      if (alias === 'tipo') {
+        auroAsegurarOpcionesSelector(control, [...candidatos, ...AURO_TIPOS_ATENCION]);
+      }
+
+      let opcion = [...control.options].find(item => candidatos.some(valor => {
         const buscado = normalizar(valor);
         return normalizar(item.value) === buscado || normalizar(item.textContent) === buscado;
       }));
 
-      /*
-        Para médicos y especialidades configurables, la cabecera puede recibir
-        valores nuevos sin depender de opciones fijas escritas en el HTML.
-        La opción creada es solo visual y no modifica Configuración ni Atención.
-      */
       if (!opcion && permitirOpcionContexto) {
         const visible = candidatos.find(valor => !/^MED[-_]/i.test(valor)) || candidatos.at(-1);
         if (visible) {
@@ -399,17 +461,31 @@ Función:
       }
 
       if (!opcion) return false;
-      control.value = opcion.value;
-    } else {
+
+      if (!(editable && control.dataset.auroValorConfirmadoAtencion === 'true')) {
+        control.dataset.auroAsignandoContexto = 'true';
+        control.value = opcion.value;
+      }
+    } else if (!(editable && control.dataset.auroValorConfirmadoAtencion === 'true')) {
+      control.dataset.auroAsignandoContexto = 'true';
       control.value = esFecha ? auroNormalizarFechaAtencion(candidatos[0]) : candidatos[0];
     }
 
-    control.dataset.auroContextoAtencion = 'true';
-    control.disabled = true;
-    control.setAttribute('aria-readonly', 'true');
-    control.title = 'Dato sincronizado desde la atención activa';
+    control.disabled = !editable;
+
+    if (editable) {
+      control.removeAttribute('aria-readonly');
+      control.title = alias === 'especialidad'
+        ? 'Especialidad clínica de esta atención. Puede confirmarla o cambiarla.'
+        : 'Tipo de atención. Puede confirmarlo o cambiarlo.';
+    } else {
+      control.setAttribute('aria-readonly', 'true');
+      control.title = 'Dato sincronizado desde la atención activa';
+    }
+
     control.dispatchEvent(new Event('input', { bubbles: true }));
     control.dispatchEvent(new Event('change', { bubbles: true }));
+    delete control.dataset.auroAsignandoContexto;
     return true;
   }
 
@@ -420,6 +496,10 @@ Función:
       control.disabled = false;
       control.removeAttribute('aria-readonly');
       delete control.dataset.auroContextoAtencion;
+      delete control.dataset.auroCabeceraContexto;
+      delete control.dataset.auroCabeceraAlias;
+      delete control.dataset.auroValorConfirmadoAtencion;
+      delete control.dataset.auroAsignandoContexto;
       control.title = '';
       control.value = '';
     });
@@ -438,10 +518,31 @@ Función:
     const especialidad = auroBuscarControlCabeceraAnamnesis('especialidad');
     const tipo = auroBuscarControlCabeceraAnamnesis('tipo');
 
-    auroAsignarValorContexto(fecha, contexto.fecha, true);
-    auroAsignarValorContexto(medico, [contexto.id_medico, contexto.medico], false, true);
-    auroAsignarValorContexto(especialidad, contexto.especialidad, false, true);
-    auroAsignarValorContexto(tipo, contexto.tipo);
+    auroAsignarValorContexto(fecha, contexto.fecha, true, false, false, 'fecha');
+    auroAsignarValorContexto(
+      medico,
+      [contexto.id_medico, contexto.medico],
+      false,
+      true,
+      false,
+      'medico'
+    );
+    auroAsignarValorContexto(
+      especialidad,
+      contexto.especialidad,
+      false,
+      true,
+      true,
+      'especialidad'
+    );
+    auroAsignarValorContexto(
+      tipo,
+      contexto.tipo,
+      false,
+      true,
+      true,
+      'tipo'
+    );
 
     return contexto;
   }
@@ -1967,7 +2068,8 @@ Función:
         valor: control.type === 'checkbox' || control.type === 'radio'
           ? texto(control.value)
           : control.value,
-        checked: !!control.checked
+        checked: !!control.checked,
+        cabecera_contexto: control.dataset?.auroCabeceraContexto === 'true'
       };
     });
 
@@ -1987,6 +2089,10 @@ Función:
         control.checked = !!dato.checked;
       } else {
         control.value = dato.valor ?? '';
+      }
+
+      if (dato.cabecera_contexto === true) {
+        control.dataset.auroValorConfirmadoAtencion = 'true';
       }
 
       control.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2025,6 +2131,13 @@ Función:
       if (!item || typeof item !== 'object') return false;
 
       const tipo = texto(item.tipo).toLowerCase();
+
+      /*
+        AUROSANAX 3.6.10:
+        La cabecera editable (especialidad y tipo) se conserva por atención,
+        pero no constituye contenido clínico para Diagnóstico o Integración.
+      */
+      if (item.cabecera_contexto === true) return false;
 
       /*
         CORRECCIÓN QUIRÚRGICA AUROSANAX:
