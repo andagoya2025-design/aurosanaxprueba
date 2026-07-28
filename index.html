@@ -2986,7 +2986,7 @@ function actualizarTarjetaPacienteHistoria(paciente){
   setTextIfExists('hcCardNacimiento', fechaNacimiento ? formatearFechaVisual(fechaNacimiento) : '—');
   setTextIfExists('hcCardEdad', edad === '—' ? '—' : edad + ' años');
   setTextIfExists('hcCardTelefono', paciente?.telefono || '—');
-  setTextIfExists('hcCardIMC', imc);
+  /* AUROSANAX FIX QUIRÚRGICO: hcCardIMC queda bajo control exclusivo de examenfisico.js */
   setTextIfExists('hcCardDetalle', paciente ? 
     ['Sexo: ' + (paciente.sexo || 'No registrado'), 'Ciudad: ' + (paciente.ciudad || 'No registrada'), 'Correo: ' + (paciente.email || 'No registrado')].join('  ·  ')
     : 'Los datos clínicos aparecerán aquí al elegir un paciente registrado.'
