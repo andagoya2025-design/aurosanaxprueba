@@ -4979,7 +4979,7 @@ async function guardarHistoriaClinicaERP(){
   const data = {
     id_paciente: idPaciente,
     fecha_apertura: esEdicion ? undefined : new Date().toISOString(),
-    motivo_consulta: getValueIfExists('hcMotivoConsulta'),
+    motivo_consulta: getValueIfExists('hcMotivoConsulta') || 'Historia clínica registrada desde AUROSANAX ERP',
     enfermedad_actual: getValueIfExists('hcEnfermedadActual'),
     antecedentes_personales: recopilarAntecedentesPersonalesCompletos(),
     antecedentes_quirurgicos: recopilarAntecedentesQuirurgicosEstructurados(),
