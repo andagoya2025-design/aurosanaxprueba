@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 2.3 contexto clínico compatible + resumen premium + paginación segura
+   Versión: 2.4 contexto maestro enriquecido no invasivo + resumen premium + paginación segura
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -2559,6 +2559,206 @@
     return a ? a.id_atencion : '';
   };
 
+
+  /* =====================================================
+     AUROSANAX - ENRIQUECIMIENTO DE CONTEXTO EN MEMORIA
+     Alcance estrictamente aditivo:
+     - No modifica la hoja atenciones.
+     - No agrega ni mueve columnas.
+     - No altera crear, finalizar, guardar ni sincronizar atenciones.
+     - Resuelve datos descriptivos desde los catálogos ya cargados.
+     - El servicio solicitado es orientativo y nunca bloquea la atención.
+  ===================================================== */
+
+  function auroContextoListaMedicos(){
+    if(Array.isArray(medicosActivosAtenciones) && medicosActivosAtenciones.length){
+      return medicosActivosAtenciones;
+    }
+
+    if(Array.isArray(window.medicosAgendaWeb) && window.medicosAgendaWeb.length){
+      return window.medicosAgendaWeb;
+    }
+
+    if(Array.isArray(window.medicos) && window.medicos.length){
+      return window.medicos;
+    }
+
+    return [];
+  }
+
+  function auroContextoResolverMedico(idMedico){
+    const id = String(idMedico || '').trim();
+    const lista = auroContextoListaMedicos();
+
+    const encontrado = lista.find(function(m){
+      return idMedicoRegistro(m) === id;
+    }) || null;
+
+    if(!encontrado){
+      return {
+        id_medico: id,
+        nombre_medico: '',
+        especialidad_medico: ''
+      };
+    }
+
+    return {
+      id_medico: id || idMedicoRegistro(encontrado),
+      nombre_medico: nombreCompletoMedico(encontrado),
+      especialidad_medico: String(
+        encontrado.especialidad_principal ||
+        encontrado.especialidad ||
+        encontrado.nombre_especialidad ||
+        ''
+      ).trim()
+    };
+  }
+
+  function auroContextoBuscarCitaPorId(idCita){
+    const id = String(idCita || '').trim();
+    if(!id) return null;
+
+    const fuentes = [];
+
+    if(Array.isArray(window.citasAgendaWeb)){
+      fuentes.push.apply(fuentes, window.citasAgendaWeb);
+    }
+
+    const seleccionada = leerCitaSeleccionadaAgenda();
+    if(seleccionada && typeof seleccionada === 'object'){
+      fuentes.push(seleccionada);
+    }
+
+    return fuentes.find(function(cita){
+      const cid = String(
+        cita?.id_cita ||
+        cita?.id ||
+        cita?.id_cita_web ||
+        cita?.fila_origen ||
+        ''
+      ).trim();
+
+      return cid === id;
+    }) || null;
+  }
+
+  function auroContextoListaServicios(){
+    const posibles = [
+      window.serviciosAgendaWeb,
+      window.serviciosActivos,
+      window.servicios
+    ];
+
+    for(let i = 0; i < posibles.length; i++){
+      if(Array.isArray(posibles[i]) && posibles[i].length){
+        return posibles[i];
+      }
+    }
+
+    return [];
+  }
+
+  function auroContextoIdServicio(servicio){
+    return String(
+      servicio?.id_servicio ||
+      servicio?.id ||
+      servicio?.codigo ||
+      ''
+    ).trim();
+  }
+
+  function auroContextoNombreServicio(servicio){
+    return String(
+      servicio?.nombre_servicio ||
+      servicio?.servicio ||
+      servicio?.nombre ||
+      ''
+    ).trim();
+  }
+
+  function auroContextoEspecialidadServicio(servicio){
+    return String(
+      servicio?.especialidad ||
+      servicio?.nombre_especialidad ||
+      servicio?.id_especialidad ||
+      ''
+    ).trim();
+  }
+
+  function auroContextoResolverServicioSolicitado(atencion){
+    const salida = {
+      id_servicio_solicitado: '',
+      nombre_servicio_solicitado: '',
+      especialidad_servicio_solicitado: '',
+      servicio_origen: '',
+      servicio_confirmado: false
+    };
+
+    const cita = auroContextoBuscarCitaPorId(atencion?.id_cita);
+    if(!cita) return salida;
+
+    salida.servicio_origen = 'cita';
+
+    const idServicioCita = String(
+      cita.id_servicio ||
+      cita.servicio_id ||
+      ''
+    ).trim();
+
+    const textoServicioCita = String(
+      cita.nombre_servicio ||
+      cita.servicio ||
+      cita.tipo_cita ||
+      cita.motivo ||
+      ''
+    ).trim();
+
+    const listaServicios = auroContextoListaServicios();
+    let servicio = null;
+
+    if(idServicioCita){
+      servicio = listaServicios.find(function(item){
+        return auroContextoIdServicio(item) === idServicioCita;
+      }) || null;
+    }
+
+    if(!servicio && textoServicioCita){
+      const buscado = normalizarTextoSimple(textoServicioCita);
+
+      servicio = listaServicios.find(function(item){
+        const nombre = normalizarTextoSimple(auroContextoNombreServicio(item));
+        return nombre && (
+          nombre === buscado ||
+          nombre.includes(buscado) ||
+          buscado.includes(nombre)
+        );
+      }) || null;
+    }
+
+    if(servicio){
+      salida.id_servicio_solicitado = auroContextoIdServicio(servicio);
+      salida.nombre_servicio_solicitado = auroContextoNombreServicio(servicio);
+      salida.especialidad_servicio_solicitado = auroContextoEspecialidadServicio(servicio);
+      return salida;
+    }
+
+    /*
+      Tolerancia deliberada:
+      Si la cita contiene un texto libre que no coincide con el catálogo,
+      se conserva como referencia sin bloquear ni convertirlo en dato confirmado.
+    */
+    salida.id_servicio_solicitado = idServicioCita;
+    salida.nombre_servicio_solicitado = textoServicioCita;
+    salida.especialidad_servicio_solicitado = String(
+      cita.especialidad ||
+      cita.nombre_especialidad ||
+      cita.id_especialidad ||
+      ''
+    ).trim();
+
+    return salida;
+  }
+
   /* =====================================================
      AUROSANAX - CONTEXTO CLÍNICO CENTRAL COMPATIBLE
      Intervención quirúrgica y aditiva.
@@ -2584,12 +2784,47 @@
         return null;
       }
 
+      const medico = auroContextoResolverMedico(atencion.id_medico);
+      const servicio = auroContextoResolverServicioSolicitado(atencion);
+
       const contexto = {
         id_atencion: String(atencion.id_atencion || '').trim(),
         id_paciente: String(atencion.id_paciente || '').trim(),
         id_historia: String(atencion.id_historia || '').trim(),
         id_cita: String(atencion.id_cita || '').trim(),
         id_medico: String(atencion.id_medico || '').trim(),
+
+        /*
+          Campos descriptivos calculados en memoria.
+          No forman parte del payload de guardarAtencion.
+        */
+        nombre_medico: String(medico.nombre_medico || '').trim(),
+        especialidad_medico: String(medico.especialidad_medico || '').trim(),
+
+        /*
+          Servicio solicitado:
+          - Es orientativo.
+          - Puede provenir de la cita o de texto libre.
+          - Nunca bloquea la atención.
+          - No se considera servicio confirmado.
+        */
+        id_servicio_solicitado: String(servicio.id_servicio_solicitado || '').trim(),
+        nombre_servicio_solicitado: String(servicio.nombre_servicio_solicitado || '').trim(),
+        especialidad_servicio_solicitado: String(servicio.especialidad_servicio_solicitado || '').trim(),
+        servicio_origen: String(servicio.servicio_origen || '').trim(),
+        servicio_confirmado: Boolean(servicio.servicio_confirmado),
+
+        /*
+          Especialidad clínica visible:
+          prioriza la del servicio cuando existe; de lo contrario usa
+          la especialidad principal configurada del médico.
+        */
+        especialidad_atencion: String(
+          servicio.especialidad_servicio_solicitado ||
+          medico.especialidad_medico ||
+          ''
+        ).trim(),
+
         numero_consulta: Number(atencion.numero_consulta || 0),
         fecha_atencion: String(atencion.fecha_atencion || '').trim(),
         hora_atencion: String(atencion.hora_atencion || '').trim(),
