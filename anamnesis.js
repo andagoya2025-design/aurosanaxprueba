@@ -1,7 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.6.2
+Versión: 3.6.3
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.2';
+  const VERSION = '3.6.3';
   const state = {
     inicializado: false,
     cargando: false,
@@ -1178,7 +1178,7 @@ Función:
     if (valores.evolucion) cronologia.push(`curso ${valores.evolucion.toLowerCase()}`);
     if (cronologia.length) partes.push(`Cuadro de ${unirNatural(cronologia)}.`);
 
-    /* AUROSANAX 3.6.2: refinamiento lingüístico clínico, sin alterar guardado ni navegación. */
+    /* AUROSANAX 3.6.3: pulido final del motor narrativo, sin alterar guardado, navegación ni vínculos. */
     const dolor = [];
     if (valores.localizacion) dolor.push(`localizado en ${valores.localizacion.toLowerCase()}`);
     if (valores.intensidad_0_10 !== '') dolor.push(`de intensidad ${valores.intensidad_0_10}/10`);
@@ -1204,7 +1204,7 @@ Función:
         'despues de la menstruacion': 'El dolor se presenta posterior a la menstruación.'
       };
 
-      if (relacion === 'sin relacion') partes.push('Sin relación aparente con la menstruación.');
+      if (relacion === 'sin relacion') partes.push('Sin relación con el ciclo menstrual.');
       else if (relacion === 'no puede precisar') partes.push('No puede precisar relación con la menstruación.');
       else if (frasesMenstruales[relacion]) partes.push(frasesMenstruales[relacion]);
       else partes.push(`Refiere relación con la menstruación: ${valores.relacion_menstruacion.toLowerCase()}.`);
@@ -1277,7 +1277,7 @@ Función:
       if (['no', 'ausente', 'ausentes', 'negativo'].includes(valor)) negativos.push(etiqueta);
     });
 
-    if (positivos.length) partes.push(`Se acompaña de ${unirNatural(positivos)}.`);
+    if (positivos.length) partes.push(`Asocia ${unirNatural(positivos)}.`);
     if (negativos.length) partes.push(`Niega ${unirNatural(negativos)}.`);
 
     const embarazoValor = valores.posibilidad_embarazo || valores.embarazo_posible;
