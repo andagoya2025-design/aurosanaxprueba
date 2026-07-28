@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.5';
+  const VERSION = '3.6.6';
   const state = {
     inicializado: false,
     cargando: false,
@@ -223,53 +223,157 @@ Función:
     const consulta = normalizar(motivo);
     if (!consulta) return 0;
 
-    let puntos = 0;
+    /*
+      AUROSANAX 3.6.6 - MOTOR GLOBAL DE SELECCIÓN DE PLANTILLAS
+      Intervención quirúrgica limitada al reconocimiento del motivo.
+      No modifica formularios, redacción clínica, guardado ni restauración.
+    */
+    const palabrasVacias = new Set([
+      'a', 'al', 'con', 'de', 'del', 'durante', 'el', 'en', 'la', 'las',
+      'lo', 'los', 'me', 'mi', 'para', 'por', 'que', 'se', 'sin', 'un',
+      'una', 'y'
+    ]);
+
+    const tokens = valor => normalizar(valor)
+      .split(' ')
+      .filter(token => token.length >= 2 && !palabrasVacias.has(token));
+
+    const unicos = lista => [...new Set(lista)];
+    const tokensConsulta = unicos(tokens(consulta));
+    const consultaCompacta = tokensConsulta.join(' ');
+
     const nombre = normalizar(nombrePlantilla(plantilla));
     const categoria = normalizar(plantilla.categoria_sindromica || '');
     const especialidad = normalizar(plantilla.especialidad || '');
     const especialidadSeleccionada = normalizar(especialidadActual());
+    const claves = palabrasClave(plantilla);
 
-    if (nombre && consulta === nombre) puntos += 1000;
-    else if (nombre && consulta.includes(nombre)) puntos += 500 + nombre.length;
+    let puntos = 0;
+    let mejorCoincidenciaFrase = 0;
+    let maxTokensCoincidentes = 0;
 
-    if (categoria && consulta.includes(categoria)) puntos += 350 + categoria.length;
+    const puntuarFrase = (frase, pesoExacto, pesoContenida, pesoTokens) => {
+      frase = normalizar(frase);
+      if (!frase) return 0;
 
-    palabrasClave(plantilla).forEach(clave => {
-      if (consulta === clave) puntos += 800 + clave.length;
-      else if (consulta.includes(clave)) puntos += 300 + clave.length;
-      else {
-        const partes = clave.split(' ').filter(p => p.length >= 4);
-        const coincidencias = partes.filter(p => consulta.includes(p)).length;
-        if (partes.length >= 2 && coincidencias >= 2) {
-          puntos += coincidencias * 15;
-        }
+      const tokensFrase = unicos(tokens(frase));
+      const fraseCompacta = tokensFrase.join(' ');
+      const coincidencias = tokensConsulta.filter(token => tokensFrase.includes(token));
+      const coberturaConsulta = tokensConsulta.length
+        ? coincidencias.length / tokensConsulta.length
+        : 0;
+      const coberturaFrase = tokensFrase.length
+        ? coincidencias.length / tokensFrase.length
+        : 0;
+
+      maxTokensCoincidentes = Math.max(maxTokensCoincidentes, coincidencias.length);
+
+      let subtotal = 0;
+
+      if (consulta === frase) {
+        subtotal += pesoExacto + frase.length;
+      } else if (consultaCompacta && consultaCompacta === fraseCompacta) {
+        /* Igualdad clínica aunque cambien artículos o preposiciones. */
+        subtotal += pesoExacto - 40 + frase.length;
+      } else if (consulta.includes(frase)) {
+        subtotal += pesoContenida + frase.length * 2;
+      } else if (frase.includes(consulta) && tokensConsulta.length >= 2) {
+        subtotal += Math.round(pesoContenida * 0.65) + consulta.length;
       }
+
+      if (coincidencias.length >= 2) {
+        subtotal += Math.round(
+          pesoTokens * coincidencias.length * coberturaConsulta * (0.5 + coberturaFrase)
+        );
+      }
+
+      if (
+        tokensConsulta.length >= 2 &&
+        coincidencias.length === tokensConsulta.length
+      ) {
+        /* Todos los conceptos del motivo aparecen juntos en la misma frase. */
+        subtotal += 700 + tokensConsulta.length * 80;
+      }
+
+      mejorCoincidenciaFrase = Math.max(mejorCoincidenciaFrase, subtotal);
+      return subtotal;
+    };
+
+    puntos += puntuarFrase(nombre, 2200, 1250, 130);
+    puntos += puntuarFrase(categoria, 1500, 850, 90);
+
+    claves.forEach(clave => {
+      puntos += puntuarFrase(clave, 2000, 1150, 120);
     });
 
+    /* Coincidencia general del motivo contra todo el contenido indexable. */
+    const contenidoPlantilla = normalizar([
+      nombre,
+      categoria,
+      especialidad,
+      ...claves
+    ].join(' '));
+    const tokensContenido = new Set(tokens(contenidoPlantilla));
+    const coincidenciasGlobales = tokensConsulta.filter(token => tokensContenido.has(token));
+
+    if (coincidenciasGlobales.length >= 2) {
+      puntos += coincidenciasGlobales.length * 70;
+    }
+
+    /* La especialidad ayuda a desempatar, pero no anula una frase clínica exacta. */
     if (especialidadSeleccionada && especialidad) {
-      if (especialidadSeleccionada === especialidad) puntos += 50;
+      if (especialidadSeleccionada === especialidad) puntos += 140;
       else if (
         especialidadSeleccionada.includes(especialidad) ||
         especialidad.includes(especialidadSeleccionada)
-      ) puntos += 25;
+      ) puntos += 70;
+      else puntos -= 20;
     }
 
-    return puntos;
+    /* Evita que una plantilla general gane por una sola palabra aislada. */
+    if (
+      tokensConsulta.length >= 2 &&
+      maxTokensCoincidentes < 2 &&
+      mejorCoincidenciaFrase < 500
+    ) {
+      puntos -= 300;
+    }
+
+    return Math.max(0, Math.round(puntos));
   }
 
   function buscarPlantilla(motivo) {
-    let mejor = null;
-    let mejorPuntaje = 0;
+    const resultados = state.plantillas
+      .map(plantilla => ({
+        plantilla,
+        puntaje: puntuarPlantilla(plantilla, motivo)
+      }))
+      .filter(resultado => resultado.puntaje > 0)
+      .sort((a, b) => {
+        if (b.puntaje !== a.puntaje) return b.puntaje - a.puntaje;
 
-    state.plantillas.forEach(plantilla => {
-      const puntaje = puntuarPlantilla(plantilla, motivo);
-      if (puntaje > mejorPuntaje) {
-        mejor = plantilla;
-        mejorPuntaje = puntaje;
-      }
-    });
+        /* En empate, prioriza la plantilla con nombre más específico. */
+        return nombrePlantilla(b.plantilla).length - nombrePlantilla(a.plantilla).length;
+      });
 
-    return mejorPuntaje > 0 ? mejor : null;
+    const mejor = resultados[0] || null;
+    const segundo = resultados[1] || null;
+
+    if (!mejor || mejor.puntaje < 180) return null;
+
+    /*
+      Si dos opciones quedan prácticamente empatadas y el puntaje es bajo,
+      se conserva la selección manual para evitar una asignación insegura.
+    */
+    if (
+      segundo &&
+      mejor.puntaje < 700 &&
+      mejor.puntaje - segundo.puntaje < 60
+    ) {
+      return null;
+    }
+
+    return mejor.plantilla;
   }
 
   function estado(mensaje, tipo = 'info') {
