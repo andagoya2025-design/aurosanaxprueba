@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.3';
+  const VERSION = '3.6.4';
   const state = {
     inicializado: false,
     cargando: false,
@@ -1181,7 +1181,16 @@ Función:
     /* AUROSANAX 3.6.3: pulido final del motor narrativo, sin alterar guardado, navegación ni vínculos. */
     const dolor = [];
     if (valores.localizacion) dolor.push(`localizado en ${valores.localizacion.toLowerCase()}`);
-    if (valores.intensidad_0_10 !== '') dolor.push(`de intensidad ${valores.intensidad_0_10}/10`);
+    if (valores.intensidad_0_10 !== '') {
+      const n=Number(valores.intensidad_0_10);
+      let grado='';
+      if(!Number.isNaN(n)){
+        if(n<=3) grado='leve';
+        else if(n<=6) grado='moderada';
+        else grado='intensa';
+      }
+      dolor.push(grado?`de intensidad ${grado} (${n}/10)`: `de intensidad ${valores.intensidad_0_10}/10`);
+    }
     if (valores.caracter) dolor.push(`de carácter ${valores.caracter.toLowerCase()}`);
     if (valores.irradiacion) dolor.push(`con irradiación a ${valores.irradiacion}`);
     if (valores.duracion_episodios) dolor.push(`con episodios de ${valores.duracion_episodios}`);
