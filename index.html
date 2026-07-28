@@ -2968,6 +2968,12 @@ function updateClinicalSummary(){
   if(document.getElementById('hcPacienteResumen'))document.getElementById('hcPacienteResumen').textContent=n;
   if(document.getElementById('hcAlergiasResumen'))document.getElementById('hcAlergiasResumen').textContent=a.length>18?a.slice(0,18)+'...':a;
   if(document.getElementById('hcControlResumen'))document.getElementById('hcControlResumen').textContent=c;
+
+  /*
+    AUROSANAX FIX QUIRÚRGICO IMC POR ATENCIÓN:
+    El resumen general no escribe IMC. Ese valor pertenece exclusivamente
+    al examen físico cargado después de pulsar Ver en una atención.
+  */
   actualizarTarjetaPacienteHistoria(paciente);
 }
 
@@ -2976,8 +2982,6 @@ function actualizarTarjetaPacienteHistoria(paciente){
   const iniciales = nombre !== 'Seleccione un paciente' ? nombre.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase() : 'A';
   const fechaNacimiento = paciente?.fecha_nacimiento ? normalizarFechaInput(paciente.fecha_nacimiento) : '';
   const edad = paciente?.edad || calcularEdadDesdeFecha(fechaNacimiento) || '—';
-  const imc = document.getElementById('hcIMC')?.value || '—';
-
   setTextIfExists('hcAvatar', iniciales || 'A');
   setTextIfExists('hcCardNombre', nombre);
   setTextIfExists('hcCardEstado', paciente ? (paciente.estado || 'Paciente activo') : 'Historia activa');
@@ -2986,7 +2990,10 @@ function actualizarTarjetaPacienteHistoria(paciente){
   setTextIfExists('hcCardNacimiento', fechaNacimiento ? formatearFechaVisual(fechaNacimiento) : '—');
   setTextIfExists('hcCardEdad', edad === '—' ? '—' : edad + ' años');
   setTextIfExists('hcCardTelefono', paciente?.telefono || '—');
-  setTextIfExists('hcCardIMC', imc);
+
+  /* No sobrescribir hcCardIMC desde la ficha general del paciente. */
+  if(!paciente) setTextIfExists('hcCardIMC', '—');
+
   setTextIfExists('hcCardDetalle', paciente ? 
     ['Sexo: ' + (paciente.sexo || 'No registrado'), 'Ciudad: ' + (paciente.ciudad || 'No registrada'), 'Correo: ' + (paciente.email || 'No registrado')].join('  ·  ')
     : 'Los datos clínicos aparecerán aquí al elegir un paciente registrado.'
@@ -3109,9 +3116,42 @@ function toggleSidebar(){
 
 /* AUROSANAX: función normalizarEstadoCivilPaciente movida a pacientes.js */
 
+/* ============================================================
+   AUROSANAX - LIMPIEZA VISUAL DEL EXAMEN AL CAMBIAR/ABRIR PACIENTE
+   El paciente y sus antecedentes permanecen visibles.
+   Ningún examen físico se muestra hasta pulsar Ver en una atención.
+============================================================ */
+function auroHistoriaLimpiarExamenSinAtencionSeleccionada(){
+  [
+    'hcPeso','hcTalla','hcIMC','hcPA','hcFC','hcFR','hcTemperatura',
+    'hcSaturacion','hcCadera','hcPorcentajeGrasa','hcMasaMuscular',
+    'hcPerimetroCefalico','hcPerimetroToracico','hcPerimetroAbdominal'
+  ].forEach(function(id){
+    setValueIfExists(id, '');
+  });
+
+  setTextIfExists('hcImcResumen', '—');
+  setTextIfExists('hcCardIMC', '—');
+
+  const previo = document.getElementById('auroExamenFisicoPrevioBox');
+  if(previo){
+    previo.style.display = 'none';
+    const contenido = previo.querySelector('.auro-previos-content');
+    if(contenido) contenido.innerHTML = '';
+  }
+
+  window.planState = window.planState || { atencionActual:'', cache:{} };
+  window.planState.atencionActual = '';
+
+  window.examenFisicoState = window.examenFisicoState || { atencionActual:'', cache:{} };
+  window.examenFisicoState.atencionActual = '';
+}
+
 function seleccionarPacienteHistoria(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || activePatientId || '';
   const p = patients.find(x => String(x.id_paciente || x.id || '') === String(idPaciente));
+
+  auroHistoriaLimpiarExamenSinAtencionSeleccionada();
 
   if(!p){
     activePatientId = '';
@@ -3912,15 +3952,6 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   setValueIfExists('hcExamenGinecologico', auroExtraerSeccionExamen(ex, 'Ginecológico'));
 
   auroActualizarAyudaIMC();
-
-  /*
-    AUROSANAX FIX QUIRÚRGICO IMC POR ATENCIÓN 2026-07-28
-    La tarjeta se pinta únicamente después de cargar el examen físico real
-    y solo si el registro pertenece a la atención actualmente solicitada.
-  */
-  if(typeof window.auroSincronizarTarjetasImcPorAtencion === 'function'){
-    window.auroSincronizarTarjetasImcPorAtencion(h);
-  }
 }
 
 function auroExtraerObservacionSistema(texto){
@@ -5657,14 +5688,12 @@ async function editarHistoriaClinicaModal(idHistoria){
   abrirHistoriaPaciente(idPacienteReal);
 
   /*
-    Se localiza la atención por la pareja real:
-    id_paciente + id_historia.
-    Esto evita conservar la atención o historia abierta anteriormente.
+    AUROSANAX FIX QUIRÚRGICO:
+    Abrir una historia identifica al paciente, pero no selecciona
+    automáticamente ninguna atención. La consulta se activa únicamente
+    cuando el profesional pulsa Ver en el historial de atenciones.
   */
-  await auroHistoriaVincularAtencionPorHistoria(
-    idHistoriaReal,
-    idPacienteReal
-  );
+  auroHistoriaLimpiarExamenSinAtencionSeleccionada();
 
   setTimeout(() => {
     editingHistoryId = idHistoriaReal;
@@ -5682,14 +5711,11 @@ async function editarHistoriaClinicaModal(idHistoria){
     setValueIfExists('hcMotivoConsulta', h.motivo_consulta || '');
     setValueIfExists('hcEnfermedadActual', h.enfermedad_actual || '');
     auroCargarAntecedentesCompletosGuardados(h);
-    setValueIfExists('hcPeso', h.peso_kg || '');
-    setValueIfExists('hcTalla', h.talla_cm || '');
-    setValueIfExists('hcIMC', h.imc || '');
-    setValueIfExists('hcPA', h.presion_arterial || '');
-    setValueIfExists('hcFC', h.frecuencia_cardiaca || '');
-    setValueIfExists('hcTemperatura', h.temperatura || '');
-    setValueIfExists('hcSaturacion', h.saturacion || '');
-    auroCargarExamenFisicoDesdeHistoria(h, 'edicion');
+    /*
+      El examen físico no se carga desde historias_clinicas.
+      Se mantiene vacío hasta seleccionar una atención con el botón Ver.
+    */
+    auroHistoriaLimpiarExamenSinAtencionSeleccionada();
     auroCargarDiagnosticosDesdeHistoria(h);
     setValueIfExists(
       'hcCie10Principal',
@@ -5697,9 +5723,6 @@ async function editarHistoriaClinicaModal(idHistoria){
     );
     auroCargarPlanDesdeHistoria(h, 'edicion');
 
-    if(typeof window.auroSincronizarTarjetasImcPorAtencion === 'function'){
-      window.auroSincronizarTarjetasImcPorAtencion(h);
-    }
     updateClinicalSummary();
 
     const botonesGuardar = [
@@ -7162,139 +7185,6 @@ document.addEventListener('click',e=>{
   }else{
     setTimeout(restaurar, 250);
   }
-})();
-</script>
-
-<script>
-/* ============================================================
-   AUROSANAX - SINCRONIZACIÓN QUIRÚRGICA DEL IMC POR ID_ATENCIÓN
-   Versión: 2026-07-28
-   Alcance exclusivo:
-   - Tarjeta superior #hcCardIMC.
-   - Tarjeta intermedia #hcImcResumen.
-   - No modifica guardado, Apps Script, Agenda, Plan ni otros módulos.
-============================================================ */
-(function auroInstalarSincronizacionImcPorAtencion(){
-  'use strict';
-
-  let idAtencionSolicitada = '';
-
-  function texto(valor){
-    return String(valor == null ? '' : valor).trim();
-  }
-
-  function idAtencionActiva(){
-    try{
-      if(typeof window.getIdAtencionActiva === 'function'){
-        const id = texto(window.getIdAtencionActiva());
-        if(id) return id;
-      }
-    }catch(_error){}
-
-    return texto(
-      window.examenFisicoState?.atencionActual ||
-      window.planState?.atencionActual ||
-      window.auroAtencionActivaId ||
-      idAtencionSolicitada
-    );
-  }
-
-  function imcClinico(valor, peso, talla){
-    const directo = texto(valor).replace(',', '.');
-
-    if(
-      directo &&
-      !/^\d{4}-\d{2}-\d{2}(?:T|$)/i.test(directo) &&
-      /^\d{1,3}(?:\.\d{1,2})?$/.test(directo)
-    ){
-      const numero = Number(directo);
-      if(Number.isFinite(numero) && numero >= 5 && numero <= 100){
-        return numero.toFixed(1);
-      }
-    }
-
-    const pesoNumero = Number(texto(peso).replace(',', '.'));
-    const tallaNumero = Number(texto(talla).replace(',', '.'));
-
-    if(
-      Number.isFinite(pesoNumero) && pesoNumero > 0 && pesoNumero <= 400 &&
-      Number.isFinite(tallaNumero) && tallaNumero >= 30 && tallaNumero <= 250
-    ){
-      const metros = tallaNumero / 100;
-      return (pesoNumero / (metros * metros)).toFixed(1);
-    }
-
-    return '';
-  }
-
-  function pintar(imc){
-    const valor = imc || '—';
-    const superior = document.getElementById('hcCardIMC');
-    const intermedia = document.getElementById('hcImcResumen');
-
-    if(superior) superior.textContent = valor;
-    if(intermedia) intermedia.textContent = valor;
-  }
-
-  function limpiarParaAtencion(idAtencion){
-    idAtencionSolicitada = texto(idAtencion);
-    pintar('');
-  }
-
-  function sincronizar(registro){
-    registro = registro && typeof registro === 'object' ? registro : {};
-
-    const idRegistro = texto(
-      registro.id_atencion ||
-      registro.atencion_id ||
-      registro.idAtencion
-    );
-
-    const idEsperado = texto(idAtencionSolicitada || idAtencionActiva());
-    const idActual = texto(idAtencionActiva());
-
-    if(idRegistro && idEsperado && idRegistro !== idEsperado) return false;
-    if(idRegistro && idActual && idRegistro !== idActual) return false;
-
-    const imc = imcClinico(
-      registro.imc || document.getElementById('hcIMC')?.value,
-      registro.peso_kg || document.getElementById('hcPeso')?.value,
-      registro.talla_cm || document.getElementById('hcTalla')?.value
-    );
-
-    const campo = document.getElementById('hcIMC');
-    if(campo) campo.value = imc;
-
-    pintar(imc);
-    return true;
-  }
-
-  window.auroSincronizarTarjetasImcPorAtencion = sincronizar;
-
-  ['aurosanax:atencion-seleccionada', 'aurosanax:atencion-iniciada', 'auro:atencion-cambiada']
-    .forEach(function(nombreEvento){
-      window.addEventListener(nombreEvento, function(evento){
-        const detalle = evento?.detail || {};
-        const id = texto(
-          detalle.id_atencion ||
-          detalle.atencion?.id_atencion
-        );
-        limpiarParaAtencion(id);
-      });
-    });
-
-  document.addEventListener('input', function(evento){
-    if(evento.target?.id === 'hcPeso' || evento.target?.id === 'hcTalla'){
-      setTimeout(function(){
-        sincronizar({
-          id_atencion: idAtencionActiva(),
-          peso_kg: document.getElementById('hcPeso')?.value,
-          talla_cm: document.getElementById('hcTalla')?.value,
-          imc: document.getElementById('hcIMC')?.value
-        });
-      }, 0);
-    }
-  });
 })();
 </script>
 
