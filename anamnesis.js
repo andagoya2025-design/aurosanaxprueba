@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.7';
+  const VERSION = '3.6.8';
   const state = {
     inicializado: false,
     cargando: false,
@@ -29,7 +29,8 @@ Función:
     idHistoriaActual: '',
     cacheAtenciones: {},
     restaurandoAtencion: false,
-    guardadoPendiente: null
+    guardadoPendiente: null,
+    contextoAtencion: {}
   };
 
   const $ = id => document.getElementById(id);
@@ -217,6 +218,196 @@ Función:
       return normalizar(bloque?.querySelector('label')?.textContent) === 'especialidad';
     });
     return texto(selector?.value);
+  }
+
+  /* ============================================================
+     AUROSANAX ANAMNESIS v3.6.8
+     CABECERA SINCRONIZADA CON LA ATENCIÓN ACTIVA
+     ------------------------------------------------------------
+     Fecha, médico, especialidad y tipo se visualizan desde el
+     núcleo de la atención. No forman parte del contenido clínico
+     que determina si existe anamnesis registrada.
+     No modifica buscador, narrativa, guardado clínico ni otros módulos.
+  ============================================================ */
+
+  const AURO_CAMPOS_CONTEXTO_ATENCION = {
+    fecha: ['fecha atencion', 'fecha de atencion', 'fecha consulta'],
+    medico: ['medico', 'profesional'],
+    especialidad: ['especialidad'],
+    tipo: ['tipo', 'tipo de consulta', 'tipo atencion']
+  };
+
+  function auroBuscarControlCabeceraAnamnesis(alias) {
+    const panel = $('hc_anamnesis');
+    if (!panel) return null;
+
+    const esperados = (AURO_CAMPOS_CONTEXTO_ATENCION[alias] || [])
+      .map(normalizar)
+      .filter(Boolean);
+
+    const labels = [...panel.querySelectorAll('label')];
+    const label = labels.find(item => {
+      const contenido = normalizar(item.textContent).replace(/\s*\*\s*$/, '');
+      return esperados.includes(contenido);
+    });
+
+    if (!label) return null;
+
+    if (label.htmlFor) {
+      const vinculado = $(label.htmlFor);
+      if (vinculado) return vinculado;
+    }
+
+    const bloque = label.closest(
+      '.col-md-2, .col-md-3, .col-md-4, .col-md-6, .col-12, .form-group'
+    ) || label.parentElement;
+
+    return bloque?.querySelector('input, select, textarea') || null;
+  }
+
+  function auroPrimerValor(objetos, claves) {
+    for (const objeto of objetos) {
+      if (!objeto || typeof objeto !== 'object') continue;
+
+      for (const clave of claves) {
+        const valor = objeto[clave];
+        if (valor && typeof valor === 'object') {
+          const interno = texto(
+            valor.nombre || valor.name || valor.descripcion || valor.label || valor.id
+          );
+          if (interno) return interno;
+        }
+
+        const limpio = texto(valor);
+        if (limpio) return limpio;
+      }
+    }
+
+    return '';
+  }
+
+  function auroObjetosContextoAtencion(detalle = {}) {
+    const objetos = [
+      detalle,
+      detalle?.atencion,
+      detalle?.data,
+      detalle?.datos,
+      window.atencionActiva,
+      window.atencionActual,
+      window.auroAtencionActiva,
+      window.planState?.atencionActiva,
+      window.planState?.atencionActualData,
+      window.examenFisicoState?.atencionActiva
+    ];
+
+    try {
+      if (typeof window.obtenerAtencionActiva === 'function') {
+        objetos.unshift(window.obtenerAtencionActiva());
+      }
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: no se pudo leer la atención activa.', error);
+    }
+
+    return objetos.filter(Boolean);
+  }
+
+  function auroNormalizarFechaAtencion(valor) {
+    const fecha = texto(valor);
+    if (!fecha) return '';
+
+    const iso = fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+    const local = fecha.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (local) return `${local[3]}-${local[2]}-${local[1]}`;
+
+    return fecha;
+  }
+
+  function auroExtraerContextoAtencion(detalle = {}) {
+    const objetos = auroObjetosContextoAtencion(detalle);
+
+    return {
+      id_atencion: auroPrimerValor(objetos, ['id_atencion', 'idAtencion', 'atencion_id']),
+      fecha: auroPrimerValor(objetos, [
+        'fecha_atencion', 'fechaAtencion', 'fecha_consulta', 'fechaConsulta', 'fecha'
+      ]),
+      id_medico: auroPrimerValor(objetos, [
+        'id_medico', 'idMedico', 'medico_id', 'profesional_id'
+      ]),
+      medico: auroPrimerValor(objetos, [
+        'nombre_medico', 'nombreMedico', 'medico_nombre', 'medico',
+        'profesional_nombre', 'profesional'
+      ]),
+      especialidad: auroPrimerValor(objetos, [
+        'especialidad', 'nombre_especialidad', 'nombreEspecialidad',
+        'especialidad_nombre'
+      ]),
+      tipo: auroPrimerValor(objetos, [
+        'tipo_atencion', 'tipoAtencion', 'tipo_consulta', 'tipoConsulta', 'tipo'
+      ])
+    };
+  }
+
+  function auroAsignarValorContexto(control, valores, esFecha = false) {
+    if (!control) return false;
+
+    const candidatos = convertirArray(valores).map(texto).filter(Boolean);
+    if (!candidatos.length) return false;
+
+    if (control.tagName === 'SELECT') {
+      const opciones = [...control.options];
+      const opcion = opciones.find(item => candidatos.some(valor => {
+        const buscado = normalizar(valor);
+        return normalizar(item.value) === buscado || normalizar(item.textContent) === buscado;
+      }));
+
+      if (!opcion) return false;
+      control.value = opcion.value;
+    } else {
+      control.value = esFecha ? auroNormalizarFechaAtencion(candidatos[0]) : candidatos[0];
+    }
+
+    control.dataset.auroContextoAtencion = 'true';
+    control.disabled = true;
+    control.setAttribute('aria-readonly', 'true');
+    control.title = 'Dato sincronizado desde la atención activa';
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
+  function auroLimpiarCabeceraAtencion() {
+    Object.keys(AURO_CAMPOS_CONTEXTO_ATENCION).forEach(alias => {
+      const control = auroBuscarControlCabeceraAnamnesis(alias);
+      if (!control) return;
+      control.disabled = false;
+      control.removeAttribute('aria-readonly');
+      delete control.dataset.auroContextoAtencion;
+      control.title = '';
+      control.value = '';
+    });
+  }
+
+  function auroSincronizarCabeceraAtencion(detalle = {}) {
+    const contexto = {
+      ...state.contextoAtencion,
+      ...auroExtraerContextoAtencion(detalle)
+    };
+
+    state.contextoAtencion = contexto;
+
+    const fecha = auroBuscarControlCabeceraAnamnesis('fecha');
+    const medico = auroBuscarControlCabeceraAnamnesis('medico');
+    const especialidad = auroBuscarControlCabeceraAnamnesis('especialidad');
+    const tipo = auroBuscarControlCabeceraAnamnesis('tipo');
+
+    auroAsignarValorContexto(fecha, contexto.fecha, true);
+    auroAsignarValorContexto(medico, [contexto.id_medico, contexto.medico]);
+    auroAsignarValorContexto(especialidad, contexto.especialidad);
+    auroAsignarValorContexto(tipo, contexto.tipo);
+
+    return contexto;
   }
 
   /*
@@ -1859,6 +2050,7 @@ Función:
         .forEach(control => {
           if (control.id === 'auroPlantillaAnamnesisSelect') return;
           if (control.type === 'button' || control.type === 'submit') return;
+          if (control.dataset?.auroContextoAtencion === 'true') return;
 
           if (control.type === 'checkbox' || control.type === 'radio') {
             control.checked = false;
@@ -1870,6 +2062,7 @@ Función:
       state.respuestas = {};
       state.narrativa = '';
       $('auroDynamicAnamnesisPanel')?.classList.remove('show');
+      auroSincronizarCabeceraAtencion();
     } finally {
       state.restaurandoAtencion = false;
     }
@@ -2015,8 +2208,16 @@ Función:
 
     window.auroAtencionSeleccionadaId = idAtencion;
 
+    auroLimpiarCabeceraAtencion();
+    state.contextoAtencion = auroExtraerContextoAtencion({
+      ...detalle,
+      id_atencion: idAtencion
+    });
+    auroSincronizarCabeceraAtencion(detalle);
+
     limpiarAnamnesisTemporal();
     const cargada = await cargarAnamnesisTemporal(idAtencion);
+    auroSincronizarCabeceraAtencion(detalle);
 
     estado(
       cargada
@@ -2051,6 +2252,13 @@ Función:
 
     window.addEventListener('aurosanax:atencion-iniciada', manejar);
     window.addEventListener('aurosanax:atencion-seleccionada', manejar);
+
+    const sincronizarContexto = evento => {
+      auroSincronizarCabeceraAtencion(evento?.detail || {});
+    };
+
+    window.addEventListener('aurosanax:atencion-actualizada', sincronizarContexto);
+    window.addEventListener('aurosanax:datos-generales-actualizados', sincronizarContexto);
 
     $('hc_anamnesis')?.addEventListener('input', auroProgramarGuardadoAnamnesis);
     $('hc_anamnesis')?.addEventListener('change', auroProgramarGuardadoAnamnesis);
@@ -2100,6 +2308,7 @@ Función:
 
     state.inicializado = true;
     auroInstalarSincronizacionAtencion();
+    auroSincronizarCabeceraAtencion();
     cargarPlantillas(false);
 
     console.info(`AUROSANAX Anamnesis v${VERSION}: inicializado.`);
@@ -2123,7 +2332,8 @@ Función:
     guardarAnamnesisTemporal,
     cargarAnamnesisTemporal,
     limpiarAnamnesisTemporal,
-    guardarAnamnesisPorAtencion
+    guardarAnamnesisPorAtencion,
+    sincronizarCabeceraAtencion: auroSincronizarCabeceraAtencion
   };
 
   window.inicializarAnamnesis = inicializar;
