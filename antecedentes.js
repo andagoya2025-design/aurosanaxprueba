@@ -1,4 +1,11 @@
 /*
+  AUROSANAX ERP - ANTECEDENTES FASE 1
+  Cambio quirúrgico: añade Citología/PAP y estado de Colposcopia
+  dentro del JSON ginecológico ya existente.
+  No crea columnas, no toca Apps Script ni otros módulos.
+*/
+
+/*
   AUROSANAX ERP - MODULO ANTECEDENTES
   Archivo modular extraído desde index.html SIN CORREGIR.
   Objetivo: iniciar modularización no destructiva del módulo Antecedentes.
@@ -333,7 +340,7 @@ function auroPrevioHumanizarClave(clave){
     habito:'Hábito', actual:'Ex consumidor', abstinencia:'Tiempo de abstinencia',
     actividad:'Actividad', distancia_km:'Distancia', frecuencia_dia:'Frecuencia', tiempo_horas:'Tiempo',
     agua_diaria_litros:'Agua diaria', comidas_dia:'Comidas al día', frutas_verduras:'Frutas / verduras', comida_rapida:'Comida rápida', azucar:'Azúcar', sal:'Sal', suplementos:'Suplementos',
-    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa', planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales', ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
+    menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa', planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales', ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', pap:'Citología / PAP', estado:'Estado', colposcopia:'Colposcopia'
   };
   if(mapa[clave] !== undefined) return mapa[clave];
   return String(clave || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -1532,7 +1539,8 @@ function recopilarAntecedentesGinecologicosEstructurados(){
     mamografia: { fecha: auroGet('hcGinMamografiaFecha'), resultado: auroGet('hcGinMamografiaResultado') },
     eco_mamario: { fecha: auroGet('hcGinEcoMamarioFecha'), resultado: auroGet('hcGinEcoMamarioResultado') },
     densitometria_osea: { fecha: auroGet('hcGinDensitometriaFecha'), resultado: auroGet('hcGinDensitometriaResultado') },
-    colposcopia: { fecha: auroGet('hcGinColposcopiaFecha'), resultado: auroGet('hcGinColposcopiaResultado') }
+    pap: { estado: auroGet('hcGinPapEstado'), resultado: auroGet('hcGinPapResultado') },
+    colposcopia: { fecha: auroGet('hcGinColposcopiaFecha'), estado: auroGet('hcGinColposcopiaEstado'), resultado: auroGet('hcGinColposcopiaResultado') }
   });
 }
 
@@ -1560,7 +1568,10 @@ function cargarAntecedentesGinecologicosEstructurados(data){
   auroSet('hcGinEcoMamarioResultado', d.eco_mamario?.resultado);
   auroSet('hcGinDensitometriaFecha', d.densitometria_osea?.fecha);
   auroSet('hcGinDensitometriaResultado', d.densitometria_osea?.resultado);
+  auroSet('hcGinPapEstado', d.pap?.estado);
+  auroSet('hcGinPapResultado', d.pap?.resultado);
   auroSet('hcGinColposcopiaFecha', d.colposcopia?.fecha);
+  auroSet('hcGinColposcopiaEstado', d.colposcopia?.estado);
   auroSet('hcGinColposcopiaResultado', d.colposcopia?.resultado);
 }
 
