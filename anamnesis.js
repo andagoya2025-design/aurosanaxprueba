@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.6';
+  const VERSION = '3.6.7';
   const state = {
     inicializado: false,
     cargando: false,
@@ -219,8 +219,57 @@ Función:
     return texto(selector?.value);
   }
 
+  /*
+    AUROSANAX 3.6.7 - EQUIVALENCIAS CLÍNICAS GLOBALES
+    -------------------------------------------------
+    Capa compacta para reconocer expresiones frecuentes sin llenar el código
+    con diagnósticos ni duplicar todas las palabras_clave de las plantillas.
+    Se aplica tanto al motivo como al contenido indexable de cada plantilla.
+  */
+  const AURO_EQUIVALENCIAS_CLINICAS = [
+    { canonico: 'sangrado', terminos: ['hemorragia', 'hemorragico', 'hemorragica', 'manchado', 'sangra', 'sangrando', 'sangre', 'metrorragia'] },
+    { canonico: 'embarazo', terminos: ['embarazada', 'gestacion', 'gestante', 'prenatal', 'obstetrico', 'obstetrica'] },
+    { canonico: 'movimientos fetales disminuidos', terminos: ['no siento al bebe', 'bebe no se mueve', 'menos movimientos del bebe', 'disminucion de movimientos', 'ausencia de movimientos fetales'] },
+    { canonico: 'disuria', terminos: ['ardor al orinar', 'dolor al orinar', 'quemazon al orinar', 'molestia al orinar'] },
+    { canonico: 'polaquiuria', terminos: ['orina frecuente', 'orinar muchas veces', 'voy mucho al bano', 'miccion frecuente'] },
+    { canonico: 'urgencia miccional', terminos: ['urgencia para orinar', 'ganas urgentes de orinar', 'no aguanta la orina'] },
+    { canonico: 'flujo vaginal leucorrea', terminos: ['flujo', 'secrecion vaginal', 'descarga vaginal', 'leucorrea'] },
+    { canonico: 'prurito picazon', terminos: ['picazon', 'comezon', 'prurito'] },
+    { canonico: 'fiebre', terminos: ['calentura', 'temperatura alta', 'febril'] },
+    { canonico: 'vomitos', terminos: ['vomito', 'vomitando', 'emesis'] },
+    { canonico: 'diarrea', terminos: ['deposiciones liquidas', 'heces liquidas', 'evacuaciones liquidas'] },
+    { canonico: 'tos', terminos: ['tose', 'tosiendo'] },
+    { canonico: 'dificultad respiratoria disnea', terminos: ['falta de aire', 'le cuesta respirar', 'respira con dificultad', 'ahogo'] },
+    { canonico: 'dolor pelvico', terminos: ['dolor de vientre', 'dolor bajo vientre', 'dolor en pelvis', 'dolor abdominal bajo'] },
+    { canonico: 'menstruacion regla', terminos: ['regla', 'periodo', 'menstruacion', 'mestruacion'] },
+    { canonico: 'amenorrea', terminos: ['no me viene la regla', 'no llega la menstruacion', 'retraso menstrual', 'falta de menstruacion'] },
+    { canonico: 'menopausia climaterio', terminos: ['sofocos', 'bochornos', 'calores menopausia', 'climaterio'] },
+    { canonico: 'incontinencia urinaria', terminos: ['se me sale la orina', 'escape de orina', 'perdida involuntaria de orina'] },
+    { canonico: 'nutricion peso', terminos: ['bajar de peso', 'subir de peso', 'sobrepeso', 'obesidad', 'dieta', 'alimentacion'] },
+    { canonico: 'hipertension presion alta', terminos: ['presion alta', 'tension alta', 'hipertension'] }
+  ];
+
+  function enriquecerTextoClinico(valor) {
+    const base = normalizar(valor);
+    if (!base) return '';
+
+    const agregados = [];
+
+    AURO_EQUIVALENCIAS_CLINICAS.forEach(grupo => {
+      const coincide = grupo.terminos.some(termino => {
+        const patron = normalizar(termino);
+        return patron && (base === patron || base.includes(patron));
+      });
+
+      if (coincide) agregados.push(normalizar(grupo.canonico));
+    });
+
+    return normalizar([base, ...agregados].join(' '));
+  }
+
   function puntuarPlantilla(plantilla, motivo) {
-    const consulta = normalizar(motivo);
+    const consultaOriginal = normalizar(motivo);
+    const consulta = enriquecerTextoClinico(motivo);
     if (!consulta) return 0;
 
     /*
@@ -253,7 +302,8 @@ Función:
     let maxTokensCoincidentes = 0;
 
     const puntuarFrase = (frase, pesoExacto, pesoContenida, pesoTokens) => {
-      frase = normalizar(frase);
+      const fraseOriginal = normalizar(frase);
+      frase = enriquecerTextoClinico(frase);
       if (!frase) return 0;
 
       const tokensFrase = unicos(tokens(frase));
@@ -270,7 +320,7 @@ Función:
 
       let subtotal = 0;
 
-      if (consulta === frase) {
+      if (consultaOriginal === fraseOriginal || consulta === frase) {
         subtotal += pesoExacto + frase.length;
       } else if (consultaCompacta && consultaCompacta === fraseCompacta) {
         /* Igualdad clínica aunque cambien artículos o preposiciones. */
@@ -307,7 +357,7 @@ Función:
     });
 
     /* Coincidencia general del motivo contra todo el contenido indexable. */
-    const contenidoPlantilla = normalizar([
+    const contenidoPlantilla = enriquecerTextoClinico([
       nombre,
       categoria,
       especialidad,
@@ -319,6 +369,16 @@ Función:
     if (coincidenciasGlobales.length >= 2) {
       puntos += coincidenciasGlobales.length * 70;
     }
+
+    /* Bonificación contextual: combina conceptos clínicos específicos. */
+    const contextoEmbarazo = consulta.includes('embarazo');
+    const contenidoEmbarazo = contenidoPlantilla.includes('embarazo');
+    const contextoPediatrico = /\b(nino|nina|bebe|pediatr|infantil)\b/.test(consulta);
+    const contenidoPediatrico = /\b(pediatr|infantil|nino sano)\b/.test(contenidoPlantilla);
+
+    if (contextoEmbarazo && contenidoEmbarazo) puntos += 650;
+    if (contextoEmbarazo && !contenidoEmbarazo && especialidad.includes('ginecologia')) puntos -= 220;
+    if (contextoPediatrico && contenidoPediatrico) puntos += 500;
 
     /* La especialidad ayuda a desempatar, pero no anula una frase clínica exacta. */
     if (especialidadSeleccionada && especialidad) {
