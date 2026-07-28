@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.8';
+  const VERSION = '3.6.9';
   const state = {
     inicializado: false,
     cargando: false,
@@ -300,9 +300,26 @@ Función:
       window.examenFisicoState?.atencionActiva
     ];
 
+    /*
+      AUROSANAX 3.6.9 - CONTEXTO CENTRAL DE ATENCIÓN
+      Prioriza el contexto maestro enriquecido de atenciones.js.
+      Se conservan las fuentes anteriores únicamente como compatibilidad.
+    */
+    try {
+      if (typeof window.getContextoAtencionActual === 'function') {
+        objetos.unshift(window.getContextoAtencionActual());
+      } else if (typeof window.obtenerContextoAtencionActual === 'function') {
+        objetos.unshift(window.obtenerContextoAtencionActual());
+      }
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: no se pudo leer el contexto central de la atención.', error);
+    }
+
     try {
       if (typeof window.obtenerAtencionActiva === 'function') {
-        objetos.unshift(window.obtenerAtencionActiva());
+        objetos.push(window.obtenerAtencionActiva());
+      } else if (typeof window.getAtencionActiva === 'function') {
+        objetos.push(window.getAtencionActiva());
       }
     } catch (error) {
       console.warn('AUROSANAX Anamnesis: no se pudo leer la atención activa.', error);
@@ -340,6 +357,9 @@ Función:
         'profesional_nombre', 'profesional'
       ]),
       especialidad: auroPrimerValor(objetos, [
+        'especialidad_atencion',
+        'especialidad_servicio_solicitado',
+        'especialidad_medico',
         'especialidad', 'nombre_especialidad', 'nombreEspecialidad',
         'especialidad_nombre'
       ]),
@@ -349,7 +369,7 @@ Función:
     };
   }
 
-  function auroAsignarValorContexto(control, valores, esFecha = false) {
+  function auroAsignarValorContexto(control, valores, esFecha = false, permitirOpcionContexto = false) {
     if (!control) return false;
 
     const candidatos = convertirArray(valores).map(texto).filter(Boolean);
@@ -357,10 +377,26 @@ Función:
 
     if (control.tagName === 'SELECT') {
       const opciones = [...control.options];
-      const opcion = opciones.find(item => candidatos.some(valor => {
+      let opcion = opciones.find(item => candidatos.some(valor => {
         const buscado = normalizar(valor);
         return normalizar(item.value) === buscado || normalizar(item.textContent) === buscado;
       }));
+
+      /*
+        Para médicos y especialidades configurables, la cabecera puede recibir
+        valores nuevos sin depender de opciones fijas escritas en el HTML.
+        La opción creada es solo visual y no modifica Configuración ni Atención.
+      */
+      if (!opcion && permitirOpcionContexto) {
+        const visible = candidatos.find(valor => !/^MED[-_]/i.test(valor)) || candidatos.at(-1);
+        if (visible) {
+          opcion = document.createElement('option');
+          opcion.value = visible;
+          opcion.textContent = visible;
+          opcion.dataset.auroOpcionContexto = 'true';
+          control.appendChild(opcion);
+        }
+      }
 
       if (!opcion) return false;
       control.value = opcion.value;
@@ -403,8 +439,8 @@ Función:
     const tipo = auroBuscarControlCabeceraAnamnesis('tipo');
 
     auroAsignarValorContexto(fecha, contexto.fecha, true);
-    auroAsignarValorContexto(medico, [contexto.id_medico, contexto.medico]);
-    auroAsignarValorContexto(especialidad, contexto.especialidad);
+    auroAsignarValorContexto(medico, [contexto.id_medico, contexto.medico], false, true);
+    auroAsignarValorContexto(especialidad, contexto.especialidad, false, true);
     auroAsignarValorContexto(tipo, contexto.tipo);
 
     return contexto;
