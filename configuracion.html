@@ -725,12 +725,18 @@
         <div class="security-summary-card"><small>Secretaría</small><strong id="secTotalSecretaria">0</strong></div>
       </div>
 
+
+      <div id="secEstadoConexion" class="notice mb-3">
+        <i class="bi bi-arrow-clockwise me-1"></i>
+        Validando la sesión administrativa…
+      </div>
+
       <div class="section-head">
         <div>
           <h4 style="font-size:22px!important">Usuarios autorizados</h4>
           <p>Gestione las cuentas autorizadas y sus niveles de acceso al ERP.</p>
         </div>
-        <button id="btnNuevoUsuario" class="btn-auro" type="button" disabled>
+        <button id="btnNuevoUsuario" class="btn-auro" type="button">
           <i class="bi bi-person-plus me-1"></i> Crear usuario
         </button>
       </div>
@@ -796,6 +802,7 @@
       </div>
     </div>
   </div>
+</section>
 
   </main>
 </div>
@@ -1572,7 +1579,7 @@ function showSecurityPanel(id,btn){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
 </script>
 <script src="config-centro.js"></script>
-<script src="seguridad.js"></script>
+<script src="seguridad.js?v=1.2.0"></script>
 
 </body>
 </html>
