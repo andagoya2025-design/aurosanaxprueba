@@ -576,7 +576,7 @@
 
   </style>
 </head>
-<body>
+<body style="visibility:hidden;">
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="brand"><div class="brand-logo">A</div><div><h1>AUROSANAX</h1><small>Secretaría DEMO</small></div></div>
@@ -613,14 +613,14 @@
     </div>
 
     <div class="config-tabs">
-      <button class="config-tab active" onclick="showConfig('medicos',this)"><i class="bi bi-person-badge me-1"></i> Médicos</button>
-      <button class="config-tab" onclick="showConfig('servicios',this)"><i class="bi bi-heart-pulse me-1"></i> Servicios</button>
-      <button class="config-tab" onclick="showConfig('horarios',this)"><i class="bi bi-clock me-1"></i> Horarios rápidos</button>
-      <button class="config-tab" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
-      <button class="config-tab" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad</button>
+      <button class="config-tab active" data-config-target="medicos" data-permiso="configuracion_medicos" onclick="showConfig('medicos',this)"><i class="bi bi-person-badge me-1"></i> Médicos</button>
+      <button class="config-tab" data-config-target="servicios" data-permiso="configuracion_servicios" onclick="showConfig('servicios',this)"><i class="bi bi-heart-pulse me-1"></i> Servicios</button>
+      <button class="config-tab" data-config-target="horarios" data-permiso="configuracion_horarios" onclick="showConfig('horarios',this)"><i class="bi bi-clock me-1"></i> Horarios rápidos</button>
+      <button class="config-tab" data-config-target="centro" data-permiso="configuracion_centro" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
+      <button class="config-tab" data-config-target="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad</button>
     </div>
 
-    <section class="screen active" id="medicos">
+    <section class="screen active" id="medicos" data-permiso="configuracion_medicos">
       <div class="cardx p-4">
         <div class="section-head"><div><h4>Gestión de médicos</h4><p>Profesionales que aparecerán en disponibilidad y formulario de citas.</p></div><button class="btn-auro" onclick="abrirModal('medico')"><i class="bi bi-plus-circle me-1"></i> Nuevo médico</button></div>
         <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Médicos conectado a Apps Script. Puede crear, editar y asignar servicios a cada profesional.</div>
@@ -629,7 +629,7 @@
       </div>
     </section>
 
-    <section class="screen" id="servicios">
+    <section class="screen" id="servicios" data-permiso="configuracion_servicios">
       <div class="cardx p-4">
         <div class="section-head"><div><h4>Servicios de agendamiento</h4><p>Servicios que puede seleccionar el paciente o secretaría.</p></div><button class="btn-auro" onclick="abrirModal('servicio')"><i class="bi bi-plus-circle me-1"></i> Nuevo servicio</button></div>
         <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Servicios conectado a Apps Script. Puede crear y editar servicios en la hoja <b>servicios</b>.</div>
@@ -638,7 +638,7 @@
       </div>
     </section>
 
-    <section class="screen" id="horarios">
+    <section class="screen" id="horarios" data-permiso="configuracion_horarios">
       <div class="cardx p-4">
         <div class="section-head"><div><h4>Plantillas de horario rápido</h4><p>Bloques reutilizables para crear disponibilidad sin escribir todo manualmente.</p></div><button class="btn-auro" onclick="abrirModalHorario('')"><i class="bi bi-plus-circle me-1"></i> Nueva plantilla</button></div>
         <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Plantilla</th><th>Horario</th><th>Intervalo</th><th>Tipo</th><th>Días</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="horariosBody"></tbody></table></div>
@@ -646,7 +646,7 @@
       </div>
     </section>
 
-    <section class="screen" id="centro">
+    <section class="screen" id="centro" data-permiso="configuracion_centro">
       <div class="cardx p-4">
         <div class="section-head">
           <div>
@@ -720,7 +720,7 @@
 
 </section>
 
-<section class="screen" id="seguridadAccesos">
+<section class="screen" id="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora">
   <div class="cardx p-4">
     <div class="section-head">
       <div>
@@ -736,15 +736,15 @@
     </div>
 
     <div class="security-subtabs">
-      <button class="security-subtab active" type="button" onclick="showSecurityPanel('securityUsuarios',this)">
+      <button class="security-subtab active" type="button" data-security-target="securityUsuarios" data-permiso="usuarios" onclick="showSecurityPanel('securityUsuarios',this)">
         <i class="bi bi-people me-1"></i> Usuarios
       </button>
-      <button class="security-subtab" type="button" onclick="showSecurityPanel('securityBitacora',this)">
+      <button class="security-subtab" type="button" data-security-target="securityBitacora" data-permiso="bitacora" onclick="showSecurityPanel('securityBitacora',this)">
         <i class="bi bi-journal-text me-1"></i> Bitácora
       </button>
     </div>
 
-    <div id="securityUsuarios" class="security-panel active">
+    <div id="securityUsuarios" class="security-panel active" data-permiso="usuarios">
       <div class="security-summary">
         <div class="security-summary-card"><small>Usuarios registrados</small><strong id="secTotalUsuarios">0</strong></div>
         <div class="security-summary-card"><small>Administradores</small><strong id="secTotalAdministradores">0</strong></div>
@@ -786,7 +786,7 @@
       </div>
     </div>
 
-    <div id="securityBitacora" class="security-panel">
+    <div id="securityBitacora" class="security-panel" data-permiso="bitacora">
       <div class="security-summary">
         <div class="security-summary-card"><small>Eventos hoy</small><strong id="secEventosHoy">0</strong></div>
         <div class="security-summary-card"><small>Accesos exitosos</small><strong id="secAccesosExitosos">0</strong></div>
@@ -852,6 +852,131 @@
 
   function toggleSidebar(){
     document.getElementById('sidebar').classList.toggle('show');
+  }
+
+  function obtenerSeguridadConfiguracion_(){
+    return window.AUROSANAX_SEGURIDAD || null;
+  }
+
+  function redirigirSegunPermisosConfiguracion_(seguridad, usuario){
+    if(seguridad && seguridad.tienePermiso('dashboard', usuario)){
+      window.location.replace('index.html');
+      return;
+    }
+
+    if(seguridad && seguridad.tienePermiso('secretaria', usuario)){
+      window.location.replace('secretaria.html');
+      return;
+    }
+
+    window.location.replace('login.html');
+  }
+
+  function aplicarPermisosCompuestosConfiguracion_(seguridad, usuario){
+    document.querySelectorAll('[data-permiso-cualquiera]').forEach(elemento => {
+      const permisos = String(elemento.getAttribute('data-permiso-cualquiera') || '')
+        .split(',')
+        .map(valor => valor.trim())
+        .filter(Boolean);
+
+      const autorizado = permisos.some(clave =>
+        seguridad.tienePermiso(clave, usuario)
+      );
+
+      elemento.style.display = autorizado ? '' : 'none';
+    });
+  }
+
+  function activarPrimerPanelSeguridadPermitido_(){
+    const tabs = Array.from(
+      document.querySelectorAll('#seguridadAccesos .security-subtab')
+    ).filter(tab => tab.style.display !== 'none');
+
+    document.querySelectorAll('#seguridadAccesos .security-subtab')
+      .forEach(tab => tab.classList.remove('active'));
+
+    document.querySelectorAll('#seguridadAccesos .security-panel')
+      .forEach(panel => panel.classList.remove('active'));
+
+    if(!tabs.length) return;
+
+    const primera = tabs[0];
+    const destino = primera.getAttribute('data-security-target');
+    primera.classList.add('active');
+
+    const panel = destino ? document.getElementById(destino) : null;
+    if(panel) panel.classList.add('active');
+  }
+
+  function activarPrimeraConfiguracionPermitida_(){
+    const tabs = Array.from(
+      document.querySelectorAll('.config-tab[data-config-target]')
+    ).filter(tab => tab.style.display !== 'none');
+
+    document.querySelectorAll('.config-tab')
+      .forEach(tab => tab.classList.remove('active'));
+
+    document.querySelectorAll('.screen')
+      .forEach(screen => screen.classList.remove('active'));
+
+    if(!tabs.length) return false;
+
+    const primera = tabs[0];
+    const destino = primera.getAttribute('data-config-target');
+
+    primera.classList.add('active');
+
+    const pantalla = destino ? document.getElementById(destino) : null;
+    if(pantalla) pantalla.classList.add('active');
+
+    if(destino === 'seguridadAccesos'){
+      activarPrimerPanelSeguridadPermitido_();
+    }
+
+    return true;
+  }
+
+  async function validarAccesoConfiguracion_(){
+    const seguridad = obtenerSeguridadConfiguracion_();
+
+    if(!seguridad){
+      window.location.replace('login.html');
+      return null;
+    }
+
+    const validacion = await seguridad.validarSesionActual();
+
+    if(!validacion || validacion.success !== true){
+      seguridad.limpiarSesion();
+      window.location.replace('login.html');
+      return null;
+    }
+
+    const usuario =
+      validacion.usuario ||
+      (validacion.sesion && validacion.sesion.usuario_publico) ||
+      seguridad.obtenerUsuario() ||
+      {};
+
+    if(!seguridad.tienePermiso('configuracion', usuario)){
+      redirigirSegunPermisosConfiguracion_(seguridad, usuario);
+      return null;
+    }
+
+    seguridad.aplicarPermisos(document);
+    aplicarPermisosCompuestosConfiguracion_(seguridad, usuario);
+
+    if(!activarPrimeraConfiguracionPermitida_()){
+      redirigirSegunPermisosConfiguracion_(seguridad, usuario);
+      return null;
+    }
+
+    document.body.style.visibility = 'visible';
+
+    return {
+      seguridad: seguridad,
+      usuario: usuario
+    };
   }
 
   function badge(e){
@@ -1045,11 +1170,26 @@ function showSecurityPanel(id,btn){
   /* Datos del centro modularizados en config-centro.js */
 
   async function refrescarDemo(){
-    await cargarMedicos();
-    await cargarServicios();
-    await cargarMedicoServicios();
-    await cargarPlantillasHorario();
-    await cargarConfiguracionCentro();
+    const seguridad = obtenerSeguridadConfiguracion_();
+    const usuario = seguridad ? seguridad.obtenerUsuario() || {} : {};
+
+    if(seguridad && seguridad.tienePermiso('configuracion_medicos', usuario)){
+      await cargarMedicos();
+      await cargarMedicoServicios();
+    }
+
+    if(seguridad && seguridad.tienePermiso('configuracion_servicios', usuario)){
+      await cargarServicios();
+    }
+
+    if(seguridad && seguridad.tienePermiso('configuracion_horarios', usuario)){
+      await cargarPlantillasHorario();
+    }
+
+    if(seguridad && seguridad.tienePermiso('configuracion_centro', usuario)){
+      await cargarConfiguracionCentro();
+    }
+
     alert('Vista actualizada.');
   }
 
@@ -1806,11 +1946,28 @@ function showSecurityPanel(id,btn){
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
-    await cargarMedicos();
-    await cargarServicios();
-    await cargarMedicoServicios();
-    await cargarPlantillasHorario();
-    await cargarConfiguracionCentro();
+    const acceso = await validarAccesoConfiguracion_();
+    if(!acceso) return;
+
+    const seguridad = acceso.seguridad;
+    const usuario = acceso.usuario;
+
+    if(seguridad.tienePermiso('configuracion_medicos', usuario)){
+      await cargarMedicos();
+      await cargarMedicoServicios();
+    }
+
+    if(seguridad.tienePermiso('configuracion_servicios', usuario)){
+      await cargarServicios();
+    }
+
+    if(seguridad.tienePermiso('configuracion_horarios', usuario)){
+      await cargarPlantillasHorario();
+    }
+
+    if(seguridad.tienePermiso('configuracion_centro', usuario)){
+      await cargarConfiguracionCentro();
+    }
   });
 
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
