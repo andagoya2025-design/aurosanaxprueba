@@ -736,9 +736,14 @@
           <h4 style="font-size:22px!important">Usuarios autorizados</h4>
           <p>Gestione las cuentas autorizadas y sus niveles de acceso al ERP.</p>
         </div>
-        <button id="btnNuevoUsuario" class="btn-auro" type="button">
-          <i class="bi bi-person-plus me-1"></i> Crear usuario
-        </button>
+        <div class="d-flex flex-wrap gap-2">
+          <button id="btnCambiarMiClave" class="btn-line" type="button" onclick="abrirModalCambioClave()">
+            <i class="bi bi-key me-1"></i> Cambiar mi contraseña
+          </button>
+          <button id="btnNuevoUsuario" class="btn-auro" type="button">
+            <i class="bi bi-person-plus me-1"></i> Crear usuario
+          </button>
+        </div>
       </div>
 
       <div class="table-responsive">
@@ -1563,6 +1568,182 @@ function showSecurityPanel(id,btn){
     }
   }
 
+
+  function abrirModalCambioClave(){
+    const modal = document.getElementById('modalConfig');
+    const title = document.getElementById('modalTitle');
+    const body = document.getElementById('modalBody');
+
+    if(!modal || !title || !body){
+      alert('No se encontró el modal de Configuración.');
+      return;
+    }
+
+    title.textContent = 'Cambiar mi contraseña';
+
+    body.innerHTML = `
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label fw-bold">Contraseña actual</label>
+          <input id="claveActualUsuario" type="password" class="form-control" autocomplete="current-password" placeholder="Ingrese su contraseña actual">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nueva contraseña</label>
+          <input id="claveNuevaUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Confirmar nueva contraseña</label>
+          <input id="claveConfirmarUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Repita la nueva contraseña">
+        </div>
+      </div>
+
+      <div id="cambioClaveMsg" class="notice mt-3">
+        La nueva contraseña debe tener al menos 8 caracteres.
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" type="button" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarCambioClave" class="btn-auro" type="button" onclick="guardarCambioClaveUsuario()">
+          <i class="bi bi-shield-lock me-1"></i> Guardar nueva contraseña
+        </button>
+      </div>
+    `;
+
+    modal.classList.add('show');
+
+    setTimeout(() => {
+      const campo = document.getElementById('claveActualUsuario');
+      if(campo) campo.focus();
+    }, 80);
+  }
+
+  async function guardarCambioClaveUsuario(){
+    const claveActual = document.getElementById('claveActualUsuario')?.value || '';
+    const claveNueva = document.getElementById('claveNuevaUsuario')?.value || '';
+    const confirmar = document.getElementById('claveConfirmarUsuario')?.value || '';
+    const mensaje = document.getElementById('cambioClaveMsg');
+    const boton = document.getElementById('btnGuardarCambioClave');
+
+    function mostrarCambioClave(texto, error){
+      if(!mensaje) return;
+      mensaje.className = error ? 'notice mt-3 text-danger' : 'notice mt-3';
+      mensaje.innerHTML = (error
+        ? '<i class="bi bi-exclamation-triangle me-1"></i>'
+        : '<i class="bi bi-check-circle me-1"></i>') + safeText(texto);
+    }
+
+    if(!claveActual){
+      mostrarCambioClave('Ingrese su contraseña actual.', true);
+      return;
+    }
+
+    if(claveNueva.length < 8){
+      mostrarCambioClave('La nueva contraseña debe tener al menos 8 caracteres.', true);
+      return;
+    }
+
+    if(claveNueva !== confirmar){
+      mostrarCambioClave('La confirmación no coincide con la nueva contraseña.', true);
+      return;
+    }
+
+    if(claveActual === claveNueva){
+      mostrarCambioClave('La nueva contraseña debe ser diferente de la actual.', true);
+      return;
+    }
+
+    const token = sessionStorage.getItem('aurosanax_seguridad_token') || '';
+    if(!token){
+      mostrarCambioClave('No existe una sesión activa. Inicie sesión nuevamente.', true);
+      return;
+    }
+
+    const original = boton ? boton.innerHTML : '';
+
+    if(boton){
+      boton.disabled = true;
+      boton.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Guardando...';
+    }
+
+    try{
+      const respuesta = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({
+          accion: 'cambiarClaveUsuario',
+          data: {
+            clave_actual: claveActual,
+            clave_nueva: claveNueva,
+            token: token
+          }
+        })
+      });
+
+      if(!respuesta.ok){
+        throw new Error('Error de conexión HTTP ' + respuesta.status + '.');
+      }
+
+      const resultado = await respuesta.json();
+
+      if(!resultado || resultado.success !== true){
+        throw new Error(
+          resultado && resultado.message
+            ? resultado.message
+            : 'No se pudo cambiar la contraseña.'
+        );
+      }
+
+      // Actualiza la bandera local para que la sesión ya no figure como temporal.
+      try{
+        const rawSesion = sessionStorage.getItem('aurosanax_seguridad_sesion');
+        if(rawSesion){
+          const sesion = JSON.parse(rawSesion);
+          sesion.requiere_cambio_clave = false;
+          sessionStorage.setItem('aurosanax_seguridad_sesion', JSON.stringify(sesion));
+        }
+
+        const rawUsuario = sessionStorage.getItem('aurosanax_seguridad_usuario');
+        if(rawUsuario){
+          const usuario = JSON.parse(rawUsuario);
+          usuario.requiere_cambio_clave = 'NO';
+          sessionStorage.setItem('aurosanax_seguridad_usuario', JSON.stringify(usuario));
+        }
+      }catch(errorSesion){
+        console.warn('No se pudo actualizar la bandera local de cambio de clave:', errorSesion);
+      }
+
+      mostrarCambioClave(
+        resultado.message || 'Contraseña actualizada correctamente.',
+        false
+      );
+
+      ['claveActualUsuario','claveNuevaUsuario','claveConfirmarUsuario'].forEach(id => {
+        const campo = document.getElementById(id);
+        if(campo) campo.value = '';
+      });
+
+      setTimeout(() => cerrarModal(), 900);
+
+    }catch(error){
+      console.error('Error cambiando contraseña:', error);
+      mostrarCambioClave(
+        error && error.message
+          ? error.message
+          : 'No se pudo cambiar la contraseña.',
+        true
+      );
+    }finally{
+      if(boton){
+        boton.disabled = false;
+        boton.innerHTML = original;
+      }
+    }
+  }
+
   function cerrarModal(event){
     if(event && event.target!==event.currentTarget)return;
     modalConfig.classList.remove('show');
@@ -1579,7 +1760,7 @@ function showSecurityPanel(id,btn){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
 </script>
 <script src="config-centro.js"></script>
-<script src="seguridad.js?v=1.2.0"></script>
+<script src="seguridad.js?v=1.2.1"></script>
 
 </body>
 </html>
