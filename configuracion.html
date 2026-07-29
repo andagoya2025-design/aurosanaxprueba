@@ -547,33 +547,6 @@
 @media(max-width:560px){.security-summary{grid-template-columns:1fr}}
 
 
-/* AUROSANAX FASE 1 - CONTRASEÑAS Y PERMISOS */
-.auro-password-wrap{position:relative}
-.auro-password-wrap .form-control{padding-right:50px!important}
-.auro-password-eye{
-  position:absolute;right:7px;top:50%;transform:translateY(-50%);
-  width:38px;height:38px;border:0;border-radius:12px;
-  background:#fff7fb;color:#8b1e5a;display:grid;place-items:center;
-  z-index:4;cursor:pointer
-}
-.auro-password-eye:hover{background:#fce7f3}
-.auro-permissions{
-  border:1px solid #f1d4e5;border-radius:20px;padding:15px;
-  background:linear-gradient(180deg,#fff,#fffafd)
-}
-.auro-permissions-grid{
-  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px
-}
-.auro-permission-item{
-  display:flex;align-items:flex-start;gap:9px;padding:10px 11px;
-  border:1px solid #f1e2ea;border-radius:14px;background:#fff
-}
-.auro-permission-item input{margin-top:3px}
-.auro-permission-item strong{display:block;font-size:14px;color:#334155}
-.auro-permission-item small{display:block;color:#64748b;line-height:1.35}
-@media(max-width:640px){.auro-permissions-grid{grid-template-columns:1fr}}
-
-
   </style>
 </head>
 <body>
@@ -1596,26 +1569,6 @@ function showSecurityPanel(id,btn){
   }
 
 
-
-  function alternarClaveCampo(idCampo, boton){
-    const campo = document.getElementById(idCampo);
-    if(!campo) return;
-
-    const mostrar = campo.type === 'password';
-    campo.type = mostrar ? 'text' : 'password';
-
-    if(boton){
-      const icono = boton.querySelector('i');
-      if(icono){
-        icono.className = mostrar ? 'bi bi-eye-slash' : 'bi bi-eye';
-      }
-      boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
-      boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
-    }
-
-    campo.focus();
-  }
-
   function abrirModalCambioClave(){
     const modal = document.getElementById('modalConfig');
     const title = document.getElementById('modalTitle');
@@ -1632,26 +1585,17 @@ function showSecurityPanel(id,btn){
       <div class="row g-3">
         <div class="col-12">
           <label class="form-label fw-bold">Contraseña actual</label>
-          <div class="auro-password-wrap">
-            <input id="claveActualUsuario" type="password" class="form-control" autocomplete="current-password" placeholder="Ingrese su contraseña actual">
-            <button class="auro-password-eye" type="button" onclick="alternarClaveCampo('claveActualUsuario',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
-          </div>
+          <input id="claveActualUsuario" type="password" class="form-control" autocomplete="current-password" placeholder="Ingrese su contraseña actual">
         </div>
 
         <div class="col-md-6">
           <label class="form-label fw-bold">Nueva contraseña</label>
-          <div class="auro-password-wrap">
-            <input id="claveNuevaUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
-            <button class="auro-password-eye" type="button" onclick="alternarClaveCampo('claveNuevaUsuario',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
-          </div>
+          <input id="claveNuevaUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
         </div>
 
         <div class="col-md-6">
           <label class="form-label fw-bold">Confirmar nueva contraseña</label>
-          <div class="auro-password-wrap">
-            <input id="claveConfirmarUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Repita la nueva contraseña">
-            <button class="auro-password-eye" type="button" onclick="alternarClaveCampo('claveConfirmarUsuario',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
-          </div>
+          <input id="claveConfirmarUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Repita la nueva contraseña">
         </div>
       </div>
 
@@ -1816,7 +1760,7 @@ function showSecurityPanel(id,btn){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
 </script>
 <script src="config-centro.js"></script>
-<script src="seguridad.js?v=1.4.0"></script>
+<script src="seguridad.js?v=1.3.0"></script>
 
 </body>
 </html>
