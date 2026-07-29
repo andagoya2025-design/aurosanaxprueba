@@ -538,9 +538,9 @@
 .security-subtab.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695);box-shadow:0 14px 30px rgba(139,30,90,.22)}
 .security-panel{display:none}.security-panel.active{display:block}
 .security-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
-.security-summary-card{border:1px solid #f1d4e5;border-radius:20px;background:linear-gradient(180deg,#fff,#fffafd);padding:15px;box-shadow:0 10px 26px rgba(15,23,42,.045)}
+.security-summary-card{border:1px solid #f1d4e5;border-radius:18px;background:linear-gradient(180deg,#fff,#fffafd);padding:12px 14px;min-height:82px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 10px 26px rgba(15,23,42,.045)}
 .security-summary-card small{display:block;color:#64748b;font-weight:800;margin-bottom:4px}
-.security-summary-card strong{font-size:25px;color:#111827;letter-spacing:-.03em}
+.security-summary-card strong{font-size:23px;color:#111827;letter-spacing:-.03em;line-height:1}
 .security-empty{padding:28px 18px;text-align:center;color:#64748b;font-weight:700}
 .security-empty i{display:block;color:#c23b83;font-size:32px;margin-bottom:8px}
 @media(max-width:980px){.security-subtabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:5px}.security-subtab{flex:0 0 auto}.security-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -590,7 +590,7 @@
       <button class="config-tab" onclick="showConfig('servicios',this)"><i class="bi bi-heart-pulse me-1"></i> Servicios</button>
       <button class="config-tab" onclick="showConfig('horarios',this)"><i class="bi bi-clock me-1"></i> Horarios rápidos</button>
       <button class="config-tab" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
-      <button class="config-tab" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad y accesos</button>
+      <button class="config-tab" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad</button>
     </div>
 
     <section class="screen active" id="medicos">
@@ -700,12 +700,12 @@
         <h4><i class="bi bi-shield-lock me-2"></i> Seguridad y accesos</h4>
         <p>Administración de usuarios autorizados y consulta de la bitácora del sistema.</p>
       </div>
-      <span class="readonly-pill"><i class="bi bi-shield-check"></i> Estructura preparada</span>
+      <span class="readonly-pill"><i class="bi bi-shield-check"></i> Control de acceso preparado</span>
     </div>
 
     <div class="notice mb-3">
       <i class="bi bi-info-circle me-1"></i>
-      Esta primera fase incorpora únicamente la interfaz. No crea, modifica ni elimina usuarios y no escribe en la bitácora.
+      Administre usuarios autorizados, permisos y consulte el historial de accesos del sistema desde un solo lugar.
     </div>
 
     <div class="security-subtabs">
@@ -728,10 +728,10 @@
       <div class="section-head">
         <div>
           <h4 style="font-size:22px!important">Usuarios autorizados</h4>
-          <p>La conexión con la hoja <b>usuarios</b> se realizará en la siguiente fase.</p>
+          <p>Gestione las cuentas autorizadas y sus niveles de acceso al ERP.</p>
         </div>
         <button id="btnNuevoUsuario" class="btn-auro" type="button" disabled>
-          <i class="bi bi-person-plus me-1"></i> Nuevo usuario
+          <i class="bi bi-person-plus me-1"></i> Crear usuario
         </button>
       </div>
 
@@ -739,40 +739,60 @@
         <table class="table table-modern">
           <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Acción</th></tr></thead>
           <tbody id="usuariosSeguridadBody">
-            <tr><td colspan="6" class="security-empty"><i class="bi bi-person-lock"></i>Interfaz lista. Pendiente conectar usuarios y permisos.</td></tr>
+            <tr><td colspan="6" class="security-empty"><i class="bi bi-person-lock"></i>No hay usuarios para mostrar. Las cuentas autorizadas aparecerán aquí.</td></tr>
           </tbody>
         </table>
       </div>
       <div id="usuariosSeguridadMobile" class="mobile-cards">
-        <div class="mobile-card security-empty"><i class="bi bi-person-lock"></i>Interfaz lista. Pendiente conectar usuarios y permisos.</div>
+        <div class="mobile-card security-empty"><i class="bi bi-person-lock"></i>No hay usuarios para mostrar. Las cuentas autorizadas aparecerán aquí.</div>
       </div>
     </div>
 
     <div id="securityBitacora" class="security-panel">
+      <div class="security-summary">
+        <div class="security-summary-card"><small>Eventos hoy</small><strong id="secEventosHoy">0</strong></div>
+        <div class="security-summary-card"><small>Accesos exitosos</small><strong id="secAccesosExitosos">0</strong></div>
+        <div class="security-summary-card"><small>Alertas</small><strong id="secAlertasSeguridad">0</strong></div>
+        <div class="security-summary-card"><small>Último evento</small><strong id="secUltimoEvento" style="font-size:16px">—</strong></div>
+      </div>
+
       <div class="section-head">
         <div>
           <h4 style="font-size:22px!important">Bitácora del sistema</h4>
-          <p>Registro de accesos y acciones relevantes. Vista exclusiva para administración.</p>
+          <p>Consulte accesos, acciones relevantes y resultados de auditoría del sistema.</p>
         </div>
         <span class="readonly-pill"><i class="bi bi-eye"></i> Solo lectura</span>
       </div>
 
       <div class="row g-3 mb-3">
-        <div class="col-md-4"><label class="form-label fw-bold">Fecha</label><input type="date" class="form-control" disabled></div>
-        <div class="col-md-4"><label class="form-label fw-bold">Usuario</label><input class="form-control" placeholder="Todos los usuarios" disabled></div>
-        <div class="col-md-4"><label class="form-label fw-bold">Acción</label><input class="form-control" placeholder="Todas las acciones" disabled></div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraDesde">Desde</label>
+          <input id="bitacoraDesde" type="date" class="form-control" disabled>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraHasta">Hasta</label>
+          <input id="bitacoraHasta" type="date" class="form-control" disabled>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraUsuario">Usuario</label>
+          <select id="bitacoraUsuario" class="form-select" disabled><option>Todos los usuarios</option></select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraAccion">Acción</label>
+          <select id="bitacoraAccion" class="form-select" disabled><option>Todas las acciones</option></select>
+        </div>
       </div>
 
       <div class="table-responsive">
         <table class="table table-modern">
-          <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Módulo</th><th>Acción</th><th>Resultado</th></tr></thead>
+          <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Módulo</th><th>Acción</th><th>Paciente</th><th>Equipo</th><th>Resultado</th></tr></thead>
           <tbody id="bitacoraSeguridadBody">
-            <tr><td colspan="5" class="security-empty"><i class="bi bi-journal-check"></i>Interfaz lista. Pendiente conectar la hoja bitacora.</td></tr>
+            <tr><td colspan="7" class="security-empty"><i class="bi bi-journal-check"></i>Aún no existen eventos registrados. Los accesos y acciones aparecerán aquí automáticamente.</td></tr>
           </tbody>
         </table>
       </div>
       <div id="bitacoraSeguridadMobile" class="mobile-cards">
-        <div class="mobile-card security-empty"><i class="bi bi-journal-check"></i>Interfaz lista. Pendiente conectar la hoja bitacora.</div>
+        <div class="mobile-card security-empty"><i class="bi bi-journal-check"></i>Aún no existen eventos registrados. Los accesos y acciones aparecerán aquí automáticamente.</div>
       </div>
     </div>
   </div>
