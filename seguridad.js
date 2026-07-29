@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.1.0
+   Versión: 1.2.0
    Fecha: 2026-07-29
 
    OBJETIVO
@@ -42,6 +42,16 @@
     claveUsuario: 'aurosanax_seguridad_usuario',
     claveExpiracion: 'aurosanax_seguridad_expira_en',
     tiempoEsperaMs: 25000
+  });
+
+
+  /* Roles visibles de la interfaz. El backend se ajustará en la fase siguiente. */
+  const SEGURIDAD_ROLES_UI = Object.freeze({
+    ADMINISTRADOR: 'ADMINISTRADOR',
+    MEDICO_PRINCIPAL: 'MEDICO_PRINCIPAL',
+    SECRETARIA: 'SECRETARIA',
+    MEDICO_COLABORADOR: 'MEDICO_COLABORADOR',
+    MEDICO_LEGACY: 'MEDICO'
   });
 
   let enviandoLogin = false;
@@ -842,7 +852,7 @@
   function actualizarResumenUsuarios() {
     const total = usuariosSeguridad.length;
     const administradores = contarRol('ADMINISTRADOR');
-    const medicos = contarRol('MEDICO');
+    const medicos = contarRolesMedicos();
     const secretaria = contarRol('SECRETARIA');
 
     establecerTexto('secTotalUsuarios', String(total));
@@ -854,6 +864,15 @@
   function contarRol(rol) {
     return usuariosSeguridad.filter(function (u) {
       return textoSeguro(u.rol).toUpperCase() === rol;
+    }).length;
+  }
+
+
+  function contarRolesMedicos() {
+    return usuariosSeguridad.filter(function (u) {
+      const rol = normalizarRolInterfaz(u.rol);
+      return rol === SEGURIDAD_ROLES_UI.MEDICO_PRINCIPAL ||
+        rol === SEGURIDAD_ROLES_UI.MEDICO_COLABORADOR;
     }).length;
   }
 
@@ -890,9 +909,10 @@
         '<div class="col-md-6">' +
           '<label class="form-label fw-bold">Rol</label>' +
           '<select id="segRol" class="form-select">' +
-            opcionSeleccionada('ADMINISTRADOR', usuario.rol, 'Administrador') +
-            opcionSeleccionada('MEDICO', usuario.rol, 'Médico') +
-            opcionSeleccionada('SECRETARIA', usuario.rol || 'SECRETARIA', 'Secretaría') +
+            opcionSeleccionada('ADMINISTRADOR', normalizarRolInterfaz(usuario.rol), 'Administrador') +
+            opcionSeleccionada('MEDICO_PRINCIPAL', normalizarRolInterfaz(usuario.rol), 'Médico principal') +
+            opcionSeleccionada('SECRETARIA', normalizarRolInterfaz(usuario.rol || 'SECRETARIA'), 'Secretaría') +
+            opcionSeleccionada('MEDICO_COLABORADOR', normalizarRolInterfaz(usuario.rol), 'Médico colaborador') +
           '</select>' +
         '</div>' +
         '<div class="col-md-6">' +
@@ -1132,12 +1152,24 @@
     return Number.isNaN(fecha.getTime()) ? null : fecha;
   }
 
-  function etiquetaRol(rol) {
+  function normalizarRolInterfaz(rol) {
     const valor = textoSeguro(rol).toUpperCase();
+
+    /* Compatibilidad temporal con cuentas antiguas MEDICO. */
+    if (valor === SEGURIDAD_ROLES_UI.MEDICO_LEGACY) {
+      return SEGURIDAD_ROLES_UI.MEDICO_COLABORADOR;
+    }
+
+    return valor;
+  }
+
+  function etiquetaRol(rol) {
+    const valor = normalizarRolInterfaz(rol);
     const texto =
-      valor === 'ADMINISTRADOR' ? 'Administrador' :
-      valor === 'MEDICO' ? 'Médico' :
-      valor === 'SECRETARIA' ? 'Secretaría' :
+      valor === SEGURIDAD_ROLES_UI.ADMINISTRADOR ? 'Administrador' :
+      valor === SEGURIDAD_ROLES_UI.MEDICO_PRINCIPAL ? 'Médico principal' :
+      valor === SEGURIDAD_ROLES_UI.SECRETARIA ? 'Secretaría' :
+      valor === SEGURIDAD_ROLES_UI.MEDICO_COLABORADOR ? 'Médico colaborador' :
       valor || 'Sin rol';
 
     return '<span class="badgex badge-blue">' + escaparHtml(texto) + '</span>';
@@ -1189,6 +1221,50 @@
   }
 
 
+  async function validarSesionActual() {
+    const token = obtenerTokenSesion();
+    if (!token) {
+      return { success: false, message: 'No existe una sesión activa.' };
+    }
+
+    try {
+      const respuesta = await apiGet('validarSesion', { token: token });
+
+      if (!respuesta || respuesta.success !== true) {
+        limpiarSesionLocal();
+        return respuesta || { success: false, message: 'Sesión inválida o expirada.' };
+      }
+
+      actualizarSesionValidada(respuesta);
+      return respuesta;
+    } catch (error) {
+      return {
+        success: false,
+        message: error && error.message ? error.message : 'No se pudo validar la sesión.'
+      };
+    }
+  }
+
+  function requiereCambioClave() {
+    const sesion = obtenerSesionLocal() || {};
+    const usuario = obtenerUsuarioActual() || {};
+
+    return sesion.requiere_cambio_clave === true ||
+      textoSeguro(usuario.requiere_cambio_clave).toUpperCase() === 'SI';
+  }
+
+  function tienePermiso(nombrePermiso) {
+    const usuario = obtenerUsuarioActual() || {};
+    const permisos = usuario.permisos && typeof usuario.permisos === 'object'
+      ? usuario.permisos
+      : {};
+
+    const rol = normalizarRolInterfaz(usuario.rol);
+    if (rol === SEGURIDAD_ROLES_UI.ADMINISTRADOR) return true;
+
+    return permisos[nombrePermiso] === true;
+  }
+
   /* ========================================================
      API PÚBLICA DEL MÓDULO
      Permite que index.html use estas funciones después.
@@ -1197,10 +1273,14 @@
   window.AUROSANAX_SEGURIDAD = Object.freeze({
     iniciarSesion: iniciarSesion,
     validarSesion: validarSesionExistenteYRedirigir,
+    validarSesionActual: validarSesionActual,
     cerrarSesion: cerrarSesion,
     obtenerToken: obtenerTokenSesion,
     obtenerSesion: obtenerSesionLocal,
     obtenerUsuario: obtenerUsuarioActual,
+    requiereCambioClave: requiereCambioClave,
+    tienePermiso: tienePermiso,
+    normalizarRol: normalizarRolInterfaz,
     limpiarSesion: limpiarSesionLocal,
     cargarUsuarios: cargarUsuariosSeguridad,
     abrirUsuario: abrirFormularioUsuario,
