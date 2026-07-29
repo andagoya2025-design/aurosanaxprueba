@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.2.1
+   Versión: 1.3.0
    Fecha: 2026-07-29
 
    OBJETIVO
@@ -654,8 +654,10 @@
 
   let usuariosSeguridad = [];
   let usuarioEditandoId = '';
+  let bitacoraSeguridad = [];
   let sesionAdministrativaValidada = false;
   let inicializacionAdministrativaEnCurso = false;
+  let bitacoraInicializada = false;
 
   async function inicializarAdministracionSeguridad() {
     if (inicializacionAdministrativaEnCurso) return;
@@ -717,7 +719,7 @@
       );
 
       await cargarUsuariosSeguridad();
-      prepararBitacoraSeguridad();
+      await cargarBitacoraSeguridad();
     } catch (error) {
       console.error('Error inicializando administración de seguridad:', error);
       sesionAdministrativaValidada = false;
@@ -1147,22 +1149,314 @@
     }
   }
 
-  function prepararBitacoraSeguridad() {
-    establecerTexto('secEventosHoy', '0');
-    establecerTexto('secAccesosExitosos', '0');
-    establecerTexto('secAlertasSeguridad', '0');
-    establecerTexto('secUltimoEvento', '—');
+  async function cargarBitacoraSeguridad() {
+    const token = exigirTokenAdministrativo();
+    mostrarEstadoBitacora('Cargando eventos de seguridad…', false);
 
-    const body = document.getElementById('bitacoraSeguridadBody');
-    if (body) {
-      body.innerHTML =
-        '<tr><td colspan="7" class="security-empty">' +
-        '<i class="bi bi-journal-check"></i>' +
-        '<b>Aún no existen eventos cargados en esta vista.</b><br>' +
-        '<span>El Apps Script ya registra eventos; la consulta administrativa se conectará mediante un endpoint de solo lectura.</span>' +
-        '</td></tr>';
+    try {
+      const respuesta = await apiGet('listarBitacoraSegura', { token: token });
+
+      if (respuesta && respuesta.success === false) {
+        throw new Error(respuesta.message || 'No se pudo consultar la bitácora.');
+      }
+
+      bitacoraSeguridad = Array.isArray(respuesta) ? respuesta : [];
+      prepararFiltrosBitacora();
+      aplicarFiltrosBitacora();
+      bitacoraInicializada = true;
+    } catch (error) {
+      console.error('Error cargando bitácora:', error);
+      bitacoraSeguridad = [];
+      actualizarResumenBitacora([]);
+      renderBitacoraSeguridad([], error.message || 'No se pudo cargar la bitácora.');
+      mostrarEstadoBitacora(error.message || 'No se pudo cargar la bitácora.', true);
     }
   }
+
+  function mostrarEstadoBitacora(mensaje, esError) {
+    let estado = document.getElementById('secEstadoBitacora');
+
+    if (!estado) {
+      const panel = document.getElementById('securityBitacora');
+      const resumen = panel ? panel.querySelector('.security-summary') : null;
+
+      if (panel && resumen) {
+        estado = document.createElement('div');
+        estado.id = 'secEstadoBitacora';
+        resumen.insertAdjacentElement('afterend', estado);
+      }
+    }
+
+    if (!estado) return;
+
+    estado.className = esError
+      ? 'notice mb-3 text-danger'
+      : 'notice mb-3';
+
+    estado.innerHTML =
+      '<i class="bi ' +
+      (esError ? 'bi-exclamation-triangle' : 'bi-journal-check') +
+      ' me-1"></i>' +
+      escaparHtml(mensaje || '');
+
+    estado.style.display = mensaje ? 'block' : 'none';
+  }
+
+  function prepararFiltrosBitacora() {
+    const desde = document.getElementById('bitacoraDesde');
+    const hasta = document.getElementById('bitacoraHasta');
+    const usuario = document.getElementById('bitacoraUsuario');
+    const accion = document.getElementById('bitacoraAccion');
+
+    [desde, hasta, usuario, accion].forEach(function (campo) {
+      if (!campo) return;
+      campo.disabled = false;
+
+      if (campo.dataset.auroBitacoraInit !== '1') {
+        campo.dataset.auroBitacoraInit = '1';
+        campo.addEventListener('change', aplicarFiltrosBitacora);
+        campo.addEventListener('input', aplicarFiltrosBitacora);
+      }
+    });
+
+    if (usuario) {
+      const usuarios = valoresUnicosBitacora('usuario');
+      const actual = usuario.value || '';
+
+      usuario.innerHTML =
+        '<option value="">Todos los usuarios</option>' +
+        usuarios.map(function (valor) {
+          return '<option value="' + escaparHtml(valor) + '">' +
+            escaparHtml(valor) +
+          '</option>';
+        }).join('');
+
+      if (usuarios.indexOf(actual) !== -1) usuario.value = actual;
+    }
+
+    if (accion) {
+      const acciones = valoresUnicosBitacora('accion');
+      const actual = accion.value || '';
+
+      accion.innerHTML =
+        '<option value="">Todas las acciones</option>' +
+        acciones.map(function (valor) {
+          return '<option value="' + escaparHtml(valor) + '">' +
+            escaparHtml(valor) +
+          '</option>';
+        }).join('');
+
+      if (acciones.indexOf(actual) !== -1) accion.value = actual;
+    }
+  }
+
+  function valoresUnicosBitacora(campo) {
+    const vistos = {};
+    const salida = [];
+
+    bitacoraSeguridad.forEach(function (evento) {
+      const valor = textoSeguro(evento && evento[campo]);
+      if (!valor) return;
+
+      const llave = valor.toLowerCase();
+      if (vistos[llave]) return;
+
+      vistos[llave] = true;
+      salida.push(valor);
+    });
+
+    return salida.sort(function (a, b) {
+      return a.localeCompare(b, 'es');
+    });
+  }
+
+  function aplicarFiltrosBitacora() {
+    const desde = valorElemento('bitacoraDesde');
+    const hasta = valorElemento('bitacoraHasta');
+    const usuario = valorElemento('bitacoraUsuario').toLowerCase();
+    const accion = valorElemento('bitacoraAccion').toLowerCase();
+
+    const filtrados = bitacoraSeguridad.filter(function (evento) {
+      const fechaEvento = fechaBitacoraISO(evento.fecha_hora);
+      const usuarioEvento = textoSeguro(evento.usuario).toLowerCase();
+      const accionEvento = textoSeguro(evento.accion).toLowerCase();
+
+      if (desde && fechaEvento && fechaEvento < desde) return false;
+      if (hasta && fechaEvento && fechaEvento > hasta) return false;
+      if (usuario && usuarioEvento !== usuario) return false;
+      if (accion && accionEvento !== accion) return false;
+
+      return true;
+    });
+
+    actualizarResumenBitacora(filtrados);
+    renderBitacoraSeguridad(filtrados);
+
+    mostrarEstadoBitacora(
+      filtrados.length
+        ? 'Bitácora actualizada: ' + filtrados.length + ' evento(s) visible(s).'
+        : 'No existen eventos que coincidan con los filtros seleccionados.',
+      false
+    );
+  }
+
+  function fechaBitacoraISO(valor) {
+    const raw = textoSeguro(valor);
+    if (!raw) return '';
+
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return match[1] + '-' + match[2] + '-' + match[3];
+
+    const fecha = convertirFechaSegura(valor);
+    if (!fecha) return '';
+
+    const y = fecha.getFullYear();
+    const m = String(fecha.getMonth() + 1).padStart(2, '0');
+    const d = String(fecha.getDate()).padStart(2, '0');
+
+    return y + '-' + m + '-' + d;
+  }
+
+  function actualizarResumenBitacora(eventos) {
+    eventos = Array.isArray(eventos) ? eventos : [];
+
+    const hoy = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Guayaquil',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+
+    const eventosHoy = eventos.filter(function (evento) {
+      return fechaBitacoraISO(evento.fecha_hora) === hoy;
+    }).length;
+
+    const exitosos = eventos.filter(function (evento) {
+      const resultado = textoSeguro(evento.resultado).toUpperCase();
+      const accion = textoSeguro(evento.accion).toUpperCase();
+      return resultado === 'EXITOSO' && accion === 'LOGIN_EXITOSO';
+    }).length;
+
+    const alertas = eventos.filter(function (evento) {
+      const resultado = textoSeguro(evento.resultado).toUpperCase();
+      const accion = textoSeguro(evento.accion).toUpperCase();
+      return resultado === 'RECHAZADO' ||
+        resultado === 'ERROR' ||
+        accion === 'LOGIN_FALLIDO';
+    }).length;
+
+    establecerTexto('secEventosHoy', String(eventosHoy));
+    establecerTexto('secAccesosExitosos', String(exitosos));
+    establecerTexto('secAlertasSeguridad', String(alertas));
+    establecerTexto(
+      'secUltimoEvento',
+      eventos.length
+        ? formatearFechaHoraEcuador(eventos[0].fecha_hora)
+        : '—'
+    );
+  }
+
+  function renderBitacoraSeguridad(eventos, mensajeError) {
+    eventos = Array.isArray(eventos) ? eventos : [];
+
+    const body = document.getElementById('bitacoraSeguridadBody');
+    const mobile = document.getElementById('bitacoraSeguridadMobile');
+
+    if (!eventos.length) {
+      const mensaje = mensajeError ||
+        'Aún no existen eventos registrados para los filtros seleccionados.';
+
+      const vacio =
+        '<i class="bi bi-journal-check"></i>' +
+        escaparHtml(mensaje);
+
+      if (body) {
+        body.innerHTML =
+          '<tr><td colspan="7" class="security-empty">' +
+          vacio +
+          '</td></tr>';
+      }
+
+      if (mobile) {
+        mobile.innerHTML =
+          '<div class="mobile-card security-empty">' +
+          vacio +
+          '</div>';
+      }
+
+      return;
+    }
+
+    if (body) {
+      body.innerHTML = eventos.map(function (evento) {
+        return (
+          '<tr>' +
+            '<td>' + escaparHtml(formatearFechaHoraEcuador(evento.fecha_hora)) + '</td>' +
+            '<td><b>' + escaparHtml(evento.usuario || 'Sistema') + '</b></td>' +
+            '<td>' + escaparHtml(evento.modulo || '—') + '</td>' +
+            '<td>' + escaparHtml(evento.accion || '—') + '</td>' +
+            '<td>' + escaparHtml(evento.id_paciente || '—') + '</td>' +
+            '<td title="' + escaparHtml(evento.dispositivo || '') + '">' +
+              escaparHtml(resumirDispositivoBitacora(evento.dispositivo)) +
+            '</td>' +
+            '<td>' + etiquetaResultadoBitacora(evento.resultado) + '</td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    if (mobile) {
+      mobile.innerHTML = eventos.map(function (evento) {
+        return (
+          '<div class="mobile-card">' +
+            '<b>' + escaparHtml(evento.accion || 'Evento') + '</b>' +
+            '<div class="line"><span>Fecha</span><span>' +
+              escaparHtml(formatearFechaHoraEcuador(evento.fecha_hora)) +
+            '</span></div>' +
+            '<div class="line"><span>Usuario</span><span>' +
+              escaparHtml(evento.usuario || 'Sistema') +
+            '</span></div>' +
+            '<div class="line"><span>Módulo</span><span>' +
+              escaparHtml(evento.modulo || '—') +
+            '</span></div>' +
+            '<div class="line"><span>Resultado</span><span>' +
+              etiquetaResultadoBitacora(evento.resultado) +
+            '</span></div>' +
+            '<div class="line"><span>Equipo</span><span>' +
+              escaparHtml(resumirDispositivoBitacora(evento.dispositivo)) +
+            '</span></div>' +
+          '</div>'
+        );
+      }).join('');
+    }
+  }
+
+  function resumirDispositivoBitacora(valor) {
+    const raw = textoSeguro(valor);
+    if (!raw) return 'No registrado';
+    return raw.length > 42 ? raw.substring(0, 39) + '…' : raw;
+  }
+
+  function etiquetaResultadoBitacora(resultado) {
+    const valor = textoSeguro(resultado).toUpperCase();
+
+    if (valor === 'EXITOSO') {
+      return '<span class="badgex badge-ok">Exitoso</span>';
+    }
+
+    if (valor === 'RECHAZADO') {
+      return '<span class="badgex badge-danger">Rechazado</span>';
+    }
+
+    if (valor === 'ERROR') {
+      return '<span class="badgex badge-danger">Error</span>';
+    }
+
+    return '<span class="badgex badge-warn">' +
+      escaparHtml(resultado || 'Sin resultado') +
+    '</span>';
+  }
+
 
   function exigirTokenAdministrativo() {
     const token = obtenerTokenSesion();
@@ -1318,6 +1612,7 @@
     validarSesion: validarSesionExistenteYRedirigir,
     validarSesionActual: validarSesionActual,
     inicializarAdministracion: inicializarAdministracionSeguridad,
+    cargarBitacora: cargarBitacoraSeguridad,
     cerrarSesion: cerrarSesion,
     obtenerToken: obtenerTokenSesion,
     obtenerSesion: obtenerSesionLocal,
