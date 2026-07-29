@@ -7617,6 +7617,21 @@ document.addEventListener('click',e=>{
           ? seguridad.obtenerUsuario()
           : null) || {};
 
+      /*
+        AUROSANAX - CONTROL QUIRÚRGICO DE ACCESO AL INDEX
+        La Configuración determina si el usuario tiene permiso "dashboard".
+        El Administrador conserva acceso total mediante seguridad.tienePermiso().
+      */
+      if(typeof seguridad.tienePermiso !== 'function'){
+        bloquearYVolverLogin('No se pudo comprobar el permiso de acceso al ERP.');
+        return;
+      }
+
+      if(!seguridad.tienePermiso('dashboard', usuario)){
+        bloquearYVolverLogin('Acceso no autorizado al sistema principal.');
+        return;
+      }
+
       pintarUsuario(usuario);
 
       /*
