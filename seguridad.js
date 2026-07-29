@@ -734,16 +734,18 @@
     return (
       '<div class="col-12">' +
         '<div class="auro-permissions">' +
-          '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">' +
-            '<div><label class="form-label fw-bold mb-1">Permisos de acceso</label>' +
-            '<div class="text-muted small">Seleccione las páginas y secciones autorizadas.</div></div>' +
-            '<div class="d-flex gap-2 flex-wrap">' +
-              '<button id="btnSeleccionarTodosPermisos" class="btn-soft btn-sm" type="button">' +
-                '<i class="bi bi-check2-square me-1"></i> Seleccionar todo</button>' +
-              '<button id="btnQuitarTodosPermisos" class="btn-line btn-sm" type="button">' +
-                '<i class="bi bi-square me-1"></i> Quitar todo</button>' +
-              '<button id="btnAplicarPermisosRol" class="btn-soft btn-sm" type="button">' +
+          '<div class="mb-3">' +
+            '<div class="mb-3">' +
+              '<label class="form-label fw-bold mb-1">Permisos de acceso</label>' +
+              '<div class="text-muted small">Seleccione las páginas y secciones autorizadas.</div>' +
+            '</div>' +
+            '<div class="d-flex justify-content-end gap-2 flex-wrap">' +
+              '<button id="btnAplicarPermisosRol" class="btn-soft btn-sm" type="button" style="min-width:130px">' +
                 '<i class="bi bi-magic me-1"></i> Aplicar rol</button>' +
+              '<button id="btnSeleccionarTodosPermisos" class="btn-soft btn-sm" type="button" style="min-width:145px">' +
+                '<i class="bi bi-check2-square me-1"></i> Seleccionar todos</button>' +
+              '<button id="btnQuitarTodosPermisos" class="btn-line btn-sm" type="button" style="min-width:125px">' +
+                '<i class="bi bi-square me-1"></i> Quitar todos</button>' +
             '</div>' +
           '</div>' +
           '<div class="auro-permissions-grid">' +
