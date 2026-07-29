@@ -1,1 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AUROSANAX ERP - Inicio de sesión</title>
 
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+
+body{
+    font-family:Arial,sans-serif;
+    background:linear-gradient(135deg,#f4f7fb,#e9eef7);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    padding:20px;
+}
+
+.login-card{
+    width:100%;
+    max-width:420px;
+    background:#fff;
+    border-radius:18px;
+    padding:36px;
+    box-shadow:0 12px 35px rgba(0,0,0,.12);
+    text-align:center;
+}
+
+#logoCentro{
+    width:90px;
+    height:90px;
+    object-fit:contain;
+    display:block;
+    margin:0 auto 18px;
+}
+
+#nombreCentro{
+    font-size:28px;
+    font-weight:bold;
+    color:#1f3f6d;
+    margin-bottom:6px;
+}
+
+#subtituloCentro{
+    font-size:14px;
+    color:#777;
+    margin-bottom:28px;
+}
+
+label{
+    display:block;
+    text-align:left;
+    margin-bottom:6px;
+    font-weight:bold;
+}
+
+input{
+    width:100%;
+    padding:13px;
+    margin-bottom:18px;
+    border:1px solid #d8dce5;
+    border-radius:10px;
+    font-size:15px;
+}
+
+button{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:10px;
+    background:#2b6cb0;
+    color:#fff;
+    font-size:16px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+#lblError{
+    display:none;
+    margin-top:16px;
+    background:#fdecec;
+    color:#b00020;
+    border-radius:8px;
+    padding:10px;
+}
+
+.footer{
+    margin-top:24px;
+    color:#888;
+    font-size:12px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="login-card">
+
+<img id="logoCentro" src="" alt="Logo">
+
+<h1 id="nombreCentro"></h1>
+
+<p id="subtituloCentro"></p>
+
+<label for="txtUsuario">Usuario</label>
+<input id="txtUsuario" type="text" autocomplete="username">
+
+<label for="txtClave">Contraseña</label>
+<input id="txtClave" type="password" autocomplete="current-password">
+
+<button id="btnLogin">Iniciar sesión</button>
+
+<div id="lblError"></div>
+
+<div class="footer">
+ERP Clínico • AUROSANAX
+</div>
+
+</div>
+
+</body>
+</html>
