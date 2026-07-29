@@ -44,23 +44,17 @@
     tiempoEsperaMs: 25000
   });
 
-
-  /* Roles visibles de la interfaz. El backend se ajustará en la fase siguiente. */
-  const SEGURIDAD_ROLES_UI = Object.freeze({
-    ADMINISTRADOR: 'ADMINISTRADOR',
-    MEDICO_PRINCIPAL: 'MEDICO_PRINCIPAL',
-    SECRETARIA: 'SECRETARIA',
-    MEDICO_COLABORADOR: 'MEDICO_COLABORADOR',
-    MEDICO_LEGACY: 'MEDICO'
-  });
-
   let enviandoLogin = false;
 
   /* ========================================================
      INICIALIZACIÓN
      ======================================================== */
 
-  document.addEventListener('DOMContentLoaded', inicializarSeguridadLogin);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', inicializarSeguridadLogin, { once: true });
+  } else {
+    window.setTimeout(inicializarSeguridadLogin, 0);
+  }
 
   async function inicializarSeguridadLogin() {
     const esPaginaLogin = Boolean(document.getElementById('formLogin'));
@@ -485,6 +479,9 @@
       SEGURIDAD_CONFIG.apiUrl,
       {
         method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
         body: JSON.stringify({
           accion: accion,
           data: data || {}
@@ -657,23 +654,30 @@
 
   let usuariosSeguridad = [];
   let usuarioEditandoId = '';
+  let sesionAdministrativaValidada = false;
+  let inicializacionAdministrativaEnCurso = false;
 
   async function inicializarAdministracionSeguridad() {
+    if (inicializacionAdministrativaEnCurso) return;
+    inicializacionAdministrativaEnCurso = true;
+
     const botonCrear = document.getElementById('btnNuevoUsuario');
 
     if (botonCrear && botonCrear.dataset.auroSeguridadInit !== '1') {
       botonCrear.dataset.auroSeguridadInit = '1';
       botonCrear.disabled = false;
-      botonCrear.addEventListener('click', function () {
-        abrirFormularioUsuario('');
-      });
+      botonCrear.addEventListener('click', manejarClickNuevoUsuario);
     }
+
+    mostrarEstadoAdministracion('Validando sesión administrativa…', false);
 
     const token = obtenerTokenSesion();
     if (!token) {
+      sesionAdministrativaValidada = false;
       bloquearAdministracionSeguridad(
-        'Debe iniciar sesión como administrador para gestionar usuarios.'
+        'No existe una sesión activa. Inicie sesión como Administrador.'
       );
+      inicializacionAdministrativaEnCurso = false;
       return;
     }
 
@@ -682,8 +686,9 @@
 
       if (!validacion || validacion.success !== true) {
         limpiarSesionLocal();
+        sesionAdministrativaValidada = false;
         bloquearAdministracionSeguridad(
-          'La sesión no es válida o expiró. Inicie sesión nuevamente.'
+          'La sesión expiró o no es válida. Inicie sesión nuevamente.'
         );
         return;
       }
@@ -697,23 +702,76 @@
         {};
 
       if (!esAdministrador(usuarioActual)) {
+        sesionAdministrativaValidada = false;
         bloquearAdministracionSeguridad(
-          'Esta sección está disponible únicamente para administradores.'
+          'Esta sección está disponible únicamente para el Administrador.'
         );
         return;
       }
 
+      sesionAdministrativaValidada = true;
       habilitarAdministracionSeguridad();
+      mostrarEstadoAdministracion(
+        'Sesión administrativa validada. Ya puede crear y administrar usuarios.',
+        false
+      );
+
       await cargarUsuariosSeguridad();
       prepararBitacoraSeguridad();
     } catch (error) {
       console.error('Error inicializando administración de seguridad:', error);
+      sesionAdministrativaValidada = false;
       bloquearAdministracionSeguridad(
         error && error.message
           ? error.message
           : 'No se pudo inicializar la administración de seguridad.'
       );
+    } finally {
+      inicializacionAdministrativaEnCurso = false;
     }
+  }
+
+  async function manejarClickNuevoUsuario() {
+    if (sesionAdministrativaValidada) {
+      abrirFormularioUsuario('');
+      return;
+    }
+
+    const token = obtenerTokenSesion();
+
+    if (!token) {
+      mostrarEstadoAdministracion(
+        'Debe iniciar sesión como Administrador antes de crear usuarios.',
+        true
+      );
+
+      window.setTimeout(function () {
+        window.location.href = SEGURIDAD_CONFIG.paginaLogin;
+      }, 700);
+      return;
+    }
+
+    await inicializarAdministracionSeguridad();
+
+    if (sesionAdministrativaValidada) {
+      abrirFormularioUsuario('');
+    }
+  }
+
+  function mostrarEstadoAdministracion(mensaje, esError) {
+    const elemento = document.getElementById('secEstadoConexion');
+    if (!elemento) return;
+
+    elemento.style.display = 'block';
+    elemento.className = esError
+      ? 'notice mb-3 text-danger'
+      : 'notice mb-3';
+
+    elemento.innerHTML =
+      '<i class="bi ' +
+      (esError ? 'bi-exclamation-triangle' : 'bi-shield-check') +
+      ' me-1"></i>' +
+      escaparHtml(mensaje || '');
   }
 
   function esAdministrador(usuario) {
@@ -727,7 +785,13 @@
 
   function bloquearAdministracionSeguridad(mensaje) {
     const boton = document.getElementById('btnNuevoUsuario');
-    if (boton) boton.disabled = true;
+    if (boton) {
+      boton.disabled = false;
+      boton.setAttribute('aria-disabled', 'true');
+      boton.title = mensaje || 'Sesión administrativa no disponible';
+    }
+
+    mostrarEstadoAdministracion(mensaje || 'Acceso no disponible.', true);
 
     usuariosSeguridad = [];
     renderUsuariosSeguridad();
@@ -753,7 +817,11 @@
 
   function habilitarAdministracionSeguridad() {
     const boton = document.getElementById('btnNuevoUsuario');
-    if (boton) boton.disabled = false;
+    if (boton) {
+      boton.disabled = false;
+      boton.removeAttribute('aria-disabled');
+      boton.title = 'Crear un nuevo usuario autorizado';
+    }
   }
 
   async function cargarUsuariosSeguridad() {
@@ -852,7 +920,10 @@
   function actualizarResumenUsuarios() {
     const total = usuariosSeguridad.length;
     const administradores = contarRol('ADMINISTRADOR');
-    const medicos = contarRolesMedicos();
+    const medicos =
+      contarRol('MEDICO_PRINCIPAL') +
+      contarRol('MEDICO_COLABORADOR') +
+      contarRol('MEDICO');
     const secretaria = contarRol('SECRETARIA');
 
     establecerTexto('secTotalUsuarios', String(total));
@@ -864,15 +935,6 @@
   function contarRol(rol) {
     return usuariosSeguridad.filter(function (u) {
       return textoSeguro(u.rol).toUpperCase() === rol;
-    }).length;
-  }
-
-
-  function contarRolesMedicos() {
-    return usuariosSeguridad.filter(function (u) {
-      const rol = normalizarRolInterfaz(u.rol);
-      return rol === SEGURIDAD_ROLES_UI.MEDICO_PRINCIPAL ||
-        rol === SEGURIDAD_ROLES_UI.MEDICO_COLABORADOR;
     }).length;
   }
 
@@ -909,10 +971,12 @@
         '<div class="col-md-6">' +
           '<label class="form-label fw-bold">Rol</label>' +
           '<select id="segRol" class="form-select">' +
-            opcionSeleccionada('ADMINISTRADOR', normalizarRolInterfaz(usuario.rol), 'Administrador') +
-            opcionSeleccionada('MEDICO_PRINCIPAL', normalizarRolInterfaz(usuario.rol), 'Médico principal') +
-            opcionSeleccionada('SECRETARIA', normalizarRolInterfaz(usuario.rol || 'SECRETARIA'), 'Secretaría') +
-            opcionSeleccionada('MEDICO_COLABORADOR', normalizarRolInterfaz(usuario.rol), 'Médico colaborador') +
+            opcionSeleccionada('ADMINISTRADOR', usuario.rol, 'Administrador') +
+            opcionSeleccionada('MEDICO_PRINCIPAL', usuario.rol, 'Médico principal') +
+            opcionSeleccionada('MEDICO_COLABORADOR',
+              String(usuario.rol || '').toUpperCase() === 'MEDICO' ? 'MEDICO_COLABORADOR' : usuario.rol,
+              'Médico colaborador') +
+            opcionSeleccionada('SECRETARIA', usuario.rol || 'SECRETARIA', 'Secretaría') +
           '</select>' +
         '</div>' +
         '<div class="col-md-6">' +
@@ -1152,24 +1216,13 @@
     return Number.isNaN(fecha.getTime()) ? null : fecha;
   }
 
-  function normalizarRolInterfaz(rol) {
-    const valor = textoSeguro(rol).toUpperCase();
-
-    /* Compatibilidad temporal con cuentas antiguas MEDICO. */
-    if (valor === SEGURIDAD_ROLES_UI.MEDICO_LEGACY) {
-      return SEGURIDAD_ROLES_UI.MEDICO_COLABORADOR;
-    }
-
-    return valor;
-  }
-
   function etiquetaRol(rol) {
-    const valor = normalizarRolInterfaz(rol);
+    const valor = textoSeguro(rol).toUpperCase();
     const texto =
-      valor === SEGURIDAD_ROLES_UI.ADMINISTRADOR ? 'Administrador' :
-      valor === SEGURIDAD_ROLES_UI.MEDICO_PRINCIPAL ? 'Médico principal' :
-      valor === SEGURIDAD_ROLES_UI.SECRETARIA ? 'Secretaría' :
-      valor === SEGURIDAD_ROLES_UI.MEDICO_COLABORADOR ? 'Médico colaborador' :
+      valor === 'ADMINISTRADOR' ? 'Administrador' :
+      valor === 'MEDICO_PRINCIPAL' ? 'Médico principal' :
+      (valor === 'MEDICO_COLABORADOR' || valor === 'MEDICO') ? 'Médico colaborador' :
+      valor === 'SECRETARIA' ? 'Secretaría' :
       valor || 'Sin rol';
 
     return '<span class="badgex badge-blue">' + escaparHtml(texto) + '</span>';
@@ -1221,48 +1274,38 @@
   }
 
 
+
   async function validarSesionActual() {
     const token = obtenerTokenSesion();
+
     if (!token) {
-      return { success: false, message: 'No existe una sesión activa.' };
+      return {
+        success: false,
+        message: 'No existe una sesión activa.'
+      };
     }
 
     try {
       const respuesta = await apiGet('validarSesion', { token: token });
 
-      if (!respuesta || respuesta.success !== true) {
-        limpiarSesionLocal();
-        return respuesta || { success: false, message: 'Sesión inválida o expirada.' };
+      if (respuesta && respuesta.success === true) {
+        actualizarSesionValidada(respuesta);
+        return respuesta;
       }
 
-      actualizarSesionValidada(respuesta);
-      return respuesta;
+      limpiarSesionLocal();
+      return respuesta || {
+        success: false,
+        message: 'Sesión inválida o expirada.'
+      };
     } catch (error) {
       return {
         success: false,
-        message: error && error.message ? error.message : 'No se pudo validar la sesión.'
+        message: error && error.message
+          ? error.message
+          : 'No fue posible validar la sesión.'
       };
     }
-  }
-
-  function requiereCambioClave() {
-    const sesion = obtenerSesionLocal() || {};
-    const usuario = obtenerUsuarioActual() || {};
-
-    return sesion.requiere_cambio_clave === true ||
-      textoSeguro(usuario.requiere_cambio_clave).toUpperCase() === 'SI';
-  }
-
-  function tienePermiso(nombrePermiso) {
-    const usuario = obtenerUsuarioActual() || {};
-    const permisos = usuario.permisos && typeof usuario.permisos === 'object'
-      ? usuario.permisos
-      : {};
-
-    const rol = normalizarRolInterfaz(usuario.rol);
-    if (rol === SEGURIDAD_ROLES_UI.ADMINISTRADOR) return true;
-
-    return permisos[nombrePermiso] === true;
   }
 
   /* ========================================================
@@ -1274,13 +1317,11 @@
     iniciarSesion: iniciarSesion,
     validarSesion: validarSesionExistenteYRedirigir,
     validarSesionActual: validarSesionActual,
+    inicializarAdministracion: inicializarAdministracionSeguridad,
     cerrarSesion: cerrarSesion,
     obtenerToken: obtenerTokenSesion,
     obtenerSesion: obtenerSesionLocal,
     obtenerUsuario: obtenerUsuarioActual,
-    requiereCambioClave: requiereCambioClave,
-    tienePermiso: tienePermiso,
-    normalizarRol: normalizarRolInterfaz,
     limpiarSesion: limpiarSesionLocal,
     cargarUsuarios: cargarUsuariosSeguridad,
     abrirUsuario: abrirFormularioUsuario,
