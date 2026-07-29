@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.3.2
+   Versión: 1.3.1
    Fecha: 2026-07-29
 
    OBJETIVO
@@ -734,17 +734,11 @@
     return (
       '<div class="col-12">' +
         '<div class="auro-permissions">' +
-          '<div class="d-flex justify-content-between align-items-start gap-2 mb-3 flex-wrap">' +
+          '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">' +
             '<div><label class="form-label fw-bold mb-1">Permisos de acceso</label>' +
             '<div class="text-muted small">Seleccione las páginas y secciones autorizadas.</div></div>' +
-            '<div class="d-flex gap-2 flex-wrap">' +
-              '<button id="btnSeleccionarTodosPermisos" class="btn-soft btn-sm" type="button">' +
-                '<i class="bi bi-check2-square me-1"></i> Seleccionar todo</button>' +
-              '<button id="btnQuitarTodosPermisos" class="btn-line btn-sm" type="button">' +
-                '<i class="bi bi-square me-1"></i> Quitar todo</button>' +
-              '<button id="btnAplicarPermisosRol" class="btn-soft btn-sm" type="button">' +
-                '<i class="bi bi-magic me-1"></i> Aplicar rol</button>' +
-            '</div>' +
+            '<button id="btnAplicarPermisosRol" class="btn-soft btn-sm" type="button">' +
+            '<i class="bi bi-magic me-1"></i> Aplicar rol</button>' +
           '</div>' +
           '<div class="auro-permissions-grid">' +
             CATALOGO_PERMISOS.map(function (permiso) {
@@ -766,62 +760,9 @@
   function aplicarPermisosDelRolSeleccionado() {
     const rol = valorElemento('segRol') || 'SECRETARIA';
     const permisos = normalizarPermisos({}, rol);
-
     document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
       check.checked = permisos[check.value] === true;
     });
-
-    actualizarBloqueoPermisosAdministrador();
-  }
-
-  function esPermisoExclusivoAdministrador(clave) {
-    return [
-      'configuracion_seguridad',
-      'usuarios',
-      'bitacora'
-    ].indexOf(textoSeguro(clave)) !== -1;
-  }
-
-  function actualizarBloqueoPermisosAdministrador() {
-    const rol = valorElemento('segRol') || 'SECRETARIA';
-    const esAdmin = textoSeguro(rol).toUpperCase() === 'ADMINISTRADOR';
-
-    document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
-      if (!esPermisoExclusivoAdministrador(check.value)) {
-        check.disabled = false;
-        return;
-      }
-
-      check.disabled = !esAdmin;
-
-      if (!esAdmin) {
-        check.checked = false;
-      }
-    });
-  }
-
-  function seleccionarTodosPermisos() {
-    const rol = valorElemento('segRol') || 'SECRETARIA';
-    const esAdmin = textoSeguro(rol).toUpperCase() === 'ADMINISTRADOR';
-
-    document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
-      if (esPermisoExclusivoAdministrador(check.value) && !esAdmin) {
-        check.checked = false;
-        check.disabled = true;
-        return;
-      }
-
-      check.disabled = false;
-      check.checked = true;
-    });
-  }
-
-  function quitarTodosPermisos() {
-    document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
-      check.checked = false;
-    });
-
-    actualizarBloqueoPermisosAdministrador();
   }
 
   function alternarClaveCampo(idCampo, boton) {
@@ -1243,8 +1184,6 @@
 
     const botonGuardar = document.getElementById('btnGuardarUsuarioSeguro');
     const botonAplicar = document.getElementById('btnAplicarPermisosRol');
-    const botonSeleccionarTodos = document.getElementById('btnSeleccionarTodosPermisos');
-    const botonQuitarTodos = document.getElementById('btnQuitarTodosPermisos');
     const botonVerClave = document.getElementById('btnVerClaveTemporal');
     const selectorRol = document.getElementById('segRol');
 
@@ -1254,26 +1193,14 @@
     if (botonAplicar) {
       botonAplicar.addEventListener('click', aplicarPermisosDelRolSeleccionado);
     }
-
-    if (botonSeleccionarTodos) {
-      botonSeleccionarTodos.addEventListener('click', seleccionarTodosPermisos);
-    }
-
-    if (botonQuitarTodos) {
-      botonQuitarTodos.addEventListener('click', quitarTodosPermisos);
-    }
-
     if (botonVerClave) {
       botonVerClave.addEventListener('click', function () {
         alternarClaveCampo('segClaveTemporal', botonVerClave);
       });
     }
-
-    if (selectorRol) {
+    if (selectorRol && !usuarioEditandoId) {
       selectorRol.addEventListener('change', aplicarPermisosDelRolSeleccionado);
     }
-
-    actualizarBloqueoPermisosAdministrador();
   }
 
 
