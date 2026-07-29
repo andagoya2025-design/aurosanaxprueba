@@ -2537,13 +2537,17 @@
     <section class="screen" id="medicos"><div class="cardx p-4"><h4 class="fw-bold">Médicos y personal</h4><p class="text-muted">Dra. Aurora como administradora principal y otros médicos por especialidad.</p></div></section>
     <section class="screen" id="configuracion">
       <div class="cardx p-4">
-        <h4 class="fw-bold">Configuración de integración</h4>
-        <p class="text-muted">Administración de la conexión segura con la base de datos clínica.</p>
+        <h4 class="fw-bold">Configuración del sistema</h4>
+        <p class="text-muted">Parámetros institucionales y estado general del ERP.</p>
         <div class="sheet-note mb-3">
-          Módulos de datos habilitados: usuarios, médicos, pacientes, citas, historias clínicas, consultas, especialidades, procedimientos, recetas, documentos y seguimientos.
+          <i class="bi bi-shield-lock me-1"></i> La conexión con la base de datos está protegida y administrada internamente.
         </div>
-        <label class="form-label fw-bold">Endpoint de integración</label>
-        <input class="form-control" id="appsScriptUrl" placeholder="https://script.google.com/macros/s/XXXXX/exec">
+        <!--
+          AUROSANAX_CONFIG_TECNICA_ENDPOINT_OCULTO
+          El endpoint NO se muestra ni se edita desde la interfaz normal.
+          Para localizarlo rápidamente, buscar en este archivo:
+          AUROSANAX_CONFIG_TECNICA_ENDPOINT_NO_EDITAR
+        -->
       </div>
     </section>
   </main>
@@ -2623,6 +2627,12 @@ const MODO_LAB = true;
    - Expone window.APP_SCRIPT_URL para pruebas de consola.
    - Evita que la consola o módulos tomen una ruta relativa de GitHub Pages.
    ========================================================== */
+/* AUROSANAX_CONFIG_TECNICA_ENDPOINT_NO_EDITAR
+   Fuente única de conexión del ERP.
+   - No eliminar.
+   - No exponer en formularios de usuario.
+   - Para una instalación nueva, sustituir únicamente la URL entre comillas.
+*/
 const AUROSANAX_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec';
 const API_URL = AUROSANAX_APPS_SCRIPT_URL;
 window.API_URL = AUROSANAX_APPS_SCRIPT_URL;
@@ -2768,13 +2778,6 @@ async function auroCargarLogoSidebarInstitucional(){
 }
 
 window.auroCargarLogoSidebarInstitucional = auroCargarLogoSidebarInstitucional;
-
-document.addEventListener('DOMContentLoaded', function(){
-  const input = document.getElementById('appsScriptUrl');
-  if(input && !String(input.value || '').trim()){
-    input.value = auroApiUrlGlobal();
-  }
-});
 
 let patients=[
   {nombre:'Paciente demo 1',cedula:'0900000001',telefono:'0990000001',email:'demo1@mail.com',servicio:'Ginecología',ultima:'05/06/2026',estado:'Activa',ciudad:'Guayaquil'},
