@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.3.0
+   Versión: 1.3.1
    Fecha: 2026-07-29
 
    OBJETIVO
@@ -42,6 +42,58 @@
     claveUsuario: 'aurosanax_seguridad_usuario',
     claveExpiracion: 'aurosanax_seguridad_expira_en',
     tiempoEsperaMs: 60000
+  });
+
+  const CATALOGO_PERMISOS = Object.freeze([
+    { clave: 'dashboard', etiqueta: 'Inicio / Dashboard' },
+    { clave: 'secretaria', etiqueta: 'Secretaría' },
+    { clave: 'formulario', etiqueta: 'Formulario interno' },
+    { clave: 'agenda', etiqueta: 'Agenda' },
+    { clave: 'disponibilidad', etiqueta: 'Disponibilidad' },
+    { clave: 'pacientes', etiqueta: 'Pacientes' },
+    { clave: 'historia_clinica', etiqueta: 'Historia clínica' },
+    { clave: 'recetas', etiqueta: 'Recetas y órdenes' },
+    { clave: 'apoyo_ia', etiqueta: 'Apoyo con IA' },
+    { clave: 'reportes', etiqueta: 'Reportes' },
+    { clave: 'configuracion', etiqueta: 'Configuración' },
+    { clave: 'configuracion_medicos', etiqueta: 'Config.: Médicos' },
+    { clave: 'configuracion_servicios', etiqueta: 'Config.: Servicios' },
+    { clave: 'configuracion_horarios', etiqueta: 'Config.: Horarios rápidos' },
+    { clave: 'configuracion_centro', etiqueta: 'Config.: Datos del centro' },
+    { clave: 'configuracion_seguridad', etiqueta: 'Config.: Seguridad' },
+    { clave: 'usuarios', etiqueta: 'Gestión de usuarios' },
+    { clave: 'bitacora', etiqueta: 'Bitácora' }
+  ]);
+
+  const PERMISOS_POR_ROL = Object.freeze({
+    ADMINISTRADOR: CATALOGO_PERMISOS.reduce(function (salida, permiso) {
+      salida[permiso.clave] = true;
+      return salida;
+    }, {}),
+    MEDICO_PRINCIPAL: {
+      dashboard: true, secretaria: true, formulario: true, agenda: true,
+      disponibilidad: true, pacientes: true, historia_clinica: true,
+      recetas: true, apoyo_ia: true, reportes: true, configuracion: true,
+      configuracion_medicos: true, configuracion_servicios: true,
+      configuracion_horarios: true, configuracion_centro: false,
+      configuracion_seguridad: false, usuarios: false, bitacora: false
+    },
+    MEDICO_COLABORADOR: {
+      dashboard: true, secretaria: false, formulario: false, agenda: true,
+      disponibilidad: false, pacientes: true, historia_clinica: true,
+      recetas: true, apoyo_ia: true, reportes: false, configuracion: false,
+      configuracion_medicos: false, configuracion_servicios: false,
+      configuracion_horarios: false, configuracion_centro: false,
+      configuracion_seguridad: false, usuarios: false, bitacora: false
+    },
+    SECRETARIA: {
+      dashboard: true, secretaria: true, formulario: true, agenda: true,
+      disponibilidad: true, pacientes: true, historia_clinica: false,
+      recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
+      configuracion_medicos: false, configuracion_servicios: false,
+      configuracion_horarios: false, configuracion_centro: false,
+      configuracion_seguridad: false, usuarios: false, bitacora: false
+    }
   });
 
   let enviandoLogin = false;
@@ -646,6 +698,102 @@
   }
 
 
+
+  function normalizarPermisos(permisos, rol) {
+    const rolNormalizado = textoSeguro(rol).toUpperCase();
+    const base = Object.assign({}, PERMISOS_POR_ROL[rolNormalizado] || {});
+    let personalizados = permisos;
+
+    if (typeof personalizados === 'string' && personalizados.trim()) {
+      try { personalizados = JSON.parse(personalizados); }
+      catch (error) { personalizados = {}; }
+    }
+
+    if (personalizados && typeof personalizados === 'object' && !Array.isArray(personalizados)) {
+      Object.keys(personalizados).forEach(function (clave) {
+        const valor = personalizados[clave];
+        base[clave] =
+          valor === true ||
+          String(valor).toUpperCase() === 'TRUE' ||
+          String(valor).toUpperCase() === 'SI';
+      });
+    }
+    return base;
+  }
+
+  function obtenerPermisosFormulario() {
+    const permisos = {};
+    document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
+      permisos[check.value] = check.checked === true;
+    });
+    return permisos;
+  }
+
+  function renderPermisosFormulario(permisos, rol) {
+    const seleccionados = normalizarPermisos(permisos, rol);
+    return (
+      '<div class="col-12">' +
+        '<div class="auro-permissions">' +
+          '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">' +
+            '<div><label class="form-label fw-bold mb-1">Permisos de acceso</label>' +
+            '<div class="text-muted small">Seleccione las páginas y secciones autorizadas.</div></div>' +
+            '<button id="btnAplicarPermisosRol" class="btn-soft btn-sm" type="button">' +
+            '<i class="bi bi-magic me-1"></i> Aplicar rol</button>' +
+          '</div>' +
+          '<div class="auro-permissions-grid">' +
+            CATALOGO_PERMISOS.map(function (permiso) {
+              return (
+                '<label class="auro-permission-item">' +
+                  '<input class="form-check-input seg-permiso-check" type="checkbox" value="' +
+                    escaparHtml(permiso.clave) + '"' +
+                    (seleccionados[permiso.clave] === true ? ' checked' : '') + '>' +
+                  '<span><strong>' + escaparHtml(permiso.etiqueta) + '</strong></span>' +
+                '</label>'
+              );
+            }).join('') +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function aplicarPermisosDelRolSeleccionado() {
+    const rol = valorElemento('segRol') || 'SECRETARIA';
+    const permisos = normalizarPermisos({}, rol);
+    document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
+      check.checked = permisos[check.value] === true;
+    });
+  }
+
+  function alternarClaveCampo(idCampo, boton) {
+    const campo = document.getElementById(idCampo);
+    if (!campo) return;
+    const mostrar = campo.type === 'password';
+    campo.type = mostrar ? 'text' : 'password';
+    if (boton) {
+      const icono = boton.querySelector('i');
+      if (icono) icono.className = mostrar ? 'bi bi-eye-slash' : 'bi bi-eye';
+      boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+    }
+    campo.focus();
+  }
+
+  function tienePermiso(clave, usuario) {
+    const actual = usuario || obtenerUsuarioActual() || {};
+    const rol = textoSeguro(actual.rol).toUpperCase();
+    if (rol === 'ADMINISTRADOR') return true;
+    const permisos = normalizarPermisos(actual.permisos, rol);
+    return permisos[textoSeguro(clave)] === true;
+  }
+
+  function aplicarVisibilidadPorPermisos(contenedor) {
+    const raiz = contenedor || document;
+    raiz.querySelectorAll('[data-permiso]').forEach(function (elemento) {
+      const clave = elemento.getAttribute('data-permiso') || '';
+      elemento.style.display = tienePermiso(clave) ? '' : 'none';
+    });
+  }
+
   /* ========================================================
      ADMINISTRACIÓN DE SEGURIDAD
      Usuarios, roles y bitácora dentro de configuracion.html
@@ -958,78 +1106,103 @@
 
     titulo.textContent = usuarioEditandoId ? 'Editar usuario' : 'Crear usuario';
 
+    const bloqueClave = !usuarioEditandoId
+      ? (
+          '<div class="col-md-6">' +
+            '<label class="form-label fw-bold">Contraseña temporal</label>' +
+            '<div class="auro-password-wrap">' +
+              '<input id="segClaveTemporal" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">' +
+              '<button id="btnVerClaveTemporal" class="auro-password-eye" type="button" aria-label="Mostrar contraseña">' +
+                '<i class="bi bi-eye"></i>' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="col-md-6">' +
+            '<label class="form-label fw-bold">Cambio obligatorio</label>' +
+            '<select id="segCambioClave" class="form-select">' +
+              '<option value="SI" selected>Sí</option>' +
+              '<option value="NO">No</option>' +
+            '</select>' +
+          '</div>'
+        )
+      : (
+          '<div class="col-md-6">' +
+            '<label class="form-label fw-bold">Cambio obligatorio de clave</label>' +
+            '<select id="segCambioClave" class="form-select">' +
+              opcionSeleccionada('SI', usuario.requiere_cambio_clave || 'SI', 'Sí') +
+              opcionSeleccionada('NO', usuario.requiere_cambio_clave, 'No') +
+            '</select>' +
+          '</div>'
+        );
+
     cuerpo.innerHTML =
       '<div class="row g-3">' +
-        '<div class="col-md-6">' +
-          '<label class="form-label fw-bold">Usuario</label>' +
+        '<div class="col-md-6"><label class="form-label fw-bold">Usuario</label>' +
           '<input id="segUsuario" class="form-control" autocomplete="off" value="' +
-            escaparHtml(usuario.usuario || '') + '" placeholder="Ej. secretaria01">' +
-        '</div>' +
-        '<div class="col-md-6">' +
-          '<label class="form-label fw-bold">Nombre completo</label>' +
+            escaparHtml(usuario.usuario || '') + '" placeholder="Ej. secretaria01"></div>' +
+        '<div class="col-md-6"><label class="form-label fw-bold">Nombre completo</label>' +
           '<input id="segNombreCompleto" class="form-control" value="' +
-            escaparHtml(usuario.nombre_completo || '') + '" placeholder="Nombre y apellidos">' +
-        '</div>' +
-        '<div class="col-md-6">' +
-          '<label class="form-label fw-bold">Rol</label>' +
+            escaparHtml(usuario.nombre_completo || '') + '" placeholder="Nombre y apellidos"></div>' +
+        '<div class="col-md-6"><label class="form-label fw-bold">Rol</label>' +
           '<select id="segRol" class="form-select">' +
             opcionSeleccionada('ADMINISTRADOR', usuario.rol, 'Administrador') +
             opcionSeleccionada('MEDICO_PRINCIPAL', usuario.rol, 'Médico principal') +
-            opcionSeleccionada('MEDICO_COLABORADOR',
-              String(usuario.rol || '').toUpperCase() === 'MEDICO' ? 'MEDICO_COLABORADOR' : usuario.rol,
-              'Médico colaborador') +
+            opcionSeleccionada(
+              'MEDICO_COLABORADOR',
+              textoSeguro(usuario.rol).toUpperCase() === 'MEDICO'
+                ? 'MEDICO_COLABORADOR'
+                : usuario.rol,
+              'Médico colaborador'
+            ) +
             opcionSeleccionada('SECRETARIA', usuario.rol || 'SECRETARIA', 'Secretaría') +
-          '</select>' +
-        '</div>' +
-        '<div class="col-md-6">' +
-          '<label class="form-label fw-bold">Estado</label>' +
+          '</select></div>' +
+        '<div class="col-md-6"><label class="form-label fw-bold">Estado</label>' +
           '<select id="segEstado" class="form-select">' +
             opcionSeleccionada('Activo', usuario.estado || 'Activo', 'Activo') +
             opcionSeleccionada('Inactivo', usuario.estado, 'Inactivo') +
-          '</select>' +
-        '</div>' +
-        '<div class="col-md-6">' +
-          '<label class="form-label fw-bold">Correo</label>' +
+          '</select></div>' +
+        '<div class="col-md-6"><label class="form-label fw-bold">Correo</label>' +
           '<input id="segEmail" type="email" class="form-control" value="' +
-            escaparHtml(usuario.email || '') + '" placeholder="correo@centro.com">' +
-        '</div>' +
-        '<div class="col-md-6">' +
-          '<label class="form-label fw-bold">Teléfono</label>' +
+            escaparHtml(usuario.email || '') + '" placeholder="correo@centro.com"></div>' +
+        '<div class="col-md-6"><label class="form-label fw-bold">Teléfono</label>' +
           '<input id="segTelefono" class="form-control" value="' +
-            escaparHtml(usuario.telefono || '') + '" placeholder="0999999999">' +
-        '</div>' +
-        (!usuarioEditandoId
-          ? '<div class="col-md-6">' +
-              '<label class="form-label fw-bold">Contraseña temporal</label>' +
-              '<input id="segClaveTemporal" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">' +
-            '</div>' +
-            '<div class="col-md-6">' +
-              '<label class="form-label fw-bold">Cambio obligatorio</label>' +
-              '<select id="segCambioClave" class="form-select">' +
-                '<option value="SI" selected>Sí</option>' +
-                '<option value="NO">No</option>' +
-              '</select>' +
-            '</div>'
-          : '<div class="col-md-6">' +
-              '<label class="form-label fw-bold">Cambio obligatorio de clave</label>' +
-              '<select id="segCambioClave" class="form-select">' +
-                opcionSeleccionada('SI', usuario.requiere_cambio_clave || 'SI', 'Sí') +
-                opcionSeleccionada('NO', usuario.requiere_cambio_clave, 'No') +
-              '</select>' +
-            '</div>') +
+            escaparHtml(usuario.telefono || '') + '" placeholder="0999999999"></div>' +
+        bloqueClave +
+        renderPermisosFormulario(usuario.permisos, usuario.rol || 'SECRETARIA') +
       '</div>' +
       '<div id="segUsuarioMsg" class="notice mt-3">' +
         'Las fechas y horas se generan en Apps Script con zona horaria America/Guayaquil.' +
       '</div>' +
       '<div class="d-flex justify-content-end gap-2 mt-3">' +
         '<button class="btn-line" type="button" onclick="cerrarModal()">Cancelar</button>' +
-        '<button id="btnGuardarUsuarioSeguro" class="btn-auro" type="button" onclick="AUROSANAX_SEGURIDAD.guardarUsuario()">' +
+        '<button id="btnGuardarUsuarioSeguro" class="btn-auro" type="button">' +
           '<i class="bi bi-save me-1"></i> Guardar usuario' +
         '</button>' +
       '</div>';
 
     modal.classList.add('show');
+
+    const botonGuardar = document.getElementById('btnGuardarUsuarioSeguro');
+    const botonAplicar = document.getElementById('btnAplicarPermisosRol');
+    const botonVerClave = document.getElementById('btnVerClaveTemporal');
+    const selectorRol = document.getElementById('segRol');
+
+    if (botonGuardar) {
+      botonGuardar.addEventListener('click', guardarUsuarioDesdeConfiguracion);
+    }
+    if (botonAplicar) {
+      botonAplicar.addEventListener('click', aplicarPermisosDelRolSeleccionado);
+    }
+    if (botonVerClave) {
+      botonVerClave.addEventListener('click', function () {
+        alternarClaveCampo('segClaveTemporal', botonVerClave);
+      });
+    }
+    if (selectorRol && !usuarioEditandoId) {
+      selectorRol.addEventListener('change', aplicarPermisosDelRolSeleccionado);
+    }
   }
+
 
   async function guardarUsuarioDesdeConfiguracion() {
     const datos = {
@@ -1040,6 +1213,7 @@
       email: valorElemento('segEmail'),
       telefono: valorElemento('segTelefono'),
       requiere_cambio_clave: valorElemento('segCambioClave') || 'SI',
+      permisos: obtenerPermisosFormulario(),
       token: exigirTokenAdministrativo()
     };
 
@@ -1622,6 +1796,10 @@
     abrirUsuario: abrirFormularioUsuario,
     guardarUsuario: guardarUsuarioDesdeConfiguracion,
     restablecerClave: restablecerClaveUsuarioDesdeConfiguracion,
+    alternarClave: alternarClaveCampo,
+    tienePermiso: tienePermiso,
+    aplicarPermisos: aplicarVisibilidadPorPermisos,
+    catalogoPermisos: CATALOGO_PERMISOS,
     formatearFechaHoraEcuador: formatearFechaHoraEcuador,
     configuracion: SEGURIDAD_CONFIG
   });
