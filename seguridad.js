@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.3.0
+   Versión: 1.4.0
    Fecha: 2026-07-29
 
    OBJETIVO
@@ -42,6 +42,58 @@
     claveUsuario: 'aurosanax_seguridad_usuario',
     claveExpiracion: 'aurosanax_seguridad_expira_en',
     tiempoEsperaMs: 60000
+  });
+
+  const CATALOGO_PERMISOS = Object.freeze([
+    { clave: 'dashboard', etiqueta: 'Inicio / Dashboard', detalle: 'Acceso a index.html y panel principal.' },
+    { clave: 'secretaria', etiqueta: 'Secretaría', detalle: 'Acceso a secretaria.html.' },
+    { clave: 'formulario', etiqueta: 'Formulario interno', detalle: 'Acceso al formulario interno de agendamiento.' },
+    { clave: 'pacientes', etiqueta: 'Pacientes', detalle: 'Consulta y gestión de pacientes autorizados.' },
+    { clave: 'agenda', etiqueta: 'Agenda', detalle: 'Agenda interna y citas.' },
+    { clave: 'disponibilidad', etiqueta: 'Disponibilidad', detalle: 'Gestión de bloques y horarios disponibles.' },
+    { clave: 'historia_clinica', etiqueta: 'Historia clínica', detalle: 'Acceso clínico según alcance del usuario.' },
+    { clave: 'recetas', etiqueta: 'Recetas y órdenes', detalle: 'Recetas, indicaciones y órdenes médicas.' },
+    { clave: 'apoyo_ia', etiqueta: 'Apoyo con IA', detalle: 'Acceso a apoyo.html.' },
+    { clave: 'reportes', etiqueta: 'Reportes', detalle: 'Consulta de reportes autorizados.' },
+    { clave: 'configuracion', etiqueta: 'Configuración', detalle: 'Acceso general a configuracion.html.' },
+    { clave: 'configuracion_medicos', etiqueta: 'Config.: Médicos', detalle: 'Pestaña Médicos dentro de Configuración.' },
+    { clave: 'configuracion_servicios', etiqueta: 'Config.: Servicios', detalle: 'Pestaña Servicios dentro de Configuración.' },
+    { clave: 'configuracion_horarios', etiqueta: 'Config.: Horarios', detalle: 'Pestaña Horarios rápidos.' },
+    { clave: 'configuracion_centro', etiqueta: 'Config.: Datos del centro', detalle: 'Información institucional.' },
+    { clave: 'configuracion_seguridad', etiqueta: 'Config.: Seguridad', detalle: 'Usuarios, roles y bitácora.' },
+    { clave: 'usuarios', etiqueta: 'Gestión de usuarios', detalle: 'Crear, editar y restablecer usuarios.' },
+    { clave: 'bitacora', etiqueta: 'Bitácora', detalle: 'Consultar auditoría del sistema.' }
+  ]);
+
+  const PERMISOS_POR_ROL = Object.freeze({
+    ADMINISTRADOR: CATALOGO_PERMISOS.reduce(function (salida, permiso) {
+      salida[permiso.clave] = true;
+      return salida;
+    }, {}),
+    MEDICO_PRINCIPAL: {
+      dashboard: true, secretaria: true, formulario: true, pacientes: true,
+      agenda: true, disponibilidad: true, historia_clinica: true, recetas: true,
+      apoyo_ia: true, reportes: true, configuracion: true,
+      configuracion_medicos: true, configuracion_servicios: true,
+      configuracion_horarios: true, configuracion_centro: false,
+      configuracion_seguridad: false, usuarios: false, bitacora: false
+    },
+    MEDICO_COLABORADOR: {
+      dashboard: true, secretaria: false, formulario: false, pacientes: true,
+      agenda: true, disponibilidad: false, historia_clinica: true, recetas: true,
+      apoyo_ia: true, reportes: false, configuracion: false,
+      configuracion_medicos: false, configuracion_servicios: false,
+      configuracion_horarios: false, configuracion_centro: false,
+      configuracion_seguridad: false, usuarios: false, bitacora: false
+    },
+    SECRETARIA: {
+      dashboard: true, secretaria: true, formulario: true, pacientes: true,
+      agenda: true, disponibilidad: true, historia_clinica: false, recetas: false,
+      apoyo_ia: false, reportes: false, configuracion: false,
+      configuracion_medicos: false, configuracion_servicios: false,
+      configuracion_horarios: false, configuracion_centro: false,
+      configuracion_seguridad: false, usuarios: false, bitacora: false
+    }
   });
 
   let enviandoLogin = false;
@@ -646,6 +698,108 @@
   }
 
 
+
+  function normalizarPermisosUsuario(permisos, rol) {
+    const rolNormalizado = textoSeguro(rol || '').toUpperCase();
+    const base = Object.assign({}, PERMISOS_POR_ROL[rolNormalizado] || {});
+
+    if (permisos && typeof permisos === 'object' && !Array.isArray(permisos)) {
+      Object.keys(permisos).forEach(function (clave) {
+        base[clave] = permisos[clave] === true ||
+          String(permisos[clave]).toUpperCase() === 'TRUE' ||
+          String(permisos[clave]).toUpperCase() === 'SI';
+      });
+    }
+
+    return base;
+  }
+
+  function tienePermiso(clave, usuario) {
+    const actual = usuario || obtenerUsuarioActual() || {};
+    const rol = textoSeguro(actual.rol).toUpperCase();
+
+    if (rol === 'ADMINISTRADOR') return true;
+
+    const permisos = normalizarPermisosUsuario(actual.permisos, rol);
+    return permisos[textoSeguro(clave)] === true;
+  }
+
+  function permisosSeleccionadosFormulario() {
+    const salida = {};
+    document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
+      salida[check.value] = check.checked === true;
+    });
+    return salida;
+  }
+
+  function htmlPermisosUsuario(permisos, rol) {
+    const seleccionados = normalizarPermisosUsuario(permisos, rol);
+
+    return (
+      '<div class="col-12">' +
+        '<div class="auro-permissions">' +
+          '<div class="d-flex justify-content-between align-items-start gap-2 mb-3">' +
+            '<div>' +
+              '<label class="form-label fw-bold mb-1">Permisos de acceso</label>' +
+              '<div class="text-muted small">Seleccione las páginas y módulos autorizados para este usuario.</div>' +
+            '</div>' +
+            '<button class="btn-soft btn-sm" type="button" onclick="AUROSANAX_SEGURIDAD.aplicarPermisosRol()">' +
+              '<i class="bi bi-magic me-1"></i> Aplicar rol' +
+            '</button>' +
+          '</div>' +
+          '<div class="auro-permissions-grid">' +
+            CATALOGO_PERMISOS.map(function (permiso) {
+              return (
+                '<label class="auro-permission-item">' +
+                  '<input class="form-check-input seg-permiso-check" type="checkbox" value="' +
+                    escaparHtml(permiso.clave) + '"' +
+                    (seleccionados[permiso.clave] === true ? ' checked' : '') +
+                  '>' +
+                  '<span><strong>' + escaparHtml(permiso.etiqueta) + '</strong>' +
+                    '<small>' + escaparHtml(permiso.detalle) + '</small></span>' +
+                '</label>'
+              );
+            }).join('') +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function aplicarPermisosRolFormulario() {
+    const rol = valorElemento('segRol') || 'SECRETARIA';
+    const permisos = normalizarPermisosUsuario({}, rol);
+
+    document.querySelectorAll('.seg-permiso-check').forEach(function (check) {
+      check.checked = permisos[check.value] === true;
+    });
+  }
+
+  function aplicarVisibilidadPorPermisos(contenedor) {
+    const raiz = contenedor || document;
+
+    raiz.querySelectorAll('[data-permiso]').forEach(function (elemento) {
+      const permiso = elemento.getAttribute('data-permiso') || '';
+      elemento.style.display = tienePermiso(permiso) ? '' : 'none';
+    });
+  }
+
+  function protegerPagina(permiso, paginaAlternativa) {
+    const token = obtenerTokenSesion();
+    if (!token) {
+      window.location.replace(SEGURIDAD_CONFIG.paginaLogin);
+      return false;
+    }
+
+    if (!tienePermiso(permiso)) {
+      alert('Acceso denegado. Su usuario no tiene permiso para esta sección.');
+      window.location.replace(paginaAlternativa || SEGURIDAD_CONFIG.paginaErp);
+      return false;
+    }
+
+    return true;
+  }
+
   /* ========================================================
      ADMINISTRACIÓN DE SEGURIDAD
      Usuarios, roles y bitácora dentro de configuracion.html
@@ -1001,7 +1155,10 @@
         (!usuarioEditandoId
           ? '<div class="col-md-6">' +
               '<label class="form-label fw-bold">Contraseña temporal</label>' +
-              '<input id="segClaveTemporal" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">' +
+              '<div class="auro-password-wrap">' +
+                '<input id="segClaveTemporal" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">' +
+                '<button class="auro-password-eye" type="button" onclick="AUROSANAX_SEGURIDAD.alternarClave(\'segClaveTemporal\',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>' +
+              '</div>' +
             '</div>' +
             '<div class="col-md-6">' +
               '<label class="form-label fw-bold">Cambio obligatorio</label>' +
@@ -1017,6 +1174,7 @@
                 opcionSeleccionada('NO', usuario.requiere_cambio_clave, 'No') +
               '</select>' +
             '</div>') +
+        htmlPermisosUsuario(usuario.permisos, usuario.rol || 'SECRETARIA') +
       '</div>' +
       '<div id="segUsuarioMsg" class="notice mt-3">' +
         'Las fechas y horas se generan en Apps Script con zona horaria America/Guayaquil.' +
@@ -1029,6 +1187,11 @@
       '</div>';
 
     modal.classList.add('show');
+
+    const selectorRol = document.getElementById('segRol');
+    if (selectorRol && !usuarioEditandoId) {
+      selectorRol.addEventListener('change', aplicarPermisosRolFormulario);
+    }
   }
 
   async function guardarUsuarioDesdeConfiguracion() {
@@ -1040,6 +1203,7 @@
       email: valorElemento('segEmail'),
       telefono: valorElemento('segTelefono'),
       requiere_cambio_clave: valorElemento('segCambioClave') || 'SI',
+      permisos: permisosSeleccionadosFormulario(),
       token: exigirTokenAdministrativo()
     };
 
@@ -1103,7 +1267,7 @@
     }
   }
 
-  async function restablecerClaveUsuarioDesdeConfiguracion(idUsuario) {
+  function restablecerClaveUsuarioDesdeConfiguracion(idUsuario) {
     const usuario = usuariosSeguridad.find(function (item) {
       return textoSeguro(item.id_usuario) === textoSeguro(idUsuario);
     });
@@ -1113,22 +1277,82 @@
       return;
     }
 
-    const clave = window.prompt(
-      'Ingrese una contraseña temporal para ' +
-      (usuario.nombre_completo || usuario.usuario) +
-      '. Debe tener al menos 8 caracteres.'
-    );
+    const modal = document.getElementById('modalConfig');
+    const titulo = document.getElementById('modalTitle');
+    const cuerpo = document.getElementById('modalBody');
 
-    if (clave === null) return;
-    if (String(clave).length < 8) {
-      alert('La contraseña temporal debe tener al menos 8 caracteres.');
+    if (!modal || !titulo || !cuerpo) {
+      alert('No se encontró el modal de Configuración.');
       return;
+    }
+
+    titulo.textContent = 'Restablecer contraseña';
+
+    cuerpo.innerHTML =
+      '<div class="notice mb-3">' +
+        '<i class="bi bi-person-lock me-1"></i>' +
+        'Usuario: <b>' + escaparHtml(usuario.nombre_completo || usuario.usuario) + '</b>' +
+      '</div>' +
+      '<div class="row g-3">' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Contraseña temporal</label>' +
+          '<div class="auro-password-wrap">' +
+            '<input id="segClaveRestablecer" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">' +
+            '<button class="auro-password-eye" type="button" onclick="AUROSANAX_SEGURIDAD.alternarClave(\\'segClaveRestablecer\\',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Confirmar contraseña</label>' +
+          '<div class="auro-password-wrap">' +
+            '<input id="segClaveRestablecerConfirmar" type="password" class="form-control" autocomplete="new-password" placeholder="Repita la contraseña">' +
+            '<button class="auro-password-eye" type="button" onclick="AUROSANAX_SEGURIDAD.alternarClave(\\'segClaveRestablecerConfirmar\\',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div id="segRestablecerMsg" class="notice mt-3">El usuario deberá cambiar esta contraseña en el siguiente acceso.</div>' +
+      '<div class="d-flex justify-content-end gap-2 mt-3">' +
+        '<button class="btn-line" type="button" onclick="cerrarModal()">Cancelar</button>' +
+        '<button id="btnConfirmarRestablecer" class="btn-auro" type="button" onclick="AUROSANAX_SEGURIDAD.confirmarRestablecerClave(\\'' +
+          escaparAtributoJs(usuario.id_usuario || '') + '\\')">' +
+          '<i class="bi bi-key me-1"></i> Restablecer contraseña' +
+        '</button>' +
+      '</div>';
+
+    modal.classList.add('show');
+  }
+
+  async function confirmarRestablecerClaveUsuario(idUsuario) {
+    const clave = valorElemento('segClaveRestablecer');
+    const confirmar = valorElemento('segClaveRestablecerConfirmar');
+    const mensaje = document.getElementById('segRestablecerMsg');
+    const boton = document.getElementById('btnConfirmarRestablecer');
+
+    function mostrar(texto, error) {
+      if (!mensaje) return;
+      mensaje.className = error ? 'notice mt-3 text-danger' : 'notice mt-3';
+      mensaje.innerHTML = escaparHtml(texto || '');
+    }
+
+    if (clave.length < 8) {
+      mostrar('La contraseña temporal debe tener al menos 8 caracteres.', true);
+      return;
+    }
+
+    if (clave !== confirmar) {
+      mostrar('La confirmación no coincide.', true);
+      return;
+    }
+
+    const original = boton ? boton.innerHTML : '';
+    if (boton) {
+      boton.disabled = true;
+      boton.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Guardando...';
     }
 
     try {
       const respuesta = await apiPost('restablecerClaveUsuario', {
-        id_usuario: usuario.id_usuario,
-        clave_temporal: String(clave),
+        id_usuario: idUsuario,
+        clave_temporal: clave,
         requiere_cambio_clave: 'SI',
         token: exigirTokenAdministrativo()
       });
@@ -1141,13 +1365,40 @@
         );
       }
 
-      alert(respuesta.message || 'Contraseña restablecida correctamente.');
+      mostrar(respuesta.message || 'Contraseña restablecida correctamente.', false);
       await cargarUsuariosSeguridad();
+
+      window.setTimeout(function () {
+        if (typeof window.cerrarModal === 'function') window.cerrarModal();
+      }, 700);
     } catch (error) {
       console.error('Error restableciendo contraseña:', error);
-      alert(error.message || 'No se pudo restablecer la contraseña.');
+      mostrar(error.message || 'No se pudo restablecer la contraseña.', true);
+    } finally {
+      if (boton) {
+        boton.disabled = false;
+        boton.innerHTML = original;
+      }
     }
   }
+
+  function alternarClaveDinamica(idCampo, boton) {
+    const campo = document.getElementById(idCampo);
+    if (!campo) return;
+
+    const mostrar = campo.type === 'password';
+    campo.type = mostrar ? 'text' : 'password';
+
+    if (boton) {
+      const icono = boton.querySelector('i');
+      if (icono) icono.className = mostrar ? 'bi bi-eye-slash' : 'bi bi-eye';
+      boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+    }
+
+    campo.focus();
+  }
+
 
   async function cargarBitacoraSeguridad() {
     const token = exigirTokenAdministrativo();
@@ -1622,6 +1873,13 @@
     abrirUsuario: abrirFormularioUsuario,
     guardarUsuario: guardarUsuarioDesdeConfiguracion,
     restablecerClave: restablecerClaveUsuarioDesdeConfiguracion,
+    confirmarRestablecerClave: confirmarRestablecerClaveUsuario,
+    alternarClave: alternarClaveDinamica,
+    aplicarPermisosRol: aplicarPermisosRolFormulario,
+    tienePermiso: tienePermiso,
+    aplicarPermisos: aplicarVisibilidadPorPermisos,
+    protegerPagina: protegerPagina,
+    catalogoPermisos: CATALOGO_PERMISOS,
     formatearFechaHoraEcuador: formatearFechaHoraEcuador,
     configuracion: SEGURIDAD_CONFIG
   });
