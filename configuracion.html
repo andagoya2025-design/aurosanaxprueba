@@ -958,7 +958,16 @@
       seguridad.obtenerUsuario() ||
       {};
 
-    if(!seguridad.tienePermiso('configuracion', usuario)){
+    const permisosEntradaConfiguracion = 'configuracion,configuracion_medicos,configuracion_servicios,configuracion_horarios,configuracion_centro,configuracion_seguridad,usuarios,bitacora'
+      .split(',')
+      .map(clave => clave.trim())
+      .filter(Boolean);
+
+    const puedeEntrarConfiguracion = permisosEntradaConfiguracion.some(clave =>
+      seguridad.tienePermiso(clave, usuario)
+    );
+
+    if(!puedeEntrarConfiguracion){
       redirigirSegunPermisosConfiguracion_(seguridad, usuario);
       return null;
     }
