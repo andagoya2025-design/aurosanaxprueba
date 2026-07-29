@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.0.0
+   Versión: 1.1.0
    Fecha: 2026-07-29
 
    OBJETIVO
@@ -11,6 +11,8 @@
    - Autenticar mediante validarLoginSeguro del Apps Script.
    - Conservar y validar la sesión.
    - Redirigir al ERP después del acceso autorizado.
+   - Administrar usuarios desde Configuración.
+   - Preparar la consulta de bitácora en modo solo lectura.
 
    NO MODIFICA
    - Base de datos.
@@ -51,15 +53,24 @@
   document.addEventListener('DOMContentLoaded', inicializarSeguridadLogin);
 
   async function inicializarSeguridadLogin() {
-    enlazarEventosLogin();
-    ocultarMensajes();
-    enfocarUsuario();
+    const esPaginaLogin = Boolean(document.getElementById('formLogin'));
+    const esModuloAdministracion = Boolean(document.getElementById('seguridadAccesos'));
 
-    await cargarIdentidadCentro();
+    if (esPaginaLogin) {
+      enlazarEventosLogin();
+      ocultarMensajes();
+      enfocarUsuario();
 
-    const token = obtenerTokenSesion();
-    if (token) {
-      await validarSesionExistenteYRedirigir(token);
+      await cargarIdentidadCentro();
+
+      const token = obtenerTokenSesion();
+      if (token) {
+        await validarSesionExistenteYRedirigir(token);
+      }
+    }
+
+    if (esModuloAdministracion) {
+      await inicializarAdministracionSeguridad();
     }
   }
 
@@ -627,6 +638,557 @@
     return partes.join(' | ').substring(0, 500);
   }
 
+
+  /* ========================================================
+     ADMINISTRACIÓN DE SEGURIDAD
+     Usuarios, roles y bitácora dentro de configuracion.html
+     Toda la lógica permanece en este mismo seguridad.js.
+     ======================================================== */
+
+  let usuariosSeguridad = [];
+  let usuarioEditandoId = '';
+
+  async function inicializarAdministracionSeguridad() {
+    const botonCrear = document.getElementById('btnNuevoUsuario');
+
+    if (botonCrear && botonCrear.dataset.auroSeguridadInit !== '1') {
+      botonCrear.dataset.auroSeguridadInit = '1';
+      botonCrear.disabled = false;
+      botonCrear.addEventListener('click', function () {
+        abrirFormularioUsuario('');
+      });
+    }
+
+    const token = obtenerTokenSesion();
+    if (!token) {
+      bloquearAdministracionSeguridad(
+        'Debe iniciar sesión como administrador para gestionar usuarios.'
+      );
+      return;
+    }
+
+    try {
+      const validacion = await apiGet('validarSesion', { token: token });
+
+      if (!validacion || validacion.success !== true) {
+        limpiarSesionLocal();
+        bloquearAdministracionSeguridad(
+          'La sesión no es válida o expiró. Inicie sesión nuevamente.'
+        );
+        return;
+      }
+
+      actualizarSesionValidada(validacion);
+
+      const usuarioActual =
+        validacion.usuario ||
+        (validacion.sesion && validacion.sesion.usuario_publico) ||
+        obtenerUsuarioActual() ||
+        {};
+
+      if (!esAdministrador(usuarioActual)) {
+        bloquearAdministracionSeguridad(
+          'Esta sección está disponible únicamente para administradores.'
+        );
+        return;
+      }
+
+      habilitarAdministracionSeguridad();
+      await cargarUsuariosSeguridad();
+      prepararBitacoraSeguridad();
+    } catch (error) {
+      console.error('Error inicializando administración de seguridad:', error);
+      bloquearAdministracionSeguridad(
+        error && error.message
+          ? error.message
+          : 'No se pudo inicializar la administración de seguridad.'
+      );
+    }
+  }
+
+  function esAdministrador(usuario) {
+    const rol = textoSeguro(usuario && usuario.rol).toUpperCase();
+    const permisos = usuario && usuario.permisos && typeof usuario.permisos === 'object'
+      ? usuario.permisos
+      : {};
+
+    return rol === 'ADMINISTRADOR' || permisos.usuarios === true;
+  }
+
+  function bloquearAdministracionSeguridad(mensaje) {
+    const boton = document.getElementById('btnNuevoUsuario');
+    if (boton) boton.disabled = true;
+
+    usuariosSeguridad = [];
+    renderUsuariosSeguridad();
+
+    const body = document.getElementById('usuariosSeguridadBody');
+    if (body) {
+      body.innerHTML =
+        '<tr><td colspan="6" class="security-empty">' +
+        '<i class="bi bi-shield-exclamation"></i>' +
+        escaparHtml(mensaje || 'Acceso no disponible.') +
+        '</td></tr>';
+    }
+
+    const mobile = document.getElementById('usuariosSeguridadMobile');
+    if (mobile) {
+      mobile.innerHTML =
+        '<div class="mobile-card security-empty">' +
+        '<i class="bi bi-shield-exclamation"></i>' +
+        escaparHtml(mensaje || 'Acceso no disponible.') +
+        '</div>';
+    }
+  }
+
+  function habilitarAdministracionSeguridad() {
+    const boton = document.getElementById('btnNuevoUsuario');
+    if (boton) boton.disabled = false;
+  }
+
+  async function cargarUsuariosSeguridad() {
+    const token = exigirTokenAdministrativo();
+
+    try {
+      const respuesta = await apiGet('listarUsuariosSeguros', { token: token });
+      usuariosSeguridad = Array.isArray(respuesta) ? respuesta : [];
+      renderUsuariosSeguridad();
+    } catch (error) {
+      console.error('Error cargando usuarios:', error);
+      usuariosSeguridad = [];
+      renderUsuariosSeguridad();
+
+      const body = document.getElementById('usuariosSeguridadBody');
+      if (body) {
+        body.innerHTML =
+          '<tr><td colspan="6" class="security-empty">' +
+          '<i class="bi bi-exclamation-triangle"></i>' +
+          escaparHtml(error.message || 'No se pudieron cargar los usuarios.') +
+          '</td></tr>';
+      }
+    }
+  }
+
+  function renderUsuariosSeguridad() {
+    actualizarResumenUsuarios();
+
+    const body = document.getElementById('usuariosSeguridadBody');
+    const mobile = document.getElementById('usuariosSeguridadMobile');
+
+    if (!body && !mobile) return;
+
+    if (!usuariosSeguridad.length) {
+      const vacio =
+        '<i class="bi bi-person-lock"></i>' +
+        '<b>Todavía no existen usuarios registrados.</b><br>' +
+        '<span>Presione Crear usuario para agregar la primera cuenta autorizada.</span>';
+
+      if (body) {
+        body.innerHTML =
+          '<tr><td colspan="6" class="security-empty">' + vacio + '</td></tr>';
+      }
+      if (mobile) {
+        mobile.innerHTML =
+          '<div class="mobile-card security-empty">' + vacio + '</div>';
+      }
+      return;
+    }
+
+    if (body) {
+      body.innerHTML = usuariosSeguridad.map(function (u) {
+        return (
+          '<tr>' +
+            '<td><b>' + escaparHtml(u.usuario || '—') + '</b></td>' +
+            '<td>' + escaparHtml(u.nombre_completo || '—') + '</td>' +
+            '<td>' + etiquetaRol(u.rol) + '</td>' +
+            '<td>' + etiquetaEstadoUsuario(u.estado) + '</td>' +
+            '<td>' + escaparHtml(formatearFechaHoraEcuador(u.ultimo_acceso)) + '</td>' +
+            '<td>' +
+              '<div class="d-flex flex-wrap gap-2">' +
+                '<button class="btn-soft btn-sm" type="button" onclick="AUROSANAX_SEGURIDAD.abrirUsuario(\'' +
+                  escaparAtributoJs(u.id_usuario || '') + '\')">Editar</button>' +
+                '<button class="btn-line btn-sm" type="button" onclick="AUROSANAX_SEGURIDAD.restablecerClave(\'' +
+                  escaparAtributoJs(u.id_usuario || '') + '\')">Restablecer clave</button>' +
+              '</div>' +
+            '</td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    if (mobile) {
+      mobile.innerHTML = usuariosSeguridad.map(function (u) {
+        return (
+          '<div class="mobile-card">' +
+            '<b>' + escaparHtml(u.nombre_completo || u.usuario || 'Usuario') + '</b>' +
+            '<div class="line"><span>Usuario</span><span>' + escaparHtml(u.usuario || '—') + '</span></div>' +
+            '<div class="line"><span>Rol</span><span>' + etiquetaRol(u.rol) + '</span></div>' +
+            '<div class="line"><span>Estado</span><span>' + etiquetaEstadoUsuario(u.estado) + '</span></div>' +
+            '<div class="line"><span>Último acceso</span><span>' +
+              escaparHtml(formatearFechaHoraEcuador(u.ultimo_acceso)) +
+            '</span></div>' +
+            '<div class="d-grid gap-2 mt-3">' +
+              '<button class="btn-soft" type="button" onclick="AUROSANAX_SEGURIDAD.abrirUsuario(\'' +
+                escaparAtributoJs(u.id_usuario || '') + '\')">Editar usuario</button>' +
+              '<button class="btn-line" type="button" onclick="AUROSANAX_SEGURIDAD.restablecerClave(\'' +
+                escaparAtributoJs(u.id_usuario || '') + '\')">Restablecer clave</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+    }
+  }
+
+  function actualizarResumenUsuarios() {
+    const total = usuariosSeguridad.length;
+    const administradores = contarRol('ADMINISTRADOR');
+    const medicos = contarRol('MEDICO');
+    const secretaria = contarRol('SECRETARIA');
+
+    establecerTexto('secTotalUsuarios', String(total));
+    establecerTexto('secTotalAdministradores', String(administradores));
+    establecerTexto('secTotalMedicos', String(medicos));
+    establecerTexto('secTotalSecretaria', String(secretaria));
+  }
+
+  function contarRol(rol) {
+    return usuariosSeguridad.filter(function (u) {
+      return textoSeguro(u.rol).toUpperCase() === rol;
+    }).length;
+  }
+
+  function abrirFormularioUsuario(idUsuario) {
+    usuarioEditandoId = textoSeguro(idUsuario);
+
+    const usuario = usuariosSeguridad.find(function (item) {
+      return textoSeguro(item.id_usuario) === usuarioEditandoId;
+    }) || {};
+
+    const modal = document.getElementById('modalConfig');
+    const titulo = document.getElementById('modalTitle');
+    const cuerpo = document.getElementById('modalBody');
+
+    if (!modal || !titulo || !cuerpo) {
+      alert('No se encontró el modal de Configuración.');
+      return;
+    }
+
+    titulo.textContent = usuarioEditandoId ? 'Editar usuario' : 'Crear usuario';
+
+    cuerpo.innerHTML =
+      '<div class="row g-3">' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Usuario</label>' +
+          '<input id="segUsuario" class="form-control" autocomplete="off" value="' +
+            escaparHtml(usuario.usuario || '') + '" placeholder="Ej. secretaria01">' +
+        '</div>' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Nombre completo</label>' +
+          '<input id="segNombreCompleto" class="form-control" value="' +
+            escaparHtml(usuario.nombre_completo || '') + '" placeholder="Nombre y apellidos">' +
+        '</div>' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Rol</label>' +
+          '<select id="segRol" class="form-select">' +
+            opcionSeleccionada('ADMINISTRADOR', usuario.rol, 'Administrador') +
+            opcionSeleccionada('MEDICO', usuario.rol, 'Médico') +
+            opcionSeleccionada('SECRETARIA', usuario.rol || 'SECRETARIA', 'Secretaría') +
+          '</select>' +
+        '</div>' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Estado</label>' +
+          '<select id="segEstado" class="form-select">' +
+            opcionSeleccionada('Activo', usuario.estado || 'Activo', 'Activo') +
+            opcionSeleccionada('Inactivo', usuario.estado, 'Inactivo') +
+          '</select>' +
+        '</div>' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Correo</label>' +
+          '<input id="segEmail" type="email" class="form-control" value="' +
+            escaparHtml(usuario.email || '') + '" placeholder="correo@centro.com">' +
+        '</div>' +
+        '<div class="col-md-6">' +
+          '<label class="form-label fw-bold">Teléfono</label>' +
+          '<input id="segTelefono" class="form-control" value="' +
+            escaparHtml(usuario.telefono || '') + '" placeholder="0999999999">' +
+        '</div>' +
+        (!usuarioEditandoId
+          ? '<div class="col-md-6">' +
+              '<label class="form-label fw-bold">Contraseña temporal</label>' +
+              '<input id="segClaveTemporal" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">' +
+            '</div>' +
+            '<div class="col-md-6">' +
+              '<label class="form-label fw-bold">Cambio obligatorio</label>' +
+              '<select id="segCambioClave" class="form-select">' +
+                '<option value="SI" selected>Sí</option>' +
+                '<option value="NO">No</option>' +
+              '</select>' +
+            '</div>'
+          : '<div class="col-md-6">' +
+              '<label class="form-label fw-bold">Cambio obligatorio de clave</label>' +
+              '<select id="segCambioClave" class="form-select">' +
+                opcionSeleccionada('SI', usuario.requiere_cambio_clave || 'SI', 'Sí') +
+                opcionSeleccionada('NO', usuario.requiere_cambio_clave, 'No') +
+              '</select>' +
+            '</div>') +
+      '</div>' +
+      '<div id="segUsuarioMsg" class="notice mt-3">' +
+        'Las fechas y horas se generan en Apps Script con zona horaria America/Guayaquil.' +
+      '</div>' +
+      '<div class="d-flex justify-content-end gap-2 mt-3">' +
+        '<button class="btn-line" type="button" onclick="cerrarModal()">Cancelar</button>' +
+        '<button id="btnGuardarUsuarioSeguro" class="btn-auro" type="button" onclick="AUROSANAX_SEGURIDAD.guardarUsuario()">' +
+          '<i class="bi bi-save me-1"></i> Guardar usuario' +
+        '</button>' +
+      '</div>';
+
+    modal.classList.add('show');
+  }
+
+  async function guardarUsuarioDesdeConfiguracion() {
+    const datos = {
+      usuario: valorElemento('segUsuario').toLowerCase(),
+      nombre_completo: valorElemento('segNombreCompleto'),
+      rol: valorElemento('segRol') || 'SECRETARIA',
+      estado: valorElemento('segEstado') || 'Activo',
+      email: valorElemento('segEmail'),
+      telefono: valorElemento('segTelefono'),
+      requiere_cambio_clave: valorElemento('segCambioClave') || 'SI',
+      token: exigirTokenAdministrativo()
+    };
+
+    if (!usuarioEditandoId) {
+      datos.clave_temporal = valorElemento('segClaveTemporal');
+    } else {
+      datos.id_usuario = usuarioEditandoId;
+    }
+
+    if (!datos.usuario || !datos.nombre_completo) {
+      mostrarMensajeUsuario('Ingrese usuario y nombre completo.', true);
+      return;
+    }
+
+    if (!usuarioEditandoId && datos.clave_temporal.length < 8) {
+      mostrarMensajeUsuario('La contraseña temporal debe tener al menos 8 caracteres.', true);
+      return;
+    }
+
+    const boton = document.getElementById('btnGuardarUsuarioSeguro');
+    const original = boton ? boton.innerHTML : '';
+
+    if (boton) {
+      boton.disabled = true;
+      boton.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Guardando...';
+    }
+
+    try {
+      const accion = usuarioEditandoId
+        ? 'editarUsuarioSeguro'
+        : 'crearUsuarioSeguro';
+
+      const respuesta = await apiPost(accion, datos);
+
+      if (!respuesta || respuesta.success !== true) {
+        throw new Error(
+          respuesta && respuesta.message
+            ? respuesta.message
+            : 'No se pudo guardar el usuario.'
+        );
+      }
+
+      mostrarMensajeUsuario(respuesta.message || 'Usuario guardado correctamente.', false);
+      await cargarUsuariosSeguridad();
+
+      window.setTimeout(function () {
+        if (typeof window.cerrarModal === 'function') window.cerrarModal();
+        else {
+          const modal = document.getElementById('modalConfig');
+          if (modal) modal.classList.remove('show');
+        }
+      }, 550);
+    } catch (error) {
+      console.error('Error guardando usuario:', error);
+      mostrarMensajeUsuario(error.message || 'No se pudo guardar el usuario.', true);
+    } finally {
+      if (boton) {
+        boton.disabled = false;
+        boton.innerHTML = original;
+      }
+    }
+  }
+
+  async function restablecerClaveUsuarioDesdeConfiguracion(idUsuario) {
+    const usuario = usuariosSeguridad.find(function (item) {
+      return textoSeguro(item.id_usuario) === textoSeguro(idUsuario);
+    });
+
+    if (!usuario) {
+      alert('No se encontró el usuario.');
+      return;
+    }
+
+    const clave = window.prompt(
+      'Ingrese una contraseña temporal para ' +
+      (usuario.nombre_completo || usuario.usuario) +
+      '. Debe tener al menos 8 caracteres.'
+    );
+
+    if (clave === null) return;
+    if (String(clave).length < 8) {
+      alert('La contraseña temporal debe tener al menos 8 caracteres.');
+      return;
+    }
+
+    try {
+      const respuesta = await apiPost('restablecerClaveUsuario', {
+        id_usuario: usuario.id_usuario,
+        clave_temporal: String(clave),
+        requiere_cambio_clave: 'SI',
+        token: exigirTokenAdministrativo()
+      });
+
+      if (!respuesta || respuesta.success !== true) {
+        throw new Error(
+          respuesta && respuesta.message
+            ? respuesta.message
+            : 'No se pudo restablecer la contraseña.'
+        );
+      }
+
+      alert(respuesta.message || 'Contraseña restablecida correctamente.');
+      await cargarUsuariosSeguridad();
+    } catch (error) {
+      console.error('Error restableciendo contraseña:', error);
+      alert(error.message || 'No se pudo restablecer la contraseña.');
+    }
+  }
+
+  function prepararBitacoraSeguridad() {
+    establecerTexto('secEventosHoy', '0');
+    establecerTexto('secAccesosExitosos', '0');
+    establecerTexto('secAlertasSeguridad', '0');
+    establecerTexto('secUltimoEvento', '—');
+
+    const body = document.getElementById('bitacoraSeguridadBody');
+    if (body) {
+      body.innerHTML =
+        '<tr><td colspan="7" class="security-empty">' +
+        '<i class="bi bi-journal-check"></i>' +
+        '<b>Aún no existen eventos cargados en esta vista.</b><br>' +
+        '<span>El Apps Script ya registra eventos; la consulta administrativa se conectará mediante un endpoint de solo lectura.</span>' +
+        '</td></tr>';
+    }
+  }
+
+  function exigirTokenAdministrativo() {
+    const token = obtenerTokenSesion();
+    if (!token) {
+      throw new Error('No existe una sesión administrativa activa.');
+    }
+    return token;
+  }
+
+  function formatearFechaHoraEcuador(valor) {
+    if (!valor) return 'Sin acceso registrado';
+
+    const fecha = convertirFechaSegura(valor);
+    if (!fecha) return textoSeguro(valor);
+
+    try {
+      return new Intl.DateTimeFormat('es-EC', {
+        timeZone: 'America/Guayaquil',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(fecha);
+    } catch (error) {
+      return textoSeguro(valor);
+    }
+  }
+
+  function convertirFechaSegura(valor) {
+    if (valor instanceof Date && !Number.isNaN(valor.getTime())) return valor;
+
+    const raw = textoSeguro(valor);
+    if (!raw) return null;
+
+    const ecu = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (ecu) {
+      return new Date(
+        Number(ecu[1]),
+        Number(ecu[2]) - 1,
+        Number(ecu[3]),
+        Number(ecu[4]),
+        Number(ecu[5]),
+        Number(ecu[6] || 0)
+      );
+    }
+
+    const fecha = new Date(raw);
+    return Number.isNaN(fecha.getTime()) ? null : fecha;
+  }
+
+  function etiquetaRol(rol) {
+    const valor = textoSeguro(rol).toUpperCase();
+    const texto =
+      valor === 'ADMINISTRADOR' ? 'Administrador' :
+      valor === 'MEDICO' ? 'Médico' :
+      valor === 'SECRETARIA' ? 'Secretaría' :
+      valor || 'Sin rol';
+
+    return '<span class="badgex badge-blue">' + escaparHtml(texto) + '</span>';
+  }
+
+  function etiquetaEstadoUsuario(estado) {
+    const activo = textoSeguro(estado || 'Activo').toLowerCase() === 'activo';
+    return '<span class="badgex ' + (activo ? 'badge-ok' : 'badge-warn') + '">' +
+      (activo ? 'Activo' : 'Inactivo') +
+    '</span>';
+  }
+
+  function opcionSeleccionada(valor, actual, etiqueta) {
+    return '<option value="' + escaparHtml(valor) + '"' +
+      (textoSeguro(valor).toUpperCase() === textoSeguro(actual).toUpperCase()
+        ? ' selected'
+        : '') +
+      '>' + escaparHtml(etiqueta || valor) + '</option>';
+  }
+
+  function valorElemento(id) {
+    const elemento = document.getElementById(id);
+    return textoSeguro(elemento ? elemento.value : '');
+  }
+
+  function mostrarMensajeUsuario(mensaje, esError) {
+    const elemento = document.getElementById('segUsuarioMsg');
+    if (!elemento) return;
+
+    elemento.innerHTML =
+      '<span class="' + (esError ? 'text-danger' : 'text-success') + ' fw-bold">' +
+      escaparHtml(mensaje || '') +
+      '</span>';
+  }
+
+  function escaparHtml(valor) {
+    return textoSeguro(valor)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function escaparAtributoJs(valor) {
+    return textoSeguro(valor)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'");
+  }
+
+
   /* ========================================================
      API PÚBLICA DEL MÓDULO
      Permite que index.html use estas funciones después.
@@ -640,6 +1202,11 @@
     obtenerSesion: obtenerSesionLocal,
     obtenerUsuario: obtenerUsuarioActual,
     limpiarSesion: limpiarSesionLocal,
+    cargarUsuarios: cargarUsuariosSeguridad,
+    abrirUsuario: abrirFormularioUsuario,
+    guardarUsuario: guardarUsuarioDesdeConfiguracion,
+    restablecerClave: restablecerClaveUsuarioDesdeConfiguracion,
+    formatearFechaHoraEcuador: formatearFechaHoraEcuador,
     configuracion: SEGURIDAD_CONFIG
   });
 
