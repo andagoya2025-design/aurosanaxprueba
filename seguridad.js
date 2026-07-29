@@ -297,6 +297,20 @@
      AUTENTICACIÓN
      ======================================================== */
 
+  function resolverPaginaAutorizada_(usuario) {
+    const actual = usuario || obtenerUsuarioActual() || {};
+
+    if (tienePermiso('dashboard', actual)) {
+      return SEGURIDAD_CONFIG.paginaErp;
+    }
+
+    if (tienePermiso('secretaria', actual)) {
+      return 'secretaria.html';
+    }
+
+    return '';
+  }
+
   async function iniciarSesion() {
     if (enviandoLogin) return;
 
@@ -334,11 +348,23 @@
       }
 
       guardarSesionSegura(respuesta);
+
+      const paginaAutorizada = resolverPaginaAutorizada_(
+        respuesta.usuario || {}
+      );
+
+      if (!paginaAutorizada) {
+        limpiarSesionLocal();
+        throw new Error(
+          'Usuario válido, pero no tiene autorización para ingresar a ningún módulo disponible.'
+        );
+      }
+
       mostrarEstado('Acceso autorizado. Ingresando al sistema...');
       limpiarClave();
 
       window.setTimeout(function () {
-        window.location.replace(SEGURIDAD_CONFIG.paginaErp);
+        window.location.replace(paginaAutorizada);
       }, 450);
     } catch (error) {
       console.error('Error de inicio de sesión:', error);
@@ -367,10 +393,27 @@
 
       if (respuesta && respuesta.success === true) {
         actualizarSesionValidada(respuesta);
+
+        const usuarioValidado =
+          respuesta.usuario ||
+          (respuesta.sesion && respuesta.sesion.usuario_publico) ||
+          obtenerUsuarioActual() ||
+          {};
+
+        const paginaAutorizada = resolverPaginaAutorizada_(usuarioValidado);
+
+        if (!paginaAutorizada) {
+          limpiarSesionLocal();
+          mostrarError(
+            'Usuario válido, pero no tiene autorización para ingresar a ningún módulo disponible.'
+          );
+          return;
+        }
+
         mostrarEstado('Sesión activa. Ingresando al sistema...');
 
         window.setTimeout(function () {
-          window.location.replace(SEGURIDAD_CONFIG.paginaErp);
+          window.location.replace(paginaAutorizada);
         }, 250);
 
         return;
