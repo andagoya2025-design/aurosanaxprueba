@@ -7054,13 +7054,32 @@ document.addEventListener('click',e=>{
 <script src="pacientes.js?v=20260629_fase2_final"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
 <script src="agenda.js?v=20260719_agenda_v1"></script>
-<script>
-  /* AUROSANAX: inicialización segura después de cargar pacientes.js */
-  if(typeof cargarPacientesDesdeSheets !== "function" || typeof renderPatients !== "function"){
-    console.error("AUROSANAX: pacientes.js no cargó completo. Verifique nombre exacto: pacientes.js y publique el archivo completo.");
-  }else{
-    inicializarERP();
-  }
+<script id="auro-erp-inicio-despues-seguridad">
+  /* AUROSANAX: preparar el ERP, pero no cargar datos antes de validar la sesión. */
+  window.__auroErpInicializacionPromesa = null;
+
+  window.auroIniciarERPTrasSeguridad = function(){
+    if(window.__auroErpInicializacionPromesa){
+      return window.__auroErpInicializacionPromesa;
+    }
+
+    if(typeof cargarPacientesDesdeSheets !== "function" || typeof renderPatients !== "function"){
+      const error = new Error("AUROSANAX: pacientes.js no cargó completo. Verifique el archivo pacientes.js publicado.");
+      console.error(error.message);
+      return Promise.reject(error);
+    }
+
+    window.__auroErpInicializacionPromesa = Promise.resolve()
+      .then(function(){
+        return inicializarERP();
+      })
+      .catch(function(error){
+        window.__auroErpInicializacionPromesa = null;
+        throw error;
+      });
+
+    return window.__auroErpInicializacionPromesa;
+  };
 </script>
 
 <!-- AUROSANAX - Módulo Plan clínico Fase 1 -->
@@ -7601,9 +7620,19 @@ document.addEventListener('click',e=>{
       pintarUsuario(usuario);
 
       /*
-        En esta fase se protege el acceso general.
-        El filtrado de módulos por permiso se aplicará en la siguiente fase.
+        La carga clínica comienza una sola vez y únicamente después de
+        confirmar una sesión válida. No se cambian las funciones internas
+        de pacientes, historias, agenda ni dashboard.
       */
+      if(typeof window.auroIniciarERPTrasSeguridad !== 'function'){
+        throw new Error('No se encontró el inicializador seguro del ERP.');
+      }
+
+      if(mensaje){
+        mensaje.textContent = 'Acceso autorizado. Cargando datos del sistema…';
+      }
+
+      await window.auroIniciarERPTrasSeguridad();
       revelarErp();
     }catch(error){
       console.error('AUROSANAX: error validando sesión del ERP:', error);
