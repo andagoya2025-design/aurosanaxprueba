@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.2.0
+   Versión: 1.2.1
    Fecha: 2026-07-29
 
    OBJETIVO
@@ -41,7 +41,7 @@
     claveSesion: 'aurosanax_seguridad_sesion',
     claveUsuario: 'aurosanax_seguridad_usuario',
     claveExpiracion: 'aurosanax_seguridad_expira_en',
-    tiempoEsperaMs: 25000
+    tiempoEsperaMs: 60000
   });
 
   let enviandoLogin = false;
