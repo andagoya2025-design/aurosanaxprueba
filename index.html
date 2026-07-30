@@ -5310,21 +5310,120 @@ async function guardarHistoriaClinicaERP(){
     await cargarHistoriasClinicasDesdeSheets();
 
     /*
-      Después de guardar/actualizar se reafirma la historia seleccionada.
-      No se permite que una recarga visual cambie silenciosamente el ID activo.
+      AUROSANAX FASE 1 - ID DE HISTORIA INMEDIATO
+      Alcance exclusivo:
+      - Primer guardado de una historia clínica.
+      - Detecta el registro recién creado usando el paciente activo.
+      - Reafirma el ID en memoria y vincula la atención abierta.
+      - No modifica módulos clínicos, Apps Script ni la base de datos.
     */
+    let historiaRefrescada = null;
+
     if(esEdicion && data.id_historia){
       editingHistoryId = String(data.id_historia).trim();
+
+      historiaRefrescada = historiasClinicas.find(h =>
+        String(h.id_historia || '').trim() === editingHistoryId
+      ) || null;
+    }else{
+      /*
+        El POST actual usa no-cors y no permite leer directamente el ID devuelto
+        por Apps Script. Por eso, únicamente en el primer guardado, se confirma
+        la nueva historia desde la lista remota. Se realizan reintentos cortos
+        para cubrir el tiempo normal de escritura de Google Sheets.
+      */
+      const buscarHistoriaNuevaDelPaciente = () => {
+        const candidatas = historiasClinicas
+          .filter(h =>
+            String(h.id_paciente || '').trim() === String(idPaciente).trim() &&
+            String(h.id_historia || '').trim()
+          )
+          .sort((a, b) =>
+            String(b.fecha_apertura || b.actualizado_en || b.creado_en || b.id_historia || '')
+              .localeCompare(
+                String(a.fecha_apertura || a.actualizado_en || a.creado_en || a.id_historia || '')
+              )
+          );
+
+        return candidatas[0] || null;
+      };
+
+      historiaRefrescada = buscarHistoriaNuevaDelPaciente();
+
+      for(let intento = 0; !historiaRefrescada && intento < 4; intento++){
+        await new Promise(resolve => setTimeout(resolve, 350));
+        await cargarHistoriasClinicasDesdeSheets();
+        historiaRefrescada = buscarHistoriaNuevaDelPaciente();
+      }
+
+      if(historiaRefrescada?.id_historia){
+        editingHistoryId = String(historiaRefrescada.id_historia).trim();
+      }
+    }
+
+    if(editingHistoryId){
       window.auroHistoriaSeleccionadaId = editingHistoryId;
 
-      const historiaRefrescada = historiasClinicas.find(h =>
-        String(h.id_historia || '').trim() === editingHistoryId
-      );
+      if(!historiaRefrescada){
+        historiaRefrescada = historiasClinicas.find(h =>
+          String(h.id_historia || '').trim() === editingHistoryId
+        ) || null;
+      }
 
       if(historiaRefrescada){
         window.historiaActual = historiaRefrescada;
         window.currentHistoria = historiaRefrescada;
       }
+
+      /*
+        Vincula exclusivamente la atención abierta del mismo paciente con la
+        historia recién confirmada. La función ya existente protege contra
+        mezcla de pacientes o reemplazo de otra historia.
+      */
+      if(!esEdicion && typeof window.vincularHistoriaAAtencionActual === 'function'){
+        try{
+          await window.vincularHistoriaAAtencionActual(
+            editingHistoryId,
+            idPaciente
+          );
+        }catch(errorVinculacion){
+          console.warn(
+            'AUROSANAX HISTORIA: la historia fue creada, pero no se pudo refrescar inmediatamente la vinculación visual de la atención.',
+            errorVinculacion
+          );
+        }
+      }
+
+      /*
+        Actualización visual localizada:
+        - cambia Guardar por Actualizar;
+        - vuelve a pintar resumen e historial de atenciones;
+        - no recarga la página ni pierde la atención activa.
+      */
+      document
+        .querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]')
+        .forEach(boton => {
+          boton.innerHTML =
+            '<i class="bi bi-save me-1"></i> Actualizar historia';
+        });
+
+      if(typeof updateClinicalSummary === 'function'){
+        updateClinicalSummary();
+      }
+
+      if(typeof window.renderAtencionesPaciente === 'function'){
+        window.renderAtencionesPaciente();
+      }
+
+      window.dispatchEvent(new CustomEvent(
+        'aurosanax:historia-creada',
+        {
+          detail: {
+            id_historia: editingHistoryId,
+            id_paciente: idPaciente
+          }
+        }
+      ));
     }
 
     actualizarDashboard();
