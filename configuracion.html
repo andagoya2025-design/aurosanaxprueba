@@ -574,7 +574,108 @@
 @media(max-width:640px){.auro-permissions-grid{grid-template-columns:1fr}}
 
 
-  </style>
+  
+    /* AUROSANAX - Identidad de sesión localizada */
+    .auro-session-card{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-height:44px;
+      padding:6px 8px 6px 7px;
+      border:1px solid #f1d4e5;
+      border-radius:16px;
+      background:linear-gradient(180deg,#ffffff,#fff8fc);
+      box-shadow:0 10px 24px rgba(15,23,42,.06);
+      max-width:320px;
+    }
+    .auro-session-avatar{
+      width:36px;
+      height:36px;
+      flex:0 0 36px;
+      border-radius:12px;
+      display:grid;
+      place-items:center;
+      color:#fff;
+      background:linear-gradient(135deg,#7a174f,#c23b83);
+      font-size:12px;
+      font-weight:950;
+      letter-spacing:.03em;
+      box-shadow:0 8px 18px rgba(139,30,90,.20);
+    }
+    .auro-session-data{
+      min-width:0;
+      line-height:1.15;
+    }
+    .auro-session-name{
+      display:block;
+      max-width:170px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      color:#1f2937;
+      font-size:12.5px;
+      font-weight:900;
+    }
+    .auro-session-role{
+      display:block;
+      max-width:170px;
+      margin-top:3px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      color:#64748b;
+      font-size:10.5px;
+      font-weight:800;
+    }
+    .auro-session-logout{
+      width:34px;
+      height:34px;
+      flex:0 0 34px;
+      padding:0;
+      border:1px solid #fecdd3;
+      border-radius:11px;
+      display:grid;
+      place-items:center;
+      background:#fff1f2;
+      color:#be123c;
+      cursor:pointer;
+      transition:.16s ease;
+    }
+    .auro-session-logout:hover{
+      background:#ffe4e6;
+      color:#9f1239;
+      transform:translateY(-1px);
+    }
+    .auro-session-actions{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    @media(max-width:980px){
+      .auro-session-actions{
+        width:100%;
+        justify-content:flex-start;
+      }
+      .auro-session-card{
+        max-width:100%;
+      }
+    }
+    @media(max-width:520px){
+      .auro-session-card{
+        width:100%;
+      }
+      .auro-session-data{
+        flex:1;
+      }
+      .auro-session-name,
+      .auro-session-role{
+        max-width:none;
+      }
+    }
+
+</style>
 </head>
 <body style="visibility:hidden;">
 <div class="app">
@@ -596,7 +697,19 @@
     <div class="demo-banner"><div><b>ENTORNO DEMO</b> — Configuración del sistema de agendamiento. No usar con pacientes reales.</div><small>Conectado a AUROSANAX DEMO HISTORIA DATOS</small></div>
     <div class="topbar">
       <div><button class="btn-soft mobile-menu mb-2" onclick="toggleSidebar()"><i class="bi bi-list"></i> Menú</button><h2>Configuración del sistema</h2><p>Parámetros para vender el agendamiento a médicos o centros médicos.</p></div>
-      <button class="btn-line" onclick="refrescarDemo()"><i class="bi bi-arrow-clockwise"></i> Actualizar vista</button>
+      <div class="auro-session-actions">
+        <div id="cfgSesionCard" class="auro-session-card" aria-label="Usuario conectado">
+          <div id="cfgSesionAvatar" class="auro-session-avatar">AU</div>
+          <div class="auro-session-data">
+            <span id="cfgSesionNombre" class="auro-session-name">Usuario</span>
+            <span id="cfgSesionRol" class="auro-session-role">Sesión activa</span>
+          </div>
+          <button id="cfgCerrarSesion" class="auro-session-logout" type="button" title="Cerrar sesión" aria-label="Cerrar sesión">
+            <i class="bi bi-box-arrow-right"></i>
+          </button>
+        </div>
+        <button class="btn-line" onclick="refrescarDemo()"><i class="bi bi-arrow-clockwise"></i> Actualizar vista</button>
+      </div>
     </div>
 
     <div class="premium-hero">
@@ -852,6 +965,92 @@
 
   function toggleSidebar(){
     document.getElementById('sidebar').classList.toggle('show');
+  }
+
+  function obtenerNombreSesionConfiguracion_(usuario){
+    const nombres = [usuario && usuario.nombres, usuario && usuario.apellidos]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    return String(
+      (usuario && (
+        usuario.nombre_completo ||
+        usuario.nombre ||
+        nombres ||
+        usuario.usuario ||
+        usuario.username
+      )) ||
+      'Usuario'
+    ).trim();
+  }
+
+  function obtenerRolSesionConfiguracion_(usuario){
+    return String(
+      (usuario && (
+        usuario.rol ||
+        usuario.nombre_rol ||
+        usuario.perfil ||
+        usuario.tipo_usuario
+      )) ||
+      'Usuario autorizado'
+    ).trim();
+  }
+
+  function obtenerInicialesSesionConfiguracion_(nombre){
+    const partes = String(nombre || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if(!partes.length) return 'AU';
+    if(partes.length === 1) return partes[0].slice(0,2).toUpperCase();
+
+    return (
+      partes[0].charAt(0) +
+      partes[partes.length - 1].charAt(0)
+    ).toUpperCase();
+  }
+
+  function pintarSesionConfiguracion_(seguridad, usuario){
+    const nombre = obtenerNombreSesionConfiguracion_(usuario);
+    const rol = obtenerRolSesionConfiguracion_(usuario);
+
+    const nombreEl = document.getElementById('cfgSesionNombre');
+    const rolEl = document.getElementById('cfgSesionRol');
+    const avatarEl = document.getElementById('cfgSesionAvatar');
+    const cerrarEl = document.getElementById('cfgCerrarSesion');
+
+    if(nombreEl) nombreEl.textContent = nombre;
+    if(rolEl) rolEl.textContent = rol;
+    if(avatarEl) avatarEl.textContent = obtenerInicialesSesionConfiguracion_(nombre);
+
+    if(cerrarEl){
+      cerrarEl.onclick = async function(){
+        cerrarEl.disabled = true;
+
+        try{
+          if(seguridad && typeof seguridad.cerrarSesion === 'function'){
+            await seguridad.cerrarSesion();
+            return;
+          }
+
+          if(seguridad && typeof seguridad.limpiarSesion === 'function'){
+            seguridad.limpiarSesion();
+          }
+
+          window.location.replace('login.html');
+        }catch(error){
+          console.error('No se pudo cerrar la sesión:', error);
+
+          if(seguridad && typeof seguridad.limpiarSesion === 'function'){
+            seguridad.limpiarSesion();
+          }
+
+          window.location.replace('login.html');
+        }
+      };
+    }
   }
 
   function obtenerSeguridadConfiguracion_(){
@@ -1960,6 +2159,8 @@ function showSecurityPanel(id,btn){
 
     const seguridad = acceso.seguridad;
     const usuario = acceso.usuario;
+
+    pintarSesionConfiguracion_(seguridad, usuario);
 
     if(seguridad.tienePermiso('configuracion_medicos', usuario)){
       await cargarMedicos();
