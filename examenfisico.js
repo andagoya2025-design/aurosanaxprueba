@@ -868,60 +868,6 @@ if (typeof hcDiagnosticosSeleccionados === 'undefined') {
   window.hcDiagnosticosSeleccionados = [];
 }
 
-/* ==========================================================
-   AUROSANAX FIX QUIRÚRGICO DIAGNÓSTICO 2026-07-30
-   ----------------------------------------------------------
-   PROBLEMA CORREGIDO:
-   En algunas cargas del ERP, hcDiagnosticosSeleccionados puede existir
-   como variable global léxica del index, mientras
-   window.hcDiagnosticosSeleccionados mantiene otra referencia.
-
-   Consecuencia:
-   - El diagnóstico aparece visualmente en la tabla.
-   - El guardado estructurado consulta window y encuentra un arreglo vacío.
-   - Plan/Receta informan que no existe descripción diagnóstica.
-
-   SOLUCIÓN:
-   Esta función identifica el arreglo clínico activo y mantiene ambas
-   referencias sincronizadas sin duplicar ni borrar diagnósticos.
-
-   NO modifica:
-   - Plan ni Receta.
-   - CIE-10 inteligente.
-   - Apps Script ni Google Sheets.
-   - Examen físico, signos vitales o IMC.
-   ========================================================== */
-function auroDiagnosticosSeleccionadosActuales(){
-  let listaLexica = null;
-  let listaWindow = Array.isArray(window.hcDiagnosticosSeleccionados)
-    ? window.hcDiagnosticosSeleccionados
-    : null;
-
-  try{
-    if(Array.isArray(hcDiagnosticosSeleccionados)){
-      listaLexica = hcDiagnosticosSeleccionados;
-    }
-  }catch(_e){}
-
-  let activa = null;
-
-  if(listaLexica && listaLexica.length){
-    activa = listaLexica;
-  }else if(listaWindow && listaWindow.length){
-    activa = listaWindow;
-  }else{
-    activa = listaLexica || listaWindow || [];
-  }
-
-  window.hcDiagnosticosSeleccionados = activa;
-
-  try{
-    hcDiagnosticosSeleccionados = activa;
-  }catch(_e){}
-
-  return activa;
-}
-
 function normalizarDxTexto(valor){
   return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
 }
@@ -942,22 +888,17 @@ function agregarDiagnosticoCie10(codigo,nombre){
 
   if(!codigo || !nombre) return;
 
-  const diagnosticos = auroDiagnosticosSeleccionadosActuales();
-
-  if(diagnosticos.some(d => d.codigo === codigo)){
+  if(hcDiagnosticosSeleccionados.some(d => d.codigo === codigo)){
     alert('Este diagnóstico ya fue agregado.');
     return;
   }
 
-  diagnosticos.push({
+  hcDiagnosticosSeleccionados.push({
     codigo,
     nombre,
-    principal: diagnosticos.length === 0,
+    principal: hcDiagnosticosSeleccionados.length === 0,
     tipo: 'Presuntivo'
   });
-
-  window.hcDiagnosticosSeleccionados = diagnosticos;
-  try{ hcDiagnosticosSeleccionados = diagnosticos; }catch(_e){}
 
   renderDiagnosticosSeleccionados();
   sincronizarDiagnosticosConCamposHistoria();
@@ -978,66 +919,12 @@ function agregarDiagnosticoCie10(codigo,nombre){
     console.warn('AUROSANAX EXAMEN: CIE-10 inteligente no pudo ejecutarse.', error);
   }
 }
-function eliminarDiagnosticoCie10(index){
-  const diagnosticos = auroDiagnosticosSeleccionadosActuales();
-  diagnosticos.splice(index,1);
-  if(diagnosticos.length && !diagnosticos.some(d => d.principal)){
-    diagnosticos[0].principal = true;
-  }
-  renderDiagnosticosSeleccionados();
-  sincronizarDiagnosticosConCamposHistoria();
-}
-
-function marcarDiagnosticoPrincipal(index){
-  const diagnosticos = auroDiagnosticosSeleccionadosActuales();
-  diagnosticos.forEach((d,i) => d.principal = i === index);
-  renderDiagnosticosSeleccionados();
-  sincronizarDiagnosticosConCamposHistoria();
-}
-
-function cambiarTipoDiagnostico(index,valor){
-  const diagnosticos = auroDiagnosticosSeleccionadosActuales();
-  if(diagnosticos[index]) diagnosticos[index].tipo = valor;
-  sincronizarDiagnosticosConCamposHistoria();
-}
-
-function renderDiagnosticosSeleccionados(){
-  const body = document.getElementById('hcDxSeleccionadosBody');
-  if(!body) return;
-
-  const diagnosticos = auroDiagnosticosSeleccionadosActuales();
-
-  if(!diagnosticos.length){
-    body.innerHTML = '<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';
-    return;
-  }
-
-  body.innerHTML = diagnosticos.map((d,i)=>`<tr><td><span class="diagnostico-cie-code">${d.codigo}</span> &nbsp; ${String(d.nombre||'').toUpperCase()}</td><td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal?'checked':''} onchange="marcarDiagnosticoPrincipal(${i})"></td><td><select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)"><option ${d.tipo==='Presuntivo'?'selected':''}>Presuntivo</option><option ${d.tipo==='Definitivo'?'selected':''}>Definitivo</option></select></td><td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');
-}
-
-function sincronizarDiagnosticosConCamposHistoria(){
-  const diagnosticos = auroDiagnosticosSeleccionadosActuales();
-  const principal = diagnosticos.find(d => d.principal) || diagnosticos[0];
-  const secundarios = diagnosticos.filter(d => !principal || d.codigo !== principal.codigo);
-
-  if(principal){
-    setValueIfExists('hcCie10Principal',principal.codigo);
-    setValueIfExists('hcDiagnosticoPrincipal',principal.nombre);
-  }else{
-    setValueIfExists('hcCie10Principal','');
-    setValueIfExists('hcDiagnosticoPrincipal','');
-  }
-
-  setValueIfExists('hcCie10Secundario',secundarios.map(d=>d.codigo).join('; '));
-  setValueIfExists('hcDiagnosticoSecundario',secundarios.map(d=>`${d.codigo} ${d.nombre} (${d.tipo})`).join('; '));
-}
-
-function recopilarDiagnosticosCie10(){
-  sincronizarDiagnosticosConCamposHistoria();
-  return auroDiagnosticosSeleccionadosActuales()
-    .map(d=>`${d.principal?'Principal':'Secundario'}: ${d.codigo} ${d.nombre} (${d.tipo})`)
-    .join(' || ');
-}
+function eliminarDiagnosticoCie10(index){hcDiagnosticosSeleccionados.splice(index,1);if(hcDiagnosticosSeleccionados.length&&!hcDiagnosticosSeleccionados.some(d=>d.principal))hcDiagnosticosSeleccionados[0].principal=true;renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function marcarDiagnosticoPrincipal(index){hcDiagnosticosSeleccionados.forEach((d,i)=>d.principal=i===index);renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
+function cambiarTipoDiagnostico(index,valor){if(hcDiagnosticosSeleccionados[index])hcDiagnosticosSeleccionados[index].tipo=valor;sincronizarDiagnosticosConCamposHistoria();}
+function renderDiagnosticosSeleccionados(){const body=document.getElementById('hcDxSeleccionadosBody');if(!body)return;if(!hcDiagnosticosSeleccionados.length){body.innerHTML='<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';return;}body.innerHTML=hcDiagnosticosSeleccionados.map((d,i)=>`<tr><td><span class="diagnostico-cie-code">${d.codigo}</span> &nbsp; ${String(d.nombre||'').toUpperCase()}</td><td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal?'checked':''} onchange="marcarDiagnosticoPrincipal(${i})"></td><td><select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)"><option ${d.tipo==='Presuntivo'?'selected':''}>Presuntivo</option><option ${d.tipo==='Definitivo'?'selected':''}>Definitivo</option></select></td><td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');}
+function sincronizarDiagnosticosConCamposHistoria(){const principal=hcDiagnosticosSeleccionados.find(d=>d.principal)||hcDiagnosticosSeleccionados[0];const secundarios=hcDiagnosticosSeleccionados.filter(d=>!principal||d.codigo!==principal.codigo);if(principal){setValueIfExists('hcCie10Principal',principal.codigo);setValueIfExists('hcDiagnosticoPrincipal',principal.nombre);}else{setValueIfExists('hcCie10Principal','');setValueIfExists('hcDiagnosticoPrincipal','');}setValueIfExists('hcCie10Secundario',secundarios.map(d=>d.codigo).join('; '));setValueIfExists('hcDiagnosticoSecundario',secundarios.map(d=>`${d.codigo} ${d.nombre} (${d.tipo})`).join('; '));}
+function recopilarDiagnosticosCie10(){sincronizarDiagnosticosConCamposHistoria();return hcDiagnosticosSeleccionados.map(d=>`${d.principal?'Principal':'Secundario'}: ${d.codigo} ${d.nombre} (${d.tipo})`).join(' || ');}
 
 function recopilarInterconsultaPlan(){
   const partes = [];
@@ -1823,16 +1710,12 @@ function auroCargarDiagnosticosDesdeHistoria(h){
   }
 
   if(lista.length){
-    const restaurados = lista.map((d, i) => ({
+    hcDiagnosticosSeleccionados = lista.map((d, i) => ({
       codigo: d.codigo,
       nombre: d.nombre,
       principal: d.principal || (i === 0 && !lista.some(x => x.principal)),
       tipo: d.tipo === 'Definitivo' ? 'Definitivo' : 'Presuntivo'
     }));
-
-    window.hcDiagnosticosSeleccionados = restaurados;
-    try{ hcDiagnosticosSeleccionados = restaurados; }catch(_e){}
-
     renderDiagnosticosSeleccionados();
     sincronizarDiagnosticosConCamposHistoria();
   }else{
@@ -2395,7 +2278,7 @@ function auroExamenFisicoLimpiarCampos(){
 
 function auroExamenFisicoCapturarDiagnosticos(){
   try{
-    return JSON.parse(JSON.stringify(auroDiagnosticosSeleccionadosActuales()));
+    return JSON.parse(JSON.stringify(window.hcDiagnosticosSeleccionados || hcDiagnosticosSeleccionados || []));
   }catch(e){
     return [];
   }
@@ -2755,7 +2638,9 @@ function auroRecopilarDiagnosticosEstructurados(){
   const base = auroBaseDetalleExamenFisico();
   const lista = [];
 
-  const seleccionados = auroDiagnosticosSeleccionadosActuales();
+  const seleccionados = Array.isArray(window.hcDiagnosticosSeleccionados)
+    ? window.hcDiagnosticosSeleccionados
+    : [];
 
   seleccionados.forEach((d, index) => {
     lista.push(Object.assign({}, base, {
