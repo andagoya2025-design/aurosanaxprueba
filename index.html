@@ -1770,6 +1770,10 @@
     display:none;
   }
 
+  html.auro-seguridad-sesion-local #auroSeguridadCortina{
+    display:none;
+  }
+
   .auro-seguridad-card{
     width:min(430px,100%);
     border:1px solid #ead5e2;
@@ -1896,7 +1900,35 @@
 <body>
 
 <script id="auro-seguridad-bloqueo-temprano">
-  document.documentElement.classList.add('auro-seguridad-validando');
+(function(){
+  'use strict';
+
+  function existeSesionLocalVigente(){
+    try{
+      const token = sessionStorage.getItem('aurosanax_seguridad_token') || '';
+      const sesion = sessionStorage.getItem('aurosanax_seguridad_sesion') || '';
+      const usuario = sessionStorage.getItem('aurosanax_seguridad_usuario') || '';
+      const expiraEn = Number(
+        sessionStorage.getItem('aurosanax_seguridad_expira_en') || 0
+      );
+
+      if(!token || !sesion || !usuario) return false;
+      if(expiraEn && Date.now() >= expiraEn) return false;
+
+      JSON.parse(sesion);
+      JSON.parse(usuario);
+      return true;
+    }catch(error){
+      return false;
+    }
+  }
+
+  if(existeSesionLocalVigente()){
+    document.documentElement.classList.add('auro-seguridad-sesion-local');
+  }else{
+    document.documentElement.classList.add('auro-seguridad-validando');
+  }
+})();
 </script>
 
 <div id="auroSeguridadCortina" role="status" aria-live="polite">
@@ -7495,7 +7527,7 @@ document.addEventListener('click',e=>{
 
 
 <!-- AUROSANAX FASE 4: protección de acceso del ERP -->
-<script src="seguridad.js"></script>
+<script src="seguridad.js?v=20260730-07"></script>
 <script id="auro-seguridad-index-guard">
 (function(){
   'use strict';
@@ -7553,6 +7585,7 @@ document.addEventListener('click',e=>{
   function revelarErp(){
     document.documentElement.classList.remove('auro-seguridad-validando');
     document.documentElement.classList.remove('auro-seguridad-denegada');
+    document.documentElement.classList.remove('auro-seguridad-sesion-local');
 
     if(cortina) cortina.classList.add('auro-oculta');
   }
@@ -7635,20 +7668,18 @@ document.addEventListener('click',e=>{
       pintarUsuario(usuario);
 
       /*
-        La carga clínica comienza una sola vez y únicamente después de
-        confirmar una sesión válida. No se cambian las funciones internas
-        de pacientes, historias, agenda ni dashboard.
+        La sesión ya fue validada y el permiso Dashboard fue confirmado.
+        Se revela el ERP inmediatamente para no mantener la cortina durante
+        la carga clínica. Los datos continúan cargándose sin volver a pedir
+        autenticación ni bloquear la navegación.
       */
+      revelarErp();
+
       if(typeof window.auroIniciarERPTrasSeguridad !== 'function'){
         throw new Error('No se encontró el inicializador seguro del ERP.');
       }
 
-      if(mensaje){
-        mensaje.textContent = 'Acceso autorizado. Cargando datos del sistema…';
-      }
-
       await window.auroIniciarERPTrasSeguridad();
-      revelarErp();
     }catch(error){
       console.error('AUROSANAX: error validando sesión del ERP:', error);
       bloquearYVolverLogin('No fue posible validar la sesión.');
@@ -7675,6 +7706,26 @@ document.addEventListener('click',e=>{
   }else{
     iniciar();
   }
+
+  window.addEventListener('pageshow', function(event){
+    if(!event.persisted) return;
+
+    const seguridad = window.AUROSANAX_SEGURIDAD;
+    const usuario = seguridad &&
+      typeof seguridad.obtenerUsuario === 'function'
+        ? seguridad.obtenerUsuario()
+        : null;
+
+    if(
+      usuario &&
+      seguridad &&
+      typeof seguridad.tienePermiso === 'function' &&
+      seguridad.tienePermiso('dashboard', usuario)
+    ){
+      pintarUsuario(usuario);
+      revelarErp();
+    }
+  });
 })();
 </script>
 
