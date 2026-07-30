@@ -37,7 +37,8 @@
     ultimoCodigo: '',
     ultimoNombre: '',
     ultimoResultado: null,
-    cargando: false
+    cargando: false,
+    aplicandoPlan: false
   };
 
   function apiUrl(){
@@ -865,7 +866,9 @@
     }
   };
 
-  window.auroCie10InteligenteAplicarAlPlan = function(){
+  window.auroCie10InteligenteAplicarAlPlan = async function(){
+    if(STATE.aplicandoPlan) return;
+
     const resultado = STATE.ultimoResultado;
     const data = normalizarProtocolo(resultado);
 
@@ -875,28 +878,77 @@
     }
 
     const confirmar = confirm(
-      'Esto agregará las sugerencias del protocolo al Plan Clínico.\n\n' +
+      'Esto guardará el diagnóstico estructurado de la consulta y agregará las sugerencias al Plan Clínico.\n\n' +
       'Revise y modifique antes de guardar o emitir receta.\n\n' +
       '¿Desea continuar?'
     );
 
     if(!confirmar) return;
 
-    const meds = aplicarMedicamentosAlPlan(data.medicamentos);
-    const ords = aplicarOrdenesAlPlan(data.ordenes);
-    const inds = aplicarIndicacionesAlPlan(data.indicaciones, data.controles);
+    STATE.aplicandoPlan = true;
 
-    if(typeof window.guardarPlanTemporal === 'function'){
-      window.guardarPlanTemporal();
+    try{
+      /*
+        AUROSANAX FIX QUIRÚRGICO 2026-07-30:
+        El botón oficial del CIE guarda primero el diagnóstico estructurado
+        de la atención activa. Así Plan y Recetas consultan la misma fila
+        persistida por id_atencion, sin restaurar interceptores globales ni
+        modificar Examen Físico, Plan, Recetas o Apps Script.
+      */
+      if(typeof window.auroGuardarDiagnosticosAtencionActual !== 'function'){
+        alert(
+          'No está disponible la función de guardado del diagnóstico estructurado.\n\n' +
+          'No se aplicó el protocolo para evitar que Plan y Receta queden desincronizados.'
+        );
+        return;
+      }
+
+      const guardadoDx = await Promise.resolve(
+        window.auroGuardarDiagnosticosAtencionActual()
+      );
+
+      if(!guardadoDx || guardadoDx.success === false){
+        alert(
+          guardadoDx?.message ||
+          'No se pudo guardar el diagnóstico estructurado de esta consulta. No se aplicó el protocolo.'
+        );
+        return;
+      }
+
+      const meds = aplicarMedicamentosAlPlan(data.medicamentos);
+      const ords = aplicarOrdenesAlPlan(data.ordenes);
+      const inds = aplicarIndicacionesAlPlan(data.indicaciones, data.controles);
+
+      if(typeof window.guardarPlanTemporal === 'function'){
+        window.guardarPlanTemporal();
+      }
+
+      try{
+        document.dispatchEvent(new CustomEvent('aurosanax:diagnosticos-actualizados', {
+          detail: {
+            id_atencion: guardadoDx.id_atencion || '',
+            id_examen: guardadoDx.id_examen || '',
+            origen: 'cie10_inteligente'
+          }
+        }));
+      }catch(_e){}
+
+      alert(
+        'Diagnóstico guardado y sugerencias aplicadas al Plan:\n' +
+        '- Medicamentos: ' + meds + '\n' +
+        '- Órdenes: ' + ords + '\n' +
+        '- Indicaciones/controles: ' + inds + '\n\n' +
+        'Debe revisar antes de guardar.'
+      );
+    }catch(error){
+      console.error(MODULO + ': error guardando diagnóstico y aplicando protocolo.', error);
+      alert(
+        'No se pudo completar la aplicación al Plan: ' +
+        (error?.message || String(error))
+      );
+    }finally{
+      STATE.aplicandoPlan = false;
     }
-
-    alert(
-      'Sugerencias aplicadas al Plan:\n' +
-      '- Medicamentos: ' + meds + '\n' +
-      '- Órdenes: ' + ords + '\n' +
-      '- Indicaciones/controles: ' + inds + '\n\n' +
-      'Debe revisar antes de guardar.'
-    );
   };
 
   window.auroCie10InteligenteEstado = function(){
