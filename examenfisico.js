@@ -1310,28 +1310,6 @@ function auroMostrarExamenFisicoPrevio(h){
   const content = document.getElementById('auroExamenFisicoPrevioContent');
   if(!box || !content) return;
 
-  /*
-    AUROSANAX VALIDACIÓN ESTRICTA POR ATENCIÓN:
-    Si hay una atención activa, la tarjeta solo acepta un registro que
-    traiga exactamente el mismo id_atencion. Un objeto de historias_clinicas
-    no tiene ese vínculo y se rechaza sin afectar la tarjeta superior.
-  */
-  const idAtencionActiva = String(
-    window.examenFisicoState?.atencionActual ||
-    (typeof window.getIdAtencionActiva === 'function'
-      ? window.getIdAtencionActiva()
-      : '') ||
-    ''
-  ).trim();
-
-  const idAtencionRegistro = String(h?.id_atencion || '').trim();
-
-  if(idAtencionActiva && idAtencionRegistro !== idAtencionActiva){
-    box.style.display = 'none';
-    content.innerHTML = '';
-    return;
-  }
-
   if(!auroHistoriaTieneExamenFisico(h)){
     box.style.display = 'none';
     content.innerHTML = '';
@@ -1478,30 +1456,9 @@ function auroMostrarDiagnosticosPrevios(h){
 }
 
 function auroCargarExamenFisicoPrevioPaciente(idPaciente){
-  /*
-    AUROSANAX FIX QUIRÚRGICO:
-    La caja "Examen físico previo guardado" no debe cargarse desde
-    historias_clinicas cuando ya existe una atención seleccionada.
-    Los diagnósticos previos conservan su flujo original.
-  */
-  const idAtencionActiva = String(
-    window.examenFisicoState?.atencionActual ||
-    (typeof window.getIdAtencionActiva === 'function'
-      ? window.getIdAtencionActiva()
-      : '') ||
-    ''
-  ).trim();
-
-  if(!idAtencionActiva){
-    const h = auroHistoriasPacienteOrdenadas(idPaciente)
-      .find(auroHistoriaTieneExamenFisico) || null;
-
-    auroMostrarExamenFisicoPrevio(h);
-  }
-
-  const dx = auroHistoriasPacienteOrdenadas(idPaciente)
-    .find(auroHistoriaTieneDiagnosticos) || null;
-
+  const h = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneExamenFisico) || null;
+  auroMostrarExamenFisicoPrevio(h);
+  const dx = auroHistoriasPacienteOrdenadas(idPaciente).find(auroHistoriaTieneDiagnosticos) || null;
   auroMostrarDiagnosticosPrevios(dx);
 }
 
@@ -3382,22 +3339,15 @@ function auroInstalarFlujoUnicoDiagnosticoPlan(){
   if(window.__auroFlujoUnicoDiagnosticoPlanInstalado) return;
   window.__auroFlujoUnicoDiagnosticoPlanInstalado = true;
 
-  auroInstalarOcultamientoBotonSecundario();
-
   /*
-    Captura el clic antes del onclick original para asegurar este orden:
-    guardar diagnóstico → confirmar → aplicar protocolo.
+    AUROSANAX CORRECCIÓN QUIRÚRGICA:
+    - Se conserva oculto el botón secundario de Integración clínica.
+    - Se elimina únicamente la captura global del clic del botón oficial.
+    - El botón morado vuelve a ejecutar directamente
+      auroCie10InteligenteAplicarAlPlan(), sin interferencia de Examen físico.
+    - No se modifica guardado, diagnóstico, examen, Plan ni Google Sheets.
   */
-  document.addEventListener('click', function(evento){
-    const boton = evento.target?.closest?.('button, a');
-    if(!auroEsBotonOficialAplicarPlan(boton)) return;
-
-    evento.preventDefault();
-    evento.stopPropagation();
-    evento.stopImmediatePropagation();
-
-    auroEjecutarBotonOficialAplicarPlan(boton);
-  }, true);
+  auroInstalarOcultamientoBotonSecundario();
 }
 
 if(document.readyState === 'loading'){
