@@ -37,9 +37,7 @@
     ultimoCodigo: '',
     ultimoNombre: '',
     ultimoResultado: null,
-    cargando: false,
-    solicitudActual: 0,
-    aplicandoPlan: false
+    cargando: false
   };
 
   function apiUrl(){
@@ -784,118 +782,11 @@
     return lista.length;
   }
 
-  function obtenerIdAtencionActivaCie10(){
-    const candidatos = [
-      window.planState?.atencionActual,
-      window.examenFisicoState?.atencionActual,
-      window.auroDiagnosticosState?.atencionActual,
-      window.auroAtencionSeleccionadaId,
-      window.auroAtencionNuevaId,
-      window.currentAttention?.id_atencion,
-      window.atencionActual?.id_atencion
-    ];
-
-    for(const valor of candidatos){
-      const id = limpiarTexto(valor);
-      if(id) return id;
-    }
-
-    try{
-      if(typeof window.getIdAtencionActiva === 'function'){
-        const id = limpiarTexto(window.getIdAtencionActiva());
-        if(id) return id;
-      }
-    }catch(error){}
-
-    try{
-      if(typeof window.getAtencionActiva === 'function'){
-        const atencion = window.getAtencionActiva();
-        const id = limpiarTexto(atencion?.id_atencion);
-        if(id) return id;
-      }
-    }catch(error){}
-
-    try{
-      const pacienteId = limpiarTexto(
-        document.getElementById('hcPacienteSelect')?.value ||
-        window.activePatientId ||
-        window.historiaActual?.id_paciente ||
-        window.currentHistoria?.id_paciente
-      );
-
-      const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
-      const lista = raw ? JSON.parse(raw) : [];
-
-      if(Array.isArray(lista)){
-        const abierta = lista.find(a =>
-          limpiarTexto(a?.id_paciente) === pacienteId &&
-          limpiarTexto(a?.estado_atencion).toLowerCase() === 'abierta' &&
-          limpiarTexto(a?.id_atencion)
-        );
-        if(abierta) return limpiarTexto(abierta.id_atencion);
-      }
-    }catch(error){}
-
-    return '';
-  }
-
-  function prepararPlanParaAtencionCie10(idAtencion){
-    idAtencion = limpiarTexto(idAtencion);
-    if(!idAtencion) return false;
-
-    window.planState = window.planState || {
-      atencionActual: '',
-      cache: {}
-    };
-
-    if(!window.planState.cache || typeof window.planState.cache !== 'object'){
-      window.planState.cache = {};
-    }
-
-    const idPlanActual = limpiarTexto(window.planState.atencionActual);
-
-    if(
-      idPlanActual !== idAtencion &&
-      typeof window.cambiarPlanPorAtencion === 'function'
-    ){
-      window.cambiarPlanPorAtencion(idAtencion);
-    }else{
-      window.planState.atencionActual = idAtencion;
-    }
-
-    return limpiarTexto(window.planState.atencionActual) === idAtencion;
-  }
-
-  function obtenerBotonAplicarPlanCie10(){
-    return document.querySelector(
-      '#auroCie10InteligenteBox .auro-cie10-btn.primary'
-    );
-  }
-
-  function cambiarEstadoBotonAplicarCie10(aplicando){
-    const boton = obtenerBotonAplicarPlanCie10();
-    if(!boton) return;
-
-    boton.disabled = !!aplicando;
-    boton.setAttribute('aria-busy', aplicando ? 'true' : 'false');
-
-    if(aplicando){
-      boton.dataset.textoOriginal = boton.innerHTML;
-      boton.innerHTML =
-        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Aplicando…';
-    }else if(boton.dataset.textoOriginal){
-      boton.innerHTML = boton.dataset.textoOriginal;
-      delete boton.dataset.textoOriginal;
-    }
-  }
-
   window.auroCie10InteligenteBuscarProtocolo = async function(codigo, nombre){
     codigo = normalizarCodigoCie10(codigo);
     nombre = limpiarTexto(nombre);
 
     if(!codigo) return null;
-
-    const numeroSolicitud = ++STATE.solicitudActual;
 
     STATE.ultimoCodigo = codigo;
     STATE.ultimoNombre = nombre;
@@ -909,11 +800,6 @@
         codigo_cie10: codigo
       });
 
-      if(numeroSolicitud !== STATE.solicitudActual){
-        console.info(MODULO + ': respuesta antigua ignorada para ' + codigo + '.');
-        return null;
-      }
-
       STATE.ultimoResultado = resultado;
       STATE.cargando = false;
 
@@ -926,10 +812,6 @@
       return resultado;
 
     }catch(error){
-      if(numeroSolicitud !== STATE.solicitudActual){
-        return null;
-      }
-
       STATE.cargando = false;
       console.warn(MODULO + ': no se pudo consultar protocolo.', error);
 
@@ -984,16 +866,6 @@
   };
 
   window.auroCie10InteligenteAplicarAlPlan = function(){
-    if(STATE.aplicandoPlan) return;
-
-    if(STATE.cargando){
-      alert(
-        'El protocolo todavía se está consultando.\\n\\n' +
-        'Espere a que termine la lectura antes de aplicarlo al Plan.'
-      );
-      return;
-    }
-
     const resultado = STATE.ultimoResultado;
     const data = normalizarProtocolo(resultado);
 
@@ -1002,89 +874,29 @@
       return;
     }
 
-    const idAtencion = obtenerIdAtencionActivaCie10();
-
-    if(!idAtencion){
-      alert(
-        'No existe una atención activa para aplicar este protocolo.\\n\\n' +
-        'Guarde primero la historia clínica e inicie una atención.'
-      );
-      return;
-    }
-
     const confirmar = confirm(
-      'Esto agregará las sugerencias del protocolo al Plan Clínico.\\n\\n' +
-      'Revise y modifique antes de guardar o emitir receta.\\n\\n' +
+      'Esto agregará las sugerencias del protocolo al Plan Clínico.\n\n' +
+      'Revise y modifique antes de guardar o emitir receta.\n\n' +
       '¿Desea continuar?'
     );
 
     if(!confirmar) return;
 
-    STATE.aplicandoPlan = true;
-    cambiarEstadoBotonAplicarCie10(true);
+    const meds = aplicarMedicamentosAlPlan(data.medicamentos);
+    const ords = aplicarOrdenesAlPlan(data.ordenes);
+    const inds = aplicarIndicacionesAlPlan(data.indicaciones, data.controles);
 
-    try{
-      if(!prepararPlanParaAtencionCie10(idAtencion)){
-        throw new Error('No se pudo sincronizar el módulo Plan con la atención activa.');
-      }
-
-      const meds = aplicarMedicamentosAlPlan(data.medicamentos);
-      const ords = aplicarOrdenesAlPlan(data.ordenes);
-      const inds = aplicarIndicacionesAlPlan(data.indicaciones, data.controles);
-
-      if(typeof window.renderMedicamentosPlanTabla === 'function'){
-        window.renderMedicamentosPlanTabla();
-      }
-
-      if(typeof window.renderOrdenesMedicasTabla === 'function'){
-        window.renderOrdenesMedicasTabla();
-      }
-
-      if(typeof window.recopilarOrdenesMedicasPlan === 'function'){
-        window.recopilarOrdenesMedicasPlan();
-      }
-
-      if(typeof window.sincronizarPlanConReceta === 'function'){
-        window.sincronizarPlanConReceta();
-      }
-
-      if(typeof window.guardarPlanTemporal === 'function'){
-        window.guardarPlanTemporal();
-      }
-
-      window.dispatchEvent(new CustomEvent(
-        'aurosanax:protocolo-aplicado-plan',
-        {
-          detail: {
-            id_atencion: idAtencion,
-            codigo_cie10: STATE.ultimoCodigo,
-            medicamentos: meds,
-            ordenes: ords,
-            indicaciones_controles: inds
-          }
-        }
-      ));
-
-      alert(
-        'Sugerencias aplicadas al Plan:\\n' +
-        '- Medicamentos: ' + meds + '\\n' +
-        '- Órdenes: ' + ords + '\\n' +
-        '- Indicaciones/controles: ' + inds + '\\n\\n' +
-        'Debe revisar antes de guardar.'
-      );
-
-    }catch(error){
-      console.error(MODULO + ': no se pudo aplicar el protocolo al Plan.', error);
-
-      alert(
-        'No se pudo aplicar el protocolo al Plan.\\n\\n' +
-        (error?.message || String(error))
-      );
-
-    }finally{
-      STATE.aplicandoPlan = false;
-      cambiarEstadoBotonAplicarCie10(false);
+    if(typeof window.guardarPlanTemporal === 'function'){
+      window.guardarPlanTemporal();
     }
+
+    alert(
+      'Sugerencias aplicadas al Plan:\n' +
+      '- Medicamentos: ' + meds + '\n' +
+      '- Órdenes: ' + ords + '\n' +
+      '- Indicaciones/controles: ' + inds + '\n\n' +
+      'Debe revisar antes de guardar.'
+    );
   };
 
   window.auroCie10InteligenteEstado = function(){
