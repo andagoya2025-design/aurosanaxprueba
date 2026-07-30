@@ -41,6 +41,8 @@
     claveSesion: 'aurosanax_seguridad_sesion',
     claveUsuario: 'aurosanax_seguridad_usuario',
     claveExpiracion: 'aurosanax_seguridad_expira_en',
+    claveUltimaValidacion: 'aurosanax_seguridad_ultima_validacion',
+    intervaloRevalidacionMs: 300000,
     tiempoEsperaMs: 60000
   });
 
@@ -386,6 +388,24 @@
      ======================================================== */
 
   async function validarSesionExistenteYRedirigir(token) {
+    const sesionLocal = obtenerSesionLocalVigente_();
+
+    if (sesionLocal) {
+      const paginaAutorizada = resolverPaginaAutorizada_(
+        sesionLocal.usuario
+      );
+
+      if (paginaAutorizada) {
+        window.location.replace(paginaAutorizada);
+
+        if (requiereRevalidacionServidor_()) {
+          revalidarSesionEnSegundoPlano_();
+        }
+
+        return;
+      }
+    }
+
     establecerEstadoBoton(true, 'Validando sesión...');
 
     try {
@@ -472,6 +492,11 @@
     } else {
       sessionStorage.removeItem(SEGURIDAD_CONFIG.claveExpiracion);
     }
+
+    sessionStorage.setItem(
+      SEGURIDAD_CONFIG.claveUltimaValidacion,
+      String(Date.now())
+    );
   }
 
   function actualizarSesionValidada(respuesta) {
@@ -496,6 +521,11 @@
     sessionStorage.setItem(
       SEGURIDAD_CONFIG.claveUsuario,
       JSON.stringify(usuario)
+    );
+
+    sessionStorage.setItem(
+      SEGURIDAD_CONFIG.claveUltimaValidacion,
+      String(Date.now())
     );
   }
 
@@ -536,6 +566,60 @@
     sessionStorage.removeItem(SEGURIDAD_CONFIG.claveSesion);
     sessionStorage.removeItem(SEGURIDAD_CONFIG.claveUsuario);
     sessionStorage.removeItem(SEGURIDAD_CONFIG.claveExpiracion);
+    sessionStorage.removeItem(SEGURIDAD_CONFIG.claveUltimaValidacion);
+  }
+
+  function obtenerSesionLocalVigente_() {
+    const token = obtenerTokenSesion();
+    const sesion = obtenerSesionLocal();
+    const usuario = obtenerUsuarioActual();
+
+    if (!token || !sesion || !usuario) return null;
+
+    return {
+      success: true,
+      local: true,
+      token: token,
+      usuario: usuario,
+      sesion: sesion
+    };
+  }
+
+  function requiereRevalidacionServidor_() {
+    const ultima = Number(
+      sessionStorage.getItem(
+        SEGURIDAD_CONFIG.claveUltimaValidacion
+      ) || 0
+    );
+
+    if (!ultima) return true;
+
+    return (
+      Date.now() - ultima >=
+      SEGURIDAD_CONFIG.intervaloRevalidacionMs
+    );
+  }
+
+  async function revalidarSesionEnSegundoPlano_() {
+    const token = obtenerTokenSesion();
+    if (!token) return;
+
+    try {
+      const respuesta = await apiGet('validarSesion', { token: token });
+
+      if (respuesta && respuesta.success === true) {
+        actualizarSesionValidada(respuesta);
+        return;
+      }
+
+      limpiarSesionLocal();
+      window.location.replace(SEGURIDAD_CONFIG.paginaLogin);
+    } catch (error) {
+      console.warn(
+        'No se pudo revalidar la sesión en segundo plano:',
+        error
+      );
+    }
   }
 
   /* ========================================================
@@ -1814,18 +1898,31 @@
 
 
 
-  async function validarSesionActual() {
-    const token = obtenerTokenSesion();
+  async function validarSesionActual(opciones) {
+    const configuracion = opciones || {};
+    const forzarServidor = configuracion.forzarServidor === true;
+    const sesionLocal = obtenerSesionLocalVigente_();
 
-    if (!token) {
+    if (!sesionLocal) {
       return {
         success: false,
         message: 'No existe una sesión activa.'
       };
     }
 
+    if (!forzarServidor) {
+      if (requiereRevalidacionServidor_()) {
+        revalidarSesionEnSegundoPlano_();
+      }
+
+      return sesionLocal;
+    }
+
     try {
-      const respuesta = await apiGet('validarSesion', { token: token });
+      const respuesta = await apiGet(
+        'validarSesion',
+        { token: sesionLocal.token }
+      );
 
       if (respuesta && respuesta.success === true) {
         actualizarSesionValidada(respuesta);
@@ -1833,6 +1930,7 @@
       }
 
       limpiarSesionLocal();
+
       return respuesta || {
         success: false,
         message: 'Sesión inválida o expirada.'
