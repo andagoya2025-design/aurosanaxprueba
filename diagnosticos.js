@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.5';
+  const VERSION = '1.5.4';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260730_sincronizacion_atencion_maestra_v1';
+  const RELEASE = '20260725_apoyo_ia_contexto_v3';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -101,35 +101,6 @@
   function historiaNuevaSinAtencion(){
     const modo = texto(window.auroModoAperturaHistoria).toLowerCase();
     if(modo !== 'nueva') return false;
-
-    /*
-      AUROSANAX FIX QUIRÚRGICO 2026-07-30:
-      Atenciones es la fuente maestra. Una historia puede conservar temporalmente
-      el modo "nueva" aun después de crear la consulta. Si ya existe una atención
-      activa real, Diagnóstico no debe limpiarla ni tratarla como inexistente.
-    */
-    try{
-      if(typeof window.getAtencionActiva === 'function'){
-        const activa = window.getAtencionActiva();
-        if(activa && texto(activa.id_atencion)) return false;
-      }
-    }catch(e){}
-
-    try{
-      if(typeof window.getIdAtencionActiva === 'function'){
-        const idActivo = texto(window.getIdAtencionActiva());
-        if(idActivo) return false;
-      }
-    }catch(e){}
-
-    try{
-      const contexto = typeof window.obtenerContextoAtencionActual === 'function'
-        ? window.obtenerContextoAtencionActual()
-        : (typeof window.getContextoAtencionActual === 'function'
-            ? window.getContextoAtencionActual()
-            : null);
-      if(contexto && texto(contexto.id_atencion)) return false;
-    }catch(e){}
 
     const idNuevo = texto(
       window.auroAtencionNuevaId ||
@@ -347,13 +318,8 @@
   }
 
   function contextoAtencionSeleccionada(){
-    /*
-      La atención activa de Atenciones tiene prioridad sobre cualquier estado
-      temporal conservado por Diagnóstico, Plan o Examen Físico.
-    */
+    const id = texto(state.atencionActual || idAtencionActiva());
     const actual = atencionActiva() || {};
-    const idMaestro = texto(actual.id_atencion || idAtencionActiva());
-    const id = texto(idMaestro || state.atencionActual);
     const idPaciente = texto(actual.id_paciente || idPacienteActual());
     const lista = obtenerAtencionesLocales();
 
@@ -382,13 +348,7 @@
     const coincidePlan = !idPlan || idPlan === id;
     const coincideExamen = !idExamen || idExamen === id;
     const esUltima = !idUltima || idUltima === id;
-
-    /*
-      Plan y Examen pueden tardar milisegundos en actualizar su estado interno.
-      Esa demora no convierte la consulta activa en histórica. El bloqueo de
-      edición depende solo de la atención maestra: existente, última y abierta.
-    */
-    const editable = !!id && esUltima && !cerrada;
+    const editable = !!id && esUltima && !cerrada && coincidePlan && coincideExamen;
 
     return {
       id,
@@ -3238,10 +3198,10 @@
     return total;
   }
 
-  async function aplicarAlPlan(){
+  function aplicarAlPlan(){
     const ctx = contextoAtencionSeleccionada();
     if(!ctx.editable){
-      mensaje('error','El protocolo solo puede aplicarse al Plan desde la última atención activa y editable.');
+      mensaje('error','El protocolo solo puede aplicarse al Plan desde la última atención activa y editable, con el mismo id_atencion en Diagnóstico, Examen físico y Plan.');
       configurarModoProtocoloMaestro();
       return;
     }
@@ -3252,35 +3212,6 @@
     const p = state.protocoloSeleccionado !== null ? state.protocolos[state.protocoloSeleccionado] : null;
     if(!p){
       mensaje('error','Seleccione un protocolo antes de aplicarlo al Plan.');
-      return;
-    }
-
-    /*
-      Antes de transferir el protocolo, garantiza que Plan use exactamente el
-      mismo id_atencion y solicita el guardado estructurado del diagnóstico con
-      la función pública ya existente. No crea diagnósticos ni duplica filas.
-    */
-    try{
-      if(typeof window.cambiarPlanPorAtencion === 'function'){
-        await Promise.resolve(window.cambiarPlanPorAtencion(state.atencionActual));
-      }
-    }catch(error){
-      console.warn(MODULO + ': no se pudo sincronizar Plan antes de aplicar.', error);
-    }
-
-    try{
-      if(typeof window.auroGuardarDiagnosticosAtencionActual === 'function'){
-        const resultadoDx = await Promise.resolve(
-          window.auroGuardarDiagnosticosAtencionActual()
-        );
-        if(resultadoDx && resultadoDx.success === false){
-          mensaje('error', resultadoDx.message || 'No se pudo guardar el diagnóstico estructurado de esta atención.');
-          return;
-        }
-      }
-    }catch(error){
-      console.error(MODULO + ': no se pudo persistir el diagnóstico estructurado.', error);
-      mensaje('error','No se pudo guardar el diagnóstico estructurado de esta atención antes de aplicar el protocolo.');
       return;
     }
 
@@ -3341,23 +3272,12 @@
   }
 
   function cambiarPorAtencion(idAtencion){
-    idAtencion = texto(idAtencion);
-
-    /*
-      El evento de Atenciones contiene el id maestro. Se registra primero para
-      evitar que un estado residual de historia nueva o de la consulta anterior
-      bloquee la sincronización.
-    */
-    if(idAtencion){
-      state.atencionActual = idAtencion;
-      window.auroAtencionSeleccionadaId = idAtencion;
-    }
-
     if(historiaNuevaSinAtencion()){
       limpiarContextoHistoriaNueva();
       return null;
     }
 
+    idAtencion = texto(idAtencion);
     if(!idAtencion) return;
     return cargarAtencion(idAtencion, true);
   }
