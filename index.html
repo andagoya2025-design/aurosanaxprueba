@@ -6701,25 +6701,10 @@ document.addEventListener('click',e=>{
   function auroPlanFormatearFechaHora(valor){
     const v = String(valor || '').trim();
     if(!v) return '';
-
-    /*
-      AUROSANAX FIX HORA RECETA:
-      Las fechas de Google Sheets ya representan la hora clínica registrada.
-      Se leen por componentes para evitar que new Date() aplique otra conversión
-      de zona horaria y reste cinco horas.
-    */
-    const isoLocal = v.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})/);
-    if(isoLocal){
-      return isoLocal[3] + '/' + isoLocal[2] + '/' + isoLocal[1] + ' ' +
-        pad2(isoLocal[4]) + ':' + isoLocal[5];
+    const d = new Date(v);
+    if(!isNaN(d.getTime())){
+      return pad2(d.getDate()) + '/' + pad2(d.getMonth()+1) + '/' + d.getFullYear() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
     }
-
-    const latamHora = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[\s,]+(\d{1,2}):(\d{2})/);
-    if(latamHora){
-      return pad2(latamHora[1]) + '/' + pad2(latamHora[2]) + '/' + latamHora[3] + ' ' +
-        pad2(latamHora[4]) + ':' + latamHora[5];
-    }
-
     return auroPlanFormatearFechaVisual(v);
   }
 
@@ -7033,13 +7018,24 @@ document.addEventListener('click',e=>{
       window.auroPlanActualizarMiniStatus();
     }
 
-    /*
-      AUROSANAX FIX HORA RECETA:
-      Se neutraliza el envoltorio visual tardío de guardarRecetaERP.
-      recetas.js conserva el control exclusivo del guardado y de su estado visual.
-      No se modifica la función de guardado, el id_receta ni la no duplicidad.
-    */
-    window.__auroPlanRecetaUxWrapped = true;
+    if(!window.__auroPlanRecetaUxWrapped && typeof window.guardarRecetaERP === 'function'){
+      const originalGuardarRecetaPlanUX = window.guardarRecetaERP;
+      window.guardarRecetaERP = async function(){
+        const r = await originalGuardarRecetaPlanUX.apply(this, arguments);
+        setTimeout(function(){
+          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            window.auroPlanActualizarMiniStatus('Receta revisada');
+          }
+        }, 700);
+        setTimeout(function(){
+          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            window.auroPlanActualizarMiniStatus();
+          }
+        }, 1500);
+        return r;
+      };
+      window.__auroPlanRecetaUxWrapped = true;
+    }
 
     if(!window.__auroPlanAtencionUxWrapped){
       ['iniciarAtencionActual','seleccionarAtencion','finalizarAtencionActual'].forEach(function(nombre){
