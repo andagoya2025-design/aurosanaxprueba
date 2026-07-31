@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 2.4 contexto maestro enriquecido no invasivo + resumen premium + paginación segura
+   Versión: 2.5 botón Iniciar reutiliza flujo oficial del botón Ver
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -1364,15 +1364,25 @@
     }
 
     /*
-      La atención recién creada se activa mediante el mismo motor utilizado
-      por el botón Ver. Así ningún módulo conserva el contexto anterior.
+      AUROSANAX FIX QUIRÚRGICO BOTÓN INICIAR v15:
+      Después de crear la atención, el botón Iniciar ejecuta exactamente el
+      mismo flujo real que el botón Ver. No se mantiene una ruta paralela de
+      sincronización, evitando que Plan conserve la consulta anterior.
     */
-    sincronizarContextoAtencion(nueva, {
-      motivo:'atencion_creada',
-      emitirIniciada:true
-    });
+    window.dispatchEvent(new CustomEvent('aurosanax:atencion-iniciada', {
+      detail: { ...nueva }
+    }));
 
     renderAtencionesPaciente();
+
+    /*
+      Se difiere un ciclo para asegurar que la lista y el DOM ya estén
+      actualizados. seleccionarAtencion() es la función oficial del botón Ver.
+    */
+    setTimeout(function(){
+      seleccionarAtencion(nueva.id_atencion);
+    }, 0);
+
     return nueva;
   }
 
