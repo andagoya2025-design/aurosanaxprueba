@@ -1105,12 +1105,14 @@
   }
 
   /* =====================================================
-     AUROSANAX - MOTOR ÚNICO DE SINCRONIZACIÓN DE ATENCIÓN
-     Cambio quirúrgico 2026-07-30
-     - Unifica Crear atención y botón Ver.
-     - No modifica guardados, IDs, Google Sheets ni arquitectura.
-     - Evita que Plan, Examen Físico y Diagnóstico conserven
-       una atención anterior en memoria.
+     AUROSANAX - MOTOR ÚNICO DE ACTIVACIÓN DE ATENCIÓN
+     Corrección quirúrgica v2.5
+
+     OBJETIVO:
+     - Evitar que Plan, Recetas, Diagnóstico o Examen Físico conserven
+       visualmente la consulta anterior al crear o abrir una atención.
+     - Reutilizar el mismo flujo tanto para "Iniciar" como para "Ver".
+     - No elimina datos, no cambia IDs, no modifica Google Sheets.
   ===================================================== */
   function sincronizarContextoAtencion(atencion, opciones){
     opciones = opciones || {};
@@ -1118,88 +1120,137 @@
     const a = normalizar(atencion || {});
     const idAtencion = String(a.id_atencion || '').trim();
     const idPaciente = String(a.id_paciente || '').trim();
-    const pacienteVisible = String(idPacienteActivo() || '').trim();
+    const idPacienteVisible = String(idPacienteActivo() || '').trim();
 
-    if(!idAtencion) return null;
+    if(!idAtencion) return false;
 
-    if(pacienteVisible && idPaciente && pacienteVisible !== idPaciente){
+    if(
+      idPacienteVisible &&
+      idPaciente &&
+      idPacienteVisible !== idPaciente
+    ){
       console.warn(
-        'AUROSANAX ATENCIONES: se bloqueó una sincronización de otro paciente.',
-        { pacienteVisible, idPaciente, idAtencion }
+        'AUROSANAX ATENCIONES: se bloqueó una atención de otro paciente.',
+        { idPacienteVisible, idPaciente, idAtencion }
       );
-      return null;
+      return false;
     }
 
-    /* Fuente maestra local de la atención activa. */
-    atencionActivaId = idAtencion;
+    /* 1. Invalidar únicamente el contexto temporal anterior. */
+    atencionActivaId = '';
 
-    /* Compatibilidad con los estados públicos ya utilizados por el ERP. */
     window.planState = window.planState || { atencionActual:'', cache:{} };
+    window.planState.atencionActual = '';
+
+    if(window.examenFisicoState){
+      window.examenFisicoState.atencionActual = '';
+      window.examenFisicoState.idExamenActual = '';
+    }
+
+    if(window.auroDiagnosticosState){
+      window.auroDiagnosticosState.atencionActual = '';
+      window.auroDiagnosticosState.detalleExamen = null;
+      window.auroDiagnosticosState.diagnosticos = [];
+      window.auroDiagnosticosState.resumenClinico = '';
+      window.auroDiagnosticosState.analisisClinico = '';
+      window.auroDiagnosticosState.conducta = '';
+    }
+
+    /* 2. Limpiar solo estados visuales de consulta; nunca datos guardados. */
+    [
+      'auroLimpiarPlanVisualAntesDeCambiarAtencion',
+      'auroLimpiarDiagnosticos',
+      'auroExamenFisicoLimpiarFormulario'
+    ].forEach(function(nombre){
+      try{
+        if(typeof window[nombre] === 'function') window[nombre]();
+      }catch(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudo ejecutar ' + nombre, error);
+      }
+    });
+
+    try{
+      if(typeof window.cambiarPlanPorAtencion === 'function'){
+        window.cambiarPlanPorAtencion('');
+      }
+    }catch(error){
+      console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Plan.', error);
+    }
+
+    try{
+      if(typeof window.cambiarExamenFisicoPorAtencion === 'function'){
+        window.cambiarExamenFisicoPorAtencion('');
+      }
+    }catch(error){
+      console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Examen Físico.', error);
+    }
+
+    window.dispatchEvent(new CustomEvent('aurosanax:atencion-limpiada', {
+      detail:{
+        id_paciente:idPaciente,
+        id_atencion_anterior:String(opciones.idAnterior || '').trim(),
+        id_atencion_nueva:idAtencion,
+        motivo:String(opciones.motivo || 'cambio_atencion')
+      }
+    }));
+
+    /* 3. Activar inmediatamente la atención nueva como fuente maestra. */
+    atencionActivaId = idAtencion;
     window.planState.atencionActual = idAtencion;
 
-    window.examenFisicoState = window.examenFisicoState || {};
-    window.examenFisicoState.atencionActual = idAtencion;
+    if(window.examenFisicoState){
+      window.examenFisicoState.atencionActual = idAtencion;
+    }
 
     if(window.auroDiagnosticosState){
       window.auroDiagnosticosState.atencionActual = idAtencion;
     }
 
-    /* Evento maestro aditivo: no reemplaza eventos existentes. */
-    window.dispatchEvent(new CustomEvent('aurosanax:contexto-atencion-cambiado', {
-      detail: { ...a, origen: opciones.origen || 'atenciones' }
+    const detalleEvento = { ...a };
+
+    window.dispatchEvent(new CustomEvent('aurosanax:atencion-seleccionada', {
+      detail:detalleEvento
     }));
 
-    if(opciones.evento){
-      window.dispatchEvent(new CustomEvent(opciones.evento, {
-        detail: { ...a }
+    if(opciones.emitirIniciada){
+      window.dispatchEvent(new CustomEvent('aurosanax:atencion-iniciada', {
+        detail:detalleEvento
       }));
     }
 
-    /* La interfaz responde primero; los módulos se sincronizan después. */
-    if(opciones.mostrarDetalle !== false){
-      renderDetalleAtencion(a);
-    }
+    /* 4. Render inmediato y carga diferida igual para Iniciar y Ver. */
+    renderDetalleAtencion(a);
 
-    window.setTimeout(function(){
+    setTimeout(function(){
       try{
         if(typeof window.cambiarPlanPorAtencion === 'function'){
           window.cambiarPlanPorAtencion(idAtencion);
-        }else if(typeof cambiarPlanPorAtencion === 'function'){
-          cambiarPlanPorAtencion(idAtencion);
         }
-      }catch(error){
-        console.warn('AUROSANAX ATENCIONES: no se pudo sincronizar Plan.', error);
-      }
 
-      try{
         if(typeof window.cambiarExamenFisicoPorAtencion === 'function'){
           window.cambiarExamenFisicoPorAtencion(idAtencion);
-        }else if(typeof cambiarExamenFisicoPorAtencion === 'function'){
-          cambiarExamenFisicoPorAtencion(idAtencion);
         }
       }catch(error){
-        console.warn('AUROSANAX ATENCIONES: no se pudo sincronizar Examen Físico.', error);
+        console.warn('AUROSANAX ATENCIONES: error al cargar módulos por atención.', error);
       }
-    }, Number(opciones.demoraModulos || 50));
+    }, 80);
 
-    if(opciones.refrescarRecetas){
-      window.setTimeout(function(){
-        cargarRecetasDesdeSheetsAtenciones(true).then(function(){
-          const actual = leerLocal().find(function(x){
-            return String(x.id_atencion || '') === idAtencion;
-          }) || a;
+    setTimeout(function(){
+      cargarRecetasDesdeSheetsAtenciones(true).then(function(){
+        /* Protección: no repintar si el usuario ya cambió de atención. */
+        if(String(atencionActivaId || '') !== idAtencion) return;
 
-          /* Solo repinta si la atención continúa activa. */
-          if(String(atencionActivaId || '') === idAtencion){
-            renderDetalleAtencion(normalizar(actual));
-          }
-        }).catch(function(error){
-          console.warn('AUROSANAX ATENCIONES: no se pudieron refrescar recetas.', error);
-        });
-      }, Number(opciones.demoraRecetas || 100));
-    }
+        const actual = leerLocal().find(function(item){
+          return String(item.id_atencion || '') === idAtencion;
+        }) || a;
 
-    return a;
+        renderDetalleAtencion(normalizar(actual));
+      }).catch(function(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudieron refrescar recetas.', error);
+      });
+    }, 140);
+
+    return true;
   }
 
   async function crearAtencion(){
@@ -1213,14 +1264,9 @@
 
     const abierta = atencionAbierta(idPaciente);
     if(abierta){
-      sincronizarContextoAtencion(abierta, {
-        origen:'crear-atencion-existente',
-        evento:'aurosanax:atencion-seleccionada',
-        mostrarDetalle:true,
-        refrescarRecetas:true
-      });
+      atencionActivaId = abierta.id_atencion;
       renderAtencionesPaciente();
-      alert('Este paciente ya tiene una atención abierta. Se cargó como atención activa.');
+      alert('Este paciente ya tiene una atención abierta.');
       return abierta;
     }
 
@@ -1313,17 +1359,18 @@
     lista.unshift(nueva);
     guardarLocal(lista);
 
-    sincronizarContextoAtencion(nueva, {
-      origen:'crear-atencion-nueva',
-      evento:'aurosanax:atencion-iniciada',
-      mostrarDetalle:true,
-      refrescarRecetas:false,
-      demoraModulos:50
-    });
-
     if(cita){
       limpiarCitaSeleccionadaAgenda();
     }
+
+    /*
+      La atención recién creada se activa mediante el mismo motor utilizado
+      por el botón Ver. Así ningún módulo conserva el contexto anterior.
+    */
+    sincronizarContextoAtencion(nueva, {
+      motivo:'atencion_creada',
+      emitirIniciada:true
+    });
 
     renderAtencionesPaciente();
     return nueva;
@@ -2022,9 +2069,9 @@
   }
 
   function seleccionarAtencion(idAtencion){
-    const a = leerLocal().find(x =>
-      String(x.id_atencion || '') === String(idAtencion || '')
-    );
+    const a = leerLocal().find(function(item){
+      return String(item.id_atencion || '') === String(idAtencion || '');
+    });
 
     if(!a){
       alert('No se encontró la atención seleccionada.');
@@ -2049,12 +2096,8 @@
     }
 
     sincronizarContextoAtencion(a, {
-      origen:'boton-ver',
-      evento:'aurosanax:atencion-seleccionada',
-      mostrarDetalle:true,
-      refrescarRecetas:true,
-      demoraModulos:50,
-      demoraRecetas:100
+      motivo:'boton_ver',
+      emitirIniciada:false
     });
   }
 
@@ -2587,10 +2630,10 @@
       return lista;
     });
   };
-  window.sincronizarContextoAtencion = sincronizarContextoAtencion;
   window.iniciarAtencionActual = crearAtencion;
   window.finalizarAtencionActual = finalizarAtencion;
   window.seleccionarAtencion = seleccionarAtencion;
+  window.sincronizarContextoAtencion = sincronizarContextoAtencion;
   window.getAtencionActiva = function(){
     if(!atencionActivaId) return null;
     return leerLocal().find(a => String(a.id_atencion) === String(atencionActivaId)) || null;
