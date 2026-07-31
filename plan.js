@@ -2922,10 +2922,10 @@ async function guardarPlanClinicoConUX(btn){
         auroPlanUXGuardarFechaLocal(atn.id, fechaHora);
         auroPlanUXPintarPanelPlanGuardado(fechaHora);
 
-        if (typeof window.auroPlanActualizarMiniStatus === 'function') {
-            window.auroPlanActualizarMiniStatus();
-        } else {
-            auroPlanUXPintarPanelPlanGuardado(fechaHora);
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            setTimeout(function(){
+                auroPlanUXPintarPanelPlanGuardado(fechaHora);
+            }, 300);
         }
 
         if(typeof window.auroPlanMostrarEstadoGuardado === 'function'){
