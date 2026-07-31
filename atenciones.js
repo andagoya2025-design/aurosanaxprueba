@@ -1596,7 +1596,14 @@
 
   function normalizarRecetaAtencion(r){
     r = r || {};
-    return {
+
+    /*
+      AUROSANAX FIX QUIRÚRGICO - RECETAS DENTRO DE ATENCIONES
+      Se conservan TODOS los campos originales de la receta. Atenciones solo
+      completa alias necesarios para su vista, sin eliminar creado_en,
+      actualizado_en, recomendaciones ni otros datos administrados por recetas.js.
+    */
+    return Object.assign({}, r, {
       id_receta: r.id_receta || r.id || '',
       id_paciente: r.id_paciente || r.paciente_id || '',
       id_historia: r.id_historia || '',
@@ -1609,25 +1616,100 @@
       estado: r.estado || 'Emitida',
       paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
       paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || '',
-      numero_consulta: r.numero_consulta || r.consulta || ''
-    };
+      numero_consulta: r.numero_consulta || r.consulta || '',
+      creado_en: r.creado_en || '',
+      actualizado_en: r.actualizado_en || ''
+    });
+  }
+
+  function auroRecetaMarcaTiempoAtenciones(valor){
+    if(!valor) return 0;
+
+    if(Object.prototype.toString.call(valor) === '[object Date]' && !isNaN(valor)){
+      return valor.getTime();
+    }
+
+    const texto = String(valor).trim();
+    if(!texto) return 0;
+
+    /* yyyy-MM-dd HH:mm:ss o ISO, con o sin zona. */
+    let m = texto.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if(m){
+      const directo = Date.parse(texto);
+      if(!isNaN(directo)) return directo;
+      return new Date(
+        Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+        Number(m[4]), Number(m[5]), Number(m[6] || 0)
+      ).getTime();
+    }
+
+    /* dd/MM/yyyy, HH:mm o dd/MM/yyyy HH:mm. */
+    m = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if(m){
+      return new Date(
+        Number(m[3]), Number(m[2]) - 1, Number(m[1]),
+        Number(m[4] || 0), Number(m[5] || 0), Number(m[6] || 0)
+      ).getTime();
+    }
+
+    const parsed = Date.parse(texto);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  function auroRecetaFusionarVersionesAtenciones(local, remota){
+    const l = normalizarRecetaAtencion(local || {});
+    const r = normalizarRecetaAtencion(remota || {});
+
+    const fechaLocal = auroRecetaMarcaTiempoAtenciones(
+      l.actualizado_en || l.creado_en || l.fecha_receta
+    );
+    const fechaRemota = auroRecetaMarcaTiempoAtenciones(
+      r.actualizado_en || r.creado_en || r.fecha_receta
+    );
+
+    /*
+      La versión más reciente gobierna. La otra solo completa campos vacíos.
+      En empate se conserva la copia local, porque puede ser la recién guardada
+      y Google Sheets todavía estar propagando la actualización.
+    */
+    const principal = fechaRemota > fechaLocal ? r : l;
+    const respaldo = fechaRemota > fechaLocal ? l : r;
+    const fusionada = Object.assign({}, respaldo, principal);
+
+    Object.keys(respaldo).forEach(function(campo){
+      if(
+        (fusionada[campo] === '' || fusionada[campo] === null || fusionada[campo] === undefined) &&
+        respaldo[campo] !== '' && respaldo[campo] !== null && respaldo[campo] !== undefined
+      ){
+        fusionada[campo] = respaldo[campo];
+      }
+    });
+
+    return normalizarRecetaAtencion(fusionada);
   }
 
   function mezclarRecetasLocalesYSheets(remotas){
     const mapa = new Map();
 
-    (Array.isArray(remotas) ? remotas : []).forEach(item => {
-      const r = normalizarRecetaAtencion(item);
-      if(r.id_receta){
-        mapa.set(String(r.id_receta), r);
+    /* Primero se registra la copia local completa. */
+    leerRecetasLocales().forEach(item => {
+      const local = normalizarRecetaAtencion(item);
+      if(local.id_receta){
+        mapa.set(String(local.id_receta), local);
       }
     });
 
-    leerRecetasLocales().forEach(item => {
-      const r = normalizarRecetaAtencion(item);
-      if(r.id_receta){
-        mapa.set(String(r.id_receta), Object.assign({}, mapa.get(String(r.id_receta)) || {}, r));
-      }
+    /* La copia remota solo reemplaza si realmente es más reciente. */
+    (Array.isArray(remotas) ? remotas : []).forEach(item => {
+      const remota = normalizarRecetaAtencion(item);
+      if(!remota.id_receta) return;
+
+      const clave = String(remota.id_receta);
+      const local = mapa.get(clave);
+      mapa.set(
+        clave,
+        local ? auroRecetaFusionarVersionesAtenciones(local, remota) : remota
+      );
     });
 
     const mezcladas = Array.from(mapa.values());
