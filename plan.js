@@ -3223,7 +3223,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
             modal.className = 'auro-plan-reset-modal-v25';
             modal.innerHTML = `
               <div class="auro-plan-reset-panel-v25" role="dialog" aria-modal="true">
-                <h5>Restablecer plan clínico</h5>
+                <h5>Limpiar plan clínico</h5>
                 <p>Se limpiará solo el Plan de esta atención.</p>
                 <div class="auro-plan-reset-warning-v25">
                   La receta guardada no se eliminará; deberá actualizarla manualmente.
@@ -3362,7 +3362,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         reset.type = 'button';
         reset.id = 'auroPlanBtnRestablecerV25';
         reset.className = 'btn btn-outline-secondary';
-        reset.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i> Restablecer plan';
+        reset.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i> Limpiar plan';
         reset.addEventListener('click', restablecerPlan);
 
         const undo = document.createElement('button');
