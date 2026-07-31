@@ -2107,20 +2107,39 @@
       recetaAtencionActualId = r.id_atencion || recetaAtencionActualId || '';
 
       const lista = leerRecetasStorage();
-      let idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
+      const ahoraGuardado = fechaHoraEcuadorISO();
+      let idx = lista.findIndex(x =>
+        String(x.id_receta || '').trim() === String(r.id_receta || '').trim()
+      );
 
-      if(!estabaEditando && idx >= 0){
-        r.id_receta = crearIdReceta(atencionMedico.id_medico);
-        idx = lista.findIndex(x => String(x.id_receta) === String(r.id_receta));
-      }
+      /*
+        AUROSANAX FIX QUIRÚRGICO - CREADO_EN / ACTUALIZADO_EN
+        - Una receta NUEVA siempre recibe creado_en y actualizado_en nuevos.
+        - Una ACTUALIZACIÓN conserva creado_en únicamente si coinciden
+          id_receta e id_atencion con el registro realmente existente.
+        - Nunca se hereda creado_en de otra receta, atención o consulta.
+      */
+      const registroExistente = idx >= 0 ? lista[idx] : null;
+      const mismaReceta = !!(
+        estabaEditando &&
+        registroExistente &&
+        String(registroExistente.id_receta || '').trim() === String(r.id_receta || '').trim() &&
+        String(registroExistente.id_atencion || '').trim() === String(r.id_atencion || '').trim()
+      );
 
-      if(estabaEditando && idx >= 0){
-        r.creado_en = lista[idx].creado_en || fechaHoraEcuadorISO();
-        r.actualizado_en = fechaHoraEcuadorISO();
-        lista[idx] = {...lista[idx], ...r};
+      if(mismaReceta){
+        r.creado_en = String(registroExistente.creado_en || '').trim() || ahoraGuardado;
+        r.actualizado_en = ahoraGuardado;
+        lista[idx] = {...registroExistente, ...r};
       }else{
-        r.creado_en = fechaHoraEcuadorISO();
-        r.actualizado_en = fechaHoraEcuadorISO();
+        /* Cualquier inconsistencia de edición se trata como receta nueva segura. */
+        if(!r.id_receta || idx >= 0 || estabaEditando){
+          r.id_receta = crearIdReceta(atencionMedico.id_medico);
+        }
+        r.creado_en = ahoraGuardado;
+        r.actualizado_en = ahoraGuardado;
+        r.forzar_nueva_receta = 'SI';
+        estabaEditando = false;
         lista.unshift(r);
       }
 
