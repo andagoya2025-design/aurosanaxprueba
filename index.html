@@ -4814,6 +4814,76 @@ async function auroHistoriaVincularAtencionPorHistoria(idHistoria, idPaciente){
   }
 }
 
+
+/* =====================================================
+   AUROSANAX FIX QUIRÚRGICO INDEX v40
+   SINCRONIZACIÓN INMEDIATA EXCLUSIVA DEL PLAN POR ATENCIÓN
+   -----------------------------------------------------
+   - Escucha únicamente cambios de atención.
+   - No modifica Diagnóstico, Examen Físico, Recetas ni Anamnesis.
+   - Obliga al Plan a limpiar/cargar la consulta nueva sin pulsar "Ver".
+===================================================== */
+(function instalarPuentePlanAtencionIndex(){
+  if(window.__auroIndexPuentePlanAtencionInstalado) return;
+  window.__auroIndexPuentePlanAtencionInstalado = true;
+
+  let secuenciaPlanAtencion = 0;
+
+  function idAtencionDesdeEvento(evento){
+    const d = evento && evento.detail ? evento.detail : {};
+    return String(
+      d.id_atencion ||
+      d.idAtencion ||
+      d.atencion?.id_atencion ||
+      ''
+    ).trim();
+  }
+
+  function sincronizarSoloPlan(idAtencion){
+    idAtencion = String(idAtencion || '').trim();
+    if(!idAtencion) return;
+
+    const miSecuencia = ++secuenciaPlanAtencion;
+
+    window.planState = window.planState || { atencionActual:'', cache:{} };
+    window.planState.atencionActual = idAtencion;
+
+    /*
+      Se llama directamente aunque planState ya tenga el mismo ID.
+      La función cambiarPlanPorAtencion usa su propio marcador de consulta
+      realmente renderizada y limpia el contenido anterior cuando corresponde.
+    */
+    const ejecutar = function(intentosRestantes){
+      if(miSecuencia !== secuenciaPlanAtencion) return;
+
+      if(typeof window.cambiarPlanPorAtencion === 'function'){
+        window.cambiarPlanPorAtencion(idAtencion);
+
+        if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+          window.auroHistoriaRefrescarEstadoConsultaActiva('hc_plan');
+        }
+        return;
+      }
+
+      if(intentosRestantes > 0){
+        setTimeout(function(){ ejecutar(intentosRestantes - 1); }, 40);
+      }else{
+        console.warn('AUROSANAX INDEX: Plan no estuvo disponible para sincronizar la atención ' + idAtencion + '.');
+      }
+    };
+
+    ejecutar(12);
+  }
+
+  window.addEventListener('aurosanax:atencion-iniciada', function(evento){
+    sincronizarSoloPlan(idAtencionDesdeEvento(evento));
+  });
+
+  window.addEventListener('aurosanax:atencion-seleccionada', function(evento){
+    sincronizarSoloPlan(idAtencionDesdeEvento(evento));
+  });
+})();
+
 function auroVincularPlanConAtencionActualDesdeIndex(){
   try{
     if(typeof window === 'undefined') return '';
