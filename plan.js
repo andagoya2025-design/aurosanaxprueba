@@ -2571,11 +2571,23 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
 
     const idAtencionActual = auroPlanObtenerIdAtencionActivaSeguro();
+    const idAtencionRenderizada = String(
+        window.__auroPlanAtencionRenderizada ||
+        window.planState?.atencionActual ||
+        ''
+    ).trim();
 
-    if(idAtencionActual && idAtencionActual !== idAtencion){
+    if(
+        (idAtencionRenderizada && idAtencionRenderizada !== idAtencion) ||
+        (idAtencionActual && idAtencionActual !== idAtencion)
+    ){
         console.warn(
             'AUROSANAX PLAN: se descartó una respuesta tardía de otra atención.',
-            { solicitada: idAtencion, actual: idAtencionActual }
+            {
+                solicitada: idAtencion,
+                actual: idAtencionActual,
+                renderizada: idAtencionRenderizada
+            }
         );
         return null;
     }
@@ -2732,10 +2744,52 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ============================================================
    AUTO-CARGA AL CAMBIAR CONSULTA / ATENCIÓN
-   AUROSANAX FIX:
-   Desactivado aquí porque cambiarPlanPorAtencion ya carga desde Sheets.
-   Evita doble carga y evita que se mezclen datos entre consultas.
+   AUROSANAX FIX QUIRÚRGICO v22:
+   - Plan escucha directamente los eventos maestros de Atenciones.
+   - La nueva atención se considera fuente autoritativa inmediata.
+   - Limpia el Plan anterior antes de cualquier carga asíncrona.
+   - Evita depender de que el usuario pulse el botón Ver.
 ============================================================ */
+(function instalarSincronizacionInmediataPlanPorAtencion(){
+    if(window.__auroPlanEventosAtencionV22Instalados) return;
+    window.__auroPlanEventosAtencionV22Instalados = true;
+
+    function aplicarContextoPlanDesdeEvento(evento){
+        const detalle = evento && evento.detail && typeof evento.detail === 'object'
+            ? evento.detail
+            : {};
+
+        const idAtencion = String(
+            detalle.id_atencion ||
+            detalle.idAtencion ||
+            ''
+        ).trim();
+
+        if(!idAtencion) return;
+
+        window.planState = window.planState || { atencionActual:'', cache:{} };
+
+        /* La atención emitida por Atenciones manda sobre cualquier estado previo. */
+        window.planState.atencionActual = idAtencion;
+
+        /* Fuerza a cambiarPlanPorAtencion a reconocer el cambio real de pantalla. */
+        if(String(window.__auroPlanAtencionRenderizada || '').trim() !== idAtencion){
+            limpiarPlanTemporal();
+        }
+
+        cambiarPlanPorAtencion(idAtencion);
+
+        if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+            setTimeout(function(){
+                try{ window.auroHistoriaRefrescarEstadoConsultaActiva('hc_plan'); }catch(e){}
+            }, 0);
+        }
+    }
+
+    window.addEventListener('aurosanax:atencion-iniciada', aplicarContextoPlanDesdeEvento);
+    window.addEventListener('aurosanax:atencion-seleccionada', aplicarContextoPlanDesdeEvento);
+    window.addEventListener('aurosanax:atencion-cambiada', aplicarContextoPlanDesdeEvento);
+})();
 
 /* ============================================================
    ESTADO VISUAL BOTÓN GUARDAR PLAN
