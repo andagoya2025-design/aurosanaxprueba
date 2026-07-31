@@ -1218,13 +1218,50 @@
     };
   }
 
+  function recetaTiempoSincronizacion(r){
+    r = r || {};
+    const valor = String(
+      r.actualizado_en ||
+      r.creado_en ||
+      r.fecha_receta ||
+      ''
+    ).trim();
+
+    if(!valor) return 0;
+
+    const directo = Date.parse(valor);
+    if(Number.isFinite(directo)) return directo;
+
+    /*
+      Respaldo para textos históricos tipo:
+      yyyy-MM-dd HH:mm:ss / yyyy-MM-ddTHH:mm:ss
+      Se comparan como una marca numérica estable, sin convertir zona horaria.
+    */
+    const m = valor.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if(m){
+      return Number(
+        m[1] + m[2] + m[3] +
+        m[4] + m[5] + (m[6] || '00')
+      );
+    }
+
+    const soloFecha = valor.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(soloFecha){
+      return Number(soloFecha[1] + soloFecha[2] + soloFecha[3] + '000000');
+    }
+
+    return 0;
+  }
+
   function mezclarRecetasLocalesYSheets(remotas){
     const mapa = new Map();
 
     /*
-      La copia local es respaldo. Google Sheets tiene prioridad
-      para evitar que datos antiguos del navegador sobrescriban
-      recetas ya corregidas en la base.
+      FIX QUIRÚRGICO DE SINCRONIZACIÓN:
+      - La versión más reciente gana por actualizado_en/creado_en.
+      - Google Sheets ya no reemplaza automáticamente una copia local
+        recién guardada con una respuesta remota todavía atrasada.
+      - No cambia IDs, anti-duplicidad, guardado ni estructura de recetas.
     */
     leerRecetasStorage().forEach(item => {
       const r = normalizarRecetaGuardada(item);
@@ -1237,36 +1274,26 @@
       const remota = normalizarRecetaGuardada(item);
       if(!remota.id_receta) return;
 
-      const clave = String(remota.id_receta);
-      const local = mapa.get(clave) || null;
+      const id = String(remota.id_receta);
+      const local = mapa.get(id);
 
       if(!local){
-        mapa.set(clave, remota);
+        mapa.set(id, remota);
         return;
       }
 
-      /*
-        AUROSANAX FIX DEFINITIVO:
-        Google Sheets no reemplaza automáticamente la copia local. Se conserva
-        la versión con la marca temporal más reciente. Esto impide que una
-        respuesta remota atrasada restaure creado_en o un actualizado_en antiguo.
-      */
-      const fechaLocal = String(
-        local.actualizado_en || local.creado_en || local.fecha_receta || ''
-      );
-      const fechaRemota = String(
-        remota.actualizado_en || remota.creado_en || remota.fecha_receta || ''
-      );
+      const tiempoLocal = recetaTiempoSincronizacion(local);
+      const tiempoRemoto = recetaTiempoSincronizacion(remota);
 
-      if(fechaRemota >= fechaLocal){
-        mapa.set(clave, Object.assign({}, local, remota));
+      if(tiempoRemoto > tiempoLocal){
+        mapa.set(id, Object.assign({}, local, remota));
       }else{
-        mapa.set(clave, Object.assign({}, remota, local));
+        mapa.set(id, Object.assign({}, remota, local));
       }
     });
 
     const mezcladas = Array.from(mapa.values()).sort((a,b) =>
-      String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || ''))
+      recetaTiempoSincronizacion(b) - recetaTiempoSincronizacion(a)
     );
 
     guardarRecetasStorage(mezcladas);
@@ -2106,34 +2133,15 @@
       const resultado = await enviarRecetaGoogleSheets(r);
 
       /*
-        AUROSANAX FIX DEFINITIVO - SINCRONIZACIÓN DE HORA DE RECETA
-        -----------------------------------------------------------
-        La receta recién guardada en localStorage contiene el actualizado_en
-        más reciente. No se consulta Google Sheets inmediatamente porque el
-        POST usa mode:'no-cors' y puede finalizar antes de que Sheets exponga
-        la escritura. Una lectura inmediata podía devolver la versión anterior
-        y reemplazar visualmente la hora correcta.
+        FIX QUIRÚRGICO:
+        No recargar inmediatamente desde Google Sheets después del POST.
+        El envío usa mode:'no-cors' y puede terminar antes de que la hoja
+        publique la versión actualizada. La recarga inmediata era la tercera
+        escritura tardía que devolvía la hora anterior al localStorage.
+        Se conserva y renderiza la copia local recién guardada.
       */
       recetasPaginaActual = 1;
       renderHistorialRecetas();
-
-      /*
-        Sincronización diferida no bloqueante. Además, la función de mezcla
-        conserva siempre la versión más reciente por actualizado_en/creado_en,
-        por lo que una respuesta remota atrasada nunca pisa la copia local nueva.
-      */
-      setTimeout(async function(){
-        try{
-          await cargarRecetasDesdeSheets(true);
-          renderHistorialRecetas();
-
-          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-            window.auroPlanActualizarMiniStatus();
-          }
-        }catch(errorSincronizacion){
-          console.warn('AUROSANAX RECETAS: sincronización diferida no completada.', errorSincronizacion);
-        }
-      }, 5000);
 
       if(resultado && resultado.success){
         mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente. Ya fue asociada a la consulta activa.`, 'ok');
