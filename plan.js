@@ -2805,6 +2805,64 @@ function auroPlanUXGuardarFechaLocal(idAtencion, fechaHora){
     }
 }
 
+/* ============================================================
+   AUROSANAX FIX QUIRÚRGICO - FECHA VISUAL DE RECETA
+   - Corrige únicamente la fecha mostrada en la tarjeta del Plan.
+   - Evita que una fecha clínica YYYY-MM-DD sea interpretada como UTC
+     y retroceda al día anterior en Ecuador.
+   - No modifica guardado, Plan, Recetas, Apps Script ni base de datos.
+============================================================ */
+function auroPlanUXFormatearFechaReceta(valor){
+    const texto = String(valor || '').trim();
+    if(!texto) return '';
+
+    /* Fecha clínica sin hora: se conserva literalmente, sin new Date(). */
+    let m = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(m){
+        return m[3] + '/' + m[2] + '/' + m[1];
+    }
+
+    /* Fecha-hora local ya guardada como texto por el ERP. */
+    m = texto.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/);
+    if(m){
+        return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5];
+    }
+
+    /* Formato visual ya recibido desde Sheets. */
+    m = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::\d{2})?)?$/);
+    if(m){
+        const fecha = String(m[1]).padStart(2,'0') + '/' + String(m[2]).padStart(2,'0') + '/' + m[3];
+        return m[4] ? fecha + ' ' + String(m[4]).padStart(2,'0') + ':' + m[5] : fecha;
+    }
+
+    /*
+      Google Sheets puede serializar fecha_receta como medianoche UTC.
+      En ese caso se conserva el día escrito en el ISO para impedir 30 → 29.
+    */
+    m = texto.match(/^(\d{4})-(\d{2})-(\d{2})T00:00:00(?:\.000)?Z$/i);
+    if(m){
+        return m[3] + '/' + m[2] + '/' + m[1];
+    }
+
+    /* Timestamps reales: se muestran en la zona oficial del ERP. */
+    try{
+        const fecha = new Date(texto);
+        if(!isNaN(fecha.getTime())){
+            return fecha.toLocaleString('es-EC', {
+                timeZone:'America/Guayaquil',
+                year:'numeric',
+                month:'2-digit',
+                day:'2-digit',
+                hour:'2-digit',
+                minute:'2-digit',
+                hour12:false
+            }).replace(',', '');
+        }
+    }catch(e){}
+
+    return texto;
+}
+
 function auroPlanUXRecetaTexto(idAtencion){
     try{
         const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
@@ -2819,7 +2877,8 @@ function auroPlanUXRecetaTexto(idAtencion){
         if(!r) return 'Receta pendiente';
 
         const f = r.actualizado_en || r.creado_en || r.fecha_receta || '';
-        return 'Receta guardada: ' + String(f);
+        const fechaVisual = auroPlanUXFormatearFechaReceta(f);
+        return fechaVisual ? ('Receta guardada: ' + fechaVisual) : 'Receta pendiente';
     }catch(e){
         return 'Receta pendiente';
     }
