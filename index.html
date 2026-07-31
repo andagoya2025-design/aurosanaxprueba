@@ -6089,8 +6089,7 @@ async function inicializarERP(){
 </script>
 
 
-<!-- AUROSANAX PRUEBA QUIRÚRGICA: motores legacy de medicamentos/órdenes del Plan bloqueados; plan.js queda como único dueño. -->
-<script id="receta-medicamentos-aurosanax-script" type="text/plain" data-auro-disabled="plan-legacy-prueba">
+<script id="receta-medicamentos-aurosanax-script">
 const MEDICAMENTOS_AUROSANAX_BASE = [
   {cat:'GINECOLOGÍA', med:'Fluconazol', pres:'150 mg cápsula', via:'VO', frec:'dosis única', dur:'1 día', ind:'Tomar según indicación médica'},
   {cat:'GINECOLOGÍA', med:'Clotrimazol', pres:'100 mg óvulos vaginales', via:'Vaginal', frec:'cada noche', dur:'6 días', ind:'Aplicar por la noche'},
@@ -6198,7 +6197,7 @@ if(typeof showScreen==='function'){
   };
 }
 </script>
-<script id="ordenes-medicas-aurosanax-script" type="text/plain" data-auro-disabled="plan-legacy-prueba">
+<script id="ordenes-medicas-aurosanax-script">
 const ORDENES_MEDICAS_BASE = [
   {categoria:'LABORATORIOS', nombre:'Hemograma completo'}, {categoria:'LABORATORIOS', nombre:'Glucosa basal'}, {categoria:'LABORATORIOS', nombre:'Hemoglobina glicosilada HbA1c'}, {categoria:'LABORATORIOS', nombre:'Insulina basal'}, {categoria:'LABORATORIOS', nombre:'Perfil lipídico'}, {categoria:'LABORATORIOS', nombre:'Perfil hepático'}, {categoria:'LABORATORIOS', nombre:'Perfil renal'}, {categoria:'LABORATORIOS', nombre:'Urea'}, {categoria:'LABORATORIOS', nombre:'Creatinina'}, {categoria:'LABORATORIOS', nombre:'Ácido úrico'}, {categoria:'LABORATORIOS', nombre:'Electrolitos séricos'}, {categoria:'LABORATORIOS', nombre:'TSH'}, {categoria:'LABORATORIOS', nombre:'T4 libre'}, {categoria:'LABORATORIOS', nombre:'T3 libre'}, {categoria:'LABORATORIOS', nombre:'Prolactina'}, {categoria:'LABORATORIOS', nombre:'FSH'}, {categoria:'LABORATORIOS', nombre:'LH'}, {categoria:'LABORATORIOS', nombre:'Estradiol'}, {categoria:'LABORATORIOS', nombre:'Progesterona'}, {categoria:'LABORATORIOS', nombre:'Testosterona total'}, {categoria:'LABORATORIOS', nombre:'Testosterona libre'}, {categoria:'LABORATORIOS', nombre:'DHEA-S'}, {categoria:'LABORATORIOS', nombre:'17 hidroxiprogesterona'}, {categoria:'LABORATORIOS', nombre:'Cortisol'}, {categoria:'LABORATORIOS', nombre:'Ferritina'}, {categoria:'LABORATORIOS', nombre:'Hierro sérico'}, {categoria:'LABORATORIOS', nombre:'Vitamina B12'}, {categoria:'LABORATORIOS', nombre:'Vitamina D 25 OH'}, {categoria:'LABORATORIOS', nombre:'Ácido fólico'}, {categoria:'LABORATORIOS', nombre:'PCR ultrasensible'}, {categoria:'LABORATORIOS', nombre:'VSG'}, {categoria:'LABORATORIOS', nombre:'Examen elemental y microscópico de orina'}, {categoria:'LABORATORIOS', nombre:'Urocultivo con antibiograma'}, {categoria:'LABORATORIOS', nombre:'Cultivo de secreción vaginal'}, {categoria:'LABORATORIOS', nombre:'Fresco y gram de secreción vaginal'}, {categoria:'LABORATORIOS', nombre:'Prueba de embarazo en sangre beta-hCG'}, {categoria:'LABORATORIOS', nombre:'Serología VIH'}, {categoria:'LABORATORIOS', nombre:'VDRL'}, {categoria:'LABORATORIOS', nombre:'Hepatitis B HBsAg'}, {categoria:'LABORATORIOS', nombre:'Hepatitis C anticuerpos'}, {categoria:'LABORATORIOS', nombre:'Toxoplasma IgG e IgM'}, {categoria:'LABORATORIOS', nombre:'Rubéola IgG e IgM'}, {categoria:'LABORATORIOS', nombre:'Citomegalovirus IgG e IgM'},
   {categoria:'IMÁGENES', nombre:'Ecografía transvaginal'}, {categoria:'IMÁGENES', nombre:'Ecografía pélvica'}, {categoria:'IMÁGENES', nombre:'Ecografía mamaria bilateral'}, {categoria:'IMÁGENES', nombre:'Mamografía bilateral'}, {categoria:'IMÁGENES', nombre:'Densitometría ósea'}, {categoria:'IMÁGENES', nombre:'Ecografía abdominal'}, {categoria:'IMÁGENES', nombre:'Ecografía renal y vías urinarias'}, {categoria:'IMÁGENES', nombre:'Ecografía tiroidea'}, {categoria:'IMÁGENES', nombre:'Radiografía de tórax'}, {categoria:'IMÁGENES', nombre:'Radiografía de columna lumbar'},
@@ -6792,40 +6791,90 @@ document.addEventListener('click',e=>{
   }
 
   function auroPlanObtenerAtencionActivaResumen(){
+    /*
+      AUROSANAX FIX QUIRÚRGICO:
+      La barra superior del Plan debe usar el ID activo real como fuente maestra.
+      No se confía en un objeto de atención anterior que pueda conservar
+      numero_consulta/estado antiguos durante el cambio rápido de consulta.
+    */
+    let idActivo = '';
+    let objetoActivo = null;
+
+    try{
+      if(typeof window.getIdAtencionActiva === 'function'){
+        idActivo = String(window.getIdAtencionActiva() || '').trim();
+      }
+    }catch(e){}
+
     try{
       if(typeof window.getAtencionActiva === 'function'){
-        const a = window.getAtencionActiva();
-        if(a){
-          return {
-            id: String(a.id_atencion || ''),
-            consulta: a.numero_consulta ? ('#' + a.numero_consulta) : 'activa',
-            estado: String(a.estado_atencion || '').trim()
-          };
+        objetoActivo = window.getAtencionActiva() || null;
+        if(!idActivo && objetoActivo?.id_atencion){
+          idActivo = String(objetoActivo.id_atencion || '').trim();
         }
       }
     }catch(e){}
 
-    try{
-      const id = String(window.planState?.atencionActual || '').trim();
-      if(id){
-        let encontrada = null;
-        try{
-          const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
-          const arr = raw ? JSON.parse(raw) : [];
-          if(Array.isArray(arr)){
-            encontrada = arr.find(a => String(a.id_atencion || '') === id) || null;
-          }
-        }catch(e){}
+    if(!idActivo){
+      idActivo = String(window.planState?.atencionActual || '').trim();
+    }
 
-        return {
-          id: id,
-          consulta: encontrada && encontrada.numero_consulta ? ('#' + encontrada.numero_consulta) : 'activa',
-          estado: encontrada ? String(encontrada.estado_atencion || '').trim() : ''
-        };
-      }
+    if(!idActivo){
+      return { id:'', consulta:'sin atención activa', estado:'' };
+    }
+
+    let encontrada = null;
+    const fuentes = [];
+
+    try{
+      if(Array.isArray(window.atenciones)) fuentes.push(window.atenciones);
+      if(Array.isArray(window.atencionesPacienteActual)) fuentes.push(window.atencionesPacienteActual);
+      if(Array.isArray(window.listaAtenciones)) fuentes.push(window.listaAtenciones);
+      if(Array.isArray(window.atencionesClinicas)) fuentes.push(window.atencionesClinicas);
     }catch(e){}
 
-    return { id:'', consulta:'sin atención activa', estado:'' };
+    for(const lista of fuentes){
+      encontrada = lista.find(a => String(a?.id_atencion || '').trim() === idActivo) || null;
+      if(encontrada) break;
+    }
+
+    if(!encontrada){
+      try{
+        const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+        const arr = raw ? JSON.parse(raw) : [];
+        if(Array.isArray(arr)){
+          encontrada = arr.find(a => String(a?.id_atencion || '').trim() === idActivo) || null;
+        }
+      }catch(e){}
+    }
+
+    if(
+      !encontrada &&
+      objetoActivo &&
+      String(objetoActivo.id_atencion || '').trim() === idActivo
+    ){
+      encontrada = objetoActivo;
+    }
+
+    const numero = String(
+      encontrada?.numero_consulta ||
+      encontrada?.nro_consulta ||
+      encontrada?.consulta_numero ||
+      encontrada?.numero ||
+      ''
+    ).trim();
+
+    const estado = String(
+      encontrada?.estado_atencion ||
+      encontrada?.estado ||
+      ''
+    ).trim();
+
+    return {
+      id: idActivo,
+      consulta: numero ? ('#' + numero) : 'activa',
+      estado: estado
+    };
   }
 
   function auroPlanReiniciarEstadoVisualPorCambioAtencion(){
@@ -6905,6 +6954,31 @@ document.addEventListener('click',e=>{
       '<span class="' + (recetaFecha ? 'ok' : 'muted') + '"><i class="bi bi-capsule"></i> ' + auroPlanEscapeSeguro(recetaTexto) + '</span>' +
       (extra ? '<span class="muted"><i class="bi bi-info-circle"></i> ' + auroPlanEscapeSeguro(extra) + '</span>' : '');
   };
+
+
+  function auroPlanRefrescarMiniStatusPorCambioAtencion(){
+    /* Limpia el rótulo viejo de inmediato y lo recalcula cuando la nueva
+       atención ya fue incorporada a las listas locales. */
+    const box = document.getElementById('auroPlanMiniStatus');
+    if(box){
+      box.innerHTML =
+        '<span><i class="bi bi-journal-medical"></i> Consulta activa</span>' +
+        '<span class="warn"><i class="bi bi-list-check"></i> Plan pendiente de guardar</span>' +
+        '<span class="muted"><i class="bi bi-capsule"></i> Receta pendiente</span>';
+    }
+
+    [0, 120, 350, 800].forEach(function(ms){
+      window.setTimeout(function(){
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+          window.auroPlanActualizarMiniStatus();
+        }
+      }, ms);
+    });
+  }
+
+  document.addEventListener('aurosanax:atencion-iniciada', auroPlanRefrescarMiniStatusPorCambioAtencion);
+  document.addEventListener('aurosanax:atencion-seleccionada', auroPlanRefrescarMiniStatusPorCambioAtencion);
+  document.addEventListener('aurosanax:atencion-creada', auroPlanRefrescarMiniStatusPorCambioAtencion);
 
   window.auroPlanActualizarBotonesHistoria = function(){
     const esEdicion = !!editingHistoryId;
