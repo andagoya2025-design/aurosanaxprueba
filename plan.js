@@ -2805,64 +2805,6 @@ function auroPlanUXGuardarFechaLocal(idAtencion, fechaHora){
     }
 }
 
-/* ============================================================
-   AUROSANAX FIX QUIRÚRGICO - FECHA VISUAL DE RECETA
-   - Corrige únicamente la fecha mostrada en la tarjeta del Plan.
-   - Evita que una fecha clínica YYYY-MM-DD sea interpretada como UTC
-     y retroceda al día anterior en Ecuador.
-   - No modifica guardado, Plan, Recetas, Apps Script ni base de datos.
-============================================================ */
-function auroPlanUXFormatearFechaReceta(valor){
-    const texto = String(valor || '').trim();
-    if(!texto) return '';
-
-    /* Fecha clínica sin hora: se conserva literalmente, sin new Date(). */
-    let m = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if(m){
-        return m[3] + '/' + m[2] + '/' + m[1];
-    }
-
-    /* Fecha-hora local ya guardada como texto por el ERP. */
-    m = texto.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/);
-    if(m){
-        return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5];
-    }
-
-    /* Formato visual ya recibido desde Sheets. */
-    m = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::\d{2})?)?$/);
-    if(m){
-        const fecha = String(m[1]).padStart(2,'0') + '/' + String(m[2]).padStart(2,'0') + '/' + m[3];
-        return m[4] ? fecha + ' ' + String(m[4]).padStart(2,'0') + ':' + m[5] : fecha;
-    }
-
-    /*
-      Google Sheets puede serializar fecha_receta como medianoche UTC.
-      En ese caso se conserva el día escrito en el ISO para impedir 30 → 29.
-    */
-    m = texto.match(/^(\d{4})-(\d{2})-(\d{2})T00:00:00(?:\.000)?Z$/i);
-    if(m){
-        return m[3] + '/' + m[2] + '/' + m[1];
-    }
-
-    /* Timestamps reales: se muestran en la zona oficial del ERP. */
-    try{
-        const fecha = new Date(texto);
-        if(!isNaN(fecha.getTime())){
-            return fecha.toLocaleString('es-EC', {
-                timeZone:'America/Guayaquil',
-                year:'numeric',
-                month:'2-digit',
-                day:'2-digit',
-                hour:'2-digit',
-                minute:'2-digit',
-                hour12:false
-            }).replace(',', '');
-        }
-    }catch(e){}
-
-    return texto;
-}
-
 function auroPlanUXRecetaTexto(idAtencion){
     try{
         const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
@@ -2877,8 +2819,7 @@ function auroPlanUXRecetaTexto(idAtencion){
         if(!r) return 'Receta pendiente';
 
         const f = r.actualizado_en || r.creado_en || r.fecha_receta || '';
-        const fechaVisual = auroPlanUXFormatearFechaReceta(f);
-        return fechaVisual ? ('Receta guardada: ' + fechaVisual) : 'Receta pendiente';
+        return 'Receta guardada: ' + String(f);
     }catch(e){
         return 'Receta pendiente';
     }
@@ -2972,6 +2913,175 @@ async function guardarPlanClinicoConUX(btn){
 
 window.guardarPlanClinicoConUX = guardarPlanClinicoConUX;
 window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
+
+
+
+/* ============================================================
+   AUROSANAX FIX QUIRÚRGICO - HORA TEMPORAL DE RECETA EN PLAN
+   Versión: Plan 23
+   Alcance exclusivo:
+   - Corrige la hora mostrada inmediatamente después de guardar/actualizar
+     una receta en la tarjeta pequeña del módulo Plan.
+   - Respeta timestamps locales con offset -05:00 sin restar cinco horas.
+   - Convierte correctamente timestamps UTC reales terminados en Z.
+   - Conserva fechas locales guardadas como texto por Google Sheets.
+   - No modifica guardado, recetas, CIE, diagnóstico, Apps Script,
+     navegación, botones ni estructura del Plan.
+============================================================ */
+
+function auroPlanUXFormatearFechaHoraRecetaSegura(valor){
+    const texto = String(valor || '').trim();
+    if(!texto) return '';
+
+    let m;
+
+    m = texto.match(
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?-05:00$/i
+    );
+    if(m){
+        return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5];
+    }
+
+    m = texto.match(
+        /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/
+    );
+    if(m){
+        return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5];
+    }
+
+    m = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(m){
+        return m[3] + '/' + m[2] + '/' + m[1];
+    }
+
+    m = texto.match(
+        /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::\d{2})?)?$/
+    );
+    if(m){
+        const fecha =
+            String(m[1]).padStart(2,'0') + '/' +
+            String(m[2]).padStart(2,'0') + '/' +
+            m[3];
+
+        return m[4]
+            ? fecha + ' ' + String(m[4]).padStart(2,'0') + ':' + m[5]
+            : fecha;
+    }
+
+    if(/Z$/i.test(texto) || /[+-]\d{2}:\d{2}$/i.test(texto)){
+        try{
+            const fecha = new Date(texto);
+
+            if(!isNaN(fecha.getTime())){
+                return fecha.toLocaleString('es-EC', {
+                    timeZone:'America/Guayaquil',
+                    year:'numeric',
+                    month:'2-digit',
+                    day:'2-digit',
+                    hour:'2-digit',
+                    minute:'2-digit',
+                    hour12:false
+                }).replace(',', '');
+            }
+        }catch(e){}
+    }
+
+    return texto;
+}
+
+function auroPlanUXRecetaTexto(idAtencion){
+    try{
+        const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
+        const arr = raw ? JSON.parse(raw) : [];
+
+        if(!Array.isArray(arr)) return 'Receta pendiente';
+
+        const recetas = arr
+            .filter(r =>
+                String(r.id_atencion || '').trim() ===
+                String(idAtencion || '').trim()
+            )
+            .sort((a,b) =>
+                String(
+                    b.actualizado_en ||
+                    b.creado_en ||
+                    b.fecha_receta ||
+                    ''
+                ).localeCompare(
+                    String(
+                        a.actualizado_en ||
+                        a.creado_en ||
+                        a.fecha_receta ||
+                        ''
+                    )
+                )
+            );
+
+        const receta = recetas[0];
+        if(!receta) return 'Receta pendiente';
+
+        const fecha =
+            receta.actualizado_en ||
+            receta.creado_en ||
+            receta.fecha_receta ||
+            '';
+
+        const visual = auroPlanUXFormatearFechaHoraRecetaSegura(fecha);
+
+        return visual
+            ? 'Receta guardada: ' + visual
+            : 'Receta pendiente';
+
+    }catch(e){
+        return 'Receta pendiente';
+    }
+}
+
+window.auroPlanActualizarMiniStatus = function(){
+    const box = document.getElementById('auroPlanMiniStatus');
+    if(!box) return;
+
+    const atn = auroPlanUXAtencionResumen();
+
+    let planFecha = '';
+
+    try{
+        const raw = localStorage.getItem(
+            'auro_plan_ultimas_actualizaciones_v1'
+        );
+
+        const mapa = raw ? JSON.parse(raw) : {};
+        planFecha = atn.id && mapa[atn.id]
+            ? String(mapa[atn.id])
+            : '';
+    }catch(e){}
+
+    const recetaTexto = auroPlanUXRecetaTexto(atn.id);
+
+    const planTexto = planFecha
+        ? 'Plan actualizado: ' + planFecha
+        : 'Plan pendiente de guardar';
+
+    box.innerHTML =
+        '<span><i class="bi bi-journal-medical"></i> Consulta ' +
+        auroPlanUXEscape(atn.consulta) +
+        '</span>' +
+        '<span class="' + (planFecha ? 'ok' : 'muted') + '">' +
+        '<i class="bi bi-list-check"></i> ' +
+        auroPlanUXEscape(planTexto) +
+        '</span>' +
+        '<span class="' +
+        (recetaTexto.includes('guardada') ? 'ok' : 'muted') +
+        '">' +
+        '<i class="bi bi-capsule"></i> ' +
+        auroPlanUXEscape(recetaTexto) +
+        '</span>';
+};
+
+window.auroPlanUXFormatearFechaHoraRecetaSegura =
+    auroPlanUXFormatearFechaHoraRecetaSegura;
+
+/* ========== FIN FIX QUIRÚRGICO HORA TEMPORAL RECETA ========== */
 
 /* ============================================================
    AUROSANAX PLAN - CORRECCIÓN NAVEGACIÓN MISMA ATENCIÓN
