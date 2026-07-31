@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO ATENCIONES
    Archivo: atenciones.js
-   Versión: 2.5 botón Iniciar reutiliza flujo oficial del botón Ver
+   Versión: 2.4 contexto maestro enriquecido no invasivo + resumen premium + paginación segura
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -1221,6 +1221,33 @@
     /* 4. Render inmediato y carga diferida igual para Iniciar y Ver. */
     renderDetalleAtencion(a);
 
+    /*
+      AUROSANAX FIX QUIRÚRGICO:
+      El botón Iniciar está enlazado directamente a la función privada
+      crearAtencion(), no al alias window.iniciarAtencionActual que Index
+      intenta envolver. Por eso la barra visual del Plan no se refrescaba
+      hasta pulsar Ver. Se actualiza aquí, dentro del motor real compartido
+      por Iniciar y Ver, usando ya la nueva atención activa.
+    */
+    try{
+      if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+        window.auroPlanActualizarMiniStatus();
+      }
+    }catch(error){
+      console.warn('AUROSANAX ATENCIONES: no se pudo refrescar el estado visual del Plan.', error);
+    }
+
+    setTimeout(function(){
+      try{
+        if(String(atencionActivaId || '') !== idAtencion) return;
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+          window.auroPlanActualizarMiniStatus();
+        }
+      }catch(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudo confirmar el estado visual del Plan.', error);
+      }
+    }, 220);
+
     setTimeout(function(){
       try{
         if(typeof window.cambiarPlanPorAtencion === 'function'){
@@ -1364,25 +1391,15 @@
     }
 
     /*
-      AUROSANAX FIX QUIRÚRGICO BOTÓN INICIAR v15:
-      Después de crear la atención, el botón Iniciar ejecuta exactamente el
-      mismo flujo real que el botón Ver. No se mantiene una ruta paralela de
-      sincronización, evitando que Plan conserve la consulta anterior.
+      La atención recién creada se activa mediante el mismo motor utilizado
+      por el botón Ver. Así ningún módulo conserva el contexto anterior.
     */
-    window.dispatchEvent(new CustomEvent('aurosanax:atencion-iniciada', {
-      detail: { ...nueva }
-    }));
+    sincronizarContextoAtencion(nueva, {
+      motivo:'atencion_creada',
+      emitirIniciada:true
+    });
 
     renderAtencionesPaciente();
-
-    /*
-      Se difiere un ciclo para asegurar que la lista y el DOM ya estén
-      actualizados. seleccionarAtencion() es la función oficial del botón Ver.
-    */
-    setTimeout(function(){
-      seleccionarAtencion(nueva.id_atencion);
-    }, 0);
-
     return nueva;
   }
 
