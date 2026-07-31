@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.11';
+  const VERSION = '3.6.12';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2015,14 +2015,123 @@ Función:
     }
 
     try {
+      if (typeof window.getContextoAtencionActual === 'function') {
+        const contexto = window.getContextoAtencionActual();
+        const id = texto(contexto?.id_atencion);
+        if (id) return id;
+      } else if (typeof window.obtenerContextoAtencionActual === 'function') {
+        const contexto = window.obtenerContextoAtencionActual();
+        const id = texto(contexto?.id_atencion);
+        if (id) return id;
+      }
+    } catch (error) {}
+
+    try {
       if (typeof window.obtenerAtencionActiva === 'function') {
         const atencion = window.obtenerAtencionActiva();
+        const id = texto(atencion?.id_atencion);
+        if (id) return id;
+      } else if (typeof window.getAtencionActiva === 'function') {
+        const atencion = window.getAtencionActiva();
         const id = texto(atencion?.id_atencion);
         if (id) return id;
       }
     } catch (error) {}
 
     return '';
+  }
+
+  /* ============================================================
+     AUROSANAX ANAMNESIS v3.6.12
+     SINCRONIZACIÓN QUIRÚRGICA PREVIA AL GUARDADO
+     ------------------------------------------------------------
+     Revalida el contexto maestro en el instante de guardar para
+     evitar que una atención recién iniciada quede temporalmente
+     sin id_atencion, id_paciente o id_historia en Anamnesis.
+     No modifica Atenciones, Index, Apps Script ni Google Sheets.
+  ============================================================ */
+
+  function auroDormirAnamnesis(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function auroLeerContextoMaestroAnamnesis() {
+    const candidatos = [];
+
+    try {
+      if (typeof window.getContextoAtencionActual === 'function') {
+        candidatos.push(window.getContextoAtencionActual());
+      } else if (typeof window.obtenerContextoAtencionActual === 'function') {
+        candidatos.push(window.obtenerContextoAtencionActual());
+      }
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: no se pudo consultar el contexto maestro al guardar.', error);
+    }
+
+    try {
+      if (typeof window.getAtencionActiva === 'function') {
+        candidatos.push(window.getAtencionActiva());
+      } else if (typeof window.obtenerAtencionActiva === 'function') {
+        candidatos.push(window.obtenerAtencionActiva());
+      }
+    } catch (error) {
+      console.warn('AUROSANAX Anamnesis: no se pudo consultar la atención activa al guardar.', error);
+    }
+
+    candidatos.push(state.contextoAtencion);
+
+    const contexto = candidatos.find(item =>
+      item && typeof item === 'object' && texto(item.id_atencion)
+    ) || {};
+
+    return {
+      id_atencion: texto(contexto.id_atencion || contexto.idAtencion || contexto.atencion_id),
+      id_paciente: texto(contexto.id_paciente || contexto.idPaciente || contexto.paciente_id),
+      id_historia: texto(contexto.id_historia || contexto.idHistoria || contexto.historia_id),
+      id_medico: texto(contexto.id_medico || contexto.idMedico || contexto.medico_id),
+      detalle: contexto
+    };
+  }
+
+  async function auroAsegurarContextoGuardadoAnamnesis(intentos = 5, esperaMs = 250) {
+    for (let intento = 1; intento <= intentos; intento += 1) {
+      const contexto = auroLeerContextoMaestroAnamnesis();
+
+      if (contexto.id_atencion) state.idAtencionActual = contexto.id_atencion;
+      if (contexto.id_paciente) state.idPacienteActual = contexto.id_paciente;
+      if (contexto.id_historia) state.idHistoriaActual = contexto.id_historia;
+
+      state.contextoAtencion = {
+        ...state.contextoAtencion,
+        ...(contexto.detalle || {}),
+        id_atencion: contexto.id_atencion || state.idAtencionActual,
+        id_paciente: contexto.id_paciente || state.idPacienteActual,
+        id_historia: contexto.id_historia || state.idHistoriaActual,
+        id_medico: contexto.id_medico || state.contextoAtencion?.id_medico || ''
+      };
+
+      const valido =
+        texto(state.idAtencionActual) &&
+        texto(state.idPacienteActual) &&
+        texto(state.idHistoriaActual);
+
+      if (valido) {
+        window.auroAtencionSeleccionadaId = texto(state.idAtencionActual);
+        return {
+          success: true,
+          id_atencion: texto(state.idAtencionActual),
+          id_paciente: texto(state.idPacienteActual),
+          id_historia: texto(state.idHistoriaActual)
+        };
+      }
+
+      if (intento < intentos) await auroDormirAnamnesis(esperaMs);
+    }
+
+    return {
+      success: false,
+      message: 'La atención todavía no terminó de sincronizarse. Los datos permanecen en pantalla; vuelva a guardar.'
+    };
   }
 
   function auroClaveControlAnamnesis(control, indice) {
@@ -2209,6 +2318,39 @@ Función:
     }
   }
 
+  function auroCoincideAnamnesisGuardada(registro, data) {
+    if (!registro || !data) return false;
+
+    return (
+      texto(registro.id_atencion) === texto(data.id_atencion) &&
+      texto(registro.motivo_consulta) === texto(data.motivo_consulta) &&
+      texto(registro.enfermedad_actual) === texto(data.enfermedad_actual)
+    );
+  }
+
+  async function auroConfirmarAnamnesisSheets(data, intentos = 5, esperaMs = 350) {
+    for (let intento = 1; intento <= intentos; intento += 1) {
+      if (intento > 1) await auroDormirAnamnesis(esperaMs);
+
+      try {
+        const registro = await auroBuscarAnamnesisSheets(data.id_atencion);
+        if (auroCoincideAnamnesisGuardada(registro, data)) {
+          return { success: true, confirmado: true, registro };
+        }
+      } catch (error) {
+        if (intento === intentos) {
+          console.warn('AUROSANAX Anamnesis: no se pudo confirmar el guardado remoto.', error);
+        }
+      }
+    }
+
+    return {
+      success: false,
+      confirmado: false,
+      message: 'La anamnesis quedó respaldada localmente, pero no se pudo confirmar todavía en Google Sheets.'
+    };
+  }
+
   async function auroEnviarAnamnesisSheets(data) {
     const api = obtenerApiUrl();
     if (!api || !data?.id_atencion || !auroTieneContenidoAnamnesis(data)) {
@@ -2230,7 +2372,7 @@ Función:
         })
       });
 
-      return { success: true };
+      return await auroConfirmarAnamnesisSheets(data);
     } catch (error) {
       console.warn('AUROSANAX Anamnesis: respaldo remoto no disponible.', error);
       return { success: false, error };
@@ -2238,10 +2380,23 @@ Función:
   }
 
   async function guardarAnamnesisPorAtencion() {
+    const contexto = await auroAsegurarContextoGuardadoAnamnesis();
+    if (!contexto.success) return contexto;
+
     const data = guardarAnamnesisTemporal();
-    if (!data) return { success: false, message: 'No existe una atención activa.' };
-    await auroEnviarAnamnesisSheets(data);
-    return { success: true, data };
+    if (!data) {
+      return {
+        success: false,
+        message: 'No fue posible preparar la anamnesis de la atención activa.'
+      };
+    }
+
+    const remoto = await auroEnviarAnamnesisSheets(data);
+    return {
+      ...remoto,
+      data,
+      success: remoto.success === true
+    };
   }
 
   async function auroBuscarAnamnesisSheets(idAtencion) {
@@ -2374,10 +2529,16 @@ Función:
     if (state.restaurandoAtencion || !auroObtenerIdAtencionAnamnesis()) return;
 
     clearTimeout(state.guardadoPendiente);
-    state.guardadoPendiente = setTimeout(() => {
+    state.guardadoPendiente = setTimeout(async () => {
+      const contexto = await auroAsegurarContextoGuardadoAnamnesis(3, 250);
+      if (!contexto.success) return;
+
       const data = guardarAnamnesisTemporal();
       if (data && auroTieneContenidoAnamnesis(data)) {
-        auroEnviarAnamnesisSheets(data);
+        const resultado = await auroEnviarAnamnesisSheets(data);
+        if (!resultado.success && !resultado.omitido) {
+          console.warn('AUROSANAX Anamnesis: autoguardado pendiente de confirmación.', resultado);
+        }
       }
     }, 900);
   }
