@@ -2859,235 +2859,24 @@ function auroPlanUXGuardarFechaLocal(idAtencion, fechaHora){
     }
 }
 
-/*
-  AUROSANAX FIX VISUAL RECETA:
-  - Conserva intacta la lógica anti-duplicidad y el id_receta.
-  - La barra del Plan muestra actualizado_en antes que creado_en.
-  - Las fechas locales sin zona horaria NO se convierten como UTC.
-  - Después de Guardar receta, refresca la barra cuando el almacenamiento
-    local recibe la respuesta actualizada del servidor.
-*/
-function auroPlanUXFechaRecetaValor(receta){
-    return String(
-        receta?.actualizado_en ||
-        receta?.creado_en ||
-        receta?.fecha_receta ||
-        ''
-    ).trim();
-}
-
-function auroPlanUXFechaComparable(valor){
-    const txt = String(valor || '').trim();
-    if(!txt) return 0;
-
-    /* Fecha clínica local: YYYY-MM-DD H:mm:ss o YYYY-MM-DD HH:mm:ss. */
-    const local = txt.match(
-        /^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/
-    );
-
-    if(local){
-        return (
-            Number(local[1]) * 10000000000 +
-            Number(local[2]) * 100000000 +
-            Number(local[3]) * 1000000 +
-            Number(local[4]) * 10000 +
-            Number(local[5]) * 100 +
-            Number(local[6] || 0)
-        );
-    }
-
-    const epoch = Date.parse(txt);
-    return Number.isFinite(epoch) ? epoch : 0;
-}
-
-function auroPlanUXFormatearFechaReceta(valor){
-    const txt = String(valor || '').trim();
-    if(!txt) return '';
-
-    /*
-      Si Sheets/Apps Script entrega una fecha clínica sin sufijo de zona,
-      se interpreta como hora local ya guardada. No se aplica desplazamiento.
-    */
-    const local = txt.match(
-        /^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/
-    );
-
-    if(local){
-        const pad = n => String(n).padStart(2, '0');
-        return (
-            pad(local[3]) + '/' +
-            pad(local[2]) + '/' +
-            local[1] + ', ' +
-            pad(local[4]) + ':' +
-            pad(local[5])
-        );
-    }
-
-    /*
-      Si el valor sí incluye zona horaria (Z o ±HH:mm), se presenta
-      explícitamente en America/Guayaquil.
-    */
-    const fecha = new Date(txt);
-    if(!Number.isNaN(fecha.getTime())){
-        try{
-            return new Intl.DateTimeFormat('es-EC', {
-                timeZone:'America/Guayaquil',
-                year:'numeric',
-                month:'2-digit',
-                day:'2-digit',
-                hour:'2-digit',
-                minute:'2-digit',
-                hour12:false
-            }).format(fecha);
-        }catch(e){
-            return fecha.toLocaleString('es-EC', {hour12:false});
-        }
-    }
-
-    return txt;
-}
-
-function auroPlanUXObtenerRecetaAtencion(idAtencion){
+function auroPlanUXRecetaTexto(idAtencion){
     try{
         const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
         const arr = raw ? JSON.parse(raw) : [];
-        if(!Array.isArray(arr)) return null;
+        if(!Array.isArray(arr)) return 'Receta pendiente';
 
         const recetas = arr
-            .filter(r =>
-                String(r.id_atencion || '').trim() ===
-                String(idAtencion || '').trim()
-            )
-            .sort((a,b) =>
-                auroPlanUXFechaComparable(auroPlanUXFechaRecetaValor(b)) -
-                auroPlanUXFechaComparable(auroPlanUXFechaRecetaValor(a))
-            );
+            .filter(r => String(r.id_atencion || '').trim() === String(idAtencion || '').trim())
+            .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || '')));
 
-        return recetas[0] || null;
+        const r = recetas[0];
+        if(!r) return 'Receta pendiente';
+
+        const f = r.actualizado_en || r.creado_en || r.fecha_receta || '';
+        return 'Receta guardada: ' + String(f);
     }catch(e){
-        return null;
+        return 'Receta pendiente';
     }
-}
-
-function auroPlanUXRecetaTexto(idAtencion){
-    const receta = auroPlanUXObtenerRecetaAtencion(idAtencion);
-    if(!receta) return 'Receta pendiente';
-
-    const fecha = auroPlanUXFormatearFechaReceta(
-        auroPlanUXFechaRecetaValor(receta)
-    );
-
-    return fecha
-        ? 'Receta guardada: ' + fecha
-        : 'Receta guardada';
-}
-
-function auroPlanUXFechaPlanActual(idAtencion){
-    try{
-        const raw = localStorage.getItem('auro_plan_ultimas_actualizaciones_v1');
-        const mapa = raw ? JSON.parse(raw) : {};
-        return String(mapa?.[idAtencion] || '').trim();
-    }catch(e){
-        return '';
-    }
-}
-
-function auroPlanUXRefrescarEstadoReceta(idAtencion){
-    const atn = auroPlanUXAtencionResumen();
-    const idActual = String(atn.id || '').trim();
-    const idEsperado = String(idAtencion || idActual).trim();
-
-    if(!idActual || idActual !== idEsperado) return;
-
-    const fechaPlan = auroPlanUXFechaPlanActual(idActual);
-    auroPlanUXPintarPanelPlanGuardado(fechaPlan || 'Pendiente');
-}
-
-function auroPlanUXProgramarRefrescoReceta(idAtencion){
-    const tiempos = [0, 250, 700, 1400, 2500, 4000, 6500];
-
-    tiempos.forEach(ms => {
-        setTimeout(function(){
-            auroPlanUXRefrescarEstadoReceta(idAtencion);
-        }, ms);
-    });
-}
-
-function auroPlanUXInstalarRefrescoGuardarReceta(){
-    if(window.__auroPlanRefrescoRecetaV23Instalado) return;
-    window.__auroPlanRefrescoRecetaV23Instalado = true;
-
-    /*
-      Respaldo visual por clic: no guarda, no crea recetas y no altera
-      el flujo original. Solo observa cuándo termina de actualizarse
-      localStorage y repinta la barra del Plan.
-    */
-    document.addEventListener('click', function(evento){
-        const boton = evento.target?.closest?.('button');
-        if(!boton) return;
-
-        const accion = String(boton.getAttribute('onclick') || '');
-        const texto = String(boton.textContent || '').toLowerCase();
-
-        const esGuardarReceta =
-            accion.includes('guardarRecetaERP') ||
-            texto.includes('guardar receta');
-
-        if(!esGuardarReceta) return;
-
-        const atn = auroPlanUXAtencionResumen();
-        if(atn.id){
-            auroPlanUXProgramarRefrescoReceta(atn.id);
-        }
-    }, true);
-
-    /*
-      Envoltura no invasiva del flujo real cuando guardarRecetaERP
-      ya está disponible. Conserva todos sus argumentos, resultado,
-      validaciones y protección anti-duplicidad.
-    */
-    let intentos = 0;
-    const timer = setInterval(function(){
-        intentos++;
-
-        const original = window.guardarRecetaERP;
-
-        if(
-            typeof original === 'function' &&
-            original.__auroPlanUXEnvuelta !== true
-        ){
-            const envuelta = async function(){
-                const atn = auroPlanUXAtencionResumen();
-                const resultado = await original.apply(this, arguments);
-
-                if(atn.id){
-                    auroPlanUXProgramarRefrescoReceta(atn.id);
-                }
-
-                return resultado;
-            };
-
-            envuelta.__auroPlanUXEnvuelta = true;
-            envuelta.__auroPlanUXOriginal = original;
-            window.guardarRecetaERP = envuelta;
-            clearInterval(timer);
-            return;
-        }
-
-        if(intentos >= 40){
-            clearInterval(timer);
-        }
-    }, 250);
-}
-
-if(document.readyState === 'loading'){
-    document.addEventListener(
-        'DOMContentLoaded',
-        auroPlanUXInstalarRefrescoGuardarReceta,
-        {once:true}
-    );
-}else{
-    auroPlanUXInstalarRefrescoGuardarReceta();
 }
 
 function auroPlanUXPintarPanelPlanGuardado(fechaHora){
@@ -3133,10 +2922,10 @@ async function guardarPlanClinicoConUX(btn){
         auroPlanUXGuardarFechaLocal(atn.id, fechaHora);
         auroPlanUXPintarPanelPlanGuardado(fechaHora);
 
-        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-            setTimeout(function(){
-                auroPlanUXPintarPanelPlanGuardado(fechaHora);
-            }, 300);
+        if (typeof window.auroPlanActualizarMiniStatus === 'function') {
+            window.auroPlanActualizarMiniStatus();
+        } else {
+            auroPlanUXPintarPanelPlanGuardado(fechaHora);
         }
 
         if(typeof window.auroPlanMostrarEstadoGuardado === 'function'){
