@@ -6089,7 +6089,8 @@ async function inicializarERP(){
 </script>
 
 
-<script id="receta-medicamentos-aurosanax-script">
+<!-- AUROSANAX PRUEBA QUIRÚRGICA: motores legacy de medicamentos/órdenes del Plan bloqueados; plan.js queda como único dueño. -->
+<script id="receta-medicamentos-aurosanax-script" type="text/plain" data-auro-disabled="plan-legacy-prueba">
 const MEDICAMENTOS_AUROSANAX_BASE = [
   {cat:'GINECOLOGÍA', med:'Fluconazol', pres:'150 mg cápsula', via:'VO', frec:'dosis única', dur:'1 día', ind:'Tomar según indicación médica'},
   {cat:'GINECOLOGÍA', med:'Clotrimazol', pres:'100 mg óvulos vaginales', via:'Vaginal', frec:'cada noche', dur:'6 días', ind:'Aplicar por la noche'},
@@ -6197,7 +6198,7 @@ if(typeof showScreen==='function'){
   };
 }
 </script>
-<script id="ordenes-medicas-aurosanax-script">
+<script id="ordenes-medicas-aurosanax-script" type="text/plain" data-auro-disabled="plan-legacy-prueba">
 const ORDENES_MEDICAS_BASE = [
   {categoria:'LABORATORIOS', nombre:'Hemograma completo'}, {categoria:'LABORATORIOS', nombre:'Glucosa basal'}, {categoria:'LABORATORIOS', nombre:'Hemoglobina glicosilada HbA1c'}, {categoria:'LABORATORIOS', nombre:'Insulina basal'}, {categoria:'LABORATORIOS', nombre:'Perfil lipídico'}, {categoria:'LABORATORIOS', nombre:'Perfil hepático'}, {categoria:'LABORATORIOS', nombre:'Perfil renal'}, {categoria:'LABORATORIOS', nombre:'Urea'}, {categoria:'LABORATORIOS', nombre:'Creatinina'}, {categoria:'LABORATORIOS', nombre:'Ácido úrico'}, {categoria:'LABORATORIOS', nombre:'Electrolitos séricos'}, {categoria:'LABORATORIOS', nombre:'TSH'}, {categoria:'LABORATORIOS', nombre:'T4 libre'}, {categoria:'LABORATORIOS', nombre:'T3 libre'}, {categoria:'LABORATORIOS', nombre:'Prolactina'}, {categoria:'LABORATORIOS', nombre:'FSH'}, {categoria:'LABORATORIOS', nombre:'LH'}, {categoria:'LABORATORIOS', nombre:'Estradiol'}, {categoria:'LABORATORIOS', nombre:'Progesterona'}, {categoria:'LABORATORIOS', nombre:'Testosterona total'}, {categoria:'LABORATORIOS', nombre:'Testosterona libre'}, {categoria:'LABORATORIOS', nombre:'DHEA-S'}, {categoria:'LABORATORIOS', nombre:'17 hidroxiprogesterona'}, {categoria:'LABORATORIOS', nombre:'Cortisol'}, {categoria:'LABORATORIOS', nombre:'Ferritina'}, {categoria:'LABORATORIOS', nombre:'Hierro sérico'}, {categoria:'LABORATORIOS', nombre:'Vitamina B12'}, {categoria:'LABORATORIOS', nombre:'Vitamina D 25 OH'}, {categoria:'LABORATORIOS', nombre:'Ácido fólico'}, {categoria:'LABORATORIOS', nombre:'PCR ultrasensible'}, {categoria:'LABORATORIOS', nombre:'VSG'}, {categoria:'LABORATORIOS', nombre:'Examen elemental y microscópico de orina'}, {categoria:'LABORATORIOS', nombre:'Urocultivo con antibiograma'}, {categoria:'LABORATORIOS', nombre:'Cultivo de secreción vaginal'}, {categoria:'LABORATORIOS', nombre:'Fresco y gram de secreción vaginal'}, {categoria:'LABORATORIOS', nombre:'Prueba de embarazo en sangre beta-hCG'}, {categoria:'LABORATORIOS', nombre:'Serología VIH'}, {categoria:'LABORATORIOS', nombre:'VDRL'}, {categoria:'LABORATORIOS', nombre:'Hepatitis B HBsAg'}, {categoria:'LABORATORIOS', nombre:'Hepatitis C anticuerpos'}, {categoria:'LABORATORIOS', nombre:'Toxoplasma IgG e IgM'}, {categoria:'LABORATORIOS', nombre:'Rubéola IgG e IgM'}, {categoria:'LABORATORIOS', nombre:'Citomegalovirus IgG e IgM'},
   {categoria:'IMÁGENES', nombre:'Ecografía transvaginal'}, {categoria:'IMÁGENES', nombre:'Ecografía pélvica'}, {categoria:'IMÁGENES', nombre:'Ecografía mamaria bilateral'}, {categoria:'IMÁGENES', nombre:'Mamografía bilateral'}, {categoria:'IMÁGENES', nombre:'Densitometría ósea'}, {categoria:'IMÁGENES', nombre:'Ecografía abdominal'}, {categoria:'IMÁGENES', nombre:'Ecografía renal y vías urinarias'}, {categoria:'IMÁGENES', nombre:'Ecografía tiroidea'}, {categoria:'IMÁGENES', nombre:'Radiografía de tórax'}, {categoria:'IMÁGENES', nombre:'Radiografía de columna lumbar'},
@@ -7214,10 +7215,10 @@ document.addEventListener('click',e=>{
 </script>
 
 <!-- AUROSANAX - Módulo Plan clínico Fase 1 -->
-<script src="plan.js?v=20260731_plan_v22"></script>
+<script src="plan.js?v=20260703_plan_ux_panel_final"></script>
 
 <!-- AUROSANAX - Módulo Atenciones -->
-<script src="atenciones.js?v=20260731_atenciones_v14"></script>
+<script src="atenciones.js?v=20260629_atenciones_v11"></script>
 
 <!-- AUROSANAX - Módulo Obstetricia por atención -->
 <script src="obstetricia.js?v=20260718_obstetricia_v1"></script>
