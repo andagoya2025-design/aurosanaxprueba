@@ -6701,10 +6701,25 @@ document.addEventListener('click',e=>{
   function auroPlanFormatearFechaHora(valor){
     const v = String(valor || '').trim();
     if(!v) return '';
-    const d = new Date(v);
-    if(!isNaN(d.getTime())){
-      return pad2(d.getDate()) + '/' + pad2(d.getMonth()+1) + '/' + d.getFullYear() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+
+    /*
+      AUROSANAX FIX HORA RECETA:
+      Las fechas de Google Sheets ya representan la hora clínica registrada.
+      Se leen por componentes para evitar que new Date() aplique otra conversión
+      de zona horaria y reste cinco horas.
+    */
+    const isoLocal = v.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})/);
+    if(isoLocal){
+      return isoLocal[3] + '/' + isoLocal[2] + '/' + isoLocal[1] + ' ' +
+        pad2(isoLocal[4]) + ':' + isoLocal[5];
     }
+
+    const latamHora = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[\s,]+(\d{1,2}):(\d{2})/);
+    if(latamHora){
+      return pad2(latamHora[1]) + '/' + pad2(latamHora[2]) + '/' + latamHora[3] + ' ' +
+        pad2(latamHora[4]) + ':' + latamHora[5];
+    }
+
     return auroPlanFormatearFechaVisual(v);
   }
 
@@ -6791,90 +6806,40 @@ document.addEventListener('click',e=>{
   }
 
   function auroPlanObtenerAtencionActivaResumen(){
-    /*
-      AUROSANAX FIX QUIRÚRGICO:
-      La barra superior del Plan debe usar el ID activo real como fuente maestra.
-      No se confía en un objeto de atención anterior que pueda conservar
-      numero_consulta/estado antiguos durante el cambio rápido de consulta.
-    */
-    let idActivo = '';
-    let objetoActivo = null;
-
-    try{
-      if(typeof window.getIdAtencionActiva === 'function'){
-        idActivo = String(window.getIdAtencionActiva() || '').trim();
-      }
-    }catch(e){}
-
     try{
       if(typeof window.getAtencionActiva === 'function'){
-        objetoActivo = window.getAtencionActiva() || null;
-        if(!idActivo && objetoActivo?.id_atencion){
-          idActivo = String(objetoActivo.id_atencion || '').trim();
+        const a = window.getAtencionActiva();
+        if(a){
+          return {
+            id: String(a.id_atencion || ''),
+            consulta: a.numero_consulta ? ('#' + a.numero_consulta) : 'activa',
+            estado: String(a.estado_atencion || '').trim()
+          };
         }
       }
     }catch(e){}
 
-    if(!idActivo){
-      idActivo = String(window.planState?.atencionActual || '').trim();
-    }
-
-    if(!idActivo){
-      return { id:'', consulta:'sin atención activa', estado:'' };
-    }
-
-    let encontrada = null;
-    const fuentes = [];
-
     try{
-      if(Array.isArray(window.atenciones)) fuentes.push(window.atenciones);
-      if(Array.isArray(window.atencionesPacienteActual)) fuentes.push(window.atencionesPacienteActual);
-      if(Array.isArray(window.listaAtenciones)) fuentes.push(window.listaAtenciones);
-      if(Array.isArray(window.atencionesClinicas)) fuentes.push(window.atencionesClinicas);
+      const id = String(window.planState?.atencionActual || '').trim();
+      if(id){
+        let encontrada = null;
+        try{
+          const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+          const arr = raw ? JSON.parse(raw) : [];
+          if(Array.isArray(arr)){
+            encontrada = arr.find(a => String(a.id_atencion || '') === id) || null;
+          }
+        }catch(e){}
+
+        return {
+          id: id,
+          consulta: encontrada && encontrada.numero_consulta ? ('#' + encontrada.numero_consulta) : 'activa',
+          estado: encontrada ? String(encontrada.estado_atencion || '').trim() : ''
+        };
+      }
     }catch(e){}
 
-    for(const lista of fuentes){
-      encontrada = lista.find(a => String(a?.id_atencion || '').trim() === idActivo) || null;
-      if(encontrada) break;
-    }
-
-    if(!encontrada){
-      try{
-        const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
-        const arr = raw ? JSON.parse(raw) : [];
-        if(Array.isArray(arr)){
-          encontrada = arr.find(a => String(a?.id_atencion || '').trim() === idActivo) || null;
-        }
-      }catch(e){}
-    }
-
-    if(
-      !encontrada &&
-      objetoActivo &&
-      String(objetoActivo.id_atencion || '').trim() === idActivo
-    ){
-      encontrada = objetoActivo;
-    }
-
-    const numero = String(
-      encontrada?.numero_consulta ||
-      encontrada?.nro_consulta ||
-      encontrada?.consulta_numero ||
-      encontrada?.numero ||
-      ''
-    ).trim();
-
-    const estado = String(
-      encontrada?.estado_atencion ||
-      encontrada?.estado ||
-      ''
-    ).trim();
-
-    return {
-      id: idActivo,
-      consulta: numero ? ('#' + numero) : 'activa',
-      estado: estado
-    };
+    return { id:'', consulta:'sin atención activa', estado:'' };
   }
 
   function auroPlanReiniciarEstadoVisualPorCambioAtencion(){
@@ -6954,31 +6919,6 @@ document.addEventListener('click',e=>{
       '<span class="' + (recetaFecha ? 'ok' : 'muted') + '"><i class="bi bi-capsule"></i> ' + auroPlanEscapeSeguro(recetaTexto) + '</span>' +
       (extra ? '<span class="muted"><i class="bi bi-info-circle"></i> ' + auroPlanEscapeSeguro(extra) + '</span>' : '');
   };
-
-
-  function auroPlanRefrescarMiniStatusPorCambioAtencion(){
-    /* Limpia el rótulo viejo de inmediato y lo recalcula cuando la nueva
-       atención ya fue incorporada a las listas locales. */
-    const box = document.getElementById('auroPlanMiniStatus');
-    if(box){
-      box.innerHTML =
-        '<span><i class="bi bi-journal-medical"></i> Consulta activa</span>' +
-        '<span class="warn"><i class="bi bi-list-check"></i> Plan pendiente de guardar</span>' +
-        '<span class="muted"><i class="bi bi-capsule"></i> Receta pendiente</span>';
-    }
-
-    [0, 120, 350, 800].forEach(function(ms){
-      window.setTimeout(function(){
-        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-          window.auroPlanActualizarMiniStatus();
-        }
-      }, ms);
-    });
-  }
-
-  document.addEventListener('aurosanax:atencion-iniciada', auroPlanRefrescarMiniStatusPorCambioAtencion);
-  document.addEventListener('aurosanax:atencion-seleccionada', auroPlanRefrescarMiniStatusPorCambioAtencion);
-  document.addEventListener('aurosanax:atencion-creada', auroPlanRefrescarMiniStatusPorCambioAtencion);
 
   window.auroPlanActualizarBotonesHistoria = function(){
     const esEdicion = !!editingHistoryId;
@@ -7093,24 +7033,13 @@ document.addEventListener('click',e=>{
       window.auroPlanActualizarMiniStatus();
     }
 
-    if(!window.__auroPlanRecetaUxWrapped && typeof window.guardarRecetaERP === 'function'){
-      const originalGuardarRecetaPlanUX = window.guardarRecetaERP;
-      window.guardarRecetaERP = async function(){
-        const r = await originalGuardarRecetaPlanUX.apply(this, arguments);
-        setTimeout(function(){
-          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-            window.auroPlanActualizarMiniStatus('Receta revisada');
-          }
-        }, 700);
-        setTimeout(function(){
-          if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-            window.auroPlanActualizarMiniStatus();
-          }
-        }, 1500);
-        return r;
-      };
-      window.__auroPlanRecetaUxWrapped = true;
-    }
+    /*
+      AUROSANAX FIX HORA RECETA:
+      Se neutraliza el envoltorio visual tardío de guardarRecetaERP.
+      recetas.js conserva el control exclusivo del guardado y de su estado visual.
+      No se modifica la función de guardado, el id_receta ni la no duplicidad.
+    */
+    window.__auroPlanRecetaUxWrapped = true;
 
     if(!window.__auroPlanAtencionUxWrapped){
       ['iniciarAtencionActual','seleccionarAtencion','finalizarAtencionActual'].forEach(function(nombre){
