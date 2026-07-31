@@ -638,6 +638,7 @@ function inicializarPlan(){
     instalarEventosOrdenesMedicasPlan();
     instalarEventosEvaluacionesPlan();
     auroPlanInstalarAyudasMedicamentos();
+    auroPlanInstalarRestablecimientoSeguro();
     auroPlanRefrescarVistas();
 }
 
@@ -2560,6 +2561,16 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
     if(!idAtencion) return null;
 
+    /*
+      Protección quirúrgica:
+      mientras se restablece el Plan de esta atención, ninguna carga tardía
+      desde Sheets puede volver a pintar el contenido que se está eliminando.
+    */
+    window.__auroPlanRestableciendo = window.__auroPlanRestableciendo || {};
+    if(window.__auroPlanRestableciendo[idAtencion]){
+        return null;
+    }
+
     window.__auroPlanCargasActivas = window.__auroPlanCargasActivas || {};
 
     if(window.__auroPlanCargasActivas[idAtencion]){
@@ -2569,6 +2580,14 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     const promesaCarga = (async function(){
 
     const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
+
+    /*
+      Una respuesta iniciada antes del restablecimiento también se descarta.
+      Esto evita que el Plan antiguo reaparezca durante la limpieza.
+    */
+    if(window.__auroPlanRestableciendo?.[idAtencion]){
+        return null;
+    }
 
     const idAtencionActual = auroPlanObtenerIdAtencionActivaSeguro();
     const idAtencionRenderizada = String(
@@ -2723,6 +2742,766 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
         delete window.__auroPlanCargasActivas[idAtencion];
     }
 }
+
+
+/* ============================================================
+   RESTABLECIMIENTO SEGURO DEL PLAN POR ATENCIÓN
+   - Opera exclusivamente sobre el id_atencion activo y visible.
+   - No elimina la atención, historia, diagnóstico ni receta emitida.
+   - Persiste el Plan vacío en Sheets mediante el flujo existente.
+   - Bloquea respuestas tardías mientras se realiza la operación.
+   - Permite deshacer únicamente dentro de la misma atención.
+============================================================ */
+
+function auroPlanClonarSeguro(valor){
+    try{
+        return JSON.parse(JSON.stringify(valor));
+    }catch(e){
+        return valor;
+    }
+}
+
+function auroPlanCapturarEstadoCompleto(){
+    return {
+        medicamentos: auroPlanClonarSeguro(window.medicamentosPlanSeleccionados || []),
+        ordenes: auroPlanClonarSeguro(window.ordenesMedicasPlanSeleccionadas || []),
+        interconsultas: auroPlanClonarSeguro(window.interconsultasPlanSeleccionadas || []),
+        plan: auroPlanGetValue('hcPlanTratamiento'),
+        indicaciones: auroPlanGetValue('hcIndicacionesPaciente'),
+        receta: auroPlanGetValue('hcRecetaMedicamentos'),
+        ordenesTexto: auroPlanGetValue('hcExamenesSolicitados'),
+        interconsultaTexto: auroPlanGetValue('hcInterconsultaResumen'),
+        evaluaciones: auroPlanGetValue('hcEvaluacionesResumen'),
+        evaluacionesChecks: auroPlanCapturarEvaluaciones(),
+        control: auroPlanGetValue('hcControl'),
+        estado: auroPlanGetValue('hcEstadoHistoria')
+    };
+}
+
+function auroPlanEstadoTieneContenido(data){
+    data = data || auroPlanCapturarEstadoCompleto();
+
+    return !!(
+        (data.medicamentos || []).length ||
+        (data.ordenes || []).length ||
+        (data.interconsultas || []).length ||
+        String(data.plan || '').trim() ||
+        String(data.indicaciones || '').trim() ||
+        String(data.receta || '').trim() ||
+        String(data.ordenesTexto || '').trim() ||
+        String(data.interconsultaTexto || '').trim() ||
+        String(data.evaluaciones || '').trim() ||
+        String(data.control || '').trim() ||
+        Object.values(data.evaluacionesChecks || {}).some(Boolean)
+    );
+}
+
+function auroPlanEstadoVacioCache(){
+    return {
+        medicamentos: [],
+        ordenes: [],
+        interconsultas: [],
+        plan: '',
+        indicaciones: '',
+        ordenesTexto: '',
+        interconsultaTexto: '',
+        evaluaciones: '',
+        evaluacionesChecks: {},
+        receta: ''
+    };
+}
+
+function auroPlanValidarAtencionParaRestablecer(){
+    const idActivo = String(
+        auroPlanObtenerIdAtencionActivaSeguro() || ''
+    ).trim();
+
+    const idInterno = String(
+        window.planState?.atencionActual || ''
+    ).trim();
+
+    const idRenderizado = String(
+        window.__auroPlanAtencionRenderizada || ''
+    ).trim();
+
+    if(!idActivo){
+        return {
+            ok:false,
+            message:'No existe una atención activa. Abra primero la consulta que desea modificar.'
+        };
+    }
+
+    if(idInterno && idInterno !== idActivo){
+        return {
+            ok:false,
+            message:'El Plan interno pertenece a otra atención. Se bloqueó la limpieza por seguridad.'
+        };
+    }
+
+    if(idRenderizado && idRenderizado !== idActivo){
+        return {
+            ok:false,
+            message:'El Plan visible pertenece a otra atención. Se bloqueó la limpieza por seguridad.'
+        };
+    }
+
+    return {
+        ok:true,
+        idAtencion:idActivo
+    };
+}
+
+function auroPlanAplicarEstadoCapturado(data){
+    data = data || auroPlanEstadoVacioCache();
+
+    window.auroPlanMedicamentoEditandoIndice = null;
+    window.medicamentosPlanSeleccionados =
+        auroPlanClonarSeguro(data.medicamentos || []);
+
+    window.ordenesMedicasPlanSeleccionadas =
+        auroPlanOrdenesUnicas(
+            auroPlanClonarSeguro(data.ordenes || [])
+        );
+
+    window.interconsultasPlanSeleccionadas =
+        auroPlanInterconsultasUnicas(
+            auroPlanClonarSeguro(data.interconsultas || [])
+        );
+
+    auroPlanSetValue('hcPlanTratamiento', data.plan || '');
+    auroPlanSetValue('hcIndicacionesPaciente', data.indicaciones || '');
+    auroPlanSetValue('hcRecetaMedicamentos', data.receta || '');
+    auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
+    auroPlanSetValue('hcInterconsultaResumen', data.interconsultaTexto || '');
+    auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
+    auroPlanSetValue('hcControl', data.control || '');
+    auroPlanSetValue('hcEstadoHistoria', data.estado || 'Activo');
+
+    limpiarFormularioMedicamento();
+    limpiarFormularioOrdenMedica();
+    limpiarFormularioInterconsulta();
+    auroPlanRestaurarEvaluaciones(data.evaluacionesChecks || {});
+
+    renderMedicamentosPlanTabla();
+    renderOrdenesMedicasTabla();
+    renderInterconsultasTabla();
+    recopilarOrdenesMedicasPlan();
+    recopilarInterconsultaPlan();
+    recopilarEvaluacionesPlan();
+    sincronizarPlanConReceta();
+    auroPlanActualizarEstadoEdicionMedicamento();
+}
+
+function auroPlanLimpiarContenidoAtencionActiva(idAtencion){
+    idAtencion = String(idAtencion || '').trim();
+    if(!idAtencion) return false;
+
+    const validacion = auroPlanValidarAtencionParaRestablecer();
+    if(!validacion.ok || validacion.idAtencion !== idAtencion){
+        return false;
+    }
+
+    window.auroPlanMedicamentoEditandoIndice = null;
+    window.medicamentosPlanSeleccionados = [];
+    window.ordenesMedicasPlanSeleccionadas = [];
+    window.interconsultasPlanSeleccionadas = [];
+
+    [
+        'hcPlanTratamiento',
+        'hcIndicacionesPaciente',
+        'hcRecetaMedicamentos',
+        'hcExamenesSolicitados',
+        'hcInterconsultaResumen',
+        'hcEvaluacionesResumen',
+        'hcControl'
+    ].forEach(function(id){
+        auroPlanSetValue(id, '');
+    });
+
+    limpiarFormularioMedicamento();
+    limpiarFormularioOrdenMedica();
+    limpiarFormularioInterconsulta();
+    limpiarEvaluacionesCamposPlan();
+
+    /*
+      Se limpian solo los campos de preparación de Receta alimentados por Plan.
+      La receta emitida permanece en su módulo y en su almacenamiento propio.
+    */
+    auroPlanSetValue('recMedicamento', '');
+    auroPlanSetValue('recIndicaciones', '');
+    auroPlanSetValue('recRecomendaciones', '');
+
+    window.planState = window.planState || {
+        atencionActual:idAtencion,
+        cache:{}
+    };
+    window.planState.atencionActual = idAtencion;
+    window.planState.cache[idAtencion] = auroPlanEstadoVacioCache();
+
+    auroPlanRefrescarVistas();
+    guardarPlanTemporal();
+
+    return true;
+}
+
+function auroPlanCerrarModalRestablecer(valor){
+    const modal = document.getElementById('auroPlanModalRestablecer');
+    if(modal) modal.remove();
+
+    const resolver = window.__auroPlanResolverModalRestablecer;
+    window.__auroPlanResolverModalRestablecer = null;
+
+    if(typeof resolver === 'function'){
+        resolver(valor || 'cancelar');
+    }
+}
+
+function auroPlanConfirmarRestablecimiento(idAtencion){
+    return new Promise(function(resolve){
+        const anterior = document.getElementById('auroPlanModalRestablecer');
+        if(anterior) anterior.remove();
+
+        window.__auroPlanResolverModalRestablecer = resolve;
+
+        const modal = document.createElement('div');
+        modal.id = 'auroPlanModalRestablecer';
+        modal.className = 'auro-plan-reset-modal';
+        modal.setAttribute('role','dialog');
+        modal.setAttribute('aria-modal','true');
+        modal.setAttribute('aria-labelledby','auroPlanResetTitulo');
+
+        modal.innerHTML = `
+          <div class="auro-plan-reset-panel">
+            <div class="auro-plan-reset-icon">
+              <i class="bi bi-arrow-counterclockwise"></i>
+            </div>
+            <h5 id="auroPlanResetTitulo">Restablecer plan de esta atención</h5>
+            <p>
+              Se limpiarán los medicamentos, órdenes, interconsultas,
+              evaluaciones, indicaciones y próximo control del Plan activo.
+            </p>
+            <div class="auro-plan-reset-atencion">
+              Atención protegida: <strong>${escapeHtmlPlan(idAtencion)}</strong>
+            </div>
+            <div class="auro-plan-reset-alerta">
+              No se eliminarán la atención, la historia clínica, el diagnóstico
+              estructurado ni una receta ya emitida.
+            </div>
+            <div class="auro-plan-reset-actions">
+              <button type="button"
+                      class="btn btn-outline-secondary"
+                      id="auroPlanResetCancelar">
+                Cancelar
+              </button>
+              <button type="button"
+                      class="btn btn-danger"
+                      id="auroPlanResetConfirmar">
+                <i class="bi bi-trash3 me-1"></i> Limpiar plan
+              </button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        modal.querySelector('#auroPlanResetCancelar')
+            ?.addEventListener('click', function(){
+                auroPlanCerrarModalRestablecer('cancelar');
+            });
+
+        modal.querySelector('#auroPlanResetConfirmar')
+            ?.addEventListener('click', function(){
+                auroPlanCerrarModalRestablecer('limpiar');
+            });
+
+        modal.addEventListener('click', function(e){
+            if(e.target === modal){
+                auroPlanCerrarModalRestablecer('cancelar');
+            }
+        });
+
+        const onKey = function(e){
+            if(e.key === 'Escape'){
+                document.removeEventListener('keydown', onKey);
+                auroPlanCerrarModalRestablecer('cancelar');
+            }
+        };
+        document.addEventListener('keydown', onKey);
+
+        setTimeout(function(){
+            modal.querySelector('#auroPlanResetCancelar')?.focus();
+        }, 0);
+    });
+}
+
+function auroPlanMostrarAvisoRestablecimiento(mensaje, tipo){
+    tipo = tipo || 'ok';
+
+    let aviso = document.getElementById('auroPlanResetAviso');
+
+    if(!aviso){
+        aviso = document.createElement('div');
+        aviso.id = 'auroPlanResetAviso';
+        aviso.className = 'auro-plan-reset-aviso';
+        document.body.appendChild(aviso);
+    }
+
+    aviso.className = 'auro-plan-reset-aviso ' + tipo;
+    aviso.textContent = String(mensaje || '');
+    aviso.classList.add('visible');
+
+    clearTimeout(window.__auroPlanResetAvisoTimer);
+    window.__auroPlanResetAvisoTimer = setTimeout(function(){
+        aviso.classList.remove('visible');
+    }, 4200);
+}
+
+async function auroPlanRestablecerAtencionActiva(btn){
+    const validacion = auroPlanValidarAtencionParaRestablecer();
+
+    if(!validacion.ok){
+        alert(validacion.message);
+        return {success:false,message:validacion.message};
+    }
+
+    const idAtencion = validacion.idAtencion;
+    const estadoAnterior = auroPlanCapturarEstadoCompleto();
+
+    if(!auroPlanEstadoTieneContenido(estadoAnterior)){
+        auroPlanMostrarAvisoRestablecimiento(
+            'El Plan de esta atención ya está vacío.',
+            'info'
+        );
+        return {success:true,empty:true};
+    }
+
+    const decision = await auroPlanConfirmarRestablecimiento(idAtencion);
+    if(decision !== 'limpiar'){
+        return {success:false,cancelled:true};
+    }
+
+    const textoOriginal = btn ? btn.innerHTML : '';
+
+    window.__auroPlanRestableciendo = window.__auroPlanRestableciendo || {};
+    window.__auroPlanRestableciendo[idAtencion] = true;
+
+    try{
+        const segundaValidacion = auroPlanValidarAtencionParaRestablecer();
+
+        if(
+            !segundaValidacion.ok ||
+            segundaValidacion.idAtencion !== idAtencion
+        ){
+            throw new Error(
+                'La atención activa cambió durante la confirmación. No se modificó ningún Plan.'
+            );
+        }
+
+        if(btn){
+            btn.disabled = true;
+            btn.innerHTML =
+                '<i class="bi bi-hourglass-split me-1"></i> Limpiando...';
+        }
+
+        window.__auroPlanUltimaLimpieza = {
+            idAtencion:idAtencion,
+            data:auroPlanClonarSeguro(estadoAnterior)
+        };
+
+        if(!auroPlanLimpiarContenidoAtencionActiva(idAtencion)){
+            throw new Error(
+                'No se pudo validar el Plan activo antes de limpiarlo.'
+            );
+        }
+
+        const resultado = await guardarPlanClinicoDesdeSheets();
+
+        if(resultado && resultado.success === false){
+            throw new Error(
+                resultado.message || 'No se pudo guardar el Plan vacío.'
+            );
+        }
+
+        auroPlanActualizarBotonDeshacer();
+        auroPlanMostrarAvisoRestablecimiento(
+            'Plan restablecido únicamente para la atención activa.',
+            'ok'
+        );
+
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            try{ window.auroPlanActualizarMiniStatus(); }catch(e){}
+        }
+
+        return resultado || {success:true};
+
+    }catch(error){
+        console.error(
+            'AUROSANAX PLAN: error restableciendo el Plan activo.',
+            error
+        );
+
+        /*
+          Si la persistencia falla se restaura inmediatamente la copia local,
+          evitando dejar la pantalla vacía sin confirmación del servidor.
+        */
+        auroPlanAplicarEstadoCapturado(estadoAnterior);
+        guardarPlanTemporal();
+
+        alert(
+            'No se pudo restablecer el Plan. Se restauró el contenido anterior.\n\n' +
+            (error?.message || String(error))
+        );
+
+        return {success:false,message:error?.message || String(error)};
+
+    }finally{
+        delete window.__auroPlanRestableciendo[idAtencion];
+
+        if(btn){
+            btn.disabled = false;
+            btn.innerHTML =
+                textoOriginal ||
+                '<i class="bi bi-arrow-counterclockwise me-1"></i> Restablecer plan';
+        }
+    }
+}
+
+async function auroPlanDeshacerRestablecimiento(btn){
+    const respaldo = window.__auroPlanUltimaLimpieza;
+    const validacion = auroPlanValidarAtencionParaRestablecer();
+
+    if(
+        !respaldo ||
+        !validacion.ok ||
+        String(respaldo.idAtencion || '') !== validacion.idAtencion
+    ){
+        auroPlanMostrarAvisoRestablecimiento(
+            'No existe una limpieza disponible para deshacer en esta atención.',
+            'info'
+        );
+        auroPlanActualizarBotonDeshacer();
+        return {success:false};
+    }
+
+    const idAtencion = validacion.idAtencion;
+    const textoOriginal = btn ? btn.innerHTML : '';
+
+    window.__auroPlanRestableciendo = window.__auroPlanRestableciendo || {};
+    window.__auroPlanRestableciendo[idAtencion] = true;
+
+    try{
+        if(btn){
+            btn.disabled = true;
+            btn.innerHTML =
+                '<i class="bi bi-hourglass-split me-1"></i> Restaurando...';
+        }
+
+        auroPlanAplicarEstadoCapturado(
+            auroPlanClonarSeguro(respaldo.data)
+        );
+
+        window.planState.cache[idAtencion] = {
+            medicamentos: auroPlanClonarSeguro(respaldo.data.medicamentos || []),
+            ordenes: auroPlanClonarSeguro(respaldo.data.ordenes || []),
+            interconsultas: auroPlanClonarSeguro(respaldo.data.interconsultas || []),
+            plan: respaldo.data.plan || '',
+            indicaciones: respaldo.data.indicaciones || '',
+            ordenesTexto: respaldo.data.ordenesTexto || '',
+            interconsultaTexto: respaldo.data.interconsultaTexto || '',
+            evaluaciones: respaldo.data.evaluaciones || '',
+            evaluacionesChecks: auroPlanClonarSeguro(respaldo.data.evaluacionesChecks || {}),
+            receta: respaldo.data.receta || ''
+        };
+
+        guardarPlanTemporal();
+
+        const resultado = await guardarPlanClinicoDesdeSheets();
+
+        if(resultado && resultado.success === false){
+            throw new Error(
+                resultado.message || 'No se pudo restaurar el Plan.'
+            );
+        }
+
+        window.__auroPlanUltimaLimpieza = null;
+        auroPlanActualizarBotonDeshacer();
+
+        auroPlanMostrarAvisoRestablecimiento(
+            'Se restauró el Plan de la atención activa.',
+            'ok'
+        );
+
+        return resultado || {success:true};
+
+    }catch(error){
+        console.error(
+            'AUROSANAX PLAN: error deshaciendo restablecimiento.',
+            error
+        );
+
+        alert(
+            'No se pudo restaurar el Plan.\n\n' +
+            (error?.message || String(error))
+        );
+
+        return {success:false,message:error?.message || String(error)};
+
+    }finally{
+        delete window.__auroPlanRestableciendo[idAtencion];
+
+        if(btn){
+            btn.disabled = false;
+            btn.innerHTML =
+                textoOriginal ||
+                '<i class="bi bi-arrow-90deg-left me-1"></i> Deshacer limpieza';
+        }
+    }
+}
+
+function auroPlanBuscarBotonGuardarPrincipal(){
+    const candidatos = Array.from(
+        document.querySelectorAll('#hc_plan button, button')
+    );
+
+    return candidatos.find(function(btn){
+        const onclick = String(btn.getAttribute('onclick') || '');
+        const texto = normalizarTextoPlan(btn.textContent || '');
+
+        return (
+            onclick.includes('guardarPlanClinicoConUX') ||
+            onclick.includes('guardarPlanClinicoDesdeSheets') ||
+            texto.includes('actualizar plan clinico')
+        );
+    }) || null;
+}
+
+function auroPlanActualizarBotonDeshacer(){
+    const btn = document.getElementById('auroPlanBtnDeshacerLimpieza');
+    if(!btn) return;
+
+    const idActivo = String(
+        auroPlanObtenerIdAtencionActivaSeguro() || ''
+    ).trim();
+
+    const respaldo = window.__auroPlanUltimaLimpieza;
+
+    btn.classList.toggle(
+        'd-none',
+        !respaldo ||
+        String(respaldo.idAtencion || '') !== idActivo
+    );
+}
+
+function auroPlanInstalarEstilosRestablecimiento(){
+    if(document.getElementById('auroPlanResetStyles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'auroPlanResetStyles';
+    style.textContent = `
+      .auro-plan-reset-actions-inline{
+        display:inline-flex;
+        align-items:center;
+        gap:8px;
+        flex-wrap:wrap;
+        margin-left:8px;
+      }
+
+      .auro-plan-reset-modal{
+        position:fixed;
+        inset:0;
+        z-index:100000;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:18px;
+        background:rgba(15,23,42,.58);
+      }
+
+      .auro-plan-reset-panel{
+        width:min(560px,100%);
+        background:#fff;
+        border:1px solid #fecdd3;
+        border-radius:22px;
+        padding:22px;
+        box-shadow:0 28px 80px rgba(15,23,42,.30);
+      }
+
+      .auro-plan-reset-icon{
+        width:46px;
+        height:46px;
+        display:grid;
+        place-items:center;
+        border-radius:15px;
+        margin-bottom:12px;
+        color:#9f1239;
+        background:#fff1f2;
+        border:1px solid #fecdd3;
+        font-size:21px;
+      }
+
+      .auro-plan-reset-panel h5{
+        margin:0 0 8px;
+        color:#111827;
+        font-weight:900;
+      }
+
+      .auro-plan-reset-panel p{
+        margin:0 0 12px;
+        color:#475569;
+        line-height:1.45;
+      }
+
+      .auro-plan-reset-atencion{
+        padding:9px 11px;
+        margin-bottom:10px;
+        border-radius:12px;
+        background:#f8fafc;
+        border:1px solid #e2e8f0;
+        color:#334155;
+        font-size:13px;
+        word-break:break-all;
+      }
+
+      .auro-plan-reset-alerta{
+        padding:10px 12px;
+        border-radius:12px;
+        color:#92400e;
+        background:#fffbeb;
+        border:1px solid #fde68a;
+        font-size:13px;
+        line-height:1.4;
+      }
+
+      .auro-plan-reset-actions{
+        display:flex;
+        justify-content:flex-end;
+        gap:9px;
+        flex-wrap:wrap;
+        margin-top:18px;
+      }
+
+      .auro-plan-reset-aviso{
+        position:fixed;
+        right:18px;
+        bottom:18px;
+        z-index:100001;
+        max-width:min(430px,calc(100vw - 36px));
+        padding:12px 15px;
+        border-radius:14px;
+        background:#fff;
+        border:1px solid #d1d5db;
+        box-shadow:0 15px 45px rgba(15,23,42,.22);
+        color:#334155;
+        font-weight:750;
+        opacity:0;
+        transform:translateY(12px);
+        pointer-events:none;
+        transition:.2s ease;
+      }
+
+      .auro-plan-reset-aviso.visible{
+        opacity:1;
+        transform:translateY(0);
+      }
+
+      .auro-plan-reset-aviso.ok{
+        border-color:#86efac;
+        background:#f0fdf4;
+        color:#166534;
+      }
+
+      .auro-plan-reset-aviso.info{
+        border-color:#bae6fd;
+        background:#f0f9ff;
+        color:#075985;
+      }
+
+      @media (max-width:768px){
+        .auro-plan-reset-actions-inline{
+          display:flex;
+          width:100%;
+          margin:8px 0 0;
+        }
+
+        .auro-plan-reset-actions-inline button{
+          flex:1 1 160px;
+        }
+
+        .auro-plan-reset-actions{
+          display:grid;
+          grid-template-columns:1fr;
+        }
+
+        .auro-plan-reset-actions button{
+          width:100%;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+}
+
+function auroPlanInstalarRestablecimientoSeguro(){
+    auroPlanInstalarEstilosRestablecimiento();
+
+    const guardar = auroPlanBuscarBotonGuardarPrincipal();
+
+    if(!guardar){
+        clearTimeout(window.__auroPlanResetInstaladorTimer);
+        window.__auroPlanResetInstaladorTimer = setTimeout(function(){
+            auroPlanInstalarRestablecimientoSeguro();
+        }, 350);
+        return;
+    }
+
+    let grupo = document.getElementById('auroPlanResetActions');
+
+    if(!grupo){
+        grupo = document.createElement('span');
+        grupo.id = 'auroPlanResetActions';
+        grupo.className = 'auro-plan-reset-actions-inline';
+
+        const restablecer = document.createElement('button');
+        restablecer.type = 'button';
+        restablecer.id = 'auroPlanBtnRestablecer';
+        restablecer.className = 'btn btn-outline-danger';
+        restablecer.innerHTML =
+            '<i class="bi bi-arrow-counterclockwise me-1"></i> Restablecer plan';
+        restablecer.title =
+            'Limpiar únicamente el Plan de la atención activa';
+
+        restablecer.addEventListener('click', function(){
+            auroPlanRestablecerAtencionActiva(restablecer);
+        });
+
+        const deshacer = document.createElement('button');
+        deshacer.type = 'button';
+        deshacer.id = 'auroPlanBtnDeshacerLimpieza';
+        deshacer.className = 'btn btn-outline-secondary d-none';
+        deshacer.innerHTML =
+            '<i class="bi bi-arrow-90deg-left me-1"></i> Deshacer limpieza';
+
+        deshacer.addEventListener('click', function(){
+            auroPlanDeshacerRestablecimiento(deshacer);
+        });
+
+        grupo.appendChild(restablecer);
+        grupo.appendChild(deshacer);
+
+        guardar.insertAdjacentElement('afterend', grupo);
+    }
+
+    auroPlanActualizarBotonDeshacer();
+}
+
+window.auroPlanRestablecerAtencionActiva =
+    auroPlanRestablecerAtencionActiva;
+
+window.auroPlanDeshacerRestablecimiento =
+    auroPlanDeshacerRestablecimiento;
+
+window.auroPlanInstalarRestablecimientoSeguro =
+    auroPlanInstalarRestablecimientoSeguro;
 
 window.editarMedicamentoPlan = editarMedicamentoPlan;
 window.cancelarEdicionMedicamentoPlan = cancelarEdicionMedicamentoPlan;
