@@ -3245,45 +3245,31 @@
       configurarModoProtocoloMaestro();
       return;
     }
+
     if(state.cambiosPendientes){
-      const continuarPendiente = window.confirm('La integración tiene cambios pendientes de confirmación temporal.\n\nPuede aplicarlos al Plan, pero se recomienda guardarlos temporalmente primero.\n\n¿Desea continuar?');
+      const continuarPendiente = window.confirm(
+        'La integración tiene cambios pendientes de confirmación temporal.\n\n' +
+        'Puede aplicarlos al Plan, pero se recomienda guardarlos temporalmente primero.\n\n' +
+        '¿Desea continuar?'
+      );
       if(!continuarPendiente) return;
     }
-    const p = state.protocoloSeleccionado !== null ? state.protocolos[state.protocoloSeleccionado] : null;
+
+    const p = state.protocoloSeleccionado !== null
+      ? state.protocolos[state.protocoloSeleccionado]
+      : null;
+
     if(!p){
       mensaje('error','Seleccione un protocolo antes de aplicarlo al Plan.');
       return;
     }
 
     /*
-      Antes de transferir el protocolo, garantiza que Plan use exactamente el
-      mismo id_atencion y solicita el guardado estructurado del diagnóstico con
-      la función pública ya existente. No crea diagnósticos ni duplica filas.
+      AUROSANAX FIX QUIRÚRGICO 2026-07-31:
+      La confirmación se muestra antes de las operaciones asíncronas.
+      Antes el usuario debía esperar la sincronización del Plan y el guardado
+      del diagnóstico para recién ver el cuadro de confirmación.
     */
-    try{
-      if(typeof window.cambiarPlanPorAtencion === 'function'){
-        await Promise.resolve(window.cambiarPlanPorAtencion(state.atencionActual));
-      }
-    }catch(error){
-      console.warn(MODULO + ': no se pudo sincronizar Plan antes de aplicar.', error);
-    }
-
-    try{
-      if(typeof window.auroGuardarDiagnosticosAtencionActual === 'function'){
-        const resultadoDx = await Promise.resolve(
-          window.auroGuardarDiagnosticosAtencionActual()
-        );
-        if(resultadoDx && resultadoDx.success === false){
-          mensaje('error', resultadoDx.message || 'No se pudo guardar el diagnóstico estructurado de esta atención.');
-          return;
-        }
-      }
-    }catch(error){
-      console.error(MODULO + ': no se pudo persistir el diagnóstico estructurado.', error);
-      mensaje('error','No se pudo guardar el diagnóstico estructurado de esta atención antes de aplicar el protocolo.');
-      return;
-    }
-
     const confirmar = window.confirm(
       'Se transferirán las sugerencias seleccionadas al Plan clínico de la atención ' +
       state.atencionActual +
@@ -3291,53 +3277,124 @@
     );
     if(!confirmar) return;
 
-    const medicamentos = agregarMedicamentosAlPlan(p.medicamentos);
-    const ordenes = agregarOrdenesAlPlan([...(p.ordenes || []), ...(p.imagenes || []), ...(p.procedimientos || [])]);
+    const boton = document.querySelector('#auroCie10InteligenteBox .auro-cie10-btn.primary') ||
+                  document.getElementById('auroDxAplicarPlan');
+    const htmlOriginal = boton ? boton.innerHTML : '';
+    const disabledOriginal = boton ? boton.disabled : false;
 
-    const resumen = texto(document.getElementById('auroDxResumen')?.value);
-    const analisis = texto(document.getElementById('auroDxAnalisis')?.value);
-    const conducta = texto(document.getElementById('auroDxConducta')?.value) || construirConducta();
+    if(boton){
+      boton.disabled = true;
+      boton.setAttribute('aria-busy','true');
+      boton.innerHTML = '<i class="bi bi-hourglass-split"></i> Aplicando protocolo...';
+    }
 
-    const planTexto = [
-      analisis ? 'ANÁLISIS CLÍNICO:\n' + analisis : '',
-      conducta ? 'CONDUCTA:\n' + conducta : ''
-    ].filter(Boolean).join('\n\n');
-
-    const indicaciones = (p.indicaciones || []).join('\n');
-    const controles = (p.controles || []).join('\n');
-
-    const aplicados = {
-      plan: setPrimerCampo(IDS_PLAN.planTratamiento, planTexto, true),
-      indicaciones: setPrimerCampo(IDS_PLAN.indicaciones, indicaciones, true),
-      control: setPrimerCampo(IDS_PLAN.control, controles, true),
-      observaciones: setPrimerCampo(IDS_PLAN.observaciones, resumen ? 'Resumen clínico integrado:\n' + resumen : '', true)
-    };
+    mensaje('aviso','Aplicando protocolo al Plan clínico...');
 
     try{
-      if(typeof window.sincronizarPlanConReceta === 'function') window.sincronizarPlanConReceta();
-      if(typeof window.guardarPlanTemporal === 'function') window.guardarPlanTemporal();
-    }catch(e){}
-
-    try{
-      document.dispatchEvent(new CustomEvent('aurosanax:diagnostico-aplicado-plan', {
-        detail: {
-          id_atencion: state.atencionActual,
-          protocolo: clonar(p, {}),
-          medicamentos_agregados: medicamentos,
-          ordenes_agregadas: ordenes
+      /*
+        Sincroniza una sola vez el contexto del Plan con la atención activa.
+        No modifica ni refresca el estado visual de Recetas.
+      */
+      try{
+        if(typeof window.cambiarPlanPorAtencion === 'function'){
+          await Promise.resolve(window.cambiarPlanPorAtencion(state.atencionActual));
         }
-      }));
-    }catch(e){}
+      }catch(error){
+        console.warn(MODULO + ': no se pudo sincronizar Plan antes de aplicar.', error);
+      }
 
-    const algunaCaja = Object.values(aplicados).some(Boolean);
-    mensaje('ok',
-      'Protocolo transferido al Plan. Medicamentos agregados: ' + medicamentos +
-      '. Órdenes agregadas: ' + ordenes +
-      (algunaCaja ? '.' : '. El Plan no expuso campos de texto compatibles; revise las tablas del Plan.')
-    );
+      /* Persistencia obligatoria del diagnóstico estructurado. */
+      try{
+        if(typeof window.auroGuardarDiagnosticosAtencionActual === 'function'){
+          const resultadoDx = await Promise.resolve(
+            window.auroGuardarDiagnosticosAtencionActual()
+          );
+          if(resultadoDx && resultadoDx.success === false){
+            throw new Error(
+              resultadoDx.message ||
+              'No se pudo guardar el diagnóstico estructurado de esta atención.'
+            );
+          }
+        }
+      }catch(error){
+        console.error(MODULO + ': no se pudo persistir el diagnóstico estructurado.', error);
+        mensaje(
+          'error',
+          'No se pudo guardar el diagnóstico estructurado de esta atención antes de aplicar el protocolo.'
+        );
+        return;
+      }
 
-    sincronizarEditorCie10DesdeDiagnosticos();
-    guardarEstadoTemporal();
+      const medicamentos = agregarMedicamentosAlPlan(p.medicamentos);
+      const ordenes = agregarOrdenesAlPlan([
+        ...(p.ordenes || []),
+        ...(p.imagenes || []),
+        ...(p.procedimientos || [])
+      ]);
+
+      const resumen = texto(document.getElementById('auroDxResumen')?.value);
+      const analisis = texto(document.getElementById('auroDxAnalisis')?.value);
+      const conducta = texto(document.getElementById('auroDxConducta')?.value) || construirConducta();
+
+      const planTexto = [
+        analisis ? 'ANÁLISIS CLÍNICO:\n' + analisis : '',
+        conducta ? 'CONDUCTA:\n' + conducta : ''
+      ].filter(Boolean).join('\n\n');
+
+      const indicaciones = (p.indicaciones || []).join('\n');
+      const controles = (p.controles || []).join('\n');
+
+      const aplicados = {
+        plan: setPrimerCampo(IDS_PLAN.planTratamiento, planTexto, true),
+        indicaciones: setPrimerCampo(IDS_PLAN.indicaciones, indicaciones, true),
+        control: setPrimerCampo(IDS_PLAN.control, controles, true),
+        observaciones: setPrimerCampo(
+          IDS_PLAN.observaciones,
+          resumen ? 'Resumen clínico integrado:\n' + resumen : '',
+          true
+        )
+      };
+
+      try{
+        if(typeof window.sincronizarPlanConReceta === 'function'){
+          window.sincronizarPlanConReceta();
+        }
+        if(typeof window.guardarPlanTemporal === 'function'){
+          window.guardarPlanTemporal();
+        }
+      }catch(e){}
+
+      try{
+        document.dispatchEvent(new CustomEvent('aurosanax:diagnostico-aplicado-plan', {
+          detail: {
+            id_atencion: state.atencionActual,
+            protocolo: clonar(p, {}),
+            medicamentos_agregados: medicamentos,
+            ordenes_agregadas: ordenes
+          }
+        }));
+      }catch(e){}
+
+      const algunaCaja = Object.values(aplicados).some(Boolean);
+      mensaje(
+        'ok',
+        'Protocolo transferido al Plan. Medicamentos agregados: ' + medicamentos +
+        '. Órdenes agregadas: ' + ordenes +
+        (algunaCaja
+          ? '.'
+          : '. El Plan no expuso campos de texto compatibles; revise las tablas del Plan.')
+      );
+
+      sincronizarEditorCie10DesdeDiagnosticos();
+      guardarEstadoTemporal();
+
+    }finally{
+      if(boton){
+        boton.disabled = disabledOriginal;
+        boton.removeAttribute('aria-busy');
+        boton.innerHTML = htmlOriginal || '<i class="bi bi-check2-circle"></i> Aplicar al Plan';
+      }
+    }
   }
 
   function cambiarPorAtencion(idAtencion){
