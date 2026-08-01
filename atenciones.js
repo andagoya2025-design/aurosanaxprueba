@@ -701,15 +701,19 @@
   }
 
 
-  async function enviarAtencionGoogleSheets(atencion){
+  async function enviarAtencionGoogleSheets(atencion, accion){
     try{
       if(!atencion) return { success:false, message:'No hay atención para enviar' };
       if(typeof API_URL === 'undefined' || !API_URL){
         return { success:false, message:'API_URL no está definida en index.html' };
       }
 
+      const accionAtencion = accion === 'editarAtencion'
+        ? 'editarAtencion'
+        : 'guardarAtencion';
+
       const payload = {
-        accion: 'guardarAtencion',
+        accion: accionAtencion,
         data: {
           id_atencion: atencion.id_atencion || '',
           numero_consulta: Number(atencion.numero_consulta || siguienteConsulta(atencion.id_paciente || idPacienteActivo()) || 1),
@@ -720,7 +724,7 @@
           fecha_atencion: atencion.fecha_atencion || fechaHoyISO(),
           hora_atencion: atencion.hora_atencion || horaActual(),
           tipo_atencion: atencion.tipo_atencion || '',
-          estado_atencion: atencion.estado_atencion || 'Finalizada',
+          estado_atencion: atencion.estado_atencion || 'Abierta',
           creado_por: atencion.creado_por || usuarioActual(),
           creado_en: atencion.creado_en || fechaHora(),
           actualizado_en: atencion.actualizado_en || fechaHora()
@@ -734,7 +738,12 @@
         body: JSON.stringify(payload)
       });
 
-      return { success:true, message:'Atención enviada a Google Sheets' };
+      return {
+        success:true,
+        message: accionAtencion === 'editarAtencion'
+          ? 'Atención actualizada en Google Sheets'
+          : 'Atención guardada en Google Sheets'
+      };
 
     }catch(error){
       console.error(MODULO, 'Error enviando atención a Google Sheets:', error);
@@ -1386,6 +1395,33 @@
     lista.unshift(nueva);
     guardarLocal(lista);
 
+    /*
+      AUROSANAX FASE 1 - PERSISTENCIA INMEDIATA DE LA ATENCIÓN:
+      La fila principal se crea en Google Sheets al pulsar Iniciar atención,
+      con estado Abierta y conservando el mismo id_atencion durante todo el flujo.
+      De este modo, Examen físico, Diagnóstico, Plan y Receta nunca trabajan
+      contra una atención inexistente en la pestaña atenciones.
+    */
+    const resultadoInicio = await enviarAtencionGoogleSheets(
+      nueva,
+      'guardarAtencion'
+    );
+
+    if(!resultadoInicio || !resultadoInicio.success){
+      const listaRollback = leerLocal().filter(function(item){
+        return String(item.id_atencion || '') !== String(nueva.id_atencion || '');
+      });
+      guardarLocal(listaRollback);
+      renderAtencionesPaciente();
+
+      alert(
+        'No se pudo crear la atención en Google Sheets. ' +
+        'No se activó la consulta para evitar registros clínicos huérfanos. ' +
+        'Revise Apps Script o la conexión.'
+      );
+      return null;
+    }
+
     if(cita){
       limpiarCitaSeleccionadaAgenda();
     }
@@ -1443,7 +1479,7 @@
     atencionActivaId = '';
     renderAtencionesPaciente();
 
-    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada);
+    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
 
     if(resultado && resultado.success){
       alert('Atención finalizada y enviada a Google Sheets.');
@@ -1562,7 +1598,7 @@
       window.examenFisicoState.atencionActual = actualizada.id_atencion;
     }
 
-    const resultado = await enviarAtencionGoogleSheets(actualizada);
+    const resultado = await enviarAtencionGoogleSheets(actualizada, 'editarAtencion');
 
     renderAtencionesPaciente();
 
