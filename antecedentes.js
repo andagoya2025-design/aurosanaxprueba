@@ -3762,3 +3762,69 @@ if(document.readyState === 'loading'){
 }
 
 console.log('AUROSANAX antecedentes.js: RESPONSIVE PREMIUM MÓVIL v1.2 + VACUNAS ETIQUETADAS cargado');
+/* ============================================================
+   AUROSANAX FIX QUIRÚRGICO - NO GUARDAR ANTECEDENTES VACÍOS
+   Alcance exclusivo:
+   - Solo modifica el valor devuelto por
+     recopilarAntecedentesPersonalesCompletos().
+   - Conserva el formato JSON y el marcador vigente cuando existe
+     al menos un dato clínico real.
+   - Ignora únicamente estructuras técnicas predeterminadas, como
+     los números 1, 2, 3 y 4 de las dosis COVID sin contenido.
+   - No modifica botones, eventos, carga, edición, actualización,
+     diseño, columnas, Apps Script ni otros módulos.
+   ============================================================ */
+function auroAntecedentesTieneDatoRealFinal_(valor, clave){
+  const clavesTecnicas = {
+    numero: true,
+    key: true,
+    biologico: true,
+    actividad: true,
+    habito: true
+  };
+
+  if(valor === null || valor === undefined) return false;
+
+  if(typeof valor === 'boolean') return valor === true;
+
+  if(typeof valor === 'number') return !Number.isNaN(valor);
+
+  if(typeof valor === 'string'){
+    if(clavesTecnicas[String(clave || '')]) return false;
+    return valor.trim() !== '';
+  }
+
+  if(Array.isArray(valor)){
+    return valor.some(function(item){
+      return auroAntecedentesTieneDatoRealFinal_(item, '');
+    });
+  }
+
+  if(typeof valor === 'object'){
+    return Object.keys(valor).some(function(k){
+      if(clavesTecnicas[k]) return false;
+      return auroAntecedentesTieneDatoRealFinal_(valor[k], k);
+    });
+  }
+
+  return false;
+}
+
+function recopilarAntecedentesPersonalesCompletos(){
+  const patologicos = recopilarAntecedentesPersonalesEstructurados();
+
+  const data = {
+    patologicos: patologicos,
+    covid: recopilarAntecedenteCovidEstructurado(),
+    vacunas: recopilarVacunasEstructuradas(),
+    habitos: recopilarHabitosEstructurados(),
+    estilo_vida: recopilarEstiloVidaEstructurado(),
+    alimentacion: recopilarAlimentacionEstructurada()
+  };
+
+  if(!auroAntecedentesTieneDatoRealFinal_(data, '')){
+    return '';
+  }
+
+  return auroSerializar(AURO_ANT_PERSONALES_MARKER, data) || patologicos;
+}
