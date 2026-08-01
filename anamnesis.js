@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.12';
+  const VERSION = '3.6.11';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2025,88 +2025,6 @@ Función:
     return '';
   }
 
-
-  /* ============================================================
-     AUROSANAX ANAMNESIS v3.6.12
-     REVALIDACIÓN NO BLOQUEANTE DE LA ATENCIÓN ACTIVA
-     ------------------------------------------------------------
-     - Solo exige id_atencion para guardar por consulta.
-     - Completa id_paciente e id_historia cuando están disponibles.
-     - No impide el guardado si esos datos descriptivos tardan en llegar.
-     - No modifica Apps Script, Atenciones, Index ni Google Sheets.
-  ============================================================ */
-
-  function auroDormirContextoAnamnesis(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  function auroRefrescarContextoAnamnesis() {
-    let contexto = null;
-
-    try {
-      if (typeof window.getContextoAtencionActual === 'function') {
-        contexto = window.getContextoAtencionActual();
-      } else if (typeof window.obtenerContextoAtencionActual === 'function') {
-        contexto = window.obtenerContextoAtencionActual();
-      }
-    } catch (error) {
-      console.warn('AUROSANAX Anamnesis: no se pudo releer el contexto maestro.', error);
-    }
-
-    if (!contexto || typeof contexto !== 'object') {
-      try {
-        if (typeof window.getAtencionActiva === 'function') {
-          contexto = window.getAtencionActiva();
-        } else if (typeof window.obtenerAtencionActiva === 'function') {
-          contexto = window.obtenerAtencionActiva();
-        }
-      } catch (error) {
-        console.warn('AUROSANAX Anamnesis: no se pudo releer la atención activa.', error);
-      }
-    }
-
-    contexto = contexto && typeof contexto === 'object' ? contexto : {};
-
-    const idAtencion = texto(
-      contexto.id_atencion || contexto.idAtencion || contexto.atencion_id ||
-      auroObtenerIdAtencionAnamnesis()
-    );
-
-    const idPaciente = texto(
-      contexto.id_paciente || contexto.idPaciente || contexto.paciente_id
-    );
-
-    const idHistoria = texto(
-      contexto.id_historia || contexto.idHistoria || contexto.historia_id
-    );
-
-    if (idAtencion) {
-      state.idAtencionActual = idAtencion;
-      window.auroAtencionSeleccionadaId = idAtencion;
-    }
-    if (idPaciente) state.idPacienteActual = idPaciente;
-    if (idHistoria) state.idHistoriaActual = idHistoria;
-
-    state.contextoAtencion = {
-      ...state.contextoAtencion,
-      ...contexto,
-      id_atencion: idAtencion || state.idAtencionActual,
-      id_paciente: idPaciente || state.idPacienteActual,
-      id_historia: idHistoria || state.idHistoriaActual
-    };
-
-    return texto(state.idAtencionActual);
-  }
-
-  async function auroEsperarIdAtencionAnamnesis(intentos = 5, esperaMs = 250) {
-    for (let intento = 1; intento <= intentos; intento += 1) {
-      const idAtencion = auroRefrescarContextoAnamnesis();
-      if (idAtencion) return idAtencion;
-      if (intento < intentos) await auroDormirContextoAnamnesis(esperaMs);
-    }
-    return '';
-  }
-
   function auroClaveControlAnamnesis(control, indice) {
     if (!control) return '';
     if (control.id) return 'id:' + control.id;
@@ -2320,25 +2238,10 @@ Función:
   }
 
   async function guardarAnamnesisPorAtencion() {
-    const idAtencion = await auroEsperarIdAtencionAnamnesis();
-    if (!idAtencion) {
-      return {
-        success: false,
-        message: 'No existe una atención activa sincronizada. Los datos permanecen en pantalla.'
-      };
-    }
-
     const data = guardarAnamnesisTemporal();
     if (!data) return { success: false, message: 'No existe una atención activa.' };
-
-    data.id_atencion = idAtencion;
-    const remoto = await auroEnviarAnamnesisSheets(data);
-
-    return {
-      success: remoto?.success === true,
-      data,
-      remoto
-    };
+    await auroEnviarAnamnesisSheets(data);
+    return { success: true, data };
   }
 
   async function auroBuscarAnamnesisSheets(idAtencion) {
@@ -2471,13 +2374,9 @@ Función:
     if (state.restaurandoAtencion || !auroObtenerIdAtencionAnamnesis()) return;
 
     clearTimeout(state.guardadoPendiente);
-    state.guardadoPendiente = setTimeout(async () => {
-      const idAtencion = await auroEsperarIdAtencionAnamnesis(4, 250);
-      if (!idAtencion) return;
-
+    state.guardadoPendiente = setTimeout(() => {
       const data = guardarAnamnesisTemporal();
       if (data && auroTieneContenidoAnamnesis(data)) {
-        data.id_atencion = idAtencion;
         auroEnviarAnamnesisSheets(data);
       }
     }, 900);
