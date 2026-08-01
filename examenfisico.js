@@ -2957,11 +2957,44 @@ function auroInstalarAutoGuardadoExamenFisicoPorAtencion(){
     }
   });
 
-  /*
-    Guardado persistente:
-    Cuando se pulsa "Actualizar historia", se mantiene el flujo original
-    y además se guarda el examen físico en examenes_fisicos por id_atencion.
-  */
+  /* ==========================================================
+     AUROSANAX FASE 2 - GUARDADO PERSISTENTE AISLADO POR MÓDULO
+     Corrección quirúrgica:
+     - El botón general "Actualizar historia" existe en todas las pestañas.
+     - Antes, cualquier clic sobre ese botón creaba/actualizaba una fila en
+       examenes_fisicos, incluso desde Anamnesis, Antecedentes, Diagnóstico o Plan.
+     - Ahora solo se persiste Examen físico cuando su panel está activo.
+     - Si aún no existe id_examen, se exige al menos un dato físico real.
+     - Si ya existe id_examen, se permite actualizarlo incluso al limpiar campos.
+     No modifica el guardado temporal, Diagnóstico, Plan, Historia ni Apps Script.
+  ========================================================== */
+  function auroExamenFisicoPanelEstaActivo(){
+    const panel = auroExamenFisicoPanel();
+    return !!(
+      panel &&
+      panel.classList &&
+      panel.classList.contains('active') &&
+      panel.offsetParent !== null
+    );
+  }
+
+  function auroExamenFisicoPayloadTieneDatosReales(payload){
+    payload = payload || {};
+
+    return [
+      payload.peso_kg,
+      payload.talla_cm,
+      payload.imc,
+      payload.presion_arterial,
+      payload.frecuencia_cardiaca,
+      payload.temperatura,
+      payload.saturacion,
+      payload.examen_fisico
+    ].some(function(valor){
+      return String(valor == null ? '' : valor).trim() !== '';
+    });
+  }
+
   document.addEventListener('click', function(e){
     const btn = e.target && e.target.closest ? e.target.closest('button, a') : null;
     if(!btn) return;
@@ -2972,13 +3005,33 @@ function auroInstalarAutoGuardadoExamenFisicoPorAtencion(){
       .replace(/\s+/g, ' ')
       .trim();
 
-    if(texto.includes('actualizar historia')){
-      setTimeout(function(){
-        if(typeof auroGuardarExamenFisicoSheets === 'function'){
-          auroGuardarExamenFisicoSheets();
-        }
-      }, 450);
-    }
+    if(!texto.includes('actualizar historia')) return;
+
+    /* Bloqueo principal: otros módulos nunca persisten Examen físico. */
+    if(!auroExamenFisicoPanelEstaActivo()) return;
+
+    setTimeout(function(){
+      if(typeof auroGuardarExamenFisicoSheets !== 'function') return;
+
+      const payload = typeof auroExamenFisicoPayload === 'function'
+        ? auroExamenFisicoPayload()
+        : null;
+
+      if(!payload || !payload.id_atencion) return;
+
+      const idExamenExistente = String(payload.id_examen || '').trim();
+      const hayDatosFisicos = auroExamenFisicoPayloadTieneDatosReales(payload);
+
+      /* No crear una fila nueva completamente vacía. */
+      if(!idExamenExistente && !hayDatosFisicos){
+        console.log(
+          'AUROSANAX EXAMEN: guardado omitido; no existen datos físicos reales.'
+        );
+        return;
+      }
+
+      auroGuardarExamenFisicoSheets();
+    }, 450);
   }, true);
 }
 
