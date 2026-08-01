@@ -1,7 +1,7 @@
 /****************************************************************
  AUROSANAX ERP
  plan.js
- ACTUALIZACIÓN QUIRÚRGICA: CONTEXTO UNIFICADO POR ATENCIÓN v20
+ ACTUALIZACIÓN QUIRÚRGICA: CONTEXTO UNIFICADO POR ATENCIÓN v20.1
  MODULACIÓN PLAN - FASE 5 EVALUACIONES / NAVEGACIÓN SEGURA
  ---------------------------------------------------------------
  OBJETIVO:
@@ -70,6 +70,71 @@ function normalizarTextoPlan(t){
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g,'')
         .trim();
+}
+
+
+/* ============================================================
+   AUROSANAX PLAN - COMPATIBILIDAD TEXTO / JSON COMPACTO
+   Intervención quirúrgica para receta_medica e indicaciones_paciente.
+   - Los registros nuevos se guardan como arreglos JSON compactos.
+   - Los registros antiguos en texto continúan siendo compatibles.
+   - La interfaz siempre recibe texto legible; nunca muestra JSON bruto.
+============================================================ */
+
+function auroPlanListaClinicaDesdeValor(valor){
+    const raw = String(valor ?? '').trim();
+    if(!raw) return [];
+
+    if(raw.startsWith('[') || raw.startsWith('{')){
+        try{
+            let datos = JSON.parse(raw);
+            if(!Array.isArray(datos)) datos = [datos];
+
+            const lista = datos.map(function(item){
+                if(typeof item === 'string') return item.trim();
+                if(!item || typeof item !== 'object') return '';
+
+                if(item.texto) return String(item.texto).trim();
+                if(item.descripcion) return String(item.descripcion).trim();
+                if(item.indicacion) return String(item.indicacion).trim();
+                if(item.recomendacion) return String(item.recomendacion).trim();
+
+                /* Compatibilidad defensiva si alguna versión guardó medicamentos estructurados. */
+                const med = String(item.med || item.medicamento || item.nombre || '').trim();
+                if(med){
+                    const partes = [
+                        med,
+                        item.pres || item.presentacion || '',
+                        item.via || '',
+                        item.frec || item.frecuencia || '',
+                        (item.dur || item.duracion) ? 'por ' + (item.dur || item.duracion) : '',
+                        item.ind || item.indicaciones || ''
+                    ].map(function(x){ return String(x || '').trim(); }).filter(Boolean);
+                    return partes.join(' - ');
+                }
+
+                return '';
+            }).filter(Boolean);
+
+            if(lista.length) return lista;
+        }catch(e){
+            /* Si no es JSON válido, se conserva como texto histórico. */
+        }
+    }
+
+    return raw
+        .split(/\r?\n+/)
+        .map(function(linea){ return String(linea || '').trim(); })
+        .filter(Boolean);
+}
+
+function auroPlanValorClinicoATexto(valor){
+    return auroPlanListaClinicaDesdeValor(valor).join('\n');
+}
+
+function auroPlanTextoClinicoAJSON(valor){
+    const lista = auroPlanListaClinicaDesdeValor(valor);
+    return lista.length ? JSON.stringify(lista) : '';
 }
 
 
@@ -811,12 +876,12 @@ function cargarPlanTemporal(idAtencion){
         JSON.parse(JSON.stringify(data.interconsultas || []));
 
     auroPlanSetValue('hcPlanTratamiento', data.plan || '');
-    auroPlanSetValue('hcIndicacionesPaciente', data.indicaciones || '');
+    auroPlanSetValue('hcIndicacionesPaciente', auroPlanValorClinicoATexto(data.indicaciones || ''));
     auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
     auroPlanSetValue('hcInterconsultaResumen', data.interconsultaTexto || '');
     auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
     auroPlanRestaurarEvaluaciones(data.evaluacionesChecks || {});
-    auroPlanSetValue('hcRecetaMedicamentos', data.receta || '');
+    auroPlanSetValue('hcRecetaMedicamentos', auroPlanValorClinicoATexto(data.receta || ''));
 
     auroPlanRefrescarVistas();
 }
@@ -2311,7 +2376,9 @@ function auroPlanPrepararDatosSheets(){
             JSON.stringify(window.medicamentosPlanSeleccionados || []),
 
         receta_medica:
-            auroPlanGetValue('hcRecetaMedicamentos'),
+            auroPlanTextoClinicoAJSON(
+                auroPlanGetValue('hcRecetaMedicamentos')
+            ),
 
         ordenes_medicas:
             JSON.stringify(
@@ -2333,7 +2400,9 @@ function auroPlanPrepararDatosSheets(){
             ),
 
         indicaciones_paciente:
-            auroPlanGetValue('hcIndicacionesPaciente'),
+            auroPlanTextoClinicoAJSON(
+                auroPlanGetValue('hcIndicacionesPaciente')
+            ),
 
         proximo_control:
             auroPlanGetValue('hcControl'),
@@ -2671,7 +2740,9 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     );
 
     auroPlanSetValue('hcRecetaMedicamentos',
-        valorPlan('receta_medica','receta','recetaMedicamentos')
+        auroPlanValorClinicoATexto(
+            valorPlan('receta_medica','receta','recetaMedicamentos')
+        )
     );
 
     auroPlanSetValue('hcExamenesSolicitados', '');
@@ -2687,7 +2758,9 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     auroPlanCargarEvaluacionesDesdeValor(evaluacionesValor);
 
     auroPlanSetValue('hcIndicacionesPaciente',
-        valorPlan('indicaciones_paciente','indicaciones','indicacionesPaciente')
+        auroPlanValorClinicoATexto(
+            valorPlan('indicaciones_paciente','indicaciones','indicacionesPaciente')
+        )
     );
 
     auroPlanSetValue('hcControl',
@@ -3173,8 +3246,8 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         window.interconsultasPlanSeleccionadas = clonarSeguro(data.interconsultas || []);
 
         auroPlanSetValue('hcPlanTratamiento', data.plan || '');
-        auroPlanSetValue('hcIndicacionesPaciente', data.indicaciones || '');
-        auroPlanSetValue('hcRecetaMedicamentos', data.receta || '');
+        auroPlanSetValue('hcIndicacionesPaciente', auroPlanValorClinicoATexto(data.indicaciones || ''));
+        auroPlanSetValue('hcRecetaMedicamentos', auroPlanValorClinicoATexto(data.receta || ''));
         auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
         auroPlanSetValue('hcInterconsultaResumen', data.interconsultaTexto || '');
         auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
@@ -3392,4 +3465,3 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     /* Solo actualiza habilitación visual; no carga, guarda ni sincroniza datos. */
     window.__auroPlanResetEstadoTimerV25 = setInterval(actualizarEstadoBoton, 1200);
 })();
-
