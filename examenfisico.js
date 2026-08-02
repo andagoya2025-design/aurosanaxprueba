@@ -3106,14 +3106,17 @@ if(document.readyState === 'loading'){
    - El Plan podía recibir protocolos sin que el diagnóstico quedara en Sheets.
 
    Resultado:
-   - Permite guardar los diagnósticos de la atención activa sin exigir
-     que el usuario abra o actualice manualmente Examen físico.
-   - Reutiliza las funciones y el endpoint existentes.
-   - Si todavía no existe id_examen, crea automáticamente el registro técnico
-     necesario y luego guarda el detalle/diagnósticos.
+   - Guarda el diagnóstico directamente por id_atencion.
+   - id_examen se conserva únicamente si ya existe un examen físico real.
+   - Nunca crea una fila técnica de examen físico desde Diagnóstico.
+   - Espera confirmación real antes de continuar hacia Plan.
    ========================================================== */
 
 async function auroGuardarDiagnosticosAtencionActual(){
+  const API = typeof auroExamenFisicoApiUrl === 'function'
+    ? auroExamenFisicoApiUrl()
+    : '';
+
   const idAtencion = String(
     (typeof auroExamenFisicoIdAtencionActual === 'function'
       ? auroExamenFisicoIdAtencionActual()
@@ -3123,6 +3126,13 @@ async function auroGuardarDiagnosticosAtencionActual(){
   const diagnosticos = typeof auroRecopilarDiagnosticosEstructurados === 'function'
     ? auroRecopilarDiagnosticosEstructurados()
     : [];
+
+  if(!API){
+    return {
+      success:false,
+      message:'API_URL no definida para guardar el diagnóstico.'
+    };
+  }
 
   if(!idAtencion){
     return {
@@ -3143,71 +3153,56 @@ async function auroGuardarDiagnosticosAtencionActual(){
       atencionActual:idAtencion,
       cache:{}
     };
+
     window.examenFisicoState.examenesSheets =
       window.examenFisicoState.examenesSheets || {};
 
+    /*
+      AUROSANAX FIX QUIRÚRGICO
+      --------------------------------------------------------
+      El guardado autónomo de Diagnóstico depende de id_atencion.
+
+      - No crea una fila en examenes_fisicos.
+      - No llama a auroGuardarExamenFisicoSheets().
+      - No llama a auroGuardarDetalleExamenFisicoSheets().
+      - Si ya existe un examen físico real, conserva su id_examen
+        únicamente como vínculo opcional.
+      - Espera la confirmación real de guardarDiagnosticos antes de
+        permitir que CIE Inteligente continúe hacia Plan.
+    */
     let examen = window.examenFisicoState.examenesSheets[idAtencion] || null;
 
     if(!examen || !String(examen.id_examen || '').trim()){
       examen = await auroBuscarExamenFisicoPorAtencion(idAtencion);
     }
 
-    let idExamen = String(examen?.id_examen || '').trim();
+    const idExamen = String(examen?.id_examen || '').trim();
 
-    /*
-      Si la consulta todavía no tiene fila técnica en examenes_fisicos,
-      se crea automáticamente usando el flujo estable ya existente.
-      Esto no obliga al médico a abrir ni actualizar Examen físico.
-    */
-    if(!idExamen){
-      const guardadoExamen = await auroGuardarExamenFisicoSheets();
+    const respuesta = await fetch(API, {
+      method:'POST',
+      body:JSON.stringify({
+        accion:'guardarDiagnosticos',
+        data:{
+          id_atencion:idAtencion,
+          id_examen:idExamen,
+          registros:diagnosticos
+        }
+      })
+    });
 
-      if(!guardadoExamen || guardadoExamen.success === false){
-        return {
-          success:false,
-          message:guardadoExamen?.message ||
-            'No se pudo crear el registro técnico del examen físico.'
-        };
-      }
-
-      idExamen = String(
-        guardadoExamen?.data?.id_examen ||
-        guardadoExamen?.id_examen ||
-        guardadoExamen?.id ||
-        window.examenFisicoState?.examenesSheets?.[idAtencion]?.id_examen ||
-        ''
-      ).trim();
-
-      /*
-        auroGuardarExamenFisicoSheets ya intenta guardar el detalle.
-        Si el backend no devolvió el id en el primer resultado, se vuelve
-        a consultar para confirmar el registro creado.
-      */
-      if(!idExamen){
-        const confirmado = await auroBuscarExamenFisicoPorAtencion(idAtencion);
-        idExamen = String(confirmado?.id_examen || '').trim();
-      }
-    }
-
-    if(!idExamen){
-      return {
-        success:false,
-        message:'No se pudo identificar el id_examen necesario para guardar el diagnóstico.'
-      };
-    }
-
-    const resultado = await auroGuardarDetalleExamenFisicoSheets(idExamen);
+    const resultado = await respuesta.json();
 
     if(!resultado || resultado.success === false){
       return {
         success:false,
         message:resultado?.message ||
-          'Apps Script no confirmó el guardado del diagnóstico.'
+          'Apps Script no confirmó el guardado del diagnóstico.',
+        data:resultado || null
       };
     }
 
     /*
-      Se invalida cualquier lectura antigua para que Diagnóstico y Recetas
+      Invalida lecturas antiguas para que Diagnóstico y Recetas
       consulten nuevamente los datos persistidos de esta atención.
     */
     try{
@@ -3224,11 +3219,16 @@ async function auroGuardarDiagnosticosAtencionActual(){
       id_atencion:idAtencion,
       id_examen:idExamen,
       diagnosticos:
-        Number(resultado.diagnosticos ?? resultado.total_guardados ?? diagnosticos.length),
+        Number(resultado.total_guardados ?? diagnosticos.length),
       data:resultado
     };
+
   }catch(error){
-    console.error('AUROSANAX DIAGNÓSTICOS: error guardando por atención.', error);
+    console.error(
+      'AUROSANAX DIAGNÓSTICOS: error guardando directamente por atención.',
+      error
+    );
+
     return {
       success:false,
       message:error?.message || String(error)
