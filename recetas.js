@@ -1,7 +1,7 @@
 /* =====================================================
    AUROSANAX ERP - MÓDULO RECETAS
    Archivo: recetas.js
-   Versión: 2.1 diagnóstico estructurado por atención
+   Versión: 2.2 diagnóstico CIE-10 persistente por atención
    Función: vista previa profesional + PDF + historial local filtrado por paciente + paginación + acciones verticales + refresco estable
             + edición independiente de recetas + vínculo con atenciones.
             + guardado JSON + impresión premium compacta + edición responsive + hora local Ecuador + edición limpia sin duplicidades.
@@ -951,13 +951,13 @@
     }
   }
 
-  function auroRecetaElegirDiagnosticoEstructurado(lista, cie){
+  function auroRecetaObtenerDiagnosticoEstructurado(lista, cie){
     const cieNorm = auroRecetaCodigoNormalizado(cie);
     const items = Array.isArray(lista) ? lista : [];
 
     const coincidentes = items.filter(dx => {
       const codigo = auroRecetaCodigoNormalizado(
-        dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || ''
+        dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || dx.codigo || ''
       );
       return !cieNorm || codigo === cieNorm;
     });
@@ -968,12 +968,13 @@
       items.find(dx => String(dx.principal || '').toUpperCase() === 'SI') ||
       items[0];
 
-    if(!principal) return '';
+    if(!principal) return null;
 
     const codigo = String(
       principal.codigo_cie10 ||
       principal.diagnostico_cie10 ||
       principal.cie10 ||
+      principal.codigo ||
       cie ||
       ''
     ).trim();
@@ -986,14 +987,21 @@
       ''
     ).trim();
 
-    if(!descripcion || auroRecetaDiagnosticoGenerico(descripcion)) return '';
+    if(!codigo || !auroRecetaCodigoNormalizado(codigo)) return null;
+    if(!descripcion || auroRecetaDiagnosticoGenerico(descripcion)) return null;
 
     const codigoNorm = auroRecetaCodigoNormalizado(codigo);
     const descripcionNorm = auroRecetaCodigoNormalizado(descripcion);
-
-    return codigo && !descripcionNorm.includes(codigoNorm)
+    const texto = codigo && !descripcionNorm.includes(codigoNorm)
       ? `${codigo} - ${descripcion}`
       : descripcion;
+
+    return { codigo, descripcion, texto, registro: principal };
+  }
+
+  function auroRecetaElegirDiagnosticoEstructurado(lista, cie){
+    const diagnostico = auroRecetaObtenerDiagnosticoEstructurado(lista, cie);
+    return diagnostico ? diagnostico.texto : '';
   }
 
   async function auroRecetaResolverDiagnosticoEstructurado(){
@@ -1003,11 +1011,12 @@
     if(!idAtencion) return auroRecetaObtenerDiagnosticoAutomatico();
 
     const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion);
-    const estructurado = auroRecetaElegirDiagnosticoEstructurado(lista, cie);
+    const estructurado = auroRecetaObtenerDiagnosticoEstructurado(lista, cie);
 
     if(estructurado){
-      setVal('recDiagnostico', estructurado);
-      return estructurado;
+      setVal('recCie10', estructurado.codigo);
+      setVal('recDiagnostico', estructurado.texto);
+      return estructurado.texto;
     }
 
     const fallback = auroRecetaObtenerDiagnosticoAutomatico();
@@ -2095,12 +2104,18 @@
         r.id_historia = obtenerIdHistoriaActivaSeguro(r.id_paciente);
       }
 
-      if(!r.diagnostico || auroRecetaDiagnosticoGenerico(r.diagnostico)){
+      if(!r.diagnostico || auroRecetaDiagnosticoGenerico(r.diagnostico) || !r.diagnostico_cie10){
         r.diagnostico = await auroRecetaResolverDiagnosticoEstructurado();
+        r.diagnostico_cie10 = val('recCie10');
       }
 
       if(!r.diagnostico || auroRecetaDiagnosticoGenerico(r.diagnostico)){
         alert('No se pudo identificar la descripción del diagnóstico de esta consulta. Actualice el diagnóstico estructurado antes de guardar la receta.');
+        return;
+      }
+
+      if(!auroRecetaCodigoNormalizado(r.diagnostico_cie10)){
+        alert('No se pudo identificar el código CIE-10 principal de esta consulta. Actualice el diagnóstico estructurado antes de guardar la receta.');
         return;
       }
 
