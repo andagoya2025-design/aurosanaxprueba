@@ -3828,3 +3828,452 @@ function recopilarAntecedentesPersonalesCompletos(){
 
   return auroSerializar(AURO_ANT_PERSONALES_MARKER, data) || patologicos;
 }
+
+/* ============================================================
+   AUROSANAX - ANTECEDENTES FAMILIARES ESTRUCTURADOS V1
+   Alcance quirúrgico:
+   - Conecta únicamente los controles familiares creados en Index 42.
+   - Usa la columna existente antecedentes_familiares.
+   - No modifica botones, payload, Apps Script, columnas ni otros módulos.
+   - Conserva compatibilidad con texto histórico.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  const MARCADOR = 'AUROSANAX_ANT_FAMILIARES_V1::';
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function selectorSeguro_(valor){
+    const raw = String(valor || '');
+    if(window.CSS && typeof window.CSS.escape === 'function'){
+      return window.CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, '\\$&');
+  }
+
+  function datosVacios_(){
+    return {
+      version:'AUROSANAX_ANT_FAMILIARES_V1',
+      patologicos:[],
+      quirurgicos:[],
+      otros:''
+    };
+  }
+
+  function tieneDatos_(data){
+    return !!(
+      (Array.isArray(data?.patologicos) && data.patologicos.length) ||
+      (Array.isArray(data?.quirurgicos) && data.quirurgicos.length) ||
+      texto_(data?.otros)
+    );
+  }
+
+  function leerValor_(valor){
+    const raw = texto_(valor);
+    if(!raw) return {estructurado:true, data:datosVacios_(), legado:''};
+
+    let json = raw;
+    if(raw.startsWith(MARCADOR)){
+      json = raw.substring(MARCADOR.length);
+    }
+
+    try{
+      const obj = JSON.parse(json);
+      if(obj && typeof obj === 'object'){
+        return {
+          estructurado:true,
+          data:{
+            version:'AUROSANAX_ANT_FAMILIARES_V1',
+            patologicos:Array.isArray(obj.patologicos) ? obj.patologicos : [],
+            quirurgicos:Array.isArray(obj.quirurgicos) ? obj.quirurgicos : [],
+            otros:texto_(obj.otros)
+          },
+          legado:''
+        };
+      }
+    }catch(e){}
+
+    return {
+      estructurado:false,
+      data:datosVacios_(),
+      legado:raw
+    };
+  }
+
+  function recopilarPatologicos_(){
+    const filas = [];
+
+    document.querySelectorAll('.hcFamiliarPatParentesco').forEach(parentescoInput => {
+      const clave = texto_(parentescoInput.dataset.patologiaFamiliar);
+      if(!clave) return;
+
+      const detalleInput = document.querySelector(
+        '.hcFamiliarPatDetalle[data-patologia-familiar="' +
+        selectorSeguro_(clave) + '"]'
+      );
+
+      const parentesco = texto_(parentescoInput.value);
+      const detalle = texto_(detalleInput?.value);
+      let patologia = clave;
+
+      if(clave === 'Otros'){
+        const otroNombre = texto_(document.querySelector('.hcFamiliarPatOtroNombre')?.value);
+        if(otroNombre) patologia = otroNombre;
+      }
+
+      if(parentesco || detalle || (clave === 'Otros' && patologia !== 'Otros')){
+        filas.push({
+          patologia:patologia,
+          parentesco:parentesco,
+          detalle:detalle
+        });
+      }
+    });
+
+    return filas;
+  }
+
+  function recopilarQuirurgicos_(){
+    const filas = [];
+
+    document.querySelectorAll('.hcFamiliarQxParentesco').forEach(parentescoInput => {
+      const clave = texto_(parentescoInput.dataset.cirugiaFamiliar);
+      if(!clave) return;
+
+      const detalleInput = document.querySelector(
+        '.hcFamiliarQxDetalle[data-cirugia-familiar="' +
+        selectorSeguro_(clave) + '"]'
+      );
+
+      const parentesco = texto_(parentescoInput.value);
+      const detalle = texto_(detalleInput?.value);
+      let cirugia = clave;
+
+      if(clave === 'Otros'){
+        const otroNombre = texto_(document.querySelector('.hcFamiliarQxOtroNombre')?.value);
+        if(otroNombre) cirugia = otroNombre;
+      }
+
+      if(parentesco || detalle || (clave === 'Otros' && cirugia !== 'Otros')){
+        filas.push({
+          cirugia:cirugia,
+          parentesco:parentesco,
+          detalle:detalle
+        });
+      }
+    });
+
+    return filas;
+  }
+
+  function recopilar_(){
+    const data = {
+      version:'AUROSANAX_ANT_FAMILIARES_V1',
+      patologicos:recopilarPatologicos_(),
+      quirurgicos:recopilarQuirurgicos_(),
+      otros:texto_(document.getElementById('hcFamiliaresOtros')?.value)
+    };
+
+    const valor = tieneDatos_(data)
+      ? MARCADOR + JSON.stringify(data)
+      : '';
+
+    const hidden = document.getElementById('hcAntecedentesFamiliares');
+    if(hidden) hidden.value = valor;
+
+    return valor;
+  }
+
+  function limpiar_(opciones){
+    const preservarHidden = opciones?.preservarHidden === true;
+
+    document.querySelectorAll(
+      '.hcFamiliarPatParentesco,.hcFamiliarPatDetalle,' +
+      '.hcFamiliarQxParentesco,.hcFamiliarQxDetalle'
+    ).forEach(input => input.value = '');
+
+    const patOtro = document.querySelector('.hcFamiliarPatOtroNombre');
+    const qxOtro = document.querySelector('.hcFamiliarQxOtroNombre');
+    const otros = document.getElementById('hcFamiliaresOtros');
+
+    if(patOtro) patOtro.value = '';
+    if(qxOtro) qxOtro.value = '';
+    if(otros) otros.value = '';
+
+    if(!preservarHidden){
+      const hidden = document.getElementById('hcAntecedentesFamiliares');
+      if(hidden) hidden.value = '';
+    }
+  }
+
+  function buscarFilaPatologica_(nombre){
+    const normal = typeof window.auroNormalizarClaveClinica === 'function'
+      ? window.auroNormalizarClaveClinica(nombre)
+      : texto_(nombre).toLowerCase();
+
+    return [...document.querySelectorAll('.hcFamiliarPatParentesco')].find(input => {
+      const valor = texto_(input.dataset.patologiaFamiliar);
+      const n = typeof window.auroNormalizarClaveClinica === 'function'
+        ? window.auroNormalizarClaveClinica(valor)
+        : valor.toLowerCase();
+      return n === normal;
+    }) || null;
+  }
+
+  function buscarFilaQuirurgica_(nombre){
+    const normal = typeof window.auroNormalizarClaveClinica === 'function'
+      ? window.auroNormalizarClaveClinica(nombre)
+      : texto_(nombre).toLowerCase();
+
+    return [...document.querySelectorAll('.hcFamiliarQxParentesco')].find(input => {
+      const valor = texto_(input.dataset.cirugiaFamiliar);
+      const n = typeof window.auroNormalizarClaveClinica === 'function'
+        ? window.auroNormalizarClaveClinica(valor)
+        : valor.toLowerCase();
+      return n === normal;
+    }) || null;
+  }
+
+  function cargarPatologicos_(filas){
+    (Array.isArray(filas) ? filas : []).forEach(item => {
+      const nombre = texto_(item?.patologia || item?.nombre);
+      if(!nombre) return;
+
+      let parentescoInput = buscarFilaPatologica_(nombre);
+      let claveReal = texto_(parentescoInput?.dataset.patologiaFamiliar);
+
+      if(!parentescoInput){
+        parentescoInput = document.querySelector(
+          '.hcFamiliarPatParentesco[data-patologia-familiar="Otros"]'
+        );
+        claveReal = 'Otros';
+        const otro = document.querySelector('.hcFamiliarPatOtroNombre');
+        if(otro) otro.value = nombre;
+      }
+
+      if(!parentescoInput) return;
+
+      parentescoInput.value = texto_(item?.parentesco);
+
+      const detalleInput = document.querySelector(
+        '.hcFamiliarPatDetalle[data-patologia-familiar="' +
+        selectorSeguro_(claveReal) + '"]'
+      );
+      if(detalleInput) detalleInput.value = texto_(item?.detalle);
+    });
+  }
+
+  function cargarQuirurgicos_(filas){
+    (Array.isArray(filas) ? filas : []).forEach(item => {
+      const nombre = texto_(item?.cirugia || item?.nombre);
+      if(!nombre) return;
+
+      let parentescoInput = buscarFilaQuirurgica_(nombre);
+      let claveReal = texto_(parentescoInput?.dataset.cirugiaFamiliar);
+
+      if(!parentescoInput){
+        parentescoInput = document.querySelector(
+          '.hcFamiliarQxParentesco[data-cirugia-familiar="Otros"]'
+        );
+        claveReal = 'Otros';
+        const otro = document.querySelector('.hcFamiliarQxOtroNombre');
+        if(otro) otro.value = nombre;
+      }
+
+      if(!parentescoInput) return;
+
+      parentescoInput.value = texto_(item?.parentesco);
+
+      const detalleInput = document.querySelector(
+        '.hcFamiliarQxDetalle[data-cirugia-familiar="' +
+        selectorSeguro_(claveReal) + '"]'
+      );
+      if(detalleInput) detalleInput.value = texto_(item?.detalle);
+    });
+  }
+
+  function cargar_(valor){
+    limpiar_({preservarHidden:true});
+
+    const lectura = leerValor_(valor);
+    const hidden = document.getElementById('hcAntecedentesFamiliares');
+
+    if(!lectura.estructurado){
+      /*
+        Compatibilidad histórica:
+        el texto antiguo se conserva íntegro en la columna y se muestra
+        en "Otros antecedentes familiares" sin convertirlo ni perderlo.
+      */
+      if(hidden) hidden.value = lectura.legado;
+      const otros = document.getElementById('hcFamiliaresOtros');
+      if(otros) otros.value = lectura.legado;
+      return;
+    }
+
+    cargarPatologicos_(lectura.data.patologicos);
+    cargarQuirurgicos_(lectura.data.quirurgicos);
+
+    const otros = document.getElementById('hcFamiliaresOtros');
+    if(otros) otros.value = texto_(lectura.data.otros);
+
+    if(hidden){
+      hidden.value = tieneDatos_(lectura.data)
+        ? MARCADOR + JSON.stringify(lectura.data)
+        : '';
+    }
+  }
+
+  function resumenItems_(valor){
+    const lectura = leerValor_(valor);
+    if(!lectura.estructurado){
+      return lectura.legado
+        ? [{titulo:'Antecedente familiar', detalle:lectura.legado}]
+        : [];
+    }
+
+    const items = [];
+
+    lectura.data.patologicos.forEach(x => {
+      const detalle = [
+        texto_(x.parentesco) ? 'Parentesco: ' + texto_(x.parentesco) : '',
+        texto_(x.detalle) ? 'Detalle: ' + texto_(x.detalle) : ''
+      ].filter(Boolean).join(' · ');
+
+      if(texto_(x.patologia)){
+        items.push({titulo:texto_(x.patologia), detalle:detalle});
+      }
+    });
+
+    lectura.data.quirurgicos.forEach(x => {
+      const detalle = [
+        texto_(x.parentesco) ? 'Parentesco: ' + texto_(x.parentesco) : '',
+        texto_(x.detalle) ? 'Detalle: ' + texto_(x.detalle) : ''
+      ].filter(Boolean).join(' · ');
+
+      if(texto_(x.cirugia)){
+        items.push({titulo:'Cirugía: ' + texto_(x.cirugia), detalle:detalle});
+      }
+    });
+
+    if(texto_(lectura.data.otros)){
+      items.push({
+        titulo:'Otros antecedentes familiares',
+        detalle:texto_(lectura.data.otros)
+      });
+    }
+
+    return items;
+  }
+
+  function conectarEventos_(){
+    const panel = document.getElementById('hc_antecedentes');
+    if(!panel || panel.dataset.auroFamiliaresConectado === '1') return;
+
+    panel.dataset.auroFamiliaresConectado = '1';
+
+    panel.addEventListener('input', event => {
+      if(event.target?.matches(
+        '.hcFamiliarPatParentesco,.hcFamiliarPatDetalle,.hcFamiliarPatOtroNombre,' +
+        '.hcFamiliarQxParentesco,.hcFamiliarQxDetalle,.hcFamiliarQxOtroNombre,' +
+        '#hcFamiliaresOtros'
+      )){
+        recopilar_();
+      }
+    });
+
+    panel.addEventListener('change', event => {
+      if(event.target?.matches(
+        '.hcFamiliarPatParentesco,.hcFamiliarPatDetalle,.hcFamiliarPatOtroNombre,' +
+        '.hcFamiliarQxParentesco,.hcFamiliarQxDetalle,.hcFamiliarQxOtroNombre,' +
+        '#hcFamiliaresOtros'
+      )){
+        recopilar_();
+      }
+    });
+
+    const formulario = panel.closest('form');
+    if(formulario && formulario.dataset.auroFamiliaresReset !== '1'){
+      formulario.dataset.auroFamiliaresReset = '1';
+      formulario.addEventListener('reset', () => {
+        setTimeout(() => limpiar_(), 0);
+      });
+    }
+  }
+
+  /*
+    Envuelve únicamente la carga ya existente de Antecedentes.
+    Primero conserva todo el comportamiento estable y después restaura
+    las nuevas tablas familiares.
+  */
+  if(typeof window.auroCargarAntecedentesDesdeHistoria === 'function'){
+    const cargarOriginal = window.auroCargarAntecedentesDesdeHistoria;
+    window.auroCargarAntecedentesDesdeHistoria = function(h, modo){
+      const resultado = cargarOriginal.apply(this, arguments);
+      cargar_(h?.antecedentes_familiares || '');
+      return resultado;
+    };
+  }
+
+  /*
+    Cuando se quita el paciente, limpia solo los controles familiares.
+    Cuando se selecciona uno, la función de carga envuelta restaura los datos.
+  */
+  if(typeof window.seleccionarPacienteHistoria === 'function'){
+    const seleccionarOriginal = window.seleccionarPacienteHistoria;
+    window.seleccionarPacienteHistoria = function(){
+      const resultado = seleccionarOriginal.apply(this, arguments);
+      const idPaciente = texto_(document.getElementById('hcPacienteSelect')?.value);
+      if(!idPaciente) limpiar_();
+      return resultado;
+    };
+  }
+
+  /*
+    Mejora exclusiva de lectura para la caja "Antecedentes previos".
+    Los demás tipos continúan usando el extractor original.
+  */
+  if(typeof window.auroExtraerItemsAntecedentePremium === 'function'){
+    const extraerOriginal = window.auroExtraerItemsAntecedentePremium;
+    window.auroExtraerItemsAntecedentePremium = function(valor, tipo){
+      if(tipo === 'familiares'){
+        const items = resumenItems_(valor);
+        if(items.length) return items;
+      }
+      return extraerOriginal.apply(this, arguments);
+    };
+  }
+
+  window.recopilarAntecedentesFamiliaresEstructurados = recopilar_;
+  window.cargarAntecedentesFamiliaresEstructurados = cargar_;
+  window.limpiarAntecedentesFamiliaresEstructurados = limpiar_;
+  window.auroParsearAntecedentesFamiliares = leerValor_;
+
+  function inicializar_(){
+    conectarEventos_();
+
+    /*
+      Respeta el valor que ya hubiera colocado la historia actual.
+      No inventa datos ni dispara guardados automáticos.
+    */
+    const hidden = document.getElementById('hcAntecedentesFamiliares');
+    if(hidden && texto_(hidden.value)){
+      cargar_(hidden.value);
+    }
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(inicializar_, 260);
+    });
+  }else{
+    setTimeout(inicializar_, 260);
+  }
+
+  console.log(
+    'AUROSANAX antecedentes.js: familiares estructurados V1 conectados sin cambios de backend.'
+  );
+})();
+
