@@ -3106,10 +3106,11 @@ if(document.readyState === 'loading'){
    - El Plan podía recibir protocolos sin que el diagnóstico quedara en Sheets.
 
    Resultado:
-   - Guarda los diagnósticos vinculados cuando ya existe un examen físico real.
-   - Si no existe id_examen, conserva el diagnóstico temporalmente para Plan.
-   - Nunca crea una fila técnica o vacía en examenes_fisicos desde Diagnóstico.
-   - Reutiliza las funciones y el endpoint existentes sin modificar otros módulos.
+   - Permite guardar los diagnósticos de la atención activa sin exigir
+     que el usuario abra o actualice manualmente Examen físico.
+   - Reutiliza las funciones y el endpoint existentes.
+   - Si todavía no existe id_examen, crea automáticamente el registro técnico
+     necesario y luego guarda el detalle/diagnósticos.
    ========================================================== */
 
 async function auroGuardarDiagnosticosAtencionActual(){
@@ -3154,30 +3155,44 @@ async function auroGuardarDiagnosticosAtencionActual(){
     let idExamen = String(examen?.id_examen || '').trim();
 
     /*
-      AUROSANAX FIX QUIRÚRGICO 2026-08-01
-      Diagnóstico y Aplicar al Plan NO deben fabricar un examen físico.
-
-      Regla:
-      - Si ya existe un examen físico real para esta atención, se conserva
-        el flujo histórico y se guardan sus diagnósticos vinculados.
-      - Si todavía no existe id_examen, el diagnóstico permanece en el
-        estado clínico temporal de la atención y Aplicar al Plan puede seguir.
-      - Nunca se llama a auroGuardarExamenFisicoSheets() desde esta ruta.
-      - El examen físico solo se crea mediante una acción deliberada dentro
-        de su propio módulo y con contenido físico real.
+      Si la consulta todavía no tiene fila técnica en examenes_fisicos,
+      se crea automáticamente usando el flujo estable ya existente.
+      Esto no obliga al médico a abrir ni actualizar Examen físico.
     */
     if(!idExamen){
-      guardarExamenFisicoTemporal();
+      const guardadoExamen = await auroGuardarExamenFisicoSheets();
 
+      if(!guardadoExamen || guardadoExamen.success === false){
+        return {
+          success:false,
+          message:guardadoExamen?.message ||
+            'No se pudo crear el registro técnico del examen físico.'
+        };
+      }
+
+      idExamen = String(
+        guardadoExamen?.data?.id_examen ||
+        guardadoExamen?.id_examen ||
+        guardadoExamen?.id ||
+        window.examenFisicoState?.examenesSheets?.[idAtencion]?.id_examen ||
+        ''
+      ).trim();
+
+      /*
+        auroGuardarExamenFisicoSheets ya intenta guardar el detalle.
+        Si el backend no devolvió el id en el primer resultado, se vuelve
+        a consultar para confirmar el registro creado.
+      */
+      if(!idExamen){
+        const confirmado = await auroBuscarExamenFisicoPorAtencion(idAtencion);
+        idExamen = String(confirmado?.id_examen || '').trim();
+      }
+    }
+
+    if(!idExamen){
       return {
-        success:true,
-        persistido:false,
-        pendiente_examen:true,
-        id_atencion:idAtencion,
-        id_examen:'',
-        diagnosticos:diagnosticos.length,
-        message:
-          'Diagnóstico conservado temporalmente. No se creó examen físico porque esta atención todavía no tiene un examen físico guardado.'
+        success:false,
+        message:'No se pudo identificar el id_examen necesario para guardar el diagnóstico.'
       };
     }
 
