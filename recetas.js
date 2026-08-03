@@ -1972,7 +1972,7 @@
         </div>
         <div class="auro-receta-grid">${datosPaciente}</div>
         <div class="auro-receta-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box">${auroRecetaMedicamentosPacienteHTML(r.medicamento)}</div></div>
-        ${r.indicaciones ? `<div class="auro-receta-section"><h4>Indicaciones para el paciente</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.indicaciones, '—')}</div></div>` : ''}
+        ${esAdministrativo && r.indicaciones ? `<div class="auro-receta-section"><h4>Indicaciones para el paciente</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.indicaciones, '—')}</div></div>` : ''}
         ${esAdministrativo && r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.recomendaciones, '—')}</div></div>` : ''}
         <div class="auro-receta-footer">
           <div class="auro-centro-contacto">${ubicacion ? `<div>${safe(ubicacion)}</div>` : ''}${contacto ? `<div>${safe(contacto)}</div>` : ''}${esAdministrativo ? `<div style="margin-top:5px;color:#64748b">ID receta: ${safe(idReceta)} · ID atención: ${safe(idAtencion)} · ID médico: ${safe(idMedico)}</div>` : ''}</div>
@@ -2823,5 +2823,12 @@
    - Cambia únicamente la representación visual del tratamiento.
    - Columnas: medicamento, presentación/concentración, cantidad e indicaciones.
    - Conserva vista previa/PDF, JSON, Plan, guardado, historial y atención.
-   - ORIGINAL/COPIA se reserva para las fases 3 y 4.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.6 - FASES 3 Y 4
+   - Vista administrativa: conserva Indicaciones para el paciente.
+   - Vista paciente / imprimir: no renderiza ese bloque.
+   - Mantiene la tabla institucional de medicamentos.
+   - No modifica guardado, JSON, Plan, Google Sheets, historial ni sincronización.
 ===================================================== */
