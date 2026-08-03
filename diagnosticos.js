@@ -68,7 +68,16 @@
     guardadoTemporalConfirmado: false,
     ultimaEdicionLocal: '',
     protocoloVisualCodigo: '',
-    protocoloVisualModoLectura: false
+    protocoloVisualModoLectura: false,
+
+    /*
+      AUROSANAX OPTIMIZACIÓN QUIRÚRGICA 2026-08-03:
+      Controles internos de sincronización. No se persisten ni modifican
+      la estructura clínica, Apps Script, Google Sheets o los demás módulos.
+    */
+    cargaToken: 0,
+    idCargaEnCurso: '',
+    promesaCarga: null
   };
 
   const IDS_PANEL_CANDIDATOS = [
@@ -3163,14 +3172,45 @@
     idAtencion = texto(idAtencion || idAtencionActiva());
     if(!idAtencion){
       state.atencionActual = '';
+      state.idCargaEnCurso = '';
+      state.promesaCarga = null;
       limpiarVisual();
       status('Sin atención activa');
       mensaje('','');
       return null;
     }
 
-    if(state.cargando) return null;
-    if(!forzar && state.atencionActual === idAtencion && state.ultimaActualizacion){
+    /*
+      Si dos señales del ERP solicitan simultáneamente la misma atención,
+      se reutiliza la carga en curso. Esto evita llamadas duplicadas sin
+      impedir cambiar inmediatamente a otra atención.
+    */
+    if(
+      state.cargando &&
+      state.idCargaEnCurso === idAtencion &&
+      state.promesaCarga
+    ){
+      return state.promesaCarga;
+    }
+
+    /*
+      Al regresar a Diagnóstico dentro de la misma atención se conserva
+      la información ya cargada en memoria. El botón “Sincronizar datos”
+      continúa forzando una lectura nueva porque envía forzar=true.
+    */
+    if(
+      !forzar &&
+      state.atencionActual === idAtencion &&
+      state.ultimaActualizacion
+    ){
+      renderDiagnosticos();
+      renderProtocolos();
+      renderFuentes();
+      restaurarEstadoTemporal(idAtencion);
+      actualizarEstadoEdicion();
+      actualizarTarjetaApoyoIA();
+      renderContextoSuperior();
+      optimizarTitulosResumenExistente();
       return state;
     }
 
@@ -3178,89 +3218,189 @@
       guardarEstadoTemporal();
     }
 
+    /*
+      Cada nueva atención recibe un token único. Si el usuario cambia rápido
+      entre Atención 1, 2 y 3, las respuestas tardías de una consulta anterior
+      se descartan y nunca reemplazan la atención actualmente seleccionada.
+    */
+    const tokenCarga = Number(state.cargaToken || 0) + 1;
+    state.cargaToken = tokenCarga;
     state.cargando = true;
+    state.idCargaEnCurso = idAtencion;
     state.atencionActual = idAtencion;
-    status('Cargando atención ' + idAtencion + '…');
+
+    status('Cargando diagnóstico de la atención ' + idAtencion + '…');
     mensaje('','');
     limpiarVisual();
     state.atencionActual = idAtencion;
 
-    try{
-      const idPaciente = idPacienteActual();
+    const cargaSigueVigente = () =>
+      state.cargaToken === tokenCarga &&
+      state.atencionActual === idAtencion;
 
-      const [
-        dxServidor,
-        detalle,
-        historia,
-        anamnesis,
-        ginecologia,
-        obstetricia,
-        estetica
-      ] = await Promise.all([
-        consultarDiagnosticos(idAtencion),
-        consultarDetalleExamen(idAtencion),
-        consultarHistoria(idPaciente, idAtencion),
-        consultarAnamnesis(idAtencion),
-        consultarEspecialidad('listarGinecologia', idAtencion),
-        consultarEspecialidad('listarObstetricia', idAtencion),
-        consultarEspecialidad('listarEstetica', idAtencion)
-      ]);
+    const ejecutarCarga = async () => {
+      try{
+        const idPaciente = idPacienteActual();
 
-      if(state.atencionActual !== idAtencion) return null;
+        /*
+          FASE 1 — CARGA RÁPIDA
+          El diagnóstico guardado se consulta y se muestra primero.
+          La integración clínica pesada continúa después sin bloquearlo.
+        */
+        const promesaDiagnosticos = consultarDiagnosticos(idAtencion);
 
-      state.detalleExamen = detalle;
-      state.historia = historia;
-      state.anamnesis = anamnesis;
-      state.especialidades = {ginecologia, obstetricia, estetica};
-      state.diagnosticos = fusionarDiagnosticos(
-        dxServidor.length ? dxServidor : normalizarDiagnosticosServidor(detalle?.diagnosticos),
-        diagnosticosLocales()
-      );
+        /*
+          FASE 2 — INTEGRACIÓN CLÍNICA
+          Estas lecturas continúan en paralelo: examen, historia, anamnesis
+          y especialidades. No se cambia su fuente ni su estructura.
+        */
+        const promesaIntegracion = Promise.all([
+          consultarDetalleExamen(idAtencion),
+          consultarHistoria(idPaciente, idAtencion),
+          consultarAnamnesis(idAtencion),
+          consultarEspecialidad('listarGinecologia', idAtencion),
+          consultarEspecialidad('listarObstetricia', idAtencion),
+          consultarEspecialidad('listarEstetica', idAtencion)
+        ]);
 
-      state.protocolos = await consultarProtocolos();
-      if(state.atencionActual !== idAtencion) return null;
+        const dxServidor = await promesaDiagnosticos;
+        if(!cargaSigueVigente()) return null;
 
-      /* AUROSANAX: selección técnica automática.
-         El bloque visual de protocolos se mantiene oculto para evitar duplicación,
-         por lo que se selecciona el primer protocolo disponible para conservar
-         la generación de conducta y la transferencia al Plan. */
-      if(state.protocolos.length && state.protocoloSeleccionado === null){
-        state.protocoloSeleccionado = 0;
+        state.diagnosticos = fusionarDiagnosticos(
+          dxServidor,
+          diagnosticosLocales()
+        );
+
+        /*
+          El CIE-10 aparece inmediatamente, antes de esperar antecedentes,
+          anamnesis, examen físico, especialidades y protocolos.
+        */
+        renderDiagnosticos();
+        sincronizarEditorCie10DesdeDiagnosticos();
+        restaurarEstadoTemporal(idAtencion);
+        actualizarEstadoEdicion();
+        actualizarTarjetaApoyoIA();
+        renderContextoSuperior();
+        optimizarTitulosResumenExistente();
+
+        const atencionInicial = atencionActiva() || {};
+        const numeroInicial = texto(
+          atencionInicial.numero_consulta ||
+          atencionInicial.numero_atencion ||
+          atencionInicial.numero
+        );
+
+        status(
+          (numeroInicial ? 'Consulta #' + numeroInicial + ' · ' : '') +
+          'Diagnóstico cargado · completando integración clínica…'
+        );
+
+        const [
+          detalle,
+          historia,
+          anamnesis,
+          ginecologia,
+          obstetricia,
+          estetica
+        ] = await promesaIntegracion;
+
+        if(!cargaSigueVigente()) return null;
+
+        state.detalleExamen = detalle;
+        state.historia = historia;
+        state.anamnesis = anamnesis;
+        state.especialidades = {ginecologia, obstetricia, estetica};
+
+        /*
+          Respaldo original: si la consulta directa no devolvió diagnósticos,
+          se leen los diagnósticos incluidos en el detalle del examen físico.
+        */
+        if(!state.diagnosticos.length){
+          state.diagnosticos = fusionarDiagnosticos(
+            normalizarDiagnosticosServidor(detalle?.diagnosticos),
+            diagnosticosLocales()
+          );
+          renderDiagnosticos();
+          sincronizarEditorCie10DesdeDiagnosticos();
+        }
+
+        renderFuentes();
+
+        /*
+          Los protocolos se consultan después de mostrar el diagnóstico y
+          completar las fuentes clínicas. Su demora ya no bloquea el CIE-10.
+        */
+        state.protocolos = await consultarProtocolos();
+        if(!cargaSigueVigente()) return null;
+
+        if(state.protocolos.length && state.protocoloSeleccionado === null){
+          state.protocoloSeleccionado = 0;
+        }
+
+        renderDiagnosticos();
+        sincronizarEditorCie10DesdeDiagnosticos();
+        renderProtocolos();
+        renderFuentes();
+        restaurarEstadoTemporal(idAtencion);
+        actualizarEstadoEdicion();
+        actualizarTarjetaApoyoIA();
+
+        state.ultimaActualizacion = new Date().toISOString();
+
+        const atencion = atencionActiva() || {};
+        const numeroConsulta = texto(
+          atencion.numero_consulta ||
+          atencion.numero_atencion ||
+          atencion.numero
+        );
+
+        status(
+          (numeroConsulta ? 'Consulta #' + numeroConsulta + ' · ' : '') +
+          'Atención ' + idAtencion + ' · ' +
+          state.diagnosticos.length + ' diagnóstico(s)'
+        );
+
+        renderContextoSuperior();
+        optimizarTitulosResumenExistente();
+
+        if(!state.diagnosticos.length){
+          mensaje(
+            'aviso',
+            'Aún no se han registrado diagnósticos. Puede generar el resumen clínico con la anamnesis y los datos disponibles.'
+          );
+        }else{
+          mensaje(
+            'ok',
+            'Información clínica sincronizada correctamente. La integración puede actualizarse con los diagnósticos registrados.'
+          );
+        }
+
+        return state;
+      }catch(error){
+        if(!cargaSigueVigente()) return null;
+
+        console.error(MODULO + ': error cargando atención.', error);
+        mensaje(
+          'error',
+          'No se pudo completar la sincronización: ' + error.message
+        );
+        status('Error de sincronización');
+        return null;
+      }finally{
+        /*
+          Una carga antigua nunca puede apagar el indicador de una carga más
+          reciente. Solo la solicitud vigente libera el estado de carga.
+        */
+        if(state.cargaToken === tokenCarga){
+          state.cargando = false;
+          state.idCargaEnCurso = '';
+          state.promesaCarga = null;
+        }
       }
+    };
 
-      renderDiagnosticos();
-      sincronizarEditorCie10DesdeDiagnosticos();
-      renderProtocolos();
-      renderFuentes();
-      restaurarEstadoTemporal(idAtencion);
-      actualizarEstadoEdicion();
-      actualizarTarjetaApoyoIA();
-
-      state.ultimaActualizacion = new Date().toISOString();
-      const atencion = atencionActiva() || {};
-      const numeroConsulta = texto(atencion.numero_consulta || atencion.numero_atencion || atencion.numero);
-      status(
-        (numeroConsulta ? 'Consulta #' + numeroConsulta + ' · ' : '') +
-        'Atención ' + idAtencion + ' · ' + state.diagnosticos.length + ' diagnóstico(s)'
-      );
-      renderContextoSuperior();
-      optimizarTitulosResumenExistente();
-
-      if(!state.diagnosticos.length){
-        mensaje('aviso','Aún no se han registrado diagnósticos. Puede generar el resumen clínico con la anamnesis y los datos disponibles.');
-      }else{
-        mensaje('ok','Información clínica sincronizada correctamente. La integración puede actualizarse con los diagnósticos registrados.');
-      }
-
-      return state;
-    }catch(error){
-      console.error(MODULO + ': error cargando atención.', error);
-      mensaje('error','No se pudo completar la sincronización: ' + error.message);
-      status('Error de sincronización');
-      return null;
-    }finally{
-      state.cargando = false;
-    }
+    state.promesaCarga = ejecutarCarga();
+    return state.promesaCarga;
   }
 
   async function cargarAtencionActual(forzar){
@@ -3695,3 +3835,25 @@
     }, 120);
   }, {once:true});
 })();
+
+/* =====================================================================
+   AUROSANAX DIAGNÓSTICOS — OPTIMIZACIÓN QUIRÚRGICA DE SINCRONIZACIÓN
+   Fecha: 2026-08-03
+
+   CAMBIOS EXCLUSIVOS:
+   - El diagnóstico CIE-10 se muestra antes que la integración clínica.
+   - Examen, historia, anamnesis y especialidades cargan en paralelo.
+   - Los protocolos ya no bloquean la visualización inicial del diagnóstico.
+   - Se reutiliza una solicitud duplicada de la misma atención.
+   - Se permite cambiar inmediatamente a otra atención durante una carga.
+   - Las respuestas tardías de atenciones anteriores son descartadas.
+   - Al volver a Diagnóstico dentro de la misma atención se usa memoria.
+   - “Sincronizar datos” conserva la recarga forzada original.
+
+   NO MODIFICADO:
+   - Guardado de diagnóstico.
+   - Aplicación de protocolo al Plan.
+   - Plan, Recetas, Examen Físico, Anamnesis, Antecedentes o Apoyo IA.
+   - Apps Script, Google Sheets, JSON, botones, HTML o CSS.
+===================================================================== */
+
