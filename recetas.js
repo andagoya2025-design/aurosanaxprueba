@@ -2352,6 +2352,49 @@
             display:flex;
             gap:8px;
             flex-wrap:wrap;
+            align-items:center;
+          }
+
+          .auro-preview-zoom{
+            display:flex;
+            align-items:center;
+            gap:6px;
+            padding:4px 6px;
+            border:1px solid #d1d5db;
+            border-radius:10px;
+            background:#f8fafc;
+          }
+
+          .auro-preview-zoom button{
+            width:34px;
+            height:34px;
+            border:1px solid #cbd5e1;
+            border-radius:8px;
+            background:#ffffff;
+            color:#374151;
+            font-size:18px;
+            font-weight:900;
+            cursor:pointer;
+          }
+
+          .auro-preview-zoom button:hover{
+            background:#fff7fb;
+            color:#8b1e5a;
+            border-color:#e7b8d2;
+          }
+
+          .auro-preview-zoom span{
+            min-width:52px;
+            text-align:center;
+            color:#374151;
+            font-size:12px;
+            font-weight:900;
+          }
+
+          .auro-preview-fit{
+            width:auto!important;
+            padding:0 10px!important;
+            font-size:12px!important;
           }
 
           .auro-preview-btn{
@@ -2386,6 +2429,8 @@
             background:#ffffff;
             box-shadow:0 18px 42px rgba(15,23,42,.24);
             transform-origin:top center;
+            transform:scale(1.15);
+            margin-bottom:44mm;
           }
 
           .auro-preview-sheet .auro-hoja-a4-doble{
@@ -2449,14 +2494,72 @@
         <div class="auro-preview-toolbar">
           <strong>Vista previa A4 vertical · Original y copia</strong>
           <div class="auro-preview-actions">
+            <div class="auro-preview-zoom" aria-label="Controles de zoom">
+              <button type="button" onclick="auroCambiarZoom(-10)" title="Disminuir zoom">−</button>
+              <span id="auroZoomValor">115%</span>
+              <button type="button" onclick="auroCambiarZoom(10)" title="Aumentar zoom">+</button>
+              <button type="button" class="auro-preview-fit" onclick="auroAjustarZoom()" title="Ajustar a la ventana">Ajustar</button>
+            </div>
             <button type="button" class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
             <button type="button" class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
           </div>
         </div>
 
         <main class="auro-preview-stage">
-          <div class="auro-preview-sheet">${html}</div>
+          <div class="auro-preview-sheet" id="auroPreviewSheet">${html}</div>
         </main>
+
+        <script>
+          (function(){
+            let auroZoomActual = 115;
+            const auroZoomMinimo = 60;
+            const auroZoomMaximo = 180;
+
+            function auroAplicarZoom(){
+              const hoja = document.getElementById('auroPreviewSheet');
+              const etiqueta = document.getElementById('auroZoomValor');
+              if(!hoja) return;
+
+              hoja.style.transform = 'scale(' + (auroZoomActual / 100) + ')';
+
+              const diferencia = Math.max(0, auroZoomActual - 100);
+              hoja.style.marginBottom = diferencia
+                ? (diferencia * 2.95) + 'mm'
+                : '0';
+
+              if(etiqueta){
+                etiqueta.textContent = auroZoomActual + '%';
+              }
+            }
+
+            window.auroCambiarZoom = function(cambio){
+              auroZoomActual = Math.max(
+                auroZoomMinimo,
+                Math.min(auroZoomMaximo, auroZoomActual + Number(cambio || 0))
+              );
+              auroAplicarZoom();
+            };
+
+            window.auroAjustarZoom = function(){
+              const anchoDisponible = Math.max(320, window.innerWidth - 44);
+              const anchoHoja = 794;
+              const calculado = Math.floor((anchoDisponible / anchoHoja) * 100);
+              auroZoomActual = Math.max(
+                auroZoomMinimo,
+                Math.min(115, calculado)
+              );
+              auroAplicarZoom();
+            };
+
+            window.addEventListener('resize', function(){
+              if(window.innerWidth <= 760){
+                window.auroAjustarZoom();
+              }
+            });
+
+            auroAplicarZoom();
+          })();
+        <\/script>
       </body>
       </html>`);
 
@@ -3291,6 +3394,16 @@
    - La vista incluye únicamente Imprimir / Guardar PDF y Cerrar.
    - Ya no abre automáticamente el cuadro de impresión.
    - Conserva Original arriba y Copia abajo.
+   - No modifica guardado, JSON, Plan, historial, Google Sheets,
+     Apps Script, IDs, eventos, listeners ni sincronización.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.9 - ZOOM COMPLETO EN VISTA PREVIA
+   - Abre por defecto al 115 %.
+   - Agrega controles internos para aumentar, disminuir y ajustar.
+   - Mantiene disponible el zoom propio del navegador.
+   - La impresión permanece en A4 vertical sin aplicar el zoom visual.
    - No modifica guardado, JSON, Plan, historial, Google Sheets,
      Apps Script, IDs, eventos, listeners ni sincronización.
 ===================================================== */
