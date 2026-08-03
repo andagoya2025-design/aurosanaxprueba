@@ -2287,7 +2287,7 @@
     return r;
   };
 
-  window.generarPDFReceta = function(recetaOpcional){
+  function auroGenerarPDFRecetaUnificada(recetaOpcional){
     if(!recetaOpcional){
       verificarCambioAtencionReceta();
       sincronizarMedicoRecetaDesdeAtencion();
@@ -2565,9 +2565,21 @@
 
     ventana.document.close();
     ventana.focus();
-  };
+  }
 
-  window.__auroRecetasConstruirPDFSeguro = function(datos){ return window.generarPDFReceta(datos); };
+  /*
+     AUROSANAX RECETAS 3.0 - MOTOR ÚNICO DE VISTA / IMPRESIÓN / PDF
+     - Plan, Recetas e Historial usan la misma función interna.
+     - La delegación segura apunta directamente al motor interno.
+     - Evita recursión o sobrescritura por impresion.js.
+     - No modifica botones, IDs, eventos, guardado, Plan ni sincronización.
+  */
+  function auroInstalarMotorPDFRecetaUnificado(){
+    window.__auroRecetasConstruirPDFSeguro = auroGenerarPDFRecetaUnificada;
+    window.generarPDFReceta = auroGenerarPDFRecetaUnificada;
+  }
+
+  auroInstalarMotorPDFRecetaUnificado();
 
   function recetaDesdeFormulario(medicoAtencion){
     auroRecetaAutocompletarDiagnosticoSiVacio();
@@ -3294,7 +3306,25 @@
     document.addEventListener(nombre, manejarCambioAtencionReceta);
   });
 
-  document.addEventListener('DOMContentLoaded', inicializarRecetas);
+  document.addEventListener('DOMContentLoaded', function(){
+    auroInstalarMotorPDFRecetaUnificado();
+    inicializarRecetas();
+  });
+
+  window.addEventListener('load', function(){
+    /*
+      Última reafirmación después del orden completo de scripts.
+      Si impresion.js cargó después, su puente seguirá delegando al motor seguro;
+      si cargó antes, recetas.js conserva directamente la función global.
+    */
+    if(
+      window.generarPDFReceta !== auroGenerarPDFRecetaUnificada &&
+      window.generarPDFReceta !== window.__auroRecetasConstruirPDFSeguro
+    ){
+      window.generarPDFReceta = auroGenerarPDFRecetaUnificada;
+    }
+    window.__auroRecetasConstruirPDFSeguro = auroGenerarPDFRecetaUnificada;
+  });
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
@@ -3406,5 +3436,16 @@
    - La impresión permanece en A4 vertical sin aplicar el zoom visual.
    - No modifica guardado, JSON, Plan, historial, Google Sheets,
      Apps Script, IDs, eventos, listeners ni sincronización.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.0 - MOTOR PDF UNIFICADO
+   - El botón PDF de Plan y el botón PDF de Recetas usan el mismo motor.
+   - Vista paciente, recetas emitidas e impresión reutilizan la plantilla A4.
+   - Original arriba, Copia abajo y controles de zoom sin cambios.
+   - El puente __auroRecetasConstruirPDFSeguro llama directamente al motor
+     interno y evita ciclos con impresion.js.
+   - No modifica Plan, index, botones, IDs, eventos, listeners, guardado,
+     JSON, historial, Google Sheets, Apps Script ni sincronización.
 ===================================================== */
 
