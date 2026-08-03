@@ -762,8 +762,44 @@ async function cambiarPlanPorAtencion(idAtencion){
         atencionAnteriorRenderizada === idAtencion
     ){
         window.planState.atencionActual = idAtencion;
-        auroPlanRefrescarVistas();
-        return;
+
+        /*
+          AUROSANAX FIX QUIRÚRGICO:
+          - En una atención abierta se conservan los cambios temporales al navegar
+            entre pestañas de la misma consulta.
+          - En una atención finalizada, al pulsar Ver se fuerza la recarga desde
+            Sheets para mostrar exactamente el Plan guardado, incluidos
+            medicamentos, protocolos aplicados y receta.
+        */
+        let atencionFinalizada = false;
+
+        try{
+            const atencionActiva = typeof window.getAtencionActiva === 'function'
+                ? window.getAtencionActiva()
+                : null;
+
+            const estadoAtencion = normalizarTextoPlan(
+                atencionActiva?.estado_atencion ||
+                atencionActiva?.estado ||
+                ''
+            );
+
+            atencionFinalizada = [
+                'finalizada',
+                'finalizado',
+                'cerrada',
+                'cerrado',
+                'completada',
+                'completado'
+            ].includes(estadoAtencion);
+        }catch(error){
+            atencionFinalizada = false;
+        }
+
+        if(!atencionFinalizada){
+            auroPlanRefrescarVistas();
+            return null;
+        }
     }
 
     window.planState.atencionActual = idAtencion;
@@ -3501,4 +3537,14 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
    - Se emite aurosanax:plan-cargado al terminar la atención correcta.
    - No modifica JSON, Apps Script, Google Sheets, medicamentos,
      protocolos, botones, responsive, guardado ni estructura de datos.
+============================================================ */
+
+/* ============================================================
+   AUROSANAX PLAN - RECARGA SEGURA DE ATENCIÓN FINALIZADA v27
+   - Al pulsar Ver sobre una atención finalizada, recarga el Plan desde Sheets
+     aunque el id_atencion coincida con la atención ya renderizada.
+   - Conserva el comportamiento anterior para atenciones abiertas:
+     no pierde cambios temporales al navegar entre pestañas.
+   - No modifica JSON, Apps Script, Google Sheets, protocolos,
+     medicamentos, botones, responsive ni guardado.
 ============================================================ */
