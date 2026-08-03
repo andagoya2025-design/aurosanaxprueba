@@ -2053,16 +2053,6 @@
           overflow:hidden;
         }
 
-        /*
-          AJUSTE QUIRÚRGICO:
-          Desplaza únicamente el bloque visual completo de la COPIA.
-          No cambia altura disponible, tipografía, interlineado ni proporciones.
-        */
-        .auro-media-copia .auro-ejemplar-contenido{
-          transform:translateY(9mm);
-          transform-origin:top left;
-        }
-
         .auro-media-receta .auro-receta-documento{
           width:100%!important;
           max-width:none!important;
@@ -3543,14 +3533,3 @@
    - No modifica lógica, medicamentos, Plan, guardado, JSON, historial,
      Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
 ===================================================== */
-
-/* =====================================================
-   AUROSANAX RECETAS 3.4B - COPIA DESPLAZADA SIN ESCALA
-   - Desplaza únicamente el contenido completo de la COPIA 9 mm hacia abajo.
-   - No agrega padding ni reduce la altura del bloque.
-   - No modifica ningún font-size, interlineado, tabla, columna ni firma.
-   - ORIGINAL permanece intacto.
-   - No modifica lógica, Plan, guardado, JSON, historial, Google Sheets,
-     Apps Script, IDs, botones, eventos, listeners ni sincronización.
-===================================================== */
-
