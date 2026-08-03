@@ -43,7 +43,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.5';
+  const VERSION = '1.5.6';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
   const RELEASE = '20260730_sincronizacion_atencion_maestra_v1';
 
@@ -2104,6 +2104,107 @@
     return frase;
   }
 
+  /* ==========================================================
+     AUROSANAX DIAGNÓSTICOS 1.5.6
+     INTÉRPRETE QUIRÚRGICO DE ANTECEDENTES FAMILIARES
+     ----------------------------------------------------------
+     - Solo transforma el valor para el resumen clínico.
+     - No modifica el dato original ni su formato en Google Sheets.
+     - Compatible con AUROSANAX_ANT_FAMILIARES_V1:: y JSON puro.
+     - Conserva compatibilidad con texto familiar antiguo.
+     ========================================================== */
+  const AURO_DX_ANT_FAMILIARES_MARKER = 'AUROSANAX_ANT_FAMILIARES_V1::';
+
+  function auroDxParseAntecedentesFamiliares(valor){
+    if(valor && typeof valor === 'object'){
+      return {estructurado:true, data:valor};
+    }
+
+    const raw = texto(valor);
+    if(!raw) return {estructurado:false, data:null, texto:''};
+
+    const limpio = raw.startsWith(AURO_DX_ANT_FAMILIARES_MARKER)
+      ? raw.substring(AURO_DX_ANT_FAMILIARES_MARKER.length).trim()
+      : quitarPrefijoSerializado(raw);
+
+    const data = parseJsonSeguro(limpio, null);
+    if(data && typeof data === 'object'){
+      return {estructurado:true, data};
+    }
+
+    return {
+      estructurado:false,
+      data:null,
+      texto:auroDxLimpiarElementoAntecedente(raw)
+    };
+  }
+
+  function auroDxNarrarItemFamiliar(item, tipo){
+    if(item === null || item === undefined) return '';
+
+    if(typeof item !== 'object'){
+      return auroDxLimpiarElementoAntecedente(item);
+    }
+
+    const nombre = auroDxLimpiarElementoAntecedente(
+      tipo === 'quirurgico'
+        ? (item.cirugia || item.procedimiento || item.nombre || item.descripcion || item.patologia)
+        : (item.patologia || item.enfermedad || item.diagnostico || item.nombre || item.descripcion)
+    );
+    const parentesco = auroDxLimpiarElementoAntecedente(
+      item.parentesco || item.familiar || item.relacion || item.parentiente
+    );
+    const detalle = auroDxLimpiarElementoAntecedente(
+      item.detalle || item.observacion || item.observaciones || item.fecha || item.anio
+    );
+
+    if(!nombre && !parentesco && !detalle) return '';
+
+    let frase = '';
+    if(parentesco && nombre){
+      frase = parentesco + ' con ' + nombre;
+    }else{
+      frase = nombre || parentesco;
+    }
+
+    if(detalle){
+      frase += frase ? ' (' + detalle + ')' : detalle;
+    }
+
+    return frase;
+  }
+
+  function auroDxNarrarFamiliares(valor){
+    const parsed = auroDxParseAntecedentesFamiliares(valor);
+
+    if(!parsed.estructurado){
+      return parsed.texto || '';
+    }
+
+    const data = parsed.data || {};
+    const frases = [];
+
+    const patologicos = Array.isArray(data.patologicos) ? data.patologicos : [];
+    const quirurgicos = Array.isArray(data.quirurgicos) ? data.quirurgicos : [];
+
+    patologicos
+      .map(item => auroDxNarrarItemFamiliar(item, 'patologico'))
+      .filter(Boolean)
+      .forEach(frase => frases.push(frase));
+
+    quirurgicos
+      .map(item => auroDxNarrarItemFamiliar(item, 'quirurgico'))
+      .filter(Boolean)
+      .forEach(frase => frases.push('antecedente quirúrgico: ' + frase));
+
+    const otros = auroDxLimpiarElementoAntecedente(data.otros);
+    if(otros && !/^(ninguno|ninguna|no|n\/a|no aplica)$/i.test(otros)){
+      frases.push('otros antecedentes familiares: ' + otros);
+    }
+
+    return auroListaNatural([...new Set(frases.map(texto).filter(Boolean))]);
+  }
+
   function auroDxConstruirNarrativaAntecedentes(historia){
     const h = historia || {};
     const personales = auroDxParseAntecedentesPersonales(
@@ -2136,8 +2237,8 @@
       bloques.push(auroPunto('No utiliza medicación habitual según refiere'));
     }
 
-    const familiares = auroDxLimpiarElementoAntecedente(h.antecedentes_familiares);
-    if(familiares) bloques.push(auroPunto('Antecedentes familiares de ' + familiares));
+    const familiares = auroDxNarrarFamiliares(h.antecedentes_familiares);
+    if(familiares) bloques.push(auroPunto('Antecedentes familiares: ' + familiares));
 
     if(personales.estructurado){
       const covid = auroDxNarrarCovid(personales.data);
