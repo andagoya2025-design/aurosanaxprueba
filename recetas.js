@@ -2225,8 +2225,14 @@
     const html = construirHTMLRecetaPacienteDuplicada(r);
     const ventana = window.open('', '_blank');
     if(!ventana){ alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes para este sitio.'); return; }
-    ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Receta médica AUROSANAX</title></head><body>${html}</body></html>`);
-    ventana.document.close(); ventana.focus(); setTimeout(() => ventana.print(), 300);
+    ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Receta médica AUROSANAX</title></head><body>${html}<script>
+      window.addEventListener('afterprint', function(){
+        window.close();
+      });
+    <\/script></body></html>`);
+    ventana.document.close();
+    ventana.focus();
+    setTimeout(() => ventana.print(), 300);
   };
 
   window.__auroRecetasConstruirPDFSeguro = function(datos){ return window.generarPDFReceta(datos); };
@@ -3049,4 +3055,13 @@
    - Vista administrativa y vista previa normal permanecen intactas.
    - No modifica guardado, JSON, Plan, Google Sheets, Apps Script,
      historial, edición, IDs, eventos ni sincronización.
+===================================================== */
+
+
+/* =====================================================
+   AUROSANAX RECETAS 2.8 - CIERRE SEGURO TRAS IMPRESIÓN
+   - Al imprimir, guardar PDF o cancelar, la ventana temporal se cierra.
+   - Evita que el navegador deje visible el documento escalado.
+   - No modifica la receta, guardado, JSON, Plan, historial,
+     Google Sheets, Apps Script, IDs, eventos ni sincronización.
 ===================================================== */
