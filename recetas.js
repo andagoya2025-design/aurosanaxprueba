@@ -2028,23 +2028,18 @@
 
         .auro-media-receta{
           position:relative;
-          height:140mm;
-          min-height:140mm;
-          max-height:140mm;
-          padding:2mm 0 8mm;
+          height:142mm;
+          min-height:142mm;
+          max-height:142mm;
+          padding:0 0 7mm;
           overflow:hidden;
           box-sizing:border-box;
           background:#fff;
         }
 
-        .auro-media-original{
-          padding-top:2mm;
-        }
-
         .auro-media-copia{
           border-top:1px dashed #8b8f97;
-          margin-top:4mm;
-          padding-top:4mm;
+          padding-top:3mm;
         }
 
         .auro-ejemplar-contenido{
@@ -2063,8 +2058,8 @@
           box-sizing:border-box!important;
           display:flex!important;
           flex-direction:column!important;
-          font-size:15.0px!important;
-          line-height:1.10!important;
+          font-size:9.2px!important;
+          line-height:1.16!important;
           overflow:hidden!important;
         }
 
@@ -2084,13 +2079,13 @@
         }
 
         .auro-media-receta .auro-receta-brand h2{
-          font-size:21.3px!important;
-          line-height:1.04!important;
+          font-size:15px!important;
+          line-height:1!important;
         }
 
         .auro-media-receta .auro-receta-brand small{
-          font-size:13.5px!important;
-          line-height:1.10!important;
+          font-size:8px!important;
+          line-height:1.12!important;
           margin-top:1px!important;
         }
 
@@ -2099,13 +2094,13 @@
         }
 
         .auro-media-receta .auro-receta-title b{
-          font-size:19.1px!important;
-          line-height:1.04!important;
+          font-size:13px!important;
+          line-height:1!important;
         }
 
         .auro-media-receta .auro-receta-title small{
-          font-size:13.4px!important;
-          margin-top:2px!important;
+          font-size:8px!important;
+          margin-top:1px!important;
         }
 
         .auro-media-receta .auro-receta-grid{
@@ -2120,18 +2115,18 @@
         .auro-media-receta .auro-receta-grid div{
           padding:3px 4px!important;
           border-radius:5px!important;
-          font-size:13.6px!important;
+          font-size:8.2px!important;
         }
 
         .auro-media-receta .auro-receta-grid span{
-          font-size:12.0px!important;
-          line-height:1.08!important;
+          font-size:6.8px!important;
+          line-height:1.05!important;
           margin-bottom:1px!important;
         }
 
         .auro-media-receta .auro-receta-grid b{
-          font-size:13.9px!important;
-          line-height:1.10!important;
+          font-size:8.5px!important;
+          line-height:1.08!important;
         }
 
         .auro-media-receta .auro-receta-section{
@@ -2142,8 +2137,8 @@
         .auro-media-receta .auro-receta-section h4{
           margin:0 0 3px!important;
           padding-bottom:2px!important;
-          font-size:14.8px!important;
-          line-height:1.10!important;
+          font-size:9.2px!important;
+          line-height:1.08!important;
         }
 
         .auro-media-receta .auro-receta-box{
@@ -2162,27 +2157,27 @@
         .auro-media-receta .auro-rx-table{
           width:100%!important;
           table-layout:fixed!important;
-          font-size:12.6px!important;
-          line-height:1.10!important;
+          font-size:7.15px!important;
+          line-height:1.08!important;
         }
 
         .auro-media-receta .auro-rx-table th{
-          font-size:11.4px!important;
+          font-size:6.15px!important;
           padding:2px 2px!important;
-          line-height:1.08!important;
+          line-height:1.05!important;
           letter-spacing:0!important;
         }
 
         .auro-media-receta .auro-rx-table td{
           padding:2px 3px!important;
-          line-height:1.10!important;
+          line-height:1.08!important;
           overflow-wrap:anywhere!important;
           word-break:normal!important;
         }
 
         .auro-media-receta .auro-rx-col-med strong{
-          font-size:12.8px!important;
-          line-height:1.10!important;
+          font-size:7.35px!important;
+          line-height:1.08!important;
         }
 
         .auro-media-receta .auro-rx-w-num{width:5%!important}
@@ -2201,14 +2196,14 @@
         }
 
         .auro-media-receta .auro-centro-contacto{
-          font-size:12.4px!important;
-          line-height:1.10!important;
+          font-size:7px!important;
+          line-height:1.16!important;
         }
 
         .auro-media-receta .auro-firma{
-          padding-top:6px!important;
-          font-size:12.8px!important;
-          line-height:1.10!important;
+          padding-top:8px!important;
+          font-size:7.4px!important;
+          line-height:1.12!important;
         }
 
         .auro-media-receta .auro-linea{
@@ -2226,7 +2221,7 @@
           justify-content:center;
           color:#4b5563;
           font-family:Arial,system-ui,sans-serif;
-          font-size:13.3px;
+          font-size:8px;
           font-weight:900;
           letter-spacing:.08em;
         }
@@ -3511,25 +3506,4 @@
    - Las recetas históricas con id_receta no son sustituidas por el Plan activo.
    - No modifica Plan, impresion.js, guardado, JSON persistido, Google Sheets,
      Apps Script, IDs, botones, eventos, listeners ni sincronización.
-===================================================== */
-
-/* =====================================================
-   AUROSANAX RECETAS 3.2 - AJUSTE FINAL DE IMPRESIÓN
-   - Aumenta proporcionalmente la tipografía de Original y Copia.
-   - Conserva jerarquías: títulos, encabezados, tabla, firma y pie.
-   - Agrega separación central real para facilitar el corte de la hoja.
-   - Reequilibra verticalmente ambos ejemplares dentro del A4.
-   - Mantiene una sola hoja A4 vertical.
-   - No modifica medicamentos, columnas, datos, Plan, guardado, JSON,
-     historial, Google Sheets, Apps Script, IDs, botones, eventos,
-     listeners, PDF ni sincronización.
-===================================================== */
-
-/* =====================================================
-   AUROSANAX RECETAS 3.3 - LETRA IMPRESA MÁS GRANDE
-   - Aumenta aproximadamente 2 a 3 puntos la tipografía de Original y Copia.
-   - Conserva centrado, márgenes, tabla, firma, corte central y una sola hoja A4.
-   - Ajusta mínimamente interlineado y rellenos para evitar desbordes.
-   - No modifica lógica, medicamentos, Plan, guardado, JSON, historial,
-     Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
 ===================================================== */
