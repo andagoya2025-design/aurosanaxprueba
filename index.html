@@ -5963,6 +5963,17 @@ function imprimirHistoriaClinica(){
     </footer>
   </div>
 </body>
+
+
+<!-- =========================================================
+     AUROSANAX INDEX - FIX QUIRÚRGICO RECETAS
+     - Neutraliza únicamente generarPDFReceta() legacy del index.
+     - recetas.js conserva la propiedad del renderizado e impresión.
+     - impresion.js puede seguir delegando a recetas.js.
+     - No modifica guardarRecetaERP, consentimiento, Plan, historial,
+       Google Sheets, Apps Script, IDs, eventos ni responsive.
+========================================================= -->
+
 </html>`;
 
   const ventana = window.open('', '_blank', 'width=1100,height=900');
@@ -6005,21 +6016,14 @@ async function guardarRecetaERP(){
   alert('El módulo premium de recetas aún está cargando. Espere unos segundos y vuelva a intentar.');
 }
 
-function generarPDFReceta(){
-  if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
-  const paciente = getPacienteActivo();
-  if(!paciente){
-    alert('Seleccione primero un paciente para generar la receta.');
-    showScreen('pacientes');
-    return;
-  }
-
-  if(document.getElementById('recFecha') && !document.getElementById('recFecha').value){
-    document.getElementById('recFecha').value = fechaHoyISO();
-  }
-
-  alert('Se abrirá la ventana de impresión para guardar la receta como PDF.');
-  window.print();
+/*
+  AUROSANAX FIX QUIRÚRGICO - INDEX SIN COLISIÓN DE RECETAS
+  La función antigua del index se conserva únicamente como respaldo interno,
+  pero deja de ocupar el nombre global generarPDFReceta().
+  recetas.js queda como propietario exclusivo de la vista e impresión premium.
+*/
+function generarPDFRecetaLegacyIndex(){
+  console.warn('AUROSANAX: flujo legacy de PDF de receta en index.html neutralizado. Use recetas.js.');
 }
 
 function generarPDFConsentimiento(){
