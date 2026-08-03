@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.13';
+  const VERSION = '3.6.14';
   const state = {
     inicializado: false,
     cargando: false,
@@ -916,7 +916,7 @@ Función:
     bloque.innerHTML = `
       <div class="gin-panel-title">
         <i class="bi bi-activity"></i>
-        Síntomas actuales
+        Síntomas ginecológicos
       </div>
 
       <div class="gin-check-grid mb-3">
@@ -1814,6 +1814,97 @@ Función:
       .trim();
   }
 
+  /* ============================================================
+     AUROSANAX 3.6.14 - SÍNTOMAS COMPLEMENTARIOS DE ANAMNESIS
+     Intervención localizada:
+     - Convierte los controles ginSint* y obsSint* en narrativa clínica.
+     - No cambia sus IDs, almacenamiento ni relación por id_atencion.
+     - No modifica plantillas, backend, botones ni otros módulos.
+     ============================================================ */
+  function auroUnirSintomasClinicos(lista) {
+    const valores = [...new Set((lista || []).map(texto).filter(Boolean))];
+    if (!valores.length) return '';
+    if (valores.length === 1) return valores[0];
+    if (valores.length === 2) return `${valores[0]} y ${valores[1]}`;
+    return `${valores.slice(0, -1).join(', ')} y ${valores.at(-1)}`;
+  }
+
+  function auroGenerarNarrativaSintomasComplementarios() {
+    const ginecologicos = [];
+    const obstetricos = [];
+
+    const mapaGinecologico = {
+      ginSintDolorPelvico: 'dolor pélvico',
+      ginSintSangrado: 'sangrado anormal',
+      ginSintLeucorrea: 'leucorrea',
+      ginSintPrurito: 'prurito',
+      ginSintDisuria: 'disuria',
+      ginSintDispareunia: 'dispareunia',
+      ginSintAmenorrea: 'amenorrea',
+      ginSintDismenorrea: 'dismenorrea',
+      ginSintMasa: 'sensación de masa',
+      ginSintSequedad: 'sequedad vaginal',
+      ginSintIncontinencia: 'incontinencia',
+      ginSintMenopausia: 'síntomas menopáusicos'
+    };
+
+    const mapaObstetrico = {
+      obsSintSangrado: 'sangrado vaginal',
+      obsSintPerdidaLiquido: 'pérdida de líquido',
+      obsSintDolorPelvico: 'dolor pélvico',
+      obsSintContracciones: 'contracciones',
+      obsSintCefalea: 'cefalea',
+      obsSintFosfenos: 'fosfenos',
+      obsSintTinnitus: 'tinnitus',
+      obsSintEpigastralgia: 'epigastralgia',
+      obsSintDisuria: 'disuria'
+    };
+
+    Object.entries(mapaGinecologico).forEach(([id, etiqueta]) => {
+      if ($(id)?.checked) ginecologicos.push(etiqueta);
+    });
+
+    Object.entries(mapaObstetrico).forEach(([id, etiqueta]) => {
+      if ($(id)?.checked) obstetricos.push(etiqueta);
+    });
+
+    const partes = [];
+
+    if (ginecologicos.length) {
+      partes.push(
+        `Como síntomas ginecológicos refiere ${auroUnirSintomasClinicos(ginecologicos)}.`
+      );
+    }
+
+    const descripcionGinecologica = texto($('ginSintDescripcion')?.value);
+    if (descripcionGinecologica) {
+      partes.push(`Descripción ginecológica: ${descripcionGinecologica}.`);
+    }
+
+    if (obstetricos.length) {
+      partes.push(
+        `Como síntomas obstétricos refiere ${auroUnirSintomasClinicos(obstetricos)}.`
+      );
+    }
+
+    const otrosObstetricos = texto($('obsSintOtros')?.value);
+    if (otrosObstetricos) {
+      partes.push(`Otros síntomas obstétricos: ${otrosObstetricos}.`);
+    }
+
+    const descripcionObstetrica = texto($('obsSintDescripcion')?.value);
+    if (descripcionObstetrica) {
+      partes.push(`Descripción obstétrica: ${descripcionObstetrica}.`);
+    }
+
+    return partes
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\.\./g, '.')
+      .replace(/\s+\./g, '.')
+      .trim();
+  }
+
   function generar() {
     if (!state.plantillaActiva) {
       estado('Seleccione primero una plantilla.', 'warn');
@@ -1831,7 +1922,15 @@ Función:
       return;
     }
 
-    const narrativa = generarNarrativa(state.plantillaActiva, respuestas);
+    const narrativaBase = generarNarrativa(state.plantillaActiva, respuestas);
+    const narrativaComplementaria = auroGenerarNarrativaSintomasComplementarios();
+    const narrativa = [narrativaBase, narrativaComplementaria]
+      .map(texto)
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     const enfermedad = $('hcEnfermedadActual');
 
     if (!enfermedad) {
@@ -2152,7 +2251,7 @@ Función:
     return salida;
   }
 
-  function auroAplicarControlesAnamnesis(controles) {
+  function auroAplicarControlesAnamnesis(controles, dispararEventos = true) {
     const panel = $('hc_anamnesis');
     if (!panel || !controles || typeof controles !== 'object') return;
 
@@ -2171,8 +2270,10 @@ Función:
         control.dataset.auroValorConfirmadoAtencion = 'true';
       }
 
-      control.dispatchEvent(new Event('input', { bubbles: true }));
-      control.dispatchEvent(new Event('change', { bubbles: true }));
+      if (dispararEventos) {
+        control.dispatchEvent(new Event('input', { bubbles: true }));
+        control.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     });
   }
 
@@ -2535,10 +2636,28 @@ Función:
       if ($('hcEnfermedadActual')) $('hcEnfermedadActual').value = texto(data.enfermedad_actual);
 
       /*
-        La restauración se hace sobre los controles existentes.
-        No altera las funciones que crean síntomas ni el asistente.
+        AUROSANAX 3.6.14:
+        Garantiza que ambos bloques existan antes de restaurar y repite
+        una vez la aplicación después del renderizado. La segunda pasada
+        no dispara eventos ni guardados automáticos.
       */
-      auroAplicarControlesAnamnesis(data.controles_json || {});
+      crearBloqueSintomasActuales();
+      crearBloqueSintomasObstetricos();
+
+      const controlesGuardados = data.controles_json || {};
+      auroAplicarControlesAnamnesis(controlesGuardados, false);
+
+      requestAnimationFrame(() => {
+        crearBloqueSintomasActuales();
+        crearBloqueSintomasObstetricos();
+        auroAplicarControlesAnamnesis(controlesGuardados, false);
+      });
+
+      setTimeout(() => {
+        crearBloqueSintomasActuales();
+        crearBloqueSintomasObstetricos();
+        auroAplicarControlesAnamnesis(controlesGuardados, false);
+      }, 120);
 
       state.respuestas = auroClonarAnamnesis(data.respuestas_json || {});
       state.narrativa = texto(data.narrativa_generada);
