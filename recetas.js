@@ -2287,6 +2287,69 @@
     return r;
   };
 
+
+  /*
+     AUROSANAX RECETAS 3.1 - FUENTE SEGURA DE DATOS PARA PDF DESDE PLAN
+     Corrige únicamente la lectura del contenido cuando el botón PDF se pulsa
+     desde Plan y los campos visibles de Recetas todavía están vacíos.
+     No modifica el formulario, guardado, JSON persistido ni sincronización.
+  */
+  function auroRecetaCompletarDatosPlanParaPDF(receta){
+    const r = Object.assign({}, receta || {});
+
+    if(String(r.medicamento || '').trim()){
+      return r;
+    }
+
+    const medicamentoRecetas = val('recMedicamento');
+    const medicamentoPlanTexto = String(
+      document.getElementById('hcRecetaMedicamentos')?.value || ''
+    ).trim();
+
+    const medicamentosPlan = (
+      recetaPlanPerteneceAtencionActiva() &&
+      Array.isArray(window.medicamentosPlanSeleccionados)
+    )
+      ? window.medicamentosPlanSeleccionados
+          .map(normalizarMedicamentoRecetaObjeto)
+          .filter(m => String(m.med || '').trim())
+      : [];
+
+    if(medicamentoRecetas){
+      r.medicamento = medicamentoRecetas;
+    }else if(medicamentosPlan.length){
+      r.medicamento = JSON.stringify(medicamentosPlan);
+    }else if(medicamentoPlanTexto){
+      r.medicamento = medicamentoPlanTexto;
+    }
+
+    if(!String(r.indicaciones || '').trim()){
+      r.indicaciones =
+        val('recIndicaciones') ||
+        String(document.getElementById('hcIndicacionesPaciente')?.value || '').trim();
+    }
+
+    if(!String(r.recomendaciones || '').trim()){
+      r.recomendaciones =
+        val('recRecomendaciones') ||
+        String(document.getElementById('hcPlanTratamiento')?.value || '').trim();
+    }
+
+    if(!String(r.cie10 || '').trim()){
+      r.cie10 =
+        val('recCie10') ||
+        String(document.getElementById('hcCie10Principal')?.value || '').trim();
+    }
+
+    if(!String(r.diagnostico || '').trim()){
+      r.diagnostico =
+        val('recDiagnostico') ||
+        String(document.getElementById('hcDiagnosticoPrincipal')?.value || '').trim();
+    }
+
+    return r;
+  }
+
   function auroGenerarPDFRecetaUnificada(recetaOpcional){
     if(!recetaOpcional){
       verificarCambioAtencionReceta();
@@ -2299,7 +2362,10 @@
       auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     }
 
-    const r = recetaOpcional || window.obtenerDatosReceta();
+    const rBase = recetaOpcional || window.obtenerDatosReceta();
+    const r = recetaOpcional
+      ? rBase
+      : auroRecetaCompletarDatosPlanParaPDF(rBase);
 
     if(!r.paciente || !r.paciente.nombre){
       alert('Seleccione primero un paciente para generar la receta.');
@@ -3447,5 +3513,17 @@
      interno y evita ciclos con impresion.js.
    - No modifica Plan, index, botones, IDs, eventos, listeners, guardado,
      JSON, historial, Google Sheets, Apps Script ni sincronización.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.1 - PDF PLAN CON DATOS COMPLETOS
+   - Si PDF receta se pulsa desde Plan, toma medicamentos desde:
+     1) recMedicamento,
+     2) medicamentosPlanSeleccionados de la atención activa,
+     3) hcRecetaMedicamentos como respaldo.
+   - Completa CIE-10, diagnóstico, indicaciones y recomendaciones solo
+     para la representación PDF cuando los campos de Recetas están vacíos.
+   - No modifica guardarRecetaERP, Plan, formulario, JSON, Google Sheets,
+     Apps Script, IDs, eventos, listeners ni sincronización.
 ===================================================== */
 
