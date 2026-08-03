@@ -1805,41 +1805,101 @@
     return mapa[key] || raw;
   }
 
+  /*
+     AUROSANAX RECETAS 2.5 - FASES 1 Y 2
+     Tabla institucional compacta para vista previa/PDF.
+     Intervención exclusivamente visual:
+     - No cambia el JSON, el formulario, Plan, guardado ni Google Sheets.
+     - Conserva compatibilidad con medicamentos estructurados y texto histórico.
+  */
+  function auroRecetaIndicacionesTabla(m){
+    const partes = [
+      m.via ? auroRecetaViaCompleta(m.via) : '',
+      m.frec || '',
+      m.dur ? 'durante ' + m.dur : '',
+      m.ind || '',
+      String(m.continuo || '').toLowerCase() === 'sí' ? 'Tratamiento continuo' : ''
+    ].map(x => String(x || '').trim()).filter(Boolean);
+
+    return [...new Set(partes)].join(' · ');
+  }
+
   function auroRecetaMedicamentosPacienteHTML(valor){
     const txt = String(valor || '').trim();
-    if(!txt) return '<div class="auro-empty-note">Sin medicamentos registrados.</div>';
+    if(!txt){
+      return '<div class="auro-empty-note">Sin medicamentos registrados.</div>';
+    }
 
-    let data = null;
-    try{
-      data = JSON.parse(txt);
-      if(!Array.isArray(data)) data = [data];
-    }catch(e){}
+    let lista = recetaMedicamentosALista(txt);
+    if(!lista.length){
+      const respaldo = medicamentoRecetaJSONATexto(txt);
+      lista = respaldo
+        ? respaldo.split(/\n+/).map(x => ({texto:String(x || '').trim()})).filter(x => x.texto)
+        : [];
+    }
 
-    if(!Array.isArray(data)) return recetaBloqueTextoPremium(medicamentoRecetaJSONATexto(txt), 'Sin medicamentos registrados.');
+    if(!lista.length){
+      return '<div class="auro-empty-note">Sin medicamentos registrados.</div>';
+    }
 
-    const items = data.map((item, index) => {
-      if(typeof item === 'string' || item?.texto){
-        const linea = typeof item === 'string' ? item : item.texto;
-        return `<article class="auro-rx-item"><div class="auro-rx-title"><span class="auro-rx-num">${index + 1}</span><b>${safe(String(linea || '').replace(/^\s*\d+\.\s*/,''))}</b></div></article>`;
+    const filas = lista.map((item, index) => {
+      let m;
+
+      if(item && item.texto){
+        const interpretado = recetaMedicamentoTextoAObjeto(item.texto);
+        m = interpretado && !interpretado.texto
+          ? normalizarMedicamentoRecetaObjeto(interpretado)
+          : {
+              med: String(item.texto || '').replace(/^\s*\d+\.\s*/, '').trim(),
+              pres: '',
+              cantidad: '',
+              via: '',
+              frec: '',
+              dur: '',
+              ind: '',
+              continuo: 'No'
+            };
+      }else{
+        m = normalizarMedicamentoRecetaObjeto(item || {});
       }
 
-      const m = normalizarMedicamentoRecetaObjeto(item || {});
-      const meta = [
-        m.pres ? `<span><b>Presentación:</b> ${safe(m.pres)}</span>` : '',
-        m.cantidad ? `<span><b>Cantidad:</b> ${safe(m.cantidad)}</span>` : '',
-        m.via ? `<span><b>Vía:</b> ${safe(auroRecetaViaCompleta(m.via))}</span>` : '',
-        m.frec ? `<span><b>Frecuencia:</b> ${safe(m.frec)}</span>` : '',
-        m.dur ? `<span><b>Duración:</b> ${safe(m.dur)}</span>` : ''
-      ].filter(Boolean).join('');
+      const nombre = String(m.med || 'Medicamento').trim();
+      const presentacion = String(m.pres || '').trim();
+      const cantidad = String(m.cantidad || '').trim();
+      const indicaciones = auroRecetaIndicacionesTabla(m);
 
-      return `<article class="auro-rx-item">
-        <div class="auro-rx-title"><span class="auro-rx-num">${index + 1}</span><b>${safe(m.med || 'Medicamento')}</b>${String(m.continuo).toLowerCase()==='sí' ? '<em>Tratamiento continuo</em>' : ''}</div>
-        ${meta ? `<div class="auro-rx-meta">${meta}</div>` : ''}
-        ${m.ind ? `<div class="auro-rx-ind"><b>Indicaciones:</b> ${safe(m.ind)}</div>` : ''}
-      </article>`;
+      return `
+        <tr>
+          <td class="auro-rx-col-num">${index + 1}</td>
+          <td class="auro-rx-col-med"><strong>${safe(nombre)}</strong></td>
+          <td class="auro-rx-col-pres">${presentacion ? safe(presentacion) : '<span class="auro-rx-vacio">—</span>'}</td>
+          <td class="auro-rx-col-cant">${cantidad ? safe(cantidad) : '<span class="auro-rx-vacio">—</span>'}</td>
+          <td class="auro-rx-col-ind">${indicaciones ? safe(indicaciones) : '<span class="auro-rx-vacio">—</span>'}</td>
+        </tr>`;
     }).join('');
 
-    return `<div class="auro-rx-list">${items}</div>`;
+    return `
+      <div class="auro-rx-table-wrap">
+        <table class="auro-rx-table" aria-label="Tratamiento prescrito">
+          <colgroup>
+            <col class="auro-rx-w-num">
+            <col class="auro-rx-w-med">
+            <col class="auro-rx-w-pres">
+            <col class="auro-rx-w-cant">
+            <col class="auro-rx-w-ind">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">N.º</th>
+              <th scope="col">Medicamento</th>
+              <th scope="col">Presentación / concentración</th>
+              <th scope="col">Cantidad</th>
+              <th scope="col">Indicaciones</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
   }
 
   function construirHTMLReceta(r, modo){
@@ -1897,12 +1957,12 @@
           .auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
           .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;word-break:break-word}
           .auro-receta-section{margin-top:9px;break-inside:avoid}.auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950}.auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;white-space:normal;word-break:break-word;background:#fff;box-shadow:0 4px 14px rgba(139,30,90,.035)}
-          .auro-rx-list{display:grid;gap:6px}.auro-rx-item{border:1px solid #edf2f7;border-left:3px solid #c23b83;border-radius:12px;background:#fff;padding:7px 9px;break-inside:avoid}.auro-rx-title{display:flex;align-items:flex-start;gap:6px;color:#111827}.auro-rx-title b{font-size:12.8px;font-weight:950}.auro-rx-title em{margin-left:auto;font-style:normal;font-size:9.5px;font-weight:900;color:#166534;background:#dcfce7;border-radius:999px;padding:2px 6px}.auro-rx-num{width:20px;height:20px;border-radius:7px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;display:inline-grid;place-items:center;font-size:10px;font-weight:950;flex:0 0 auto}.auro-rx-meta{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0 0 26px;color:#475569;font-size:11.3px}.auro-rx-meta b{color:#6b7280}.auro-rx-ind{margin:3px 0 0 26px;color:#334155;font-size:11.3px;background:#f8fafc;border:1px solid #eef2f7;border-radius:9px;padding:4px 6px}.auro-rx-ind b{color:#8b1e5a}
+          .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
           .auro-receta-footer{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:24px;align-items:end}.auro-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}.auro-firma{text-align:center;padding-top:20px;font-size:11px}.auro-linea{border-top:1px solid #111827;margin-bottom:5px}.badge-auro{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:900;margin-top:3px}.badge-ok{background:#dcfce7;color:#166534}.badge-danger{background:#fee2e2;color:#991b1b}
           .auro-admin-alert{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:7px 9px;margin-bottom:9px;font-weight:800;font-size:11px}
-          @page{size:A4;margin:10mm}@media print{.no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-item{break-inside:avoid;page-break-inside:avoid}.auro-receta-grid{gap:4px;padding:6px}.auro-receta-grid div{padding:4px 6px}.auro-receta-footer{margin-top:18px}.auro-admin-alert{display:none}}
-          @media(max-width:700px){.auro-receta-header{grid-template-columns:auto 1fr}.auro-receta-title{grid-column:1/-1;text-align:left}.auro-receta-grid{grid-template-columns:1fr 1fr}.auro-receta-footer{grid-template-columns:1fr}.auro-rx-meta{display:grid;grid-template-columns:1fr}}
+          @page{size:A4;margin:10mm}@media print{.no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-table-wrap,.auro-rx-table tr{break-inside:avoid;page-break-inside:avoid}.auro-receta-grid{gap:4px;padding:6px}.auro-receta-grid div{padding:4px 6px}.auro-rx-table{font-size:9.4px}.auro-rx-table th{font-size:8.3px;padding:4px}.auro-rx-table td{padding:4px 5px}.auro-rx-col-med strong{font-size:9.8px}.auro-receta-footer{margin-top:18px}.auro-admin-alert{display:none}}
+          @media(max-width:700px){.auro-receta-header{grid-template-columns:auto 1fr}.auro-receta-title{grid-column:1/-1;text-align:left}.auro-receta-grid{grid-template-columns:1fr 1fr}.auro-receta-footer{grid-template-columns:1fr}.auro-rx-table-wrap{overflow-x:auto}.auro-rx-table{min-width:720px}}
         </style>
         ${esAdministrativo ? '<div class="auro-admin-alert">Vista administrativa interna: contiene identificadores y datos de auditoría. No entregar al paciente.</div>' : ''}
         <div class="auro-receta-header">
@@ -2756,4 +2816,12 @@
    - “Nueva receta” es la única acción que fuerza otra receta.
    - Conserva edición por id_receta, Plan → Receta, PDF e historial.
    - Agrega respaldo de intención al Apps Script con forzar_nueva_receta.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 2.5 - IMPRESIÓN TABULADA FASES 1 Y 2
+   - Cambia únicamente la representación visual del tratamiento.
+   - Columnas: medicamento, presentación/concentración, cantidad e indicaciones.
+   - Conserva vista previa/PDF, JSON, Plan, guardado, historial y atención.
+   - ORIGINAL/COPIA se reserva para las fases 3 y 4.
 ===================================================== */
