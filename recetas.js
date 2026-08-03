@@ -2053,6 +2053,16 @@
           overflow:hidden;
         }
 
+        /*
+          AJUSTE QUIRÚRGICO:
+          Desplaza únicamente el bloque visual completo de la COPIA.
+          No cambia altura disponible, tipografía, interlineado ni proporciones.
+        */
+        .auro-media-copia .auro-ejemplar-contenido{
+          transform:translateY(9mm);
+          transform-origin:top left;
+        }
+
         .auro-media-receta .auro-receta-documento{
           width:100%!important;
           max-width:none!important;
@@ -2162,12 +2172,12 @@
         .auro-media-receta .auro-rx-table{
           width:100%!important;
           table-layout:fixed!important;
-          font-size:12.6px!important;
-          line-height:1.10!important;
+          font-size:10.6px!important;
+          line-height:1.06!important;
         }
 
         .auro-media-receta .auro-rx-table th{
-          font-size:11.4px!important;
+          font-size:9.4px!important;
           padding:2px 2px!important;
           line-height:1.08!important;
           letter-spacing:0!important;
@@ -2181,8 +2191,8 @@
         }
 
         .auro-media-receta .auro-rx-col-med strong{
-          font-size:12.8px!important;
-          line-height:1.10!important;
+          font-size:10.8px!important;
+          line-height:1.06!important;
         }
 
         .auro-media-receta .auro-rx-w-num{width:5%!important}
@@ -2207,7 +2217,7 @@
 
         .auro-media-receta .auro-firma{
           padding-top:6px!important;
-          font-size:12.8px!important;
+          font-size:10.8px!important;
           line-height:1.10!important;
         }
 
@@ -3533,3 +3543,25 @@
    - No modifica lógica, medicamentos, Plan, guardado, JSON, historial,
      Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
 ===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.4B - COPIA DESPLAZADA SIN ESCALA
+   - Desplaza únicamente el contenido completo de la COPIA 9 mm hacia abajo.
+   - No agrega padding ni reduce la altura del bloque.
+   - No modifica ningún font-size, interlineado, tabla, columna ni firma.
+   - ORIGINAL permanece intacto.
+   - No modifica lógica, Plan, guardado, JSON, historial, Google Sheets,
+     Apps Script, IDs, botones, eventos, listeners ni sincronización.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.5 - TABLA COMPACTA FINAL
+   - Reduce únicamente 2 puntos la tipografía del contenido de la tabla.
+   - Reduce padding e interlineado para permitir al menos 2 filas adicionales.
+   - Mantiene intactos encabezado institucional, paciente, diagnóstico,
+     firma, Original, Copia, desplazamiento físico y línea de corte.
+   - Conserva una sola hoja A4 lista para doblar y cortar.
+   - No modifica lógica, Plan, guardado, JSON, historial, Google Sheets,
+     Apps Script, IDs, botones, eventos, listeners ni sincronización.
+===================================================== */
+
