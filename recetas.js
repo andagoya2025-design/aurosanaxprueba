@@ -2270,6 +2270,33 @@
       </style>`;
   }
 
+  /*
+     AUROSANAX RECETAS 3.1 - DATOS ESTRUCTURADOS PARA REPRESENTACIÓN
+     Corrige el flujo PDF llamado desde Plan/impresion.js.
+     Cuando se trata de la receta activa aún no emitida, usa directamente
+     medicamentosPlanSeleccionados como JSON estructurado.
+     Las recetas ya guardadas conservan su propio contenido histórico.
+  */
+  function auroRecetaPrepararDatosParaRepresentacion(datos){
+    const r = Object.assign({}, datos || {});
+    const idReceta = String(r.id_receta || '').trim();
+
+    /*
+      Un PDF solicitado desde Plan llega por impresion.js como recetaOpcional,
+      aunque todavía no sea una receta guardada. Por eso no se puede decidir
+      únicamente con recetaOpcional: se distingue por ausencia de id_receta.
+    */
+    if(!idReceta && recetaPlanPerteneceAtencionActiva()){
+      const medicamentosEstructurados = recetaMedicamentosPlanActualesSeguros();
+
+      if(medicamentosEstructurados.length){
+        r.medicamento = JSON.stringify(medicamentosEstructurados);
+      }
+    }
+
+    return r;
+  }
+
   window.vistaPreviaReceta = function(){
     verificarCambioAtencionReceta();
     sincronizarMedicoRecetaDesdeAtencion();
@@ -2278,7 +2305,9 @@
     auroRecetaAutocompletarDiagnosticoSiVacio();
     auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     const box = asegurarVistaPreviaReceta();
-    const r = window.obtenerDatosReceta();
+    const r = auroRecetaPrepararDatosParaRepresentacion(
+      window.obtenerDatosReceta()
+    );
     if(!r.paciente || !r.paciente.nombre){
       if(box) box.innerHTML = `<div class="sheet-note"><i class="bi bi-exclamation-triangle me-1"></i> Primero seleccione o abra un paciente desde Pacientes o Historia Clínica.</div>`;
       return r;
@@ -2299,7 +2328,9 @@
       auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     }
 
-    const r = recetaOpcional || window.obtenerDatosReceta();
+    const r = auroRecetaPrepararDatosParaRepresentacion(
+      recetaOpcional || window.obtenerDatosReceta()
+    );
 
     if(!r.paciente || !r.paciente.nombre){
       alert('Seleccione primero un paciente para generar la receta.');
@@ -2575,7 +2606,17 @@
      - No modifica botones, IDs, eventos, guardado, Plan ni sincronización.
   */
   function auroInstalarMotorPDFRecetaUnificado(){
-    window.__auroRecetasConstruirPDFSeguro = auroGenerarPDFRecetaUnificada;
+    /*
+      impresion.js envía obtenerDatosReceta() como argumento. El motor vuelve
+      a preparar esos datos para recuperar el arreglo estructurado del Plan
+      antes de construir la tabla.
+    */
+    window.__auroRecetasConstruirPDFSeguro = function(datos){
+      return auroGenerarPDFRecetaUnificada(
+        auroRecetaPrepararDatosParaRepresentacion(datos)
+      );
+    };
+
     window.generarPDFReceta = auroGenerarPDFRecetaUnificada;
   }
 
@@ -3323,7 +3364,11 @@
     ){
       window.generarPDFReceta = auroGenerarPDFRecetaUnificada;
     }
-    window.__auroRecetasConstruirPDFSeguro = auroGenerarPDFRecetaUnificada;
+    window.__auroRecetasConstruirPDFSeguro = function(datos){
+      return auroGenerarPDFRecetaUnificada(
+        auroRecetaPrepararDatosParaRepresentacion(datos)
+      );
+    };
   });
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
@@ -3448,3 +3493,18 @@
    - No modifica Plan, index, botones, IDs, eventos, listeners, guardado,
      JSON, historial, Google Sheets, Apps Script ni sincronización.
 ===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.1 - SOLUCIÓN FINAL PDF DESDE PLAN
+   - Corrige el caso real: impresion.js pasa obtenerDatosReceta() como
+     recetaOpcional, aunque la receta todavía no tenga id_receta.
+   - Si no existe id_receta y el Plan pertenece a la atención activa,
+     usa medicamentosPlanSeleccionados directamente como JSON estructurado.
+   - Una fila por medicamento.
+   - Columnas: medicamento, presentación/concentración, cantidad e indicaciones.
+   - Vía, frecuencia, duración, observaciones y continuo permanecen agrupados.
+   - Las recetas históricas con id_receta no son sustituidas por el Plan activo.
+   - No modifica Plan, impresion.js, guardado, JSON persistido, Google Sheets,
+     Apps Script, IDs, botones, eventos, listeners ni sincronización.
+===================================================== */
+
