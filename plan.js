@@ -711,7 +711,7 @@ function inicializarPlan(){
    CAMBIO DE CONSULTA / ATENCIÓN
 ============================================================ */
 
-function cambiarPlanPorAtencion(idAtencion){
+async function cambiarPlanPorAtencion(idAtencion){
 
     inicializarPlan();
     cancelarEdicionMedicamentoPlan({limpiarFormulario:false});
@@ -783,19 +783,41 @@ function cambiarPlanPorAtencion(idAtencion){
     }
 
     if(typeof window.cargarPlanClinicoDesdeSheets === 'function'){
-        setTimeout(function(){
+        if(
+            String(window.__auroPlanAtencionRenderizada || '').trim() !== idAtencion ||
+            String(window.planState?.atencionActual || '').trim() !== idAtencion
+        ){
+            return null;
+        }
+
+        try{
+            const planCargado = await window.cargarPlanClinicoDesdeSheets(idAtencion);
+
             if(
                 String(window.__auroPlanAtencionRenderizada || '').trim() !== idAtencion ||
                 String(window.planState?.atencionActual || '').trim() !== idAtencion
             ){
-                return;
+                return null;
             }
 
-            window.cargarPlanClinicoDesdeSheets(idAtencion).catch(function(error){
-                console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets.', error);
-            });
-        }, 80);
+            window.dispatchEvent(new CustomEvent('aurosanax:plan-cargado', {
+                detail:{
+                    id_atencion:idAtencion,
+                    tiene_plan:!!planCargado,
+                    medicamentos:Array.isArray(window.medicamentosPlanSeleccionados)
+                        ? window.medicamentosPlanSeleccionados.length
+                        : 0
+                }
+            }));
+
+            return planCargado;
+        }catch(error){
+            console.warn('AUROSANAX PLAN: no se pudo cargar Plan desde Sheets.', error);
+            return null;
+        }
     }
+
+    return null;
 }
 
 
@@ -2146,7 +2168,8 @@ async function auroPlanApiGet(accion, params){
     }
 
     const query = new URLSearchParams({
-        accion: accion
+        accion: accion,
+        _: String(Date.now())
     });
 
     Object.keys(params || {}).forEach(k => {
@@ -2155,7 +2178,11 @@ async function auroPlanApiGet(accion, params){
         }
     });
 
-    const res = await fetch(urlBase + '?' + query.toString());
+    const res = await fetch(urlBase + '?' + query.toString(), {
+        method: 'GET',
+        cache: 'no-store'
+    });
+
     return await res.json();
 }
 
@@ -2827,7 +2854,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if(window.__auroPlanEventosAtencionV22Instalados) return;
     window.__auroPlanEventosAtencionV22Instalados = true;
 
-    function aplicarContextoPlanDesdeEvento(evento){
+    async function aplicarContextoPlanDesdeEvento(evento){
         const detalle = evento && evento.detail && typeof evento.detail === 'object'
             ? evento.detail
             : {};
@@ -2850,7 +2877,7 @@ document.addEventListener('DOMContentLoaded', function(){
             limpiarPlanTemporal();
         }
 
-        cambiarPlanPorAtencion(idAtencion);
+        await cambiarPlanPorAtencion(idAtencion);
 
         if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
             setTimeout(function(){
@@ -3465,3 +3492,13 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     /* Solo actualiza habilitación visual; no carga, guarda ni sincroniza datos. */
     window.__auroPlanResetEstadoTimerV25 = setInterval(actualizarEstadoBoton, 1200);
 })();
+
+/* ============================================================
+   AUROSANAX PLAN - CORRECCIÓN QUIRÚRGICA DE CARGA ESTABLE v26
+   - cambiarPlanPorAtencion espera la carga real desde Sheets.
+   - Se elimina únicamente el retraso artificial de 80 ms.
+   - Las consultas GET del Plan usan cache:no-store y parámetro temporal.
+   - Se emite aurosanax:plan-cargado al terminar la atención correcta.
+   - No modifica JSON, Apps Script, Google Sheets, medicamentos,
+     protocolos, botones, responsive, guardado ni estructura de datos.
+============================================================ */
