@@ -2157,20 +2157,20 @@
         .auro-media-receta .auro-rx-table{
           width:100%!important;
           table-layout:fixed!important;
-          font-size:7.35px!important;
-          line-height:1.12!important;
+          font-size:7.15px!important;
+          line-height:1.08!important;
         }
 
         .auro-media-receta .auro-rx-table th{
-          font-size:6.3px!important;
-          padding:2.4px 2px!important;
-          line-height:1.08!important;
+          font-size:6.15px!important;
+          padding:2px 2px!important;
+          line-height:1.05!important;
           letter-spacing:0!important;
         }
 
         .auro-media-receta .auro-rx-table td{
-          padding:2.5px 3px!important;
-          line-height:1.12!important;
+          padding:2px 3px!important;
+          line-height:1.08!important;
           overflow-wrap:anywhere!important;
           word-break:normal!important;
         }
@@ -2187,8 +2187,8 @@
         .auro-media-receta .auro-rx-w-ind{width:42%!important}
 
         .auro-media-receta .auro-receta-footer{
-          margin-top:18mm!important;
-          padding-top:4px!important;
+          margin-top:auto!important;
+          padding-top:5px!important;
           gap:12px!important;
           grid-template-columns:1.1fr .9fr!important;
           align-items:end!important;
@@ -2201,9 +2201,9 @@
         }
 
         .auro-media-receta .auro-firma{
-          padding-top:6px!important;
-          font-size:7.6px!important;
-          line-height:1.14!important;
+          padding-top:8px!important;
+          font-size:7.4px!important;
+          line-height:1.12!important;
         }
 
         .auro-media-receta .auro-linea{
@@ -2270,109 +2270,6 @@
       </style>`;
   }
 
-
-  function abrirVistaAmpliadaReceta(r){
-    const html = construirHTMLRecetaPacienteDobleA4(r);
-    const ventana = window.open('', '_blank');
-
-    if(!ventana){
-      alert('El navegador bloqueó la vista ampliada. Permita ventanas emergentes para este sitio.');
-      return;
-    }
-
-    ventana.document.write(`<!DOCTYPE html>
-      <html lang="es">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>Vista ampliada de receta AUROSANAX</title>
-        <style>
-          html,body{margin:0;padding:0;background:#e5e7eb;font-family:Arial,system-ui,sans-serif;}
-          .auro-preview-toolbar{
-            position:sticky;top:0;z-index:9999;
-            display:flex;justify-content:space-between;align-items:center;gap:10px;
-            padding:10px 16px;background:#fff;border-bottom:1px solid #d1d5db;
-            box-shadow:0 4px 14px rgba(15,23,42,.12);
-          }
-          .auro-preview-toolbar strong{color:#7a174f;font-size:15px;}
-          .auro-preview-actions{display:flex;gap:8px;flex-wrap:wrap;}
-          .auro-preview-btn{
-            border:0;border-radius:10px;padding:9px 13px;font-weight:850;cursor:pointer;
-            background:#8b1e5a;color:#fff;
-          }
-          .auro-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #d1d5db;}
-          .auro-preview-stage{
-            padding:20px;display:flex;justify-content:center;align-items:flex-start;
-            min-height:calc(100vh - 58px);box-sizing:border-box;
-          }
-          .auro-preview-sheet{
-            width:210mm;min-height:297mm;background:#fff;
-            box-shadow:0 18px 45px rgba(15,23,42,.22);
-            transform-origin:top center;
-          }
-          .auro-preview-sheet .auro-hoja-a4-doble{
-            width:198mm!important;max-width:198mm!important;
-            margin:6mm auto!important;
-          }
-          @media(max-width:980px){
-            .auro-preview-sheet{transform:scale(.82);margin-bottom:-53mm;}
-          }
-          @media(max-width:760px){
-            .auro-preview-toolbar{align-items:flex-start;flex-direction:column;}
-            .auro-preview-stage{padding:8px;overflow:auto;justify-content:flex-start;}
-            .auro-preview-sheet{transform:scale(.62);transform-origin:top left;margin-bottom:-113mm;}
-          }
-          @media print{
-            .auro-preview-toolbar{display:none!important;}
-            .auro-preview-stage{padding:0!important;background:#fff!important;}
-            .auro-preview-sheet{box-shadow:none!important;transform:none!important;width:auto!important;min-height:0!important;margin:0!important;}
-          }
-        </style>
-      </head>
-      <body>
-        <div class="auro-preview-toolbar">
-          <strong>Vista ampliada · Receta A4 vertical</strong>
-          <div class="auro-preview-actions">
-            <button class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
-            <button class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
-          </div>
-        </div>
-        <main class="auro-preview-stage">
-          <div class="auro-preview-sheet">${html}</div>
-        </main>
-      </body>
-      </html>`);
-
-    ventana.document.close();
-    ventana.focus();
-  }
-
-  window.vistaAmpliadaReceta = function(){
-    verificarCambioAtencionReceta();
-    sincronizarMedicoRecetaDesdeAtencion();
-
-    if(el('recFecha') && !val('recFecha')){
-      setVal('recFecha', fechaHoyReceta());
-    }
-
-    if(!recetaEditandoId && recetaPlanPerteneceAtencionActiva() && typeof sincronizarPlanConReceta === 'function'){
-      sincronizarPlanConReceta();
-    }
-
-    auroRecetaAutocompletarDiagnosticoSiVacio();
-    auroRecetaNormalizarMedicamentosEdicionSiSeguro();
-
-    const r = window.obtenerDatosReceta();
-
-    if(!r.paciente || !r.paciente.nombre){
-      alert('Seleccione primero un paciente para abrir la vista ampliada.');
-      if(typeof showScreen === 'function') showScreen('pacientes');
-      return;
-    }
-
-    abrirVistaAmpliadaReceta(r);
-  };
-
   window.vistaPreviaReceta = function(){
     verificarCambioAtencionReceta();
     sincronizarMedicoRecetaDesdeAtencion();
@@ -2401,21 +2298,170 @@
       auroRecetaAutocompletarDiagnosticoSiVacio();
       auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     }
+
     const r = recetaOpcional || window.obtenerDatosReceta();
+
     if(!r.paciente || !r.paciente.nombre){
       alert('Seleccione primero un paciente para generar la receta.');
       if(typeof showScreen === 'function') showScreen('pacientes');
       return;
     }
+
     const html = construirHTMLRecetaPacienteDobleA4(r);
     const ventana = window.open('', '_blank');
-    if(!ventana){ alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes para este sitio.'); return; }
-    ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Receta médica AUROSANAX</title></head><body>${html}<script>
-      window.addEventListener('afterprint', function(){ window.close(); });
-    <\/script></body></html>`);
+
+    if(!ventana){
+      alert('El navegador bloqueó la vista previa. Permita ventanas emergentes para este sitio.');
+      return;
+    }
+
+    ventana.document.write(`<!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Vista previa de receta AUROSANAX</title>
+        <style>
+          html,body{
+            margin:0;
+            padding:0;
+            background:#dfe3e8;
+            font-family:Arial,system-ui,sans-serif;
+          }
+
+          .auro-preview-toolbar{
+            position:sticky;
+            top:0;
+            z-index:9999;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:12px;
+            padding:12px 18px;
+            background:#ffffff;
+            border-bottom:1px solid #d1d5db;
+            box-shadow:0 3px 14px rgba(15,23,42,.14);
+          }
+
+          .auro-preview-toolbar strong{
+            color:#7a174f;
+            font-size:15px;
+          }
+
+          .auro-preview-actions{
+            display:flex;
+            gap:8px;
+            flex-wrap:wrap;
+          }
+
+          .auro-preview-btn{
+            border:0;
+            border-radius:10px;
+            padding:9px 14px;
+            font-weight:850;
+            cursor:pointer;
+            background:#8b1e5a;
+            color:#ffffff;
+          }
+
+          .auro-preview-btn.secondary{
+            background:#ffffff;
+            color:#374151;
+            border:1px solid #cbd5e1;
+          }
+
+          .auro-preview-stage{
+            min-height:calc(100vh - 62px);
+            padding:20px;
+            box-sizing:border-box;
+            display:flex;
+            justify-content:center;
+            align-items:flex-start;
+            overflow:auto;
+          }
+
+          .auro-preview-sheet{
+            width:210mm;
+            min-height:297mm;
+            background:#ffffff;
+            box-shadow:0 18px 42px rgba(15,23,42,.24);
+            transform-origin:top center;
+          }
+
+          .auro-preview-sheet .auro-hoja-a4-doble{
+            width:198mm!important;
+            max-width:198mm!important;
+            margin:6mm auto!important;
+          }
+
+          @media(max-width:980px){
+            .auro-preview-sheet{
+              transform:scale(.82);
+              margin-bottom:-53mm;
+            }
+          }
+
+          @media(max-width:760px){
+            .auro-preview-toolbar{
+              align-items:flex-start;
+              flex-direction:column;
+            }
+
+            .auro-preview-stage{
+              justify-content:flex-start;
+              padding:8px;
+            }
+
+            .auro-preview-sheet{
+              transform:scale(.60);
+              transform-origin:top left;
+              margin-bottom:-118mm;
+            }
+          }
+
+          @media print{
+            html,body{
+              background:#ffffff!important;
+            }
+
+            .auro-preview-toolbar{
+              display:none!important;
+            }
+
+            .auro-preview-stage{
+              display:block!important;
+              min-height:0!important;
+              padding:0!important;
+              overflow:visible!important;
+            }
+
+            .auro-preview-sheet{
+              width:auto!important;
+              min-height:0!important;
+              margin:0!important;
+              box-shadow:none!important;
+              transform:none!important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="auro-preview-toolbar">
+          <strong>Vista previa A4 vertical · Original y copia</strong>
+          <div class="auro-preview-actions">
+            <button type="button" class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+            <button type="button" class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
+          </div>
+        </div>
+
+        <main class="auro-preview-stage">
+          <div class="auro-preview-sheet">${html}</div>
+        </main>
+      </body>
+      </html>`);
+
     ventana.document.close();
     ventana.focus();
-    setTimeout(() => ventana.print(), 350);
   };
 
   window.__auroRecetasConstruirPDFSeguro = function(datos){ return window.generarPDFReceta(datos); };
@@ -3060,31 +3106,8 @@
   function agregarBotonVistaPrevia(){
     const seccion = el('recetas'); if(!seccion) return;
     const actions = seccion.querySelector('.section-head .d-flex');
-
     if(actions && !el('btnVistaPreviaReceta')){
-      const btn = document.createElement('button');
-      btn.id = 'btnVistaPreviaReceta';
-      btn.type = 'button';
-      btn.className = 'btn-soft';
-      btn.innerHTML = '<i class="bi bi-eye me-1"></i> Vista previa';
-      btn.onclick = window.vistaPreviaReceta;
-      actions.insertBefore(btn, actions.firstChild);
-    }
-
-    if(actions && !el('btnVistaAmpliadaReceta')){
-      const btnAmpliar = document.createElement('button');
-      btnAmpliar.id = 'btnVistaAmpliadaReceta';
-      btnAmpliar.type = 'button';
-      btnAmpliar.className = 'btn-soft';
-      btnAmpliar.innerHTML = '<i class="bi bi-arrows-fullscreen me-1"></i> Vista ampliada';
-      btnAmpliar.onclick = window.vistaAmpliadaReceta;
-
-      const referencia = el('btnVistaPreviaReceta');
-      if(referencia && referencia.nextSibling){
-        actions.insertBefore(btnAmpliar, referencia.nextSibling);
-      }else{
-        actions.appendChild(btnAmpliar);
-      }
+      const btn = document.createElement('button'); btn.id = 'btnVistaPreviaReceta'; btn.type = 'button'; btn.className = 'btn-soft'; btn.innerHTML = '<i class="bi bi-eye me-1"></i> Vista previa'; btn.onclick = window.vistaPreviaReceta; actions.insertBefore(btn, actions.firstChild);
     }
   }
 
@@ -3263,12 +3286,12 @@
 ===================================================== */
 
 /* =====================================================
-   AUROSANAX RECETAS 2.8 - VISTA AMPLIADA Y AJUSTE FINAL
-   - Agrega botón Vista ampliada sin alterar Vista previa ni PDF receta.
-   - Abre una hoja A4 vertical grande con Original y Copia.
-   - Permite imprimir o guardar PDF desde la vista ampliada.
-   - Acerca la firma, mejora el uso del espacio y la legibilidad de la tabla.
-   - Mantiene intactos guardado, JSON, Plan, historial, Google Sheets,
-     Apps Script, IDs, eventos, listeners y sincronización.
+   AUROSANAX RECETAS 2.8 - VISTA PREVIA GRANDE
+   - Vista paciente / imprimir abre primero una vista A4 ampliada.
+   - La vista incluye únicamente Imprimir / Guardar PDF y Cerrar.
+   - Ya no abre automáticamente el cuadro de impresión.
+   - Conserva Original arriba y Copia abajo.
+   - No modifica guardado, JSON, Plan, historial, Google Sheets,
+     Apps Script, IDs, eventos, listeners ni sincronización.
 ===================================================== */
 
