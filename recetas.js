@@ -2063,7 +2063,7 @@
           box-sizing:border-box!important;
           display:flex!important;
           flex-direction:column!important;
-          font-size:15.0px!important;
+          font-size:13px!important;
           line-height:1.10!important;
           overflow:hidden!important;
         }
@@ -2084,12 +2084,12 @@
         }
 
         .auro-media-receta .auro-receta-brand h2{
-          font-size:21.3px!important;
+          font-size:19.3px!important;
           line-height:1.04!important;
         }
 
         .auro-media-receta .auro-receta-brand small{
-          font-size:13.5px!important;
+          font-size:11.5px!important;
           line-height:1.10!important;
           margin-top:1px!important;
         }
@@ -2099,12 +2099,12 @@
         }
 
         .auro-media-receta .auro-receta-title b{
-          font-size:19.1px!important;
+          font-size:17.1px!important;
           line-height:1.04!important;
         }
 
         .auro-media-receta .auro-receta-title small{
-          font-size:13.4px!important;
+          font-size:11.4px!important;
           margin-top:2px!important;
         }
 
@@ -2120,17 +2120,17 @@
         .auro-media-receta .auro-receta-grid div{
           padding:3px 4px!important;
           border-radius:5px!important;
-          font-size:13.6px!important;
+          font-size:11.6px!important;
         }
 
         .auro-media-receta .auro-receta-grid span{
-          font-size:12.0px!important;
+          font-size:10px!important;
           line-height:1.08!important;
           margin-bottom:1px!important;
         }
 
         .auro-media-receta .auro-receta-grid b{
-          font-size:13.9px!important;
+          font-size:11.9px!important;
           line-height:1.10!important;
         }
 
@@ -2142,7 +2142,7 @@
         .auro-media-receta .auro-receta-section h4{
           margin:0 0 3px!important;
           padding-bottom:2px!important;
-          font-size:14.8px!important;
+          font-size:12.8px!important;
           line-height:1.10!important;
         }
 
@@ -2162,12 +2162,12 @@
         .auro-media-receta .auro-rx-table{
           width:100%!important;
           table-layout:fixed!important;
-          font-size:12.6px!important;
+          font-size:10.6px!important;
           line-height:1.10!important;
         }
 
         .auro-media-receta .auro-rx-table th{
-          font-size:11.4px!important;
+          font-size:9.4px!important;
           padding:2px 2px!important;
           line-height:1.08!important;
           letter-spacing:0!important;
@@ -2181,7 +2181,7 @@
         }
 
         .auro-media-receta .auro-rx-col-med strong{
-          font-size:12.8px!important;
+          font-size:10.8px!important;
           line-height:1.10!important;
         }
 
@@ -2201,13 +2201,13 @@
         }
 
         .auro-media-receta .auro-centro-contacto{
-          font-size:12.4px!important;
+          font-size:10.4px!important;
           line-height:1.10!important;
         }
 
         .auro-media-receta .auro-firma{
           padding-top:6px!important;
-          font-size:12.8px!important;
+          font-size:10.8px!important;
           line-height:1.10!important;
         }
 
@@ -2226,7 +2226,7 @@
           justify-content:center;
           color:#4b5563;
           font-family:Arial,system-ui,sans-serif;
-          font-size:13.3px;
+          font-size:11.3px;
           font-weight:900;
           letter-spacing:.08em;
         }
