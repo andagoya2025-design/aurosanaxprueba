@@ -2287,138 +2287,6 @@
     return r;
   };
 
-
-  /*
-     AUROSANAX RECETAS 3.1 - FUENTE SEGURA DE DATOS PARA PDF DESDE PLAN
-     Corrige únicamente la lectura del contenido cuando el botón PDF se pulsa
-     desde Plan y los campos visibles de Recetas todavía están vacíos.
-     No modifica el formulario, guardado, JSON persistido ni sincronización.
-  */
-  function auroRecetaMedicamentosTextoEstructuradoParaPDF(valor){
-    const texto = String(valor || '').trim();
-    if(!texto) return [];
-
-    /*
-      Formato esperado del editor:
-      1. Medicamento
-         Vía: ... · Cantidad: ... · Frecuencia: ... · Duración: ...
-         Indicaciones: ...
-    */
-    const bloques = texto
-      .split(/\n\s*\n+/)
-      .map(x => String(x || '').trim())
-      .filter(Boolean);
-
-    const salida = [];
-
-    bloques.forEach(function(bloque){
-      const lineas = bloque
-        .split(/\n+/)
-        .map(x => String(x || '').trim())
-        .filter(Boolean);
-
-      if(!lineas.length) return;
-
-      const primera = lineas.shift().replace(/^\s*\d+\.\s*/, '').trim();
-      if(!primera) return;
-
-      const detalle = lineas.join(' · ');
-      const leerCampo = function(nombre){
-        const patron = new RegExp(
-          '(?:^|[·|])\\s*' + nombre + '\\s*:\\s*([^·|]+)',
-          'i'
-        );
-        const m = detalle.match(patron);
-        return m ? String(m[1] || '').trim() : '';
-      };
-
-      const indicacionMatch = detalle.match(
-        /(?:^|[·|])\s*Indicaciones?\s*:\s*(.+)$/i
-      );
-
-      salida.push({
-        med: primera,
-        pres: leerCampo('Presentación(?:\\s*\\/\\s*concentración)?') || leerCampo('Presentacion(?:\\s*\\/\\s*concentracion)?'),
-        via: leerCampo('Vía') || leerCampo('Via'),
-        cantidad: leerCampo('Cantidad'),
-        frec: leerCampo('Frecuencia'),
-        dur: leerCampo('Duración') || leerCampo('Duracion'),
-        ind: indicacionMatch ? String(indicacionMatch[1] || '').trim() : '',
-        continuo: /tratamiento\s+continuo/i.test(detalle) ? 'Sí' : 'No'
-      });
-    });
-
-    return salida.filter(m => String(m.med || '').trim());
-  }
-
-  function auroRecetaCompletarDatosPlanParaPDF(receta){
-    const r = Object.assign({}, receta || {});
-
-    if(String(r.medicamento || '').trim()){
-      return r;
-    }
-
-    const medicamentoRecetas = val('recMedicamento');
-    const medicamentoPlanTexto = String(
-      document.getElementById('hcRecetaMedicamentos')?.value || ''
-    ).trim();
-
-    /*
-      PRIORIDAD QUIRÚRGICA:
-      La tabla PDF necesita objetos estructurados, no líneas visuales.
-      Por eso se prioriza el arreglo real del Plan antes del textarea.
-    */
-    const medicamentosPlan = Array.isArray(window.medicamentosPlanSeleccionados)
-      ? window.medicamentosPlanSeleccionados
-          .map(normalizarMedicamentoRecetaObjeto)
-          .filter(m => String(m.med || '').trim())
-      : [];
-
-    const medicamentosRecetaEstructurados =
-      auroRecetaMedicamentosTextoEstructuradoParaPDF(medicamentoRecetas);
-
-    const medicamentosPlanTextoEstructurados =
-      auroRecetaMedicamentosTextoEstructuradoParaPDF(medicamentoPlanTexto);
-
-    if(medicamentosPlan.length){
-      r.medicamento = JSON.stringify(medicamentosPlan);
-    }else if(medicamentosRecetaEstructurados.length){
-      r.medicamento = JSON.stringify(medicamentosRecetaEstructurados);
-    }else if(medicamentosPlanTextoEstructurados.length){
-      r.medicamento = JSON.stringify(medicamentosPlanTextoEstructurados);
-    }else if(medicamentoRecetas){
-      r.medicamento = medicamentoRecetas;
-    }else if(medicamentoPlanTexto){
-      r.medicamento = medicamentoPlanTexto;
-    }
-
-    if(!String(r.indicaciones || '').trim()){
-      r.indicaciones =
-        val('recIndicaciones') ||
-        String(document.getElementById('hcIndicacionesPaciente')?.value || '').trim();
-    }
-
-    if(!String(r.recomendaciones || '').trim()){
-      r.recomendaciones =
-        val('recRecomendaciones') ||
-        String(document.getElementById('hcPlanTratamiento')?.value || '').trim();
-    }
-
-    if(!String(r.cie10 || '').trim()){
-      r.cie10 =
-        val('recCie10') ||
-        String(document.getElementById('hcCie10Principal')?.value || '').trim();
-    }
-
-    if(!String(r.diagnostico || '').trim()){
-      r.diagnostico =
-        val('recDiagnostico') ||
-        String(document.getElementById('hcDiagnosticoPrincipal')?.value || '').trim();
-    }
-
-    return r;
-  }
-
   function auroGenerarPDFRecetaUnificada(recetaOpcional){
     if(!recetaOpcional){
       verificarCambioAtencionReceta();
@@ -2431,10 +2299,7 @@
       auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     }
 
-    const rBase = recetaOpcional || window.obtenerDatosReceta();
-    const r = recetaOpcional
-      ? rBase
-      : auroRecetaCompletarDatosPlanParaPDF(rBase);
+    const r = recetaOpcional || window.obtenerDatosReceta();
 
     if(!r.paciente || !r.paciente.nombre){
       alert('Seleccione primero un paciente para generar la receta.');
@@ -3583,27 +3448,3 @@
    - No modifica Plan, index, botones, IDs, eventos, listeners, guardado,
      JSON, historial, Google Sheets, Apps Script ni sincronización.
 ===================================================== */
-
-/* =====================================================
-   AUROSANAX RECETAS 3.1 - PDF PLAN CON DATOS COMPLETOS
-   - Si PDF receta se pulsa desde Plan, toma medicamentos desde:
-     1) recMedicamento,
-     2) medicamentosPlanSeleccionados de la atención activa,
-     3) hcRecetaMedicamentos como respaldo.
-   - Completa CIE-10, diagnóstico, indicaciones y recomendaciones solo
-     para la representación PDF cuando los campos de Recetas están vacíos.
-   - No modifica guardarRecetaERP, Plan, formulario, JSON, Google Sheets,
-     Apps Script, IDs, eventos, listeners ni sincronización.
-===================================================== */
-
-/* =====================================================
-   AUROSANAX RECETAS 3.2 - COLUMNAS PDF CORREGIDAS
-   - Evita convertir Vía, Frecuencia, Duración e Indicaciones en filas.
-   - Prioriza medicamentosPlanSeleccionados como objetos estructurados.
-   - Si solo existe texto del formulario, lo reconstruye por bloques.
-   - Cada medicamento ocupa una sola fila.
-   - Presentación, cantidad e indicaciones vuelven a sus columnas.
-   - No modifica Plan, guardado, JSON persistido, Google Sheets,
-     Apps Script, IDs, eventos, listeners ni sincronización.
-===================================================== */
-
