@@ -1983,209 +1983,291 @@
 
 
   /*
-     AUROSANAX RECETAS 2.7 - ORIGINAL / COPIA EN UNA SOLA HOJA A4
-     Intervención exclusivamente visual para impresión del paciente.
-     No modifica construirHTMLReceta(), guardado, JSON, Plan, historial,
-     Google Sheets, Apps Script, IDs, eventos ni sincronizaciones.
+     AUROSANAX RECETAS 2.7 - ORIGINAL / COPIA A4 FINAL
+     Intervención exclusivamente visual para la impresión del paciente.
+     No modifica guardado, JSON, Plan, historial, Google Sheets,
+     Apps Script, IDs, eventos ni sincronizaciones.
   */
-  function construirHTMLRecetaPacienteDuplicada(r){
-    const ejemplar = construirHTMLReceta(r, 'paciente');
+  function construirHTMLRecetaPacienteDobleA4(r){
+    const original = construirHTMLReceta(r, 'paciente');
+    const copia = construirHTMLReceta(r, 'paciente');
 
     return `
-      <div class="auro-receta-hoja-doble">
-        <section class="auro-receta-ejemplar auro-receta-original">
-          <div class="auro-receta-contenido">${ejemplar}</div>
-          <div class="auro-receta-tipo-ejemplar"><span>ORIGINAL</span></div>
+      <div class="auro-hoja-a4-doble">
+        <section class="auro-media-receta auro-media-original">
+          <div class="auro-ejemplar-contenido">${original}</div>
+          <div class="auro-ejemplar-etiqueta"><span>ORIGINAL</span></div>
         </section>
 
-        <section class="auro-receta-ejemplar auro-receta-copia">
-          <div class="auro-receta-contenido">${ejemplar}</div>
-          <div class="auro-receta-tipo-ejemplar"><span>COPIA</span></div>
+        <section class="auro-media-receta auro-media-copia">
+          <div class="auro-ejemplar-contenido">${copia}</div>
+          <div class="auro-ejemplar-etiqueta"><span>COPIA</span></div>
         </section>
+      </div>
 
-        <style>
+      <style>
+        html,body{
+          margin:0!important;
+          padding:0!important;
+          background:#fff!important;
+        }
+
+        body{
+          width:100%;
+          min-height:100%;
+          overflow-x:hidden;
+        }
+
+        .auro-hoja-a4-doble{
+          width:100%;
+          max-width:198mm;
+          margin:0 auto;
+          background:#fff;
+          box-sizing:border-box;
+        }
+
+        .auro-media-receta{
+          position:relative;
+          height:142mm;
+          min-height:142mm;
+          max-height:142mm;
+          padding:0 0 7mm;
+          overflow:hidden;
+          box-sizing:border-box;
+          background:#fff;
+        }
+
+        .auro-media-copia{
+          border-top:1px dashed #8b8f97;
+          padding-top:3mm;
+        }
+
+        .auro-ejemplar-contenido{
+          width:100%;
+          height:100%;
+          overflow:hidden;
+        }
+
+        .auro-media-receta .auro-receta-documento{
+          width:100%!important;
+          max-width:none!important;
+          height:100%!important;
+          min-height:0!important;
+          margin:0!important;
+          padding:0!important;
+          box-sizing:border-box!important;
+          display:flex!important;
+          flex-direction:column!important;
+          font-size:9.2px!important;
+          line-height:1.16!important;
+          overflow:hidden!important;
+        }
+
+        .auro-media-receta .auro-receta-header{
+          grid-template-columns:auto 1fr auto!important;
+          gap:8px!important;
+          padding:0 0 5px!important;
+          margin:0 0 5px!important;
+          border-bottom-width:2px!important;
+          flex:0 0 auto!important;
+        }
+
+        .auro-media-receta .auro-receta-logo-wrap{
+          width:46px!important;
+          height:46px!important;
+          border-radius:9px!important;
+        }
+
+        .auro-media-receta .auro-receta-brand h2{
+          font-size:15px!important;
+          line-height:1!important;
+        }
+
+        .auro-media-receta .auro-receta-brand small{
+          font-size:8px!important;
+          line-height:1.12!important;
+          margin-top:1px!important;
+        }
+
+        .auro-media-receta .auro-receta-title{
+          min-width:125px!important;
+        }
+
+        .auro-media-receta .auro-receta-title b{
+          font-size:13px!important;
+          line-height:1!important;
+        }
+
+        .auro-media-receta .auro-receta-title small{
+          font-size:8px!important;
+          margin-top:1px!important;
+        }
+
+        .auro-media-receta .auro-receta-grid{
+          grid-template-columns:repeat(4,minmax(0,1fr))!important;
+          gap:3px!important;
+          padding:4px!important;
+          margin:0 0 5px!important;
+          border-radius:8px!important;
+          flex:0 0 auto!important;
+        }
+
+        .auro-media-receta .auro-receta-grid div{
+          padding:3px 4px!important;
+          border-radius:5px!important;
+          font-size:8.2px!important;
+        }
+
+        .auro-media-receta .auro-receta-grid span{
+          font-size:6.8px!important;
+          line-height:1.05!important;
+          margin-bottom:1px!important;
+        }
+
+        .auro-media-receta .auro-receta-grid b{
+          font-size:8.5px!important;
+          line-height:1.08!important;
+        }
+
+        .auro-media-receta .auro-receta-section{
+          margin-top:4px!important;
+          flex:0 0 auto!important;
+        }
+
+        .auro-media-receta .auro-receta-section h4{
+          margin:0 0 3px!important;
+          padding-bottom:2px!important;
+          font-size:9.2px!important;
+          line-height:1.08!important;
+        }
+
+        .auro-media-receta .auro-receta-box{
+          padding:4px!important;
+          border-radius:7px!important;
+          box-shadow:none!important;
+          overflow:hidden!important;
+        }
+
+        .auro-media-receta .auro-rx-table-wrap{
+          width:100%!important;
+          overflow:hidden!important;
+          border-radius:5px!important;
+        }
+
+        .auro-media-receta .auro-rx-table{
+          width:100%!important;
+          table-layout:fixed!important;
+          font-size:7.15px!important;
+          line-height:1.08!important;
+        }
+
+        .auro-media-receta .auro-rx-table th{
+          font-size:6.15px!important;
+          padding:2px 2px!important;
+          line-height:1.05!important;
+          letter-spacing:0!important;
+        }
+
+        .auro-media-receta .auro-rx-table td{
+          padding:2px 3px!important;
+          line-height:1.08!important;
+          overflow-wrap:anywhere!important;
+          word-break:normal!important;
+        }
+
+        .auro-media-receta .auro-rx-col-med strong{
+          font-size:7.35px!important;
+          line-height:1.08!important;
+        }
+
+        .auro-media-receta .auro-rx-w-num{width:5%!important}
+        .auro-media-receta .auro-rx-w-med{width:21%!important}
+        .auro-media-receta .auro-rx-w-pres{width:23%!important}
+        .auro-media-receta .auro-rx-w-cant{width:9%!important}
+        .auro-media-receta .auro-rx-w-ind{width:42%!important}
+
+        .auro-media-receta .auro-receta-footer{
+          margin-top:auto!important;
+          padding-top:5px!important;
+          gap:12px!important;
+          grid-template-columns:1.1fr .9fr!important;
+          align-items:end!important;
+          flex:0 0 auto!important;
+        }
+
+        .auro-media-receta .auro-centro-contacto{
+          font-size:7px!important;
+          line-height:1.16!important;
+        }
+
+        .auro-media-receta .auro-firma{
+          padding-top:8px!important;
+          font-size:7.4px!important;
+          line-height:1.12!important;
+        }
+
+        .auro-media-receta .auro-linea{
+          margin-bottom:3px!important;
+        }
+
+        .auro-ejemplar-etiqueta{
+          position:absolute;
+          left:0;
+          right:0;
+          bottom:0;
+          height:6mm;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          color:#4b5563;
+          font-family:Arial,system-ui,sans-serif;
+          font-size:8px;
+          font-weight:900;
+          letter-spacing:.08em;
+        }
+
+        .auro-ejemplar-etiqueta:before,
+        .auro-ejemplar-etiqueta:after{
+          content:"";
+          flex:1;
+          height:1px;
+          background:#9ca3af;
+        }
+
+        .auro-ejemplar-etiqueta span{
+          padding:0 9px;
+          white-space:nowrap;
+        }
+
+        @page{
+          size:A4 portrait;
+          margin:6mm;
+        }
+
+        @media print{
           html,body{
-            margin:0!important;
-            padding:0!important;
-            background:#fff!important;
+            width:210mm!important;
+            height:297mm!important;
+            overflow:hidden!important;
+            -webkit-print-color-adjust:exact!important;
+            print-color-adjust:exact!important;
           }
 
-          .auro-receta-hoja-doble{
-            width:100%;
-            max-width:100%;
-            margin:0 auto;
-            background:#fff;
+          .auro-hoja-a4-doble{
+            width:198mm!important;
+            height:285mm!important;
+            max-width:198mm!important;
+            overflow:hidden!important;
+            page-break-after:avoid!important;
+            break-after:avoid-page!important;
           }
 
-          .auro-receta-ejemplar{
-            position:relative;
-            height:142mm;
-            box-sizing:border-box;
-            overflow:hidden;
-            background:#fff;
-            padding:0 0 7mm;
+          .auro-media-receta{
+            page-break-inside:avoid!important;
+            break-inside:avoid!important;
           }
-
-          .auro-receta-copia{
-            border-top:1px dashed #6b7280;
-            padding-top:3mm;
-          }
-
-          .auro-receta-contenido{
-            width:100%;
-            height:100%;
-            overflow:hidden;
-          }
-
-          .auro-receta-ejemplar .auro-receta-documento{
-            zoom:.72;
-            width:138.8889%;
-            max-width:none!important;
-            min-height:180mm;
-            margin:0!important;
-            display:flex;
-            flex-direction:column;
-            box-sizing:border-box;
-          }
-
-          .auro-receta-ejemplar .auro-receta-header{
-            padding-bottom:7px;
-            margin-bottom:6px;
-            gap:10px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-brand h2{
-            font-size:19px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-title b{
-            font-size:16px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-grid{
-            margin-bottom:6px;
-            padding:6px;
-            gap:4px;
-            border-radius:11px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-grid div{
-            padding:4px 6px;
-            border-radius:7px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-section{
-            margin-top:6px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-section h4{
-            margin-bottom:4px;
-            padding-bottom:3px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-box{
-            padding:6px 7px;
-            border-radius:10px;
-            box-shadow:none;
-          }
-
-          .auro-receta-ejemplar .auro-rx-table-wrap{
-            border-radius:7px;
-            overflow:hidden;
-          }
-
-          .auro-receta-ejemplar .auro-rx-table{
-            font-size:9.2px;
-            line-height:1.15;
-          }
-
-          .auro-receta-ejemplar .auro-rx-table th{
-            font-size:7.8px;
-            padding:3px 4px;
-          }
-
-          .auro-receta-ejemplar .auro-rx-table td{
-            padding:3px 4px;
-          }
-
-          .auro-receta-ejemplar .auro-rx-col-med strong{
-            font-size:9.5px;
-          }
-
-          .auro-receta-ejemplar .auro-receta-footer{
-            margin-top:auto!important;
-            padding-top:7px;
-            gap:14px;
-          }
-
-          .auro-receta-ejemplar .auro-firma{
-            padding-top:11px;
-            font-size:9.5px;
-          }
-
-          .auro-receta-ejemplar .auro-centro-contacto{
-            font-size:9px;
-            line-height:1.25;
-          }
-
-          .auro-receta-tipo-ejemplar{
-            position:absolute;
-            left:0;
-            right:0;
-            bottom:0;
-            height:6mm;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            color:#475569;
-            font-family:Arial,system-ui,sans-serif;
-            font-size:10px;
-            font-weight:900;
-            letter-spacing:.08em;
-          }
-
-          .auro-receta-tipo-ejemplar:before,
-          .auro-receta-tipo-ejemplar:after{
-            content:"";
-            height:1px;
-            background:#9ca3af;
-            flex:1;
-          }
-
-          .auro-receta-tipo-ejemplar span{
-            padding:0 10px;
-            white-space:nowrap;
-          }
-
-          @page{
-            size:A4 portrait;
-            margin:6mm;
-          }
-
-          @media print{
-            html,body{
-              width:210mm!important;
-              min-height:297mm!important;
-              overflow:hidden!important;
-              -webkit-print-color-adjust:exact!important;
-              print-color-adjust:exact!important;
-            }
-
-            .auro-receta-hoja-doble{
-              width:198mm!important;
-              height:285mm!important;
-              overflow:hidden!important;
-              page-break-after:avoid!important;
-              break-after:avoid-page!important;
-            }
-
-            .auro-receta-ejemplar{
-              page-break-inside:avoid!important;
-              break-inside:avoid!important;
-            }
-          }
-        </style>
-      </div>`;
+        }
+      </style>`;
   }
 
   window.vistaPreviaReceta = function(){
@@ -2222,17 +2304,15 @@
       if(typeof showScreen === 'function') showScreen('pacientes');
       return;
     }
-    const html = construirHTMLRecetaPacienteDuplicada(r);
+    const html = construirHTMLRecetaPacienteDobleA4(r);
     const ventana = window.open('', '_blank');
     if(!ventana){ alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes para este sitio.'); return; }
-    ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Receta médica AUROSANAX</title></head><body>${html}<script>
-      window.addEventListener('afterprint', function(){
-        window.close();
-      });
+    ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Receta médica AUROSANAX</title></head><body>${html}<script>
+      window.addEventListener('afterprint', function(){ window.close(); });
     <\/script></body></html>`);
     ventana.document.close();
     ventana.focus();
-    setTimeout(() => ventana.print(), 300);
+    setTimeout(() => ventana.print(), 350);
   };
 
   window.__auroRecetasConstruirPDFSeguro = function(datos){ return window.generarPDFReceta(datos); };
@@ -3047,21 +3127,12 @@
 ===================================================== */
 
 /* =====================================================
-   AUROSANAX RECETAS 2.7 - ORIGINAL / COPIA A4
-   - Duplica exclusivamente la impresión para paciente.
-   - Ejemplar superior: ORIGINAL.
-   - Ejemplar inferior: COPIA.
-   - Ambos se ajustan simétricamente a una sola hoja A4.
-   - Vista administrativa y vista previa normal permanecen intactas.
-   - No modifica guardado, JSON, Plan, Google Sheets, Apps Script,
-     historial, edición, IDs, eventos ni sincronización.
+   AUROSANAX RECETAS 2.7 - ORIGINAL / COPIA A4 FINAL
+   - Duplica únicamente la impresión para paciente.
+   - Original arriba y copia abajo, en una sola hoja A4.
+   - Corrige ancho, corte lateral, espacios y posición de firma.
+   - Cierra la ventana temporal al imprimir, guardar PDF o cancelar.
+   - No modifica guardado, JSON, Plan, historial, Google Sheets,
+     Apps Script, IDs, eventos ni sincronización.
 ===================================================== */
 
-
-/* =====================================================
-   AUROSANAX RECETAS 2.8 - CIERRE SEGURO TRAS IMPRESIÓN
-   - Al imprimir, guardar PDF o cancelar, la ventana temporal se cierra.
-   - Evita que el navegador deje visible el documento escalado.
-   - No modifica la receta, guardado, JSON, Plan, historial,
-     Google Sheets, Apps Script, IDs, eventos ni sincronización.
-===================================================== */
