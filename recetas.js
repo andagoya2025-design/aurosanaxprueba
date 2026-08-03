@@ -2054,16 +2054,13 @@
         }
 
         /*
-          AJUSTE FÍSICO QUIRÚRGICO:
-          La copia conserva la misma estructura y tipografía, pero su contenido
-          completo baja 9 mm dentro de la mitad inferior del A4. Se reduce la
-          altura útil en esos mismos 9 mm para evitar desbordes y aprovechar
-          correctamente el espacio inferior al cortar o doblar la hoja.
+          AJUSTE QUIRÚRGICO:
+          Desplaza únicamente el bloque visual completo de la COPIA.
+          No cambia altura disponible, tipografía, interlineado ni proporciones.
         */
         .auro-media-copia .auro-ejemplar-contenido{
-          box-sizing:border-box;
-          padding-top:9mm;
-          height:calc(100% - 9mm);
+          transform:translateY(9mm);
+          transform-origin:top left;
         }
 
         .auro-media-receta .auro-receta-documento{
@@ -3548,12 +3545,12 @@
 ===================================================== */
 
 /* =====================================================
-   AUROSANAX RECETAS 3.4 - AJUSTE FÍSICO DE LA COPIA
-   - Baja únicamente el contenido completo de la COPIA 9 mm.
-   - Mantiene ORIGINAL sin cambios.
-   - Conserva tamaños de letra, tabla, columnas, firma, corte central,
-     márgenes laterales y una sola hoja A4.
-   - No modifica lógica, datos, Plan, guardado, JSON, historial,
-     Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
+   AUROSANAX RECETAS 3.4B - COPIA DESPLAZADA SIN ESCALA
+   - Desplaza únicamente el contenido completo de la COPIA 9 mm hacia abajo.
+   - No agrega padding ni reduce la altura del bloque.
+   - No modifica ningún font-size, interlineado, tabla, columna ni firma.
+   - ORIGINAL permanece intacto.
+   - No modifica lógica, Plan, guardado, JSON, historial, Google Sheets,
+     Apps Script, IDs, botones, eventos, listeners ni sincronización.
 ===================================================== */
 
