@@ -2757,6 +2757,253 @@
 }
 </style>
 
+
+<style id="auro-plan-mobile-premium-quirurgico-style">
+/* ============================================================
+   AUROSANAX PLAN MOBILE PREMIUM QUIRURGICO
+   ALCANCE:
+   - Solo presentación del panel Plan en pantallas <= 980 px.
+   - No modifica IDs, onclick, funciones, eventos, carga ni guardado.
+   - No modifica Diagnóstico, Recetas, Atenciones ni escritorio.
+============================================================ */
+@media(max-width:980px){
+
+  #historia #hc_plan{
+    min-width:0 !important;
+  }
+
+  #historia #hc_plan > .clinical-subtitle{
+    margin-top:10px !important;
+    margin-bottom:9px !important;
+    font-size:13.5px !important;
+    line-height:1.25 !important;
+  }
+
+  /* Ancho completo real del contenido del Plan */
+  #historia #hc_plan .hc-plan-narrow,
+  #historia #hc_plan .hc-plan-row-small{
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+  }
+
+  #historia #hc_plan > .row{
+    --bs-gutter-x:.75rem !important;
+    --bs-gutter-y:.75rem !important;
+  }
+
+  #historia #hc_plan .form-label{
+    margin-bottom:4px !important;
+    font-size:11.5px !important;
+    line-height:1.25 !important;
+  }
+
+  #historia #hc_plan .form-control,
+  #historia #hc_plan .form-select{
+    min-height:41px !important;
+    padding:8px 10px !important;
+    border-radius:12px !important;
+    font-size:12.5px !important;
+    line-height:1.25 !important;
+  }
+
+  #historia #hc_plan textarea.form-control{
+    min-height:88px !important;
+    line-height:1.4 !important;
+    resize:vertical !important;
+  }
+
+  /* Cajas principales del Plan */
+  #historia #hc_plan .receta-medicamentos-box,
+  #historia #hc_plan .ordenes-medicas-box,
+  #historia #hc_plan .interconsulta-box,
+  #historia #hc_plan .evaluaciones-box{
+    padding:11px !important;
+    border-radius:16px !important;
+    box-shadow:0 7px 18px rgba(15,23,42,.045) !important;
+    min-width:0 !important;
+  }
+
+  #historia #hc_plan .receta-medicamentos-box .row,
+  #historia #hc_plan .ordenes-medicas-box .row,
+  #historia #hc_plan .interconsulta-box .row{
+    --bs-gutter-x:.7rem !important;
+    --bs-gutter-y:.7rem !important;
+  }
+
+  /* Botones táctiles sin alterar onclick */
+  #historia #hc_plan button{
+    min-height:40px !important;
+    padding:8px 10px !important;
+    border-radius:12px !important;
+    font-size:12.5px !important;
+    line-height:1.2 !important;
+  }
+
+  #historia #hc_plan .d-flex.gap-2.flex-wrap{
+    gap:7px !important;
+  }
+
+  /* Las tablas del Plan deben verse en móvil.
+     Se revierte únicamente aquí la regla global que oculta .table-responsive. */
+  #historia #hc_plan .table-responsive{
+    display:block !important;
+    width:100% !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch;
+    border:1px solid #f1e7ef !important;
+    border-radius:13px !important;
+    background:#fff !important;
+    margin-top:10px !important;
+  }
+
+  #historia #hc_plan .receta-table{
+    min-width:920px !important;
+    margin:0 !important;
+  }
+
+  #historia #hc_plan .ordenes-table{
+    min-width:620px !important;
+    margin:0 !important;
+  }
+
+  #historia #hc_plan .receta-table th,
+  #historia #hc_plan .ordenes-table th{
+    padding:7px 8px !important;
+    font-size:10px !important;
+    line-height:1.2 !important;
+    white-space:nowrap !important;
+  }
+
+  #historia #hc_plan .receta-table td,
+  #historia #hc_plan .ordenes-table td{
+    padding:7px 8px !important;
+    font-size:11.5px !important;
+    line-height:1.3 !important;
+  }
+
+  /* Sugerencias de medicamentos y órdenes dentro del ancho disponible */
+  #historia #hc_plan .med-sugerencias,
+  #historia #hc_plan .ordenes-sugerencias{
+    left:0 !important;
+    right:0 !important;
+    max-height:230px !important;
+    border-radius:12px !important;
+  }
+
+  #historia #hc_plan .med-sugerencias .med-sug-item,
+  #historia #hc_plan .ordenes-sugerencias .orden-sug-item{
+    padding:8px 10px !important;
+    font-size:12px !important;
+    line-height:1.3 !important;
+  }
+
+  /* Interconsulta */
+  #historia #hc_plan .interconsulta-box textarea{
+    min-height:86px !important;
+  }
+
+  /* Evaluaciones */
+  #historia #hc_plan .evaluaciones-box .evaluacion-subtitle{
+    margin-bottom:9px !important;
+    font-size:13px !important;
+  }
+
+  #historia #hc_plan .evaluaciones-grid{
+    grid-template-columns:1fr !important;
+    gap:8px !important;
+  }
+
+  #historia #hc_plan .evaluaciones-check{
+    gap:8px !important;
+    padding:8px 9px !important;
+    border:1px solid #f1e7ef !important;
+    border-radius:12px !important;
+    background:#fffafd !important;
+    font-size:12px !important;
+    line-height:1.35 !important;
+  }
+
+  #historia #hc_plan .evaluaciones-check input{
+    margin-top:2px !important;
+    flex:0 0 auto !important;
+  }
+
+  /* Estado y avisos del Plan */
+  #historia #hc_plan .auro-previos-box,
+  #historia #hc_plan .auro-save-status,
+  #historia #hc_plan .auro-plan-mini-status{
+    padding:9px 10px !important;
+    border-radius:13px !important;
+    font-size:11.5px !important;
+    line-height:1.4 !important;
+    margin-bottom:10px !important;
+  }
+
+  #historia #hc_plan .form-text{
+    margin-top:6px !important;
+    font-size:10.5px !important;
+    line-height:1.35 !important;
+  }
+
+  /* Zona inferior segura para el botón flotante */
+  #historia #hc_plan{
+    padding-bottom:76px !important;
+  }
+}
+
+@media(max-width:760px){
+
+  /* En teléfono, cada control ocupa una fila completa */
+  #historia #hc_plan .receta-medicamentos-box [class*="col-md-"],
+  #historia #hc_plan .ordenes-medicas-box [class*="col-md-"],
+  #historia #hc_plan .interconsulta-box [class*="col-md-"],
+  #historia #hc_plan .hc-plan-row-small [class*="col-md-"]{
+    flex:0 0 100% !important;
+    width:100% !important;
+    max-width:100% !important;
+  }
+
+  #historia #hc_plan .receta-medicamentos-box .col-md-12.d-flex{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:7px !important;
+  }
+
+  #historia #hc_plan .receta-medicamentos-box .col-md-12.d-flex button{
+    width:100% !important;
+  }
+
+  #historia #hc_plan .ordenes-medicas-box .col-md-2.d-grid button{
+    width:100% !important;
+  }
+}
+
+@media(max-width:480px){
+
+  #historia #hc_plan .receta-medicamentos-box,
+  #historia #hc_plan .ordenes-medicas-box,
+  #historia #hc_plan .interconsulta-box,
+  #historia #hc_plan .evaluaciones-box{
+    padding:9px !important;
+    border-radius:14px !important;
+  }
+
+  #historia #hc_plan .receta-medicamentos-box .col-md-12.d-flex{
+    grid-template-columns:1fr !important;
+  }
+
+  #historia #hc_plan .receta-table{
+    min-width:880px !important;
+  }
+
+  #historia #hc_plan .ordenes-table{
+    min-width:590px !important;
+  }
+}
+</style>
+
 </head>
 
 <body>
