@@ -3004,6 +3004,208 @@
 }
 </style>
 
+
+<style id="auro-recetas-mobile-premium-quirurgico-style">
+/* ============================================================
+   AUROSANAX RECETAS MOBILE PREMIUM QUIRURGICO
+   ALCANCE:
+   - Solo presentación del módulo Recetas en pantallas <= 980 px.
+   - No modifica IDs, onclick, funciones, guardado, PDF ni sincronización.
+   - No modifica Plan, Diagnóstico, Atenciones ni escritorio.
+============================================================ */
+@media(max-width:980px){
+
+  #recetas > .cardx{
+    padding:12px !important;
+    border-radius:18px !important;
+    padding-bottom:82px !important;
+  }
+
+  /* Cabecera y acciones */
+  #recetas .section-head{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    gap:10px !important;
+    margin-bottom:11px !important;
+    padding-bottom:10px !important;
+    border-bottom:1px solid #f1f5f9 !important;
+  }
+
+  #recetas .section-head h4{
+    font-size:15px !important;
+    line-height:1.25 !important;
+    margin-bottom:3px !important;
+  }
+
+  #recetas .section-head p{
+    font-size:11.5px !important;
+    line-height:1.35 !important;
+    margin:0 !important;
+  }
+
+  #recetas .section-head > .d-flex{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:7px !important;
+    width:100% !important;
+  }
+
+  #recetas .section-head button{
+    width:100% !important;
+    min-height:41px !important;
+    padding:8px 10px !important;
+    border-radius:12px !important;
+    font-size:12.5px !important;
+    line-height:1.2 !important;
+  }
+
+  /* Ficha de paciente del módulo */
+  #recetas .module-patient-card{
+    grid-template-columns:1fr !important;
+    gap:8px !important;
+    padding:11px !important;
+    margin-bottom:11px !important;
+    border-radius:16px !important;
+  }
+
+  #recetas .module-patient-title{
+    font-size:13.5px !important;
+    line-height:1.25 !important;
+  }
+
+  #recetas .module-patient-meta{
+    gap:5px !important;
+    font-size:11.5px !important;
+  }
+
+  #recetas .module-patient-meta span{
+    padding:4px 7px !important;
+  }
+
+  #recetas .module-patient-actions{
+    width:100% !important;
+    justify-content:flex-start !important;
+    gap:7px !important;
+  }
+
+  #recetas .module-patient-actions button{
+    min-height:38px !important;
+    border-radius:11px !important;
+    font-size:12px !important;
+  }
+
+  /* Formulario principal */
+  #recetas > .cardx > .row{
+    --bs-gutter-x:.75rem !important;
+    --bs-gutter-y:.75rem !important;
+  }
+
+  #recetas .form-label{
+    margin-bottom:4px !important;
+    font-size:11.5px !important;
+    line-height:1.25 !important;
+  }
+
+  #recetas .form-control,
+  #recetas .form-select{
+    min-height:41px !important;
+    padding:8px 10px !important;
+    border-radius:12px !important;
+    font-size:12.5px !important;
+    line-height:1.3 !important;
+  }
+
+  #recetas input[type="date"]{
+    min-width:0 !important;
+  }
+
+  /* El módulo usa hc-plan-narrow; aquí se fuerza ancho completo solo en Recetas */
+  #recetas .hc-plan-narrow{
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+  }
+
+  #recetas #recMedicamento{
+    min-height:230px !important;
+    line-height:1.45 !important;
+    resize:vertical !important;
+  }
+
+  #recetas #recIndicaciones{
+    min-height:130px !important;
+    line-height:1.42 !important;
+    resize:vertical !important;
+  }
+
+  #recetas #recRecomendaciones{
+    min-height:110px !important;
+    line-height:1.42 !important;
+    resize:vertical !important;
+  }
+
+  #recetas .form-text{
+    margin-top:6px !important;
+    font-size:10.5px !important;
+    line-height:1.35 !important;
+  }
+
+  #recetas .clinical-note{
+    margin-top:11px !important;
+    padding:9px 10px !important;
+    border-radius:13px !important;
+    font-size:11.5px !important;
+    line-height:1.4 !important;
+  }
+}
+
+@media(max-width:760px){
+
+  /* Cada campo ocupa una fila completa en teléfono */
+  #recetas .row > [class*="col-md-"]{
+    flex:0 0 100% !important;
+    width:100% !important;
+    max-width:100% !important;
+  }
+
+  /* CIE-10 y Estado se mantienen claros y sin estrecharse */
+  #recetas #recCie10,
+  #recetas #recEstado,
+  #recetas #recMedico,
+  #recetas #recFecha{
+    width:100% !important;
+  }
+}
+
+@media(max-width:480px){
+
+  #recetas > .cardx{
+    padding:10px !important;
+    padding-bottom:78px !important;
+  }
+
+  #recetas .section-head > .d-flex{
+    grid-template-columns:1fr !important;
+  }
+
+  #recetas .section-head h4{
+    font-size:14.5px !important;
+  }
+
+  #recetas #recMedicamento{
+    min-height:210px !important;
+  }
+
+  #recetas #recIndicaciones{
+    min-height:120px !important;
+  }
+
+  #recetas #recRecomendaciones{
+    min-height:100px !important;
+  }
+}
+</style>
+
 </head>
 
 <body>
