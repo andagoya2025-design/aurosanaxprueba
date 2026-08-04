@@ -2291,6 +2291,71 @@
 }
 </style>
 
+
+<style id="auro-buscador-historias-3-lineas-style">
+/* ============================================================
+   AUROSANAX BUSCADOR HISTORIAS 3 LINEAS
+   Intervención visual localizada:
+   - Nombre del paciente
+   - Fecha de la última atención
+   - Primer diagnóstico de esa atención
+   No modifica apertura, edición, guardado, IDs ni módulos clínicos.
+============================================================ */
+#historiasList .history-row{
+  padding:12px 13px;
+  border-color:#ead5e2;
+  border-radius:16px;
+  background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%);
+  box-shadow:0 6px 18px rgba(15,23,42,.045);
+}
+#historiasList .history-row-top{
+  margin:0;
+  align-items:center;
+}
+#historiasList .auro-history-three-lines{
+  min-width:0;
+  display:grid;
+  gap:4px;
+}
+#historiasList .auro-history-name{
+  color:#111827;
+  font-size:14px;
+  font-weight:900;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+#historiasList .auro-history-date{
+  color:#64748b;
+  font-size:12px;
+  font-weight:750;
+  line-height:1.25;
+}
+#historiasList .auro-history-dx{
+  color:#8b1e5a;
+  font-size:12.5px;
+  font-weight:850;
+  line-height:1.3;
+  overflow-wrap:anywhere;
+}
+#historiasList .history-row .btn-action{
+  flex:0 0 auto;
+  min-height:36px;
+}
+@media(max-width:560px){
+  #historiasList .history-row{
+    padding:11px;
+  }
+  #historiasList .history-row-top{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:9px;
+  }
+  #historiasList .history-row .btn-action{
+    width:100%;
+  }
+}
+</style>
+
 </head>
 
 <body>
@@ -6329,8 +6394,23 @@ function actualizarResumenObstetricia(){
 function openHistoriasModal(){
   const modal = document.getElementById('historiasModal');
   if(modal) modal.classList.add('show');
+
   actualizarFiltroPacientesHistorias();
+
+  /*
+    Render inmediato con la información disponible y actualización posterior
+    desde las fuentes oficiales. El modal no queda bloqueado mientras carga.
+  */
   renderHistoriasClinicas();
+
+  auroCargarResumenBuscadorHistorias(false).then(function(){
+    renderHistoriasClinicas();
+  }).catch(function(error){
+    console.warn(
+      'AUROSANAX HISTORIAS: no se pudo refrescar el resumen de atenciones y diagnósticos.',
+      error
+    );
+  });
 }
 
 function closeHistoriasModal(){
@@ -6351,6 +6431,146 @@ function obtenerPacientePorHistoria(h){
   return patients.find(p => p.id_paciente === id) || null;
 }
 
+/* ============================================================
+   AUROSANAX BUSCADOR HISTORIAS 3 LINEAS
+   Fuente:
+   paciente -> última atención -> diagnóstico principal o primero
+   Solo lectura; no guarda ni modifica registros.
+============================================================ */
+window.auroHistoriasResumenCache = window.auroHistoriasResumenCache || {
+  atenciones:[],
+  diagnosticos:[],
+  cargado:false,
+  cargando:null
+};
+
+function auroListaRespuestaHistorias(valor){
+  if(Array.isArray(valor)) return valor;
+  if(Array.isArray(valor?.data)) return valor.data;
+  return [];
+}
+
+async function auroCargarResumenBuscadorHistorias(forzar){
+  const cache = window.auroHistoriasResumenCache;
+
+  if(cache.cargado && !forzar){
+    return cache;
+  }
+
+  if(cache.cargando){
+    return cache.cargando;
+  }
+
+  if(typeof API_URL === 'undefined' || !API_URL){
+    return cache;
+  }
+
+  cache.cargando = Promise.all([
+    fetch(API_URL + '?accion=listarAtenciones&_=' + Date.now())
+      .then(function(res){ return res.json(); }),
+    fetch(API_URL + '?accion=listarDiagnosticos&_=' + Date.now())
+      .then(function(res){ return res.json(); })
+  ]).then(function(resultados){
+    cache.atenciones = auroListaRespuestaHistorias(resultados[0]);
+    cache.diagnosticos = auroListaRespuestaHistorias(resultados[1]);
+    cache.cargado = true;
+    return cache;
+  }).finally(function(){
+    cache.cargando = null;
+  });
+
+  return cache.cargando;
+}
+
+function auroMarcaTiempoAtencionHistoria(a){
+  const fecha = String(a?.fecha_atencion || '').slice(0,10);
+  const hora = String(a?.hora_atencion || '00:00').slice(0,5);
+  const directo = Date.parse(fecha + 'T' + (hora || '00:00') + ':00');
+  if(!isNaN(directo)) return directo;
+
+  const actualizado = Date.parse(String(a?.actualizado_en || a?.creado_en || ''));
+  return isNaN(actualizado) ? 0 : actualizado;
+}
+
+function auroUltimaAtencionParaHistoria(h){
+  const cache = window.auroHistoriasResumenCache || {};
+  const idPaciente = String(h?.id_paciente || h?.paciente_id || '').trim();
+  const idHistoria = String(h?.id_historia || h?.id || '').trim();
+
+  const candidatas = (Array.isArray(cache.atenciones) ? cache.atenciones : [])
+    .filter(function(a){
+      const coincidePaciente =
+        idPaciente &&
+        String(a?.id_paciente || '').trim() === idPaciente;
+
+      const coincideHistoria =
+        idHistoria &&
+        String(a?.id_historia || '').trim() === idHistoria;
+
+      return coincidePaciente && (!String(a?.id_historia || '').trim() || coincideHistoria);
+    })
+    .sort(function(a,b){
+      const ta = auroMarcaTiempoAtencionHistoria(a);
+      const tb = auroMarcaTiempoAtencionHistoria(b);
+      if(ta !== tb) return tb - ta;
+      return Number(b?.numero_consulta || 0) - Number(a?.numero_consulta || 0);
+    });
+
+  return candidatas[0] || null;
+}
+
+function auroDiagnosticoPrimeroAtencionHistoria(atencion){
+  if(!atencion) return null;
+
+  const cache = window.auroHistoriasResumenCache || {};
+  const idAtencion = String(atencion.id_atencion || '').trim();
+  if(!idAtencion) return null;
+
+  const lista = (Array.isArray(cache.diagnosticos) ? cache.diagnosticos : [])
+    .filter(function(dx){
+      return String(dx?.id_atencion || '').trim() === idAtencion;
+    });
+
+  if(!lista.length) return null;
+
+  /*
+    Si existe un registro marcado como principal se muestra ese.
+    De lo contrario se respeta el primer diagnóstico guardado.
+  */
+  return lista.find(function(dx){
+    const principal = String(
+      dx?.principal || dx?.es_principal || dx?.diagnostico_principal || ''
+    ).trim().toUpperCase();
+
+    return principal === 'SI' ||
+           principal === 'SÍ' ||
+           principal === 'TRUE' ||
+           principal === '1';
+  }) || lista[0];
+}
+
+function auroTextoDiagnosticoHistoria(dx){
+  if(!dx) return 'Sin diagnóstico';
+
+  const codigo = String(
+    dx.codigo_cie10 ||
+    dx.diagnostico_cie10 ||
+    dx.cie10 ||
+    dx.codigo ||
+    ''
+  ).trim();
+
+  const nombre = String(
+    dx.descripcion ||
+    dx.diagnostico ||
+    dx.nombre_diagnostico ||
+    dx.nombre ||
+    ''
+  ).trim();
+
+  return [codigo, nombre].filter(Boolean).join(' - ') || 'Sin diagnóstico';
+}
+
 function renderHistoriasClinicas(){
   const q = (document.getElementById('historiaSearch')?.value || '').toLowerCase();
   const idPaciente = document.getElementById('historiaPacienteFiltro')?.value || '';
@@ -6358,29 +6578,44 @@ function renderHistoriasClinicas(){
   const list = document.getElementById('historiasList');
   if(!list) return;
 
-  const rows = historiasClinicas.filter(h => {
+  const rows = historiasClinicas.filter(function(h){
     const p = obtenerPacientePorHistoria(h);
-    const fechaHistoria = normalizarFechaInput(h.fecha_registro || h.fecha_apertura || h.creado_en || h.actualizado_en || '');
-    const texto = [p?.nombre, p?.cedula, h.motivo_consulta, h.diagnostico_principal, h.diagnostico_cie10, h.observaciones, h.estado].join(' ').toLowerCase();
-    return (!q || texto.includes(q)) && (!idPaciente || h.id_paciente === idPaciente) && (!fecha || fechaHistoria === fecha);
+    const ultimaAtencion = auroUltimaAtencionParaHistoria(h);
+    const fechaAtencion = String(ultimaAtencion?.fecha_atencion || '').slice(0,10);
+    const dx = auroDiagnosticoPrimeroAtencionHistoria(ultimaAtencion);
+    const diagnosticoTexto = auroTextoDiagnosticoHistoria(dx);
+
+    const texto = [
+      p?.nombre,
+      p?.cedula,
+      fechaAtencion,
+      diagnosticoTexto,
+      h.estado
+    ].join(' ').toLowerCase();
+
+    return (!q || texto.includes(q)) &&
+           (!idPaciente || String(h.id_paciente || '') === String(idPaciente)) &&
+           (!fecha || fechaAtencion === fecha);
   });
 
-  list.innerHTML = rows.map((h, idx) => {
+  list.innerHTML = rows.map(function(h, idx){
     const p = obtenerPacientePorHistoria(h);
-    const fechaHistoria = normalizarFechaInput(h.fecha_registro || h.fecha_apertura || h.creado_en || h.actualizado_en || '');
     const titulo = p?.nombre || h.nombre_paciente || 'Paciente no identificado';
-    const motivo = h.motivo_consulta || h.enfermedad_actual || h.observaciones || 'Historia clínica registrada';
-    const diagnostico = h.diagnostico_principal || h.diagnostico_cie10 || 'Sin diagnóstico visible';
+    const ultimaAtencion = auroUltimaAtencionParaHistoria(h);
+    const fechaAtencion = String(ultimaAtencion?.fecha_atencion || '').slice(0,10);
+    const dx = auroDiagnosticoPrimeroAtencionHistoria(ultimaAtencion);
+    const diagnostico = auroTextoDiagnosticoHistoria(dx);
+
     return `
       <div class="history-row">
         <div class="history-row-top">
-          <div>
-            <b>${titulo}</b><br>
-            <span class="history-muted">${fechaHistoria ? formatearFechaVisual(fechaHistoria) : 'Fecha no registrada'} · ${diagnostico}</span>
+          <div class="auro-history-three-lines">
+            <div class="auro-history-name">${titulo}</div>
+            <div class="auro-history-date">${fechaAtencion ? formatearFechaVisual(fechaAtencion) : 'Sin atención registrada'}</div>
+            <div class="auro-history-dx">${diagnostico}</div>
           </div>
           ${h.id_paciente ? `<button class="btn-action primary" onclick="editarHistoriaClinicaModal('${h.id_historia || h.id || idx}')"><i class="bi bi-pencil-square me-1"></i> Abrir / editar</button>` : `<span class="badge-auro badge-warn">Sin paciente vinculado</span>`}
         </div>
-        <div>${motivo}</div>
       </div>
     `;
   }).join('') || '<div class="text-center text-muted py-4">No se encontraron historias clínicas.</div>';
