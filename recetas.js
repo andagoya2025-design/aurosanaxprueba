@@ -2484,19 +2484,40 @@
 
           @media(max-width:760px){
             .auro-preview-toolbar{
-              align-items:flex-start;
+              align-items:stretch;
               flex-direction:column;
+              gap:9px;
+              padding:10px;
+            }
+
+            .auro-preview-actions{
+              display:grid;
+              grid-template-columns:1fr;
+              width:100%;
+              gap:7px;
+            }
+
+            .auro-preview-zoom{
+              width:100%;
+              justify-content:center;
+              box-sizing:border-box;
+            }
+
+            .auro-preview-btn{
+              width:100%;
+              min-height:42px;
             }
 
             .auro-preview-stage{
-              justify-content:flex-start;
-              padding:8px;
+              justify-content:center;
+              padding:8px 4px 18px;
+              overflow-x:hidden;
             }
 
             .auro-preview-sheet{
-              transform:scale(.60);
-              transform-origin:top left;
-              margin-bottom:-118mm;
+              transform-origin:top center;
+              margin-left:auto;
+              margin-right:auto;
             }
           }
 
@@ -2548,7 +2569,7 @@
         <script>
           (function(){
             let auroZoomActual = 115;
-            const auroZoomMinimo = 60;
+            const auroZoomMinimo = 30;
             const auroZoomMaximo = 180;
 
             function auroAplicarZoom(){
@@ -2558,9 +2579,9 @@
 
               hoja.style.transform = 'scale(' + (auroZoomActual / 100) + ')';
 
-              const diferencia = Math.max(0, auroZoomActual - 100);
+              const diferencia = auroZoomActual - 100;
               hoja.style.marginBottom = diferencia
-                ? (diferencia * 2.95) + 'mm'
+                ? (diferencia * 2.97) + 'mm'
                 : '0';
 
               if(etiqueta){
@@ -2577,23 +2598,30 @@
             };
 
             window.auroAjustarZoom = function(){
-              const anchoDisponible = Math.max(320, window.innerWidth - 44);
+              const margenHorizontal = window.innerWidth <= 760 ? 12 : 44;
+              const anchoDisponible = Math.max(240, window.innerWidth - margenHorizontal);
               const anchoHoja = 794;
               const calculado = Math.floor((anchoDisponible / anchoHoja) * 100);
+
               auroZoomActual = Math.max(
                 auroZoomMinimo,
                 Math.min(115, calculado)
               );
+
               auroAplicarZoom();
             };
 
             window.addEventListener('resize', function(){
-              if(window.innerWidth <= 760){
+              if(window.innerWidth <= 980){
                 window.auroAjustarZoom();
               }
             });
 
-            auroAplicarZoom();
+            if(window.innerWidth <= 980){
+              window.auroAjustarZoom();
+            }else{
+              auroAplicarZoom();
+            }
           })();
         <\/script>
       </body>
