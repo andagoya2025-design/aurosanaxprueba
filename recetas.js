@@ -2251,23 +2251,28 @@
 
         @media print{
           html,body{
-            width:210mm!important;
-            height:297mm!important;
-            overflow:hidden!important;
+            width:auto!important;
+            height:auto!important;
+            min-height:0!important;
+            overflow:visible!important;
             -webkit-print-color-adjust:exact!important;
             print-color-adjust:exact!important;
           }
 
           .auro-hoja-a4-doble{
             width:198mm!important;
-            height:285mm!important;
+            height:266mm!important;
             max-width:198mm!important;
+            margin:0 auto!important;
             overflow:hidden!important;
             page-break-after:avoid!important;
             break-after:avoid-page!important;
           }
 
           .auro-media-receta{
+            height:131mm!important;
+            min-height:131mm!important;
+            max-height:131mm!important;
             page-break-inside:avoid!important;
             break-inside:avoid!important;
           }
@@ -2509,15 +2514,15 @@
             }
 
             .auro-preview-stage{
-              justify-content:center;
+              justify-content:flex-start;
               padding:8px 4px 18px;
               overflow-x:hidden;
             }
 
             .auro-preview-sheet{
-              transform-origin:top center;
-              margin-left:auto;
-              margin-right:auto;
+              transform-origin:top left;
+              margin-left:0;
+              margin-right:0;
             }
           }
 
@@ -2538,11 +2543,16 @@
             }
 
             .auro-preview-sheet{
+              position:static!important;
+              left:auto!important;
               width:auto!important;
               min-height:0!important;
               margin:0!important;
+              margin-left:0!important;
+              margin-right:0!important;
               box-shadow:none!important;
               transform:none!important;
+              transform-origin:initial!important;
             }
           }
         </style>
@@ -2577,12 +2587,32 @@
               const etiqueta = document.getElementById('auroZoomValor');
               if(!hoja) return;
 
-              hoja.style.transform = 'scale(' + (auroZoomActual / 100) + ')';
+              const escala = auroZoomActual / 100;
+              hoja.style.transform = 'scale(' + escala + ')';
 
               const diferencia = auroZoomActual - 100;
               hoja.style.marginBottom = diferencia
                 ? (diferencia * 2.97) + 'mm'
                 : '0';
+
+              if(window.innerWidth <= 980){
+                const escenario = document.querySelector('.auro-preview-stage');
+                const anchoDisponible = Math.max(
+                  240,
+                  (escenario ? escenario.clientWidth : window.innerWidth) - 8
+                );
+                const anchoHojaEscalada = 794 * escala;
+                const margenIzquierdo = Math.max(
+                  0,
+                  Math.floor((anchoDisponible - anchoHojaEscalada) / 2)
+                );
+
+                hoja.style.marginLeft = margenIzquierdo + 'px';
+                hoja.style.marginRight = '0';
+              }else{
+                hoja.style.marginLeft = '0';
+                hoja.style.marginRight = '0';
+              }
 
               if(etiqueta){
                 etiqueta.textContent = auroZoomActual + '%';
@@ -2598,8 +2628,10 @@
             };
 
             window.auroAjustarZoom = function(){
+              const escenario = document.querySelector('.auro-preview-stage');
+              const anchoBase = escenario ? escenario.clientWidth : window.innerWidth;
               const margenHorizontal = window.innerWidth <= 760 ? 12 : 44;
-              const anchoDisponible = Math.max(240, window.innerWidth - margenHorizontal);
+              const anchoDisponible = Math.max(240, anchoBase - margenHorizontal);
               const anchoHoja = 794;
               const calculado = Math.floor((anchoDisponible / anchoHoja) * 100);
 
