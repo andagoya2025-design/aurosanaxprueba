@@ -5,7 +5,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AUROSANAX Clinical ERP</title>
+  <title id="auroTituloDocumento">AUROSANAX Clinical ERP</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -3054,8 +3054,8 @@
     <div class="brand">
       <div class="brand-logo">A</div>
       <div>
-        <h1>AUROSANAX</h1>
-        <small>Clinical ERP</small>
+        <h1 id="auroNombreCentroSidebar">AUROSANAX</h1>
+        <small id="auroSubtituloSistema">Clinical ERP</small>
       </div>
     </div>
 
@@ -3141,7 +3141,7 @@
     <section class="screen active" id="dashboard">
       <div class="hero">
         <div>
-          <h3>Bienvenida a AUROSANAX Clinical ERP</h3>
+          <h3 id="auroBienvenidaCentro">Bienvenida a AUROSANAX Clinical ERP</h3>
           <p>Plataforma clínica integral para la gestión de pacientes, agenda, historias clínicas, especialidades y seguimiento médico.</p>
         </div>
         <div class="quick-actions">
@@ -3191,7 +3191,7 @@
               <button class="btn-soft text-start" onclick="showScreen('pacientes')"><i class="bi bi-search me-2"></i> Buscar paciente</button>
               <button class="btn-soft text-start" onclick="showScreen('historia'); setTimeout(openHistoriasModal, 150)"><i class="bi bi-file-earmark-medical me-2"></i> Buscar historia clínica</button>
               <button class="btn-soft text-start" onclick="showScreen('procedimientos')"><i class="bi bi-clipboard2-pulse me-2"></i> Procedimientos</button>
-              <button class="btn-soft text-start" onclick="abrirWhatsAppConsultorio()"><i class="bi bi-whatsapp me-2"></i> WhatsApp AUROSANAX</button>
+              <button class="btn-soft text-start" onclick="abrirWhatsAppConsultorio()"><i class="bi bi-whatsapp me-2"></i> WhatsApp <span class="auroNombreCentroWhatsapp">AUROSANAX</span></button>
             </div>
           </div>
         </div>
@@ -3867,7 +3867,7 @@
         <div class="clinical-note mt-3"><i class="bi bi-info-circle me-1"></i> La receta vuelve al modelo simple: <b>una receta = una fila</b>. El detalle completo de medicamentos se guarda en la columna <b>medicamento</b> de la pestaña recetas para evitar múltiples filas por cada medicamento.</div>
       </div>
     </section>
-    <section class="screen" id="seguimiento"><div class="cardx p-4"><h4 class="fw-bold">Seguimiento por WhatsApp</h4><p class="text-muted">Recordatorios, controles, postprocedimientos y mensajes rápidos.</p><button class="btn-auro" onclick="abrirWhatsAppConsultorio()"><i class="bi bi-whatsapp me-1"></i> WhatsApp AUROSANAX</button></div></section>
+    <section class="screen" id="seguimiento"><div class="cardx p-4"><h4 class="fw-bold">Seguimiento por WhatsApp</h4><p class="text-muted">Recordatorios, controles, postprocedimientos y mensajes rápidos.</p><button class="btn-auro" onclick="abrirWhatsAppConsultorio()"><i class="bi bi-whatsapp me-1"></i> WhatsApp <span class="auroNombreCentroWhatsapp">AUROSANAX</span></button></div></section>
     <section class="screen" id="medicos"><div class="cardx p-4"><h4 class="fw-bold">Médicos y personal</h4><p class="text-muted">Dra. Aurora como administradora principal y otros médicos por especialidad.</p></div></section>
     <section class="screen" id="configuracion">
       <div class="cardx p-4">
@@ -4073,6 +4073,41 @@ function auroPintarLogoSidebarDesdeUrls(urls){
   img.src = lista[intento];
 }
 
+
+function auroAplicarIdentidadCentroIndex(cfg){
+  cfg = cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : {};
+
+  const nombre = String(
+    cfg.nombre_clinica ||
+    cfg.nombre_centro ||
+    cfg.razon_social ||
+    'AUROSANAX'
+  ).trim() || 'AUROSANAX';
+
+  const nombreSidebar = document.getElementById('auroNombreCentroSidebar');
+  const bienvenida = document.getElementById('auroBienvenidaCentro');
+  const subtituloPantalla = document.getElementById('screenSubtitle');
+
+  if(nombreSidebar) nombreSidebar.textContent = nombre;
+  if(bienvenida) bienvenida.textContent = 'Bienvenida a ' + nombre + ' Clinical ERP';
+
+  if(
+    subtituloPantalla &&
+    document.getElementById('dashboard')?.classList.contains('active')
+  ){
+    subtituloPantalla.textContent = 'Resumen general del centro médico ' + nombre;
+  }
+
+  document.querySelectorAll('.auroNombreCentroWhatsapp').forEach(el => {
+    el.textContent = nombre;
+  });
+
+  document.title = nombre + ' Clinical ERP';
+
+  window.auroNombreCentro = nombre;
+  window.auroModoSistema = String(cfg.modo_sistema || 'DEMO').trim() || 'DEMO';
+}
+
 async function auroCargarLogoSidebarInstitucional(){
   const logo = document.querySelector('.brand-logo');
   if(!logo) return;
@@ -4094,6 +4129,7 @@ async function auroCargarLogoSidebarInstitucional(){
     }
 
     window.auroConfiguracionCentro = cfg;
+    auroAplicarIdentidadCentroIndex(cfg);
 
     const logoUrl = String(cfg.logo_url || cfg.logo_drive_url || '').trim();
     const logoFileId = String(cfg.logo_file_id || '').trim();
@@ -4340,7 +4376,7 @@ function showScreen(id, btn){
   if(btn) btn.classList.add('active');
 
   const titles={
-    dashboard:['Dashboard','Resumen general del centro médico AUROSANAX'],
+    dashboard:['Dashboard','Resumen general del centro médico ' + (window.auroNombreCentro || 'AUROSANAX')],
     pacientes:['Pacientes','Registro, búsqueda y seguimiento de pacientes'],
     agenda:['Agenda médica','Citas por médico y especialidad'],
     historia:['Historia clínica','Datos generales'],
