@@ -2196,7 +2196,7 @@
           padding-top:5px!important;
           gap:12px!important;
           grid-template-columns:1.1fr .9fr!important;
-          align-items:start!important;
+          align-items:end!important;
           flex:0 0 auto!important;
         }
 
@@ -2206,7 +2206,7 @@
         }
 
         .auro-media-receta .auro-firma{
-          padding-top:0!important;
+          padding-top:6px!important;
           font-size:10.8px!important;
           line-height:1.10!important;
         }
@@ -2509,18 +2509,15 @@
             }
 
             .auro-preview-stage{
-              display:block;
+              justify-content:center;
               padding:8px 4px 18px;
               overflow-x:hidden;
-              text-align:center;
             }
 
             .auro-preview-sheet{
-              position:relative;
-              left:50%;
               transform-origin:top center;
-              margin-left:0;
-              margin-right:0;
+              margin-left:auto;
+              margin-right:auto;
             }
           }
 
@@ -2538,18 +2535,14 @@
               min-height:0!important;
               padding:0!important;
               overflow:visible!important;
-              text-align:left!important;
             }
 
             .auro-preview-sheet{
-              position:static!important;
-              left:auto!important;
               width:auto!important;
               min-height:0!important;
               margin:0!important;
               box-shadow:none!important;
               transform:none!important;
-              transform-origin:initial!important;
             }
           }
         </style>
@@ -2584,9 +2577,7 @@
               const etiqueta = document.getElementById('auroZoomValor');
               if(!hoja) return;
 
-              hoja.style.transform = window.innerWidth <= 980
-                ? 'translateX(-50%) scale(' + (auroZoomActual / 100) + ')'
-                : 'scale(' + (auroZoomActual / 100) + ')';
+              hoja.style.transform = 'scale(' + (auroZoomActual / 100) + ')';
 
               const diferencia = auroZoomActual - 100;
               hoja.style.marginBottom = diferencia
