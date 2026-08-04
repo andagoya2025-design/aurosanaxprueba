@@ -2196,21 +2196,21 @@
           padding-top:5px!important;
           gap:12px!important;
           grid-template-columns:1.1fr .9fr!important;
-          align-items:center!important;
+          align-items:start!important;
           flex:0 0 auto!important;
         }
 
         .auro-media-receta .auro-centro-contacto{
           font-size:10.4px!important;
           line-height:1.10!important;
-          align-self:center!important;
+          align-self:start!important;
         }
 
         .auro-media-receta .auro-firma{
           padding-top:0!important;
           font-size:10.8px!important;
           line-height:1.10!important;
-          align-self:center!important;
+          align-self:start!important;
         }
 
         .auro-media-receta .auro-linea{
