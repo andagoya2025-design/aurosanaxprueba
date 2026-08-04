@@ -2582,6 +2582,181 @@
 }
 </style>
 
+
+<style id="auro-diagnostico-mobile-premium-style">
+/* ============================================================
+   AUROSANAX DIAGNOSTICO MOBILE PREMIUM
+   Intervención visual localizada:
+   - Solo panel Diagnóstico
+   - Solo pantallas <= 980 px
+   - No modifica búsqueda, selección, CIE-10, guardado ni sincronización
+============================================================ */
+@media(max-width:980px){
+
+  #historia #hc_diagnostico{
+    min-width:0 !important;
+  }
+
+  #historia #hc_diagnostico .clinical-subtitle{
+    margin-top:10px !important;
+    margin-bottom:8px !important;
+    font-size:13.5px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-card{
+    margin-bottom:12px !important;
+    border-radius:17px !important;
+    box-shadow:0 7px 18px rgba(15,23,42,.045) !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-head{
+    padding:9px 11px !important;
+    font-size:12.5px !important;
+    line-height:1.2 !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-body{
+    padding:10px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-subtitle{
+    margin-bottom:8px !important;
+    font-size:12.5px !important;
+  }
+
+  /* Búsqueda CIE-10 compacta y táctil */
+  #historia #hc_diagnostico .diagnostico-cie-search-grid{
+    grid-template-columns:1fr !important;
+    gap:8px !important;
+    margin-bottom:10px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-search-grid > div{
+    min-width:0 !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-search-grid .form-label{
+    margin-bottom:4px !important;
+    font-size:11.5px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-search-grid .form-control{
+    min-height:41px !important;
+    padding:8px 10px !important;
+    border-radius:12px !important;
+    font-size:12.5px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-search-grid button{
+    min-height:41px !important;
+    border-radius:12px !important;
+    padding:8px 10px !important;
+    font-size:12.5px !important;
+  }
+
+  /* Tablas con desplazamiento horizontal controlado */
+  #historia #hc_diagnostico .diagnostico-table-wrap{
+    margin-bottom:9px !important;
+    border-radius:13px !important;
+    overflow-x:auto !important;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  #historia #hc_diagnostico .diagnostico-table{
+    min-width:620px !important;
+    font-size:12px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-table th{
+    padding:7px 8px !important;
+    font-size:10px !important;
+    line-height:1.2 !important;
+    white-space:nowrap !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-table td{
+    padding:7px 8px !important;
+    font-size:11.5px !important;
+    line-height:1.3 !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-code{
+    font-size:11.5px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-add,
+  #historia #hc_diagnostico .diagnostico-delete{
+    min-height:34px !important;
+    padding:6px 8px !important;
+    border-radius:10px !important;
+    font-size:11px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-radio{
+    width:16px !important;
+    height:16px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-tipo-select{
+    min-width:126px !important;
+    min-height:34px !important;
+    padding:6px 8px !important;
+    font-size:11px !important;
+    border-radius:10px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-empty{
+    padding:11px !important;
+    font-size:11.5px !important;
+  }
+
+  /* Módulo externo montado debajo */
+  #historia #hc_diagnostico #auroDiagnosticosMount{
+    min-width:0 !important;
+  }
+
+  #historia #hc_diagnostico #auroDiagnosticosMount .cardx,
+  #historia #hc_diagnostico #auroDiagnosticosMount .auro-diagnostico-card,
+  #historia #hc_diagnostico #auroDiagnosticosMount .diagnostico-card{
+    padding:11px !important;
+    border-radius:16px !important;
+  }
+
+  #historia #hc_diagnostico #auroDiagnosticosMount .form-control,
+  #historia #hc_diagnostico #auroDiagnosticosMount .form-select{
+    min-height:40px !important;
+    padding:8px 10px !important;
+    border-radius:12px !important;
+    font-size:12.5px !important;
+  }
+
+  #historia #hc_diagnostico #auroDiagnosticosMount textarea{
+    min-height:82px !important;
+    line-height:1.35 !important;
+  }
+
+  #historia #hc_diagnostico #auroDiagnosticosMount button{
+    min-height:40px !important;
+    border-radius:12px !important;
+    font-size:12.5px !important;
+  }
+}
+
+@media(max-width:480px){
+  #historia #hc_diagnostico .diagnostico-cie-body{
+    padding:9px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-table{
+    min-width:590px !important;
+  }
+
+  #historia #hc_diagnostico .diagnostico-cie-head{
+    font-size:12px !important;
+  }
+}
+</style>
+
 </head>
 
 <body>
