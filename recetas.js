@@ -2538,14 +2538,18 @@
               min-height:0!important;
               padding:0!important;
               overflow:visible!important;
+              text-align:left!important;
             }
 
             .auro-preview-sheet{
+              position:static!important;
+              left:auto!important;
               width:auto!important;
               min-height:0!important;
               margin:0!important;
               box-shadow:none!important;
               transform:none!important;
+              transform-origin:initial!important;
             }
           }
         </style>
