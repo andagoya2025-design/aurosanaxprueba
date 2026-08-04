@@ -2020,7 +2020,7 @@
 
         .auro-hoja-a4-doble{
           width:100%;
-          max-width:198mm;
+          max-width:194mm;
           margin:0 auto;
           background:#fff;
           box-sizing:border-box;
@@ -2246,7 +2246,7 @@
 
         @page{
           size:A4 portrait;
-          margin:6mm;
+          margin:6mm 8mm;
         }
 
         @media print{
@@ -2259,12 +2259,28 @@
           }
 
           .auro-hoja-a4-doble{
-            width:198mm!important;
+            width:194mm!important;
             height:285mm!important;
-            max-width:198mm!important;
+            max-width:194mm!important;
+            margin:0 auto!important;
             overflow:hidden!important;
             page-break-after:avoid!important;
             break-after:avoid-page!important;
+          }
+
+          html.auro-ios .auro-hoja-a4-doble{
+            height:266mm!important;
+          }
+
+          html.auro-ios .auro-media-receta{
+            height:131.5mm!important;
+            min-height:131.5mm!important;
+            max-height:131.5mm!important;
+          }
+
+          html.auro-ios .auro-media-copia{
+            margin-top:3mm!important;
+            padding-top:3mm!important;
           }
 
           .auro-media-receta{
@@ -2357,6 +2373,13 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <title>Vista previa de receta AUROSANAX</title>
+        <script>
+          (function(){
+            var esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '') ||
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            if(esIOS) document.documentElement.classList.add('auro-ios');
+          })();
+        <\/script>
         <style>
           html,body{
             margin:0;
@@ -2470,9 +2493,9 @@
           }
 
           .auro-preview-sheet .auro-hoja-a4-doble{
-            width:198mm!important;
-            max-width:198mm!important;
-            margin:6mm auto!important;
+            width:194mm!important;
+            max-width:194mm!important;
+            margin:6mm 8mm!important;
           }
 
           @media(max-width:980px){
