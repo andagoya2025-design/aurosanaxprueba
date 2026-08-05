@@ -377,17 +377,56 @@
     const miniMonthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const miniDayNames = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
+    function esperar(ms){
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     async function apiGet(accion, params){
-      const query = new URLSearchParams({accion: accion, t: Date.now()});
-      if(params && typeof params === 'object'){
-        Object.keys(params).forEach(k => {
-          if(params[k] !== undefined && params[k] !== null) query.append(k, params[k]);
-        });
+      let ultimoError = null;
+
+      for(let intento = 1; intento <= 3; intento++){
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        try{
+          const query = new URLSearchParams({
+            accion: accion,
+            t: Date.now(),
+            intento: intento
+          });
+
+          if(params && typeof params === 'object'){
+            Object.keys(params).forEach(k => {
+              if(params[k] !== undefined && params[k] !== null){
+                query.append(k, params[k]);
+              }
+            });
+          }
+
+          const url = API_URL + '?' + query.toString();
+          const res = await fetch(url, {
+            method:'GET',
+            cache:'no-store',
+            redirect:'follow',
+            signal:controller.signal
+          });
+
+          if(!res.ok) throw new Error('Error HTTP ' + res.status);
+
+          const data = await res.json();
+          clearTimeout(timeoutId);
+          return data;
+        }catch(error){
+          clearTimeout(timeoutId);
+          ultimoError = error;
+
+          if(intento < 3){
+            await esperar(700 * intento);
+          }
+        }
       }
-      const url = API_URL + '?' + query.toString();
-      const res = await fetch(url);
-      if(!res.ok) throw new Error('Error HTTP ' + res.status);
-      return await res.json();
+
+      throw ultimoError || new Error('No se pudo conectar con el servidor.');
     }
 
     async function apiPost(accion, data){
@@ -760,29 +799,61 @@
 
     async function cargarDatosIniciales(conservarMensaje){
       if(!conservarMensaje) limpiarStatus();
-      document.getElementById('loadingSlots').classList.add('show');
+
+      const loading = document.getElementById('loadingSlots');
+      const selMedico = document.getElementById('id_medico');
+
+      if(loading) loading.classList.add('show');
+      if(selMedico){
+        selMedico.innerHTML = '<option value="">Cargando médicos...</option>';
+        selMedico.disabled = true;
+      }
+
       try{
-        const resultados = await Promise.allSettled([
+        const [dispResultado, medicosResultado] = await Promise.all([
           apiGet('listarDisponibilidad'),
-          apiGet('listarMedicosActivos'),
-          apiGet('listarCitas'),
-          apiGet('listarPacientes')
+          apiGet('listarMedicosActivos')
         ]);
 
-        disponibilidad = resultados[0].status === 'fulfilled' && Array.isArray(resultados[0].value) ? resultados[0].value : [];
-        medicos = resultados[1].status === 'fulfilled' && Array.isArray(resultados[1].value) ? resultados[1].value : [];
-        citas = resultados[2].status === 'fulfilled' && Array.isArray(resultados[2].value) ? resultados[2].value : [];
-        pacientes = resultados[3].status === 'fulfilled' && Array.isArray(resultados[3].value) ? resultados[3].value : [];
+        disponibilidad = Array.isArray(dispResultado) ? dispResultado : [];
+        medicos = Array.isArray(medicosResultado) ? medicosResultado : [];
 
         renderMedicos();
+
+        if(selMedico) selMedico.disabled = false;
+
         await cargarServiciosMedico();
         sincronizarMiniDesdeInput();
         renderHorasDisponibles();
+
+        if(!medicos.length){
+          setStatus(
+            'info',
+            '<i class="bi bi-info-circle me-1"></i> En este momento no existen médicos activos publicados.'
+          );
+        }
       }catch(e){
         console.error(e);
-        setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> No se pudieron cargar los horarios. ' + e.message);
+
+        if(selMedico){
+          selMedico.innerHTML = '<option value="">No se pudo conectar. Toque “Actualizar horarios”.</option>';
+          selMedico.disabled = false;
+        }
+
+        setStatus(
+          'err',
+          '<i class="bi bi-exclamation-triangle me-1"></i> No se pudo conectar con la agenda en este momento. Intente nuevamente en unos segundos.'
+        );
       }finally{
-        document.getElementById('loadingSlots').classList.remove('show');
+        if(loading) loading.classList.remove('show');
+      }
+    }
+));
+        }
+      }catch(e){}
+    }
+catch(e){
+        return [];
       }
     }
 
@@ -815,7 +886,7 @@
       const lista = Array.from(porId.values());
 
       if(!lista.length){
-        sel.innerHTML = '<option value="">No hay médicos activos configurados</option>';
+        sel.innerHTML = '<option value="">No hay médicos activos publicados</option>';
         sel.value = '';
         actualizarEspecialidadMedico();
         return;
@@ -1328,6 +1399,21 @@
       };
 
       if(!validarFormularioAntesDeEnviar(data)) return;
+
+      setStatus('info','Verificando la información de la cita...');
+
+      const datosPrevios = await Promise.allSettled([
+        apiGet('listarCitas'),
+        apiGet('listarPacientes')
+      ]);
+
+      citas = datosPrevios[0].status === 'fulfilled' && Array.isArray(datosPrevios[0].value)
+        ? datosPrevios[0].value
+        : [];
+
+      pacientes = datosPrevios[1].status === 'fulfilled' && Array.isArray(datosPrevios[1].value)
+        ? datosPrevios[1].value
+        : [];
 
       const duplicada = citaDuplicadaLocal(data);
       if(duplicada){
