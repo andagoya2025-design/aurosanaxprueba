@@ -2468,6 +2468,16 @@
             color:#ffffff;
           }
 
+          .auro-preview-btn.share{
+            background:#166534;
+            color:#ffffff;
+          }
+
+          .auro-preview-btn.share:disabled{
+            opacity:.68;
+            cursor:wait;
+          }
+
           .auro-preview-btn.secondary{
             background:#ffffff;
             color:#374151;
@@ -2583,6 +2593,7 @@
               <button type="button" class="auro-preview-fit" onclick="auroAjustarZoom()" title="Ajustar a la ventana">Ajustar</button>
             </div>
             <button type="button" class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+            <button type="button" class="auro-preview-btn share" id="auroBtnCompartir" onclick="auroCompartirRecetaTemporal()">Compartir</button>
             <button type="button" class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
           </div>
         </div>
@@ -2596,6 +2607,206 @@
             let auroZoomActual = 115;
             const auroZoomMinimo = 30;
             const auroZoomMaximo = 180;
+            let auroArchivoTemporalCompartir = null;
+            let auroPreparandoCompartir = false;
+            let auroLimpiezaCompartirTimer = null;
+
+            function auroNombreArchivoSeguro(valor){
+              return String(valor || 'receta-aurosanax')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-zA-Z0-9_-]+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '') || 'receta-aurosanax';
+            }
+
+            function auroLiberarArchivoTemporal(){
+              auroArchivoTemporalCompartir = null;
+              auroPreparandoCompartir = false;
+              if(auroLimpiezaCompartirTimer){
+                clearTimeout(auroLimpiezaCompartirTimer);
+                auroLimpiezaCompartirTimer = null;
+              }
+            }
+
+            function auroProgramarLimpiezaTemporal(){
+              if(auroLimpiezaCompartirTimer){
+                clearTimeout(auroLimpiezaCompartirTimer);
+              }
+              auroLimpiezaCompartirTimer = setTimeout(auroLiberarArchivoTemporal, 300000);
+            }
+
+            function auroCargarGeneradorPDFTemporal(){
+              if(window.html2pdf) return Promise.resolve(window.html2pdf);
+              if(window.__auroHtml2PdfPromise) return window.__auroHtml2PdfPromise;
+
+              window.__auroHtml2PdfPromise = new Promise(function(resolve, reject){
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                script.async = true;
+                script.onload = function(){
+                  window.html2pdf ? resolve(window.html2pdf) : reject(new Error('No se pudo iniciar el generador temporal.'));
+                };
+                script.onerror = function(){
+                  reject(new Error('No se pudo cargar el generador temporal de PDF.'));
+                };
+                document.head.appendChild(script);
+              });
+
+              return window.__auroHtml2PdfPromise;
+            }
+
+            async function auroPrepararArchivoTemporal(){
+              if(auroArchivoTemporalCompartir) return auroArchivoTemporalCompartir;
+              if(auroPreparandoCompartir) return null;
+
+              auroPreparandoCompartir = true;
+              const hoja = document.getElementById('auroPreviewSheet');
+              if(!hoja) throw new Error('No se encontró la receta para compartir.');
+
+              await auroCargarGeneradorPDFTemporal();
+
+              const contenedor = document.createElement('div');
+              contenedor.setAttribute('aria-hidden','true');
+              contenedor.style.position = 'fixed';
+              contenedor.style.left = '-100000px';
+              contenedor.style.top = '0';
+              contenedor.style.width = '210mm';
+              contenedor.style.minHeight = '297mm';
+              contenedor.style.background = '#ffffff';
+              contenedor.style.zIndex = '-1';
+
+              const copia = hoja.cloneNode(true);
+              copia.removeAttribute('id');
+              copia.style.width = '210mm';
+              copia.style.minHeight = '297mm';
+              copia.style.margin = '0';
+              copia.style.transform = 'none';
+              copia.style.boxShadow = 'none';
+              contenedor.appendChild(copia);
+              document.body.appendChild(contenedor);
+
+              try{
+                const blob = await window.html2pdf()
+                  .set({
+                    margin: 0,
+                    filename: 'receta-aurosanax.pdf',
+                    image: { type:'jpeg', quality:0.98 },
+                    html2canvas: {
+                      scale: 2,
+                      useCORS: true,
+                      backgroundColor: '#ffffff',
+                      logging: false,
+                      scrollX: 0,
+                      scrollY: 0
+                    },
+                    jsPDF: { unit:'mm', format:'a4', orientation:'portrait', compress:true },
+                    pagebreak: { mode:['avoid-all','css','legacy'] }
+                  })
+                  .from(copia)
+                  .outputPdf('blob');
+
+                const titulo = document.title || 'Receta AUROSANAX';
+                const nombreBase = auroNombreArchivoSeguro(titulo.replace(/^Vista previa de /i,''));
+                auroArchivoTemporalCompartir = new File(
+                  [blob],
+                  nombreBase + '.pdf',
+                  { type:'application/pdf', lastModified:Date.now() }
+                );
+                auroProgramarLimpiezaTemporal();
+                return auroArchivoTemporalCompartir;
+              }finally{
+                contenedor.remove();
+                auroPreparandoCompartir = false;
+              }
+            }
+
+            async function auroEjecutarCompartirTemporal(){
+              const archivo = auroArchivoTemporalCompartir;
+              if(!archivo) return false;
+
+              if(
+                typeof navigator.share !== 'function' ||
+                typeof navigator.canShare !== 'function' ||
+                !navigator.canShare({files:[archivo]})
+              ){
+                throw new Error('Este navegador no permite compartir archivos PDF directamente.');
+              }
+
+              await navigator.share({
+                title:'Receta médica AUROSANAX',
+                text:'Receta médica emitida por AUROSANAX.',
+                files:[archivo]
+              });
+
+              auroLiberarArchivoTemporal();
+              return true;
+            }
+
+            window.auroCompartirRecetaTemporal = async function(){
+              const boton = document.getElementById('auroBtnCompartir');
+
+              if(auroArchivoTemporalCompartir){
+                try{
+                  await auroEjecutarCompartirTemporal();
+                  if(boton){
+                    boton.disabled = false;
+                    boton.textContent = 'Compartir';
+                  }
+                }catch(error){
+                  if(error && error.name === 'AbortError'){
+                    auroLiberarArchivoTemporal();
+                    if(boton){
+                      boton.disabled = false;
+                      boton.textContent = 'Compartir';
+                    }
+                    return;
+                  }
+                  alert(error && error.message ? error.message : 'No se pudo compartir la receta.');
+                }
+                return;
+              }
+
+              if(boton){
+                boton.disabled = true;
+                boton.textContent = 'Preparando...';
+              }
+
+              try{
+                await auroPrepararArchivoTemporal();
+
+                if(boton){
+                  boton.disabled = false;
+                  boton.textContent = 'Compartir ahora';
+                }
+
+                try{
+                  await auroEjecutarCompartirTemporal();
+                  if(boton) boton.textContent = 'Compartir';
+                }catch(error){
+                  /* Safari puede exigir una segunda pulsación después de crear el PDF. */
+                  if(error && (error.name === 'NotAllowedError' || error.name === 'SecurityError')){
+                    return;
+                  }
+                  if(error && error.name === 'AbortError'){
+                    auroLiberarArchivoTemporal();
+                    if(boton) boton.textContent = 'Compartir';
+                    return;
+                  }
+                  throw error;
+                }
+              }catch(error){
+                auroLiberarArchivoTemporal();
+                if(boton){
+                  boton.disabled = false;
+                  boton.textContent = 'Compartir';
+                }
+                alert(error && error.message ? error.message : 'No se pudo preparar la receta para compartir.');
+              }
+            };
+
+            window.addEventListener('pagehide', auroLiberarArchivoTemporal);
+            window.addEventListener('beforeunload', auroLiberarArchivoTemporal);
 
             function auroAplicarZoom(){
               const hoja = document.getElementById('auroPreviewSheet');
@@ -3585,4 +3796,16 @@
    - Ajusta mínimamente interlineado y rellenos para evitar desbordes.
    - No modifica lógica, medicamentos, Plan, guardado, JSON, historial,
      Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.4 - COMPARTIR PDF TEMPORAL
+   - Agrega un botón Compartir aislado dentro de la vista previa A4.
+   - Genera el PDF únicamente al solicitar compartir y lo mantiene en RAM.
+   - No descarga ni guarda el archivo en el dispositivo.
+   - Libera la referencia temporal después de compartir, cancelar, cerrar
+     la vista o transcurrir cinco minutos.
+   - Conserva intactos Imprimir / Guardar PDF, zoom, dimensiones A4,
+     Original/Copia, guardado, Plan, Google Sheets, Apps Script, IDs,
+     eventos, listeners y sincronización.
 ===================================================== */
