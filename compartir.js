@@ -169,17 +169,107 @@
     return { ok:true, accion:'correo', correo:correo };
   }
 
+
+  async function compartirDesdeVista(opciones){
+    const cfg = opciones || {};
+    const ventanaVista = cfg.ventana || cfg.window || null;
+    const blob = cfg.blob || cfg.file || null;
+    const titulo = textoSeguro(cfg.titulo || cfg.title || 'Receta médica AUROSANAX');
+    const texto = textoSeguro(
+      cfg.texto ||
+      cfg.text ||
+      'Receta médica emitida por AUROSANAX.'
+    );
+    const nombreArchivo = normalizarNombreArchivo(
+      cfg.nombreArchivo || cfg.fileName || 'Receta-medica-AUROSANAX.pdf',
+      'pdf'
+    );
+
+    /*
+      1. Si el visor ya entrega un Blob/File PDF real, lo comparte directamente.
+    */
+    if(blob instanceof Blob){
+      return compartirArchivo({
+        blob: blob,
+        nombreArchivo: nombreArchivo,
+        titulo: titulo,
+        texto: texto
+      });
+    }
+
+    /*
+      2. El motor actual de Recetas usa window.print() y no entrega un Blob PDF.
+         En ese caso no se puede adjuntar automáticamente un PDF inexistente.
+         Se abre el menú nativo para compartir texto y, como respaldo,
+         se abre el flujo de Imprimir / Guardar PDF.
+    */
+    if(puedeCompartirTexto()){
+      try{
+        await navigator.share({
+          title: titulo,
+          text: texto
+        });
+
+        return {
+          ok: true,
+          accion: 'compartido-texto-sin-pdf'
+        };
+      }catch(error){
+        if(error && error.name === 'AbortError'){
+          return {
+            ok: false,
+            accion: 'cancelado'
+          };
+        }
+      }
+    }
+
+    if(ventanaVista && !ventanaVista.closed){
+      ventanaVista.focus();
+      ventanaVista.print();
+
+      return {
+        ok: true,
+        accion: 'imprimir-guardar-pdf'
+      };
+    }
+
+    if(typeof window.print === 'function'){
+      window.print();
+
+      return {
+        ok: true,
+        accion: 'imprimir-guardar-pdf'
+      };
+    }
+
+    throw new Error(
+      'El navegador no permite compartir directamente y no existe una vista imprimible disponible.'
+    );
+  }
+
   window.AuroCompartir = Object.freeze({
     version: VERSION,
     puedeCompartirArchivos: puedeCompartirArchivos,
     puedeCompartirTexto: puedeCompartirTexto,
     compartirArchivo: compartirArchivo,
     compartirTexto: compartirTexto,
+    compartirDesdeVista: compartirDesdeVista,
     abrirWhatsApp: abrirWhatsApp,
     abrirCorreo: abrirCorreo,
     descargarArchivo: descargarArchivo,
     normalizarTelefonoWhatsApp: normalizarTelefonoWhatsApp
   });
 
-  console.info('AUROSANAX compartir.js genérico cargado · versión ' + VERSION);
+  console.info('AUROSANAX compartir.js corregido · versión ' + VERSION);
 })();
+
+/* =========================================================
+   AUROSANAX COMPARTIR 1.1 - CORRECCIÓN OPERATIVA
+   - Agrega compartirDesdeVista().
+   - Comparte un PDF real cuando recibe Blob/File.
+   - Si el visor todavía usa window.print(), comparte texto mediante
+     el menú nativo y abre Imprimir / Guardar PDF como respaldo.
+   - No modifica Recetas, impresión, responsive, Plan, Google Sheets
+     ni Apps Script.
+========================================================= */
