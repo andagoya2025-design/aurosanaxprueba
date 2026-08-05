@@ -1,11 +1,13 @@
 /* =========================================================
    AUROSANAX ERP - MODULO COMPARTIR
    Archivo: compartir.js
-   Fase 1: compartir documentos sin modificar impresión ni PDF
+   Fase 2: módulo genérico para compartir documentos
    Importante:
    - No genera el PDF.
    - Recibe un Blob/File ya generado por otro módulo.
-   - No modifica recetas.js, impresion.js, Plan, Google Sheets ni Apps Script.
+   - No conoce recetas, certificados, consentimientos ni historias clínicas.
+   - Puede ser reutilizado por cualquier módulo del ERP.
+   - No modifica impresión, PDF, Google Sheets ni Apps Script.
 ========================================================= */
 
 (function(){
@@ -167,43 +169,17 @@
     return { ok:true, accion:'correo', correo:correo };
   }
 
-  async function compartirReceta(opciones){
-    const cfg = opciones || {};
-    const paciente = cfg.paciente || {};
-    const nombrePaciente = textoSeguro(
-      cfg.nombrePaciente || paciente.nombre || [paciente.nombres, paciente.apellidos].filter(Boolean).join(' ')
-    );
-
-    return compartirArchivo({
-      blob: cfg.blob || cfg.file,
-      nombreArchivo: cfg.nombreArchivo || ('Receta médica' + (nombrePaciente ? ' - ' + nombrePaciente : '')),
-      titulo: cfg.titulo || 'Receta médica AUROSANAX',
-      texto: cfg.texto || ('Receta médica' + (nombrePaciente ? ' de ' + nombrePaciente : '') + '.')
-    });
-  }
-
   window.AuroCompartir = Object.freeze({
     version: VERSION,
-    puedeCompartirArchivos,
-    puedeCompartirTexto,
-    compartirArchivo,
-    compartirTexto,
-    compartirReceta,
-    abrirWhatsApp,
-    abrirCorreo,
-    descargarArchivo,
-    normalizarTelefonoWhatsApp
+    puedeCompartirArchivos: puedeCompartirArchivos,
+    puedeCompartirTexto: puedeCompartirTexto,
+    compartirArchivo: compartirArchivo,
+    compartirTexto: compartirTexto,
+    abrirWhatsApp: abrirWhatsApp,
+    abrirCorreo: abrirCorreo,
+    descargarArchivo: descargarArchivo,
+    normalizarTelefonoWhatsApp: normalizarTelefonoWhatsApp
   });
 
-  if(typeof window.auroCompartirRecetaPDF !== 'function'){
-    window.auroCompartirRecetaPDF = compartirReceta;
-  }
-  if(typeof window.auroAbrirWhatsAppPaciente !== 'function'){
-    window.auroAbrirWhatsAppPaciente = abrirWhatsApp;
-  }
-  if(typeof window.auroAbrirCorreoPaciente !== 'function'){
-    window.auroAbrirCorreoPaciente = abrirCorreo;
-  }
-
-  console.info('AUROSANAX compartir.js cargado · versión ' + VERSION);
+  console.info('AUROSANAX compartir.js genérico cargado · versión ' + VERSION);
 })();
