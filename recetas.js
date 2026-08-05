@@ -2583,6 +2583,7 @@
               <button type="button" class="auro-preview-fit" onclick="auroAjustarZoom()" title="Ajustar a la ventana">Ajustar</button>
             </div>
             <button type="button" class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+            <button type="button" class="auro-preview-btn secondary" onclick="auroCompartirReceta()">📤 Compartir receta</button>
             <button type="button" class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
           </div>
         </div>
@@ -2620,6 +2621,38 @@
                 Math.min(auroZoomMaximo, auroZoomActual + Number(cambio || 0))
               );
               auroAplicarZoom();
+            };
+
+            window.auroCompartirReceta = async function(){
+              try{
+                if(
+                  window.__auroRecetaPDFBlob instanceof Blob &&
+                  window.opener &&
+                  window.opener.AuroCompartir &&
+                  typeof window.opener.AuroCompartir.compartirArchivo === 'function'
+                ){
+                  await window.opener.AuroCompartir.compartirArchivo({
+                    blob: window.__auroRecetaPDFBlob,
+                    nombreArchivo: 'Receta-medica-AUROSANAX.pdf',
+                    titulo: 'Receta médica AUROSANAX',
+                    texto: 'Receta médica emitida por AUROSANAX.'
+                  });
+                  return;
+                }
+
+                alert(
+                  'Para compartir la receta en PDF:\n\n' +
+                  '1. Presione “Imprimir / Guardar PDF”.\n' +
+                  '2. Guarde el documento como PDF.\n' +
+                  '3. Compártalo por WhatsApp, correo, AirDrop u otra aplicación del dispositivo.'
+                );
+
+                window.print();
+              }catch(error){
+                if(error && error.name === 'AbortError') return;
+                console.error('AUROSANAX: no se pudo compartir la receta.', error);
+                alert('No se pudo abrir la opción de compartir. Use “Imprimir / Guardar PDF”.');
+              }
             };
 
             window.auroAjustarZoom = function(){
@@ -3585,4 +3618,14 @@
    - Ajusta mínimamente interlineado y rellenos para evitar desbordes.
    - No modifica lógica, medicamentos, Plan, guardado, JSON, historial,
      Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.4 - BOTÓN COMPARTIR RECETA
+   - Agrega únicamente el botón "Compartir receta" en la vista previa A4.
+   - No modifica impresión, tamaños, zoom, responsive, guardado, Plan,
+     historial, Google Sheets, Apps Script, IDs, eventos ni sincronización.
+   - El motor actual usa window.print(); por ello, mientras no exista un Blob
+     PDF real, el botón abre el flujo seguro de Guardar PDF para compartirlo
+     después desde WhatsApp, correo, AirDrop u otra aplicación.
 ===================================================== */
