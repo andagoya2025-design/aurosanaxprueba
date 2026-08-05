@@ -1527,15 +1527,16 @@ catch(e){
       }
     });
 
-    document.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('DOMContentLoaded', () => {
       const hoy = new Date();
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
-      await cargarConfiguracionCentroFormulario();
-
       actualizarResumenSeleccion();
       actualizarEspecialidadMedico();
+
+      // Carga paralela: la identidad institucional no bloquea médicos ni horarios.
+      cargarConfiguracionCentroFormulario();
       cargarDatosIniciales();
     });
   </script>
