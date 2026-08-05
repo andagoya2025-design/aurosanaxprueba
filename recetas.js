@@ -2626,32 +2626,29 @@
             window.auroCompartirReceta = async function(){
               try{
                 if(
-                  window.__auroRecetaPDFBlob instanceof Blob &&
                   window.opener &&
                   window.opener.AuroCompartir &&
-                  typeof window.opener.AuroCompartir.compartirArchivo === 'function'
+                  typeof window.opener.AuroCompartir.compartirDesdeVista === 'function'
                 ){
-                  await window.opener.AuroCompartir.compartirArchivo({
-                    blob: window.__auroRecetaPDFBlob,
-                    nombreArchivo: 'Receta-medica-AUROSANAX.pdf',
+                  await window.opener.AuroCompartir.compartirDesdeVista({
+                    ventana: window,
                     titulo: 'Receta médica AUROSANAX',
-                    texto: 'Receta médica emitida por AUROSANAX.'
+                    texto: 'Receta médica emitida por AUROSANAX.',
+                    nombreArchivo: 'Receta-medica-AUROSANAX.pdf'
                   });
                   return;
                 }
 
                 alert(
-                  'Para compartir la receta en PDF:\n\n' +
-                  '1. Presione “Imprimir / Guardar PDF”.\n' +
-                  '2. Guarde el documento como PDF.\n' +
-                  '3. Compártalo por WhatsApp, correo, AirDrop u otra aplicación del dispositivo.'
+                  'El módulo compartir.js no está cargado en la página principal. ' +
+                  'Se abrirá Imprimir / Guardar PDF como respaldo.'
                 );
-
                 window.print();
               }catch(error){
                 if(error && error.name === 'AbortError') return;
-                console.error('AUROSANAX: no se pudo compartir la receta.', error);
-                alert('No se pudo abrir la opción de compartir. Use “Imprimir / Guardar PDF”.');
+                console.error('AUROSANAX: error al compartir receta.', error);
+                alert('No se pudo compartir la receta. Se abrirá Imprimir / Guardar PDF.');
+                window.print();
               }
             };
 
@@ -3628,4 +3625,24 @@
    - El motor actual usa window.print(); por ello, mientras no exista un Blob
      PDF real, el botón abre el flujo seguro de Guardar PDF para compartirlo
      después desde WhatsApp, correo, AirDrop u otra aplicación.
+===================================================== */
+
+
+/* =====================================================
+   AUROSANAX RECETAS 3.4.1 - CORRECCIÓN BOTÓN COMPARTIR
+   - Corrige el escape de saltos de línea dentro de la ventana de vista previa.
+   - Evita el error de sintaxis que impedía ejecutar auroCompartirReceta().
+   - Añade respaldo directo a window.print() si la función no estuviera disponible.
+   - No modifica impresión A4, zoom, tamaños, responsive, guardado, Plan,
+     historial, Google Sheets, Apps Script, IDs ni sincronización.
+===================================================== */
+
+
+/* =====================================================
+   AUROSANAX RECETAS 3.4.2 - INTEGRACIÓN REAL COMPARTIR
+   - Corrige el onclick inválido que impedía ejecutar el botón.
+   - Conecta la ventana de receta con opener.AuroCompartir.compartirDesdeVista().
+   - Mantiene window.print() como respaldo si compartir.js no está cargado.
+   - No modifica A4, zoom, tamaños, responsive, Plan, guardado,
+     historial, Google Sheets, Apps Script, IDs ni sincronización.
 ===================================================== */
