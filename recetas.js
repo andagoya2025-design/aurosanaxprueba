@@ -2721,16 +2721,29 @@
               }
             }
 
+            function auroEsMovilCompartible(){
+              const ua = String(navigator.userAgent || '');
+              const plataforma = String(navigator.platform || '');
+              const esIOS = /iPhone|iPad|iPod/i.test(ua) ||
+                (plataforma === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
+              const esAndroid = /Android/i.test(ua);
+              return esIOS || esAndroid;
+            }
+
             async function auroEjecutarCompartirTemporal(){
               const archivo = auroArchivoTemporalCompartir;
               if(!archivo) return false;
+
+              if(!auroEsMovilCompartible()){
+                throw new Error('La función Compartir está disponible desde Android, iPhone o iPad. En esta computadora use Imprimir / Guardar PDF.');
+              }
 
               if(
                 typeof navigator.share !== 'function' ||
                 typeof navigator.canShare !== 'function' ||
                 !navigator.canShare({files:[archivo]})
               ){
-                throw new Error('Este navegador no permite compartir archivos PDF directamente.');
+                throw new Error('Este navegador móvil no permite compartir el PDF directamente. Abra la receta en Chrome, Safari o el navegador actualizado del dispositivo.');
               }
 
               await navigator.share({
@@ -2745,6 +2758,13 @@
 
             window.auroCompartirRecetaTemporal = async function(){
               const boton = document.getElementById('auroBtnCompartir');
+
+              /* En Windows/macOS de escritorio no se invoca Web Share para
+                 evitar que el sistema abra Microsoft Store u otra asociación. */
+              if(!auroEsMovilCompartible()){
+                alert('Compartir PDF está habilitado para Android, iPhone y iPad. En esta computadora use Imprimir / Guardar PDF.');
+                return;
+              }
 
               if(auroArchivoTemporalCompartir){
                 try{
@@ -3799,8 +3819,10 @@
 ===================================================== */
 
 /* =====================================================
-   AUROSANAX RECETAS 3.4 - COMPARTIR PDF TEMPORAL
-   - Agrega un botón Compartir aislado dentro de la vista previa A4.
+   AUROSANAX RECETAS 3.5 - COMPARTIR MÓVIL SEGURO
+   - Conserva el botón Compartir aislado dentro de la vista previa A4.
+   - Solo invoca el menú nativo en Android, iPhone o iPad.
+   - En Windows/macOS de escritorio bloquea la invocación para evitar Microsoft Store.
    - Genera el PDF únicamente al solicitar compartir y lo mantiene en RAM.
    - No descarga ni guarda el archivo en el dispositivo.
    - Libera la referencia temporal después de compartir, cancelar, cerrar
