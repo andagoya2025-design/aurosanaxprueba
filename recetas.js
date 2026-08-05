@@ -2583,7 +2583,6 @@
               <button type="button" class="auro-preview-fit" onclick="auroAjustarZoom()" title="Ajustar a la ventana">Ajustar</button>
             </div>
             <button type="button" class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
-            <button type="button" class="auro-preview-btn secondary" onclick="auroCompartirReceta()">📤 Compartir receta</button>
             <button type="button" class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
           </div>
         </div>
@@ -2621,35 +2620,6 @@
                 Math.min(auroZoomMaximo, auroZoomActual + Number(cambio || 0))
               );
               auroAplicarZoom();
-            };
-
-            window.auroCompartirReceta = async function(){
-              try{
-                if(
-                  window.opener &&
-                  window.opener.AuroCompartir &&
-                  typeof window.opener.AuroCompartir.compartirDesdeVista === 'function'
-                ){
-                  await window.opener.AuroCompartir.compartirDesdeVista({
-                    ventana: window,
-                    titulo: 'Receta médica AUROSANAX',
-                    texto: 'Receta médica emitida por AUROSANAX.',
-                    nombreArchivo: 'Receta-medica-AUROSANAX.pdf'
-                  });
-                  return;
-                }
-
-                alert(
-                  'El módulo compartir.js no está cargado en la página principal. ' +
-                  'Se abrirá Imprimir / Guardar PDF como respaldo.'
-                );
-                window.print();
-              }catch(error){
-                if(error && error.name === 'AbortError') return;
-                console.error('AUROSANAX: error al compartir receta.', error);
-                alert('No se pudo compartir la receta. Se abrirá Imprimir / Guardar PDF.');
-                window.print();
-              }
             };
 
             window.auroAjustarZoom = function(){
@@ -3615,34 +3585,4 @@
    - Ajusta mínimamente interlineado y rellenos para evitar desbordes.
    - No modifica lógica, medicamentos, Plan, guardado, JSON, historial,
      Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
-===================================================== */
-
-/* =====================================================
-   AUROSANAX RECETAS 3.4 - BOTÓN COMPARTIR RECETA
-   - Agrega únicamente el botón "Compartir receta" en la vista previa A4.
-   - No modifica impresión, tamaños, zoom, responsive, guardado, Plan,
-     historial, Google Sheets, Apps Script, IDs, eventos ni sincronización.
-   - El motor actual usa window.print(); por ello, mientras no exista un Blob
-     PDF real, el botón abre el flujo seguro de Guardar PDF para compartirlo
-     después desde WhatsApp, correo, AirDrop u otra aplicación.
-===================================================== */
-
-
-/* =====================================================
-   AUROSANAX RECETAS 3.4.1 - CORRECCIÓN BOTÓN COMPARTIR
-   - Corrige el escape de saltos de línea dentro de la ventana de vista previa.
-   - Evita el error de sintaxis que impedía ejecutar auroCompartirReceta().
-   - Añade respaldo directo a window.print() si la función no estuviera disponible.
-   - No modifica impresión A4, zoom, tamaños, responsive, guardado, Plan,
-     historial, Google Sheets, Apps Script, IDs ni sincronización.
-===================================================== */
-
-
-/* =====================================================
-   AUROSANAX RECETAS 3.4.2 - INTEGRACIÓN REAL COMPARTIR
-   - Corrige el onclick inválido que impedía ejecutar el botón.
-   - Conecta la ventana de receta con opener.AuroCompartir.compartirDesdeVista().
-   - Mantiene window.print() como respaldo si compartir.js no está cargado.
-   - No modifica A4, zoom, tamaños, responsive, Plan, guardado,
-     historial, Google Sheets, Apps Script, IDs ni sincronización.
 ===================================================== */
