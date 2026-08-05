@@ -2868,12 +2868,27 @@
               auroAplicarZoom();
             };
 
-            /* Mostrar Compartir únicamente donde el sistema puede
-               entregar realmente el PDF temporal a aplicaciones móviles. */
+            /* AUROSANAX 3.7 - Botón Compartir siempre visible.
+               - En Android, iPhone y iPad queda activo.
+               - En computadora queda visible pero desactivado para impedir
+                 Microsoft Store, Enlace Móvil u otras asociaciones de Windows.
+               - No toca Imprimir / Guardar PDF ni el formato A4. */
             (function auroConfigurarBotonCompartirPorDispositivo(){
               const botonCompartir = document.getElementById('auroBtnCompartir');
               if(!botonCompartir) return;
-              botonCompartir.style.display = auroEsMovilCompartible() ? '' : 'none';
+
+              const disponible = auroEsMovilCompartible();
+              botonCompartir.style.display = '';
+              botonCompartir.disabled = !disponible;
+              botonCompartir.setAttribute('aria-disabled', disponible ? 'false' : 'true');
+              botonCompartir.title = disponible
+                ? 'Compartir receta en este dispositivo'
+                : 'Disponible al abrir la receta desde Android, iPhone o iPad';
+
+              if(!disponible){
+                botonCompartir.style.opacity = '0.58';
+                botonCompartir.style.cursor = 'not-allowed';
+              }
             })();
 
             window.addEventListener('resize', function(){
@@ -3849,4 +3864,15 @@
    - En Android, iPhone y iPad conserva el PDF temporal en memoria.
    - No modifica Imprimir / Guardar PDF, A4, Original/Copia, zoom,
      guardado, Plan, Apps Script, Google Sheets, IDs ni sincronización.
+===================================================== */
+
+
+/* =====================================================
+   AUROSANAX RECETAS 3.7 - COMPARTIR VISIBLE Y SEGURO
+   - El botón Compartir permanece visible en la vista previa.
+   - Android, iPhone y iPad: comparte el PDF temporal desde memoria.
+   - Computadora: el botón queda visible y desactivado, evitando Microsoft
+     Store, Enlace Móvil y asociaciones externas del sistema operativo.
+   - No modifica Imprimir / Guardar PDF, A4, Original/Copia, zoom, Plan,
+     guardado, JSON, Google Sheets, Apps Script, IDs ni sincronización.
 ===================================================== */
