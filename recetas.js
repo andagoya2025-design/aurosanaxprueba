@@ -2759,10 +2759,11 @@
             window.auroCompartirRecetaTemporal = async function(){
               const boton = document.getElementById('auroBtnCompartir');
 
-              /* En Windows/macOS de escritorio no se invoca Web Share para
-                 evitar que el sistema abra Microsoft Store u otra asociación. */
+              /* Protección quirúrgica de escritorio:
+                 el botón se oculta y esta función sale en silencio.
+                 No abre Microsoft Store, Enlace Móvil ni mensajes emergentes. */
               if(!auroEsMovilCompartible()){
-                alert('Compartir PDF está habilitado para Android, iPhone y iPad. En esta computadora use Imprimir / Guardar PDF.');
+                if(boton) boton.style.display = 'none';
                 return;
               }
 
@@ -2866,6 +2867,14 @@
 
               auroAplicarZoom();
             };
+
+            /* Mostrar Compartir únicamente donde el sistema puede
+               entregar realmente el PDF temporal a aplicaciones móviles. */
+            (function auroConfigurarBotonCompartirPorDispositivo(){
+              const botonCompartir = document.getElementById('auroBtnCompartir');
+              if(!botonCompartir) return;
+              botonCompartir.style.display = auroEsMovilCompartible() ? '' : 'none';
+            })();
 
             window.addEventListener('resize', function(){
               if(window.innerWidth <= 980){
@@ -3830,4 +3839,14 @@
    - Conserva intactos Imprimir / Guardar PDF, zoom, dimensiones A4,
      Original/Copia, guardado, Plan, Google Sheets, Apps Script, IDs,
      eventos, listeners y sincronización.
+===================================================== */
+
+
+/* =====================================================
+   AUROSANAX RECETAS 3.6 - COMPARTIR MÓVIL SIN INTERFERENCIA EN PC
+   - En Windows y macOS de escritorio oculta el botón Compartir.
+   - Evita Microsoft Store, Enlace Móvil y alertas innecesarias.
+   - En Android, iPhone y iPad conserva el PDF temporal en memoria.
+   - No modifica Imprimir / Guardar PDF, A4, Original/Copia, zoom,
+     guardado, Plan, Apps Script, Google Sheets, IDs ni sincronización.
 ===================================================== */
