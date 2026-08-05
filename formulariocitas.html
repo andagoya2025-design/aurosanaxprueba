@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AUROSANAX DEMO - Formulario de Citas v2.12 Flujo Guiado</title>
+  <title id="tituloDocumentoCentro">Agenda tu cita | AUROSANAX</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -144,6 +144,38 @@
       .success-grid{grid-template-columns:1fr}
       .success-actions .btn-wa,.success-actions .btn-wa-secretaria,.success-actions .btn-line{width:100%;justify-content:center}
     }
+
+    /* ===== AUROSANAX - IDENTIDAD INSTITUCIONAL DINÁMICA ===== */
+    .logo{
+      overflow:hidden;
+    }
+    .logo img{
+      width:100%;
+      height:100%;
+    }
+    .center-contact{
+      position:relative;
+      z-index:1;
+      margin-top:16px;
+      display:grid;
+      gap:8px;
+    }
+    .center-contact-item{
+      display:none;
+      align-items:flex-start;
+      gap:8px;
+      font-size:12.5px;
+      line-height:1.4;
+      color:rgba(255,255,255,.92);
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:14px;
+      padding:9px 10px;
+      word-break:break-word;
+    }
+    .center-contact-item.show{display:flex}
+    .center-contact-item i{margin-top:1px;color:#fde68a}
+
   </style>
 </head>
 <body>
@@ -151,16 +183,25 @@
     <div class="shell">
       <aside class="hero">
         <div class="brand">
-          <div class="logo">A</div>
-          <div><h1>AUROSANAX</h1><small>Formulario de citas DEMO</small></div>
+          <div class="logo" id="logoCentroBox">
+            <img id="logoCentroImg" alt="Logo del centro" style="display:none;max-width:100%;max-height:100%;object-fit:contain;border-radius:14px;">
+            <span id="logoCentroFallback">A</span>
+          </div>
+          <div><h1 id="nombreCentroHero">AUROSANAX</h1><small>Formulario de citas</small></div>
         </div>
         <h2>Reserva tu cita médica</h2>
         <p>Primero seleccione el médico, servicio, fecha y horario disponible. Luego complete sus datos para finalizar la reserva.</p>
-        <div class="pill"><i class="bi bi-shield-check"></i> Entorno DEMO · No usar con pacientes reales</div>
+        <div class="pill"><i class="bi bi-shield-check"></i> Reserva en línea segura</div>
         <div class="steps">
           <div class="step"><i class="bi bi-person-badge"></i><div><b>1. Médico y servicio</b><span>El sistema mostrará disponibilidad según el profesional seleccionado.</span></div></div>
           <div class="step"><i class="bi bi-calendar2-check"></i><div><b>2. Fecha y hora</b><span>Seleccione la fecha en el campo principal y luego elija una hora disponible.</span></div></div>
           <div class="step"><i class="bi bi-send-check"></i><div><b>3. Datos y reserva</b><span>Complete sus datos para que Secretaría confirme por WhatsApp.</span></div></div>
+        </div>
+
+        <div class="center-contact">
+          <div id="centroDireccion" class="center-contact-item"><i class="bi bi-geo-alt-fill"></i><span></span></div>
+          <div id="centroEmail" class="center-contact-item"><i class="bi bi-envelope-fill"></i><span></span></div>
+          <div id="centroWhatsapp" class="center-contact-item"><i class="bi bi-whatsapp"></i><span></span></div>
         </div>
       </aside>
 
@@ -315,14 +356,14 @@
             <button type="button" class="btn-line" onclick="cargarDatosIniciales()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
           </div>
         </form>
-        <div class="demo">AUROSANAX DEMO · Prueba de formulario web</div>
+        <div class="demo" id="pieCentroFormulario">AUROSANAX · Formulario web de citas</div>
       </main>
     </div>
   </div>
 
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec';
-    const WHATSAPP_SECRETARIA = '593984567660'; // Número de Secretaría AUROSANAX. Cambiar aquí si se usa otro número.
+    let WHATSAPP_SECRETARIA = '593984567660';
 
     let disponibilidad = [];
     let medicos = [];
@@ -353,6 +394,131 @@
       const res = await fetch(API_URL, { method:'POST', body: JSON.stringify({accion, data}) });
       if(!res.ok) throw new Error('Error HTTP ' + res.status);
       return await res.json();
+    }
+
+
+    let configuracionCentro = {};
+
+    function valorConfigFormulario(clave, valorDefault){
+      const v = configuracionCentro && configuracionCentro[clave] !== undefined
+        ? configuracionCentro[clave]
+        : '';
+      return v !== '' && v !== null && v !== undefined ? v : (valorDefault || '');
+    }
+
+    function extraerDriveFileIdFormulario(url){
+      const raw = String(url || '').trim();
+      if(!raw) return '';
+
+      let m = raw.match(/\/file\/d\/([^/]+)/);
+      if(m && m[1]) return decodeURIComponent(m[1]);
+
+      m = raw.match(/[?&]id=([^&]+)/);
+      if(m && m[1]) return decodeURIComponent(m[1]);
+
+      if(/^[a-zA-Z0-9_-]{20,}$/.test(raw)) return raw;
+      return '';
+    }
+
+    function urlsLogoFormulario(url){
+      const raw = String(url || '').trim();
+      if(!raw) return [];
+
+      const id = extraerDriveFileIdFormulario(raw);
+      if(id){
+        return [
+          'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w400',
+          'https://drive.google.com/uc?export=view&id=' + encodeURIComponent(id),
+          raw
+        ];
+      }
+      return [raw];
+    }
+
+    function mostrarContactoCentro(id, valor){
+      const box = document.getElementById(id);
+      if(!box) return;
+
+      const span = box.querySelector('span');
+      const txt = String(valor || '').trim();
+      if(!txt){
+        box.classList.remove('show');
+        if(span) span.textContent = '';
+        return;
+      }
+
+      if(span) span.textContent = txt;
+      box.classList.add('show');
+    }
+
+    function aplicarLogoCentroFormulario(url){
+      const img = document.getElementById('logoCentroImg');
+      const fallback = document.getElementById('logoCentroFallback');
+      if(!img || !fallback) return;
+
+      const urls = urlsLogoFormulario(url);
+      if(!urls.length){
+        img.style.display = 'none';
+        fallback.style.display = 'inline';
+        img.removeAttribute('src');
+        return;
+      }
+
+      let intento = 0;
+      const cargar = () => {
+        const actual = urls[intento];
+        img.onload = () => {
+          img.style.display = 'block';
+          fallback.style.display = 'none';
+        };
+        img.onerror = () => {
+          intento++;
+          if(intento < urls.length){
+            cargar();
+            return;
+          }
+          img.style.display = 'none';
+          fallback.style.display = 'inline';
+        };
+        img.src = actual + (actual.includes('?') ? '&' : '?') + 't=' + Date.now();
+      };
+
+      cargar();
+    }
+
+    function aplicarConfiguracionCentroFormulario(){
+      const nombre = valorConfigFormulario('nombre_clinica', 'AUROSANAX');
+      const whatsapp = valorConfigFormulario('whatsapp_clinica', '593984567660');
+      const email = valorConfigFormulario('email_clinica', '');
+      const direccion = valorConfigFormulario('direccion_clinica', '');
+      const logoUrl = valorConfigFormulario('logo_url', '');
+
+      WHATSAPP_SECRETARIA = normalizarWhatsApp(whatsapp) || '593984567660';
+
+      const nombreEl = document.getElementById('nombreCentroHero');
+      const tituloEl = document.getElementById('tituloDocumentoCentro');
+      const pieEl = document.getElementById('pieCentroFormulario');
+
+      if(nombreEl) nombreEl.textContent = nombre;
+      if(tituloEl) tituloEl.textContent = 'Agenda tu cita | ' + nombre;
+      document.title = 'Agenda tu cita | ' + nombre;
+      if(pieEl) pieEl.textContent = nombre + ' · Formulario web de citas';
+
+      mostrarContactoCentro('centroDireccion', direccion);
+      mostrarContactoCentro('centroEmail', email);
+      mostrarContactoCentro('centroWhatsapp', whatsapp);
+      aplicarLogoCentroFormulario(logoUrl);
+    }
+
+    async function cargarConfiguracionCentroFormulario(){
+      try{
+        const r = await apiGet('obtenerConfiguracion');
+        configuracionCentro = r && typeof r === 'object' && !Array.isArray(r) ? r : {};
+      }catch(error){
+        console.error('No se pudo cargar la configuración del centro:', error);
+        configuracionCentro = {};
+      }
+      aplicarConfiguracionCentroFormulario();
     }
 
     function fechaISO(date){
@@ -1157,7 +1323,7 @@
         servicio: document.getElementById('servicio').value,
         tipo_cita: document.getElementById('servicio').value,
         motivo: document.getElementById('servicio').value,
-        canal_agendamiento: 'Formulario Web DEMO',
+        canal_agendamiento: 'Formulario Web AUROSANAX',
         observaciones: document.getElementById('observaciones').value.trim()
       };
 
@@ -1275,10 +1441,13 @@
       }
     });
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       const hoy = new Date();
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
+      await cargarConfiguracionCentroFormulario();
+
       actualizarResumenSeleccion();
       actualizarEspecialidadMedico();
       cargarDatosIniciales();
