@@ -2088,9 +2088,34 @@
       nombre = raw || '—';
     }
 
+    let especialidad = '';
+
+    try{
+      const medicosLista = medicosActivosAtenciones.length
+        ? medicosActivosAtenciones
+        : (Array.isArray(window.medicos) ? window.medicos : []);
+
+      const encontradoEspecialidad = medicosLista.find(function(m){
+        const mid = String(m.id_medico || m.id || m.codigo || '').trim();
+        return id && mid && mid === id;
+      }) || null;
+
+      if(encontradoEspecialidad){
+        especialidad = String(
+          encontradoEspecialidad.especialidad_principal ||
+          encontradoEspecialidad.especialidad ||
+          encontradoEspecialidad.nombre_especialidad ||
+          ''
+        ).trim();
+      }
+    }catch(e){
+      console.warn(MODULO, 'No se pudo resolver especialidad desde catálogo.', e);
+    }
+
     return {
       nombre: nombre || '—',
-      id: id || '—'
+      id: id || '—',
+      especialidad: especialidad || '—'
     };
   }
 
@@ -2100,11 +2125,55 @@
 
     return '<div class="auro-atencion-medico-box">' +
       '<strong class="auro-atencion-medico-nombre">' + safe(m.nombre) + '</strong>' +
+      '<div class="small text-muted">' + safe(m.especialidad || '—') + '</div>' +
       '<div class="auro-atencion-medico-id-row">' +
         '<span class="auro-atencion-medico-id-label">ID</span>' +
         '<small class="auro-atencion-medico-id">' + idValor + '</small>' +
       '</div>' +
     '</div>';
+  }
+
+  function auroAtencionEspecialidadMedicoHTML(atencion){
+    const m = auroAtencionResolverMedico(atencion);
+    return '<div class="auro-atencion-medico-box">' +
+      '<strong class="auro-atencion-medico-nombre">' + safe(m.especialidad || '—') + '</strong>' +
+      '<div class="small text-muted">' + safe(m.nombre || '—') + '</div>' +
+    '</div>';
+  }
+
+  function auroAtencionVerReceta(idReceta){
+    const id = String(idReceta || '').trim();
+
+    if(!id){
+      alert('No se encontró el identificador de la receta.');
+      return;
+    }
+
+    if(typeof window.verRecetaEmitida !== 'function'){
+      alert('El visor de recetas todavía no está disponible. Espere unos segundos e intente nuevamente.');
+      return;
+    }
+
+    try{
+      if(typeof window.showScreen === 'function'){
+        window.showScreen('recetas');
+      }
+    }catch(error){
+      console.warn(MODULO, 'No se pudo abrir el módulo Recetas antes de visualizar.', error);
+    }
+
+    setTimeout(function(){
+      try{
+        window.verRecetaEmitida(id);
+        const seccion = document.getElementById('recetas');
+        if(seccion){
+          window.scrollTo({ top: seccion.offsetTop || 0, behavior:'smooth' });
+        }
+      }catch(error){
+        console.error(MODULO, 'No se pudo visualizar la receta.', error);
+        alert('No se pudo abrir la receta seleccionada.');
+      }
+    }, 180);
   }
 
   function ocultarDetalleAtencion(){
@@ -2141,6 +2210,7 @@
           '<td>' + auroAtencionMedicamentoResumenHTML(r.medicamento || r.medicamentos || '') + '</td>' +
           '<td><div class="auro-receta-indicacion-resumen">' + safe(resumenTexto(r.indicaciones || '', 120)) + '</div></td>' +
           '<td><span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span></td>' +
+          '<td><button type="button" class="btn-action primary" data-receta-ver-id="' + safe(r.id_receta || '') + '"><i class="bi bi-eye me-1"></i> Ver receta</button></td>' +
         '</tr>';
       }).join('');
 
@@ -2157,6 +2227,7 @@
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</div>' +
           '<div class="small mt-2"><b>Medicamento:</b><br>' + auroAtencionMedicamentoResumenHTML(r.medicamento || r.medicamentos || '') + '</div>' +
           '<div class="small mt-2"><b>Indicaciones:</b><br>' + safe(resumenTexto(r.indicaciones || '', 160)) + '</div>' +
+          '<button type="button" class="btn-action primary mt-2" data-receta-ver-id="' + safe(r.id_receta || '') + '"><i class="bi bi-eye me-1"></i> Ver receta</button>' +
         '</div>';
       }).join('');
 
@@ -2166,7 +2237,7 @@
           '<div class="auro-recetas-atencion-desktop">' +
             '<div class="table-responsive">' +
               '<table class="table table-modern align-middle mb-0">' +
-                '<thead><tr><th>Fecha</th><th>ID receta</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th></tr></thead>' +
+                '<thead><tr><th>Fecha</th><th>ID receta</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th><th>Acción</th></tr></thead>' +
                 '<tbody>' + filasRecetasDesktop + '</tbody>' +
               '</table>' +
             '</div>' +
@@ -2202,6 +2273,7 @@
         auroAtencionDato('Hora', horaVisualAtencion(a.hora_atencion || '—')) +
         auroAtencionDato('Tipo', a.tipo_atencion || '—') +
         auroAtencionDatoHTML('Médico', auroAtencionMedicoHTML(a)) +
+        auroAtencionDato('Especialidad', auroAtencionResolverMedico(a).especialidad || '—') +
         auroAtencionDato('ID historia', a.id_historia || '—') +
         auroAtencionDato('ID cita', auroAtencionCitaTexto(a)) +
         auroAtencionDato('Paciente', a.id_paciente || idPacienteActivo() || '—') +
@@ -2211,6 +2283,12 @@
 
     const btnOcultar = $('btnOcultarDetalleAtencion');
     if(btnOcultar) btnOcultar.addEventListener('click', ocultarDetalleAtencion);
+
+    box.querySelectorAll('[data-receta-ver-id]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        auroAtencionVerReceta(this.getAttribute('data-receta-ver-id'));
+      });
+    });
   }
 
   function seleccionarAtencion(idAtencion){
@@ -2407,6 +2485,7 @@
         '<td>' + safe(fechaVisual(a.fecha_atencion)) + '</td>' +
         '<td>' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</td>' +
         '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
+        '<td>' + auroAtencionEspecialidadMedicoHTML(a) + '</td>' +
         '<td><span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span></td>' +
         '<td><button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver</button></td>' +
       '</tr>';
@@ -2420,6 +2499,8 @@
           '<span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span>' +
         '</div>' +
         '<div class="small"><b>Tipo:</b> ' + safe(a.tipo_atencion || '—') + '</div>' +
+        '<div class="small"><b>Especialidad:</b> ' + safe(auroAtencionResolverMedico(a).especialidad || '—') + '</div>' +
+        '<div class="small"><b>Médico:</b> ' + safe(auroAtencionResolverMedico(a).nombre || '—') + '</div>' +
         '<div class="small text-muted"><b>ID:</b> ' + safe(a.id_atencion || '—') + '</div>' +
         '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver consulta</button>' +
       '</div>';
@@ -2436,7 +2517,7 @@
       '<div class="auro-atenciones-desktop">' +
         '<div class="table-responsive">' +
           '<table class="table table-modern align-middle mb-0">' +
-            '<thead><tr><th>Consulta</th><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Estado</th><th>Acción</th></tr></thead>' +
+            '<thead><tr><th>Consulta</th><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Especialidad / médico</th><th>Estado</th><th>Acción</th></tr></thead>' +
             '<tbody>' + filasTabla + '</tbody>' +
           '</table>' +
         '</div>' +
