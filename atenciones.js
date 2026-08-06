@@ -2418,7 +2418,7 @@
         : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
     }
 
-    resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '');
+    resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '') + ' · Vista integral activa';
 
     if(activaBox){
       /*
@@ -2474,10 +2474,14 @@
         '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
         '<td>' + auroAtencionEspecialidadMedicoHTML(a) + '</td>' +
         '<td><span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span></td>' +
-        '<td><div class="d-flex gap-1 flex-wrap">' +
-          '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver</button>' +
-          '<button type="button" class="btn-action soft" data-atencion-integral-id="' + safe(a.id_atencion) + '"><i class="bi bi-grid-1x2 me-1"></i> Vista integral</button>' +
-        '</div></td>' +
+        '<td style="min-width:150px">' +
+          '<div style="display:grid;grid-template-columns:1fr;gap:6px">' +
+            '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '" style="width:100%">Ver</button>' +
+            '<button type="button" class="btn-action soft" data-atencion-integral-id="' + safe(a.id_atencion) + '" style="width:100%;border:1px solid #8b1e5a;background:#fff7fb;color:#8b1e5a;font-weight:900">' +
+              '<i class="bi bi-grid-1x2 me-1"></i> Vista integral' +
+            '</button>' +
+          '</div>' +
+        '</td>' +
       '</tr>';
     }).join('');
 
@@ -2492,9 +2496,11 @@
         '<div class="small"><b>Especialidad:</b> ' + safe(auroAtencionResolverMedico(a).especialidad || '—') + '</div>' +
         '<div class="small"><b>Médico:</b> ' + safe(auroAtencionResolverMedico(a).nombre || '—') + '</div>' +
         '<div class="small text-muted"><b>ID:</b> ' + safe(a.id_atencion || '—') + '</div>' +
-        '<div class="d-grid gap-2 mt-2">' +
-          '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver consulta</button>' +
-          '<button type="button" class="btn-action soft" data-atencion-integral-id="' + safe(a.id_atencion) + '"><i class="bi bi-grid-1x2 me-1"></i> Vista integral</button>' +
+        '<div style="display:grid;grid-template-columns:1fr;gap:7px;margin-top:10px">' +
+          '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '" style="width:100%">Ver consulta</button>' +
+          '<button type="button" class="btn-action soft" data-atencion-integral-id="' + safe(a.id_atencion) + '" style="width:100%;border:1px solid #8b1e5a;background:#fff7fb;color:#8b1e5a;font-weight:900">' +
+            '<i class="bi bi-grid-1x2 me-1"></i> Vista integral' +
+          '</button>' +
         '</div>' +
       '</div>';
     }).join('');
