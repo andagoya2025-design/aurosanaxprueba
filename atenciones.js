@@ -3245,7 +3245,7 @@
 
 /* ============================================================
    AUROSANAX ERP - VISTA INTEGRAL DE LA ATENCIÓN
-   Versión: 1.1.0 - refinamiento quirúrgico, premium y responsive
+   Versión: 1.2.0 - refinamiento premium quirúrgico y responsive
 
    ALCANCE ESTRICTO:
    - Solo lectura y presentación.
@@ -3256,7 +3256,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_1';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_2';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3271,7 +3271,7 @@
       .replace(/'/g,'&#039;');
   }
 
-  function normalizarComparacion(v){
+  function norm(v){
     return texto(v)
       .toLowerCase()
       .normalize('NFD')
@@ -3280,37 +3280,21 @@
       .trim();
   }
 
-  function esValorVacioOInterno(v){
-    const n = normalizarComparacion(v);
+  function esVacio(v){
+    const n = norm(v);
     if(!n) return true;
 
-    const exactos = new Set([
-      'seleccione',
-      'seleccione...',
-      'seleccionar',
-      'no registrado',
-      'no registrada',
-      'no registrado en esta atencion',
-      'no registrada en esta atencion',
-      'no disponible',
-      'sin informacion',
-      'sin informacion registrada',
-      'sin datos',
-      'sin dato',
-      'undefined',
-      'null',
-      'false',
-      '[]',
-      '{}',
-      '-',
-      '—'
-    ]);
-
-    return exactos.has(n);
+    return new Set([
+      'seleccione','seleccione...','seleccionar','elegir indicacion rapida...',
+      'no registrado','no registrada','no registrado en esta atencion',
+      'no registrada en esta atencion','no disponible','sin informacion',
+      'sin informacion registrada','sin datos','sin dato','undefined',
+      'null','false','[]','{}','-','—'
+    ]).has(n);
   }
 
-  function esTextoEstadoInterno(v){
-    const n = normalizarComparacion(v);
+  function esEstadoInterno(v){
+    const n = norm(v);
     if(!n) return true;
 
     return (
@@ -3414,14 +3398,14 @@
   function primero(obj, claves){
     for(const k of claves){
       const v = obj && obj[k];
-      if(!esValorVacioOInterno(v)) return texto(v);
+      if(!esVacio(v)) return texto(v);
     }
     return '';
   }
 
-  function dato(label, value, anchoCompleto){
-    if(esValorVacioOInterno(value)) return '';
-    return '<div class="avi-data'+(anchoCompleto?' avi-span-full':'')+'">'+
+  function dato(label, value, clase){
+    if(esVacio(value)) return '';
+    return '<div class="avi-data '+(clase || '')+'">'+
       '<span>'+esc(label)+'</span>'+
       '<b>'+esc(value)+'</b>'+
     '</div>';
@@ -3437,7 +3421,7 @@
       texto(atencion?.id_paciente);
 
     return [
-      dato('Paciente',nombre),
+      dato('Paciente',nombre,'avi-col-2'),
       dato('Identificación',primero(p,['numero_documento','cedula','documento','identificacion'])),
       dato('Fecha de nacimiento',fechaVisual(nacimiento)),
       dato('Edad',edad ? edad+' años' : ''),
@@ -3445,10 +3429,10 @@
       dato('Estado civil',primero(p,['estado_civil','estadoCivil'])),
       dato('Ocupación',primero(p,['ocupacion','profesion'])),
       dato('Teléfono',primero(p,['telefono','celular','movil'])),
-      dato('Correo',primero(p,['correo','email'])),
-      dato('Dirección',primero(p,['direccion','domicilio']),true),
+      dato('Correo',primero(p,['correo','email']),'avi-col-2'),
+      dato('Dirección',primero(p,['direccion','domicilio']),'avi-col-2'),
       dato('Aseguradora',primero(p,['aseguradora','seguro'])),
-      dato('Contacto de emergencia',primero(p,['contacto_emergencia','emergencia_contacto','nombre_contacto_emergencia']),true)
+      dato('Contacto de emergencia',primero(p,['contacto_emergencia','emergencia_contacto','nombre_contacto_emergencia']),'avi-col-2')
     ].filter(Boolean).join('');
   }
 
@@ -3466,10 +3450,10 @@
       dato('Hora',horaVisual(a?.hora_atencion)),
       dato('Tipo',a?.tipo_atencion),
       dato('Estado',a?.estado_atencion),
-      dato('Médico',ctx.nombre_medico || a?.nombre_medico || a?.id_medico,true),
-      dato('Especialidad',ctx.especialidad_atencion || ctx.especialidad_medico),
-      dato('ID atención',a?.id_atencion,true),
-      dato('ID historia',a?.id_historia,true),
+      dato('Médico',ctx.nombre_medico || a?.nombre_medico || a?.id_medico,'avi-col-2'),
+      dato('Especialidad',ctx.especialidad_atencion || ctx.especialidad_medico,'avi-col-2'),
+      dato('ID atención',a?.id_atencion,'avi-col-2 avi-id-card'),
+      dato('ID historia',a?.id_historia,'avi-col-2 avi-id-card'),
       dato('ID cita',a?.id_cita || '')
     ].filter(Boolean).join('');
   }
@@ -3530,52 +3514,64 @@
     if(el.type === 'checkbox' || el.type === 'radio'){
       if(!el.checked) return '';
 
-      const etiqueta = etiquetaCheckbox(el);
-      const valorRaw = texto(el.value);
-
-      if(!valorRaw || normalizarComparacion(valorRaw) === 'on'){
-        return 'Sí';
-      }
-
-      if(esValorVacioOInterno(valorRaw)) return 'Sí';
-      return valorRaw;
+      const raw = texto(el.value);
+      if(!raw || norm(raw) === 'on' || esVacio(raw)) return 'Sí';
+      return raw;
     }
 
     if(el.tagName === 'SELECT'){
       const op = el.options && el.selectedIndex >= 0
         ? el.options[el.selectedIndex]
         : null;
-
       const valor = texto(op?.textContent || el.value);
-      return esValorVacioOInterno(valor) ? '' : valor;
+      return esVacio(valor) ? '' : valor;
     }
 
     const valor = texto(el.value || el.textContent);
-    return esValorVacioOInterno(valor) ? '' : valor;
+    return esVacio(valor) ? '' : valor;
   }
 
   function limpiarEtiqueta(valor){
-    const t = texto(valor).replace(/\s+/g,' ');
+    let t = texto(valor).replace(/\s+/g,' ');
     if(!t) return 'Dato clínico';
 
-    const n = normalizarComparacion(t);
-    if(n === 'registro visible' || n === 'dato registrado'){
-      return 'Dato clínico';
-    }
+    const mapa = {
+      'hcrecetamedicamentos':'Medicamentos',
+      'hcexamenessolicitados':'Exámenes solicitados',
+      'hcinterconsultas':'Interconsultas',
+      'hcordenesmedicas':'Órdenes médicas',
+      'hcindicaciones':'Indicaciones generales',
+      'tto. continuo':'Tratamiento continuo',
+      'registro visible':'Dato clínico',
+      'dato registrado':'Dato clínico'
+    };
 
-    return t;
+    const n = norm(t).replace(/\s/g,'');
+    if(mapa[n]) return mapa[n];
+
+    const n2 = norm(t);
+    if(mapa[n2]) return mapa[n2];
+
+    t = t
+      .replace(/^hc/i,'')
+      .replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g,'$1 $2')
+      .replace(/[_-]+/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+
+    return t || 'Dato clínico';
   }
 
   function limpiarTextoClinico(valor){
     let t = texto(valor).replace(/\s+/g,' ').trim();
-    if(!t || esTextoEstadoInterno(t)) return '';
+    if(!t || esEstadoInterno(t)) return '';
 
     t = t
       .replace(/^registro visible\s*:?\s*/i,'')
       .replace(/^dato registrado\s*:?\s*/i,'')
       .trim();
 
-    return esValorVacioOInterno(t) ? '' : t;
+    return esVacio(t) ? '' : t;
   }
 
   function interpretarAntecedenteFamiliar(valor){
@@ -3585,8 +3581,7 @@
     const idx = raw.indexOf('{');
     if(idx < 0) return null;
 
-    const posibleJSON = raw.slice(idx);
-    const data = parseJSON(posibleJSON,null);
+    const data = parseJSON(raw.slice(idx),null);
     if(!data || typeof data !== 'object') return null;
 
     const salida = [];
@@ -3596,7 +3591,6 @@
       const patologia = texto(item?.patologia || item?.nombre);
       const parentesco = texto(item?.parentesco);
       const detalle = texto(item?.detalle);
-
       if(!patologia) return;
 
       salida.push({
@@ -3606,25 +3600,34 @@
           parentesco ? 'Parentesco: '+parentesco : '',
           detalle ? 'Detalle: '+detalle : ''
         ].filter(Boolean).join(' · '),
-        anchoCompleto:false
+        tipo:'texto'
       });
     });
 
     return salida.length ? salida : null;
   }
 
-  function contenidoEnLista(valor){
+  function listaDesdeValor(valor){
     const raw = texto(valor);
     if(!raw) return null;
 
     const data = parseJSON(raw,null);
-    if(!Array.isArray(data)) return null;
+    if(Array.isArray(data)){
+      const items = data.map(x =>
+        typeof x === 'string'
+          ? texto(x)
+          : texto(x?.texto || x?.indicacion || x?.descripcion || x?.nombre)
+      ).filter(x=>!esVacio(x));
 
-    const items = data
-      .map(x => typeof x === 'string' ? texto(x) : texto(x?.texto || x?.indicacion || x?.descripcion))
-      .filter(x => !esValorVacioOInterno(x));
+      return items.length ? items : null;
+    }
 
-    return items.length ? items : null;
+    const numerados = raw
+      .split(/\s+(?=\d+\.\s)/)
+      .map(x=>x.replace(/^\d+\.\s*/,'').trim())
+      .filter(Boolean);
+
+    return numerados.length > 1 ? numerados : null;
   }
 
   function deduplicarPares(pares){
@@ -3639,7 +3642,7 @@
       const antecedente = interpretarAntecedenteFamiliar(valor);
       if(antecedente){
         antecedente.forEach(item=>{
-          const clave = normalizarComparacion(item.valor);
+          const clave = norm(item.valor);
           if(!clave || vistos.has(clave)) return;
           vistos.add(clave);
           salida.push(item);
@@ -3647,14 +3650,15 @@
         return;
       }
 
-      const claveContenido = normalizarComparacion(valor);
+      const claveContenido = norm(valor);
       if(!claveContenido || vistos.has(claveContenido)) return;
 
       vistos.add(claveContenido);
       salida.push({
         etiqueta,
         valor,
-        anchoCompleto: Boolean(p.anchoCompleto || valor.length > 150)
+        tipo:p.tipo || 'texto',
+        anchoCompleto:Boolean(p.anchoCompleto || valor.length > 150)
       });
     });
 
@@ -3673,22 +3677,29 @@
       const valor = valorCampo(el);
       if(!valor) return;
 
-      const etiqueta =
+      let etiqueta =
         (el.type === 'checkbox' || el.type === 'radio')
           ? etiquetaCheckbox(el)
           : etiquetaCampo(el);
 
+      const eNorm = norm(etiqueta);
+      const vNorm = norm(valor);
+
+      if(panelId === 'hc_anamnesis' && (
+        eNorm === 'tipo' ||
+        eNorm.includes('tipo de consulta') ||
+        (eNorm === 'tipo' && vNorm.includes('primera vez'))
+      )){
+        return;
+      }
+
       pares.push({
-        etiqueta: etiqueta || 'Dato clínico',
+        etiqueta:etiqueta || 'Dato clínico',
         valor,
-        anchoCompleto: valor.length > 150 || el.tagName === 'TEXTAREA'
+        anchoCompleto:valor.length > 150 || el.tagName === 'TEXTAREA'
       });
     });
 
-    /*
-      Solo se consideran bloques visuales con contenido clínico.
-      Se excluyen mensajes internos, estados y duplicados del formulario.
-    */
     panel.querySelectorAll(
       '.auro-previos-line,.auro-previos-mini-row,.obs-read,'+
       '.auro-dx-item,.auro-dx-source-item,.auro-dx-contexto-stat'
@@ -3696,7 +3707,7 @@
       if(n.closest('button')) return;
 
       const valor = limpiarTextoClinico(n.textContent);
-      if(!valor || esTextoEstadoInterno(valor)) return;
+      if(!valor || esEstadoInterno(valor)) return;
 
       let etiqueta = '';
       const titulo = n.querySelector(
@@ -3704,14 +3715,12 @@
         '.auro-previos-label,.label,.title'
       );
 
-      if(titulo){
-        etiqueta = texto(titulo.textContent);
-      }
+      if(titulo) etiqueta = texto(titulo.textContent);
 
       pares.push({
-        etiqueta: etiqueta || 'Dato clínico',
+        etiqueta:etiqueta || 'Dato clínico',
         valor,
-        anchoCompleto: valor.length > 150
+        anchoCompleto:valor.length > 150
       });
     });
 
@@ -3722,7 +3731,7 @@
     if(!pares.length) return '';
 
     return '<div class="avi-lines">'+pares.map(p=>{
-      const lista = contenidoEnLista(p.valor);
+      const lista = listaDesdeValor(p.valor);
 
       if(lista){
         return '<div class="avi-line avi-span-full">'+
@@ -3752,53 +3761,112 @@
     '</details>';
   }
 
-  function medicamentosHTML(valor){
+  function medicamentoCards(valor){
     const raw = texto(valor);
     if(!raw) return '';
 
-    const data = parseJSON(raw,null);
+    let data = parseJSON(raw,null);
     if(!data){
-      return '<div class="avi-lines">'+
-        '<div class="avi-line avi-span-full"><b>Medicamento</b><p>'+esc(raw)+'</p></div>'+
-      '</div>';
+      const lista = listaDesdeValor(raw);
+      const arr = lista || [raw];
+      return '<div class="avi-med-grid">'+arr.map(x=>
+        '<article class="avi-med-card"><h5>Medicamento</h5><p>'+esc(x)+'</p></article>'
+      ).join('')+'</div>';
     }
 
-    const arr = Array.isArray(data) ? data : [data];
+    if(!Array.isArray(data)) data = [data];
 
-    const html = arr.filter(Boolean).map((m,i)=>{
+    const html = data.filter(Boolean).map((m,i)=>{
       if(typeof m === 'string'){
-        return '<div class="avi-line">'+
-          '<b>Medicamento '+(i+1)+'</b>'+
-          '<p>'+esc(m)+'</p>'+
-        '</div>';
+        return '<article class="avi-med-card"><h5>Medicamento '+(i+1)+'</h5><p>'+esc(m)+'</p></article>';
       }
 
       const nombre = texto(m.med || m.medicamento || m.nombre || m.texto);
-      const detalle = [
-        m.pres || m.presentacion,
-        m.via,
-        m.cantidad ? 'Cantidad: '+m.cantidad : '',
-        m.frec || m.frecuencia,
-        m.dur || m.duracion,
-        m.ind || m.indicaciones
-      ].filter(x=>!esValorVacioOInterno(x)).join(' · ');
+      const filas = [
+        ['Presentación',m.pres || m.presentacion],
+        ['Vía',m.via],
+        ['Cantidad',m.cantidad],
+        ['Frecuencia',m.frec || m.frecuencia],
+        ['Duración',m.dur || m.duracion],
+        ['Indicaciones',m.ind || m.indicaciones]
+      ].filter(x=>!esVacio(x[1]));
 
-      if(!nombre && !detalle) return '';
+      if(!nombre && !filas.length) return '';
 
-      return '<div class="avi-line">'+
-        '<b>'+esc(nombre || ('Medicamento '+(i+1)))+'</b>'+
-        '<p>'+esc(detalle)+'</p>'+
-      '</div>';
+      return '<article class="avi-med-card">'+
+        '<h5>'+esc(nombre || ('Medicamento '+(i+1)))+'</h5>'+
+        '<div class="avi-med-details">'+filas.map(f=>
+          '<div><span>'+esc(f[0])+'</span><b>'+esc(f[1])+'</b></div>'
+        ).join('')+'</div>'+
+      '</article>';
     }).filter(Boolean).join('');
 
-    return html ? '<div class="avi-lines">'+html+'</div>' : '';
+    return html ? '<div class="avi-med-grid">'+html+'</div>' : '';
+  }
+
+  function planHTML(){
+    const pares = capturarPanel('hc_plan');
+    if(!pares.length) return '';
+
+    const grupos = {
+      indicaciones:[],
+      medicamentos:[],
+      examenes:[],
+      ordenes:[],
+      interconsultas:[],
+      otros:[]
+    };
+
+    pares.forEach(p=>{
+      const n = norm(p.etiqueta);
+      if(n.includes('medicamento')) grupos.medicamentos.push(p);
+      else if(n.includes('examen')) grupos.examenes.push(p);
+      else if(n.includes('interconsulta')) grupos.interconsultas.push(p);
+      else if(n.includes('orden')) grupos.ordenes.push(p);
+      else if(n.includes('indicacion')) grupos.indicaciones.push(p);
+      else grupos.otros.push(p);
+    });
+
+    let html = '';
+
+    if(grupos.indicaciones.length){
+      html += '<div class="avi-subgroup"><h5>Indicaciones generales</h5>'+
+        paresHTML(grupos.indicaciones)+'</div>';
+    }
+
+    if(grupos.medicamentos.length){
+      html += '<div class="avi-subgroup"><h5>Medicamentos</h5>'+
+        grupos.medicamentos.map(p=>medicamentoCards(p.valor)).join('')+'</div>';
+    }
+
+    if(grupos.examenes.length){
+      html += '<div class="avi-subgroup"><h5>Exámenes solicitados</h5>'+
+        paresHTML(grupos.examenes)+'</div>';
+    }
+
+    if(grupos.ordenes.length){
+      html += '<div class="avi-subgroup"><h5>Órdenes médicas</h5>'+
+        paresHTML(grupos.ordenes)+'</div>';
+    }
+
+    if(grupos.interconsultas.length){
+      html += '<div class="avi-subgroup"><h5>Interconsultas</h5>'+
+        paresHTML(grupos.interconsultas)+'</div>';
+    }
+
+    if(grupos.otros.length){
+      html += '<div class="avi-subgroup"><h5>Otros datos del plan</h5>'+
+        paresHTML(grupos.otros)+'</div>';
+    }
+
+    return html;
   }
 
   function indicacionesHTML(valor){
     const raw = texto(valor);
-    if(!raw || esValorVacioOInterno(raw)) return '';
+    if(!raw || esVacio(raw)) return '';
 
-    const lista = contenidoEnLista(raw);
+    const lista = listaDesdeValor(raw);
     if(lista){
       return '<div class="avi-note">'+
         '<b>Indicaciones</b>'+
@@ -3808,10 +3876,7 @@
       '</div>';
     }
 
-    return '<div class="avi-note">'+
-      '<b>Indicaciones</b>'+
-      '<p>'+esc(raw)+'</p>'+
-    '</div>';
+    return '<div class="avi-note"><b>Indicaciones</b><p>'+esc(raw)+'</p></div>';
   }
 
   function recetasHTML(idAtencion){
@@ -3819,14 +3884,17 @@
     if(!recetas.length) return '';
 
     return '<div class="avi-rx-list">'+recetas.map(r=>{
-      const meds = medicamentosHTML(r.medicamento || r.medicamentos);
+      const meds = medicamentoCards(r.medicamento || r.medicamentos);
       const indicaciones = indicacionesHTML(r.indicaciones);
 
       return '<article class="avi-rx-card">'+
         '<div class="avi-rx-head">'+
-          '<div><b>Receta médica</b><small>'+esc(r.id_receta || r.id || '')+'</small></div>'+
-          '<button type="button" class="avi-btn" data-avi-rx="'+esc(r.id_receta || r.id || '')+'">'+
-            '<i class="bi bi-eye"></i> Ver receta'+
+          '<div>'+
+            '<h4>Receta médica</h4>'+
+            '<small>'+esc(r.id_receta || r.id || '')+'</small>'+
+          '</div>'+
+          '<button type="button" class="avi-btn avi-btn-primary" data-avi-rx="'+esc(r.id_receta || r.id || '')+'">'+
+            '<i class="bi bi-eye"></i> Ver receta completa'+
           '</button>'+
         '</div>'+
         '<div class="avi-rx-meta">'+
@@ -3847,47 +3915,35 @@
     s.id = 'auroVistaIntegralCSS';
     s.textContent = `
       .avi-overlay{
-        position:fixed;inset:0;z-index:100000;
-        background:rgba(15,23,42,.68);
-        display:flex;align-items:center;justify-content:center;
-        padding:16px;
+        position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.68);
+        display:flex;align-items:center;justify-content:center;padding:16px;
       }
       .avi-shell{
-        width:min(1240px,100%);
-        max-height:96vh;
-        background:#f8fafc;
-        border-radius:24px;
-        overflow:hidden;
-        display:flex;
-        flex-direction:column;
+        width:min(1240px,100%);max-height:96vh;background:#f8fafc;
+        border-radius:24px;overflow:hidden;display:flex;flex-direction:column;
         box-shadow:0 30px 90px rgba(15,23,42,.38);
       }
       .avi-head{
-        position:sticky;top:0;z-index:3;
         display:flex;justify-content:space-between;gap:14px;align-items:flex-start;
-        padding:16px 18px;
-        background:linear-gradient(135deg,#fff7fb,#fff);
+        padding:16px 18px;background:linear-gradient(135deg,#fff7fb,#fff);
         border-bottom:1px solid #f3d4e8;
       }
       .avi-head h3{margin:0;color:#4a1334;font-weight:950}
       .avi-head p{margin:4px 0 0;color:#64748b;font-size:12px;overflow-wrap:anywhere}
-      .avi-head-context{
-        margin-top:8px;
-        display:flex;gap:6px;flex-wrap:wrap;
-      }
+      .avi-head-context{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
       .avi-chip{
-        display:inline-flex;align-items:center;gap:5px;
-        border:1px solid #ead7e2;background:#fff;color:#6c1d52;
-        border-radius:999px;padding:4px 8px;font-size:11px;font-weight:850;
+        display:inline-flex;align-items:center;gap:5px;border:1px solid #ead7e2;
+        background:#fff;color:#6c1d52;border-radius:999px;padding:4px 8px;
+        font-size:11px;font-weight:850;
       }
       .avi-close,.avi-btn{
         border:1px solid #ead7e2;background:#fff;color:#6c1d52;
         border-radius:11px;padding:8px 11px;font-weight:850;cursor:pointer;
       }
+      .avi-btn-primary{background:#7a174f;color:#fff;border-color:#7a174f}
       .avi-toolbar{
-        position:sticky;top:0;z-index:2;
-        display:flex;gap:8px;flex-wrap:wrap;
-        padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb;
+        display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;
+        background:#fff;border-bottom:1px solid #e5e7eb;
       }
       .avi-body{overflow:auto;padding:16px;-webkit-overflow-scrolling:touch}
       .avi-group-title{
@@ -3895,13 +3951,13 @@
         text-transform:uppercase;letter-spacing:.05em;
       }
       .avi-data-grid{
-        display:grid;
-        grid-template-columns:repeat(4,minmax(0,1fr));
+        display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
         gap:8px;margin-bottom:14px;
       }
       .avi-data{
         background:#fff;border:1px solid #e5e7eb;border-radius:14px;
-        padding:10px;min-width:0;
+        padding:10px;min-width:0;min-height:64px;display:flex;
+        flex-direction:column;justify-content:center;
       }
       .avi-data span{
         display:block;font-size:10px;color:#64748b;text-transform:uppercase;
@@ -3911,13 +3967,15 @@
         display:block;margin-top:4px;color:#111827;font-size:12px;
         overflow-wrap:anywhere;
       }
+      .avi-col-2{grid-column:span 2}
+      .avi-id-card b{font-size:11px;color:#475569}
       .avi-section{
         background:#fff;border:1px solid #e5e7eb;border-radius:17px;
         margin-bottom:10px;overflow:hidden;
       }
       .avi-section summary{
-        list-style:none;cursor:pointer;padding:13px 15px;
-        display:flex;justify-content:space-between;gap:10px;align-items:center;
+        list-style:none;cursor:pointer;padding:13px 15px;display:flex;
+        justify-content:space-between;gap:10px;align-items:center;
         font-weight:950;color:#334155;
       }
       .avi-section summary::-webkit-details-marker{display:none}
@@ -3926,13 +3984,11 @@
       .avi-chevron{transition:.18s}
       .avi-section-body{padding:0 15px 15px}
       .avi-lines{
-        display:grid;
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:8px;
+        display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
       }
       .avi-line{
-        border:1px solid #e8edf2;border-radius:12px;
-        padding:10px;background:#fbfdff;min-width:0;
+        border:1px solid #e8edf2;border-radius:12px;padding:10px;
+        background:#fbfdff;min-width:0;
       }
       .avi-span-full{grid-column:1/-1}
       .avi-line b,.avi-note b{
@@ -3947,13 +4003,41 @@
         margin:6px 0 0;padding-left:20px;color:#1f2937;line-height:1.5;
       }
       .avi-clean-list li+li{margin-top:4px}
-      .avi-rx-list{display:grid;gap:10px}
+      .avi-subgroup+.avi-subgroup{margin-top:14px}
+      .avi-subgroup>h5{
+        margin:0 0 8px;color:#334155;font-size:13px;font-weight:950;
+      }
+      .avi-med-grid{
+        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
+      }
+      .avi-med-card{
+        border:1px solid #ead7e2;border-radius:15px;padding:12px;
+        background:linear-gradient(180deg,#fff,#fffafd);
+      }
+      .avi-med-card h5{margin:0 0 8px;color:#6c1d52;font-size:14px;font-weight:950}
+      .avi-med-card p{margin:0;color:#334155;line-height:1.5}
+      .avi-med-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+      .avi-med-details div{
+        border:1px solid #edf0f3;background:#fff;border-radius:10px;padding:8px;
+      }
+      .avi-med-details span{
+        display:block;color:#64748b;font-size:9px;font-weight:900;
+        text-transform:uppercase;
+      }
+      .avi-med-details b{
+        display:block;margin-top:3px;color:#1f2937;font-size:11px;
+        overflow-wrap:anywhere;
+      }
+      .avi-rx-list{display:grid;gap:12px}
       .avi-rx-card{
-        border:1px solid #ead7e2;border-radius:16px;padding:12px;background:#fff;
+        border:1px solid #e4c7da;border-radius:18px;padding:14px;background:#fff;
+        box-shadow:0 8px 24px rgba(122,23,79,.07);
       }
       .avi-rx-head{
         display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
+        margin-bottom:10px;
       }
+      .avi-rx-head h4{margin:0;color:#4a1334;font-size:16px;font-weight:950}
       .avi-rx-head small{
         display:block;color:#64748b;margin-top:3px;overflow-wrap:anywhere;
       }
@@ -3961,7 +4045,7 @@
         display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
         gap:7px;margin:10px 0;
       }
-      .avi-note{margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px}
+      .avi-note{margin-top:12px;border-top:1px solid #e5e7eb;padding-top:10px}
       .avi-loading{padding:30px;text-align:center;color:#64748b}
       .avi-rx-overlay{
         position:fixed;inset:0;z-index:100010;background:rgba(15,23,42,.7);
@@ -3978,13 +4062,13 @@
       @media(max-width:980px){
         .avi-data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
         .avi-lines{grid-template-columns:repeat(2,minmax(0,1fr))}
+        .avi-col-2{grid-column:span 2}
       }
 
       @media(max-width:760px){
         .avi-overlay,.avi-rx-overlay{padding:0;align-items:flex-end}
         .avi-shell,.avi-rx-shell{
-          width:100%;max-width:100%;max-height:96dvh;
-          border-radius:20px 20px 0 0;
+          width:100%;max-width:100%;max-height:96dvh;border-radius:20px 20px 0 0;
         }
         .avi-head{
           padding:12px calc(12px + env(safe-area-inset-right)) 12px
@@ -3994,8 +4078,7 @@
         .avi-head h3{font-size:18px}
         .avi-close{min-height:44px;flex:0 0 auto}
         .avi-toolbar{
-          display:grid;grid-template-columns:1fr 1fr;
-          padding:9px 12px;
+          display:grid;grid-template-columns:1fr 1fr;padding:9px 12px;
         }
         .avi-toolbar .avi-btn{width:100%;min-height:44px}
         .avi-toolbar .avi-btn:last-child{grid-column:1/-1}
@@ -4004,8 +4087,10 @@
             calc(14px + env(safe-area-inset-bottom))
             calc(12px + env(safe-area-inset-left));
         }
-        .avi-data-grid,.avi-lines,.avi-rx-meta{grid-template-columns:1fr}
-        .avi-span-full{grid-column:auto}
+        .avi-data-grid,.avi-lines,.avi-rx-meta,.avi-med-grid,.avi-med-details{
+          grid-template-columns:1fr;
+        }
+        .avi-col-2,.avi-span-full{grid-column:auto}
         .avi-section summary{padding:12px}
         .avi-section-body{padding:0 12px 12px}
         .avi-rx-head{display:grid;grid-template-columns:1fr}
@@ -4065,12 +4150,8 @@
 
       document.body.appendChild(o);
 
-      o.querySelector('[data-avi-cerrar-rx]')
-        .addEventListener('click',cerrarReceta);
-
-      o.addEventListener('click',e=>{
-        if(e.target === o) cerrarReceta();
-      });
+      o.querySelector('[data-avi-cerrar-rx]').addEventListener('click',cerrarReceta);
+      o.addEventListener('click',e=>{ if(e.target === o) cerrarReceta(); });
 
     }catch(e){
       console.error(MODULO,e);
@@ -4079,24 +4160,9 @@
   }
 
   function encabezadoContexto(a){
-    let ctx = {};
-    try{
-      ctx = typeof window.obtenerContextoAtencionActual === 'function'
-        ? (window.obtenerContextoAtencionActual() || {})
-        : {};
-    }catch(_){}
-
-    const p = pacienteActual();
-    const nombre = nombrePaciente(p) || texto(a?.id_paciente);
-
     return [
-      nombre ? '<span class="avi-chip"><i class="bi bi-person"></i>'+esc(nombre)+'</span>' : '',
       a?.numero_consulta ? '<span class="avi-chip">Consulta #'+esc(a.numero_consulta)+'</span>' : '',
       a?.fecha_atencion ? '<span class="avi-chip">'+esc(fechaVisual(a.fecha_atencion))+'</span>' : '',
-      a?.hora_atencion ? '<span class="avi-chip">'+esc(horaVisual(a.hora_atencion))+'</span>' : '',
-      (ctx.nombre_medico || a?.id_medico)
-        ? '<span class="avi-chip"><i class="bi bi-person-badge"></i>'+esc(ctx.nombre_medico || a.id_medico)+'</span>'
-        : '',
       a?.estado_atencion ? '<span class="avi-chip">'+esc(a.estado_atencion)+'</span>' : '',
       '<span class="avi-chip"><i class="bi bi-lock"></i>Solo lectura</span>'
     ].filter(Boolean).join('');
@@ -4115,42 +4181,52 @@
 
     if(idActivo !== texto(idAtencion)){
       body.innerHTML =
-        '<div class="avi-line avi-span-full">'+
-          '<b>Atención no verificada</b>'+
-          '<p>No se pudo confirmar la consulta seleccionada.</p>'+
-        '</div>';
+        '<div class="avi-line avi-span-full"><b>Atención no verificada</b>'+
+        '<p>No se pudo confirmar la consulta seleccionada.</p></div>';
       return;
     }
 
     const a = atencionPorId(idAtencion);
     if(!a){
       body.innerHTML =
-        '<div class="avi-line avi-span-full">'+
-          '<b>Atención no encontrada</b>'+
-          '<p>No se encontró la atención solicitada.</p>'+
-        '</div>';
+        '<div class="avi-line avi-span-full"><b>Atención no encontrada</b>'+
+        '<p>No se encontró la atención solicitada.</p></div>';
       return;
     }
 
-    const bloques = [
-      ['Anamnesis','bi-clipboard2-pulse','hc_anamnesis',true],
-      ['Antecedentes de la historia clínica','bi-clock-history','hc_antecedentes',false],
-      ['Examen físico','bi-person-vcard','hc_examen',true],
-      ['Obstetricia','bi-heart-pulse','hc_obstetricia',false],
-      ['Diagnóstico e integración clínica','bi-journal-medical','hc_diagnostico',true],
-      ['Plan, medicamentos, órdenes e interconsultas','bi-list-check','hc_plan',true]
-    ];
+    const anamnesis = seccion(
+      'Anamnesis','bi-clipboard2-pulse',
+      paresHTML(capturarPanel('hc_anamnesis')),true
+    );
 
-    const seccionesClinicas = bloques.map(b=>{
-      const contenido = paresHTML(capturarPanel(b[2]));
-      return seccion(b[0],b[1],contenido,b[3]);
-    }).filter(Boolean).join('');
+    const antecedentes = seccion(
+      'Antecedentes de la historia clínica','bi-clock-history',
+      paresHTML(capturarPanel('hc_antecedentes')),false
+    );
+
+    const examen = seccion(
+      'Examen físico','bi-person-vcard',
+      paresHTML(capturarPanel('hc_examen')),true
+    );
+
+    const obstetricia = seccion(
+      'Obstetricia','bi-heart-pulse',
+      paresHTML(capturarPanel('hc_obstetricia')),false
+    );
+
+    const diagnosticos = seccion(
+      'Diagnósticos','bi-journal-medical',
+      paresHTML(capturarPanel('hc_diagnostico')),true
+    );
+
+    const plan = seccion(
+      'Plan terapéutico','bi-list-check',
+      planHTML(),true
+    );
 
     const recetas = seccion(
-      'Recetas asociadas',
-      'bi-prescription2',
-      recetasHTML(idAtencion),
-      true
+      'Recetas asociadas','bi-prescription2',
+      recetasHTML(idAtencion),true
     );
 
     const datosPaciente = datosPacienteHTML(a);
@@ -4165,13 +4241,10 @@
         ? '<h4 class="avi-group-title">Datos de la atención</h4>'+
           '<div class="avi-data-grid">'+datosAtencion+'</div>'
         : '')+
-      seccionesClinicas+
-      recetas;
+      anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+recetas;
 
     const contextBox = overlay.querySelector('[data-avi-contexto]');
-    if(contextBox){
-      contextBox.innerHTML = encabezadoContexto(a);
-    }
+    if(contextBox) contextBox.innerHTML = encabezadoContexto(a);
 
     body.querySelectorAll('[data-avi-rx]').forEach(btn=>{
       btn.addEventListener('click',()=>{
@@ -4182,18 +4255,15 @@
 
   async function esperarAtencion(id, maxMs){
     const inicio = Date.now();
-
     while(Date.now()-inicio < maxMs){
       const actual = texto(
         typeof window.getIdAtencionActiva === 'function'
           ? window.getIdAtencionActiva()
           : ''
       );
-
       if(actual === texto(id)) return true;
       await new Promise(r=>setTimeout(r,100));
     }
-
     return false;
   }
 
@@ -4239,9 +4309,7 @@
     document.body.style.overflow = 'hidden';
 
     o.querySelector('[data-avi-cerrar]').addEventListener('click',cerrar);
-    o.addEventListener('click',e=>{
-      if(e.target === o) cerrar();
-    });
+    o.addEventListener('click',e=>{ if(e.target === o) cerrar(); });
 
     o.querySelector('[data-avi-expandir]').addEventListener('click',()=>{
       o.querySelectorAll('details').forEach(d=>d.open=true);
@@ -4264,30 +4332,25 @@
 
       if(!ok){
         o.querySelector('.avi-body').innerHTML =
-          '<div class="avi-line avi-span-full">'+
-            '<b>No se pudo activar la consulta</b>'+
-            '<p>Cierre el visor y pulse primero “Ver”.</p>'+
-          '</div>';
+          '<div class="avi-line avi-span-full"><b>No se pudo activar la consulta</b>'+
+          '<p>Cierre el visor y pulse primero “Ver”.</p></div>';
         return;
       }
 
       await new Promise(r=>setTimeout(r,1600));
       renderizar(id);
-
       setTimeout(()=>renderizar(id),1400);
 
     }catch(e){
       console.error(MODULO,e);
       o.querySelector('.avi-body').innerHTML =
-        '<div class="avi-line avi-span-full">'+
-          '<b>Error de presentación</b>'+
-          '<p>No se pudo construir la Vista integral.</p>'+
-        '</div>';
+        '<div class="avi-line avi-span-full"><b>Error de presentación</b>'+
+        '<p>No se pudo construir la Vista integral.</p></div>';
     }
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.1.0',
+    version:'1.2.0',
     abrir,
     cerrar,
     abrirReceta,
