@@ -4511,6 +4511,49 @@ function auroHistoriaLimpiarExamenSinAtencionSeleccionada(){
   window.examenFisicoState.atencionActual = '';
 }
 
+
+/* ============================================================
+   AUROSANAX - LIMPIEZA QUIRÚRGICA DE ANAMNESIS SIN ATENCIÓN
+   - Se ejecuta al abrir una historia clínica.
+   - Mantiene datos generales y antecedentes.
+   - No elimina información guardada.
+   - Anamnesis solo se mostrará al pulsar Ver en una atención.
+============================================================ */
+function auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada(){
+  const panel = document.getElementById('hc_anamnesis');
+
+  if(panel){
+    panel.querySelectorAll('input, textarea, select').forEach(function(el){
+      if(el.type === 'checkbox' || el.type === 'radio'){
+        el.checked = false;
+        return;
+      }
+
+      if(el.tagName === 'SELECT'){
+        el.selectedIndex = 0;
+        return;
+      }
+
+      if(!el.readOnly && !el.disabled){
+        el.value = '';
+      }
+    });
+
+    panel.querySelectorAll('[contenteditable="true"]').forEach(function(el){
+      el.innerHTML = '';
+    });
+  }
+
+  /*
+    Refuerzo explícito de los dos campos que antes se rellenaban
+    directamente desde historias_clinicas.
+  */
+  setValueIfExists('hcMotivoConsulta', '');
+  setValueIfExists('hcEnfermedadActual', '');
+  setValueIfExists('hcRevisionSistemas', '');
+  setValueIfExists('hcSintomasAlarma', '');
+}
+
 function seleccionarPacienteHistoria(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || activePatientId || '';
   const p = patients.find(x => String(x.id_paciente || x.id || '') === String(idPaciente));
@@ -7339,6 +7382,7 @@ async function editarHistoriaClinicaModal(idHistoria){
     cuando el profesional pulsa Ver en el historial de atenciones.
   */
   auroHistoriaLimpiarExamenSinAtencionSeleccionada();
+  auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada();
 
   setTimeout(() => {
     editingHistoryId = idHistoriaReal;
@@ -7353,8 +7397,12 @@ async function editarHistoriaClinicaModal(idHistoria){
       seleccionarPacienteHistoria();
     }
 
-    setValueIfExists('hcMotivoConsulta', h.motivo_consulta || '');
-    setValueIfExists('hcEnfermedadActual', h.enfermedad_actual || '');
+    /*
+      AUROSANAX CORRECCIÓN QUIRÚRGICA:
+      Abrir una historia no selecciona ninguna atención.
+      Por tanto, Anamnesis permanece vacía hasta pulsar Ver.
+    */
+    auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada();
     auroCargarAntecedentesCompletosGuardados(h);
     /*
       El examen físico no se carga desde historias_clinicas.
