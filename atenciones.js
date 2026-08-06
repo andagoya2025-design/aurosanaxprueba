@@ -354,33 +354,6 @@
         margin-top:14px;
       }
 
-
-
-      /* AUROSANAX - Vista integral premium de solo lectura */
-      .auro-integral-modal{position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.64);display:flex;align-items:center;justify-content:center;padding:18px}
-      .auro-integral-panel{width:min(1180px,100%);max-height:94vh;background:#f8fafc;border-radius:24px;box-shadow:0 30px 90px rgba(15,23,42,.34);display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,255,255,.7)}
-      .auro-integral-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:17px 20px;background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff}
-      .auro-integral-head h3{margin:0;font-size:21px;font-weight:950}.auro-integral-head p{margin:4px 0 0;font-size:12px;opacity:.9;overflow-wrap:anywhere}
-      .auro-integral-close{border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;border-radius:12px;padding:9px 12px;font-weight:900;cursor:pointer;flex:0 0 auto}
-      .auro-integral-toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:2}
-      .auro-integral-toolbar button{border:1px solid #ead5e2;background:#fff;color:#7a174f;border-radius:11px;padding:7px 10px;font-weight:850;font-size:12px;cursor:pointer}
-      .auro-integral-body{padding:16px;overflow:auto;overscroll-behavior:contain}
-      .auro-integral-grid-head{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:14px}
-      .auro-integral-dato{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:10px;min-width:0}.auro-integral-dato span{display:block;color:#64748b;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}.auro-integral-dato b{display:block;margin-top:3px;color:#111827;font-size:13px;overflow-wrap:anywhere}
-      .auro-integral-section{background:#fff;border:1px solid #e5e7eb;border-radius:18px;margin-bottom:11px;overflow:hidden;box-shadow:0 5px 16px rgba(15,23,42,.035)}
-      .auro-integral-section summary{list-style:none;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:13px 15px;cursor:pointer;font-weight:950;color:#4a1637;background:linear-gradient(135deg,#fff,#fff8fc)}
-      .auro-integral-section summary::-webkit-details-marker{display:none}.auro-integral-section summary:after{content:'+';font-size:20px}.auro-integral-section[open] summary:after{content:'−'}
-      .auro-integral-section-body{padding:13px 15px;border-top:1px solid #f0e1e9}
-      .auro-integral-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-      .auro-integral-field{border:1px solid #e7e9ee;border-radius:12px;padding:9px 10px;background:#fcfcfd;min-width:0}.auro-integral-field strong{display:block;color:#7a174f;font-size:11px;margin-bottom:4px}.auro-integral-field div{white-space:pre-wrap;overflow-wrap:anywhere;color:#25303b;font-size:13px;line-height:1.42}
-      .auro-integral-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:12px;color:#64748b;background:#f8fafc;font-size:13px}
-      .auro-integral-table{width:100%;border-collapse:collapse;font-size:12px}.auro-integral-table th,.auro-integral-table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}.auro-integral-table th{background:#f8fafc;color:#475569;font-weight:900}
-      .auro-integral-source{margin-top:8px;color:#94a3b8;font-size:10px;font-weight:800}
-      .auro-rx-overlay .auro-integral-panel{width:min(900px,100%)}.auro-rx-overlay .auro-integral-body{background:#fff}
-      .auro-integral-loading{padding:40px 20px;text-align:center;color:#64748b;font-weight:800}
-      @media(max-width:800px){.auro-integral-modal{padding:0;align-items:flex-end}.auro-integral-panel{width:100%;max-height:96dvh;border-radius:20px 20px 0 0}.auro-integral-head{padding:14px}.auro-integral-head h3{font-size:18px}.auro-integral-toolbar{display:grid;grid-template-columns:1fr 1fr}.auro-integral-toolbar button{min-height:40px}.auro-integral-body{padding:10px 10px calc(16px + env(safe-area-inset-bottom))}.auro-integral-grid-head{grid-template-columns:1fr 1fr}.auro-integral-fields{grid-template-columns:1fr}.auro-integral-section summary{padding:12px}.auro-integral-section-body{padding:10px}.auro-integral-table{font-size:11px}}
-      @media(max-width:460px){.auro-integral-grid-head{grid-template-columns:1fr}.auro-integral-toolbar{grid-template-columns:1fr}.auro-integral-close{padding:8px 10px}}
-
       @media (max-width: 768px){
         #auroAtencionesBox{
           padding:12px!important;
@@ -2169,172 +2142,38 @@
   }
 
   function auroAtencionVerReceta(idReceta){
-    return auroAtencionVerRecetaModal(idReceta);
-  }
-
-
-  /* =====================================================
-     AUROSANAX - VISTA INTEGRAL PREMIUM DE LA ATENCIÓN
-     - Solo lectura.
-     - No guarda ni modifica datos clínicos.
-     - Reutiliza la selección maestra por id_atencion.
-     - Extrae exactamente los valores ya cargados por cada módulo.
-  ===================================================== */
-  function auroIntegralHumanizarId(id){
-    return String(id || '')
-      .replace(/^hc|^obs|^rec/i,'')
-      .replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g,'$1 $2')
-      .replace(/[_-]+/g,' ')
-      .replace(/\s+/g,' ')
-      .trim()
-      .replace(/^./,function(c){ return c.toUpperCase(); });
-  }
-
-  function auroIntegralTextoControl(control){
-    if(!control) return '';
-    if(control.type === 'checkbox' || control.type === 'radio'){
-      return control.checked ? (control.value && control.value !== 'on' ? control.value : 'Sí') : '';
-    }
-    if(control.tagName === 'SELECT'){
-      const op = control.options && control.selectedIndex >= 0 ? control.options[control.selectedIndex] : null;
-      const valor = String(op ? op.textContent : control.value || '').trim();
-      return /^(seleccione|seleccionar|no registrado|no registrada|sin registro|—)$/i.test(valor) ? '' : valor;
-    }
-    return String(control.value || '').trim();
-  }
-
-  function auroIntegralEtiquetaControl(control, panel){
-    if(!control) return '';
-    let label = null;
-    if(control.id){
-      try{ label = panel.querySelector('label[for="' + CSS.escape(control.id) + '"]'); }catch(e){}
-    }
-    if(!label){
-      const bloque = control.closest('.col-md-2,.col-md-3,.col-md-4,.col-md-6,.col-md-8,.col-md-12,.col-12,.form-group,.obs-read,.obs-context-item,.auro-dx-section');
-      label = bloque ? bloque.querySelector('label,small,.auro-dx-label') : null;
-    }
-    return String(label ? label.textContent : auroIntegralHumanizarId(control.id || control.name || 'Dato'))
-      .replace(/\s+/g,' ').replace(/\*+$/,'').trim();
-  }
-
-  function auroIntegralExtraerPanel(idPanel){
-    const panel = document.getElementById(idPanel);
-    if(!panel) return { campos:[], tablas:[] };
-    const campos = [];
-    const vistos = new Set();
-    panel.querySelectorAll('input,select,textarea').forEach(function(control){
-      if(control.type === 'hidden' || control.disabled && !String(control.value || '').trim()) return;
-      const valor = auroIntegralTextoControl(control);
-      if(!valor) return;
-      const etiqueta = auroIntegralEtiquetaControl(control,panel) || 'Dato';
-      const clave = etiqueta.toLowerCase() + '|' + valor;
-      if(vistos.has(clave)) return;
-      vistos.add(clave);
-      campos.push({ etiqueta:etiqueta, valor:valor });
-    });
-
-    const tablas = [];
-    panel.querySelectorAll('table').forEach(function(tabla){
-      const cabeceras = Array.from(tabla.querySelectorAll('thead th')).map(function(th){ return String(th.textContent || '').replace(/\s+/g,' ').trim(); });
-      const filas = Array.from(tabla.querySelectorAll('tbody tr')).map(function(tr){
-        return Array.from(tr.querySelectorAll('td')).map(function(td){
-          const clon = td.cloneNode(true);
-          clon.querySelectorAll('button,input,select,textarea').forEach(function(x){ x.remove(); });
-          return String(clon.textContent || '').replace(/\s+/g,' ').trim();
-        });
-      }).filter(function(f){ return f.some(Boolean) && !f.join(' ').toLowerCase().includes('sin registros') && !f.join(' ').toLowerCase().includes('sin diagnósticos'); });
-      if(filas.length) tablas.push({ cabeceras:cabeceras, filas:filas });
-    });
-    return { campos:campos, tablas:tablas };
-  }
-
-  function auroIntegralPanelHTML(titulo, icono, idPanel, abierto){
-    const data = auroIntegralExtraerPanel(idPanel);
-    let contenido = '';
-    if(data.campos.length){
-      contenido += '<div class="auro-integral-fields">' + data.campos.map(function(c){
-        return '<div class="auro-integral-field"><strong>' + safe(c.etiqueta) + '</strong><div>' + safe(c.valor) + '</div></div>';
-      }).join('') + '</div>';
-    }
-    data.tablas.forEach(function(t){
-      const maxCols = Math.max(t.cabeceras.length, ...t.filas.map(function(f){return f.length;}));
-      contenido += '<div class="table-responsive mt-2"><table class="auro-integral-table">';
-      if(t.cabeceras.length) contenido += '<thead><tr>' + t.cabeceras.slice(0,maxCols).map(function(h){return '<th>'+safe(h || 'Dato')+'</th>';}).join('') + '</tr></thead>';
-      contenido += '<tbody>' + t.filas.map(function(f){return '<tr>'+f.slice(0,maxCols).map(function(v){return '<td>'+safe(v)+'</td>';}).join('')+'</tr>';}).join('') + '</tbody></table></div>';
-    });
-    if(!contenido) contenido = '<div class="auro-integral-empty">Sin información registrada en esta atención.</div>';
-    return '<details class="auro-integral-section" ' + (abierto ? 'open' : '') + '><summary><span><i class="bi ' + icono + ' me-2"></i>' + safe(titulo) + '</span></summary><div class="auro-integral-section-body">' + contenido + '<div class="auro-integral-source">Fuente: módulo ' + safe(titulo) + ' · Vista de solo lectura</div></div></details>';
-  }
-
-  function auroIntegralPacienteDatos(a){
-    let p = pacienteActivo() || {};
-    const get = function(id){ return String(document.getElementById(id)?.value || '').trim(); };
-    const nombre = String(p.nombre_completo || p.nombre || ((p.nombres || '') + ' ' + (p.apellidos || ''))).replace(/\s+/g,' ').trim();
-    return [
-      ['Paciente', nombre || '—'], ['Identificación', p.numero_documento || p.cedula || p.documento || get('hcCedula') || '—'],
-      ['Fecha de nacimiento', p.fecha_nacimiento || get('hcNacimiento') || '—'], ['Edad', p.edad || get('hcEdad') || '—'],
-      ['Sexo', p.sexo || get('hcSexo') || '—'], ['Estado civil', p.estado_civil || get('hcEstadoCivil') || '—'],
-      ['Ocupación', p.ocupacion || get('hcOcupacion') || '—'], ['Teléfono', p.telefono || p.whatsapp || get('hcTelefono') || '—'],
-      ['Correo', p.email || p.correo || get('hcCorreo') || '—'], ['Dirección', p.direccion || get('hcDireccion') || '—'],
-      ['Aseguradora', p.aseguradora || p.seguro || get('hcSeguro') || '—'], ['Contacto de emergencia', p.contacto_emergencia || get('hcContactoEmergencia') || '—'],
-      ['Historia clínica', a.id_historia || '—'], ['Consulta', a.numero_consulta ? '#' + a.numero_consulta : '—'],
-      ['Fecha y hora', fechaVisual(a.fecha_atencion) + ' · ' + horaVisualAtencion(a.hora_atencion)], ['Médico', auroAtencionResolverMedico(a).nombre || '—'],
-      ['Especialidad', auroAtencionResolverMedico(a).especialidad || '—'], ['Estado', a.estado_atencion || '—']
-    ];
-  }
-
-  function auroCerrarModalIntegral(modal){ if(modal && modal.parentNode) modal.parentNode.removeChild(modal); }
-
-  function auroConstruirVistaIntegral(a){
-    const modal = document.querySelector('.auro-integral-modal[data-tipo="historia"]');
-    if(!modal) return;
-    const body = modal.querySelector('.auro-integral-body');
-    if(!body) return;
-    const datos = auroIntegralPacienteDatos(a);
-    body.innerHTML =
-      '<div class="auro-integral-grid-head">' + datos.map(function(d){return '<div class="auro-integral-dato"><span>'+safe(d[0])+'</span><b>'+safe(d[1])+'</b></div>';}).join('') + '</div>' +
-      auroIntegralPanelHTML('Anamnesis','bi-clipboard2-pulse','hc_anamnesis',true) +
-      auroIntegralPanelHTML('Antecedentes','bi-clock-history','hc_antecedentes',false) +
-      auroIntegralPanelHTML('Examen físico','bi-person-vcard','hc_examen',true) +
-      auroIntegralPanelHTML('Obstetricia','bi-heart-pulse','obstetricia',false) +
-      auroIntegralPanelHTML('Diagnóstico','bi-journal-medical','hc_diagnostico',true) +
-      auroIntegralPanelHTML('Plan e indicaciones','bi-list-check','hc_plan',true);
-  }
-
-  function auroAbrirVistaIntegral(idAtencion){
-    const a = leerLocal().find(function(x){ return String(x.id_atencion || '') === String(idAtencion || ''); });
-    if(!a) return alert('No se encontró la atención seleccionada.');
-    seleccionarAtencion(idAtencion);
-    document.querySelectorAll('.auro-integral-modal[data-tipo="historia"]').forEach(function(x){x.remove();});
-    const modal = document.createElement('div');
-    modal.className = 'auro-integral-modal'; modal.dataset.tipo = 'historia';
-    modal.innerHTML = '<div class="auro-integral-panel" role="dialog" aria-modal="true"><div class="auro-integral-head"><div><h3><i class="bi bi-grid-1x2-fill me-2"></i>Vista integral de la atención</h3><p>ID atención: '+safe(a.id_atencion)+' · Contenido literal cargado desde los módulos clínicos</p></div><button type="button" class="auro-integral-close">Cerrar</button></div><div class="auro-integral-toolbar"><button type="button" data-integral-expandir>Expandir todo</button><button type="button" data-integral-contraer>Contraer todo</button><button type="button" data-integral-actualizar>Actualizar vista</button></div><div class="auro-integral-body"><div class="auro-integral-loading"><span class="spinner-border spinner-border-sm me-2"></span>Cargando la consulta seleccionada…</div></div></div>';
-    document.body.appendChild(modal);
-    const cerrar=function(){auroCerrarModalIntegral(modal);};
-    modal.querySelector('.auro-integral-close').addEventListener('click',cerrar);
-    modal.addEventListener('click',function(e){if(e.target===modal)cerrar();});
-    modal.querySelector('[data-integral-expandir]').addEventListener('click',function(){modal.querySelectorAll('details').forEach(function(d){d.open=true;});});
-    modal.querySelector('[data-integral-contraer]').addEventListener('click',function(){modal.querySelectorAll('details').forEach(function(d){d.open=false;});});
-    modal.querySelector('[data-integral-actualizar]').addEventListener('click',function(){auroConstruirVistaIntegral(a);});
-    setTimeout(function(){ auroConstruirVistaIntegral(a); }, 1100);
-    setTimeout(function(){ auroConstruirVistaIntegral(a); }, 2300);
-  }
-
-  async function auroAtencionVerRecetaModal(idReceta){
     const id = String(idReceta || '').trim();
-    if(!id) return alert('No se encontró el identificador de la receta.');
-    if(typeof window.verRecetaEmitida !== 'function') return alert('El visor original de Recetas todavía no está disponible.');
+
+    if(!id){
+      alert('No se encontró el identificador de la receta.');
+      return;
+    }
+
+    if(typeof window.verRecetaEmitida !== 'function'){
+      alert('El visor de recetas todavía no está disponible. Espere unos segundos e intente nuevamente.');
+      return;
+    }
+
     try{
-      await window.verRecetaEmitida(id);
-      const preview = document.getElementById('recetaPreview');
-      if(!preview) throw new Error('No se encontró la vista previa original.');
-      document.querySelectorAll('.auro-integral-modal[data-tipo="receta"]').forEach(function(x){x.remove();});
-      const modal = document.createElement('div'); modal.className='auro-integral-modal auro-rx-overlay'; modal.dataset.tipo='receta';
-      modal.innerHTML='<div class="auro-integral-panel" role="dialog" aria-modal="true"><div class="auro-integral-head"><div><h3><i class="bi bi-prescription2 me-2"></i>Receta médica</h3><p>'+safe(id)+' · Vista original de Recetas en modo lectura</p></div><button type="button" class="auro-integral-close">Cerrar</button></div><div class="auro-integral-body"></div></div>';
-      modal.querySelector('.auro-integral-body').appendChild(preview.cloneNode(true));
-      document.body.appendChild(modal);
-      const cerrar=function(){auroCerrarModalIntegral(modal);}; modal.querySelector('.auro-integral-close').addEventListener('click',cerrar); modal.addEventListener('click',function(e){if(e.target===modal)cerrar();});
-    }catch(error){ console.error(MODULO,error); alert('No se pudo abrir el visor original de la receta.'); }
+      if(typeof window.showScreen === 'function'){
+        window.showScreen('recetas');
+      }
+    }catch(error){
+      console.warn(MODULO, 'No se pudo abrir el módulo Recetas antes de visualizar.', error);
+    }
+
+    setTimeout(function(){
+      try{
+        window.verRecetaEmitida(id);
+        const seccion = document.getElementById('recetas');
+        if(seccion){
+          window.scrollTo({ top: seccion.offsetTop || 0, behavior:'smooth' });
+        }
+      }catch(error){
+        console.error(MODULO, 'No se pudo visualizar la receta.', error);
+        alert('No se pudo abrir la receta seleccionada.');
+      }
+    }, 180);
   }
 
   function ocultarDetalleAtencion(){
@@ -2648,7 +2487,7 @@
         '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
         '<td>' + auroAtencionEspecialidadMedicoHTML(a) + '</td>' +
         '<td><span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span></td>' +
-        '<td><div class="d-flex gap-1 flex-wrap"><button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver</button><button type="button" class="btn-action soft" data-atencion-integral-id="' + safe(a.id_atencion) + '"><i class="bi bi-grid-1x2 me-1"></i> Vista integral</button></div></td>' +
+        '<td><button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver</button></td>' +
       '</tr>';
     }).join('');
 
@@ -2663,7 +2502,7 @@
         '<div class="small"><b>Especialidad:</b> ' + safe(auroAtencionResolverMedico(a).especialidad || '—') + '</div>' +
         '<div class="small"><b>Médico:</b> ' + safe(auroAtencionResolverMedico(a).nombre || '—') + '</div>' +
         '<div class="small text-muted"><b>ID:</b> ' + safe(a.id_atencion || '—') + '</div>' +
-        '<div class="d-grid gap-2 mt-2"><button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver consulta</button><button type="button" class="btn-action soft" data-atencion-integral-id="' + safe(a.id_atencion) + '"><i class="bi bi-grid-1x2 me-1"></i> Vista integral</button></div>' +
+        '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '">Ver consulta</button>' +
       '</div>';
     }).join('');
 
@@ -2708,12 +2547,6 @@
     lista.querySelectorAll('[data-atencion-id]').forEach(btn => {
       btn.addEventListener('click', function(){
         seleccionarAtencion(this.getAttribute('data-atencion-id'));
-      });
-    });
-
-    lista.querySelectorAll('[data-atencion-integral-id]').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        auroAbrirVistaIntegral(this.getAttribute('data-atencion-integral-id'));
       });
     });
   }
@@ -3002,8 +2835,6 @@
   };
 
   window.renderAtencionesPaciente = renderAtencionesPaciente;
-  window.auroAbrirVistaIntegralAtencion = auroAbrirVistaIntegral;
-  window.auroAtencionVerRecetaModal = auroAtencionVerRecetaModal;
   window.cargarAtencionesDesdeSheets = cargarAtencionesDesdeSheets;
   window.cargarRecetasDesdeSheetsAtenciones = cargarRecetasDesdeSheetsAtenciones;
   window.refrescarRecetasAtencionesDesdeSheets = function(){
