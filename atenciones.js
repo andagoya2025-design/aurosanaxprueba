@@ -17,6 +17,12 @@
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
+  /*
+    AUROSANAX 2.5.1 - generación de contexto.
+    Cada transición clínica real incrementa este valor para invalidar
+    callbacks diferidos de una atención anterior.
+  */
+  let contextoAtencionEpoch = 0;
   let consultasVisible = true;
   let atencionesSheetsCargadas = false;
   let atencionesSheetsCargando = false;
@@ -1113,39 +1119,20 @@
     }
   }
 
-  /* =====================================================
-     AUROSANAX - MOTOR ÚNICO DE ACTIVACIÓN DE ATENCIÓN
-     Corrección quirúrgica v2.5
 
-     OBJETIVO:
-     - Evitar que Plan, Recetas, Diagnóstico o Examen Físico conserven
-       visualmente la consulta anterior al crear o abrir una atención.
-     - Reutilizar el mismo flujo tanto para "Iniciar" como para "Ver".
-     - No elimina datos, no cambia IDs, no modifica Google Sheets.
-  ===================================================== */
-  function sincronizarContextoAtencion(atencion, opciones){
+  function auroInvalidarContextoAtencion(opciones){
     opciones = opciones || {};
 
-    const a = normalizar(atencion || {});
-    const idAtencion = String(a.id_atencion || '').trim();
-    const idPaciente = String(a.id_paciente || '').trim();
-    const idPacienteVisible = String(idPacienteActivo() || '').trim();
+    const idAnterior = String(
+      opciones.idAnterior != null ? opciones.idAnterior : atencionActivaId
+    ).trim();
 
-    if(!idAtencion) return false;
+    const idNueva = String(opciones.idNueva || '').trim();
+    const idPaciente = String(
+      opciones.idPaciente != null ? opciones.idPaciente : idPacienteActivo()
+    ).trim();
 
-    if(
-      idPacienteVisible &&
-      idPaciente &&
-      idPacienteVisible !== idPaciente
-    ){
-      console.warn(
-        'AUROSANAX ATENCIONES: se bloqueó una atención de otro paciente.',
-        { idPacienteVisible, idPaciente, idAtencion }
-      );
-      return false;
-    }
-
-    /* 1. Invalidar únicamente el contexto temporal anterior. */
+    contextoAtencionEpoch += 1;
     atencionActivaId = '';
 
     window.planState = window.planState || { atencionActual:'', cache:{} };
@@ -1165,46 +1152,125 @@
       window.auroDiagnosticosState.conducta = '';
     }
 
-    /* 2. Limpiar solo estados visuales de consulta; nunca datos guardados. */
-    [
-      'auroLimpiarPlanVisualAntesDeCambiarAtencion',
-      'auroLimpiarDiagnosticos',
-      'auroExamenFisicoLimpiarFormulario'
-    ].forEach(function(nombre){
+    if(opciones.limpiarVisual !== false){
+      [
+        'auroLimpiarPlanVisualAntesDeCambiarAtencion',
+        'auroLimpiarDiagnosticos',
+        'auroExamenFisicoLimpiarFormulario'
+      ].forEach(function(nombre){
+        try{
+          if(typeof window[nombre] === 'function') window[nombre]();
+        }catch(error){
+          console.warn('AUROSANAX ATENCIONES: no se pudo ejecutar ' + nombre, error);
+        }
+      });
+
       try{
-        if(typeof window[nombre] === 'function') window[nombre]();
+        if(typeof window.cambiarPlanPorAtencion === 'function'){
+          window.cambiarPlanPorAtencion('');
+        }
       }catch(error){
-        console.warn('AUROSANAX ATENCIONES: no se pudo ejecutar ' + nombre, error);
+        console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Plan.', error);
       }
-    });
 
-    try{
-      if(typeof window.cambiarPlanPorAtencion === 'function'){
-        window.cambiarPlanPorAtencion('');
+      try{
+        if(typeof window.cambiarExamenFisicoPorAtencion === 'function'){
+          window.cambiarExamenFisicoPorAtencion('');
+        }
+      }catch(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Examen Físico.', error);
       }
-    }catch(error){
-      console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Plan.', error);
-    }
-
-    try{
-      if(typeof window.cambiarExamenFisicoPorAtencion === 'function'){
-        window.cambiarExamenFisicoPorAtencion('');
-      }
-    }catch(error){
-      console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Examen Físico.', error);
     }
 
     window.dispatchEvent(new CustomEvent('aurosanax:atencion-limpiada', {
       detail:{
         id_paciente:idPaciente,
-        id_atencion_anterior:String(opciones.idAnterior || '').trim(),
-        id_atencion_nueva:idAtencion,
-        motivo:String(opciones.motivo || 'cambio_atencion')
+        id_atencion_anterior:idAnterior,
+        id_atencion_nueva:idNueva,
+        motivo:String(opciones.motivo || 'cambio_atencion'),
+        contexto_epoch:contextoAtencionEpoch
       }
     }));
 
-    /* 3. Activar inmediatamente la atención nueva como fuente maestra. */
+    return {
+      idAnterior,
+      idNueva,
+      idPaciente,
+      epoch:contextoAtencionEpoch
+    };
+  }
+
+  /* =====================================================
+     AUROSANAX - MOTOR ÚNICO DE ACTIVACIÓN DE ATENCIÓN
+     Corrección quirúrgica v2.5
+
+     OBJETIVO:
+     - Evitar que Plan, Recetas, Diagnóstico o Examen Físico conserven
+       visualmente la consulta anterior al crear o abrir una atención.
+     - Reutilizar el mismo flujo tanto para "Iniciar" como para "Ver".
+     - No elimina datos, no cambia IDs, no modifica Google Sheets.
+  ===================================================== */
+  function sincronizarContextoAtencion(atencion, opciones){
+    opciones = opciones || {};
+
+    const a = normalizar(atencion || {});
+    const idAtencion = String(a.id_atencion || '').trim();
+    const idPaciente = String(a.id_paciente || '').trim();
+    const idPacienteVisible = String(idPacienteActivo() || '').trim();
+    const idAnterior = String(atencionActivaId || '').trim();
+
+    if(!idAtencion) return false;
+
+    if(
+      idPacienteVisible &&
+      idPaciente &&
+      idPacienteVisible !== idPaciente
+    ){
+      console.warn(
+        'AUROSANAX ATENCIONES: se bloqueó una atención de otro paciente.',
+        { idPacienteVisible, idPaciente, idAtencion }
+      );
+      return false;
+    }
+
+    /*
+      2.5.1:
+      Volver a pulsar Ver sobre la MISMA consulta no es una transición clínica.
+      Se conserva exactamente la funcionalidad visual sin limpiar ni emitir
+      eventos que puedan despertar autosaves de otros módulos.
+    */
+    if(idAnterior && idAnterior === idAtencion){
+      renderDetalleAtencion(a);
+
+      try{
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+          window.auroPlanActualizarMiniStatus();
+        }
+      }catch(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudo refrescar el estado visual del Plan.', error);
+      }
+
+      return true;
+    }
+
+    /*
+      Transición clínica real A -> B:
+      una sola invalidación central comunica la id anterior exacta.
+    */
+    const transicion = auroInvalidarContextoAtencion({
+      idAnterior:idAnterior,
+      idNueva:idAtencion,
+      idPaciente:idPaciente,
+      motivo:String(opciones.motivo || 'cambio_atencion'),
+      limpiarVisual:true
+    });
+
+    const epoch = transicion.epoch;
+
+    /* Activar inmediatamente la atención nueva como fuente maestra. */
     atencionActivaId = idAtencion;
+
+    window.planState = window.planState || { atencionActual:'', cache:{} };
     window.planState.atencionActual = idAtencion;
 
     if(window.examenFisicoState){
@@ -1215,7 +1281,11 @@
       window.auroDiagnosticosState.atencionActual = idAtencion;
     }
 
-    const detalleEvento = { ...a };
+    const detalleEvento = {
+      ...a,
+      contexto_epoch:epoch,
+      id_atencion_anterior:idAnterior
+    };
 
     window.dispatchEvent(new CustomEvent('aurosanax:atencion-seleccionada', {
       detail:detalleEvento
@@ -1227,17 +1297,9 @@
       }));
     }
 
-    /* 4. Render inmediato y carga diferida igual para Iniciar y Ver. */
+    /* Render inmediato: Ver, Iniciar y Vista integral conservan su comportamiento. */
     renderDetalleAtencion(a);
 
-    /*
-      AUROSANAX FIX QUIRÚRGICO:
-      El botón Iniciar está enlazado directamente a la función privada
-      crearAtencion(), no al alias window.iniciarAtencionActual que Index
-      intenta envolver. Por eso la barra visual del Plan no se refrescaba
-      hasta pulsar Ver. Se actualiza aquí, dentro del motor real compartido
-      por Iniciar y Ver, usando ya la nueva atención activa.
-    */
     try{
       if(typeof window.auroPlanActualizarMiniStatus === 'function'){
         window.auroPlanActualizarMiniStatus();
@@ -1248,17 +1310,9 @@
 
     setTimeout(function(){
       try{
+        if(contextoAtencionEpoch !== epoch) return;
         if(String(atencionActivaId || '') !== idAtencion) return;
-        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
-          window.auroPlanActualizarMiniStatus();
-        }
-      }catch(error){
-        console.warn('AUROSANAX ATENCIONES: no se pudo confirmar el estado visual del Plan.', error);
-      }
-    }, 220);
 
-    setTimeout(function(){
-      try{
         if(typeof window.cambiarPlanPorAtencion === 'function'){
           window.cambiarPlanPorAtencion(idAtencion);
         }
@@ -1273,7 +1327,7 @@
 
     setTimeout(function(){
       cargarRecetasDesdeSheetsAtenciones(true).then(function(){
-        /* Protección: no repintar si el usuario ya cambió de atención. */
+        if(contextoAtencionEpoch !== epoch) return;
         if(String(atencionActivaId || '') !== idAtencion) return;
 
         const actual = leerLocal().find(function(item){
@@ -1285,6 +1339,19 @@
         console.warn('AUROSANAX ATENCIONES: no se pudieron refrescar recetas.', error);
       });
     }, 140);
+
+    setTimeout(function(){
+      try{
+        if(contextoAtencionEpoch !== epoch) return;
+        if(String(atencionActivaId || '') !== idAtencion) return;
+
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+          window.auroPlanActualizarMiniStatus();
+        }
+      }catch(error){
+        console.warn('AUROSANAX ATENCIONES: no se pudo confirmar el estado visual del Plan.', error);
+      }
+    }, 220);
 
     return true;
   }
@@ -1476,7 +1543,16 @@
       });
     }
 
-    atencionActivaId = '';
+    const idFinalizada = String(atencionFinalizada?.id_atencion || abierta.id_atencion || '').trim();
+
+    auroInvalidarContextoAtencion({
+      idAnterior:idFinalizada,
+      idNueva:'',
+      idPaciente:idPaciente,
+      motivo:'atencion_finalizada',
+      limpiarVisual:true
+    });
+
     renderAtencionesPaciente();
 
     const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
@@ -2164,12 +2240,16 @@
   }
 
   function ocultarDetalleAtencion(){
+    /*
+      2.5.1:
+      Ocultar es únicamente una acción visual.
+      NO invalida la atención clínica activa ni rompe el contexto maestro.
+    */
     const box = $('auroAtencionActivaBox');
     if(box){
       box.style.display = 'none';
       box.innerHTML = '';
     }
-    atencionActivaId = '';
   }
 
   function renderDetalleAtencion(a){
@@ -2307,7 +2387,8 @@
 
     sincronizarContextoAtencion(a, {
       motivo:'boton_ver',
-      emitirIniciada:false
+      emitirIniciada:false,
+      idAnterior:String(atencionActivaId || '').trim()
     });
   }
 
@@ -2621,17 +2702,15 @@
         */
         const idAtencionAnterior = String(atencionActivaId || '').trim();
 
-        atencionActivaId = '';
         consultasPaginaActual = 1;
 
-        window.dispatchEvent(new CustomEvent('aurosanax:atencion-limpiada', {
-          detail: {
-            id_paciente: String(idPacienteActivo() || '').trim(),
-            id_atencion_anterior: idAtencionAnterior,
-            id_atencion_nueva: '',
-            motivo: 'cambio_paciente_historia'
-          }
-        }));
+        auroInvalidarContextoAtencion({
+          idAnterior:idAtencionAnterior,
+          idNueva:'',
+          idPaciente:String(idPacienteActivo() || '').trim(),
+          motivo:'cambio_paciente_historia',
+          limpiarVisual:true
+        });
 
         const box = $('auroAtencionActivaBox');
         if(box){
@@ -2652,8 +2731,16 @@
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
-        atencionActivaId = '';
+        const idAtencionAnterior = String(atencionActivaId || '').trim();
         consultasPaginaActual = 1;
+
+        auroInvalidarContextoAtencion({
+          idAnterior:idAtencionAnterior,
+          idNueva:'',
+          idPaciente:String(idPacienteActivo() || '').trim(),
+          motivo:'abrir_historia_paciente',
+          limpiarVisual:true
+        });
 
         const box = $('auroAtencionActivaBox');
         if(box){
@@ -2740,19 +2827,16 @@
       Reinicio exclusivamente en memoria.
       No se toca localStorage ni Google Sheets.
     */
-    atencionActivaId = '';
+    const idAtencionAnterior = String(atencionActivaId || '').trim();
     consultasPaginaActual = 1;
 
-    window.planState = window.planState || {
-      atencionActual: '',
-      cache: {}
-    };
-    window.planState.atencionActual = '';
-
-    if(window.examenFisicoState){
-      window.examenFisicoState.atencionActual = '';
-      window.examenFisicoState.idExamenActual = '';
-    }
+    auroInvalidarContextoAtencion({
+      idAnterior:idAtencionAnterior,
+      idNueva:'',
+      idPaciente:idPacienteNuevo,
+      motivo:'historia_nueva',
+      limpiarVisual:false
+    });
 
     const activaBox = $('auroAtencionActivaBox');
     if(activaBox){
@@ -2813,13 +2897,6 @@
     }catch(error){
       console.warn('AUROSANAX ATENCIONES: no se pudo reiniciar Examen Físico.', error);
     }
-
-    window.dispatchEvent(new CustomEvent('aurosanax:atencion-limpiada', {
-      detail: {
-        id_paciente: idPacienteNuevo,
-        motivo: 'historia_nueva'
-      }
-    }));
 
     setTimeout(function(){
       renderAtencionesPaciente();
@@ -2909,6 +2986,10 @@
   window.getIdAtencionActiva = function(){
     const a = window.getAtencionActiva();
     return a ? a.id_atencion : '';
+  };
+
+  window.getContextoAtencionEpoch = function(){
+    return contextoAtencionEpoch;
   };
 
 
@@ -3252,7 +3333,8 @@
       medicos_activos_cargados: medicosActivosCargados,
       medicos_activos: medicosActivosAtenciones.length,
       cita_agenda_seleccionada: leerCitaSeleccionadaAgenda(),
-      atencion_activa: window.getAtencionActiva()
+      atencion_activa: window.getAtencionActiva(),
+      contexto_epoch: contextoAtencionEpoch
     };
   };
 
