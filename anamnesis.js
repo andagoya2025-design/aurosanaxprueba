@@ -1,7 +1,8 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión: 3.6.3
+Versión base: 3.6.3
+Parche actual: 3.6.16 - aislamiento de atención + captura manual JSON + IDs obstétricos exclusivos
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -14,7 +15,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.15';
+  const VERSION = '3.6.16';
   const state = {
     inicializado: false,
     cargando: false,
@@ -32,7 +33,8 @@ Función:
     guardadoPendiente: null,
     contextoAtencion: {},
     guardadosRemotosEnCurso: {},
-    guardadosRemotosPendientes: {}
+    guardadosRemotosPendientes: {},
+    contextoEpoch: 0
   };
 
   const $ = id => document.getElementById(id);
@@ -1817,7 +1819,7 @@ Función:
   /* ============================================================
      AUROSANAX 3.6.14 - SÍNTOMAS COMPLEMENTARIOS DE ANAMNESIS
      Intervención localizada:
-     - Convierte los controles ginSint* y anaObsSint* en narrativa clínica.
+     - Convierte los controles ginSint* y obsSint* en narrativa clínica.
      - No cambia sus IDs, almacenamiento ni relación por id_atencion.
      - No modifica plantillas, backend, botones ni otros módulos.
      ============================================================ */
@@ -2168,10 +2170,21 @@ Función:
 
     contexto = contexto && typeof contexto === 'object' ? contexto : {};
 
-    const idAtencion = texto(
-      contexto.id_atencion || contexto.idAtencion || contexto.atencion_id ||
-      auroObtenerIdAtencionAnamnesis()
+    const idContextoExterno = texto(
+      contexto.id_atencion || contexto.idAtencion || contexto.atencion_id
     );
+
+    /*
+      AUROSANAX 3.6.16 - AISLAMIENTO DE CONTEXTO
+      Una lectura tardía del contexto global nunca puede cambiar por sí sola
+      la atención que Anamnesis ya tiene seleccionada. Solo se adopta el ID
+      externo cuando todavía no existe un ID interno.
+    */
+    if (!state.idAtencionActual && idContextoExterno) {
+      state.idAtencionActual = idContextoExterno;
+    }
+
+    const idAtencion = texto(state.idAtencionActual || idContextoExterno);
 
     const idPaciente = texto(
       contexto.id_paciente || contexto.idPaciente || contexto.paciente_id
@@ -2181,22 +2194,22 @@ Función:
       contexto.id_historia || contexto.idHistoria || contexto.historia_id
     );
 
-    if (idAtencion) {
-      state.idAtencionActual = idAtencion;
-      window.auroAtencionSeleccionadaId = idAtencion;
+    /* Solo completa datos descriptivos si pertenecen a la misma atención. */
+    const mismoContexto = !idContextoExterno || !idAtencion || idContextoExterno === idAtencion;
+    if (mismoContexto) {
+      if (idPaciente) state.idPacienteActual = idPaciente;
+      if (idHistoria) state.idHistoriaActual = idHistoria;
     }
-    if (idPaciente) state.idPacienteActual = idPaciente;
-    if (idHistoria) state.idHistoriaActual = idHistoria;
 
     state.contextoAtencion = {
       ...state.contextoAtencion,
-      ...contexto,
-      id_atencion: idAtencion || state.idAtencionActual,
-      id_paciente: idPaciente || state.idPacienteActual,
-      id_historia: idHistoria || state.idHistoriaActual
+      ...(mismoContexto ? contexto : {}),
+      id_atencion: idAtencion,
+      id_paciente: state.idPacienteActual,
+      id_historia: state.idHistoriaActual
     };
 
-    return texto(state.idAtencionActual);
+    return idAtencion;
   }
 
   async function auroEsperarIdAtencionAnamnesis(intentos = 5, esperaMs = 250) {
@@ -2259,14 +2272,8 @@ Función:
       const clave = auroClaveControlAnamnesis(control, indice);
       let dato = controles[clave];
 
-      /*
-        AUROSANAX 3.6.15 - COMPATIBILIDAD RETROACTIVA:
-        Los controles obstétricos propios de Anamnesis ahora utilizan IDs
-        exclusivos con prefijo anaObs*. Los registros históricos conservan
-        claves id:obsSint*. Esta equivalencia permite restaurarlos sin
-        modificar Google Sheets ni migrar datos anteriores.
-      */
-      if (!dato && control.id && control.id.startsWith('anaObs')) {
+      /* Retrocompatibilidad: registros previos usaban obsSint* en Anamnesis. */
+      if (!dato && control.id && /^anaObs/.test(control.id)) {
         const idAnterior = control.id.replace(/^anaObs/, 'obs');
         dato = controles['id:' + idAnterior];
       }
@@ -2290,23 +2297,42 @@ Función:
     });
   }
 
-  function auroCapturarAnamnesisActual() {
-    const idAtencion = auroObtenerIdAtencionAnamnesis();
+  function auroCapturarAnamnesisActual(idAtencionForzado = '') {
+    const idAtencion = texto(idAtencionForzado || auroObtenerIdAtencionAnamnesis());
+    const motivoConsulta = texto($('hcMotivoConsulta')?.value);
+    const enfermedadActual = texto($('hcEnfermedadActual')?.value);
+    const usaPlantilla = !!state.plantillaActiva;
+
+    /*
+      AUROSANAX 3.6.16 - TRAZABILIDAD DE CAPTURA MANUAL
+      Si el profesional escribe directamente sin motor, se conserva una
+      estructura JSON mínima y explícita. narrativa_generada queda reservada
+      únicamente para texto realmente producido por el motor.
+    */
+    const respuestas = usaPlantilla
+      ? leerRespuestas()
+      : (motivoConsulta || enfermedadActual)
+        ? {
+            _modo_captura: 'manual',
+            motivo_consulta: motivoConsulta,
+            enfermedad_actual: enfermedadActual
+          }
+        : {};
 
     return {
       id_atencion: idAtencion,
       id_paciente: texto(state.idPacienteActual),
       id_historia: texto(state.idHistoriaActual),
-      motivo_consulta: texto($('hcMotivoConsulta')?.value),
-      enfermedad_actual: texto($('hcEnfermedadActual')?.value),
-      id_plantilla_anamnesis: state.plantillaActiva
+      motivo_consulta: motivoConsulta,
+      enfermedad_actual: enfermedadActual,
+      id_plantilla_anamnesis: usaPlantilla
         ? idPlantilla(state.plantillaActiva)
         : texto($('auroPlantillaAnamnesisSelect')?.value),
-      nombre_plantilla: state.plantillaActiva
+      nombre_plantilla: usaPlantilla
         ? nombrePlantilla(state.plantillaActiva)
         : '',
-      respuestas_json: state.plantillaActiva ? leerRespuestas() : {},
-      narrativa_generada: texto(state.narrativa),
+      respuestas_json: respuestas,
+      narrativa_generada: usaPlantilla ? texto(state.narrativa) : '',
       controles_json: auroCapturarControlesAnamnesis(),
       panel_abierto: !!$('auroDynamicAnamnesisPanel')?.classList.contains('show'),
       modulo_version: VERSION,
@@ -2351,11 +2377,11 @@ Función:
     );
   }
 
-  function guardarAnamnesisTemporal() {
-    const idAtencion = auroObtenerIdAtencionAnamnesis();
+  function guardarAnamnesisTemporal(idAtencionForzado = '') {
+    const idAtencion = texto(idAtencionForzado || auroObtenerIdAtencionAnamnesis());
     if (!idAtencion || state.restaurandoAtencion) return null;
 
-    const data = auroCapturarAnamnesisActual();
+    const data = auroCapturarAnamnesisActual(idAtencion);
     data.id_atencion = idAtencion;
 
     state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(data);
@@ -2696,27 +2722,35 @@ Función:
     if (!idAtencion) return false;
 
     const anterior = texto(state.idAtencionActual);
-
-    if (anterior && anterior !== idAtencion) {
-      clearTimeout(state.guardadoPendiente);
-      state.guardadoPendiente = null;
-
-      const dataAnterior = guardarAnamnesisTemporal();
-      if (dataAnterior && auroTieneContenidoAnamnesis(dataAnterior)) {
-        dataAnterior.id_atencion = anterior;
-        await auroGuardarDatosAnamnesisConfirmados(
-          dataAnterior,
-          { mostrarEstado: false }
-        );
-      }
+    if (anterior === idAtencion) {
+      auroSincronizarCabeceraAtencion(detalle);
+      return true;
     }
 
-    if (anterior === idAtencion) return true;
+    /* Cancela cualquier autosave que fue programado para el contexto anterior. */
+    clearTimeout(state.guardadoPendiente);
+    state.guardadoPendiente = null;
+    state.contextoEpoch += 1;
 
+    /*
+      Captura INMUTABLE de la atención anterior antes de cambiar de paciente.
+      Nunca vuelve a consultar el contexto global para decidir su id_atencion.
+    */
+    let dataAnterior = null;
+    if (anterior) {
+      dataAnterior = auroCapturarAnamnesisActual(anterior);
+      dataAnterior.id_atencion = anterior;
+
+      state.cacheAtenciones[anterior] = auroClonarAnamnesis(dataAnterior);
+      const cacheLocal = auroLeerCacheAnamnesisLocal();
+      cacheLocal[anterior] = auroClonarAnamnesis(dataAnterior);
+      auroGuardarCacheAnamnesisLocal(cacheLocal);
+    }
+
+    /* El nuevo contexto se fija inmediatamente; no espera al servidor anterior. */
     state.idAtencionActual = idAtencion;
-    state.idPacienteActual = texto(detalle.id_paciente || state.idPacienteActual);
-    state.idHistoriaActual = texto(detalle.id_historia || state.idHistoriaActual);
-
+    state.idPacienteActual = texto(detalle.id_paciente || '');
+    state.idHistoriaActual = texto(detalle.id_historia || '');
     window.auroAtencionSeleccionadaId = idAtencion;
 
     auroLimpiarCabeceraAtencion();
@@ -2727,7 +2761,22 @@ Función:
     auroSincronizarCabeceraAtencion(detalle);
 
     limpiarAnamnesisTemporal();
+
+    /* Guarda la fotografía anterior en segundo plano, ya sellada con su ID. */
+    if (dataAnterior && auroTieneContenidoAnamnesis(dataAnterior)) {
+      auroGuardarDatosAnamnesisConfirmados(
+        dataAnterior,
+        { mostrarEstado: false }
+      ).catch(error => {
+        console.warn('AUROSANAX Anamnesis: no se confirmó el guardado de la atención anterior.', error);
+      });
+    }
+
     const cargada = await cargarAnamnesisTemporal(idAtencion);
+
+    /* Si el usuario cambió otra vez mientras cargaba, no aplica contexto obsoleto. */
+    if (texto(state.idAtencionActual) !== idAtencion) return false;
+
     auroSincronizarCabeceraAtencion(detalle);
 
     estado(
@@ -2741,16 +2790,37 @@ Función:
   }
 
   function auroProgramarGuardadoAnamnesis() {
-    if (state.restaurandoAtencion || !auroObtenerIdAtencionAnamnesis()) return;
+    if (state.restaurandoAtencion) return;
+
+    const idProgramado = texto(state.idAtencionActual || auroObtenerIdAtencionAnamnesis());
+    if (!idProgramado) return;
+
+    const pacienteProgramado = texto(state.idPacienteActual);
+    const historiaProgramada = texto(state.idHistoriaActual);
+    const epochProgramado = state.contextoEpoch;
 
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = setTimeout(async () => {
-      const idAtencion = await auroEsperarIdAtencionAnamnesis(4, 250);
-      if (!idAtencion) return;
+      state.guardadoPendiente = null;
 
-      const data = guardarAnamnesisTemporal();
+      /*
+        Candado principal: un autosave pertenece para siempre a la atención
+        en la que fue programado. Si el usuario ya cambió, se descarta.
+      */
+      if (
+        state.restaurandoAtencion ||
+        state.contextoEpoch !== epochProgramado ||
+        texto(state.idAtencionActual) !== idProgramado ||
+        (pacienteProgramado && texto(state.idPacienteActual) !== pacienteProgramado) ||
+        (historiaProgramada && texto(state.idHistoriaActual) !== historiaProgramada)
+      ) {
+        return;
+      }
+
+      const data = auroCapturarAnamnesisActual(idProgramado);
+      if (!data || texto(data.id_atencion) !== idProgramado) return;
+
       if (data && auroTieneContenidoAnamnesis(data)) {
-        data.id_atencion = idAtencion;
         await auroGuardarDatosAnamnesisConfirmados(
           data,
           { mostrarEstado: false }
@@ -2787,22 +2857,34 @@ Función:
   }
 
   function obtenerDatosAnamnesis() {
+    const motivoConsulta = texto($('hcMotivoConsulta')?.value);
+    const enfermedadActual = texto($('hcEnfermedadActual')?.value);
+    const usaPlantilla = !!state.plantillaActiva;
+
     return {
       id_atencion: auroObtenerIdAtencionAnamnesis(),
       id_paciente: texto(state.idPacienteActual),
       id_historia: texto(state.idHistoriaActual),
-      motivo_consulta: texto($('hcMotivoConsulta')?.value),
-      enfermedad_actual: texto($('hcEnfermedadActual')?.value),
+      motivo_consulta: motivoConsulta,
+      enfermedad_actual: enfermedadActual,
       revision_sistemas: '',
       sintomas_alarma: '',
-      id_plantilla_anamnesis: state.plantillaActiva
+      id_plantilla_anamnesis: usaPlantilla
         ? idPlantilla(state.plantillaActiva)
         : '',
-      nombre_plantilla: state.plantillaActiva
+      nombre_plantilla: usaPlantilla
         ? nombrePlantilla(state.plantillaActiva)
         : '',
-      respuestas_json: state.plantillaActiva ? leerRespuestas() : {},
-      narrativa_generada: state.narrativa,
+      respuestas_json: usaPlantilla
+        ? leerRespuestas()
+        : (motivoConsulta || enfermedadActual)
+          ? {
+              _modo_captura: 'manual',
+              motivo_consulta: motivoConsulta,
+              enfermedad_actual: enfermedadActual
+            }
+          : {},
+      narrativa_generada: usaPlantilla ? texto(state.narrativa) : '',
       modulo_version: VERSION
     };
   }
