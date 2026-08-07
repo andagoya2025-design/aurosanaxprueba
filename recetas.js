@@ -2028,12 +2028,12 @@
           <div><span>CIE-10</span><b>${safe(r.cie10 || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
           <div style="grid-column:1/-1"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>`
       : `
-          <div><span>Paciente</span><b>${safe(nombre)}</b><small class="auro-paciente-cedula">Cédula: ${safe(cedula)}</small></div>
-          <div><span>Edad</span><b>${safe(edad)}</b></div>
-          <div><span>Fecha de emisión</span><b>${safe(fechaVisual(r.fecha))}</b></div>
-          <div><span>N.º de receta</span><b>${safe(idReceta === '—' ? '—' : idReceta)}</b></div>
-          ${r.cie10 ? `<div><span>CIE-10</span><b>${safe(r.cie10)}</b></div>` : ''}
-          ${r.diagnostico ? `<div style="grid-column:span 3"><span>Diagnóstico</span><b>${safe(r.diagnostico)}</b></div>` : ''}`;
+          <div class="auro-rx-dato auro-rx-paciente"><span>Paciente</span><b>${safe(nombre)}</b></div>
+          <div class="auro-rx-dato auro-rx-cedula"><span>Cédula</span><b>${safe(cedula)}</b></div>
+          <div class="auro-rx-dato auro-rx-edad"><span>Edad</span><b>${safe(edad)}</b></div>
+          <div class="auro-rx-dato auro-rx-fecha"><span>Fecha de emisión</span><b>${safe(fechaVisual(r.fecha))}</b></div>
+          <div class="auro-rx-dato auro-rx-numero"><span>N.º de receta</span><b>${safe(idReceta === '—' ? '—' : idReceta)}</b></div>
+          <div class="auro-rx-dato auro-rx-diagnostico"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>`;
 
     return `
       <div class="auro-receta-documento ${esAdministrativo ? 'modo-administrativo' : 'modo-paciente'}">
@@ -2043,20 +2043,34 @@
           .auro-receta-logo-wrap{width:76px;height:76px;display:grid;place-items:center;border:1px solid #ead5e2;border-radius:16px;background:#fff;overflow:hidden}.auro-receta-logo-wrap:empty,.auro-receta-logo-wrap.sin-logo{display:none}.auro-receta-logo{max-width:100%;max-height:100%;object-fit:contain;display:block}
           .auro-receta-brand h2{margin:0;color:#8b1e5a;font-weight:950;letter-spacing:.04em;font-size:22px;line-height:1.05}.auro-receta-brand small{color:#6b7280;font-weight:750;font-size:11px;line-height:1.3;display:block;margin-top:3px}
           .auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
-          .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;word-break:break-word}.auro-paciente-cedula{display:block;color:#475569;font-size:9.8px;font-weight:800;line-height:1.15;margin-top:2px}
+          .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;overflow-wrap:anywhere;word-break:normal}
+          .modo-paciente .auro-receta-grid{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr) minmax(0,.72fr) minmax(0,1fr) minmax(0,1.35fr) minmax(0,1.9fr);align-items:stretch}
+          .modo-paciente .auro-receta-grid .auro-rx-dato{display:flex;flex-direction:column;justify-content:flex-start;min-height:52px}
+          .modo-paciente .auro-receta-grid .auro-rx-paciente b,
+          .modo-paciente .auro-receta-grid .auro-rx-diagnostico b{white-space:normal;overflow-wrap:anywhere}
           .auro-receta-section{margin-top:9px;break-inside:avoid}.auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950}.auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;white-space:normal;word-break:break-word;background:#fff;box-shadow:0 4px 14px rgba(139,30,90,.035)}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
           .auro-receta-footer{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:24px;align-items:end}.auro-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}.auro-firma{text-align:center;padding-top:20px;font-size:11px}.auro-linea{border-top:1px solid #111827;margin-bottom:5px}.badge-auro{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:900;margin-top:3px}.badge-ok{background:#dcfce7;color:#166534}.badge-danger{background:#fee2e2;color:#991b1b}
           .auro-admin-alert{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:7px 9px;margin-bottom:9px;font-weight:800;font-size:11px}
           @page{size:A4;margin:10mm}@media print{.no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-table-wrap,.auro-rx-table tr{break-inside:avoid;page-break-inside:avoid}.auro-receta-grid{gap:4px;padding:6px}.auro-receta-grid div{padding:4px 6px}.auro-rx-table{font-size:9.4px}.auro-rx-table th{font-size:8.3px;padding:4px}.auro-rx-table td{padding:4px 5px}.auro-rx-col-med strong{font-size:9.8px}.auro-receta-footer{margin-top:18px}.auro-admin-alert{display:none}}
-          @media(max-width:700px){.auro-receta-header{grid-template-columns:auto 1fr}.auro-receta-title{grid-column:1/-1;text-align:left}.auro-receta-grid{grid-template-columns:1fr 1fr}.auro-receta-footer{grid-template-columns:1fr}.auro-rx-table-wrap{overflow-x:auto}.auro-rx-table{min-width:720px}}
+          @media(max-width:700px){
+            .auro-receta-header{grid-template-columns:auto 1fr}
+            .auro-receta-title{grid-column:1/-1;text-align:left}
+            .auro-receta-grid{grid-template-columns:1fr 1fr}
+            .modo-paciente .auro-receta-grid{grid-template-columns:1fr 1fr}
+            .modo-paciente .auro-rx-paciente,
+            .modo-paciente .auro-rx-diagnostico{grid-column:1/-1}
+            .auro-receta-footer{grid-template-columns:1fr}
+            .auro-rx-table-wrap{overflow-x:auto}
+            .auro-rx-table{min-width:720px}
+          }
         </style>
         ${esAdministrativo ? '<div class="auro-admin-alert">Vista administrativa interna: contiene identificadores y datos de auditoría. No entregar al paciente.</div>' : ''}
         <div class="auro-receta-header">
           <div class="auro-receta-logo-wrap">${logo}</div>
-          <div class="auro-receta-brand"><h2>${safe(centro)}</h2>${cfg.subtitulo ? `<small>${safe(cfg.subtitulo)}</small>` : ''}<small>${safe(medico.nombre)}</small>${medico.especialidad ? `<small>${safe(medico.especialidad)}</small>` : ''}</div>
-          <div class="auro-receta-title"><b>RECETA MÉDICA</b><small>Fecha: ${safe(fechaVisual(r.fecha))}</small>${esAdministrativo ? `<span class="badge-auro ${estadoClass}">${safe(r.estado || 'Emitida')}</span>` : ''}</div>
+          <div class="auro-receta-brand"><h2>${safe(centro)}</h2>${cfg.subtitulo ? `<small>${safe(cfg.subtitulo)}</small>` : ''}${medico.especialidad ? `<small>${safe(medico.especialidad)}</small>` : ''}</div>
+          <div class="auro-receta-title"><b>RECETA MÉDICA</b>${esAdministrativo ? `<span class="badge-auro ${estadoClass}">${safe(r.estado || 'Emitida')}</span>` : ''}</div>
         </div>
         <div class="auro-receta-grid">${datosPaciente}</div>
         <div class="auro-receta-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box">${auroRecetaMedicamentosPacienteHTML(r.medicamento)}</div></div>
@@ -2197,7 +2211,7 @@
         }
 
         .auro-media-receta .auro-receta-grid{
-          grid-template-columns:repeat(4,minmax(0,1fr))!important;
+          grid-template-columns:minmax(0,1.55fr) minmax(0,1fr) minmax(0,.72fr) minmax(0,1fr) minmax(0,1.35fr) minmax(0,1.9fr)!important;
           gap:3px!important;
           padding:4px!important;
           margin:0 0 5px!important;
@@ -3683,4 +3697,18 @@
    - Si edad no existe, la calcula desde fecha_nacimiento con zona Ecuador.
    - No modifica medicamentos, diagnóstico, Plan, guardado, JSON,
      historial, Google Sheets, Apps Script, IDs, botones ni eventos.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.5 DEFINITIVA - ENCABEZADO PROFESIONAL
+   - Seis tarjetas independientes: Paciente, Cédula, Edad,
+     Fecha de emisión, N.º de receta y Diagnóstico.
+   - Se elimina la tarjeta CIE-10 del encabezado del paciente
+     para evitar duplicar el código ya incluido en Diagnóstico.
+   - Se elimina el nombre del médico del encabezado superior;
+     permanece en la firma inferior.
+   - Se elimina la fecha duplicada bajo "RECETA MÉDICA".
+   - Mantiene original/copia A4, medicamentos, firma, guardado,
+     Plan, Google Sheets, Apps Script, IDs y eventos.
+   - Responsive: escritorio, Android, iPhone y iPad.
 ===================================================== */
