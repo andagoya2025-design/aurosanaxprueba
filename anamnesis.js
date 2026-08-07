@@ -2,7 +2,7 @@
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
 Versión base: 3.6.3
-Parche actual: 3.6.18 - Paso 3: candado de transición de contexto + invalidación segura previa
+Parche actual: 3.6.19 - Guardado de atención anterior solo cuando existe cambio clínico real
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -15,7 +15,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.18';
+  const VERSION = '3.6.19';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2745,14 +2745,29 @@ Función:
     state.contextoEpoch += 1;
 
     /*
-      Captura INMUTABLE de la atención anterior antes de cambiar de paciente.
-      Nunca vuelve a consultar el contexto global para decidir su id_atencion.
+      AUROSANAX 3.6.19 - GUARDADO QUIRÚRGICO POR CAMBIO REAL
+      ------------------------------------------------------
+      Conserva la última fotografía conocida ANTES de capturar la pantalla.
+      Así podemos distinguir entre:
+      - navegar sin modificar: no hace POST y no cambia actualizado_en;
+      - modificar y cambiar de atención antes del autosave: sí guarda.
+      No modifica Index, Atenciones, backend, IDs ni estructura de datos.
     */
+    const dataAnteriorBase = anterior
+      ? auroClonarAnamnesis(state.cacheAtenciones[anterior] || null)
+      : null;
+
     let dataAnterior = null;
+    let anteriorCambioReal = false;
+
     if (anterior) {
       dataAnterior = auroCapturarAnamnesisActual(anterior);
       dataAnterior.id_atencion = anterior;
 
+      anteriorCambioReal = !dataAnteriorBase ||
+        auroFirmaAnamnesis(dataAnteriorBase) !== auroFirmaAnamnesis(dataAnterior);
+
+      /* El respaldo local sí se refresca siempre; no implica escritura remota. */
       state.cacheAtenciones[anterior] = auroClonarAnamnesis(dataAnterior);
       const cacheLocal = auroLeerCacheAnamnesisLocal();
       cacheLocal[anterior] = auroClonarAnamnesis(dataAnterior);
@@ -2774,8 +2789,15 @@ Función:
 
     limpiarAnamnesisTemporal();
 
-    /* Guarda la fotografía anterior en segundo plano, ya sellada con su ID. */
-    if (dataAnterior && auroTieneContenidoAnamnesis(dataAnterior)) {
+    /*
+      Solo existe escritura remota de la atención anterior cuando la firma
+      clínica cambió. Navegar entre consultas sin editar ya no toca Sheets.
+    */
+    if (
+      dataAnterior &&
+      anteriorCambioReal &&
+      auroTieneContenidoAnamnesis(dataAnterior)
+    ) {
       auroGuardarDatosAnamnesisConfirmados(
         dataAnterior,
         { mostrarEstado: false }
