@@ -2,7 +2,7 @@
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
 Versión base: 3.6.3
-Parche actual: 3.6.17 - Paso 2: invalidación segura al limpiar atención + aislamiento previo conservado
+Parche actual: 3.6.18 - Paso 3: candado de transición de contexto + invalidación segura previa
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -15,7 +15,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.17';
+  const VERSION = '3.6.18';
   const state = {
     inicializado: false,
     cargando: false,
@@ -34,7 +34,8 @@ Función:
     contextoAtencion: {},
     guardadosRemotosEnCurso: {},
     guardadosRemotosPendientes: {},
-    contextoEpoch: 0
+    contextoEpoch: 0,
+    contextoInvalidado: false
   };
 
   const $ = id => document.getElementById(id);
@@ -2103,6 +2104,10 @@ Función:
   }
 
   function auroObtenerIdAtencionAnamnesis() {
+    /* Mientras Atenciones está cambiando de paciente, ninguna fuente global
+       secundaria puede reinyectar la atención anterior. */
+    if (state.contextoInvalidado) return '';
+
     const candidatos = [
       state.idAtencionActual,
       window.auroAtencionSeleccionadaId,
@@ -2144,6 +2149,8 @@ Función:
   }
 
   function auroRefrescarContextoAnamnesis() {
+    if (state.contextoInvalidado) return '';
+
     let contexto = null;
 
     try {
@@ -2378,6 +2385,8 @@ Función:
   }
 
   function guardarAnamnesisTemporal(idAtencionForzado = '') {
+    if (state.contextoInvalidado) return null;
+
     const idAtencion = texto(idAtencionForzado || auroObtenerIdAtencionAnamnesis());
     if (!idAtencion || state.restaurandoAtencion) return null;
 
@@ -2721,6 +2730,9 @@ Función:
     idAtencion = texto(idAtencion || detalle.id_atencion);
     if (!idAtencion) return false;
 
+    /* Solo un evento válido de selección/inicio levanta el candado de transición. */
+    state.contextoInvalidado = false;
+
     const anterior = texto(state.idAtencionActual);
     if (anterior === idAtencion) {
       auroSincronizarCabeceraAtencion(detalle);
@@ -2790,7 +2802,7 @@ Función:
   }
 
   function auroProgramarGuardadoAnamnesis() {
-    if (state.restaurandoAtencion) return;
+    if (state.restaurandoAtencion || state.contextoInvalidado) return;
 
     const idProgramado = texto(state.idAtencionActual || auroObtenerIdAtencionAnamnesis());
     if (!idProgramado) return;
@@ -2830,8 +2842,8 @@ Función:
   }
 
   /* ============================================================
-     AUROSANAX ANAMNESIS v3.6.17 - PASO 2
-     INVALIDACIÓN QUIRÚRGICA AL LIMPIAR LA ATENCIÓN
+     AUROSANAX ANAMNESIS v3.6.18 - PASO 3
+     CANDADO DE TRANSICIÓN AL LIMPIAR LA ATENCIÓN
      ------------------------------------------------------------
      Objetivo:
      - Cancelar cualquier autosave pendiente de la atención anterior.
@@ -2845,6 +2857,7 @@ Función:
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = null;
     state.contextoEpoch += 1;
+    state.contextoInvalidado = true;
 
     state.idAtencionActual = '';
     state.idPacienteActual = '';
