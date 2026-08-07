@@ -2,7 +2,7 @@
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
 Versión base: 3.6.3
-Parche actual: 3.6.16 - aislamiento de atención + captura manual JSON + IDs obstétricos exclusivos
+Parche actual: 3.6.17 - Paso 2: invalidación segura al limpiar atención + aislamiento previo conservado
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -15,7 +15,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.16';
+  const VERSION = '3.6.17';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2829,6 +2829,66 @@ Función:
     }, 700);
   }
 
+  /* ============================================================
+     AUROSANAX ANAMNESIS v3.6.17 - PASO 2
+     INVALIDACIÓN QUIRÚRGICA AL LIMPIAR LA ATENCIÓN
+     ------------------------------------------------------------
+     Objetivo:
+     - Cancelar cualquier autosave pendiente de la atención anterior.
+     - Invalidar inmediatamente IDs internos y el alias global propio.
+     - Limpiar únicamente el contenido temporal visible de Anamnesis.
+     - Esperar a aurosanax:atencion-seleccionada / iniciada para cargar
+       el nuevo contexto.
+     - No guarda, no consulta Sheets y no modifica otros módulos.
+  ============================================================ */
+  function auroInvalidarAnamnesisPorAtencionLimpiada() {
+    clearTimeout(state.guardadoPendiente);
+    state.guardadoPendiente = null;
+    state.contextoEpoch += 1;
+
+    state.idAtencionActual = '';
+    state.idPacienteActual = '';
+    state.idHistoriaActual = '';
+    state.contextoAtencion = {};
+
+    /* Este alias es escrito por Anamnesis; al limpiar la atención no debe
+       quedar disponible como fuente residual para un guardado posterior. */
+    window.auroAtencionSeleccionadaId = '';
+
+    state.restaurandoAtencion = true;
+    try {
+      const motivo = $('hcMotivoConsulta');
+      const enfermedad = $('hcEnfermedadActual');
+
+      if (motivo) motivo.value = '';
+      if (enfermedad) enfermedad.value = '';
+
+      const selector = $('auroPlantillaAnamnesisSelect');
+      if (selector) selector.value = '';
+      seleccionarPlantilla('', false);
+
+      $('hc_anamnesis')
+        ?.querySelectorAll('input, select, textarea')
+        .forEach(control => {
+          if (control.id === 'auroPlantillaAnamnesisSelect') return;
+          if (control.type === 'button' || control.type === 'submit') return;
+          if (control.dataset?.auroContextoAtencion === 'true') return;
+
+          if (control.type === 'checkbox' || control.type === 'radio') {
+            control.checked = false;
+          } else {
+            control.value = '';
+          }
+        });
+
+      state.respuestas = {};
+      state.narrativa = '';
+      $('auroDynamicAnamnesisPanel')?.classList.remove('show');
+    } finally {
+      state.restaurandoAtencion = false;
+    }
+  }
+
   function auroInstalarSincronizacionAtencion() {
     if (window.__auroAnamnesisEventosAtencionInstalados) return;
     window.__auroAnamnesisEventosAtencionInstalados = true;
@@ -2840,6 +2900,7 @@ Función:
 
     window.addEventListener('aurosanax:atencion-iniciada', manejar);
     window.addEventListener('aurosanax:atencion-seleccionada', manejar);
+    window.addEventListener('aurosanax:atencion-limpiada', auroInvalidarAnamnesisPorAtencionLimpiada);
 
     const sincronizarContexto = evento => {
       auroSincronizarCabeceraAtencion(evento?.detail || {});
