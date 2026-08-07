@@ -15,7 +15,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.16';
+  const VERSION = '3.6.17';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2600,7 +2600,7 @@ Función:
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = null;
 
-    const idAtencion = await auroEsperarIdAtencionAnamnesis();
+    const idAtencion = texto(state.idAtencionActual);
     if (!idAtencion) {
       return {
         success: false,
@@ -2608,7 +2608,16 @@ Función:
       };
     }
 
-    const data = guardarAnamnesisTemporal();
+    if (!auroContextoMaestroCoincideAnamnesis(
+      idAtencion,
+      texto(state.idPacienteActual),
+      texto(state.idHistoriaActual)
+    )) {
+      estado('Guardado bloqueado: la atención visible no coincide con el contexto maestro.', 'warn');
+      return { success: false, bloqueado_contexto: true, id_atencion: idAtencion };
+    }
+
+    const data = guardarAnamnesisTemporal(idAtencion);
     if (!data) return { success: false, message: 'No existe una atención activa.' };
 
     data.id_atencion = idAtencion;
@@ -2719,7 +2728,10 @@ Función:
 
   async function cambiarAnamnesisPorAtencion(idAtencion, detalle = {}) {
     idAtencion = texto(idAtencion || detalle.id_atencion);
-    if (!idAtencion) return false;
+    if (!idAtencion) {
+      auroInvalidarAnamnesisPorCambioAtencion(detalle);
+      return false;
+    }
 
     const anterior = texto(state.idAtencionActual);
     if (anterior === idAtencion) {
@@ -2727,54 +2739,31 @@ Función:
       return true;
     }
 
-    /* Cancela cualquier autosave que fue programado para el contexto anterior. */
+    /*
+      AUROSANAX 3.6.17 - CAMBIO DE ATENCIÓN FAIL-CLOSED
+      Al cambiar de consulta NO se vuelve a guardar el DOM anterior.
+      El contenido ya se respalda localmente en cada edición y el remoto
+      solo se permite cuando el contexto maestro coincide exactamente.
+    */
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = null;
     state.contextoEpoch += 1;
 
-    /*
-      Captura INMUTABLE de la atención anterior antes de cambiar de paciente.
-      Nunca vuelve a consultar el contexto global para decidir su id_atencion.
-    */
-    let dataAnterior = null;
-    if (anterior) {
-      dataAnterior = auroCapturarAnamnesisActual(anterior);
-      dataAnterior.id_atencion = anterior;
-
-      state.cacheAtenciones[anterior] = auroClonarAnamnesis(dataAnterior);
-      const cacheLocal = auroLeerCacheAnamnesisLocal();
-      cacheLocal[anterior] = auroClonarAnamnesis(dataAnterior);
-      auroGuardarCacheAnamnesisLocal(cacheLocal);
-    }
-
-    /* El nuevo contexto se fija inmediatamente; no espera al servidor anterior. */
     state.idAtencionActual = idAtencion;
     state.idPacienteActual = texto(detalle.id_paciente || '');
     state.idHistoriaActual = texto(detalle.id_historia || '');
     window.auroAtencionSeleccionadaId = idAtencion;
 
-    auroLimpiarCabeceraAtencion();
     state.contextoAtencion = auroExtraerContextoAtencion({
       ...detalle,
       id_atencion: idAtencion
     });
-    auroSincronizarCabeceraAtencion(detalle);
 
     limpiarAnamnesisTemporal();
-
-    /* Guarda la fotografía anterior en segundo plano, ya sellada con su ID. */
-    if (dataAnterior && auroTieneContenidoAnamnesis(dataAnterior)) {
-      auroGuardarDatosAnamnesisConfirmados(
-        dataAnterior,
-        { mostrarEstado: false }
-      ).catch(error => {
-        console.warn('AUROSANAX Anamnesis: no se confirmó el guardado de la atención anterior.', error);
-      });
-    }
+    auroSincronizarCabeceraAtencion(detalle);
 
     const cargada = await cargarAnamnesisTemporal(idAtencion);
 
-    /* Si el usuario cambió otra vez mientras cargaba, no aplica contexto obsoleto. */
     if (texto(state.idAtencionActual) !== idAtencion) return false;
 
     auroSincronizarCabeceraAtencion(detalle);
@@ -2792,21 +2781,26 @@ Función:
   function auroProgramarGuardadoAnamnesis() {
     if (state.restaurandoAtencion) return;
 
-    const idProgramado = texto(state.idAtencionActual || auroObtenerIdAtencionAnamnesis());
+    const idProgramado = texto(state.idAtencionActual);
     if (!idProgramado) return;
 
     const pacienteProgramado = texto(state.idPacienteActual);
     const historiaProgramada = texto(state.idHistoriaActual);
     const epochProgramado = state.contextoEpoch;
 
+    /*
+      Respaldo local inmediato: evita perder los últimos cambios si el usuario
+      cambia de consulta antes de que venza el debounce remoto.
+    */
+    const respaldoLocal = guardarAnamnesisTemporal(idProgramado);
+    if (respaldoLocal) {
+      respaldoLocal.id_atencion = idProgramado;
+    }
+
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = setTimeout(async () => {
       state.guardadoPendiente = null;
 
-      /*
-        Candado principal: un autosave pertenece para siempre a la atención
-        en la que fue programado. Si el usuario ya cambió, se descarta.
-      */
       if (
         state.restaurandoAtencion ||
         state.contextoEpoch !== epochProgramado ||
@@ -2817,10 +2811,28 @@ Función:
         return;
       }
 
+      /*
+        CANDADO DEFINITIVO: el estado interno no basta.
+        Antes de tocar Sheets se exige coincidencia con la fuente maestra
+        de Atenciones. Si hay duda o el evento llegó tarde, NO se guarda.
+      */
+      if (!auroContextoMaestroCoincideAnamnesis(
+        idProgramado,
+        pacienteProgramado,
+        historiaProgramada
+      )) {
+        console.warn('AUROSANAX Anamnesis: autosave bloqueado por contexto maestro no coincidente.', {
+          idProgramado,
+          pacienteProgramado,
+          historiaProgramada
+        });
+        return;
+      }
+
       const data = auroCapturarAnamnesisActual(idProgramado);
       if (!data || texto(data.id_atencion) !== idProgramado) return;
 
-      if (data && auroTieneContenidoAnamnesis(data)) {
+      if (auroTieneContenidoAnamnesis(data)) {
         await auroGuardarDatosAnamnesisConfirmados(
           data,
           { mostrarEstado: false }
@@ -2840,9 +2852,15 @@ Función:
 
     window.addEventListener('aurosanax:atencion-iniciada', manejar);
     window.addEventListener('aurosanax:atencion-seleccionada', manejar);
+    window.addEventListener('aurosanax:atencion-limpiada', evento => {
+      auroInvalidarAnamnesisPorCambioAtencion(evento?.detail || {});
+    });
 
     const sincronizarContexto = evento => {
-      auroSincronizarCabeceraAtencion(evento?.detail || {});
+      const detalle = evento?.detail || {};
+      const idDetalle = texto(detalle.id_atencion || detalle.idAtencion || '');
+      if (idDetalle && state.idAtencionActual && idDetalle !== state.idAtencionActual) return;
+      auroSincronizarCabeceraAtencion(detalle);
     };
 
     window.addEventListener('aurosanax:atencion-actualizada', sincronizarContexto);
@@ -2933,12 +2951,14 @@ Función:
     cargarAnamnesisTemporal,
     limpiarAnamnesisTemporal,
     guardarAnamnesisPorAtencion,
-    sincronizarCabeceraAtencion: auroSincronizarCabeceraAtencion
+    sincronizarCabeceraAtencion: auroSincronizarCabeceraAtencion,
+    invalidarPorCambioAtencion: auroInvalidarAnamnesisPorCambioAtencion
   };
 
   window.inicializarAnamnesis = inicializar;
   window.auroObtenerDatosAnamnesis = obtenerDatosAnamnesis;
   window.cambiarAnamnesisPorAtencion = cambiarAnamnesisPorAtencion;
+  window.auroInvalidarAnamnesisPorCambioAtencion = auroInvalidarAnamnesisPorCambioAtencion;
   window.guardarAnamnesisPorAtencion = guardarAnamnesisPorAtencion;
 
   if (!inicializar()) {
