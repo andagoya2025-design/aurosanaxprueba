@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.16';
+  const VERSION = '3.6.17';
   const state = {
     inicializado: false,
     cargando: false,
@@ -57,7 +57,14 @@ Función:
     */
     contextoEpoch: 0,
     contextoInvalidado: false,
-    solicitudCarga: 0
+    solicitudCarga: 0,
+
+    /*
+      3.6.17:
+      Firma clínica confirmada por atención. El autosave no vuelve a enviar
+      un registro si un evento programático no cambió realmente su contenido.
+    */
+    firmaPersistidaPorAtencion: {}
   };
 
   const $ = id => document.getElementById(id);
@@ -2219,7 +2226,13 @@ Función:
       Si el núcleo ya expone un id_atencion, debe ser exactamente el mismo.
       No se permite que un estado viejo de Anamnesis "reconstruya" el contexto.
     */
-    if (idMaestro && idMaestro !== idAtencion) return false;
+    /*
+      3.6.17 - CANDADO MAESTRO:
+      Para autorizar un guardado remoto, Atenciones debe confirmar
+      explícitamente la misma id_atencion. Un contexto maestro vacío ya no
+      permite reutilizar silenciosamente el estado interno de Anamnesis.
+    */
+    if (!idMaestro || idMaestro !== idAtencion) return false;
     if (pacienteToken && pacienteMaestro && pacienteToken !== pacienteMaestro) return false;
     if (historiaToken && historiaMaestra && historiaToken !== historiaMaestra) return false;
 
@@ -2662,6 +2675,7 @@ Función:
 
       if (confirmado) {
         state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(data);
+        state.firmaPersistidaPorAtencion[idAtencion] = auroFirmaAnamnesis(data);
 
         const cacheLocal = auroLeerCacheAnamnesisLocal();
         cacheLocal[idAtencion] = auroClonarAnamnesis(data);
@@ -2815,7 +2829,10 @@ Función:
 
     if (remoto) data = remoto;
 
-    if (!data || !auroTieneContenidoAnamnesis(data)) return false;
+    if (!data || !auroTieneContenidoAnamnesis(data)) {
+      state.firmaPersistidaPorAtencion[idAtencion] = '';
+      return false;
+    }
 
     state.restaurandoAtencion = true;
 
@@ -2874,6 +2891,7 @@ Función:
       }
 
       state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(data);
+      state.firmaPersistidaPorAtencion[idAtencion] = auroFirmaAnamnesis(data);
 
       const cacheLocal = auroLeerCacheAnamnesisLocal();
       cacheLocal[idAtencion] = auroClonarAnamnesis(data);
@@ -2980,6 +2998,7 @@ Función:
 
     if (!cargada) {
       state.cambiosUsuarioPorAtencion[idAtencion] = false;
+      state.firmaPersistidaPorAtencion[idAtencion] = '';
     }
 
     auroSincronizarCabeceraAtencion(detalle);
@@ -2999,6 +3018,12 @@ Función:
 
     const objetivo = evento?.target || null;
     if (objetivo?.dataset?.auroAsignandoContexto === 'true') return;
+
+    /*
+      Fecha, médico, especialidad y tipo son contexto de la atención.
+      Su sincronización no constituye una edición clínica de Anamnesis.
+    */
+    if (objetivo?.dataset?.auroCabeceraContexto === 'true') return;
 
     const token = auroCrearTokenContextoAnamnesis();
     const idAtencionActual = texto(token.id_atencion);
@@ -3022,6 +3047,21 @@ Función:
       data.id_atencion = idAtencionActual;
       data.id_paciente = texto(token.id_paciente);
       data.id_historia = texto(token.id_historia);
+
+      /*
+        3.6.17:
+        Un input/change programático que no alteró realmente el contenido
+        clínico no genera POST ni modifica actualizado_en.
+      */
+      const firmaActual = auroFirmaAnamnesis(data);
+      const firmaPersistida = texto(
+        state.firmaPersistidaPorAtencion[idAtencionActual]
+      );
+
+      if (firmaPersistida && firmaActual === firmaPersistida) {
+        state.cambiosUsuarioPorAtencion[idAtencionActual] = false;
+        return;
+      }
 
       if (!auroTokenContextoValido(token, true)) return;
 
@@ -3065,6 +3105,12 @@ Función:
         delete state.guardadosRemotosPendientes[anterior];
         state.cambiosUsuarioPorAtencion[anterior] = false;
       }
+
+      /*
+        También se eliminan pendientes huérfanos de cualquier atención.
+        Un cambio de contexto no debe permitir que una cola antigua sobreviva.
+      */
+      state.guardadosRemotosPendientes = {};
 
       state.idAtencionActual = '';
       state.idPacienteActual = '';
@@ -3154,13 +3200,22 @@ Función:
     limpiarAnamnesisTemporal,
     guardarAnamnesisPorAtencion,
     sincronizarCabeceraAtencion: auroSincronizarCabeceraAtencion,
-    obtenerContextoSeguro: () => ({
-      id_atencion: texto(state.idAtencionActual),
-      id_paciente: texto(state.idPacienteActual),
-      id_historia: texto(state.idHistoriaActual),
-      epoch: Number(state.contextoEpoch || 0),
-      invalidado: !!state.contextoInvalidado
-    })
+    obtenerContextoSeguro: () => {
+      const maestro = auroLeerContextoMaestroAnamnesis();
+      return {
+        id_atencion: texto(state.idAtencionActual),
+        id_paciente: texto(state.idPacienteActual),
+        id_historia: texto(state.idHistoriaActual),
+        epoch: Number(state.contextoEpoch || 0),
+        invalidado: !!state.contextoInvalidado,
+        id_atencion_maestra: texto(
+          maestro?.id_atencion || maestro?.idAtencion || maestro?.atencion_id
+        ),
+        firma_persistida: texto(
+          state.firmaPersistidaPorAtencion[state.idAtencionActual]
+        )
+      };
+    }
   };
 
   window.inicializarAnamnesis = inicializar;
