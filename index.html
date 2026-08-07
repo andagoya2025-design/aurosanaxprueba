@@ -6223,25 +6223,442 @@ function auroHistoriaLeerActualizacionConsulta(idAtencion, idModulo){
   return mapa[auroHistoriaClaveActualizacion(id, modulo)] || null;
 }
 
-function auroHistoriaRefrescarEstadoConsultaActiva(idModulo){
+/* =====================================================
+   AUROSANAX INDEX 49 - LECTOR CENTRAL REAL DE ESTADO
+   -----------------------------------------------------
+   OBJETIVO EXCLUSIVO:
+   - Corregir el mensaje azul inferior.
+   - SOLO LECTURA.
+   - NO guarda, NO edita, NO hace POST.
+   - NO toca Atenciones, Anamnesis, Plan, Examen, Diagnóstico,
+     Recetas ni sus mecanismos de guardado.
+   - Cada módulo conserva su propia autoridad clínica.
+===================================================== */
+
+window.__auroEstadoRealModuloToken = Number(window.__auroEstadoRealModuloToken || 0);
+
+function auroHistoriaFormatearFechaReal(valor){
+  const raw = String(valor || '').trim();
+  if(!raw) return '';
+
+  /*
+    Fechas históricas del ERP pueden venir como:
+    - yyyy-mm-dd hh:mm:ss
+    - ISO
+    - dd/mm/yyyy hh:mm
+    Se evita reinterpretar agresivamente para no introducir desfases horarios.
+  */
+  const isoLocal = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/
+  );
+
+  if(isoLocal){
+    return (
+      isoLocal[3] + '/' + isoLocal[2] + '/' + isoLocal[1] + ' ' +
+      String(isoLocal[4]).padStart(2,'0') + ':' + isoLocal[5] +
+      (isoLocal[6] ? ':' + isoLocal[6] : '')
+    );
+  }
+
+  const fecha = new Date(raw);
+  if(!Number.isNaN(fecha.getTime()) && raw.includes('T')){
+    try{
+      return fecha.toLocaleString('es-EC', {
+        year:'numeric',
+        month:'2-digit',
+        day:'2-digit',
+        hour:'2-digit',
+        minute:'2-digit',
+        second:'2-digit',
+        hour12:false
+      });
+    }catch(e){}
+  }
+
+  return raw;
+}
+
+function auroHistoriaFechaRegistro(registro){
+  if(!registro || typeof registro !== 'object') return '';
+  return String(
+    registro.actualizado_en ||
+    registro.fecha_actualizacion ||
+    registro.updated_at ||
+    registro.creado_en ||
+    registro.fecha_creacion ||
+    registro.created_at ||
+    ''
+  ).trim();
+}
+
+function auroHistoriaRegistroHistoriaActual(){
+  try{
+    if(window.historiaActual && typeof window.historiaActual === 'object'){
+      return window.historiaActual;
+    }
+  }catch(e){}
+
+  try{
+    if(window.currentHistoria && typeof window.currentHistoria === 'object'){
+      return window.currentHistoria;
+    }
+  }catch(e){}
+
+  try{
+    const idHistoria = String(
+      (typeof editingHistoryId !== 'undefined' ? editingHistoryId : '') ||
+      document.getElementById('hcIdHistoria')?.value ||
+      ''
+    ).trim();
+
+    if(idHistoria && Array.isArray(window.historiasClinicas)){
+      return window.historiasClinicas.find(function(h){
+        return String(h?.id_historia || '').trim() === idHistoria;
+      }) || null;
+    }
+  }catch(e){}
+
+  return null;
+}
+
+function auroHistoriaEstadoDatosGenerales(){
+  const historia = auroHistoriaRegistroHistoriaActual();
+  if(!historia || !String(historia.id_historia || '').trim()){
+    return {
+      existe:false,
+      fecha:'',
+      fuente:'historia_clinica'
+    };
+  }
+
+  return {
+    existe:true,
+    fecha:auroHistoriaFechaRegistro(historia),
+    fuente:'historia_clinica'
+  };
+}
+
+async function auroHistoriaGETSoloLectura(accion, params){
+  try{
+    if(typeof API_URL === 'undefined' || !API_URL) return null;
+
+    const q = new URLSearchParams({
+      accion:String(accion || ''),
+      _:String(Date.now())
+    });
+
+    Object.keys(params || {}).forEach(function(k){
+      const v = params[k];
+      if(v !== undefined && v !== null && String(v).trim() !== ''){
+        q.append(k, String(v));
+      }
+    });
+
+    const res = await fetch(API_URL + '?' + q.toString(), {
+      method:'GET',
+      cache:'no-store'
+    });
+
+    return await res.json();
+  }catch(error){
+    console.warn(
+      'AUROSANAX ESTADO REAL: lectura no disponible para ' + accion + '.',
+      error
+    );
+    return null;
+  }
+}
+
+async function auroHistoriaEstadoAnamnesis(idAtencion){
+  /*
+    Fuente real: anamnesis_atenciones por id_atencion.
+    Es una consulta GET; no utiliza ninguna función de guardado.
+  */
+  const respuesta = await auroHistoriaGETSoloLectura(
+    'buscarAnamnesisPorAtencion',
+    {id_atencion:idAtencion}
+  );
+
+  const registro =
+    respuesta?.data ||
+    respuesta?.anamnesis ||
+    (
+      respuesta &&
+      !Array.isArray(respuesta) &&
+      String(respuesta.id_atencion || '').trim()
+        ? respuesta
+        : null
+    );
+
+  if(!registro || String(registro.id_atencion || '').trim() !== idAtencion){
+    return {existe:false, fecha:'', fuente:'anamnesis_atenciones'};
+  }
+
+  return {
+    existe:true,
+    fecha:auroHistoriaFechaRegistro(registro),
+    fuente:'anamnesis_atenciones'
+  };
+}
+
+async function auroHistoriaEstadoExamen(idAtencion){
+  /*
+    Primero usa el registro real ya cargado por examenfisico.js.
+    Si no está en memoria y existe su función pública de búsqueda,
+    hace únicamente esa lectura.
+  */
+  try{
+    const registroMemoria =
+      window.examenFisicoState?.examenesSheets?.[idAtencion] || null;
+
+    if(
+      registroMemoria &&
+      String(registroMemoria.id_atencion || idAtencion).trim() === idAtencion &&
+      String(registroMemoria.id_examen || '').trim()
+    ){
+      return {
+        existe:true,
+        fecha:auroHistoriaFechaRegistro(registroMemoria),
+        fuente:'examenes_fisicos'
+      };
+    }
+  }catch(e){}
+
+  try{
+    if(typeof window.auroBuscarExamenFisicoPorAtencion === 'function'){
+      const registro = await window.auroBuscarExamenFisicoPorAtencion(idAtencion);
+      if(registro && String(registro.id_examen || '').trim()){
+        return {
+          existe:true,
+          fecha:auroHistoriaFechaRegistro(registro),
+          fuente:'examenes_fisicos'
+        };
+      }
+    }
+  }catch(error){
+    console.warn('AUROSANAX ESTADO REAL: no se pudo leer Examen físico.', error);
+  }
+
+  return {existe:false, fecha:'', fuente:'examenes_fisicos'};
+}
+
+function auroHistoriaEstadoDiagnostico(idAtencion){
+  /*
+    Diagnóstico es especial:
+    solo se considera persistido si existen diagnósticos reales
+    de la atención. Un panel abierto o una fecha de carga NO bastan.
+  */
+  try{
+    const estado =
+      window.auroDiagnosticos &&
+      typeof window.auroDiagnosticos.obtenerEstado === 'function'
+        ? window.auroDiagnosticos.obtenerEstado()
+        : window.auroDiagnosticosState;
+
+    const idEstado = String(estado?.atencionActual || '').trim();
+    const lista = Array.isArray(estado?.diagnosticos)
+      ? estado.diagnosticos
+      : [];
+
+    if(idEstado !== idAtencion || !lista.length){
+      return {existe:false, fecha:'', fuente:'diagnosticos'};
+    }
+
+    const fechas = lista
+      .map(function(dx){ return auroHistoriaFechaRegistro(dx); })
+      .filter(Boolean)
+      .sort();
+
+    return {
+      existe:true,
+      fecha:fechas.length
+        ? fechas[fechas.length - 1]
+        : String(estado?.ultimaActualizacion || '').trim(),
+      fuente:'diagnosticos'
+    };
+  }catch(error){
+    return {existe:false, fecha:'', fuente:'diagnosticos'};
+  }
+}
+
+async function auroHistoriaEstadoPlan(idAtencion){
+  /*
+    Plan conserva su guardado autónomo.
+    Solo se consulta buscarPlanPorAtencion; jamás se llama a guardar Plan.
+  */
+  try{
+    if(typeof window.buscarPlanClinicoPorAtencionDesdeSheets === 'function'){
+      const plan = await window.buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
+      if(plan && String(plan.id_plan || '').trim()){
+        return {
+          existe:true,
+          fecha:auroHistoriaFechaRegistro(plan),
+          fuente:'planes_clinicos'
+        };
+      }
+      return {existe:false, fecha:'', fuente:'planes_clinicos'};
+    }
+  }catch(error){
+    console.warn('AUROSANAX ESTADO REAL: no se pudo leer Plan.', error);
+  }
+
+  return {existe:false, fecha:'', fuente:'planes_clinicos'};
+}
+
+function auroHistoriaEstadoObstetricia(idAtencion){
+  try{
+    const api = window.AurosanaxObstetricia;
+    const registro =
+      api && typeof api.obtenerRegistroActual === 'function'
+        ? api.obtenerRegistroActual()
+        : null;
+
+    if(
+      registro &&
+      String(registro.id_atencion || '').trim() === idAtencion
+    ){
+      return {
+        existe:true,
+        fecha:auroHistoriaFechaRegistro(registro),
+        fuente:'obstetricia'
+      };
+    }
+  }catch(e){}
+
+  return null;
+}
+
+async function auroHistoriaResolverEstadoRealModulo(idAtencion, modulo){
+  const id = String(idAtencion || '').trim();
+  const m = String(modulo || '').trim();
+
+  if(m === 'hc_datos' || m === 'hc_antecedentes'){
+    return auroHistoriaEstadoDatosGenerales();
+  }
+
+  if(!id){
+    return {existe:false, fecha:'', fuente:'sin_atencion'};
+  }
+
+  if(m === 'hc_anamnesis'){
+    return await auroHistoriaEstadoAnamnesis(id);
+  }
+
+  if(m === 'hc_examen'){
+    return await auroHistoriaEstadoExamen(id);
+  }
+
+  if(m === 'hc_diagnostico'){
+    return auroHistoriaEstadoDiagnostico(id);
+  }
+
+  if(m === 'hc_plan'){
+    return await auroHistoriaEstadoPlan(id);
+  }
+
+  if(m === 'hc_obstetricia'){
+    const obstetricia = auroHistoriaEstadoObstetricia(id);
+    if(obstetricia) return obstetricia;
+  }
+
+  /*
+    Para Estética/Documentos u otros módulos que todavía no exponen
+    una fuente persistida pública propia, se conserva el comportamiento
+    anterior como respaldo, sin inventar fechas.
+  */
+  const local = auroHistoriaLeerActualizacionConsulta(id, m);
+  if(local && local.fechaHora){
+    return {
+      existe:true,
+      fecha:String(local.fechaHora || ''),
+      fuente:'estado_visual_legacy'
+    };
+  }
+
+  return {
+    existe:false,
+    fecha:'',
+    fuente:'sin_registro_confirmado'
+  };
+}
+
+async function auroHistoriaRefrescarEstadoConsultaActiva(idModulo){
+  const token = ++window.__auroEstadoRealModuloToken;
   const atn = auroHistoriaAtencionResumen();
   const modulo = String(idModulo || auroHistoriaModuloActivo()).trim() || 'hc_datos';
   const nombreModulo = auroHistoriaNombreModulo(modulo);
 
-  if(!atn || !atn.id){
-    auroHistoriaMostrarEstado(nombreModulo + ': sin consulta activa. Presione Ver en una consulta para trabajar por atención.', '');
+  /*
+    Datos generales y Antecedentes pertenecen a la historia.
+    Una historia recién creada puede existir aun sin atención seleccionada.
+  */
+  if(modulo === 'hc_datos' || modulo === 'hc_antecedentes'){
+    const estadoHistoria = await auroHistoriaResolverEstadoRealModulo('', modulo);
+
+    if(token !== window.__auroEstadoRealModuloToken) return;
+
+    if(estadoHistoria.existe){
+      const fecha = auroHistoriaFormatearFechaReal(estadoHistoria.fecha);
+      auroHistoriaMostrarEstado(
+        nombreModulo +
+        (fecha ? ' · Última actualización: ' + fecha : ' · Historia clínica guardada.'),
+        'ok'
+      );
+    }else{
+      auroHistoriaMostrarEstado(
+        nombreModulo + ' · Historia clínica aún no guardada.',
+        ''
+      );
+    }
     return;
   }
 
-  const item = auroHistoriaLeerActualizacionConsulta(atn.id, modulo);
-  if(item && item.fechaHora){
+  if(!atn || !atn.id){
     auroHistoriaMostrarEstado(
-      nombreModulo + ' · Consulta ' + (atn.consulta || item.consulta || 'activa') + ' · Última actualización: ' + item.fechaHora,
+      nombreModulo +
+      ': sin consulta activa. Presione Ver en una consulta para trabajar por atención.',
+      ''
+    );
+    return;
+  }
+
+  /*
+    Mensaje transitorio únicamente visual mientras se resuelve una lectura GET.
+    Nunca modifica datos ni timestamps.
+  */
+  auroHistoriaMostrarEstado(
+    nombreModulo + ' · Consulta ' + (atn.consulta || 'activa') + ' · Verificando última actualización…',
+    ''
+  );
+
+  const resultado = await auroHistoriaResolverEstadoRealModulo(atn.id, modulo);
+
+  /*
+    Protección contra respuesta tardía:
+    si cambió pestaña o atención durante la lectura, este resultado se descarta.
+  */
+  if(token !== window.__auroEstadoRealModuloToken) return;
+
+  const atnActual = auroHistoriaAtencionResumen();
+  if(String(atnActual?.id || '').trim() !== String(atn.id || '').trim()) return;
+  if(auroHistoriaModuloActivo() !== modulo) return;
+
+  if(resultado && resultado.existe){
+    const fecha = auroHistoriaFormatearFechaReal(resultado.fecha);
+
+    auroHistoriaMostrarEstado(
+      nombreModulo +
+      ' · Consulta ' + (atn.consulta || 'activa') +
+      (fecha
+        ? ' · Última actualización: ' + fecha
+        : ' · Registro guardado en este módulo.'),
       'ok'
     );
   }else{
     auroHistoriaMostrarEstado(
-      nombreModulo + ' · Consulta ' + (atn.consulta || 'activa') + ' · Sin actualización registrada en este módulo.',
+      nombreModulo +
+      ' · Consulta ' + (atn.consulta || 'activa') +
+      ' · Sin actualización registrada en este módulo.',
       ''
     );
   }
@@ -6250,6 +6667,29 @@ function auroHistoriaRefrescarEstadoConsultaActiva(idModulo){
 window.auroHistoriaRefrescarEstadoConsultaActiva = auroHistoriaRefrescarEstadoConsultaActiva;
 window.auroHistoriaGuardarActualizacionConsulta = auroHistoriaGuardarActualizacionConsulta;
 window.auroHistoriaModuloActivo = auroHistoriaModuloActivo;
+window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModulo;
+
+/*
+  Refrescos SOLO VISUALES después de cargas ya existentes.
+  No disparan cargas ni guardados; solo vuelven a leer el estado inferior.
+*/
+(function auroInstalarRefrescoEstadoRealModulos(){
+  if(window.__auroEstadoRealRefrescosInstalados) return;
+  window.__auroEstadoRealRefrescosInstalados = true;
+
+  window.addEventListener('aurosanax:plan-cargado', function(){
+    if(auroHistoriaModuloActivo() === 'hc_plan'){
+      auroHistoriaRefrescarEstadoConsultaActiva('hc_plan');
+    }
+  });
+
+  window.addEventListener('aurosanax:atencion-seleccionada', function(){
+    const modulo = auroHistoriaModuloActivo();
+    setTimeout(function(){
+      auroHistoriaRefrescarEstadoConsultaActiva(modulo);
+    }, 180);
+  });
+})();
 
 function auroHistoriaSetBotonesGuardando(guardando){
   document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(btn => {
