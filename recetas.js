@@ -1622,6 +1622,69 @@
     }
   }
 
+
+  /* =====================================================
+     AUROSANAX RECETAS 3.4 - CÉDULA Y EDAD EN ENCABEZADO
+     Intervención quirúrgica:
+     - Calcula edad cumplida desde fecha_nacimiento si no viene informada.
+     - Formatea la edad como "N años".
+     - Amplía únicamente los alias de identificación del paciente.
+     - No modifica diseño A4, medicamentos, Plan, guardado ni backend.
+  ===================================================== */
+  function auroRecetaCalcularEdadCumplida(fechaNacimiento){
+    const raw = String(fechaNacimiento || '').trim();
+    if(!raw) return '';
+
+    let anio, mes, dia;
+
+    let m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m){
+      anio = Number(m[1]);
+      mes = Number(m[2]);
+      dia = Number(m[3]);
+    }else{
+      m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+      if(!m) return '';
+      dia = Number(m[1]);
+      mes = Number(m[2]);
+      anio = Number(m[3]);
+    }
+
+    if(!anio || !mes || !dia) return '';
+
+    const hoyPartes = new Intl.DateTimeFormat('en-CA', {
+      timeZone:'America/Guayaquil',
+      year:'numeric',
+      month:'2-digit',
+      day:'2-digit'
+    }).formatToParts(new Date()).reduce((acc, p) => {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+
+    const hoyAnio = Number(hoyPartes.year);
+    const hoyMes = Number(hoyPartes.month);
+    const hoyDia = Number(hoyPartes.day);
+
+    let edad = hoyAnio - anio;
+    if(hoyMes < mes || (hoyMes === mes && hoyDia < dia)) edad -= 1;
+
+    return edad >= 0 && edad <= 130 ? String(edad) : '';
+  }
+
+  function auroRecetaFormatearEdad(valor, fechaNacimiento){
+    let edad = String(valor ?? '').trim();
+
+    if(!edad){
+      edad = auroRecetaCalcularEdadCumplida(fechaNacimiento);
+    }
+
+    const numero = edad.match(/\d{1,3}/)?.[0] || '';
+    if(!numero) return '—';
+
+    return `${numero} años`;
+  }
+
   function auroRecetaCompletarPacienteParaImpresion(r){
     const pBase = (r && r.paciente) ? r.paciente : {};
     const pEncontrado = auroRecetaBuscarPacientePorReceta(r) || {};
@@ -1631,17 +1694,42 @@
     const p = Object.assign({}, pEncontrado, pBase);
 
     p.nombre = pBase.nombre || r?.paciente_nombre || nombreCompletoEncontrado || 'Paciente no seleccionado';
-    p.cedula = pBase.cedula || r?.paciente_cedula || pEncontrado.cedula || pEncontrado.numero_documento || '—';
+    p.cedula =
+      pBase.cedula ||
+      pBase.numero_documento ||
+      pBase.documento ||
+      pBase.identificacion ||
+      pBase.numero_identificacion ||
+      r?.paciente_cedula ||
+      r?.cedula ||
+      r?.numero_documento ||
+      r?.identificacion ||
+      pEncontrado.cedula ||
+      pEncontrado.numero_documento ||
+      pEncontrado.documento ||
+      pEncontrado.identificacion ||
+      pEncontrado.numero_identificacion ||
+      '—';
+
     p.telefono = pBase.telefono || pBase.whatsapp || r?.paciente_telefono || pEncontrado.telefono || pEncontrado.whatsapp || '—';
     p.whatsapp = p.telefono;
     p.id_paciente = pBase.id_paciente || pBase.id || r?.id_paciente || pEncontrado.id_paciente || pEncontrado.id || '—';
 
-    p.fecha_nacimiento = pBase.fecha_nacimiento || pBase.nacimiento || pEncontrado.fecha_nacimiento || pEncontrado.nacimiento || '';
-    p.edad = pBase.edad || r?.paciente_edad || pEncontrado.edad || '';
+    p.fecha_nacimiento =
+      pBase.fecha_nacimiento ||
+      pBase.fechaNacimiento ||
+      pBase.nacimiento ||
+      r?.paciente_fecha_nacimiento ||
+      r?.fecha_nacimiento ||
+      pEncontrado.fecha_nacimiento ||
+      pEncontrado.fechaNacimiento ||
+      pEncontrado.nacimiento ||
+      '';
 
-    if(!p.edad && p.fecha_nacimiento && typeof calcularEdadDesdeFecha === 'function'){
-      p.edad = calcularEdadDesdeFecha(p.fecha_nacimiento);
-    }
+    p.edad = auroRecetaFormatearEdad(
+      pBase.edad || r?.paciente_edad || pEncontrado.edad || '',
+      p.fecha_nacimiento
+    );
 
     return p;
   }
@@ -1940,7 +2028,7 @@
           <div><span>CIE-10</span><b>${safe(r.cie10 || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
           <div style="grid-column:1/-1"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>`
       : `
-          <div><span>Paciente</span><b>${safe(nombre)}</b></div>
+          <div><span>Paciente</span><b>${safe(nombre)}</b><small class="auro-paciente-cedula">Cédula: ${safe(cedula)}</small></div>
           <div><span>Edad</span><b>${safe(edad)}</b></div>
           <div><span>Fecha de emisión</span><b>${safe(fechaVisual(r.fecha))}</b></div>
           <div><span>N.º de receta</span><b>${safe(idReceta === '—' ? '—' : idReceta)}</b></div>
@@ -1955,7 +2043,7 @@
           .auro-receta-logo-wrap{width:76px;height:76px;display:grid;place-items:center;border:1px solid #ead5e2;border-radius:16px;background:#fff;overflow:hidden}.auro-receta-logo-wrap:empty,.auro-receta-logo-wrap.sin-logo{display:none}.auro-receta-logo{max-width:100%;max-height:100%;object-fit:contain;display:block}
           .auro-receta-brand h2{margin:0;color:#8b1e5a;font-weight:950;letter-spacing:.04em;font-size:22px;line-height:1.05}.auro-receta-brand small{color:#6b7280;font-weight:750;font-size:11px;line-height:1.3;display:block;margin-top:3px}
           .auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
-          .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;word-break:break-word}
+          .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;word-break:break-word}.auro-paciente-cedula{display:block;color:#475569;font-size:9.8px;font-weight:800;line-height:1.15;margin-top:2px}
           .auro-receta-section{margin-top:9px;break-inside:avoid}.auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950}.auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;white-space:normal;word-break:break-word;background:#fff;box-shadow:0 4px 14px rgba(139,30,90,.035)}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
@@ -3585,4 +3673,14 @@
    - Ajusta mínimamente interlineado y rellenos para evitar desbordes.
    - No modifica lógica, medicamentos, Plan, guardado, JSON, historial,
      Google Sheets, Apps Script, IDs, botones, eventos ni sincronización.
+===================================================== */
+
+/* =====================================================
+   AUROSANAX RECETAS 3.4 - CÉDULA + EDAD EN ENCABEZADO
+   - Muestra la cédula debajo del nombre del paciente sin cambiar
+     la cuadrícula de 4 columnas ni los espacios del formato A4.
+   - Muestra edad como "N años".
+   - Si edad no existe, la calcula desde fecha_nacimiento con zona Ecuador.
+   - No modifica medicamentos, diagnóstico, Plan, guardado, JSON,
+     historial, Google Sheets, Apps Script, IDs, botones ni eventos.
 ===================================================== */
