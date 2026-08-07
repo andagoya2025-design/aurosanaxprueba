@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.14';
+  const VERSION = '3.6.15';
   const state = {
     inicializado: false,
     cargando: false,
@@ -968,25 +968,25 @@ Función:
       </div>
 
       <div class="obs-check-grid mb-3">
-        ${checkSintomaObstetrico('obsSintSangrado','Sangrado vaginal')}
-        ${checkSintomaObstetrico('obsSintPerdidaLiquido','Pérdida de líquido')}
-        ${checkSintomaObstetrico('obsSintDolorPelvico','Dolor pélvico')}
-        ${checkSintomaObstetrico('obsSintContracciones','Contracciones')}
-        ${checkSintomaObstetrico('obsSintCefalea','Cefalea')}
-        ${checkSintomaObstetrico('obsSintFosfenos','Fosfenos')}
-        ${checkSintomaObstetrico('obsSintTinnitus','Tinnitus')}
-        ${checkSintomaObstetrico('obsSintEpigastralgia','Epigastralgia')}
-        ${checkSintomaObstetrico('obsSintDisuria','Disuria')}
+        ${checkSintomaObstetrico('anaObsSintSangrado','Sangrado vaginal')}
+        ${checkSintomaObstetrico('anaObsSintPerdidaLiquido','Pérdida de líquido')}
+        ${checkSintomaObstetrico('anaObsSintDolorPelvico','Dolor pélvico')}
+        ${checkSintomaObstetrico('anaObsSintContracciones','Contracciones')}
+        ${checkSintomaObstetrico('anaObsSintCefalea','Cefalea')}
+        ${checkSintomaObstetrico('anaObsSintFosfenos','Fosfenos')}
+        ${checkSintomaObstetrico('anaObsSintTinnitus','Tinnitus')}
+        ${checkSintomaObstetrico('anaObsSintEpigastralgia','Epigastralgia')}
+        ${checkSintomaObstetrico('anaObsSintDisuria','Disuria')}
       </div>
 
       <div class="row g-3">
         <div class="col-md-6">
-          <label class="form-label fw-bold" for="obsSintOtros">Otros síntomas</label>
-          <input id="obsSintOtros" class="form-control">
+          <label class="form-label fw-bold" for="anaObsSintOtros">Otros síntomas</label>
+          <input id="anaObsSintOtros" class="form-control">
         </div>
         <div class="col-md-6">
-          <label class="form-label fw-bold" for="obsSintDescripcion">Descripción y evolución</label>
-          <textarea id="obsSintDescripcion" rows="2" class="form-control"></textarea>
+          <label class="form-label fw-bold" for="anaObsSintDescripcion">Descripción y evolución</label>
+          <textarea id="anaObsSintDescripcion" rows="2" class="form-control"></textarea>
         </div>
       </div>
     `;
@@ -1817,7 +1817,7 @@ Función:
   /* ============================================================
      AUROSANAX 3.6.14 - SÍNTOMAS COMPLEMENTARIOS DE ANAMNESIS
      Intervención localizada:
-     - Convierte los controles ginSint* y obsSint* en narrativa clínica.
+     - Convierte los controles ginSint* y anaObsSint* en narrativa clínica.
      - No cambia sus IDs, almacenamiento ni relación por id_atencion.
      - No modifica plantillas, backend, botones ni otros módulos.
      ============================================================ */
@@ -1849,15 +1849,15 @@ Función:
     };
 
     const mapaObstetrico = {
-      obsSintSangrado: 'sangrado vaginal',
-      obsSintPerdidaLiquido: 'pérdida de líquido',
-      obsSintDolorPelvico: 'dolor pélvico',
-      obsSintContracciones: 'contracciones',
-      obsSintCefalea: 'cefalea',
-      obsSintFosfenos: 'fosfenos',
-      obsSintTinnitus: 'tinnitus',
-      obsSintEpigastralgia: 'epigastralgia',
-      obsSintDisuria: 'disuria'
+      anaObsSintSangrado: 'sangrado vaginal',
+      anaObsSintPerdidaLiquido: 'pérdida de líquido',
+      anaObsSintDolorPelvico: 'dolor pélvico',
+      anaObsSintContracciones: 'contracciones',
+      anaObsSintCefalea: 'cefalea',
+      anaObsSintFosfenos: 'fosfenos',
+      anaObsSintTinnitus: 'tinnitus',
+      anaObsSintEpigastralgia: 'epigastralgia',
+      anaObsSintDisuria: 'disuria'
     };
 
     Object.entries(mapaGinecologico).forEach(([id, etiqueta]) => {
@@ -1887,12 +1887,12 @@ Función:
       );
     }
 
-    const otrosObstetricos = texto($('obsSintOtros')?.value);
+    const otrosObstetricos = texto($('anaObsSintOtros')?.value);
     if (otrosObstetricos) {
       partes.push(`Otros síntomas obstétricos: ${otrosObstetricos}.`);
     }
 
-    const descripcionObstetrica = texto($('obsSintDescripcion')?.value);
+    const descripcionObstetrica = texto($('anaObsSintDescripcion')?.value);
     if (descripcionObstetrica) {
       partes.push(`Descripción obstétrica: ${descripcionObstetrica}.`);
     }
@@ -2257,7 +2257,20 @@ Función:
 
     [...panel.querySelectorAll('input, select, textarea')].forEach((control, indice) => {
       const clave = auroClaveControlAnamnesis(control, indice);
-      const dato = controles[clave];
+      let dato = controles[clave];
+
+      /*
+        AUROSANAX 3.6.15 - COMPATIBILIDAD RETROACTIVA:
+        Los controles obstétricos propios de Anamnesis ahora utilizan IDs
+        exclusivos con prefijo anaObs*. Los registros históricos conservan
+        claves id:obsSint*. Esta equivalencia permite restaurarlos sin
+        modificar Google Sheets ni migrar datos anteriores.
+      */
+      if (!dato && control.id && control.id.startsWith('anaObs')) {
+        const idAnterior = control.id.replace(/^anaObs/, 'obs');
+        dato = controles['id:' + idAnterior];
+      }
+
       if (!dato) return;
 
       if (control.type === 'checkbox' || control.type === 'radio') {
