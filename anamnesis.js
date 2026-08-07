@@ -1,8 +1,7 @@
 /*
 AUROSANAX ERP - MOTOR DINÁMICO DE ANAMNESIS SINDRÓMICA
 Archivo: anamnesis.js
-Versión base: 3.6.3
-Parche actual: 3.6.19 - Guardado de atención anterior solo cuando existe cambio clínico real
+Versión: 3.6.3
 
 Función:
 - Consultar las plantillas activas desde plantillas_anamnesis.
@@ -15,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.19';
+  const VERSION = '3.6.15';
   const state = {
     inicializado: false,
     cargando: false,
@@ -34,8 +33,12 @@ Función:
     contextoAtencion: {},
     guardadosRemotosEnCurso: {},
     guardadosRemotosPendientes: {},
-    contextoEpoch: 0,
-    contextoInvalidado: false
+    /*
+      AUROSANAX 3.6.15 - protección quirúrgica contra guardados fantasma.
+      Solo una edición clínica real marca una atención como pendiente.
+      Abrir, cargar, visualizar o sincronizar la cabecera NO debe marcarla.
+    */
+    cambiosUsuarioPorAtencion: {}
   };
 
   const $ = id => document.getElementById(id);
@@ -971,25 +974,25 @@ Función:
       </div>
 
       <div class="obs-check-grid mb-3">
-        ${checkSintomaObstetrico('anaObsSintSangrado','Sangrado vaginal')}
-        ${checkSintomaObstetrico('anaObsSintPerdidaLiquido','Pérdida de líquido')}
-        ${checkSintomaObstetrico('anaObsSintDolorPelvico','Dolor pélvico')}
-        ${checkSintomaObstetrico('anaObsSintContracciones','Contracciones')}
-        ${checkSintomaObstetrico('anaObsSintCefalea','Cefalea')}
-        ${checkSintomaObstetrico('anaObsSintFosfenos','Fosfenos')}
-        ${checkSintomaObstetrico('anaObsSintTinnitus','Tinnitus')}
-        ${checkSintomaObstetrico('anaObsSintEpigastralgia','Epigastralgia')}
-        ${checkSintomaObstetrico('anaObsSintDisuria','Disuria')}
+        ${checkSintomaObstetrico('obsSintSangrado','Sangrado vaginal')}
+        ${checkSintomaObstetrico('obsSintPerdidaLiquido','Pérdida de líquido')}
+        ${checkSintomaObstetrico('obsSintDolorPelvico','Dolor pélvico')}
+        ${checkSintomaObstetrico('obsSintContracciones','Contracciones')}
+        ${checkSintomaObstetrico('obsSintCefalea','Cefalea')}
+        ${checkSintomaObstetrico('obsSintFosfenos','Fosfenos')}
+        ${checkSintomaObstetrico('obsSintTinnitus','Tinnitus')}
+        ${checkSintomaObstetrico('obsSintEpigastralgia','Epigastralgia')}
+        ${checkSintomaObstetrico('obsSintDisuria','Disuria')}
       </div>
 
       <div class="row g-3">
         <div class="col-md-6">
-          <label class="form-label fw-bold" for="anaObsSintOtros">Otros síntomas</label>
-          <input id="anaObsSintOtros" class="form-control">
+          <label class="form-label fw-bold" for="obsSintOtros">Otros síntomas</label>
+          <input id="obsSintOtros" class="form-control">
         </div>
         <div class="col-md-6">
-          <label class="form-label fw-bold" for="anaObsSintDescripcion">Descripción y evolución</label>
-          <textarea id="anaObsSintDescripcion" rows="2" class="form-control"></textarea>
+          <label class="form-label fw-bold" for="obsSintDescripcion">Descripción y evolución</label>
+          <textarea id="obsSintDescripcion" rows="2" class="form-control"></textarea>
         </div>
       </div>
     `;
@@ -1852,15 +1855,15 @@ Función:
     };
 
     const mapaObstetrico = {
-      anaObsSintSangrado: 'sangrado vaginal',
-      anaObsSintPerdidaLiquido: 'pérdida de líquido',
-      anaObsSintDolorPelvico: 'dolor pélvico',
-      anaObsSintContracciones: 'contracciones',
-      anaObsSintCefalea: 'cefalea',
-      anaObsSintFosfenos: 'fosfenos',
-      anaObsSintTinnitus: 'tinnitus',
-      anaObsSintEpigastralgia: 'epigastralgia',
-      anaObsSintDisuria: 'disuria'
+      obsSintSangrado: 'sangrado vaginal',
+      obsSintPerdidaLiquido: 'pérdida de líquido',
+      obsSintDolorPelvico: 'dolor pélvico',
+      obsSintContracciones: 'contracciones',
+      obsSintCefalea: 'cefalea',
+      obsSintFosfenos: 'fosfenos',
+      obsSintTinnitus: 'tinnitus',
+      obsSintEpigastralgia: 'epigastralgia',
+      obsSintDisuria: 'disuria'
     };
 
     Object.entries(mapaGinecologico).forEach(([id, etiqueta]) => {
@@ -1890,12 +1893,12 @@ Función:
       );
     }
 
-    const otrosObstetricos = texto($('anaObsSintOtros')?.value);
+    const otrosObstetricos = texto($('obsSintOtros')?.value);
     if (otrosObstetricos) {
       partes.push(`Otros síntomas obstétricos: ${otrosObstetricos}.`);
     }
 
-    const descripcionObstetrica = texto($('anaObsSintDescripcion')?.value);
+    const descripcionObstetrica = texto($('obsSintDescripcion')?.value);
     if (descripcionObstetrica) {
       partes.push(`Descripción obstétrica: ${descripcionObstetrica}.`);
     }
@@ -2104,10 +2107,6 @@ Función:
   }
 
   function auroObtenerIdAtencionAnamnesis() {
-    /* Mientras Atenciones está cambiando de paciente, ninguna fuente global
-       secundaria puede reinyectar la atención anterior. */
-    if (state.contextoInvalidado) return '';
-
     const candidatos = [
       state.idAtencionActual,
       window.auroAtencionSeleccionadaId,
@@ -2149,8 +2148,6 @@ Función:
   }
 
   function auroRefrescarContextoAnamnesis() {
-    if (state.contextoInvalidado) return '';
-
     let contexto = null;
 
     try {
@@ -2177,21 +2174,10 @@ Función:
 
     contexto = contexto && typeof contexto === 'object' ? contexto : {};
 
-    const idContextoExterno = texto(
-      contexto.id_atencion || contexto.idAtencion || contexto.atencion_id
+    const idAtencion = texto(
+      contexto.id_atencion || contexto.idAtencion || contexto.atencion_id ||
+      auroObtenerIdAtencionAnamnesis()
     );
-
-    /*
-      AUROSANAX 3.6.16 - AISLAMIENTO DE CONTEXTO
-      Una lectura tardía del contexto global nunca puede cambiar por sí sola
-      la atención que Anamnesis ya tiene seleccionada. Solo se adopta el ID
-      externo cuando todavía no existe un ID interno.
-    */
-    if (!state.idAtencionActual && idContextoExterno) {
-      state.idAtencionActual = idContextoExterno;
-    }
-
-    const idAtencion = texto(state.idAtencionActual || idContextoExterno);
 
     const idPaciente = texto(
       contexto.id_paciente || contexto.idPaciente || contexto.paciente_id
@@ -2201,22 +2187,22 @@ Función:
       contexto.id_historia || contexto.idHistoria || contexto.historia_id
     );
 
-    /* Solo completa datos descriptivos si pertenecen a la misma atención. */
-    const mismoContexto = !idContextoExterno || !idAtencion || idContextoExterno === idAtencion;
-    if (mismoContexto) {
-      if (idPaciente) state.idPacienteActual = idPaciente;
-      if (idHistoria) state.idHistoriaActual = idHistoria;
+    if (idAtencion) {
+      state.idAtencionActual = idAtencion;
+      window.auroAtencionSeleccionadaId = idAtencion;
     }
+    if (idPaciente) state.idPacienteActual = idPaciente;
+    if (idHistoria) state.idHistoriaActual = idHistoria;
 
     state.contextoAtencion = {
       ...state.contextoAtencion,
-      ...(mismoContexto ? contexto : {}),
-      id_atencion: idAtencion,
-      id_paciente: state.idPacienteActual,
-      id_historia: state.idHistoriaActual
+      ...contexto,
+      id_atencion: idAtencion || state.idAtencionActual,
+      id_paciente: idPaciente || state.idPacienteActual,
+      id_historia: idHistoria || state.idHistoriaActual
     };
 
-    return idAtencion;
+    return texto(state.idAtencionActual);
   }
 
   async function auroEsperarIdAtencionAnamnesis(intentos = 5, esperaMs = 250) {
@@ -2277,14 +2263,7 @@ Función:
 
     [...panel.querySelectorAll('input, select, textarea')].forEach((control, indice) => {
       const clave = auroClaveControlAnamnesis(control, indice);
-      let dato = controles[clave];
-
-      /* Retrocompatibilidad: registros previos usaban obsSint* en Anamnesis. */
-      if (!dato && control.id && /^anaObs/.test(control.id)) {
-        const idAnterior = control.id.replace(/^anaObs/, 'obs');
-        dato = controles['id:' + idAnterior];
-      }
-
+      const dato = controles[clave];
       if (!dato) return;
 
       if (control.type === 'checkbox' || control.type === 'radio') {
@@ -2304,42 +2283,23 @@ Función:
     });
   }
 
-  function auroCapturarAnamnesisActual(idAtencionForzado = '') {
-    const idAtencion = texto(idAtencionForzado || auroObtenerIdAtencionAnamnesis());
-    const motivoConsulta = texto($('hcMotivoConsulta')?.value);
-    const enfermedadActual = texto($('hcEnfermedadActual')?.value);
-    const usaPlantilla = !!state.plantillaActiva;
-
-    /*
-      AUROSANAX 3.6.16 - TRAZABILIDAD DE CAPTURA MANUAL
-      Si el profesional escribe directamente sin motor, se conserva una
-      estructura JSON mínima y explícita. narrativa_generada queda reservada
-      únicamente para texto realmente producido por el motor.
-    */
-    const respuestas = usaPlantilla
-      ? leerRespuestas()
-      : (motivoConsulta || enfermedadActual)
-        ? {
-            _modo_captura: 'manual',
-            motivo_consulta: motivoConsulta,
-            enfermedad_actual: enfermedadActual
-          }
-        : {};
+  function auroCapturarAnamnesisActual() {
+    const idAtencion = auroObtenerIdAtencionAnamnesis();
 
     return {
       id_atencion: idAtencion,
       id_paciente: texto(state.idPacienteActual),
       id_historia: texto(state.idHistoriaActual),
-      motivo_consulta: motivoConsulta,
-      enfermedad_actual: enfermedadActual,
-      id_plantilla_anamnesis: usaPlantilla
+      motivo_consulta: texto($('hcMotivoConsulta')?.value),
+      enfermedad_actual: texto($('hcEnfermedadActual')?.value),
+      id_plantilla_anamnesis: state.plantillaActiva
         ? idPlantilla(state.plantillaActiva)
         : texto($('auroPlantillaAnamnesisSelect')?.value),
-      nombre_plantilla: usaPlantilla
+      nombre_plantilla: state.plantillaActiva
         ? nombrePlantilla(state.plantillaActiva)
         : '',
-      respuestas_json: respuestas,
-      narrativa_generada: usaPlantilla ? texto(state.narrativa) : '',
+      respuestas_json: state.plantillaActiva ? leerRespuestas() : {},
+      narrativa_generada: texto(state.narrativa),
       controles_json: auroCapturarControlesAnamnesis(),
       panel_abierto: !!$('auroDynamicAnamnesisPanel')?.classList.contains('show'),
       modulo_version: VERSION,
@@ -2384,13 +2344,11 @@ Función:
     );
   }
 
-  function guardarAnamnesisTemporal(idAtencionForzado = '') {
-    if (state.contextoInvalidado) return null;
-
-    const idAtencion = texto(idAtencionForzado || auroObtenerIdAtencionAnamnesis());
+  function guardarAnamnesisTemporal() {
+    const idAtencion = auroObtenerIdAtencionAnamnesis();
     if (!idAtencion || state.restaurandoAtencion) return null;
 
-    const data = auroCapturarAnamnesisActual(idAtencion);
+    const data = auroCapturarAnamnesisActual();
     data.id_atencion = idAtencion;
 
     state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(data);
@@ -2621,7 +2579,17 @@ Función:
     if (!data) return { success: false, message: 'No existe una atención activa.' };
 
     data.id_atencion = idAtencion;
-    return auroGuardarDatosAnamnesisConfirmados(data, { mostrarEstado: true });
+
+    const resultado = await auroGuardarDatosAnamnesisConfirmados(
+      data,
+      { mostrarEstado: true }
+    );
+
+    if (resultado && resultado.success) {
+      state.cambiosUsuarioPorAtencion[idAtencion] = false;
+    }
+
+    return resultado;
   }
 
   async function auroBuscarAnamnesisSheets(idAtencion) {
@@ -2720,6 +2688,12 @@ Función:
       cacheLocal[idAtencion] = auroClonarAnamnesis(data);
       auroGuardarCacheAnamnesisLocal(cacheLocal);
 
+      /*
+        Cargar/restaurar una atención es una operación de lectura.
+        No autoriza un POST posterior por el solo hecho de cambiar de consulta.
+      */
+      state.cambiosUsuarioPorAtencion[idAtencion] = false;
+
       return true;
     } finally {
       state.restaurandoAtencion = false;
@@ -2730,54 +2704,42 @@ Función:
     idAtencion = texto(idAtencion || detalle.id_atencion);
     if (!idAtencion) return false;
 
-    /* Solo un evento válido de selección/inicio levanta el candado de transición. */
-    state.contextoInvalidado = false;
-
     const anterior = texto(state.idAtencionActual);
-    if (anterior === idAtencion) {
-      auroSincronizarCabeceraAtencion(detalle);
-      return true;
+
+    if (anterior && anterior !== idAtencion) {
+      clearTimeout(state.guardadoPendiente);
+      state.guardadoPendiente = null;
+
+      /*
+        AUROSANAX 3.6.15:
+        Cambiar de consulta, usar "Ver" o abrir Vista integral NO es una
+        modificación clínica. Solo se persiste la atención anterior cuando
+        existe una edición real pendiente de esa misma id_atencion.
+      */
+      if (state.cambiosUsuarioPorAtencion[anterior] === true) {
+        const dataAnterior = guardarAnamnesisTemporal();
+
+        if (dataAnterior && auroTieneContenidoAnamnesis(dataAnterior)) {
+          dataAnterior.id_atencion = anterior;
+
+          const resultadoAnterior = await auroGuardarDatosAnamnesisConfirmados(
+            dataAnterior,
+            { mostrarEstado: false }
+          );
+
+          if (resultadoAnterior && resultadoAnterior.success) {
+            state.cambiosUsuarioPorAtencion[anterior] = false;
+          }
+        }
+      }
     }
 
-    /* Cancela cualquier autosave que fue programado para el contexto anterior. */
-    clearTimeout(state.guardadoPendiente);
-    state.guardadoPendiente = null;
-    state.contextoEpoch += 1;
+    if (anterior === idAtencion) return true;
 
-    /*
-      AUROSANAX 3.6.19 - GUARDADO QUIRÚRGICO POR CAMBIO REAL
-      ------------------------------------------------------
-      Conserva la última fotografía conocida ANTES de capturar la pantalla.
-      Así podemos distinguir entre:
-      - navegar sin modificar: no hace POST y no cambia actualizado_en;
-      - modificar y cambiar de atención antes del autosave: sí guarda.
-      No modifica Index, Atenciones, backend, IDs ni estructura de datos.
-    */
-    const dataAnteriorBase = anterior
-      ? auroClonarAnamnesis(state.cacheAtenciones[anterior] || null)
-      : null;
-
-    let dataAnterior = null;
-    let anteriorCambioReal = false;
-
-    if (anterior) {
-      dataAnterior = auroCapturarAnamnesisActual(anterior);
-      dataAnterior.id_atencion = anterior;
-
-      anteriorCambioReal = !dataAnteriorBase ||
-        auroFirmaAnamnesis(dataAnteriorBase) !== auroFirmaAnamnesis(dataAnterior);
-
-      /* El respaldo local sí se refresca siempre; no implica escritura remota. */
-      state.cacheAtenciones[anterior] = auroClonarAnamnesis(dataAnterior);
-      const cacheLocal = auroLeerCacheAnamnesisLocal();
-      cacheLocal[anterior] = auroClonarAnamnesis(dataAnterior);
-      auroGuardarCacheAnamnesisLocal(cacheLocal);
-    }
-
-    /* El nuevo contexto se fija inmediatamente; no espera al servidor anterior. */
     state.idAtencionActual = idAtencion;
-    state.idPacienteActual = texto(detalle.id_paciente || '');
-    state.idHistoriaActual = texto(detalle.id_historia || '');
+    state.idPacienteActual = texto(detalle.id_paciente || state.idPacienteActual);
+    state.idHistoriaActual = texto(detalle.id_historia || state.idHistoriaActual);
+
     window.auroAtencionSeleccionadaId = idAtencion;
 
     auroLimpiarCabeceraAtencion();
@@ -2788,28 +2750,11 @@ Función:
     auroSincronizarCabeceraAtencion(detalle);
 
     limpiarAnamnesisTemporal();
-
-    /*
-      Solo existe escritura remota de la atención anterior cuando la firma
-      clínica cambió. Navegar entre consultas sin editar ya no toca Sheets.
-    */
-    if (
-      dataAnterior &&
-      anteriorCambioReal &&
-      auroTieneContenidoAnamnesis(dataAnterior)
-    ) {
-      auroGuardarDatosAnamnesisConfirmados(
-        dataAnterior,
-        { mostrarEstado: false }
-      ).catch(error => {
-        console.warn('AUROSANAX Anamnesis: no se confirmó el guardado de la atención anterior.', error);
-      });
-    }
-
     const cargada = await cargarAnamnesisTemporal(idAtencion);
 
-    /* Si el usuario cambió otra vez mientras cargaba, no aplica contexto obsoleto. */
-    if (texto(state.idAtencionActual) !== idAtencion) return false;
+    if (!cargada) {
+      state.cambiosUsuarioPorAtencion[idAtencion] = false;
+    }
 
     auroSincronizarCabeceraAtencion(detalle);
 
@@ -2823,105 +2768,49 @@ Función:
     return cargada;
   }
 
-  function auroProgramarGuardadoAnamnesis() {
-    if (state.restaurandoAtencion || state.contextoInvalidado) return;
+  function auroProgramarGuardadoAnamnesis(evento) {
+    if (state.restaurandoAtencion) return;
 
-    const idProgramado = texto(state.idAtencionActual || auroObtenerIdAtencionAnamnesis());
-    if (!idProgramado) return;
+    /*
+      auroSincronizarCabeceraAtencion() asigna fecha/médico/especialidad/tipo
+      y dispara input/change de forma programática mientras esta marca existe.
+      Esos eventos son de sincronización, NO una edición clínica del usuario.
+    */
+    const objetivo = evento?.target || null;
+    if (objetivo?.dataset?.auroAsignandoContexto === 'true') return;
 
-    const pacienteProgramado = texto(state.idPacienteActual);
-    const historiaProgramada = texto(state.idHistoriaActual);
-    const epochProgramado = state.contextoEpoch;
+    const idAtencionActual = texto(auroObtenerIdAtencionAnamnesis());
+    if (!idAtencionActual) return;
+
+    state.cambiosUsuarioPorAtencion[idAtencionActual] = true;
 
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = setTimeout(async () => {
-      state.guardadoPendiente = null;
+      const idAtencion = await auroEsperarIdAtencionAnamnesis(4, 250);
+      if (!idAtencion) return;
 
       /*
-        Candado principal: un autosave pertenece para siempre a la atención
-        en la que fue programado. Si el usuario ya cambió, se descarta.
+        Protección adicional:
+        el temporizador pertenece a la atención que recibió la edición.
+        Si entretanto cambió el contexto, no se reutiliza otro id_atencion.
       */
-      if (
-        state.restaurandoAtencion ||
-        state.contextoEpoch !== epochProgramado ||
-        texto(state.idAtencionActual) !== idProgramado ||
-        (pacienteProgramado && texto(state.idPacienteActual) !== pacienteProgramado) ||
-        (historiaProgramada && texto(state.idHistoriaActual) !== historiaProgramada)
-      ) {
-        return;
-      }
+      if (idAtencion !== idAtencionActual) return;
+      if (state.cambiosUsuarioPorAtencion[idAtencionActual] !== true) return;
 
-      const data = auroCapturarAnamnesisActual(idProgramado);
-      if (!data || texto(data.id_atencion) !== idProgramado) return;
-
+      const data = guardarAnamnesisTemporal();
       if (data && auroTieneContenidoAnamnesis(data)) {
-        await auroGuardarDatosAnamnesisConfirmados(
+        data.id_atencion = idAtencionActual;
+
+        const resultado = await auroGuardarDatosAnamnesisConfirmados(
           data,
           { mostrarEstado: false }
         );
+
+        if (resultado && resultado.success) {
+          state.cambiosUsuarioPorAtencion[idAtencionActual] = false;
+        }
       }
     }, 700);
-  }
-
-  /* ============================================================
-     AUROSANAX ANAMNESIS v3.6.18 - PASO 3
-     CANDADO DE TRANSICIÓN AL LIMPIAR LA ATENCIÓN
-     ------------------------------------------------------------
-     Objetivo:
-     - Cancelar cualquier autosave pendiente de la atención anterior.
-     - Invalidar inmediatamente IDs internos y el alias global propio.
-     - Limpiar únicamente el contenido temporal visible de Anamnesis.
-     - Esperar a aurosanax:atencion-seleccionada / iniciada para cargar
-       el nuevo contexto.
-     - No guarda, no consulta Sheets y no modifica otros módulos.
-  ============================================================ */
-  function auroInvalidarAnamnesisPorAtencionLimpiada() {
-    clearTimeout(state.guardadoPendiente);
-    state.guardadoPendiente = null;
-    state.contextoEpoch += 1;
-    state.contextoInvalidado = true;
-
-    state.idAtencionActual = '';
-    state.idPacienteActual = '';
-    state.idHistoriaActual = '';
-    state.contextoAtencion = {};
-
-    /* Este alias es escrito por Anamnesis; al limpiar la atención no debe
-       quedar disponible como fuente residual para un guardado posterior. */
-    window.auroAtencionSeleccionadaId = '';
-
-    state.restaurandoAtencion = true;
-    try {
-      const motivo = $('hcMotivoConsulta');
-      const enfermedad = $('hcEnfermedadActual');
-
-      if (motivo) motivo.value = '';
-      if (enfermedad) enfermedad.value = '';
-
-      const selector = $('auroPlantillaAnamnesisSelect');
-      if (selector) selector.value = '';
-      seleccionarPlantilla('', false);
-
-      $('hc_anamnesis')
-        ?.querySelectorAll('input, select, textarea')
-        .forEach(control => {
-          if (control.id === 'auroPlantillaAnamnesisSelect') return;
-          if (control.type === 'button' || control.type === 'submit') return;
-          if (control.dataset?.auroContextoAtencion === 'true') return;
-
-          if (control.type === 'checkbox' || control.type === 'radio') {
-            control.checked = false;
-          } else {
-            control.value = '';
-          }
-        });
-
-      state.respuestas = {};
-      state.narrativa = '';
-      $('auroDynamicAnamnesisPanel')?.classList.remove('show');
-    } finally {
-      state.restaurandoAtencion = false;
-    }
   }
 
   function auroInstalarSincronizacionAtencion() {
@@ -2935,7 +2824,6 @@ Función:
 
     window.addEventListener('aurosanax:atencion-iniciada', manejar);
     window.addEventListener('aurosanax:atencion-seleccionada', manejar);
-    window.addEventListener('aurosanax:atencion-limpiada', auroInvalidarAnamnesisPorAtencionLimpiada);
 
     const sincronizarContexto = evento => {
       auroSincronizarCabeceraAtencion(evento?.detail || {});
@@ -2953,34 +2841,22 @@ Función:
   }
 
   function obtenerDatosAnamnesis() {
-    const motivoConsulta = texto($('hcMotivoConsulta')?.value);
-    const enfermedadActual = texto($('hcEnfermedadActual')?.value);
-    const usaPlantilla = !!state.plantillaActiva;
-
     return {
       id_atencion: auroObtenerIdAtencionAnamnesis(),
       id_paciente: texto(state.idPacienteActual),
       id_historia: texto(state.idHistoriaActual),
-      motivo_consulta: motivoConsulta,
-      enfermedad_actual: enfermedadActual,
+      motivo_consulta: texto($('hcMotivoConsulta')?.value),
+      enfermedad_actual: texto($('hcEnfermedadActual')?.value),
       revision_sistemas: '',
       sintomas_alarma: '',
-      id_plantilla_anamnesis: usaPlantilla
+      id_plantilla_anamnesis: state.plantillaActiva
         ? idPlantilla(state.plantillaActiva)
         : '',
-      nombre_plantilla: usaPlantilla
+      nombre_plantilla: state.plantillaActiva
         ? nombrePlantilla(state.plantillaActiva)
         : '',
-      respuestas_json: usaPlantilla
-        ? leerRespuestas()
-        : (motivoConsulta || enfermedadActual)
-          ? {
-              _modo_captura: 'manual',
-              motivo_consulta: motivoConsulta,
-              enfermedad_actual: enfermedadActual
-            }
-          : {},
-      narrativa_generada: usaPlantilla ? texto(state.narrativa) : '',
+      respuestas_json: state.plantillaActiva ? leerRespuestas() : {},
+      narrativa_generada: state.narrativa,
       modulo_version: VERSION
     };
   }
