@@ -3112,127 +3112,150 @@ if(document.readyState === 'loading'){
    - Espera confirmación real antes de continuar hacia Plan.
    ========================================================== */
 
+/* ==========================================================
+   AUROSANAX FIX QUIRÚRGICO DIAGNÓSTICO INDEPENDIENTE 2026-08-07
+   ----------------------------------------------------------
+   Alcance exclusivo:
+   - Diagnósticos de la atención activa.
+   - Permite eliminar el último diagnóstico enviando registros: [].
+   - Compara contra Google Sheets antes de escribir.
+   - Si no existe cambio clínico real, NO hace POST.
+   - Conserva id_diagnostico al editar el mismo código CIE-10.
+   - No guarda Examen Físico.
+   - No modifica Plan, Recetas, Anamnesis ni Atenciones.
+   ========================================================== */
+
+function auroDxTextoComparable_(valor){
+  return String(valor === null || valor === undefined ? '' : valor).trim();
+}
+
+function auroDxCodigoComparable_(registro){
+  registro = registro || {};
+  return auroDxTextoComparable_(registro.codigo_cie10 || registro.codigo || registro.cie10 || '')
+    .toUpperCase().replace(/\./g,'').replace(/\s+/g,'');
+}
+
+function auroDxPrincipalComparable_(registro){
+  registro = registro || {};
+  const valor = auroDxTextoComparable_(registro.principal !== undefined ? registro.principal : registro.es_principal).toUpperCase();
+  return (registro.principal === true || ['SI','SÍ','TRUE','1'].includes(valor)) ? 'SI' : 'NO';
+}
+
+function auroDxTipoComparable_(registro){
+  registro = registro || {};
+  const tipo = auroDxTextoComparable_(registro.tipo_diagnostico || registro.tipo || 'Presuntivo').toLowerCase();
+  return tipo === 'definitivo' ? 'Definitivo' : 'Presuntivo';
+}
+
+function auroDxDescripcionComparable_(registro){
+  registro = registro || {};
+  return auroDxTextoComparable_(registro.descripcion || registro.nombre || registro.diagnostico || '').replace(/\s+/g,' ');
+}
+
+function auroDxFirmaLista_(lista){
+  return (Array.isArray(lista) ? lista : []).map(function(registro){
+    return [
+      auroDxCodigoComparable_(registro),
+      auroDxDescripcionComparable_(registro).toLowerCase(),
+      auroDxPrincipalComparable_(registro),
+      auroDxTipoComparable_(registro),
+      auroDxTextoComparable_(registro.estado || 'Activo').toLowerCase(),
+      auroDxTextoComparable_(registro.observaciones || '').replace(/\s+/g,' ').toLowerCase()
+    ].join('|');
+  }).sort().join('||');
+}
+
+async function auroDxLeerPersistidosAtencion_(API, idAtencion){
+  if(!API || !idAtencion) return [];
+  const url = API + '?accion=listarDiagnosticosPorAtencion&id_atencion=' + encodeURIComponent(idAtencion) + '&_=' + Date.now();
+  const respuesta = await fetch(url, {method:'GET', cache:'no-store'});
+  const data = await respuesta.json();
+  if(Array.isArray(data)) return data;
+  if(data && Array.isArray(data.data)) return data.data;
+  if(data && Array.isArray(data.registros)) return data.registros;
+  return [];
+}
+
+function auroDxConservarIdsPersistidos_(actuales, persistidos){
+  const anteriores = Array.isArray(persistidos) ? persistidos : [];
+  return (Array.isArray(actuales) ? actuales : []).map(function(registro){
+    const salida = Object.assign({}, registro || {});
+    const idActual = auroDxTextoComparable_(salida.id_diagnostico);
+    const codigoActual = auroDxCodigoComparable_(salida);
+    let coincidencia = null;
+    if(idActual){
+      coincidencia = anteriores.find(function(item){
+        return auroDxTextoComparable_(item.id_diagnostico) === idActual;
+      }) || null;
+    }
+    if(!coincidencia && codigoActual){
+      coincidencia = anteriores.find(function(item){
+        return auroDxCodigoComparable_(item) === codigoActual;
+      }) || null;
+    }
+    if(coincidencia && coincidencia.id_diagnostico){
+      salida.id_diagnostico = coincidencia.id_diagnostico;
+    }
+    return salida;
+  });
+}
+
 async function auroGuardarDiagnosticosAtencionActual(){
-  const API = typeof auroExamenFisicoApiUrl === 'function'
-    ? auroExamenFisicoApiUrl()
-    : '';
+  const API = typeof auroExamenFisicoApiUrl === 'function' ? auroExamenFisicoApiUrl() : '';
+  const idAtencion = String((typeof auroExamenFisicoIdAtencionActual === 'function' ? auroExamenFisicoIdAtencionActual() : window.examenFisicoState?.atencionActual) || '').trim();
+  let diagnosticos = typeof auroRecopilarDiagnosticosEstructurados === 'function' ? auroRecopilarDiagnosticosEstructurados() : [];
 
-  const idAtencion = String(
-    (typeof auroExamenFisicoIdAtencionActual === 'function'
-      ? auroExamenFisicoIdAtencionActual()
-      : window.examenFisicoState?.atencionActual) || ''
-  ).trim();
-
-  const diagnosticos = typeof auroRecopilarDiagnosticosEstructurados === 'function'
-    ? auroRecopilarDiagnosticosEstructurados()
-    : [];
-
-  if(!API){
-    return {
-      success:false,
-      message:'API_URL no definida para guardar el diagnóstico.'
-    };
-  }
-
-  if(!idAtencion){
-    return {
-      success:false,
-      message:'No existe una atención activa para guardar el diagnóstico.'
-    };
-  }
-
-  if(!Array.isArray(diagnosticos) || !diagnosticos.length){
-    return {
-      success:false,
-      message:'No existen diagnósticos seleccionados para esta atención.'
-    };
-  }
+  if(!API) return {success:false,message:'API_URL no definida para guardar el diagnóstico.'};
+  if(!idAtencion) return {success:false,message:'No existe una atención activa para guardar el diagnóstico.'};
 
   try{
-    window.examenFisicoState = window.examenFisicoState || {
-      atencionActual:idAtencion,
-      cache:{}
-    };
+    if(window.auroDiagnosticos && typeof window.auroDiagnosticos.puedeAplicarAlPlan === 'function' && window.auroDiagnosticos.puedeAplicarAlPlan() === false){
+      return {success:false,bloqueado:true,message:'La atención seleccionada está cerrada o es histórica. Diagnóstico permanece en solo lectura.'};
+    }
+  }catch(e){}
 
-    window.examenFisicoState.examenesSheets =
-      window.examenFisicoState.examenesSheets || {};
+  try{
+    window.examenFisicoState = window.examenFisicoState || {atencionActual:idAtencion,cache:{}};
+    window.examenFisicoState.examenesSheets = window.examenFisicoState.examenesSheets || {};
 
-    /*
-      AUROSANAX FIX QUIRÚRGICO
-      --------------------------------------------------------
-      El guardado autónomo de Diagnóstico depende de id_atencion.
+    const persistidos = await auroDxLeerPersistidosAtencion_(API, idAtencion);
+    diagnosticos = auroDxConservarIdsPersistidos_(Array.isArray(diagnosticos) ? diagnosticos : [], persistidos);
 
-      - No crea una fila en examenes_fisicos.
-      - No llama a auroGuardarExamenFisicoSheets().
-      - No llama a auroGuardarDetalleExamenFisicoSheets().
-      - Si ya existe un examen físico real, conserva su id_examen
-        únicamente como vínculo opcional.
-      - Espera la confirmación real de guardarDiagnosticos antes de
-        permitir que CIE Inteligente continúe hacia Plan.
-    */
-    let examen = window.examenFisicoState.examenesSheets[idAtencion] || null;
+    const firmaActual = auroDxFirmaLista_(diagnosticos);
+    const firmaPersistida = auroDxFirmaLista_(persistidos);
 
-    if(!examen || !String(examen.id_examen || '').trim()){
-      examen = await auroBuscarExamenFisicoPorAtencion(idAtencion);
+    if(firmaActual === firmaPersistida){
+      return {success:true,sin_cambios:true,id_atencion:idAtencion,diagnosticos:diagnosticos.length,message:'Diagnóstico sin cambios. No se realizó ninguna escritura.'};
     }
 
+    let examen = window.examenFisicoState.examenesSheets[idAtencion] || null;
+    if(!examen || !String(examen.id_examen || '').trim()) examen = await auroBuscarExamenFisicoPorAtencion(idAtencion);
     const idExamen = String(examen?.id_examen || '').trim();
 
     const respuesta = await fetch(API, {
       method:'POST',
-      body:JSON.stringify({
-        accion:'guardarDiagnosticos',
-        data:{
-          id_atencion:idAtencion,
-          id_examen:idExamen,
-          registros:diagnosticos
-        }
-      })
+      body:JSON.stringify({accion:'guardarDiagnosticos',data:{id_atencion:idAtencion,id_examen:idExamen,registros:diagnosticos}})
     });
-
     const resultado = await respuesta.json();
-
     if(!resultado || resultado.success === false){
-      return {
-        success:false,
-        message:resultado?.message ||
-          'Apps Script no confirmó el guardado del diagnóstico.',
-        data:resultado || null
-      };
+      return {success:false,message:resultado?.message || 'Apps Script no confirmó el guardado del diagnóstico.',data:resultado || null};
     }
 
-    /*
-      Invalida lecturas antiguas para que Diagnóstico y Recetas
-      consulten nuevamente los datos persistidos de esta atención.
-    */
     try{
-      if(window.auroDiagnosticosState?.cache){
-        delete window.auroDiagnosticosState.cache[idAtencion];
-      }
-      if(window.recetaDiagnosticosPorAtencionCache){
-        delete window.recetaDiagnosticosPorAtencionCache[idAtencion];
-      }
+      if(window.auroDiagnosticosState?.cache) delete window.auroDiagnosticosState.cache[idAtencion];
+      if(window.recetaDiagnosticosPorAtencionCache) delete window.recetaDiagnosticosPorAtencionCache[idAtencion];
     }catch(e){}
 
-    return {
-      success:true,
-      id_atencion:idAtencion,
-      id_examen:idExamen,
-      diagnosticos:
-        Number(resultado.total_guardados ?? diagnosticos.length),
-      data:resultado
-    };
+    try{
+      if(window.auroDiagnosticos && typeof window.auroDiagnosticos.cargar === 'function') await Promise.resolve(window.auroDiagnosticos.cargar(idAtencion, true));
+    }catch(e){
+      console.warn('AUROSANAX DIAGNÓSTICOS: guardado confirmado, pero no se pudo refrescar el visor.', e);
+    }
 
+    return {success:true,sin_cambios:false,id_atencion:idAtencion,id_examen:idExamen,diagnosticos:Number(resultado.total_guardados ?? diagnosticos.length),data:resultado};
   }catch(error){
-    console.error(
-      'AUROSANAX DIAGNÓSTICOS: error guardando directamente por atención.',
-      error
-    );
-
-    return {
-      success:false,
-      message:error?.message || String(error)
-    };
+    console.error('AUROSANAX DIAGNÓSTICOS: error guardando directamente por atención.', error);
+    return {success:false,message:error?.message || String(error)};
   }
 }
 
@@ -3419,6 +3442,63 @@ window.auroInstalarFlujoUnicoDiagnosticoPlan =
   auroInstalarFlujoUnicoDiagnosticoPlan;
 
 
+
+/* ==========================================================
+   AUROSANAX - ACTUALIZAR HISTORIA DESDE DIAGNÓSTICO 2026-08-07
+   ----------------------------------------------------------
+   - Solo actúa si el panel Diagnóstico está activo/visible.
+   - No guarda Examen Físico.
+   - No aplica Plan.
+   - Usa el guardador autónomo de Diagnóstico.
+   - Si no hay cambios, el guardador no escribe.
+   ========================================================== */
+function auroDxPanelEstaActivo_(){
+  const candidatos = [
+    document.getElementById('hc_diagnostico'),
+    document.getElementById('hc_diagnosticos'),
+    document.getElementById('diagnosticos'),
+    document.getElementById('diagnostico')
+  ].filter(Boolean);
+
+  return candidatos.some(function(panel){
+    const visible = panel.offsetParent !== null;
+    const activo = panel.classList?.contains('active') || panel.classList?.contains('show') || panel.getAttribute('aria-hidden') === 'false';
+    return visible && !!activo;
+  });
+}
+
+function auroInstalarActualizarDiagnosticoIndependiente_(){
+  if(window.__auroActualizarDiagnosticoIndependienteInstalado) return;
+  window.__auroActualizarDiagnosticoIndependienteInstalado = true;
+
+  document.addEventListener('click', function(e){
+    const btn = e.target && e.target.closest ? e.target.closest('button, a') : null;
+    if(!btn) return;
+    const textoBoton = String(btn.textContent || btn.innerText || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+    if(!textoBoton.includes('actualizar historia')) return;
+    if(!auroDxPanelEstaActivo_()) return;
+
+    setTimeout(async function(){
+      if(typeof window.auroGuardarDiagnosticosAtencionActual !== 'function') return;
+      const resultado = await window.auroGuardarDiagnosticosAtencionActual();
+      if(!resultado || resultado.success !== true){
+        console.warn('AUROSANAX DIAGNÓSTICOS: actualización no confirmada.', resultado);
+        return;
+      }
+      if(resultado.sin_cambios){
+        console.log('AUROSANAX DIAGNÓSTICOS: sin cambios reales; no se escribió en Sheets.');
+      }else{
+        console.log('AUROSANAX DIAGNÓSTICOS: actualización independiente confirmada.', resultado);
+      }
+    }, 450);
+  }, true);
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', auroInstalarActualizarDiagnosticoIndependiente_);
+}else{
+  auroInstalarActualizarDiagnosticoIndependiente_();
+}
 
 /* AUROSANAX - Confirmación de carga del módulo */
 window.auroExamenFisicoModuloCargado = true;
