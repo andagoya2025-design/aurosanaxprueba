@@ -597,6 +597,15 @@
       tipo_diagnostico: texto(d.tipo_diagnostico || d.tipo || 'Presuntivo'),
       estado: texto(d.estado || 'Activo'),
       observaciones: texto(d.observaciones),
+
+      /*
+       * AUROSANAX FIX QUIRÚRGICO FECHAS DIAGNÓSTICO 2026-08-07
+       * Solo conserva las fechas reales recibidas desde Google Sheets.
+       * No genera fechas, no guarda y no modifica id_atencion.
+       */
+      fecha_creacion: texto(d.fecha_creacion),
+      fecha_actualizacion: texto(d.fecha_actualizacion),
+
       origen: 'Google Sheets'
     })).filter(d => {
       const activo = !d.estado || ['activo','activa','si','true'].includes(normalizar(d.estado));
@@ -3856,4 +3865,3 @@
    - Plan, Recetas, Examen Físico, Anamnesis, Antecedentes o Apoyo IA.
    - Apps Script, Google Sheets, JSON, botones, HTML o CSS.
 ===================================================================== */
-
