@@ -1797,13 +1797,29 @@ function auroV21AplicarMedicamentosPorPatologia(chk){
   }
 }
 
-function auroV21AgregarBoton(texto, icono, onClick){
+function auroV21AgregarBoton(texto, icono, onClick, estadoKey){
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn-soft auro-v21-helper-btn';
   btn.innerHTML = `<i class="bi ${icono} me-1"></i>${texto}`;
+  if(estadoKey) btn.dataset.auroHelperKey = estadoKey;
+  btn.setAttribute('aria-pressed', 'false');
   btn.addEventListener('click', onClick);
   return btn;
+}
+
+function auroV21SetBotonRapidoActivo(estadoKey, activo){
+  if(!estadoKey) return;
+  const btn = document.querySelector(
+    `.auro-v21-helper-btn[data-auro-helper-key="${CSS.escape(String(estadoKey))}"]`
+  );
+  if(!btn) return;
+  btn.classList.toggle('auro-v21-helper-active', !!activo);
+  btn.setAttribute('aria-pressed', activo ? 'true' : 'false');
+}
+
+function auroV21DesactivarBotonRapido(estadoKey){
+  auroV21SetBotonRapidoActivo(estadoKey, false);
 }
 
 function auroV21InsertarPanelAyudas(){
@@ -1827,28 +1843,32 @@ function auroV21InsertarPanelAyudas(){
     panel.dataset.auroNiegaPatologicos = '1';
     document.querySelectorAll('.hcPatologicoCheck').forEach(chk => chk.checked = false);
     document.querySelectorAll('.hcPatologicoTiempo,.hcPatologicoMedicamento').forEach(i => i.value = '');
+    auroV21SetBotonRapidoActivo('niega_patologicos', true);
     alert('Se registrará: Niega antecedentes patológicos personales relevantes.');
-  }));
+  }, 'niega_patologicos'));
 
   actions.appendChild(auroV21AgregarBoton('Niega quirúrgicos', 'bi-check2-circle', () => {
     panel.dataset.auroNiegaQuirurgicos = '1';
     document.querySelectorAll('.hcQuirurgicoCheck').forEach(chk => chk.checked = false);
     document.querySelectorAll('.hcQuirurgicoFecha,.hcQuirurgicoOtroNombre').forEach(i => i.value = '');
+    auroV21SetBotonRapidoActivo('niega_quirurgicos', true);
     alert('Se registrará: Niega antecedentes quirúrgicos.');
-  }));
+  }, 'niega_quirurgicos'));
 
   actions.appendChild(auroV21AgregarBoton('Niega alergias', 'bi-shield-check', () => {
     panel.dataset.auroNiegaAlergias = '1';
     document.querySelectorAll('.hcAlergiaCheck').forEach(chk => chk.checked = false);
     document.querySelectorAll('.hcAlergiaDetalle').forEach(i => i.value = '');
     if(document.getElementById('hcAlergiasResumen')) document.getElementById('hcAlergiasResumen').textContent = 'Niega alergias';
+    auroV21SetBotonRapidoActivo('niega_alergias', true);
     alert('Se registrará: Niega alergias conocidas.');
-  }));
+  }, 'niega_alergias'));
 
   actions.appendChild(auroV21AgregarBoton('Sin medicación actual', 'bi-capsule', () => {
     const el = document.getElementById('hcMedicacionActual');
     if(el) el.value = 'No usa medicación actual según refiere.';
-  }));
+    auroV21SetBotonRapidoActivo('sin_medicacion', true);
+  }, 'sin_medicacion'));
 
   actions.appendChild(auroV21AgregarBoton('Vacunas al día según refiere', 'bi-shield-plus', () => {
     ['Covid','Hpv','HepB','Influenza','Tdpa'].forEach(key => {
@@ -1861,7 +1881,8 @@ function auroV21InsertarPanelAyudas(){
         if(obs && !obs.value) obs.value = 'Al día según refiere';
       }
     });
-  }));
+    auroV21SetBotonRapidoActivo('vacunas_dia', true);
+  }, 'vacunas_dia'));
 
   actions.appendChild(auroV21AgregarBoton('Hábitos sin consumo nocivo', 'bi-heart', () => {
     ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].forEach(key => {
@@ -1872,7 +1893,8 @@ function auroV21InsertarPanelAyudas(){
       if(tiempo) tiempo.value = 'No aplica';
       if(abst) abst.value = 'No aplica';
     });
-  }));
+    auroV21SetBotonRapidoActivo('habitos_sin_consumo', true);
+  }, 'habitos_sin_consumo'));
 
   const firstSubtitle = panel.querySelector('.clinical-subtitle');
   if(firstSubtitle) firstSubtitle.insertAdjacentElement('afterend', box);
@@ -1901,6 +1923,7 @@ function auroV21InicializarAyudasAntecedentes(){
       if(chk && input.value.trim()) chk.checked = true;
       const panel = document.getElementById('hc_antecedentes');
       if(panel) delete panel.dataset.auroNiegaPatologicos;
+      auroV21DesactivarBotonRapido('niega_patologicos');
     });
   });
 
@@ -1909,6 +1932,7 @@ function auroV21InicializarAyudasAntecedentes(){
       auroV21AplicarMedicamentosPorPatologia(chk);
       const panel = document.getElementById('hc_antecedentes');
       if(panel && chk.checked) delete panel.dataset.auroNiegaPatologicos;
+      if(chk.checked) auroV21DesactivarBotonRapido('niega_patologicos');
     });
     auroV21AplicarMedicamentosPorPatologia(chk);
   });
@@ -1923,6 +1947,7 @@ function auroV21InicializarAyudasAntecedentes(){
       if(chk && input.value.trim()) chk.checked = true;
       const panel = document.getElementById('hc_antecedentes');
       if(panel) delete panel.dataset.auroNiegaQuirurgicos;
+      auroV21DesactivarBotonRapido('niega_quirurgicos');
     });
   });
 
@@ -1934,6 +1959,7 @@ function auroV21InicializarAyudasAntecedentes(){
       if(chk && otroCirugia.value.trim()) chk.checked = true;
       const panel = document.getElementById('hc_antecedentes');
       if(panel) delete panel.dataset.auroNiegaQuirurgicos;
+      auroV21DesactivarBotonRapido('niega_quirurgicos');
     });
   }
 
@@ -1945,6 +1971,7 @@ function auroV21InicializarAyudasAntecedentes(){
       if(chk && input.value.trim()) chk.checked = true;
       const panel = document.getElementById('hc_antecedentes');
       if(panel) delete panel.dataset.auroNiegaAlergias;
+      auroV21DesactivarBotonRapido('niega_alergias');
     });
   });
 
@@ -1952,6 +1979,7 @@ function auroV21InicializarAyudasAntecedentes(){
     chk.addEventListener('change', () => {
       const panel = document.getElementById('hc_antecedentes');
       if(panel && chk.checked) delete panel.dataset.auroNiegaAlergias;
+      if(chk.checked) auroV21DesactivarBotonRapido('niega_alergias');
     });
   });
 
@@ -1995,6 +2023,37 @@ function auroV21InicializarAyudasAntecedentes(){
     if(/Sección visual|no modifica Google Sheets|fase no modifica/i.test(note.textContent || '')){
       note.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Sección conectada a Historia Clínica. Se guarda en Google Sheets dentro de antecedentes estructurados.';
     }
+  });
+
+  /* Estado visual de ayudas rápidas: solo interfaz, sin alterar guardado. */
+  const medActual = document.getElementById('hcMedicacionActual');
+  if(medActual && medActual.dataset.auroHelperVisualReady !== '1'){
+    medActual.dataset.auroHelperVisualReady = '1';
+    medActual.addEventListener('input', () => {
+      if(String(medActual.value || '').trim() !== 'No usa medicación actual según refiere.'){
+        auroV21DesactivarBotonRapido('sin_medicacion');
+      }
+    });
+  }
+
+  document.querySelectorAll('#hc_antecedentes [id^="hcVac"]').forEach(el => {
+    if(el.dataset.auroHelperVisualReady === '1') return;
+    el.dataset.auroHelperVisualReady = '1';
+    const desactivar = () => auroV21DesactivarBotonRapido('vacunas_dia');
+    el.addEventListener('input', desactivar);
+    el.addEventListener('change', desactivar);
+  });
+
+  ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].forEach(key => {
+    document.querySelectorAll(
+      `input[name="hcHabito${key}Ex"],#hcHabito${key}Tiempo,#hcHabito${key}Abstinencia`
+    ).forEach(el => {
+      if(el.dataset.auroHelperVisualReady === '1') return;
+      el.dataset.auroHelperVisualReady = '1';
+      const desactivar = () => auroV21DesactivarBotonRapido('habitos_sin_consumo');
+      el.addEventListener('input', desactivar);
+      el.addEventListener('change', desactivar);
+    });
   });
 }
 
@@ -4276,4 +4335,3 @@ function recopilarAntecedentesPersonalesCompletos(){
     'AUROSANAX antecedentes.js: familiares estructurados V1 conectados sin cambios de backend.'
   );
 })();
-
