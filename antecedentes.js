@@ -962,6 +962,10 @@ function auroCargarAntecedentesDesdeHistoria(h, modo){
 
   auroMostrarAntecedentesPrevios(h, modo || 'lectura');
   updateClinicalSummary();
+
+  if(typeof auroV21SincronizarEstadosAyudas === 'function'){
+    setTimeout(auroV21SincronizarEstadosAyudas, 0);
+  }
 }
 
 function auroCargarAntecedentesPreviosPaciente(idPaciente){
@@ -1090,11 +1094,22 @@ function limpiarAntecedentesPersonalesEstructurados(){
 function cargarAntecedentesPersonalesEstructurados(valor){
   limpiarAntecedentesPersonalesEstructurados();
   const texto = String(valor || '').trim();
+  const panel = document.getElementById('hc_antecedentes');
+
+  if(panel) delete panel.dataset.auroNiegaPatologicos;
+
   if(!texto){
+    if(typeof auroV21SincronizarEstadosAyudas === 'function') auroV21SincronizarEstadosAyudas();
     return;
   }
 
   setValueIfExists('hcAntecedentesPersonales', texto);
+
+  if(/^Niega antecedentes patológicos personales relevantes\.?$/i.test(texto)){
+    if(panel) panel.dataset.auroNiegaPatologicos = '1';
+    if(typeof auroV21SincronizarEstadosAyudas === 'function') auroV21SincronizarEstadosAyudas();
+    return;
+  }
 
   texto.split(';').map(x => x.trim()).filter(Boolean).forEach(item => {
     const partes = item.split('|').map(x => x.trim());
@@ -1149,11 +1164,22 @@ function limpiarAntecedentesQuirurgicosEstructurados(){
 function cargarAntecedentesQuirurgicosEstructurados(valor){
   limpiarAntecedentesQuirurgicosEstructurados();
   const texto = String(valor || '').trim();
+  const panel = document.getElementById('hc_antecedentes');
+
+  if(panel) delete panel.dataset.auroNiegaQuirurgicos;
+
   if(!texto){
+    if(typeof auroV21SincronizarEstadosAyudas === 'function') auroV21SincronizarEstadosAyudas();
     return;
   }
 
   setValueIfExists('hcAntecedentesQuirurgicos', texto);
+
+  if(/^Niega antecedentes quirúrgicos\.?$/i.test(texto)){
+    if(panel) panel.dataset.auroNiegaQuirurgicos = '1';
+    if(typeof auroV21SincronizarEstadosAyudas === 'function') auroV21SincronizarEstadosAyudas();
+    return;
+  }
 
   texto.split(';').map(x => x.trim()).filter(Boolean).forEach(item => {
     const partes = item.split('|').map(x => x.trim());
@@ -1210,11 +1236,23 @@ function limpiarAlergiasEstructuradas(){
 function cargarAlergiasEstructuradas(valor){
   limpiarAlergiasEstructuradas();
   const texto = String(valor || '').trim();
+  const panel = document.getElementById('hc_antecedentes');
+
+  if(panel) delete panel.dataset.auroNiegaAlergias;
+
   if(!texto){
+    if(typeof auroV21SincronizarEstadosAyudas === 'function') auroV21SincronizarEstadosAyudas();
     return;
   }
 
   setValueIfExists('hcAlergias', texto);
+
+  if(/^Niega alergias conocidas\.?$/i.test(texto)){
+    if(panel) panel.dataset.auroNiegaAlergias = '1';
+    if(document.getElementById('hcAlergiasResumen')) document.getElementById('hcAlergiasResumen').textContent = 'Niega alergias';
+    if(typeof auroV21SincronizarEstadosAyudas === 'function') auroV21SincronizarEstadosAyudas();
+    return;
+  }
 
   texto.split(';').map(x => x.trim()).filter(Boolean).forEach(item => {
     const partes = item.split('|').map(x => x.trim());
@@ -1884,6 +1922,54 @@ function auroV21DesactivarBotonRapido(estadoKey, limpiarSnapshot = true){
   if(limpiarSnapshot) delete AURO_V21_HELPER_SNAPSHOTS[estadoKey];
 }
 
+function auroV21SincronizarEstadosAyudas(){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return;
+
+  auroV21SetBotonRapidoActivo(
+    'niega_patologicos',
+    panel.dataset.auroNiegaPatologicos === '1'
+  );
+
+  auroV21SetBotonRapidoActivo(
+    'niega_quirurgicos',
+    panel.dataset.auroNiegaQuirurgicos === '1'
+  );
+
+  auroV21SetBotonRapidoActivo(
+    'niega_alergias',
+    panel.dataset.auroNiegaAlergias === '1'
+  );
+
+  auroV21SetBotonRapidoActivo(
+    'niega_familiares',
+    panel.dataset.auroNiegaFamiliares === '1'
+  );
+
+  const med = String(document.getElementById('hcMedicacionActual')?.value || '').trim();
+  auroV21SetBotonRapidoActivo(
+    'sin_medicacion',
+    med === 'No usa medicación actual según refiere.'
+  );
+
+  const vacunasRapidas = ['Covid','Hpv','HepB','Influenza','Tdpa'];
+  const vacunasAlDia = vacunasRapidas.every(vacunaKey => {
+    const checks = [...document.querySelectorAll(`[id^="hcVac${vacunaKey}Apl"]`)];
+    return checks.length > 0 && checks.every(chk => chk.checked);
+  });
+  auroV21SetBotonRapidoActivo('vacunas_dia', vacunasAlDia);
+
+  const habitosSinConsumo = ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].every(habitoKey => {
+    const no = document.querySelector(`input[name="hcHabito${habitoKey}Ex"][value="No"]`);
+    const tiempo = String(document.getElementById('hcHabito' + habitoKey + 'Tiempo')?.value || '').trim();
+    const abst = String(document.getElementById('hcHabito' + habitoKey + 'Abstinencia')?.value || '').trim();
+    return !!no?.checked && tiempo === 'No aplica' && abst === 'No aplica';
+  });
+  auroV21SetBotonRapidoActivo('habitos_sin_consumo', habitosSinConsumo);
+}
+
+window.auroV21SincronizarEstadosAyudas = auroV21SincronizarEstadosAyudas;
+
 function auroV21InsertarPanelAyudas(){
   const panel = document.getElementById('hc_antecedentes');
   if(!panel || document.getElementById('auroV21AntecedentesHelp')) return;
@@ -2055,39 +2141,41 @@ function auroV21InsertarPanelAyudas(){
     const key = 'niega_familiares';
 
     if(auroV21BotonRapidoEstaActivo(key)){
-      auroV21RestaurarSnapshot(key);
+      auroV21RestaurarSnapshot(key, extras => {
+        if(extras?.niega === undefined) delete panel.dataset.auroNiegaFamiliares;
+        else panel.dataset.auroNiegaFamiliares = extras.niega;
+      });
+
       if(typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'){
         window.recopilarAntecedentesFamiliaresEstructurados();
       }
+
       auroV21SetBotonRapidoActivo(key, false);
       return;
     }
 
-    auroV21GuardarSnapshot(key, [
-      '.hcFamiliarPatParentesco','.hcFamiliarPatDetalle','.hcFamiliarPatOtroNombre',
-      '.hcFamiliarQxParentesco','.hcFamiliarQxDetalle','.hcFamiliarQxOtroNombre',
-      '#hcFamiliaresOtros','#hcAntecedentesFamiliares'
-    ]);
+    auroV21GuardarSnapshot(
+      key,
+      [
+        '.hcFamiliarPatParentesco','.hcFamiliarPatDetalle','.hcFamiliarPatOtroNombre',
+        '.hcFamiliarQxParentesco','.hcFamiliarQxDetalle','.hcFamiliarQxOtroNombre',
+        '#hcFamiliaresOtros','#hcAntecedentesFamiliares'
+      ],
+      () => ({ niega: panel.dataset.auroNiegaFamiliares })
+    );
 
     if(typeof window.limpiarAntecedentesFamiliaresEstructurados === 'function'){
       window.limpiarAntecedentesFamiliaresEstructurados();
-    }else{
-      document.querySelectorAll(
-        '.hcFamiliarPatParentesco,.hcFamiliarPatDetalle,.hcFamiliarPatOtroNombre,' +
-        '.hcFamiliarQxParentesco,.hcFamiliarQxDetalle,.hcFamiliarQxOtroNombre'
-      ).forEach(i => i.value = '');
-      const hidden = document.getElementById('hcAntecedentesFamiliares');
-      if(hidden) hidden.value = '';
     }
 
-    const otros = document.getElementById('hcFamiliaresOtros');
-    if(otros) otros.value = 'Niega antecedentes familiares relevantes.';
+    panel.dataset.auroNiegaFamiliares = '1';
 
     if(typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'){
       window.recopilarAntecedentesFamiliaresEstructurados();
     }
 
     auroV21SetBotonRapidoActivo(key, true);
+    alert('Se registrará: Niega antecedentes familiares relevantes.');
   }, 'niega_familiares'));
 
   const firstSubtitle = panel.querySelector('.clinical-subtitle');
@@ -2129,6 +2217,24 @@ function auroV21InicializarAyudasAntecedentes(){
       if(chk.checked) auroV21DesactivarBotonRapido('niega_patologicos');
     });
     auroV21AplicarMedicamentosPorPatologia(chk);
+  });
+
+  document.querySelectorAll('.hcPatologicoTiempo').forEach(input => {
+    input.addEventListener('input', () => {
+      if(!input.value.trim()) return;
+      const panel = document.getElementById('hc_antecedentes');
+      if(panel) delete panel.dataset.auroNiegaPatologicos;
+      auroV21DesactivarBotonRapido('niega_patologicos');
+    });
+  });
+
+  document.querySelectorAll('.hcQuirurgicoCheck').forEach(chk => {
+    chk.addEventListener('change', () => {
+      if(!chk.checked) return;
+      const panel = document.getElementById('hc_antecedentes');
+      if(panel) delete panel.dataset.auroNiegaQuirurgicos;
+      auroV21DesactivarBotonRapido('niega_quirurgicos');
+    });
   });
 
   document.querySelectorAll('.hcQuirurgicoFecha').forEach(input => {
@@ -2223,11 +2329,13 @@ function auroV21InicializarAyudasAntecedentes(){
   const medActual = document.getElementById('hcMedicacionActual');
   if(medActual && medActual.dataset.auroHelperVisualReady !== '1'){
     medActual.dataset.auroHelperVisualReady = '1';
-    medActual.addEventListener('input', () => {
+    const revisarMedicacionRapida = () => {
       if(String(medActual.value || '').trim() !== 'No usa medicación actual según refiere.'){
         auroV21DesactivarBotonRapido('sin_medicacion');
       }
-    });
+    };
+    medActual.addEventListener('input', revisarMedicacionRapida);
+    medActual.addEventListener('change', revisarMedicacionRapida);
   }
 
   document.querySelectorAll('#hc_antecedentes [id^="hcVac"]').forEach(el => {
@@ -2257,10 +2365,16 @@ function auroV21InicializarAyudasAntecedentes(){
   ).forEach(el => {
     if(el.dataset.auroHelperFamiliaVisualReady === '1') return;
     el.dataset.auroHelperFamiliaVisualReady = '1';
-    const desactivar = () => auroV21DesactivarBotonRapido('niega_familiares');
+    const desactivar = () => {
+      const panel = document.getElementById('hc_antecedentes');
+      if(panel) delete panel.dataset.auroNiegaFamiliares;
+      auroV21DesactivarBotonRapido('niega_familiares');
+    };
     el.addEventListener('input', desactivar);
     el.addEventListener('change', desactivar);
   });
+
+  setTimeout(auroV21SincronizarEstadosAyudas, 0);
 }
 
 /* Redefinición no destructiva: conserva el formato anterior, pero añade unidades flexibles y botones rápidos. */
@@ -4122,6 +4236,7 @@ function recopilarAntecedentesPersonalesCompletos(){
   function datosVacios_(){
     return {
       version:'AUROSANAX_ANT_FAMILIARES_V1',
+      niega:false,
       patologicos:[],
       quirurgicos:[],
       otros:''
@@ -4130,6 +4245,7 @@ function recopilarAntecedentesPersonalesCompletos(){
 
   function tieneDatos_(data){
     return !!(
+      data?.niega === true ||
       (Array.isArray(data?.patologicos) && data.patologicos.length) ||
       (Array.isArray(data?.quirurgicos) && data.quirurgicos.length) ||
       texto_(data?.otros)
@@ -4152,6 +4268,7 @@ function recopilarAntecedentesPersonalesCompletos(){
           estructurado:true,
           data:{
             version:'AUROSANAX_ANT_FAMILIARES_V1',
+            niega:obj.niega === true,
             patologicos:Array.isArray(obj.patologicos) ? obj.patologicos : [],
             quirurgicos:Array.isArray(obj.quirurgicos) ? obj.quirurgicos : [],
             otros:texto_(obj.otros)
@@ -4235,8 +4352,10 @@ function recopilarAntecedentesPersonalesCompletos(){
   }
 
   function recopilar_(){
+    const panel = document.getElementById('hc_antecedentes');
     const data = {
       version:'AUROSANAX_ANT_FAMILIARES_V1',
+      niega:panel?.dataset?.auroNiegaFamiliares === '1',
       patologicos:recopilarPatologicos_(),
       quirurgicos:recopilarQuirurgicos_(),
       otros:texto_(document.getElementById('hcFamiliaresOtros')?.value)
@@ -4271,6 +4390,9 @@ function recopilarAntecedentesPersonalesCompletos(){
     if(!preservarHidden){
       const hidden = document.getElementById('hcAntecedentesFamiliares');
       if(hidden) hidden.value = '';
+
+      const panel = document.getElementById('hc_antecedentes');
+      if(panel) delete panel.dataset.auroNiegaFamiliares;
     }
   }
 
@@ -4378,6 +4500,12 @@ function recopilarAntecedentesPersonalesCompletos(){
       return;
     }
 
+    const panel = document.getElementById('hc_antecedentes');
+    if(panel){
+      if(lectura.data.niega === true) panel.dataset.auroNiegaFamiliares = '1';
+      else delete panel.dataset.auroNiegaFamiliares;
+    }
+
     cargarPatologicos_(lectura.data.patologicos);
     cargarQuirurgicos_(lectura.data.quirurgicos);
 
@@ -4388,6 +4516,10 @@ function recopilarAntecedentesPersonalesCompletos(){
       hidden.value = tieneDatos_(lectura.data)
         ? MARCADOR + JSON.stringify(lectura.data)
         : '';
+    }
+
+    if(typeof window.auroV21SincronizarEstadosAyudas === 'function'){
+      setTimeout(window.auroV21SincronizarEstadosAyudas, 0);
     }
   }
 
@@ -4400,6 +4532,14 @@ function recopilarAntecedentesPersonalesCompletos(){
     }
 
     const items = [];
+
+    if(lectura.data.niega === true){
+      items.push({
+        titulo:'Niega antecedentes familiares relevantes',
+        detalle:''
+      });
+      return items;
+    }
 
     lectura.data.patologicos.forEach(x => {
       const detalle = [
