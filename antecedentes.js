@@ -1818,8 +1818,70 @@ function auroV21SetBotonRapidoActivo(estadoKey, activo){
   btn.setAttribute('aria-pressed', activo ? 'true' : 'false');
 }
 
-function auroV21DesactivarBotonRapido(estadoKey){
+function auroV21BotonRapidoEstaActivo(estadoKey){
+  const btn = document.querySelector(
+    `.auro-v21-helper-btn[data-auro-helper-key="${CSS.escape(String(estadoKey || ''))}"]`
+  );
+  return !!btn?.classList.contains('auro-v21-helper-active');
+}
+
+/*
+  Estado temporal SOLO en memoria del navegador.
+  No se guarda en Google Sheets, no modifica fechas, IDs ni payload.
+  Sirve únicamente para que el segundo clic restaure exactamente
+  lo que había antes de usar una ayuda rápida.
+*/
+const AURO_V21_HELPER_SNAPSHOTS = Object.create(null);
+
+function auroV21CapturarControles(selectores){
+  const mapa = new Map();
+
+  (selectores || []).forEach(selector => {
+    document.querySelectorAll(selector).forEach(el => {
+      if(mapa.has(el)) return;
+      mapa.set(el, {
+        el: el,
+        value: 'value' in el ? el.value : undefined,
+        checked: 'checked' in el ? !!el.checked : undefined
+      });
+    });
+  });
+
+  return [...mapa.values()];
+}
+
+function auroV21RestaurarControles(snapshot){
+  (snapshot || []).forEach(item => {
+    const el = item?.el;
+    if(!el || !document.documentElement.contains(el)) return;
+    if(item.value !== undefined && 'value' in el) el.value = item.value;
+    if(item.checked !== undefined && 'checked' in el) el.checked = !!item.checked;
+  });
+}
+
+function auroV21GuardarSnapshot(estadoKey, selectores, extras){
+  AURO_V21_HELPER_SNAPSHOTS[estadoKey] = {
+    controles: auroV21CapturarControles(selectores),
+    extras: typeof extras === 'function' ? extras() : null
+  };
+}
+
+function auroV21RestaurarSnapshot(estadoKey, restaurarExtras){
+  const snapshot = AURO_V21_HELPER_SNAPSHOTS[estadoKey];
+  if(!snapshot) return false;
+
+  auroV21RestaurarControles(snapshot.controles);
+  if(typeof restaurarExtras === 'function'){
+    restaurarExtras(snapshot.extras);
+  }
+
+  delete AURO_V21_HELPER_SNAPSHOTS[estadoKey];
+  return true;
+}
+
+function auroV21DesactivarBotonRapido(estadoKey, limpiarSnapshot = true){
   auroV21SetBotonRapidoActivo(estadoKey, false);
+  if(limpiarSnapshot) delete AURO_V21_HELPER_SNAPSHOTS[estadoKey];
 }
 
 function auroV21InsertarPanelAyudas(){
@@ -1832,7 +1894,7 @@ function auroV21InsertarPanelAyudas(){
   box.innerHTML = `
     <div>
       <b><i class="bi bi-magic me-1"></i>Ayudas clínicas de llenado rápido</b>
-      <small>Opciones editables. No reemplazan el criterio médico.</small>
+      <small>Opciones editables. Segundo clic revierte únicamente la ayuda aplicada.</small>
     </div>
     <div class="auro-v21-help-actions"></div>
   `;
@@ -1840,61 +1902,193 @@ function auroV21InsertarPanelAyudas(){
   const actions = box.querySelector('.auro-v21-help-actions');
 
   actions.appendChild(auroV21AgregarBoton('Niega patológicos', 'bi-check2-circle', () => {
+    const key = 'niega_patologicos';
+
+    if(auroV21BotonRapidoEstaActivo(key)){
+      auroV21RestaurarSnapshot(key, extras => {
+        if(extras?.niega === undefined) delete panel.dataset.auroNiegaPatologicos;
+        else panel.dataset.auroNiegaPatologicos = extras.niega;
+      });
+      auroV21SetBotonRapidoActivo(key, false);
+      return;
+    }
+
+    auroV21GuardarSnapshot(
+      key,
+      ['.hcPatologicoCheck','.hcPatologicoTiempo','.hcPatologicoMedicamento','#hcAntecedentesPersonales'],
+      () => ({ niega: panel.dataset.auroNiegaPatologicos })
+    );
+
     panel.dataset.auroNiegaPatologicos = '1';
     document.querySelectorAll('.hcPatologicoCheck').forEach(chk => chk.checked = false);
     document.querySelectorAll('.hcPatologicoTiempo,.hcPatologicoMedicamento').forEach(i => i.value = '');
-    auroV21SetBotonRapidoActivo('niega_patologicos', true);
+    auroV21SetBotonRapidoActivo(key, true);
     alert('Se registrará: Niega antecedentes patológicos personales relevantes.');
   }, 'niega_patologicos'));
 
   actions.appendChild(auroV21AgregarBoton('Niega quirúrgicos', 'bi-check2-circle', () => {
+    const key = 'niega_quirurgicos';
+
+    if(auroV21BotonRapidoEstaActivo(key)){
+      auroV21RestaurarSnapshot(key, extras => {
+        if(extras?.niega === undefined) delete panel.dataset.auroNiegaQuirurgicos;
+        else panel.dataset.auroNiegaQuirurgicos = extras.niega;
+      });
+      auroV21SetBotonRapidoActivo(key, false);
+      return;
+    }
+
+    auroV21GuardarSnapshot(
+      key,
+      ['.hcQuirurgicoCheck','.hcQuirurgicoFecha','.hcQuirurgicoOtroNombre','#hcAntecedentesQuirurgicos'],
+      () => ({ niega: panel.dataset.auroNiegaQuirurgicos })
+    );
+
     panel.dataset.auroNiegaQuirurgicos = '1';
     document.querySelectorAll('.hcQuirurgicoCheck').forEach(chk => chk.checked = false);
     document.querySelectorAll('.hcQuirurgicoFecha,.hcQuirurgicoOtroNombre').forEach(i => i.value = '');
-    auroV21SetBotonRapidoActivo('niega_quirurgicos', true);
+    auroV21SetBotonRapidoActivo(key, true);
     alert('Se registrará: Niega antecedentes quirúrgicos.');
   }, 'niega_quirurgicos'));
 
   actions.appendChild(auroV21AgregarBoton('Niega alergias', 'bi-shield-check', () => {
+    const key = 'niega_alergias';
+
+    if(auroV21BotonRapidoEstaActivo(key)){
+      auroV21RestaurarSnapshot(key, extras => {
+        if(extras?.niega === undefined) delete panel.dataset.auroNiegaAlergias;
+        else panel.dataset.auroNiegaAlergias = extras.niega;
+
+        const resumen = document.getElementById('hcAlergiasResumen');
+        if(resumen && extras?.resumen !== undefined) resumen.textContent = extras.resumen;
+      });
+      auroV21SetBotonRapidoActivo(key, false);
+      return;
+    }
+
+    auroV21GuardarSnapshot(
+      key,
+      ['.hcAlergiaCheck','.hcAlergiaDetalle','#hcAlergias'],
+      () => ({
+        niega: panel.dataset.auroNiegaAlergias,
+        resumen: document.getElementById('hcAlergiasResumen')?.textContent
+      })
+    );
+
     panel.dataset.auroNiegaAlergias = '1';
     document.querySelectorAll('.hcAlergiaCheck').forEach(chk => chk.checked = false);
     document.querySelectorAll('.hcAlergiaDetalle').forEach(i => i.value = '');
     if(document.getElementById('hcAlergiasResumen')) document.getElementById('hcAlergiasResumen').textContent = 'Niega alergias';
-    auroV21SetBotonRapidoActivo('niega_alergias', true);
+    auroV21SetBotonRapidoActivo(key, true);
     alert('Se registrará: Niega alergias conocidas.');
   }, 'niega_alergias'));
 
   actions.appendChild(auroV21AgregarBoton('Sin medicación actual', 'bi-capsule', () => {
+    const key = 'sin_medicacion';
+
+    if(auroV21BotonRapidoEstaActivo(key)){
+      auroV21RestaurarSnapshot(key);
+      auroV21SetBotonRapidoActivo(key, false);
+      return;
+    }
+
+    auroV21GuardarSnapshot(key, ['#hcMedicacionActual']);
     const el = document.getElementById('hcMedicacionActual');
     if(el) el.value = 'No usa medicación actual según refiere.';
-    auroV21SetBotonRapidoActivo('sin_medicacion', true);
+    auroV21SetBotonRapidoActivo(key, true);
   }, 'sin_medicacion'));
 
   actions.appendChild(auroV21AgregarBoton('Vacunas al día según refiere', 'bi-shield-plus', () => {
-    ['Covid','Hpv','HepB','Influenza','Tdpa'].forEach(key => {
-      const nombre = document.getElementById('hcVac' + key + 'Nombre');
-      if(nombre && !nombre.value) nombre.value = key === 'Hpv' ? 'HPV / no recuerda marca' : 'No recuerda marca';
+    const key = 'vacunas_dia';
+
+    if(auroV21BotonRapidoEstaActivo(key)){
+      auroV21RestaurarSnapshot(key);
+      auroV21SetBotonRapidoActivo(key, false);
+      return;
+    }
+
+    auroV21GuardarSnapshot(key, ['#hc_antecedentes [id^="hcVac"]']);
+
+    ['Covid','Hpv','HepB','Influenza','Tdpa'].forEach(vacunaKey => {
+      const nombre = document.getElementById('hcVac' + vacunaKey + 'Nombre');
+      if(nombre && !nombre.value) nombre.value = vacunaKey === 'Hpv' ? 'HPV / no recuerda marca' : 'No recuerda marca';
+
       for(let i=1;i<=4;i++){
-        const apl = document.getElementById('hcVac' + key + 'Apl' + i);
-        const obs = document.getElementById('hcVac' + key + 'Obs' + i);
+        const apl = document.getElementById('hcVac' + vacunaKey + 'Apl' + i);
+        const obs = document.getElementById('hcVac' + vacunaKey + 'Obs' + i);
         if(apl) apl.checked = true;
         if(obs && !obs.value) obs.value = 'Al día según refiere';
       }
     });
-    auroV21SetBotonRapidoActivo('vacunas_dia', true);
+
+    auroV21SetBotonRapidoActivo(key, true);
   }, 'vacunas_dia'));
 
   actions.appendChild(auroV21AgregarBoton('Hábitos sin consumo nocivo', 'bi-heart', () => {
-    ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].forEach(key => {
-      const no = document.querySelector(`input[name="hcHabito${key}Ex"][value="No"]`);
+    const key = 'habitos_sin_consumo';
+
+    if(auroV21BotonRapidoEstaActivo(key)){
+      auroV21RestaurarSnapshot(key);
+      auroV21SetBotonRapidoActivo(key, false);
+      return;
+    }
+
+    auroV21GuardarSnapshot(key, [
+      'input[name^="hcHabito"][name$="Ex"]',
+      '[id^="hcHabito"][id$="Tiempo"]',
+      '[id^="hcHabito"][id$="Abstinencia"]'
+    ]);
+
+    ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].forEach(habitoKey => {
+      const no = document.querySelector(`input[name="hcHabito${habitoKey}Ex"][value="No"]`);
       if(no) no.checked = true;
-      const tiempo = document.getElementById('hcHabito' + key + 'Tiempo');
-      const abst = document.getElementById('hcHabito' + key + 'Abstinencia');
+      const tiempo = document.getElementById('hcHabito' + habitoKey + 'Tiempo');
+      const abst = document.getElementById('hcHabito' + habitoKey + 'Abstinencia');
       if(tiempo) tiempo.value = 'No aplica';
       if(abst) abst.value = 'No aplica';
     });
-    auroV21SetBotonRapidoActivo('habitos_sin_consumo', true);
+
+    auroV21SetBotonRapidoActivo(key, true);
   }, 'habitos_sin_consumo'));
+
+  actions.appendChild(auroV21AgregarBoton('Niega antecedentes familiares', 'bi-people', () => {
+    const key = 'niega_familiares';
+
+    if(auroV21BotonRapidoEstaActivo(key)){
+      auroV21RestaurarSnapshot(key);
+      if(typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'){
+        window.recopilarAntecedentesFamiliaresEstructurados();
+      }
+      auroV21SetBotonRapidoActivo(key, false);
+      return;
+    }
+
+    auroV21GuardarSnapshot(key, [
+      '.hcFamiliarPatParentesco','.hcFamiliarPatDetalle','.hcFamiliarPatOtroNombre',
+      '.hcFamiliarQxParentesco','.hcFamiliarQxDetalle','.hcFamiliarQxOtroNombre',
+      '#hcFamiliaresOtros','#hcAntecedentesFamiliares'
+    ]);
+
+    if(typeof window.limpiarAntecedentesFamiliaresEstructurados === 'function'){
+      window.limpiarAntecedentesFamiliaresEstructurados();
+    }else{
+      document.querySelectorAll(
+        '.hcFamiliarPatParentesco,.hcFamiliarPatDetalle,.hcFamiliarPatOtroNombre,' +
+        '.hcFamiliarQxParentesco,.hcFamiliarQxDetalle,.hcFamiliarQxOtroNombre'
+      ).forEach(i => i.value = '');
+      const hidden = document.getElementById('hcAntecedentesFamiliares');
+      if(hidden) hidden.value = '';
+    }
+
+    const otros = document.getElementById('hcFamiliaresOtros');
+    if(otros) otros.value = 'Niega antecedentes familiares relevantes.';
+
+    if(typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'){
+      window.recopilarAntecedentesFamiliaresEstructurados();
+    }
+
+    auroV21SetBotonRapidoActivo(key, true);
+  }, 'niega_familiares'));
 
   const firstSubtitle = panel.querySelector('.clinical-subtitle');
   if(firstSubtitle) firstSubtitle.insertAdjacentElement('afterend', box);
@@ -2054,6 +2248,18 @@ function auroV21InicializarAyudasAntecedentes(){
       el.addEventListener('input', desactivar);
       el.addEventListener('change', desactivar);
     });
+  });
+
+  document.querySelectorAll(
+    '.hcFamiliarPatParentesco,.hcFamiliarPatDetalle,.hcFamiliarPatOtroNombre,' +
+    '.hcFamiliarQxParentesco,.hcFamiliarQxDetalle,.hcFamiliarQxOtroNombre,' +
+    '#hcFamiliaresOtros'
+  ).forEach(el => {
+    if(el.dataset.auroHelperFamiliaVisualReady === '1') return;
+    el.dataset.auroHelperFamiliaVisualReady = '1';
+    const desactivar = () => auroV21DesactivarBotonRapido('niega_familiares');
+    el.addEventListener('input', desactivar);
+    el.addEventListener('change', desactivar);
   });
 }
 
