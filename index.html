@@ -3368,11 +3368,22 @@
                 <input id="hcIMC" class="form-control" readonly aria-readonly="true" placeholder="Automático">
                 <span class="auro-vital-unit">kg/m²</span>
               </div>
-              <div class="col-6 col-md-2 auro-vital-field auro-vital-pa">
-                <label class="form-label fw-bold" for="hcPA">Presión arterial</label>
-                <input id="hcPA" class="form-control" inputmode="numeric" autocomplete="off" maxlength="7" placeholder="Ej. 120/80" aria-describedby="hcPAFormato">
-                <span class="auro-vital-unit">mmHg</span>
-                <div id="hcPAFormato" class="form-text">Sistólica/diastólica</div>
+              <div class="col-12 col-md-4 auro-vital-field auro-vital-pa">
+                <label class="form-label fw-bold">Presión arterial</label>
+                <div class="auro-pa-doble" role="group" aria-label="Presión arterial sistólica y diastólica">
+                  <div class="auro-pa-campo">
+                    <input id="hcPASistolica" class="form-control" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="120" aria-label="Presión arterial sistólica">
+                    <small>Sistólica</small>
+                  </div>
+                  <span class="auro-pa-separador" aria-hidden="true">/</span>
+                  <div class="auro-pa-campo">
+                    <input id="hcPADiastolica" class="form-control" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="80" aria-label="Presión arterial diastólica">
+                    <small>Diastólica</small>
+                  </div>
+                  <span class="auro-pa-unidad">mmHg</span>
+                </div>
+                <input id="hcPA" type="hidden" autocomplete="off" aria-hidden="true">
+                <small id="hcPAAuroAyuda" class="auro-vital-ayuda" aria-live="polite"></small>
               </div>
               <div class="col-6 col-md-2 auro-vital-field">
                 <label class="form-label fw-bold" for="hcFC">Frecuencia cardíaca</label>
