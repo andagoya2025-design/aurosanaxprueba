@@ -1515,6 +1515,7 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   setValueIfExists('hcTalla', h.talla_cm || '');
   setValueIfExists('hcIMC', auroIMCClinicoSeguro(h.imc, h.peso_kg, h.talla_cm));
   setValueIfExists('hcPA', h.presion_arterial || '');
+  auroPASincronizarDesdeCompatibilidad();
   setValueIfExists('hcFC', h.frecuencia_cardiaca || '');
   setValueIfExists('hcTemperatura', h.temperatura || '');
   setValueIfExists('hcSaturacion', h.saturacion || '');
@@ -1573,6 +1574,10 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   setValueIfExists('hcExamenGinecologico', auroExtraerSeccionExamen(ex, 'Ginecológico'));
 
   auroActualizarAyudaIMC();
+  if(typeof auroPASincronizarDesdeCompatibilidad === 'function'){
+    auroPASincronizarDesdeCompatibilidad();
+  }
+
   if(typeof auroActualizarApoyoSignosVitales === 'function'){
     auroActualizarApoyoSignosVitales();
   }
@@ -1777,6 +1782,100 @@ function auroVitalPresion(valor){
   const diastolica = Number(match[2]);
   if(!Number.isFinite(sistolica) || !Number.isFinite(diastolica)) return null;
   return { sistolica, diastolica, texto: sistolica + '/' + diastolica };
+}
+
+/* ==========================================================
+   AUROSANAX - PA DOBLE CAMPO / COMPATIBILIDAD QUIRÚRGICA
+   - Interfaz: sistólica + diastólica.
+   - Contrato histórico: hcPA conserva "120/80".
+   - No cambia payload, backend, Sheets ni registros existentes.
+   ========================================================== */
+function auroPASoloEnteros(valor){
+  return auroVitalTexto(valor).replace(/\D/g, '').slice(0, 3);
+}
+
+function auroPASincronizarHaciaCompatibilidad(){
+  const sistolicaEl = document.getElementById('hcPASistolica');
+  const diastolicaEl = document.getElementById('hcPADiastolica');
+  const paEl = document.getElementById('hcPA');
+  if(!sistolicaEl || !diastolicaEl || !paEl) return;
+
+  const sistolica = auroPASoloEnteros(sistolicaEl.value);
+  const diastolica = auroPASoloEnteros(diastolicaEl.value);
+  sistolicaEl.value = sistolica;
+  diastolicaEl.value = diastolica;
+  paEl.value = sistolica && diastolica ? sistolica + '/' + diastolica : '';
+}
+
+function auroPASincronizarDesdeCompatibilidad(){
+  const sistolicaEl = document.getElementById('hcPASistolica');
+  const diastolicaEl = document.getElementById('hcPADiastolica');
+  const paEl = document.getElementById('hcPA');
+  if(!sistolicaEl || !diastolicaEl || !paEl) return;
+
+  const pa = auroVitalPresion(paEl.value);
+  if(pa){
+    sistolicaEl.value = String(pa.sistolica);
+    diastolicaEl.value = String(pa.diastolica);
+  }else if(!auroVitalTexto(paEl.value)){
+    sistolicaEl.value = '';
+    diastolicaEl.value = '';
+  }
+}
+
+function auroPAActualizarPresentacion(){
+  const paEl = document.getElementById('hcPA');
+  const sistolicaEl = document.getElementById('hcPASistolica');
+  const diastolicaEl = document.getElementById('hcPADiastolica');
+  if(!paEl || !sistolicaEl || !diastolicaEl) return;
+
+  const resultado = auroInterpretarPA(paEl.value);
+  const ayuda = auroObtenerAyudaVital('hcPA');
+  if(ayuda){
+    ['normal','precaucion','alerta','critico','invalido'].forEach(nivel => {
+      ayuda.classList.remove('auro-vital-nivel-' + nivel);
+      sistolicaEl.classList.remove('auro-vital-input-' + nivel);
+      diastolicaEl.classList.remove('auro-vital-input-' + nivel);
+    });
+
+    if(!auroVitalTexto(paEl.value)){
+      ayuda.textContent = '';
+      return;
+    }
+
+    const nivel = resultado?.nivel || 'pendiente';
+    ayuda.textContent = resultado?.texto || '';
+    ayuda.classList.add(auroVitalClaseNivel(nivel));
+    if(nivel !== 'pendiente'){
+      sistolicaEl.classList.add('auro-vital-input-' + nivel);
+      diastolicaEl.classList.add('auro-vital-input-' + nivel);
+    }
+  }
+}
+
+function auroPAInstalarCamposDobles(){
+  const sistolicaEl = document.getElementById('hcPASistolica');
+  const diastolicaEl = document.getElementById('hcPADiastolica');
+  if(!sistolicaEl || !diastolicaEl) return;
+  if(sistolicaEl.dataset.auroPaDoble === '1') return;
+
+  sistolicaEl.dataset.auroPaDoble = '1';
+  diastolicaEl.dataset.auroPaDoble = '1';
+
+  [sistolicaEl, diastolicaEl].forEach(el => {
+    el.addEventListener('input', function(){
+      auroPASincronizarHaciaCompatibilidad();
+      auroPAActualizarPresentacion();
+      auroActualizarApoyoSignosVitales();
+    });
+    el.addEventListener('blur', function(){
+      auroPASincronizarHaciaCompatibilidad();
+      auroPAActualizarPresentacion();
+    });
+  });
+
+  auroPASincronizarDesdeCompatibilidad();
+  auroPAActualizarPresentacion();
 }
 
 function auroInterpretarIMC(valor){
@@ -1999,6 +2098,8 @@ function calcIMC(){
 }
 
 function auroNormalizarVitalesExamen(){
+  auroPASincronizarHaciaCompatibilidad();
+
   const paEl = document.getElementById('hcPA');
   if(paEl){
     const pa = auroVitalPresion(paEl.value);
@@ -2061,7 +2162,11 @@ function auroActualizarApoyoSignosVitales(){
     ['hcSaturacion', auroInterpretarSaturacion(document.getElementById('hcSaturacion')?.value)]
   ];
 
-  resultados.forEach(([id, resultado]) => auroAplicarResultadoVital(id, resultado));
+  resultados.forEach(([id, resultado]) => {
+    if(id === 'hcPA') return;
+    auroAplicarResultadoVital(id, resultado);
+  });
+  auroPAActualizarPresentacion();
   const imcResultado = auroActualizarAyudaIMC();
   if(imcResultado) resultados.push(['hcIMC', imcResultado]);
 
@@ -2137,7 +2242,6 @@ function auroInicializarAyudasExamenFisicoV32(){
   const campos = {
     hcPeso:{placeholder:'Ej. 60', ariaLabel:'Peso en kilogramos'},
     hcTalla:{placeholder:'Ej. 154', ariaLabel:'Talla en centímetros'},
-    hcPA:{placeholder:'Ej. 120/80', inputmode:'text', ariaLabel:'Presión arterial sistólica sobre diastólica'},
     hcFC:{placeholder:'Ej. 72', ariaLabel:'Frecuencia cardíaca por minuto'},
     hcFR:{placeholder:'Ej. 16', ariaLabel:'Frecuencia respiratoria por minuto'},
     hcTemperatura:{placeholder:'Ej. 36.5', ariaLabel:'Temperatura en grados Celsius'},
@@ -2145,6 +2249,7 @@ function auroInicializarAyudasExamenFisicoV32(){
   };
 
   Object.keys(campos).forEach(id => auroPrepararCampoVital(id, campos[id]));
+  auroPAInstalarCamposDobles();
   auroObtenerAyudaVital('hcIMC');
 
   /* Compatibilidad con listeners históricos del mismo módulo. */
@@ -2697,6 +2802,8 @@ async function auroGuardarDetalleExamenFisicoSheets(idExamen){
 
 
 function auroExamenFisicoPayload(){
+  auroPASincronizarHaciaCompatibilidad();
+
   const atencion = auroExamenFisicoAtencionActual() || {};
   const idAtencion = auroExamenFisicoIdAtencionActual() || String(window.examenFisicoState?.atencionActual || '').trim();
 
@@ -2781,6 +2888,7 @@ function auroCargarExamenFisicoDesdeSheet(registro){
     setValueIfExists('hcTalla', registro.talla_cm || '');
     setValueIfExists('hcIMC', auroIMCClinicoSeguro(registro.imc, registro.peso_kg, registro.talla_cm));
     setValueIfExists('hcPA', registro.presion_arterial || '');
+    auroPASincronizarDesdeCompatibilidad();
     setValueIfExists('hcFC', registro.frecuencia_cardiaca || '');
     setValueIfExists('hcTemperatura', registro.temperatura || '');
     setValueIfExists('hcSaturacion', registro.saturacion || '');
