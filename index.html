@@ -1351,6 +1351,65 @@
       .auro-v21-unit-wrap{grid-template-columns:1fr}
     }
 
+
+    /* ============================================================
+       AUROSANAX - ANTECEDENTES CONTRASTE + BOTONES RÁPIDOS
+       Cambio quirúrgico de presentación:
+       - Dato ingresado: negro fuerte.
+       - Placeholder/guía: gris claro.
+       - Campo deshabilitado: gris tenue.
+       - Botón rápido activo: resaltado visual.
+       No cambia IDs, valores, eventos, guardado ni backend.
+       ============================================================ */
+    #hc_antecedentes input.form-control:not(:disabled):not([readonly]),
+    #hc_antecedentes textarea.form-control:not(:disabled):not([readonly]),
+    #hc_antecedentes select.form-select:not(:disabled){
+      color:#111827 !important;
+      font-weight:650 !important;
+      opacity:1 !important;
+    }
+
+    #hc_antecedentes input.form-control::placeholder,
+    #hc_antecedentes textarea.form-control::placeholder{
+      color:#b0b7c3 !important;
+      font-weight:400 !important;
+      opacity:1 !important;
+    }
+
+    #hc_antecedentes input.form-control:disabled,
+    #hc_antecedentes textarea.form-control:disabled,
+    #hc_antecedentes select.form-select:disabled,
+    #hc_antecedentes input.form-control[readonly],
+    #hc_antecedentes textarea.form-control[readonly]{
+      color:#6b7280 !important;
+      background:#f8fafc !important;
+      opacity:.78 !important;
+    }
+
+    #hc_antecedentes .auro-v21-helper-btn{
+      transition:background .16s ease,color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+    }
+
+    #hc_antecedentes .auro-v21-helper-btn.auro-v21-helper-active,
+    #hc_antecedentes .auro-v21-helper-btn[aria-pressed="true"]{
+      background:linear-gradient(135deg,var(--primary),var(--primary-2)) !important;
+      color:#fff !important;
+      border-color:transparent !important;
+      box-shadow:0 7px 16px rgba(139,30,90,.20) !important;
+    }
+
+    #hc_antecedentes .auro-v21-helper-btn.auro-v21-helper-active i,
+    #hc_antecedentes .auro-v21-helper-btn[aria-pressed="true"] i{
+      color:#fff !important;
+    }
+
+    #hc_antecedentes .auro-v21-helper-btn.auro-v21-helper-active::after,
+    #hc_antecedentes .auro-v21-helper-btn[aria-pressed="true"]::after{
+      content:" ✓";
+      font-weight:900;
+      margin-left:4px;
+    }
+
     /* AUROSANAX - Caja de antecedentes previos v2.2 */
     .auro-previos-box{
       border:1px solid #bfdbfe;
