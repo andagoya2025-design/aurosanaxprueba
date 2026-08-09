@@ -1565,13 +1565,6 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   setValueIfExists('hcEndocrinoObservacion', auroExtraerObservacionSistema(endocrino));
   setValueIfExists('hcHemoLinfaticoObservacion', auroExtraerObservacionSistema(hemo));
 
-  setValueIfExists('hcExamenGeneral', auroExtraerSeccionExamen(ex, 'Estado general'));
-  setValueIfExists('hcCabezaCuello', auroExtraerSeccionExamen(ex, 'Cabeza y cuello'));
-  setValueIfExists('hcToraxRespiratorio', auroExtraerSeccionExamen(ex, 'Tórax/Respiratorio'));
-  setValueIfExists('hcCardiovascular', auroExtraerSeccionExamen(ex, 'Cardiovascular') || getValueIfExists('hcCardiovascular'));
-  setValueIfExists('hcAbdomen', auroExtraerSeccionExamen(ex, 'Abdomen'));
-  setValueIfExists('hcExtremidades', auroExtraerSeccionExamen(ex, 'Extremidades'));
-  setValueIfExists('hcExamenGinecologico', auroExtraerSeccionExamen(ex, 'Ginecológico'));
 
   auroActualizarAyudaIMC();
   if(typeof auroPASincronizarDesdeCompatibilidad === 'function'){
@@ -1618,13 +1611,6 @@ function auroConstruirExamenFisicoCompleto(){
     endocrino ? 'Endócrino: ' + endocrino : '',
     hemo ? 'Hemo-linfático: ' + hemo : '',
     regional ? 'Examen físico regional: ' + regional : '',
-    getValueIfExists('hcExamenGeneral') ? 'Estado general: ' + getValueIfExists('hcExamenGeneral') : '',
-    getValueIfExists('hcCabezaCuello') ? 'Cabeza y cuello: ' + getValueIfExists('hcCabezaCuello') : '',
-    getValueIfExists('hcToraxRespiratorio') ? 'Tórax/Respiratorio: ' + getValueIfExists('hcToraxRespiratorio') : '',
-    getValueIfExists('hcCardiovascular') ? 'Cardiovascular clínico: ' + getValueIfExists('hcCardiovascular') : '',
-    getValueIfExists('hcAbdomen') ? 'Abdomen: ' + getValueIfExists('hcAbdomen') : '',
-    getValueIfExists('hcExtremidades') ? 'Extremidades: ' + getValueIfExists('hcExtremidades') : '',
-    getValueIfExists('hcExamenGinecologico') ? 'Ginecológico: ' + getValueIfExists('hcExamenGinecologico') : ''
   ]);
 }
 
@@ -2207,14 +2193,6 @@ function auroPrepararCampoVital(id, configuracion){
   });
 }
 
-function auroAplicarExamenFisicoSinHallazgos(){
-  setValueIfExists('hcExamenGeneral', 'Paciente en buen estado general aparente, consciente, orientada, hidratada, afebril, sin signos de dificultad respiratoria al momento de la valoración.');
-  setValueIfExists('hcCabezaCuello', 'Normocéfala. Cuello móvil, sin adenopatías aparentes, sin ingurgitación yugular.');
-  setValueIfExists('hcToraxRespiratorio', 'Tórax simétrico. Murmullo vesicular conservado, sin ruidos agregados evidentes.');
-  setValueIfExists('hcCardiovascular', 'Ruidos cardíacos rítmicos, sin soplos evidentes al examen clínico.');
-  setValueIfExists('hcAbdomen', 'Abdomen blando, depresible, no doloroso a la palpación superficial, sin signos de irritación peritoneal.');
-  setValueIfExists('hcExtremidades', 'Extremidades sin edema aparente, pulsos periféricos conservados, movilidad conservada.');
-}
 
 function auroMarcarSistemasNoValorados(){
   [
