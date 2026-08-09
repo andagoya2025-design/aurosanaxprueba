@@ -2332,19 +2332,44 @@ Función:
     if (!panel) return {};
 
     const salida = {};
+
+    /*
+      AUROSANAX FIX QUIRÚRGICO - CONTROLES_JSON COMPACTO
+      --------------------------------------------------
+      Objetivo:
+      - Mantener una sola fila por id_atencion.
+      - No duplicar Motivo ni Enfermedad actual dentro de controles_json,
+        porque ya tienen columnas propias en anamnesis_atenciones.
+      - No guardar controles vacíos ni checkbox/radio desmarcados.
+      - Conservar controles con contenido real necesarios para restauración.
+      - Mantener compatibilidad de lectura con controles_json antiguos.
+      - No modifica IDs, backend, Apps Script, fechas ni generador.
+    */
     [...panel.querySelectorAll('input, select, textarea')].forEach((control, indice) => {
       if (!control || control.disabled || control.type === 'button' ||
           control.type === 'submit' || control.type === 'reset') return;
 
+      if ([
+        'hcMotivoConsulta',
+        'hcEnfermedadActual',
+        'auroPlantillaAnamnesisSelect'
+      ].includes(control.id)) return;
+
       const clave = auroClaveControlAnamnesis(control, indice);
       if (!clave) return;
 
+      const tipoControl = (control.type || control.tagName.toLowerCase()).toLowerCase();
+      const esSeleccion = tipoControl === 'checkbox' || tipoControl === 'radio';
+
+      if (esSeleccion && !control.checked) return;
+
+      const valorControl = texto(control.value);
+      if (!esSeleccion && !valorControl) return;
+
       salida[clave] = {
         tipo: control.type || control.tagName.toLowerCase(),
-        valor: control.type === 'checkbox' || control.type === 'radio'
-          ? texto(control.value)
-          : control.value,
-        checked: !!control.checked,
+        valor: valorControl,
+        checked: esSeleccion ? true : !!control.checked,
         cabecera_contexto: control.dataset?.auroCabeceraContexto === 'true'
       };
     });
@@ -2393,7 +2418,9 @@ Función:
       nombre_plantilla: state.plantillaActiva
         ? nombrePlantilla(state.plantillaActiva)
         : '',
-      respuestas_json: state.plantillaActiva ? leerRespuestas() : {},
+      respuestas_json: state.plantillaActiva
+        ? leerRespuestas()
+        : { _modo_captura: 'manual' },
       narrativa_generada: texto(state.narrativa),
       controles_json: auroCapturarControlesAnamnesis(),
       panel_abierto: !!$('auroDynamicAnamnesisPanel')?.classList.contains('show'),
