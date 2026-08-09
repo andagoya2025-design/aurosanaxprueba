@@ -2405,6 +2405,7 @@ Función:
 
   function auroCapturarAnamnesisActual() {
     const idAtencion = texto(state.idAtencionActual);
+    const usoGenerador = !!texto(state.narrativa);
 
     return {
       id_atencion: idAtencion,
@@ -2412,16 +2413,16 @@ Función:
       id_historia: texto(state.idHistoriaActual),
       motivo_consulta: texto($('hcMotivoConsulta')?.value),
       enfermedad_actual: texto($('hcEnfermedadActual')?.value),
-      id_plantilla_anamnesis: state.plantillaActiva
+      id_plantilla_anamnesis: usoGenerador && state.plantillaActiva
         ? idPlantilla(state.plantillaActiva)
-        : texto($('auroPlantillaAnamnesisSelect')?.value),
-      nombre_plantilla: state.plantillaActiva
+        : '',
+      nombre_plantilla: usoGenerador && state.plantillaActiva
         ? nombrePlantilla(state.plantillaActiva)
         : '',
-      respuestas_json: state.plantillaActiva
+      respuestas_json: usoGenerador && state.plantillaActiva
         ? leerRespuestas()
         : { _modo_captura: 'manual' },
-      narrativa_generada: texto(state.narrativa),
+      narrativa_generada: usoGenerador ? texto(state.narrativa) : '',
       controles_json: auroCapturarControlesAnamnesis(),
       panel_abierto: !!$('auroDynamicAnamnesisPanel')?.classList.contains('show'),
       modulo_version: VERSION,
@@ -3162,6 +3163,8 @@ Función:
   }
 
   function obtenerDatosAnamnesis() {
+    const usoGenerador = !!texto(state.narrativa);
+
     return {
       id_atencion: auroObtenerIdAtencionAnamnesis(),
       id_paciente: texto(state.idPacienteActual),
@@ -3170,14 +3173,16 @@ Función:
       enfermedad_actual: texto($('hcEnfermedadActual')?.value),
       revision_sistemas: '',
       sintomas_alarma: '',
-      id_plantilla_anamnesis: state.plantillaActiva
+      id_plantilla_anamnesis: usoGenerador && state.plantillaActiva
         ? idPlantilla(state.plantillaActiva)
         : '',
-      nombre_plantilla: state.plantillaActiva
+      nombre_plantilla: usoGenerador && state.plantillaActiva
         ? nombrePlantilla(state.plantillaActiva)
         : '',
-      respuestas_json: state.plantillaActiva ? leerRespuestas() : {},
-      narrativa_generada: state.narrativa,
+      respuestas_json: usoGenerador && state.plantillaActiva
+        ? leerRespuestas()
+        : { _modo_captura: 'manual' },
+      narrativa_generada: usoGenerador ? texto(state.narrativa) : '',
       modulo_version: VERSION
     };
   }
