@@ -2196,10 +2196,26 @@
     const parsed = auroDxParseAntecedentesFamiliares(valor);
 
     if(!parsed.estructurado){
-      return parsed.texto || '';
+      const textoLibre = auroDxLimpiarElementoAntecedente(parsed.texto || '');
+      if(/^niega antecedentes familiares/i.test(textoLibre)){
+        return 'niega antecedentes familiares relevantes';
+      }
+      return textoLibre;
     }
 
     const data = parsed.data || {};
+
+    /*
+      AUROSANAX FIX QUIRÚRGICO 2026-08-08:
+      antecedentes.js puede guardar la negación familiar como estado
+      estructurado { niega:true } dentro de la misma columna existente.
+      Diagnóstico solo la interpreta para el resumen; no modifica origen,
+      Google Sheets, fechas, IDs ni estructura de guardado.
+    */
+    if(data.niega === true || auroSi(data.niega)){
+      return 'niega antecedentes familiares relevantes';
+    }
+
     const frases = [];
 
     const patologicos = Array.isArray(data.patologicos) ? data.patologicos : [];
@@ -2216,6 +2232,9 @@
       .forEach(frase => frases.push('antecedente quirúrgico: ' + frase));
 
     const otros = auroDxLimpiarElementoAntecedente(data.otros);
+    if(/^niega antecedentes familiares/i.test(otros)){
+      return 'niega antecedentes familiares relevantes';
+    }
     if(otros && !/^(ninguno|ninguna|no|n\/a|no aplica)$/i.test(otros)){
       frases.push('otros antecedentes familiares: ' + otros);
     }
@@ -2256,7 +2275,13 @@
     }
 
     const familiares = auroDxNarrarFamiliares(h.antecedentes_familiares);
-    if(familiares) bloques.push(auroPunto('Antecedentes familiares: ' + familiares));
+    if(familiares){
+      if(/^niega antecedentes familiares/i.test(familiares)){
+        bloques.push(auroPunto(familiares));
+      }else{
+        bloques.push(auroPunto('Antecedentes familiares: ' + familiares));
+      }
+    }
 
     if(personales.estructurado){
       const covid = auroDxNarrarCovid(personales.data);
