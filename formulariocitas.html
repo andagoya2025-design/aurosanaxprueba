@@ -1373,31 +1373,40 @@
         const cedulaPaciente = data.numero_documento || '';
         const whatsappPaciente = data.whatsapp || data.telefono || '';
         const codigoReserva = idCita || 'Pendiente de asignar';
+        const nombreCentroMensaje = valorConfigFormulario('nombre_clinica', 'AUROSANAX');
+
+        /*
+          AUROSANAX - AJUSTE QUIRÚRGICO WHATSAPP FORMULARIO
+          - Usa el nombre institucional desde Configuración.
+          - Mantiene el contenido y flujo actual.
+          - Usa escapes Unicode para preservar emojis aunque el archivo
+            sea servido por un entorno que altere caracteres UTF-8.
+        */
         const mensajeComprobantePaciente =
-          '🏥 AUROSANAX\n\n' +
+          '\uD83C\uDFE5 ' + nombreCentroMensaje + '\n\n' +
           'Su reserva ha sido registrada correctamente.\n\n' +
-          '⚠️ IMPORTANTE: Este comprobante NO confirma definitivamente la cita. La reserva permanece pendiente de confirmación por Secretaría.\n\n' +
-          '🔖 Código: ' + codigoReserva + '\n' +
-          '👤 Paciente: ' + pacienteNombre + '\n' +
-          (cedulaPaciente ? '🪪 Cédula: ' + cedulaPaciente + '\n' : '') +
-          '📅 Fecha: ' + formatearFechaBonita(data.fecha_cita) + '\n' +
-          '🕔 Hora: ' + data.hora_inicio + ' - ' + data.hora_fin + '\n' +
-          '👩‍⚕️ Médico: ' + medicoNombre(data.id_medico) + '\n' +
-          '🩺 Servicio: ' + (data.servicio || data.motivo || 'No especificado') + '\n\n' +
+          '\u26A0\uFE0F IMPORTANTE: Este comprobante NO confirma definitivamente la cita. La reserva permanece pendiente de confirmación por Secretaría.\n\n' +
+          '\uD83D\uDD16 Código: ' + codigoReserva + '\n' +
+          '\uD83D\uDC64 Paciente: ' + pacienteNombre + '\n' +
+          (cedulaPaciente ? '\uD83E\uDEAA Cédula: ' + cedulaPaciente + '\n' : '') +
+          '\uD83D\uDCC5 Fecha: ' + formatearFechaBonita(data.fecha_cita) + '\n' +
+          '\uD83D\uDD54 Hora: ' + data.hora_inicio + ' - ' + data.hora_fin + '\n' +
+          '\uD83D\uDC69\u200D\u2695\uFE0F Médico: ' + medicoNombre(data.id_medico) + '\n' +
+          '\uD83E\uDE7A Servicio: ' + (data.servicio || data.motivo || 'No especificado') + '\n\n' +
           'Para garantizar su atención, contacte a Secretaría para confirmar la disponibilidad definitiva.\n\n' +
-          'Gracias por confiar en AUROSANAX.';
+          'Gracias por confiar en ' + nombreCentroMensaje + '.';
 
         const mensajeSecretaria =
-          'Hola, acabo de realizar una reserva mediante el formulario de AUROSANAX.\n\n' +
+          'Hola, acabo de realizar una reserva mediante el formulario de ' + nombreCentroMensaje + '.\n\n' +
           'Solicito por favor la confirmación de mi cita.\n\n' +
-          '🔖 Código: ' + codigoReserva + '\n' +
-          '👤 Paciente: ' + pacienteNombre + '\n' +
-          (cedulaPaciente ? '🪪 Cédula: ' + cedulaPaciente + '\n' : '') +
-          '📅 Fecha: ' + formatearFechaBonita(data.fecha_cita) + '\n' +
-          '🕔 Hora: ' + data.hora_inicio + ' - ' + data.hora_fin + '\n' +
-          '👩‍⚕️ Médico: ' + medicoNombre(data.id_medico) + '\n' +
-          '🩺 Servicio: ' + (data.servicio || data.motivo || 'No especificado') + '\n' +
-          '📱 WhatsApp del paciente: ' + whatsappPaciente + '\n\n' +
+          '\uD83D\uDD16 Código: ' + codigoReserva + '\n' +
+          '\uD83D\uDC64 Paciente: ' + pacienteNombre + '\n' +
+          (cedulaPaciente ? '\uD83E\uDEAA Cédula: ' + cedulaPaciente + '\n' : '') +
+          '\uD83D\uDCC5 Fecha: ' + formatearFechaBonita(data.fecha_cita) + '\n' +
+          '\uD83D\uDD54 Hora: ' + data.hora_inicio + ' - ' + data.hora_fin + '\n' +
+          '\uD83D\uDC69\u200D\u2695\uFE0F Médico: ' + medicoNombre(data.id_medico) + '\n' +
+          '\uD83E\uDE7A Servicio: ' + (data.servicio || data.motivo || 'No especificado') + '\n' +
+          '\uD83D\uDCF1 WhatsApp del paciente: ' + whatsappPaciente + '\n\n' +
           'Quedo pendiente de la confirmación por Secretaría. Gracias.';
 
         const wa = normalizarWhatsApp(data.whatsapp);
