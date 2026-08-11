@@ -721,6 +721,14 @@
     return agregados;
   }
 
+  function firmaOrdenPlan(o){
+    return normalizarTextoBusquedaCie10([
+      o?.orden || o?.nombre || '',
+      o?.cat || o?.categoria || '',
+      o?.obs || o?.observacion || ''
+    ].join(' '));
+  }
+
   function aplicarOrdenesAlPlan(ordenes){
     if(!Array.isArray(ordenes) || !ordenes.length) return 0;
 
@@ -731,21 +739,22 @@
     let agregadas = 0;
 
     ordenes.forEach(o => {
-      if(typeof o === 'string'){
-        window.ordenesMedicasPlanSeleccionadas.push({
-          orden: o,
-          cat: 'OTROS',
-          obs: ''
-        });
-        agregadas++;
-        return;
-      }
+      const ordenPlan = (typeof o === 'string')
+        ? { orden: o, cat: 'OTROS', obs: '' }
+        : {
+            orden: o?.orden || o?.nombre || '',
+            cat: o?.categoria || o?.cat || 'OTROS',
+            obs: o?.observacion || o?.obs || ''
+          };
 
-      window.ordenesMedicasPlanSeleccionadas.push({
-        orden: o.orden || o.nombre || '',
-        cat: o.categoria || o.cat || 'OTROS',
-        obs: o.observacion || o.obs || ''
-      });
+      if(!limpiarTexto(ordenPlan.orden)) return;
+
+      const firmaNueva = firmaOrdenPlan(ordenPlan);
+      const existe = window.ordenesMedicasPlanSeleccionadas.some(x => firmaOrdenPlan(x) === firmaNueva);
+
+      if(existe) return;
+
+      window.ordenesMedicasPlanSeleccionadas.push(ordenPlan);
       agregadas++;
     });
 
@@ -760,6 +769,11 @@
     return agregadas;
   }
 
+  function textoIndicacionPlan(x){
+    if(typeof x === 'string') return limpiarTexto(x);
+    return limpiarTexto(Object.values(x || {}).filter(Boolean).join(' - '));
+  }
+
   function aplicarIndicacionesAlPlan(indicaciones, controles){
     const lista = []
       .concat(Array.isArray(indicaciones) ? indicaciones : [])
@@ -767,20 +781,34 @@
 
     if(!lista.length) return 0;
 
-    const textoNuevo = lista.map(x => {
-      if(typeof x === 'string') return x;
-      return Object.values(x || {}).filter(Boolean).join(' - ');
-    }).filter(Boolean).join('\n');
-
-    if(!textoNuevo) return 0;
-
     const campo = document.getElementById('hcIndicacionesPaciente');
-    if(campo){
-      const actual = String(campo.value || '').trim();
-      campo.value = actual ? actual + '\n' + textoNuevo : textoNuevo;
-    }
+    if(!campo) return 0;
 
-    return lista.length;
+    const existentes = String(campo.value || '')
+      .split(/\r?\n/)
+      .map(x => limpiarTexto(x))
+      .filter(Boolean);
+
+    const firmasExistentes = new Set(existentes.map(normalizarTextoBusquedaCie10));
+    const nuevas = [];
+
+    lista.forEach(x => {
+      const texto = textoIndicacionPlan(x);
+      if(!texto) return;
+
+      const firma = normalizarTextoBusquedaCie10(texto);
+      if(!firma || firmasExistentes.has(firma)) return;
+
+      firmasExistentes.add(firma);
+      nuevas.push(texto);
+    });
+
+    if(!nuevas.length) return 0;
+
+    const actual = String(campo.value || '').trim();
+    campo.value = actual ? actual + '\n' + nuevas.join('\n') : nuevas.join('\n');
+
+    return nuevas.length;
   }
 
   window.auroCie10InteligenteBuscarProtocolo = async function(codigo, nombre){
