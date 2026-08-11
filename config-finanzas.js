@@ -26,6 +26,7 @@
    - finGastoNombre
    - finGastoNombreOtro
    - finGastoCategoria
+   - finGastoCategoriaOtro
    - finGastoValor
    - finGastoPeriodicidad
    - finGastoValorMensual
@@ -63,6 +64,24 @@
     margen_minimo: 'margen_minimo',
     porcentaje_referido_predeterminado: 'porcentaje_referido_predeterminado',
     dias_vencimiento_cartera: 'dias_vencimiento_cartera'
+  });
+
+  /* Sugerencias de alta. No fijan montos y siguen siendo editables. */
+  const AURO_FIN_GASTO_SUGERENCIAS = Object.freeze({
+    'Alquiler': { categoria: 'Infraestructura', periodicidad: 'Mensual' },
+    'Luz': { categoria: 'Servicios básicos', periodicidad: 'Mensual' },
+    'Agua': { categoria: 'Servicios básicos', periodicidad: 'Mensual' },
+    'Internet': { categoria: 'Servicios básicos', periodicidad: 'Mensual' },
+    'Mantenimiento de aire': { categoria: 'Mantenimiento', periodicidad: 'Anual' },
+    'Permiso de funcionamiento': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
+    'Bomberos': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
+    'Patente': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
+    'Tasa de Habilitación': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
+    'Publicidad': { categoria: 'Marketing/Publicidad', periodicidad: 'Anual' },
+    'Contabilidad': { categoria: 'Administración', periodicidad: 'Anual' },
+    'Limpieza e insumos': { categoria: 'Limpieza e insumos', periodicidad: 'Anual' },
+    'Mantenimiento de equipos': { categoria: 'Mantenimiento', periodicidad: 'Anual' },
+    'Depreciación de equipos': { categoria: 'Equipos/Depreciación', periodicidad: 'Mensual' }
   });
 
   let auroFinanzasConfigCargada = false;
@@ -361,6 +380,74 @@
     actualizarNombreOtroGastoFinanzas();
   }
 
+  function actualizarCategoriaOtroGastoFinanzas(){
+    const selector = finEl('finGastoCategoria');
+    const otro = finEl('finGastoCategoriaOtro');
+    if(!selector || !otro) return;
+
+    const esOtro = finTexto(selector.value) === '__OTRO__';
+    otro.classList.toggle('d-none', !esOtro);
+
+    if(!esOtro) otro.value = '';
+  }
+
+  function obtenerCategoriaGastoFinanzas(){
+    const selector = finEl('finGastoCategoria');
+    if(!selector) return '';
+
+    const valor = finTexto(selector.value);
+    if(valor === '__OTRO__'){
+      return finTexto(finEl('finGastoCategoriaOtro')?.value);
+    }
+    return valor;
+  }
+
+  function asignarCategoriaGastoFinanzas(categoria){
+    const selector = finEl('finGastoCategoria');
+    const otro = finEl('finGastoCategoriaOtro');
+    if(!selector) return;
+
+    const valor = finTexto(categoria);
+    const existe = Array.from(selector.options || []).some(function(op){
+      return finTexto(op.value) === valor;
+    });
+
+    if(!valor){
+      selector.value = '';
+      if(otro) otro.value = '';
+    }else if(existe){
+      selector.value = valor;
+      if(otro) otro.value = '';
+    }else{
+      selector.value = '__OTRO__';
+      if(otro) otro.value = valor;
+    }
+
+    actualizarCategoriaOtroGastoFinanzas();
+  }
+
+  function fechaHoyFinanzas(){
+    const ahora = new Date();
+    const y = ahora.getFullYear();
+    const m = String(ahora.getMonth() + 1).padStart(2, '0');
+    const d = String(ahora.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+
+  function aplicarSugerenciasGastoFinanzas(){
+    const nombre = obtenerNombreGastoFinanzas();
+    const sugerencia = AURO_FIN_GASTO_SUGERENCIAS[nombre];
+    if(!sugerencia) return;
+
+    asignarCategoriaGastoFinanzas(sugerencia.categoria);
+
+    const periodicidad = finEl('finGastoPeriodicidad');
+    if(periodicidad && sugerencia.periodicidad){
+      periodicidad.value = sugerencia.periodicidad;
+      actualizarProrrateoGastoFinanzas();
+    }
+  }
+
   function finPeriodicidadMensual(valor, periodicidad){
     const v = finNumero(valor);
     const p = finTexto(periodicidad).toLowerCase();
@@ -454,8 +541,15 @@
     if(otroNombre) otroNombre.value = '';
     actualizarNombreOtroGastoFinanzas();
 
+    const otraCategoria = finEl('finGastoCategoriaOtro');
+    if(otraCategoria) otraCategoria.value = '';
+    actualizarCategoriaOtroGastoFinanzas();
+
     const periodicidad = finEl('finGastoPeriodicidad');
     if(periodicidad) periodicidad.value = 'Mensual';
+
+    const fechaInicio = finEl('finGastoFechaInicio');
+    if(fechaInicio) fechaInicio.value = fechaHoyFinanzas();
 
     const id = finEl('finGastoId');
     if(id) id.value = '';
@@ -471,7 +565,7 @@
 
     finAsignarValor('finGastoId', gasto.id_gasto);
     asignarNombreGastoFinanzas(gasto.nombre_gasto);
-    finAsignarValor('finGastoCategoria', gasto.categoria);
+    asignarCategoriaGastoFinanzas(gasto.categoria);
     finAsignarValor('finGastoValor', gasto.valor);
     finAsignarValor('finGastoPeriodicidad', gasto.periodicidad || 'Mensual');
     finAsignarValor('finGastoValorMensual', gasto.valor_mensual_prorrateado);
@@ -485,17 +579,26 @@
 
     const idGasto = finTexto(finEl('finGastoId')?.value);
     const nombre = obtenerNombreGastoFinanzas();
-    const categoria = finTexto(finEl('finGastoCategoria')?.value);
+    const categoria = obtenerCategoriaGastoFinanzas();
     const valor = finNumero(finEl('finGastoValor')?.value);
     const periodicidad = finTexto(finEl('finGastoPeriodicidad')?.value || 'Mensual');
+    const fechaInicio = finTexto(finEl('finGastoFechaInicio')?.value);
     const mensual = finPeriodicidadMensual(valor, periodicidad);
 
     if(!nombre){
       alert('Seleccione o escriba el nombre del gasto.');
       return;
     }
+    if(!categoria){
+      alert('Seleccione o escriba la categoría del gasto.');
+      return;
+    }
     if(!(valor > 0)){
       alert('El valor del gasto debe ser mayor que cero.');
+      return;
+    }
+    if(!fechaInicio){
+      alert('La fecha de inicio es obligatoria.');
       return;
     }
 
@@ -505,7 +608,7 @@
       valor: valor,
       periodicidad: periodicidad,
       valor_mensual_prorrateado: mensual,
-      fecha_inicio: finTexto(finEl('finGastoFechaInicio')?.value),
+      fecha_inicio: fechaInicio,
       fecha_fin: finTexto(finEl('finGastoFechaFin')?.value),
       estado: 'Activo',
       observaciones: finTexto(finEl('finGastoObservaciones')?.value)
@@ -806,8 +909,18 @@
     const selectorNombreGasto = finEl('finGastoNombre');
     if(selectorNombreGasto && selectorNombreGasto.dataset.auroFinNombreInit !== '1'){
       selectorNombreGasto.dataset.auroFinNombreInit = '1';
-      selectorNombreGasto.addEventListener('change', actualizarNombreOtroGastoFinanzas);
+      selectorNombreGasto.addEventListener('change', function(){
+        actualizarNombreOtroGastoFinanzas();
+        aplicarSugerenciasGastoFinanzas();
+      });
       actualizarNombreOtroGastoFinanzas();
+    }
+
+    const selectorCategoriaGasto = finEl('finGastoCategoria');
+    if(selectorCategoriaGasto && selectorCategoriaGasto.dataset.auroFinCategoriaInit !== '1'){
+      selectorCategoriaGasto.dataset.auroFinCategoriaInit = '1';
+      selectorCategoriaGasto.addEventListener('change', actualizarCategoriaOtroGastoFinanzas);
+      actualizarCategoriaOtroGastoFinanzas();
     }
 
     const btnGasto = finEl('btnGuardarGastoFinanzas');
@@ -873,6 +986,12 @@
 
   function prepararConfigFinanzas(){
     enlazarEventosConfigFinanzas();
+
+    const idGasto = finTexto(finEl('finGastoId')?.value);
+    const fechaInicio = finEl('finGastoFechaInicio');
+    if(!idGasto && fechaInicio && !finTexto(fechaInicio.value)){
+      fechaInicio.value = fechaHoyFinanzas();
+    }
   }
 
   /* API pública mínima para configuracion.html.
