@@ -855,6 +855,7 @@
           <option value="Permiso de funcionamiento">Permiso de funcionamiento</option>
           <option value="Bomberos">Bomberos</option>
           <option value="Patente">Patente</option>
+          <option value="Tasa de Habilitación">Tasa de Habilitación</option>
           <option value="Publicidad">Publicidad</option>
           <option value="Contabilidad">Contabilidad</option>
           <option value="Limpieza e insumos">Limpieza e insumos</option>
@@ -866,7 +867,19 @@
       </div>
       <div class="col-md-4">
         <label class="form-label fw-bold">Categoría</label>
-        <input id="finGastoCategoria" class="form-control" placeholder="Ej. Infraestructura">
+        <select id="finGastoCategoria" class="form-select">
+          <option value="">Seleccione categoría...</option>
+          <option value="Infraestructura">Infraestructura</option>
+          <option value="Servicios básicos">Servicios básicos</option>
+          <option value="Mantenimiento">Mantenimiento</option>
+          <option value="Permisos e impuestos">Permisos e impuestos</option>
+          <option value="Marketing/Publicidad">Marketing/Publicidad</option>
+          <option value="Administración">Administración</option>
+          <option value="Limpieza e insumos">Limpieza e insumos</option>
+          <option value="Equipos/Depreciación">Equipos/Depreciación</option>
+          <option value="__OTRO__">Otro</option>
+        </select>
+        <input id="finGastoCategoriaOtro" class="form-control mt-2 d-none" placeholder="Escriba la categoría">
       </div>
       <div class="col-md-2">
         <label class="form-label fw-bold">Valor</label>
@@ -888,8 +901,8 @@
         <input id="finGastoValorMensual" class="form-control" readonly placeholder="0.00">
       </div>
       <div class="col-md-4">
-        <label class="form-label fw-bold">Fecha inicio</label>
-        <input id="finGastoFechaInicio" type="date" class="form-control">
+        <label class="form-label fw-bold">Fecha inicio *</label>
+        <input id="finGastoFechaInicio" type="date" class="form-control" required>
       </div>
       <div class="col-md-4">
         <label class="form-label fw-bold">Fecha fin (opcional)</label>
