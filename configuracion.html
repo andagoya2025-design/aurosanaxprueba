@@ -671,6 +671,7 @@
       <button class="config-tab" data-config-target="servicios" data-permiso="configuracion_servicios" onclick="showConfig('servicios',this)"><i class="bi bi-heart-pulse me-1"></i> Servicios</button>
       <button class="config-tab" data-config-target="horarios" data-permiso="configuracion_horarios" onclick="showConfig('horarios',this)"><i class="bi bi-clock me-1"></i> Horarios rápidos</button>
       <button class="config-tab" data-config-target="centro" data-permiso="configuracion_centro" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
+      <button class="config-tab" data-config-target="finanzas" onclick="showConfig('finanzas',this)"><i class="bi bi-cash-coin me-1"></i> Finanzas</button>
       <button class="config-tab" data-config-target="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad</button>
     </div>
 
@@ -772,6 +773,122 @@
         </div>
       </div>
 
+</section>
+
+<!-- ==========================================================
+     AUROSANAX FINANZAS - CONFIGURACIÓN FASE 3
+     Panel aislado. No guarda por navegación.
+     La lógica vive exclusivamente en config-finanzas.js.
+     ========================================================== -->
+<section class="screen" id="finanzas">
+  <div class="cardx p-4 mb-4">
+    <div class="section-head">
+      <div>
+        <h4>Configuración financiera</h4>
+        <p>Parámetros económicos del centro. Esta configuración es independiente de médicos, servicios, datos institucionales y módulos clínicos.</p>
+      </div>
+      <button id="btnGuardarConfigFinanzas" type="button" class="btn-auro">
+        <i class="bi bi-save me-1"></i> Guardar parámetros
+      </button>
+    </div>
+
+    <div id="finanzasConfigMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Los parámetros financieros se cargan únicamente al ingresar a esta sección.
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Moneda</label>
+        <select id="cfgFinMoneda" class="form-select">
+          <option value="USD">USD - Dólar estadounidense</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Meta mensual</label>
+        <input id="cfgFinMetaMensual" type="number" min="0" step="0.01" class="form-control" placeholder="0.00">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Horas facturables / mes</label>
+        <input id="cfgFinHorasFacturables" type="number" min="0" step="0.01" class="form-control" placeholder="0">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Margen mínimo (%)</label>
+        <input id="cfgFinMargenMinimo" type="number" min="0" max="100" step="0.01" class="form-control" placeholder="0">
+      </div>
+      <div class="col-12">
+        <div class="notice"><b>Guardado independiente:</b> estos parámetros se guardan únicamente en configuración financiera y no modifican Datos del centro, Médicos, Servicios, Seguridad ni información clínica.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cardx p-4">
+    <div class="section-head">
+      <div>
+        <h4>Gastos fijos</h4>
+        <p>Registre gastos recurrentes para futuras métricas de rentabilidad. No generan movimientos clínicos ni cobros al paciente.</p>
+      </div>
+    </div>
+
+    <div id="finanzasGastosMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Cargando gastos fijos...
+    </div>
+
+    <input id="finGastoId" type="hidden">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Nombre del gasto</label>
+        <input id="finGastoNombre" class="form-control" placeholder="Ej. Arriendo">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Categoría</label>
+        <input id="finGastoCategoria" class="form-control" placeholder="Ej. Infraestructura">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-bold">Valor</label>
+        <input id="finGastoValor" type="number" min="0" step="0.01" class="form-control" placeholder="0.00">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-bold">Periodicidad</label>
+        <select id="finGastoPeriodicidad" class="form-select">
+          <option value="Mensual">Mensual</option>
+          <option value="Semanal">Semanal</option>
+          <option value="Quincenal">Quincenal</option>
+          <option value="Trimestral">Trimestral</option>
+          <option value="Semestral">Semestral</option>
+          <option value="Anual">Anual</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Valor mensual prorrateado</label>
+        <input id="finGastoValorMensual" class="form-control" readonly placeholder="0.00">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Fecha inicio</label>
+        <input id="finGastoFechaInicio" type="date" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Fecha fin (opcional)</label>
+        <input id="finGastoFechaFin" type="date" class="form-control">
+      </div>
+      <div class="col-12">
+        <label class="form-label fw-bold">Observaciones</label>
+        <textarea id="finGastoObservaciones" class="form-control" rows="2" placeholder="Observación opcional"></textarea>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button id="btnGuardarGastoFinanzas" type="button" class="btn-auro"><i class="bi bi-save me-1"></i> Guardar gasto</button>
+        <button id="btnLimpiarGastoFinanzas" type="button" class="btn-line"><i class="bi bi-eraser me-1"></i> Limpiar</button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-modern">
+        <thead><tr><th>Gasto</th><th>Categoría</th><th>Valor</th><th>Periodicidad</th><th>Mensual</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody id="finGastosTbody">
+          <tr><td colspan="7" class="text-center text-muted py-3">Sin gastos fijos cargados.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </section>
 
 <section class="screen" id="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora">
@@ -1176,6 +1293,12 @@
     document.getElementById(id).classList.add('active');
     document.querySelectorAll('.config-tab').forEach(b=>b.classList.remove('active'));
     if(btn)btn.classList.add('active');
+
+    /* AUROSANAX FINANZAS FASE 3: solo carga al entrar; nunca guarda por navegación. */
+    if(id === 'finanzas' && window.auroConfigFinanzas){
+      window.auroConfigFinanzas.preparar();
+      window.auroConfigFinanzas.inicializar();
+    }
   }
 
 
@@ -2124,6 +2247,7 @@ function showSecurityPanel(id,btn){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
 </script>
 <script src="config-centro.js"></script>
+<script src="config-finanzas.js"></script>
 <script src="seguridad.js?v=1.4.0"></script>
 
 </body>
