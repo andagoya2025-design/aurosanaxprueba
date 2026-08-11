@@ -815,6 +815,14 @@
         <label class="form-label fw-bold">Margen mínimo (%)</label>
         <input id="cfgFinMargenMinimo" type="number" min="0" max="100" step="0.01" class="form-control" placeholder="0">
       </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Referido predeterminado (%)</label>
+        <input id="cfgFinPorcentajeReferido" type="number" min="0" max="100" step="0.01" class="form-control" placeholder="0">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Vencimiento de cartera (días)</label>
+        <input id="cfgFinDiasCartera" type="number" min="0" step="1" class="form-control" placeholder="0">
+      </div>
       <div class="col-12">
         <div class="notice"><b>Guardado independiente:</b> estos parámetros se guardan únicamente en configuración financiera y no modifican Datos del centro, Médicos, Servicios, Seguridad ni información clínica.</div>
       </div>
@@ -886,6 +894,45 @@
         <tbody id="finGastosTbody">
           <tr><td colspan="7" class="text-center text-muted py-3">Sin gastos fijos cargados.</td></tr>
         </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- AUROSANAX FINANZAS: configuración económica de médicos.
+       Bloque visual aislado; no modifica el catálogo clínico de médicos. -->
+  <div class="cardx p-4 mt-4">
+    <div class="section-head">
+      <div>
+        <h4>Configuración económica de médicos</h4>
+        <p>Defina las condiciones económicas de cada médico usando el catálogo existente. Esta sección no modifica sus datos clínicos ni profesionales.</p>
+      </div>
+    </div>
+
+    <div id="finanzasMedicosMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Cargando configuración económica de médicos...
+    </div>
+
+    <input id="finMedicoConfigId" type="hidden">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4"><label class="form-label fw-bold">Médico</label><select id="finMedicoId" class="form-select"><option value="">Seleccione médico...</option></select></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Tipo de pago</label><select id="finMedicoTipoPago" class="form-select"><option value="Porcentaje">Porcentaje</option><option value="Fijo">Valor fijo</option><option value="Hora">Por hora</option></select></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Estado</label><select id="finMedicoEstado" class="form-select"><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Porcentaje (%)</label><input id="finMedicoPorcentaje" type="number" min="0" max="100" step="0.01" class="form-control" placeholder="0"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Valor fijo</label><input id="finMedicoValorFijo" type="number" min="0" step="0.01" class="form-control" placeholder="0.00"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Valor por hora</label><input id="finMedicoValorHora" type="number" min="0" step="0.01" class="form-control" placeholder="0.00"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Vigencia desde</label><input id="finMedicoVigenciaDesde" type="date" class="form-control"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Vigencia hasta (opcional)</label><input id="finMedicoVigenciaHasta" type="date" class="form-control"></div>
+      <div class="col-12"><label class="form-label fw-bold">Observaciones</label><textarea id="finMedicoObservaciones" class="form-control" rows="2" placeholder="Condición económica u observación opcional"></textarea></div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button id="btnGuardarMedicoFinanzas" type="button" class="btn-auro"><i class="bi bi-save me-1"></i> Guardar condición médica</button>
+        <button id="btnLimpiarMedicoFinanzas" type="button" class="btn-line"><i class="bi bi-eraser me-1"></i> Limpiar</button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-modern">
+        <thead><tr><th>Médico</th><th>Tipo</th><th>%</th><th>Fijo</th><th>Hora</th><th>Desde</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody id="finMedicosTbody"><tr><td colspan="8" class="text-center text-muted py-3">Sin configuraciones económicas cargadas.</td></tr></tbody>
       </table>
     </div>
   </div>
