@@ -1,7 +1,7 @@
 /* ==========================================================
    AUROSANAX ERP DEMO - CONFIG FINANZAS JS
-   Versión: 2026-08-11
-   Fase 3 - Archivo independiente
+   Versión: 2026-08-11 / 02
+   Fase 3 - Archivo independiente ampliado
 
    OBJETIVO:
    - Administrar únicamente configuración financiera.
@@ -17,6 +17,8 @@
    - cfgFinMetaMensual
    - cfgFinHorasFacturables
    - cfgFinMargenMinimo
+   - cfgFinPorcentajeReferido
+   - cfgFinDiasCartera
    - finanzasConfigMsg
    - btnGuardarConfigFinanzas
 
@@ -32,6 +34,22 @@
    - finGastosTbody
    - finanzasGastosMsg
    - btnGuardarGastoFinanzas
+
+   Configuración económica de médicos:
+   - finMedicoConfigId
+   - finMedicoId
+   - finMedicoTipoPago
+   - finMedicoPorcentaje
+   - finMedicoValorFijo
+   - finMedicoValorHora
+   - finMedicoVigenciaDesde
+   - finMedicoVigenciaHasta
+   - finMedicoEstado
+   - finMedicoObservaciones
+   - finMedicosTbody
+   - finanzasMedicosMsg
+   - btnGuardarMedicoFinanzas
+   - btnLimpiarMedicoFinanzas
    ========================================================== */
 
 (function(){
@@ -41,12 +59,20 @@
     moneda: 'moneda',
     meta_mensual: 'meta_mensual',
     horas_facturables_mes: 'horas_facturables_mes',
-    margen_minimo: 'margen_minimo'
+    margen_minimo: 'margen_minimo',
+    porcentaje_referido_predeterminado: 'porcentaje_referido_predeterminado',
+    dias_vencimiento_cartera: 'dias_vencimiento_cartera'
   });
 
   let auroFinanzasConfigCargada = false;
   let auroFinanzasGastosCargados = false;
   let auroFinanzasGastos = [];
+
+  /* Estado aislado: configuración económica de médicos.
+     No modifica el catálogo clínico de médicos. */
+  let auroFinanzasMedicosCargados = false;
+  let auroFinanzasCatalogoMedicos = [];
+  let auroFinanzasConfigMedicos = [];
 
   function finEl(id){
     return document.getElementById(id);
@@ -151,6 +177,12 @@
       finAsignarValor('cfgFinMargenMinimo',
         finValorConfig(datos, AURO_FIN_CONFIG_KEYS.margen_minimo, ''));
 
+      finAsignarValor('cfgFinPorcentajeReferido',
+        finValorConfig(datos, AURO_FIN_CONFIG_KEYS.porcentaje_referido_predeterminado, ''));
+
+      finAsignarValor('cfgFinDiasCartera',
+        finValorConfig(datos, AURO_FIN_CONFIG_KEYS.dias_vencimiento_cartera, ''));
+
       auroFinanzasConfigCargada = true;
       finSetMsg('finanzasConfigMsg', 'Configuración financiera cargada.', 'ok');
     }catch(e){
@@ -184,6 +216,8 @@
     const meta = finNumeroOpcional(finEl('cfgFinMetaMensual')?.value);
     const horas = finNumeroOpcional(finEl('cfgFinHorasFacturables')?.value);
     const margen = finNumeroOpcional(finEl('cfgFinMargenMinimo')?.value);
+    const referido = finNumeroOpcional(finEl('cfgFinPorcentajeReferido')?.value);
+    const diasCartera = finNumeroOpcional(finEl('cfgFinDiasCartera')?.value);
 
     if(!moneda){
       alert('Seleccione o ingrese la moneda.');
@@ -199,6 +233,14 @@
     }
     if(margen !== '' && (margen < 0 || margen > 100)){
       alert('El margen mínimo debe estar entre 0 y 100.');
+      return;
+    }
+    if(referido !== '' && (referido < 0 || referido > 100)){
+      alert('El porcentaje de referido debe estar entre 0 y 100.');
+      return;
+    }
+    if(diasCartera !== '' && diasCartera < 0){
+      alert('Los días de vencimiento de cartera no pueden ser negativos.');
       return;
     }
 
@@ -235,6 +277,24 @@
         'Margen mínimo objetivo en porcentaje',
         'numero'
       );
+
+      if(finEl('cfgFinPorcentajeReferido')){
+        await guardarClaveFinanciera(
+          AURO_FIN_CONFIG_KEYS.porcentaje_referido_predeterminado,
+          referido,
+          'Porcentaje de referido predeterminado',
+          'numero'
+        );
+      }
+
+      if(finEl('cfgFinDiasCartera')){
+        await guardarClaveFinanciera(
+          AURO_FIN_CONFIG_KEYS.dias_vencimiento_cartera,
+          diasCartera,
+          'Días predeterminados para vencimiento de cartera',
+          'numero'
+        );
+      }
 
       auroFinanzasConfigCargada = false;
       await cargarConfiguracionFinanzas(true);
@@ -431,11 +491,254 @@
     }
   }
 
+
+  /* ---------------- CONFIGURACIÓN ECONÓMICA DE MÉDICOS ----------------
+     Usa únicamente:
+     - listarMedicos() para lectura del catálogo existente.
+     - configuracion_medicos_financiera para condiciones económicas.
+     Nunca modifica la hoja medicos.
+     ------------------------------------------------------------------- */
+
+  function finNombreMedico(m){
+    const nombre = finTexto(m?.nombre_completo || m?.nombre || m?.nombres);
+    const apellido = finTexto(m?.apellido || m?.apellidos);
+    return finTexto((nombre + ' ' + apellido).trim()) || finTexto(m?.id_medico);
+  }
+
+  async function cargarMedicosFinanzas(forzar){
+    if(auroFinanzasMedicosCargados && !forzar){
+      renderConfiguracionMedicosFinanzas();
+      return;
+    }
+
+    finValidarApi();
+    finSetMsg('finanzasMedicosMsg', 'Cargando configuración económica de médicos...', 'info');
+
+    try{
+      const resultados = await Promise.all([
+        window.apiGet('listarMedicos'),
+        window.apiGet('listarConfiguracionMedicosFinanciera')
+      ]);
+
+      auroFinanzasCatalogoMedicos = Array.isArray(resultados[0]) ? resultados[0] : [];
+      auroFinanzasConfigMedicos = Array.isArray(resultados[1]) ? resultados[1] : [];
+      auroFinanzasMedicosCargados = true;
+
+      renderSelectMedicosFinanzas();
+      renderConfiguracionMedicosFinanzas();
+      finSetMsg('finanzasMedicosMsg', 'Configuración económica de médicos cargada.', 'ok');
+    }catch(e){
+      console.error('AUROSANAX Finanzas - cargar médicos:', e);
+      auroFinanzasCatalogoMedicos = [];
+      auroFinanzasConfigMedicos = [];
+      renderSelectMedicosFinanzas();
+      renderConfiguracionMedicosFinanzas();
+      finSetMsg(
+        'finanzasMedicosMsg',
+        'No se pudo cargar la configuración económica de médicos: ' + finTexto(e.message || e),
+        'error'
+      );
+    }
+  }
+
+  function renderSelectMedicosFinanzas(){
+    const select = finEl('finMedicoId');
+    if(!select) return;
+
+    const actual = finTexto(select.value);
+    select.innerHTML = '<option value="">Seleccione médico...</option>' +
+      auroFinanzasCatalogoMedicos.map(function(m){
+        const id = finTexto(m.id_medico);
+        return '<option value="' + finEscape(id) + '">' +
+          finEscape(finNombreMedico(m)) +
+        '</option>';
+      }).join('');
+
+    if(actual) select.value = actual;
+  }
+
+  function finBuscarNombreMedico(idMedico){
+    const id = finTexto(idMedico);
+    const medico = auroFinanzasCatalogoMedicos.find(function(m){
+      return finTexto(m.id_medico) === id;
+    });
+    return medico ? finNombreMedico(medico) : id;
+  }
+
+  function renderConfiguracionMedicosFinanzas(){
+    const tbody = finEl('finMedicosTbody');
+    if(!tbody) return;
+
+    if(!auroFinanzasConfigMedicos.length){
+      tbody.innerHTML =
+        '<tr><td colspan="8" class="text-center text-muted py-3">' +
+        'Sin configuraciones económicas de médicos registradas.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = auroFinanzasConfigMedicos.map(function(c){
+      return '<tr>' +
+        '<td>' + finEscape(finBuscarNombreMedico(c.id_medico)) + '</td>' +
+        '<td>' + finEscape(c.tipo_pago) + '</td>' +
+        '<td>' + finEscape(c.porcentaje) + '</td>' +
+        '<td>' + finEscape(c.valor_fijo) + '</td>' +
+        '<td>' + finEscape(c.valor_hora) + '</td>' +
+        '<td>' + finEscape(c.vigencia_desde) + '</td>' +
+        '<td>' + finEscape(c.estado) + '</td>' +
+        '<td class="text-end">' +
+          '<button type="button" class="btn btn-sm btn-outline-primary" ' +
+          'data-fin-editar-medico="' + finEscape(c.id_config_medico) + '">' +
+          '<i class="bi bi-pencil"></i></button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function actualizarCamposTipoPagoMedicoFinanzas(){
+    const tipo = finTexto(finEl('finMedicoTipoPago')?.value).toLowerCase();
+
+    const porcentaje = finEl('finMedicoPorcentaje');
+    const fijo = finEl('finMedicoValorFijo');
+    const hora = finEl('finMedicoValorHora');
+
+    if(porcentaje) porcentaje.disabled = tipo !== 'porcentaje';
+    if(fijo) fijo.disabled = tipo !== 'fijo';
+    if(hora) hora.disabled = tipo !== 'hora' && tipo !== 'por hora' && tipo !== 'por_hora';
+  }
+
+  function limpiarFormularioMedicoFinanzas(){
+    [
+      'finMedicoConfigId',
+      'finMedicoId',
+      'finMedicoPorcentaje',
+      'finMedicoValorFijo',
+      'finMedicoValorHora',
+      'finMedicoVigenciaDesde',
+      'finMedicoVigenciaHasta',
+      'finMedicoObservaciones'
+    ].forEach(function(id){
+      const el = finEl(id);
+      if(el) el.value = '';
+    });
+
+    const tipo = finEl('finMedicoTipoPago');
+    if(tipo) tipo.value = 'Porcentaje';
+
+    const estado = finEl('finMedicoEstado');
+    if(estado) estado.value = 'Activo';
+
+    actualizarCamposTipoPagoMedicoFinanzas();
+  }
+
+  function cargarMedicoEnFormularioFinanzas(idConfig){
+    const id = finTexto(idConfig);
+    const config = auroFinanzasConfigMedicos.find(function(c){
+      return finTexto(c.id_config_medico) === id;
+    });
+    if(!config) return;
+
+    finAsignarValor('finMedicoConfigId', config.id_config_medico);
+    finAsignarValor('finMedicoId', config.id_medico);
+    finAsignarValor('finMedicoTipoPago', config.tipo_pago || 'Porcentaje');
+    finAsignarValor('finMedicoPorcentaje', config.porcentaje);
+    finAsignarValor('finMedicoValorFijo', config.valor_fijo);
+    finAsignarValor('finMedicoValorHora', config.valor_hora);
+    finAsignarValor('finMedicoVigenciaDesde', config.vigencia_desde);
+    finAsignarValor('finMedicoVigenciaHasta', config.vigencia_hasta);
+    finAsignarValor('finMedicoEstado', config.estado || 'Activo');
+    finAsignarValor('finMedicoObservaciones', config.observaciones);
+
+    actualizarCamposTipoPagoMedicoFinanzas();
+  }
+
+  async function guardarConfiguracionMedicoFinanzas(){
+    finValidarApi();
+
+    const idConfig = finTexto(finEl('finMedicoConfigId')?.value);
+    const idMedico = finTexto(finEl('finMedicoId')?.value);
+    const tipoPago = finTexto(finEl('finMedicoTipoPago')?.value);
+    const porcentaje = finNumeroOpcional(finEl('finMedicoPorcentaje')?.value);
+    const valorFijo = finNumeroOpcional(finEl('finMedicoValorFijo')?.value);
+    const valorHora = finNumeroOpcional(finEl('finMedicoValorHora')?.value);
+
+    if(!idMedico){
+      alert('Seleccione un médico.');
+      return;
+    }
+    if(!tipoPago){
+      alert('Seleccione el tipo de pago.');
+      return;
+    }
+    if(porcentaje !== '' && (porcentaje < 0 || porcentaje > 100)){
+      alert('El porcentaje del médico debe estar entre 0 y 100.');
+      return;
+    }
+    if(valorFijo !== '' && valorFijo < 0){
+      alert('El valor fijo no puede ser negativo.');
+      return;
+    }
+    if(valorHora !== '' && valorHora < 0){
+      alert('El valor por hora no puede ser negativo.');
+      return;
+    }
+
+    const data = {
+      id_medico: idMedico,
+      tipo_pago: tipoPago,
+      porcentaje: porcentaje,
+      valor_fijo: valorFijo,
+      valor_hora: valorHora,
+      vigencia_desde: finTexto(finEl('finMedicoVigenciaDesde')?.value),
+      vigencia_hasta: finTexto(finEl('finMedicoVigenciaHasta')?.value),
+      estado: finTexto(finEl('finMedicoEstado')?.value || 'Activo'),
+      observaciones: finTexto(finEl('finMedicoObservaciones')?.value)
+    };
+
+    finSetBoton('btnGuardarMedicoFinanzas', true, 'Guardando...');
+    finSetMsg('finanzasMedicosMsg', 'Guardando configuración económica del médico...', 'info');
+
+    try{
+      let respuesta;
+
+      if(idConfig){
+        respuesta = await window.apiPost('editarConfiguracionMedicoFinanciera', {
+          id_config_medico: idConfig,
+          data: data
+        });
+      }else{
+        respuesta = await window.apiPost('guardarConfiguracionMedicoFinanciera', data);
+      }
+
+      if(!respuesta || respuesta.success !== true){
+        throw new Error(
+          (respuesta && respuesta.message) ||
+          'No se pudo guardar la configuración económica del médico.'
+        );
+      }
+
+      limpiarFormularioMedicoFinanzas();
+      auroFinanzasMedicosCargados = false;
+      await cargarMedicosFinanzas(true);
+      finSetMsg('finanzasMedicosMsg', 'Configuración económica del médico guardada correctamente.', 'ok');
+    }catch(e){
+      console.error('AUROSANAX Finanzas - guardar médico:', e);
+      finSetMsg(
+        'finanzasMedicosMsg',
+        'Error guardando configuración económica del médico: ' + finTexto(e.message || e),
+        'error'
+      );
+      alert('Error al guardar configuración del médico: ' + finTexto(e.message || e));
+    }finally{
+      finSetBoton('btnGuardarMedicoFinanzas', false);
+    }
+  }
+
   async function inicializarConfiguracionFinanzas(){
     /* Solo lectura. Nunca guarda por inicialización o navegación. */
     await Promise.allSettled([
       cargarConfiguracionFinanzas(false),
-      cargarGastosFijosFinanzas(false)
+      cargarGastosFijosFinanzas(false),
+      cargarMedicosFinanzas(false)
     ]);
   }
 
@@ -476,6 +779,35 @@
         cargarGastoEnFormularioFinanzas(btn.getAttribute('data-fin-editar-gasto'));
       });
     }
+
+    const btnMedico = finEl('btnGuardarMedicoFinanzas');
+    if(btnMedico && btnMedico.dataset.auroFinInit !== '1'){
+      btnMedico.dataset.auroFinInit = '1';
+      btnMedico.addEventListener('click', guardarConfiguracionMedicoFinanzas);
+    }
+
+    const btnLimpiarMedico = finEl('btnLimpiarMedicoFinanzas');
+    if(btnLimpiarMedico && btnLimpiarMedico.dataset.auroFinInit !== '1'){
+      btnLimpiarMedico.dataset.auroFinInit = '1';
+      btnLimpiarMedico.addEventListener('click', limpiarFormularioMedicoFinanzas);
+    }
+
+    const tipoPagoMedico = finEl('finMedicoTipoPago');
+    if(tipoPagoMedico && tipoPagoMedico.dataset.auroFinInit !== '1'){
+      tipoPagoMedico.dataset.auroFinInit = '1';
+      tipoPagoMedico.addEventListener('change', actualizarCamposTipoPagoMedicoFinanzas);
+      actualizarCamposTipoPagoMedicoFinanzas();
+    }
+
+    const tbodyMedicos = finEl('finMedicosTbody');
+    if(tbodyMedicos && tbodyMedicos.dataset.auroFinInit !== '1'){
+      tbodyMedicos.dataset.auroFinInit = '1';
+      tbodyMedicos.addEventListener('click', function(ev){
+        const btn = ev.target.closest('[data-fin-editar-medico]');
+        if(!btn) return;
+        cargarMedicoEnFormularioFinanzas(btn.getAttribute('data-fin-editar-medico'));
+      });
+    }
   }
 
   function prepararConfigFinanzas(){
@@ -488,9 +820,12 @@
     inicializar: inicializarConfiguracionFinanzas,
     cargarConfiguracion: function(){ return cargarConfiguracionFinanzas(true); },
     cargarGastos: function(){ return cargarGastosFijosFinanzas(true); },
+    cargarMedicos: function(){ return cargarMedicosFinanzas(true); },
     guardarConfiguracion: guardarConfiguracionFinanzas,
     guardarGasto: guardarGastoFijoFinanzas,
     limpiarGasto: limpiarFormularioGastoFinanzas,
+    guardarMedico: guardarConfiguracionMedicoFinanzas,
+    limpiarMedico: limpiarFormularioMedicoFinanzas,
     preparar: prepararConfigFinanzas
   });
 
