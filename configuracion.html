@@ -845,7 +845,24 @@
     <div class="row g-3 mb-3">
       <div class="col-md-4">
         <label class="form-label fw-bold">Nombre del gasto</label>
-        <input id="finGastoNombre" class="form-control" placeholder="Ej. Arriendo">
+        <select id="finGastoNombre" class="form-select">
+          <option value="">Seleccione gasto...</option>
+          <option value="Alquiler">Alquiler</option>
+          <option value="Luz">Luz</option>
+          <option value="Agua">Agua</option>
+          <option value="Internet">Internet</option>
+          <option value="Mantenimiento de aire">Mantenimiento de aire</option>
+          <option value="Permiso de funcionamiento">Permiso de funcionamiento</option>
+          <option value="Bomberos">Bomberos</option>
+          <option value="Patente">Patente</option>
+          <option value="Publicidad">Publicidad</option>
+          <option value="Contabilidad">Contabilidad</option>
+          <option value="Limpieza e insumos">Limpieza e insumos</option>
+          <option value="Mantenimiento de equipos">Mantenimiento de equipos</option>
+          <option value="Depreciación de equipos">Depreciación de equipos</option>
+          <option value="__OTRO__">Otro</option>
+        </select>
+        <input id="finGastoNombreOtro" class="form-control mt-2 d-none" placeholder="Escriba el nombre del gasto">
       </div>
       <div class="col-md-4">
         <label class="form-label fw-bold">Categoría</label>
