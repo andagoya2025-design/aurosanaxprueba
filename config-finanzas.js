@@ -24,6 +24,7 @@
 
    Gastos fijos:
    - finGastoNombre
+   - finGastoNombreOtro
    - finGastoCategoria
    - finGastoValor
    - finGastoPeriodicidad
@@ -311,6 +312,55 @@
     }
   }
 
+  function actualizarNombreOtroGastoFinanzas(){
+    const selector = finEl('finGastoNombre');
+    const otro = finEl('finGastoNombreOtro');
+    if(!selector || !otro) return;
+
+    const esOtro = finTexto(selector.value) === '__OTRO__';
+    otro.classList.toggle('d-none', !esOtro);
+
+    if(!esOtro){
+      otro.value = '';
+    }
+  }
+
+  function obtenerNombreGastoFinanzas(){
+    const selector = finEl('finGastoNombre');
+    if(!selector) return '';
+
+    const valor = finTexto(selector.value);
+    if(valor === '__OTRO__'){
+      return finTexto(finEl('finGastoNombreOtro')?.value);
+    }
+
+    return valor;
+  }
+
+  function asignarNombreGastoFinanzas(nombre){
+    const selector = finEl('finGastoNombre');
+    const otro = finEl('finGastoNombreOtro');
+    if(!selector) return;
+
+    const valor = finTexto(nombre);
+    const existe = Array.from(selector.options || []).some(function(op){
+      return finTexto(op.value) === valor;
+    });
+
+    if(!valor){
+      selector.value = '';
+      if(otro) otro.value = '';
+    }else if(existe){
+      selector.value = valor;
+      if(otro) otro.value = '';
+    }else{
+      selector.value = '__OTRO__';
+      if(otro) otro.value = valor;
+    }
+
+    actualizarNombreOtroGastoFinanzas();
+  }
+
   function finPeriodicidadMensual(valor, periodicidad){
     const v = finNumero(valor);
     const p = finTexto(periodicidad).toLowerCase();
@@ -400,6 +450,10 @@
       if(el) el.value = '';
     });
 
+    const otroNombre = finEl('finGastoNombreOtro');
+    if(otroNombre) otroNombre.value = '';
+    actualizarNombreOtroGastoFinanzas();
+
     const periodicidad = finEl('finGastoPeriodicidad');
     if(periodicidad) periodicidad.value = 'Mensual';
 
@@ -416,7 +470,7 @@
     if(!gasto) return;
 
     finAsignarValor('finGastoId', gasto.id_gasto);
-    finAsignarValor('finGastoNombre', gasto.nombre_gasto);
+    asignarNombreGastoFinanzas(gasto.nombre_gasto);
     finAsignarValor('finGastoCategoria', gasto.categoria);
     finAsignarValor('finGastoValor', gasto.valor);
     finAsignarValor('finGastoPeriodicidad', gasto.periodicidad || 'Mensual');
@@ -430,14 +484,14 @@
     finValidarApi();
 
     const idGasto = finTexto(finEl('finGastoId')?.value);
-    const nombre = finTexto(finEl('finGastoNombre')?.value);
+    const nombre = obtenerNombreGastoFinanzas();
     const categoria = finTexto(finEl('finGastoCategoria')?.value);
     const valor = finNumero(finEl('finGastoValor')?.value);
     const periodicidad = finTexto(finEl('finGastoPeriodicidad')?.value || 'Mensual');
     const mensual = finPeriodicidadMensual(valor, periodicidad);
 
     if(!nombre){
-      alert('Ingrese el nombre del gasto.');
+      alert('Seleccione o escriba el nombre del gasto.');
       return;
     }
     if(!(valor > 0)){
@@ -747,6 +801,13 @@
     if(btnConfig && btnConfig.dataset.auroFinInit !== '1'){
       btnConfig.dataset.auroFinInit = '1';
       btnConfig.addEventListener('click', guardarConfiguracionFinanzas);
+    }
+
+    const selectorNombreGasto = finEl('finGastoNombre');
+    if(selectorNombreGasto && selectorNombreGasto.dataset.auroFinNombreInit !== '1'){
+      selectorNombreGasto.dataset.auroFinNombreInit = '1';
+      selectorNombreGasto.addEventListener('change', actualizarNombreOtroGastoFinanzas);
+      actualizarNombreOtroGastoFinanzas();
     }
 
     const btnGasto = finEl('btnGuardarGastoFinanzas');
