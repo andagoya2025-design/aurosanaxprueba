@@ -3156,6 +3156,71 @@
   }
 
 
+  /* ==========================================================
+     AUROSANAX FIX QUIRÚRGICO - LIMPIEZA CIE ENTRE ATENCIONES
+     2026-08-11
+     ----------------------------------------------------------
+     Alcance exclusivo:
+     - Limpia el editor CIE-10 temporal al cerrar/cambiar de atención.
+     - Evita que diagnósticos locales de la atención anterior se fusionen
+       con la siguiente atención.
+     - No guarda, elimina ni modifica registros persistidos.
+     - No toca Apps Script, Google Sheets, Plan, Recetas ni Examen Físico.
+     ========================================================== */
+  function limpiarEditorCie10Consulta(){
+    /* Estado temporal compartido con el editor CIE de examenfisico.js. */
+    window.hcDiagnosticosSeleccionados = [];
+    window.hcDxResultadosActuales = [];
+
+    /* Compatibilidad con las variables globales históricas del editor. */
+    try{
+      hcDiagnosticosSeleccionados = window.hcDiagnosticosSeleccionados;
+    }catch(_e){}
+    try{
+      hcDxResultadosActuales = window.hcDxResultadosActuales;
+    }catch(_e){}
+
+    /* Limpia únicamente los campos variables del editor CIE. */
+    ['hcDxCodigoBuscar','hcDxNombreBuscar'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+
+    const resultados = document.getElementById('hcDxResultadosBody');
+    if(resultados){
+      resultados.innerHTML = '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
+    }
+
+    /* Reutiliza el render y sincronización oficiales del editor. */
+    try{
+      if(typeof window.renderDiagnosticosSeleccionados === 'function'){
+        window.renderDiagnosticosSeleccionados();
+      }else if(typeof renderDiagnosticosSeleccionados === 'function'){
+        renderDiagnosticosSeleccionados();
+      }
+    }catch(error){
+      console.warn(MODULO + ': no se pudo limpiar la tabla superior CIE-10.', error);
+    }
+
+    try{
+      if(typeof window.sincronizarDiagnosticosConCamposHistoria === 'function'){
+        window.sincronizarDiagnosticosConCamposHistoria();
+      }else if(typeof sincronizarDiagnosticosConCamposHistoria === 'function'){
+        sincronizarDiagnosticosConCamposHistoria();
+      }
+    }catch(error){
+      console.warn(MODULO + ': no se pudieron limpiar los campos compatibles CIE-10.', error);
+    }
+
+    /* El visor inteligente puede conservar su propio STATE; se oculta para
+       impedir que el protocolo de la atención cerrada permanezca visible. */
+    try{
+      if(typeof window.auroCie10InteligenteOcultar === 'function'){
+        window.auroCie10InteligenteOcultar();
+      }
+    }catch(_e){}
+  }
+
   function limpiarContextoHistoriaNueva(){
     /*
       Limpieza exclusivamente en memoria y visual.
@@ -3166,6 +3231,7 @@
     state.cargando = false;
     state.ultimaActualizacion = '';
     limpiarVisual();
+    limpiarEditorCie10Consulta();
 
     status('Sin atención activa');
     mensaje(
