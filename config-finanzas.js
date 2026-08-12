@@ -543,9 +543,19 @@
         '<td>' + finEscape(normalizarFechaInputFinanzas(g.fecha_fin)) + '</td>' +
         '<td>' + finEscape(g.estado) + '</td>' +
         '<td class="text-end">' +
-          '<button type="button" class="btn btn-sm btn-outline-primary" ' +
-          'data-fin-editar-gasto="' + finEscape(g.id_gasto) + '">' +
+          '<button type="button" class="btn btn-sm btn-outline-primary me-1" ' +
+          'data-fin-editar-gasto="' + finEscape(g.id_gasto) + '" title="Editar">' +
           '<i class="bi bi-pencil"></i></button>' +
+          '<button type="button" class="btn btn-sm ' +
+          (finTexto(g.estado).toLowerCase() === 'activo' ? 'btn-outline-warning' : 'btn-outline-success') + '" ' +
+          'data-fin-estado-gasto="' + finEscape(g.id_gasto) + '" ' +
+          'data-fin-nuevo-estado="' +
+          (finTexto(g.estado).toLowerCase() === 'activo' ? 'Inactivo' : 'Activo') + '" ' +
+          'title="' +
+          (finTexto(g.estado).toLowerCase() === 'activo' ? 'Desactivar' : 'Reactivar') + '">' +
+          '<i class="bi ' +
+          (finTexto(g.estado).toLowerCase() === 'activo' ? 'bi-pause-circle' : 'bi-play-circle') +
+          '"></i></button>' +
         '</td>' +
       '</tr>';
     }).join('');
@@ -581,6 +591,75 @@
 
     const id = finEl('finGastoId');
     if(id) id.value = '';
+  }
+
+  async function cambiarEstadoGastoFinanzas(idGasto, nuevoEstado){
+    finValidarApi();
+
+    const id = finTexto(idGasto);
+    const estado = finTexto(nuevoEstado);
+
+    if(!id || !estado) return;
+
+    const gasto = auroFinanzasGastos.find(function(g){
+      return finTexto(g.id_gasto) === id;
+    });
+
+    if(!gasto){
+      alert('No se encontró el gasto seleccionado.');
+      return;
+    }
+
+    const accion = estado === 'Activo' ? 'reactivar' : 'desactivar';
+    const confirmado = confirm(
+      '¿Desea ' + accion + ' el gasto "' + finTexto(gasto.nombre_gasto) + '"?'
+    );
+
+    if(!confirmado) return;
+
+    finSetMsg('finanzasGastosMsg', 'Actualizando estado del gasto...', 'info');
+
+    try{
+      const data = {
+        nombre_gasto: gasto.nombre_gasto,
+        categoria: gasto.categoria,
+        valor: gasto.valor,
+        periodicidad: gasto.periodicidad,
+        valor_mensual_prorrateado: gasto.valor_mensual_prorrateado,
+        fecha_inicio: gasto.fecha_inicio,
+        fecha_fin: gasto.fecha_fin,
+        estado: estado,
+        observaciones: gasto.observaciones
+      };
+
+      const respuesta = await window.apiPost('editarGastoFijoFinanciero', {
+        id_gasto: id,
+        data: data
+      });
+
+      if(!respuesta || respuesta.success !== true){
+        throw new Error((respuesta && respuesta.message) || 'No se pudo actualizar el estado del gasto.');
+      }
+
+      auroFinanzasGastosCargados = false;
+      await cargarGastosFijosFinanzas(true);
+
+      finSetMsg(
+        'finanzasGastosMsg',
+        estado === 'Activo'
+          ? 'Gasto reactivado correctamente.'
+          : 'Gasto desactivado correctamente.',
+        'ok'
+      );
+    }catch(e){
+      console.error('AUROSANAX Finanzas - cambiar estado gasto:', e);
+      finSetMsg(
+        'finanzasGastosMsg',
+        'Error actualizando estado del gasto: ' + finTexto(e.message || e),
+        'error'
+      );
+      alert('Error al actualizar el estado del gasto: ' + finTexto(e.message || e));
+    }
   }
 
   function cargarGastoEnFormularioFinanzas(idGasto){
@@ -976,9 +1055,19 @@
     if(tbody && tbody.dataset.auroFinInit !== '1'){
       tbody.dataset.auroFinInit = '1';
       tbody.addEventListener('click', function(ev){
-        const btn = ev.target.closest('[data-fin-editar-gasto]');
-        if(!btn) return;
-        cargarGastoEnFormularioFinanzas(btn.getAttribute('data-fin-editar-gasto'));
+        const btnEditar = ev.target.closest('[data-fin-editar-gasto]');
+        if(btnEditar){
+          cargarGastoEnFormularioFinanzas(btnEditar.getAttribute('data-fin-editar-gasto'));
+          return;
+        }
+
+        const btnEstado = ev.target.closest('[data-fin-estado-gasto]');
+        if(btnEstado){
+          cambiarEstadoGastoFinanzas(
+            btnEstado.getAttribute('data-fin-estado-gasto'),
+            btnEstado.getAttribute('data-fin-nuevo-estado')
+          );
+        }
       });
     }
 
@@ -1032,6 +1121,7 @@
     guardarConfiguracion: guardarConfiguracionFinanzas,
     guardarGasto: guardarGastoFijoFinanzas,
     limpiarGasto: limpiarFormularioGastoFinanzas,
+    cambiarEstadoGasto: cambiarEstadoGastoFinanzas,
     guardarMedico: guardarConfiguracionMedicoFinanzas,
     limpiarMedico: limpiarFormularioMedicoFinanzas,
     preparar: prepararConfigFinanzas
