@@ -532,6 +532,118 @@
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   }
 
+  function finTipoGastoVisible(gasto){
+    const directo = finTexto(gasto?.tipo_gasto);
+    if(directo) return directo;
+
+    const p = finTexto(gasto?.periodicidad).toLowerCase();
+    if(p === 'anual' || p === 'semestral' || p === 'trimestral') return 'Periódico';
+    if(p === 'único' || p === 'unico') return 'Variable';
+    return 'Fijo';
+  }
+
+  function finEsGastoRecurrente(tipo){
+    const t = finTexto(tipo).toLowerCase();
+    return t === 'fijo' || t === 'periódico' || t === 'periodico';
+  }
+
+  function actualizarTipoGastoFinanzas(){
+    const tipo = finTexto(finEl('finGastoTipo')?.value || 'Fijo');
+    const periodicidad = finEl('finGastoPeriodicidad');
+
+    if(!periodicidad) return;
+
+    if(tipo === 'Variable' || tipo === 'Extraordinario'){
+      periodicidad.value = 'Único';
+    }else if(finTexto(periodicidad.value).toLowerCase() === 'único' ||
+             finTexto(periodicidad.value).toLowerCase() === 'unico'){
+      periodicidad.value = tipo === 'Periódico' ? 'Anual' : 'Mensual';
+    }
+
+    actualizarProrrateoGastoFinanzas();
+  }
+
+  function finMesActual(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+
+  function finMoneyUI(valor){
+    return '$' + finNumero(valor).toLocaleString('es-EC',{
+      minimumFractionDigits:2,
+      maximumFractionDigits:2
+    });
+  }
+
+  async function cargarResumenMensualFinanzas(forzar){
+    finValidarApi();
+
+    const periodo = finTexto(finEl('finResumenPeriodo')?.value) || finMesActual();
+    if(finEl('finResumenPeriodo') && !finEl('finResumenPeriodo').value){
+      finEl('finResumenPeriodo').value = periodo;
+    }
+
+    finSetMsg('finResumenMsg', 'Calculando resultado financiero del período...', 'info');
+
+    try{
+      const r = await window.apiGet('obtenerResumenFinancieroPeriodo', { periodo: periodo });
+      const data = r && typeof r === 'object' ? r : {};
+
+      const asignar = function(id, valor){
+        const el = finEl(id);
+        if(el) el.textContent = valor;
+      };
+
+      asignar('finResIngresos', finMoneyUI(data.ingresos_cobrados));
+      asignar('finResFacturacion', finMoneyUI(data.facturacion_generada));
+      asignar('finResCartera', finMoneyUI(data.cuentas_por_cobrar));
+      asignar('finResFijos', finMoneyUI(data.gastos_fijos));
+      asignar('finResPeriodicos', finMoneyUI(data.gastos_periodicos));
+      asignar('finResVariables', finMoneyUI(data.costos_variables));
+      asignar('finResExtraordinarios', finMoneyUI(data.gastos_extraordinarios));
+      asignar('finResComisiones', finMoneyUI(data.comisiones_medicos));
+      asignar('finResResultado', finMoneyUI(data.utilidad_estimada));
+      asignar('finResMargen', finNumero(data.margen_operativo_pct).toFixed(1) + '%');
+      asignar('finResPuntoEquilibrio',
+        data.punto_equilibrio_mensual === null || data.punto_equilibrio_mensual === undefined
+          ? '—'
+          : finMoneyUI(data.punto_equilibrio_mensual)
+      );
+      asignar('finResAtenciones', String(data.numero_atenciones || 0));
+      asignar('finResTicket', finMoneyUI(data.ticket_promedio));
+
+      const resultadoCard = finEl('finResResultadoCard');
+      if(resultadoCard){
+        resultadoCard.classList.remove('fin-result-ok','fin-result-bad','fin-result-neutral');
+        resultadoCard.classList.add(
+          finNumero(data.utilidad_estimada) > 0
+            ? 'fin-result-ok'
+            : (finNumero(data.utilidad_estimada) < 0 ? 'fin-result-bad' : 'fin-result-neutral')
+        );
+      }
+
+      const texto = finNumero(data.utilidad_estimada) > 0
+        ? 'Resultado positivo del período.'
+        : (finNumero(data.utilidad_estimada) < 0
+            ? 'El período presenta pérdida operativa estimada.'
+            : 'El período está en punto neutro o todavía no tiene suficiente información.');
+
+      finSetMsg('finResumenMsg',
+        texto + ' El análisis usa ingresos realmente cobrados y costos configurados/registrados.',
+        finNumero(data.utilidad_estimada) < 0 ? 'error' : 'ok'
+      );
+
+      return data;
+    }catch(e){
+      console.error('AUROSANAX Finanzas - resumen mensual:', e);
+      finSetMsg('finResumenMsg',
+        'No se pudo calcular el resumen mensual: ' + finTexto(e.message || e),
+        'error'
+      );
+      return null;
+    }
+  }
+
   function finPeriodicidadMensual(valor, periodicidad){
     const v = finNumero(valor);
     const p = finTexto(periodicidad).toLowerCase();
@@ -543,6 +655,7 @@
     if(p === 'trimestral') return Math.round((v / 3) * 100) / 100;
     if(p === 'semestral') return Math.round((v / 6) * 100) / 100;
     if(p === 'anual') return Math.round((v / 12) * 100) / 100;
+    if(p === 'único' || p === 'unico') return v;
 
     return v;
   }
@@ -586,7 +699,7 @@
     const mobile = finEl('finGastosMobile');
 
     if(!auroFinanzasGastos.length){
-      if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
+      if(tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
       if(mobile) mobile.innerHTML = '<div class="text-muted text-center py-3">Sin gastos fijos registrados.</div>';
       return;
     }
@@ -597,6 +710,7 @@
         return '<tr>' +
           '<td>' + finEscape(g.nombre_gasto) + '</td>' +
           '<td>' + finEscape(g.categoria) + '</td>' +
+          '<td>' + finEscape(finTipoGastoVisible(g)) + '</td>' +
           '<td>' + finEscape(g.valor) + '</td>' +
           '<td>' + finEscape(g.periodicidad) + '</td>' +
           '<td>' + finEscape(g.valor_mensual_prorrateado) + '</td>' +
@@ -619,6 +733,7 @@
           '<div class="fin-mobile-title"><strong>' + finEscape(g.nombre_gasto) + '</strong><span class="' + (activo ? 'fin-state-active' : 'fin-state-inactive') + '">' + finEscape(g.estado || 'Activo') + '</span></div>' +
           '<div class="fin-mobile-grid">' +
             '<span>Categoría</span><b>' + finEscape(g.categoria) + '</b>' +
+            '<span>Tipo</span><b>' + finEscape(finTipoGastoVisible(g)) + '</b>' +
             '<span>Valor</span><b>$' + finDinero(g.valor) + '</b>' +
             '<span>Periodicidad</span><b>' + finEscape(g.periodicidad) + '</b>' +
             '<span>Mensual</span><b>$' + finDinero(g.valor_mensual_prorrateado) + '</b>' +
@@ -656,6 +771,9 @@
     const otraCategoria = finEl('finGastoCategoriaOtro');
     if(otraCategoria) otraCategoria.value = '';
     actualizarCategoriaOtroGastoFinanzas();
+
+    const tipoGasto = finEl('finGastoTipo');
+    if(tipoGasto) tipoGasto.value = 'Fijo';
 
     const periodicidad = finEl('finGastoPeriodicidad');
     if(periodicidad) periodicidad.value = 'Mensual';
@@ -697,6 +815,7 @@
       const data = {
         nombre_gasto: gasto.nombre_gasto,
         categoria: gasto.categoria,
+        tipo_gasto: finTipoGastoVisible(gasto),
         valor: gasto.valor,
         periodicidad: gasto.periodicidad,
         valor_mensual_prorrateado: gasto.valor_mensual_prorrateado,
@@ -717,6 +836,7 @@
 
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
+      await cargarResumenMensualFinanzas(true);
 
       finSetMsg(
         'finanzasGastosMsg',
@@ -764,6 +884,7 @@
       limpiarFormularioGastoFinanzas();
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
+      await cargarResumenMensualFinanzas(true);
       finSetMsg('finanzasGastosMsg', 'Gasto eliminado correctamente.', 'ok');
     }catch(e){
       console.error('AUROSANAX Finanzas - eliminar gasto:', e);
@@ -806,6 +927,7 @@
           const r = await window.apiPost('guardarGastoFijoFinanciero', {
             nombre_gasto: base.nombre_gasto,
             categoria: base.categoria,
+            tipo_gasto: (base.periodicidad === 'Anual' || base.periodicidad === 'Semestral' || base.periodicidad === 'Trimestral') ? 'Periódico' : 'Fijo',
             valor: base.valor,
             periodicidad: base.periodicidad,
             valor_mensual_prorrateado: mensual,
@@ -823,6 +945,7 @@
 
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
+      await cargarResumenMensualFinanzas(true);
       finSetMsg(
         'finanzasGastosMsg',
         errores.length
@@ -847,6 +970,7 @@
     finAsignarValor('finGastoId', gasto.id_gasto);
     asignarNombreGastoFinanzas(gasto.nombre_gasto);
     asignarCategoriaGastoFinanzas(gasto.categoria);
+    finAsignarValor('finGastoTipo', finTipoGastoVisible(gasto));
     finAsignarValor('finGastoValor', gasto.valor);
     finAsignarValor('finGastoPeriodicidad', gasto.periodicidad || 'Mensual');
     finAsignarValor('finGastoValorMensual', gasto.valor_mensual_prorrateado);
@@ -861,6 +985,7 @@
     const idGasto = finTexto(finEl('finGastoId')?.value);
     const nombre = obtenerNombreGastoFinanzas();
     const categoria = obtenerCategoriaGastoFinanzas();
+    const tipoGasto = finTexto(finEl('finGastoTipo')?.value || 'Fijo');
     const valor = finNumero(finEl('finGastoValor')?.value);
     const periodicidad = finTexto(finEl('finGastoPeriodicidad')?.value || 'Mensual');
     const fechaInicio = finTexto(finEl('finGastoFechaInicio')?.value);
@@ -883,7 +1008,7 @@
       return;
     }
 
-    if(!idGasto){
+    if(!idGasto && finEsGastoRecurrente(tipoGasto)){
       const duplicadoActivo = finBuscarGastoActivoDuplicado(nombre, '');
       if(duplicadoActivo){
         cargarGastoEnFormularioFinanzas(duplicadoActivo.id_gasto);
@@ -896,6 +1021,7 @@
     const data = {
       nombre_gasto: nombre,
       categoria: categoria,
+      tipo_gasto: tipoGasto,
       valor: valor,
       periodicidad: periodicidad,
       valor_mensual_prorrateado: mensual,
@@ -927,6 +1053,7 @@
       limpiarFormularioGastoFinanzas();
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
+      await cargarResumenMensualFinanzas(true);
       finSetMsg('finanzasGastosMsg', 'Gasto fijo guardado correctamente.', 'ok');
     }catch(e){
       console.error('AUROSANAX Finanzas - guardar gasto:', e);
@@ -1200,7 +1327,8 @@
     await Promise.allSettled([
       cargarConfiguracionFinanzas(false),
       cargarGastosFijosFinanzas(false),
-      cargarMedicosFinanzas(false)
+      cargarMedicosFinanzas(false),
+      cargarResumenMensualFinanzas(false)
     ]);
   }
 
@@ -1219,6 +1347,12 @@
         aplicarSugerenciasGastoFinanzas();
       });
       actualizarNombreOtroGastoFinanzas();
+    }
+
+    const selectorTipoGasto = finEl('finGastoTipo');
+    if(selectorTipoGasto && selectorTipoGasto.dataset.auroFinInit !== '1'){
+      selectorTipoGasto.dataset.auroFinInit = '1';
+      selectorTipoGasto.addEventListener('change', actualizarTipoGastoFinanzas);
     }
 
     const selectorCategoriaGasto = finEl('finGastoCategoria');
@@ -1314,6 +1448,19 @@
     }
     enlazarEdicionMedicos_(finEl('finMedicosTbody'));
     enlazarEdicionMedicos_(finEl('finMedicosMobile'));
+
+    const resumenPeriodo = finEl('finResumenPeriodo');
+    if(resumenPeriodo && resumenPeriodo.dataset.auroFinInit !== '1'){
+      resumenPeriodo.dataset.auroFinInit = '1';
+      if(!resumenPeriodo.value) resumenPeriodo.value = finMesActual();
+      resumenPeriodo.addEventListener('change', function(){ cargarResumenMensualFinanzas(true); });
+    }
+
+    const btnResumen = finEl('btnActualizarResumenFinanzas');
+    if(btnResumen && btnResumen.dataset.auroFinInit !== '1'){
+      btnResumen.dataset.auroFinInit = '1';
+      btnResumen.addEventListener('click', function(){ cargarResumenMensualFinanzas(true); });
+    }
   }
 
   function prepararConfigFinanzas(){
@@ -1339,6 +1486,7 @@
     cambiarEstadoGasto: cambiarEstadoGastoFinanzas,
     eliminarGasto: eliminarGastoFinanzas,
     cargarGastosBase: cargarGastosBaseAurosanaxFinanzas,
+    cargarResumen: function(){ return cargarResumenMensualFinanzas(true); },
     guardarMedico: guardarConfiguracionMedicoFinanzas,
     limpiarMedico: limpiarFormularioMedicoFinanzas,
     preparar: prepararConfigFinanzas
