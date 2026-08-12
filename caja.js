@@ -85,10 +85,23 @@
     return cajaTxt(m?.nombre_medico || m?.nombre_completo || m?.nombre || [m?.nombres,m?.apellidos].filter(Boolean).join(' ')) || cajaTxt(a?.id_medico) || '—';
   }
   function cajaEstadoBadge(m){
-    if(!m) return '<span class="caja-status caja-status-sincuenta">Sin cuenta</span>';
+    if(!m) return '<span class="caja-status caja-status-sincuenta">Sin cobrar</span>';
+
     const e=cajaTxt(m.estado_pago)||'Pendiente';
-    const c=e.toLowerCase()==='pagado'?'pagado':e.toLowerCase()==='parcial'?'parcial':'pendiente';
-    return `<span class="caja-status caja-status-${c}">${cajaEsc(e)}</span>`;
+    const normal=cajaNormalizar(e);
+
+    let c='pendiente';
+    let visible='Pendiente de pago';
+
+    if(normal==='pagado'){
+      c='pagado';
+      visible='Pagado';
+    }else if(normal==='parcial'){
+      c='parcial';
+      visible='Saldo pendiente';
+    }
+
+    return `<span class="caja-status caja-status-${c}">${cajaEsc(visible)}</span>`;
   }
   function cajaCitaDeAtencion(a){
     const idCita=cajaTxt(a?.id_cita);
@@ -350,7 +363,11 @@
           </div>
           <div class="text-end">
             ${cajaEstadoBadge(m)}
-            <div class="caja-money mt-1">${m?cajaMoney(m.saldo_pendiente):'—'}</div>
+            <div class="caja-money mt-1">${m
+              ? (cajaTxt(m.estado_pago).toLowerCase()==='pagado'
+                  ? 'Saldo ' + cajaMoney(0)
+                  : 'Saldo ' + cajaMoney(m.saldo_pendiente))
+              : '—'}</div>
           </div>
         </div>
       </div>`;
@@ -866,7 +883,7 @@
       return `<div class="row"><span>${cajaEsc(nombre)}</span><b>${cajaMoney(d.subtotal!==undefined?d.subtotal:d.precio_unitario)}</b></div>`;
     }).join('');
 
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Recibo ${cajaEsc(recibo)}</title><style>@page{size:80mm auto;margin:5mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:11px}.r{width:70mm;margin:auto}.logo{max-width:34mm;max-height:18mm;object-fit:contain;display:block;margin:0 auto 5px}.c{text-align:center}.title{font-size:16px;font-weight:800}.sub{font-size:10px;color:#555}.rule{border-top:1px dashed #777;margin:8px 0}.row{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.row span:first-child{color:#555;max-width:43mm}.row b{text-align:right}.total{font-size:16px;font-weight:900}.foot{text-align:center;font-size:9px;color:#666;line-height:1.4;margin-top:8px}@media print{button{display:none}}</style></head><body><div class="r"><div class="c">${logo?`<img class="logo" src="${cajaEsc(logo)}">`:''}<div class="title">${cajaEsc(centro)}</div>${direccion?`<div class="sub">${cajaEsc(direccion)}</div>`:''}${telefono?`<div class="sub">${cajaEsc(telefono)}</div>`:''}<div class="rule"></div><b>COMPROBANTE DE CAJA</b><div class="sub">${cajaEsc(recibo)}</div></div><div class="rule"></div><div class="row"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="row"><span>Atención</span><b>${cajaEsc(cajaIdAtencion(a))}</b></div><div class="row"><span>Consulta</span><b>${cajaEsc(a.numero_consulta||'—')}</b></div><div class="row"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rule"></div>${detalleHtml}<div class="rule"></div><div class="row"><span>Fecha pago</span><b>${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))}</b></div><div class="row"><span>Forma pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="row"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}<div class="rule"></div><div class="row total"><span>RECIBIDO / ABONO</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="row"><span>Total cuenta</span><b>${cajaMoney(m.valor_final)}</b></div><div class="row"><span>Abonado acumulado</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="row"><span>Saldo pendiente</span><b>${cajaMoney(m.saldo_pendiente)}</b></div><div class="rule"></div><div class="c sub">Recibido por: ${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</div><div class="foot">Comprobante interno de Caja generado por AUROSANAX ERP.<br>No sustituye factura o comprobante tributario cuando corresponda.</div></div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Recibo ${cajaEsc(recibo)}</title><style>@page{size:80mm auto;margin:5mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:11px}.r{width:70mm;margin:auto}.logo{max-width:34mm;max-height:18mm;object-fit:contain;display:block;margin:0 auto 5px}.c{text-align:center}.title{font-size:16px;font-weight:800}.sub{font-size:10px;color:#555}.rule{border-top:1px dashed #777;margin:8px 0}.row{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.row span:first-child{color:#555;max-width:43mm}.row b{text-align:right}.total{font-size:16px;font-weight:900}.foot{text-align:center;font-size:9px;color:#666;line-height:1.4;margin-top:8px}@media print{button{display:none}}</style></head><body><div class="r"><div class="c">${logo?`<img class="logo" src="${cajaEsc(logo)}">`:''}<div class="title">${cajaEsc(centro)}</div>${direccion?`<div class="sub">${cajaEsc(direccion)}</div>`:''}${telefono?`<div class="sub">${cajaEsc(telefono)}</div>`:''}<div class="rule"></div><b>COMPROBANTE DE CAJA</b><div class="sub">${cajaEsc(recibo)}</div></div><div class="rule"></div><div class="row"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="row"><span>Atención</span><b>${cajaEsc(cajaIdAtencion(a))}</b></div><div class="row"><span>Consulta</span><b>${cajaEsc(a.numero_consulta||'—')}</b></div><div class="row"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rule"></div>${detalleHtml}<div class="rule"></div><div class="row"><span>Fecha pago</span><b>${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))}</b></div><div class="row"><span>Forma pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="row"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}<div class="rule"></div><div class="row total"><span>${cajaNum(m.saldo_pendiente)<=0.001?'PAGO FINAL':'ABONO RECIBIDO'}</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="row"><span>Total cuenta</span><b>${cajaMoney(m.valor_final)}</b></div><div class="row"><span>Abonado acumulado</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="row"><span>Saldo pendiente</span><b>${cajaMoney(m.saldo_pendiente)}</b></div><div class="rule"></div><div class="c sub">Recibido por: ${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</div><div class="foot">Comprobante interno de Caja generado por AUROSANAX ERP.<br>No sustituye factura o comprobante tributario cuando corresponda.</div></div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
 
     const w=window.open('','_blank','width=430,height=720');
     if(!w){
@@ -1051,8 +1068,8 @@ function cajaAplicarMejorasInterfaz(){
       cajaNormalizar(b.textContent).includes('cobrar saldo completo')
     );
     if(btnSaldo){
-      btnSaldo.innerHTML='<i class="bi bi-check-all"></i> Usar saldo completo';
-      btnSaldo.title='Completa el valor pendiente. Luego seleccione la forma de pago y registre el pago.';
+      btnSaldo.innerHTML='<i class="bi bi-check-all"></i> Cobrar saldo completo';
+      btnSaldo.title='Completa el saldo pendiente. Luego seleccione la forma de pago y pulse Registrar pago.';
     }
 
     /* Mejor distribución del formulario de pago en tablet/móvil. */
