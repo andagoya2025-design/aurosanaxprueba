@@ -49,6 +49,23 @@
   function cajaMoney(v){ return '$' + cajaNum(v).toLocaleString('es-EC',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function cajaEsc(v){ return cajaTxt(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
   function cajaFecha(v){ const t=cajaTxt(v); if(!t)return '—'; const m=t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:t; }
+  function cajaFechaISO(v){
+    const t=cajaTxt(v);
+    if(!t) return '';
+
+    let m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+
+    m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+
+    const d=new Date(t);
+    if(!Number.isNaN(d.getTime())){
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    return '';
+  }
   function cajaIdAtencion(a){ return cajaTxt(a?.id_atencion || a?.id); }
   function cajaNormalizar(v){
     return cajaTxt(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
@@ -311,6 +328,7 @@
     const q=cajaNormalizar(document.getElementById('cajaBuscar')?.value);
     const filtro=cajaTxt(document.getElementById('cajaFiltro')?.value).toLowerCase();
     const campo=cajaTxt(document.getElementById('cajaBuscarPor')?.value || 'todos').toLowerCase();
+    const fechaSeleccionada=cajaTxt(document.getElementById('cajaBuscarFecha')?.value);
 
     const rows=[...cajaAtenciones].filter(a=>{
       const id=cajaIdAtencion(a);
@@ -319,6 +337,11 @@
       const m=cajaMovimientoAtencion(id);
       const estado=m?cajaTxt(m.estado_pago).toLowerCase():'sin_cuenta';
       if(filtro && estado!==filtro)return false;
+
+      if(campo==='fecha'){
+        if(!fechaSeleccionada) return true;
+        return cajaFechaISO(a.fecha_atencion || a.creado_en) === fechaSeleccionada;
+      }
 
       const servicio=cajaServicioTextoOrigen(a);
       const valores={
@@ -925,7 +948,7 @@ function cajaAplicarMejorasInterfaz(){
       style.textContent=`
         #caja .caja-search-grid{
           display:grid;
-          grid-template-columns:minmax(135px,.72fr) minmax(220px,1.45fr) minmax(145px,.83fr);
+          grid-template-columns:minmax(145px,.80fr) minmax(220px,1.45fr) minmax(150px,.90fr);
           gap:8px;
           margin-bottom:12px;
           align-items:stretch;
@@ -942,6 +965,12 @@ function cajaAplicarMejorasInterfaz(){
         }
         #caja .caja-search-grid .form-control{
           padding-right:11px;
+        }
+        #caja .caja-search-date{
+          display:none;
+        }
+        #caja .caja-search-date.is-visible{
+          display:block;
         }
         #caja .caja-actions{
           align-items:stretch;
@@ -1033,21 +1062,62 @@ function cajaAplicarMejorasInterfaz(){
         '<option value="paciente">Paciente</option>'+
         '<option value="cedula">Cédula</option>'+
         '<option value="medico">Médico</option>'+
-        '<option value="atencion">Atención / cita</option>';
-      select.addEventListener('change',renderCajaAtenciones);
+        '<option value="atencion">Atención / cita</option>'+
+        '<option value="fecha">Fecha específica</option>';
 
       const main=document.createElement('div');
       main.className='caja-search-main';
       main.appendChild(buscar);
       buscar.placeholder='Escriba nombre, cédula, médico o ID...';
 
+      const fechaBox=document.createElement('div');
+      fechaBox.className='caja-search-date';
+      const fechaInput=document.createElement('input');
+      fechaInput.id='cajaBuscarFecha';
+      fechaInput.type='date';
+      fechaInput.className='form-control';
+      fechaInput.setAttribute('aria-label','Fecha específica de atención');
+      fechaInput.addEventListener('input',renderCajaAtenciones);
+      fechaInput.addEventListener('change',renderCajaAtenciones);
+      fechaBox.appendChild(fechaInput);
+
       const status=document.createElement('div');
       status.appendChild(filtro);
 
+      /* Solo cambia el texto visible; conserva los values internos. */
+      [...filtro.options].forEach(opt=>{
+        const v=cajaTxt(opt.value).toLowerCase();
+        if(v==='sin_cuenta') opt.textContent='Sin cobrar';
+        else if(v==='pendiente') opt.textContent='Pendiente de pago';
+        else if(v==='parcial') opt.textContent='Saldo pendiente';
+        else if(v==='pagado') opt.textContent='Pagado';
+        else if(v==='') opt.textContent='Todas';
+      });
+
+      function actualizarModoBusquedaCaja(){
+        const esFecha=select.value==='fecha';
+        main.style.display=esFecha?'none':'';
+        fechaBox.classList.toggle('is-visible',esFecha);
+
+        if(esFecha){
+          buscar.value='';
+          if(!fechaInput.value){
+            const hoy=new Date();
+            fechaInput.value=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+          }
+        }
+
+        renderCajaAtenciones();
+      }
+
+      select.addEventListener('change',actualizarModoBusquedaCaja);
+
       wrap.appendChild(select);
       wrap.appendChild(main);
+      wrap.appendChild(fechaBox);
       wrap.appendChild(status);
       oldRow.replaceWith(wrap);
+      actualizarModoBusquedaCaja();
     }
 
     /* Valor recibido: al tocarlo se selecciona completo para escribir encima. */
