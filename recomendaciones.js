@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.0.1
+ Versión: 1.0.2
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.0.1';
+  const VERSION = '1.0.2';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -209,8 +209,18 @@
       registro.estado_consulta
     );
 
-    const cerrada = /(cerrad|finaliz|complet|anulad|cancelad|archivad)/.test(estado);
-    const editable = !!id && !cerrada;
+    /*
+      AUROSANAX RECOMENDACIONES 2026-08-12:
+      El cierre clínico de la atención NO equivale al cierre documental
+      de Recomendaciones. Una atención finalizada/cerrada/completada
+      puede todavía requerir emisión o corrección de recomendaciones.
+
+      Solo se bloquean estados que invalidan la atención como documento
+      clínico operativo: anulada, cancelada o archivada.
+    */
+    const finalizada = /(cerrad|finaliz|complet)/.test(estado);
+    const bloqueada = /(anulad|cancelad|archivad)/.test(estado);
+    const editable = !!id && !bloqueada;
 
     return {
       id:id,
@@ -222,9 +232,11 @@
         registro.numero_consulta ||
         registro.numero_atencion
       ),
-      cerrada:cerrada,
+      estadoAtencion:estado,
+      finalizada:finalizada,
+      bloqueada:bloqueada,
       editable:editable,
-      historica:!!id && cerrada
+      historica:!!id && bloqueada
     };
   }
 
@@ -510,7 +522,7 @@
 
           <section class="auro-rec-card">
             <div class="auro-rec-card-head">
-              <div><b>Signos de alerta</b><small>Seleccione únicamente los signos que deben explicarse al paciente.</small></div>
+              <div><b>Signos de alerta</b><small>Marque las opciones aplicables. Use “Otros signos / observaciones” para escribir indicaciones adicionales.</small></div>
             </div>
             <div class="auro-rec-card-body">
               <div class="auro-rec-check-grid">${checksHtml(ALERTAS,'alerta')}</div>
@@ -523,7 +535,7 @@
 
           <section class="auro-rec-card">
             <div class="auro-rec-card-head">
-              <div><b>Signos de infección</b><small>Indicaciones de vigilancia posteriores a tratamiento o procedimiento.</small></div>
+              <div><b>Signos de infección</b><small>Marque las opciones aplicables y escriba aclaraciones libres en el campo de observaciones.</small></div>
             </div>
             <div class="auro-rec-card-body">
               <div class="auro-rec-check-grid">${checksHtml(INFECCION,'infeccion')}</div>
@@ -639,6 +651,28 @@
     }).join('');
   }
 
+  function precargarSeguimientoDesdePlanSiVacio(){
+    if(state.idRecomendacion) return false;
+    if(getValue('auroRecMotivoControl')) return false;
+
+    const candidatos = [
+      'hcProximoControl',
+      'hcControl',
+      'hcSeguimiento'
+    ];
+
+    for(const id of candidatos){
+      const el=document.getElementById(id);
+      const valor=txt(el?.value || el?.textContent);
+      if(!valor) continue;
+
+      setValue('auroRecMotivoControl',valor);
+      return true;
+    }
+
+    return false;
+  }
+
   function detalleActual(){
     return {
       version:JSON_VERSION,
@@ -711,9 +745,16 @@
     const estado=document.getElementById('auroRecEstado');
     if(estado){
       estado.className='auro-rec-state ' + (editable ? 'edit' : 'read');
-      estado.innerHTML=editable
-        ? '<i class="bi bi-pencil-square"></i> Atención activa · Editable'
-        : '<i class="bi bi-lock"></i> Consulta histórica · Solo lectura';
+
+      if(!ctx.id){
+        estado.innerHTML='<i class="bi bi-lock"></i> Sin atención';
+      }else if(ctx.bloqueada){
+        estado.innerHTML='<i class="bi bi-lock"></i> Atención anulada/cancelada · Solo lectura';
+      }else if(ctx.finalizada){
+        estado.innerHTML='<i class="bi bi-check2-circle"></i> Atención finalizada · Recomendaciones editables';
+      }else{
+        estado.innerHTML='<i class="bi bi-pencil-square"></i> Atención activa · Editable';
+      }
     }
   }
 
@@ -780,9 +821,18 @@
           ? 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.'
           : 'Recomendaciones históricas cargadas en modo solo lectura.','ok');
       }else{
-        setMsg(ctx.editable
-          ? 'Esta atención todavía no tiene recomendaciones guardadas.'
-          : 'Esta consulta histórica no tiene recomendaciones registradas.','info');
+        const precargado = ctx.editable
+          ? precargarSeguimientoDesdePlanSiVacio()
+          : false;
+
+        setMsg(
+          ctx.editable
+            ? (precargado
+                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó el motivo de control disponible en Plan para revisión.'
+                : 'Esta atención todavía no tiene recomendaciones guardadas.')
+            : 'Esta atención está bloqueada y no tiene recomendaciones registradas.',
+          'info'
+        );
       }
 
       state.idAtencion=ctx.id;
