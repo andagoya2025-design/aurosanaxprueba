@@ -487,7 +487,8 @@
     document.getElementById('cajaSaldoVista').textContent=cajaMoney(m.saldo_pendiente);
 
     const saldo=cajaNum(m.saldo_pendiente);
-    document.getElementById('cajaValorPago').value=saldo>0?saldo.toFixed(2):'';
+    const valorPago=document.getElementById('cajaValorPago');
+    if(valorPago) valorPago.value='';
     document.getElementById('cajaFormularioPago').style.display=saldo>0?'block':'none';
 
     await cajaCargarDetallesMovimiento();
@@ -877,6 +878,24 @@
     w.document.close();
   }
 
+function cajaMejorarCampoValorRecibido(){
+    const valor=document.getElementById('cajaValorPago');
+    if(!valor || valor.dataset.cajaSelectAllInit==='1') return;
+
+    valor.dataset.cajaSelectAllInit='1';
+
+    const seleccionarTodo=function(){
+      try{
+        requestAnimationFrame(function(){
+          valor.select();
+        });
+      }catch(_e){}
+    };
+
+    valor.addEventListener('focus', seleccionarTodo);
+    valor.addEventListener('click', seleccionarTodo);
+  }
+
 function cajaAplicarMejorasInterfaz(){
     const screen=document.getElementById('caja');
     if(!screen || screen.dataset.cajaPremiumInit==='1') return;
@@ -1013,6 +1032,9 @@ function cajaAplicarMejorasInterfaz(){
       wrap.appendChild(status);
       oldRow.replaceWith(wrap);
     }
+
+    /* Valor recibido: al tocarlo se selecciona completo para escribir encima. */
+    cajaMejorarCampoValorRecibido();
 
     /* Forma de pago siempre exige decisión explícita, incluso al cancelar saldo. */
     const forma=document.getElementById('cajaFormaPago');
