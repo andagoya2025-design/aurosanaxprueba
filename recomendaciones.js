@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.0.0
+ Versión: 1.0.1
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.0.0';
+  const VERSION = '1.0.1';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -184,34 +184,145 @@
   function contextoAtencion(){
     const actual = atencionActiva() || {};
     const id = txt(actual.id_atencion || idAtencionActiva());
-    if(!id) return {id:'', atencion:{}, editable:false, historica:false};
+    if(!id) return {id:'', atencion:{}, editable:false, historica:false, cerrada:false};
 
+    /*
+      AUROSANAX FIX QUIRÚRGICO 2026-08-12:
+      La autoridad clínica es la atención seleccionada/activa del ERP.
+      localStorage se usa únicamente como respaldo descriptivo y NUNCA
+      para decidir que una atención abierta es histórica solo porque
+      otra fila local tenga fecha o número de consulta superior.
+      Este criterio replica el patrón estable del Plan: una atención
+      seleccionada es editable mientras no esté explícitamente cerrada.
+    */
     const local = atencionesLocales();
-    const registro = local.find(a=>txt(a?.id_atencion) === id) || actual || {};
+    const localRegistro = local.find(a=>txt(a?.id_atencion) === id) || {};
+    const registro = Object.assign({}, localRegistro, actual);
 
     const idPaciente = txt(registro.id_paciente || actual.id_paciente);
-    const delPaciente = local
-      .filter(a=>!idPaciente || txt(a?.id_paciente) === idPaciente)
-      .sort((a,b)=>{
-        const fa=tiempoAtencion(a), fb=tiempoAtencion(b);
-        if(fa !== fb) return fb-fa;
-        return Number(b?.numero_consulta || 0)-Number(a?.numero_consulta || 0);
-      });
+    const estado = norm(
+      actual.estado_atencion ||
+      actual.estado ||
+      actual.estado_consulta ||
+      registro.estado_atencion ||
+      registro.estado ||
+      registro.estado_consulta
+    );
 
-    const ultima = delPaciente[0] || registro;
-    const esUltima = !txt(ultima?.id_atencion) || txt(ultima?.id_atencion) === id;
-    const estado = norm(registro.estado_atencion || registro.estado || registro.estado_consulta);
     const cerrada = /(cerrad|finaliz|complet|anulad|cancelad|archivad)/.test(estado);
-    const editable = !!id && esUltima && !cerrada;
+    const editable = !!id && !cerrada;
 
     return {
       id:id,
       atencion:registro,
       idPaciente:idPaciente,
-      numeroConsulta:txt(registro.numero_consulta || registro.numero_atencion || actual.numero_consulta),
+      numeroConsulta:txt(
+        actual.numero_consulta ||
+        actual.numero_atencion ||
+        registro.numero_consulta ||
+        registro.numero_atencion
+      ),
+      cerrada:cerrada,
       editable:editable,
-      historica:!editable
+      historica:!!id && cerrada
     };
+  }
+
+  function primerTexto(){
+    for(let i=0;i<arguments.length;i++){
+      const v=txt(arguments[i]);
+      if(v) return v;
+    }
+    return '';
+  }
+
+  function valorCampo(){
+    for(let i=0;i<arguments.length;i++){
+      const el=document.getElementById(arguments[i]);
+      if(!el) continue;
+
+      if(el.tagName === 'SELECT'){
+        const opcion=el.options?.[el.selectedIndex];
+        const t=txt(opcion?.textContent);
+        if(t && !/^seleccione/i.test(t)) return t;
+      }
+
+      const v=txt(el.value || el.textContent);
+      if(v) return v;
+    }
+    return '';
+  }
+
+  function nombreMedicoDesdeContexto(atencion){
+    const a=atencion || {};
+    const activa=atencionActiva() || {};
+
+    return primerTexto(
+      a.nombre_medico,
+      a.medico_nombre,
+      a.nombre_profesional,
+      a.profesional_nombre,
+      a.doctor_nombre,
+      activa.nombre_medico,
+      activa.medico_nombre,
+      activa.nombre_profesional,
+      activa.profesional_nombre,
+      activa.doctor_nombre,
+      window.currentAttention?.nombre_medico,
+      window.currentAttention?.medico_nombre,
+      window.atencionActual?.nombre_medico,
+      window.atencionActual?.medico_nombre,
+      valorCampo('hcProfesional','hcMedico','atencionProfesional','atencionMedico'),
+      document.querySelector('.doctor-pill strong')?.textContent,
+      document.querySelector('.doctor-pill b')?.textContent
+    );
+  }
+
+  function nombrePacienteDesdeContexto(atencion){
+    const a=atencion || {};
+    const activa=atencionActiva() || {};
+
+    return primerTexto(
+      a.nombre_paciente,
+      a.paciente_nombre,
+      activa.nombre_paciente,
+      activa.paciente_nombre,
+      window.currentAttention?.nombre_paciente,
+      window.atencionActual?.nombre_paciente,
+      valorCampo('hcPacienteNombre','hcNombrePaciente')
+    );
+  }
+
+  async function enriquecerContextoDesdeServidor(ctx){
+    if(!ctx || !ctx.id) return ctx;
+
+    const a=ctx.atencion || {};
+    const faltaMedico=!nombreMedicoDesdeContexto(a);
+    const faltaPaciente=!nombrePacienteDesdeContexto(a);
+    const faltaNumero=!txt(ctx.numeroConsulta);
+
+    if(!faltaMedico && !faltaPaciente && !faltaNumero) return ctx;
+
+    try{
+      const data=await apiGet('listarAtenciones');
+      const lista=Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.registros) ? data.registros : []);
+
+      const encontrada=lista.find(item=>txt(item?.id_atencion)===txt(ctx.id));
+      if(!encontrada) return ctx;
+
+      ctx.atencion=Object.assign({}, a, encontrada);
+      ctx.numeroConsulta=primerTexto(
+        encontrada.numero_consulta,
+        encontrada.numero_atencion,
+        ctx.numeroConsulta
+      );
+      return ctx;
+    }catch(error){
+      console.warn(MODULO+': no se pudo enriquecer el contexto descriptivo.',error);
+      return ctx;
+    }
   }
 
   function parseDetalle(valor){
@@ -288,10 +399,10 @@
       .auro-rec-check{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid #edf0f3;border-radius:13px;background:#fff;min-height:44px;font-size:13px;font-weight:650;line-height:1.3}
       .auro-rec-check input{width:17px;height:17px;accent-color:#8b1e5a;flex:0 0 auto;margin-top:1px}
       .auro-rec-dx-list{display:grid;gap:8px}
-      .auro-rec-dx{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:flex-start;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
-      .auro-rec-dx-code{font-weight:950;color:#8b1e5a}
-      .auro-rec-dx-name{font-size:13px;font-weight:750;line-height:1.35}
-      .auro-rec-dx-tag{font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569}
+      .auro-rec-dx{display:grid;grid-template-columns:86px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
+      .auro-rec-dx-code{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 8px;border-radius:10px;background:#fff0f7;border:1px solid #f3c7df;font-size:12px;font-weight:950;color:#8b1e5a;text-align:center;white-space:nowrap}
+      .auro-rec-dx-name{min-width:0;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
+      .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
       .auro-rec-btn{border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:13px;padding:10px 13px;font-weight:850;cursor:pointer}
@@ -327,8 +438,9 @@
         .auro-rec-check{min-height:48px;font-size:13px;padding:10px}
         .auro-rec-actions{display:grid;grid-template-columns:1fr;bottom:6px;padding:9px}
         .auro-rec-btn{width:100%;min-height:46px;font-size:14px}
-        .auro-rec-dx{grid-template-columns:auto minmax(0,1fr)}
-        .auro-rec-dx-tag{grid-column:1/-1;width:max-content}
+        .auro-rec-dx{grid-template-columns:78px minmax(0,1fr);align-items:start}
+        .auro-rec-dx-code{width:78px}
+        .auro-rec-dx-tag{grid-column:2;width:max-content;max-width:100%;margin-top:-2px}
       }
     `;
     document.head.appendChild(style);
@@ -503,7 +615,7 @@
     setValue('auroRecGenerales','');
     aplicarChecks('alerta',[]);
     aplicarChecks('infeccion',[]);
-    setText('auroRecActualizado','—');
+    setText('auroRecActualizado','Sin guardar aún');
   }
 
   function renderDiagnosticos(){
@@ -609,11 +721,11 @@
     const ctx=state.contexto || contextoAtencion();
     const a=ctx.atencion || {};
 
-    setText('auroRecPaciente',txt(a.nombre_paciente || a.paciente_nombre || 'Paciente de la atención'));
+    setText('auroRecPaciente',nombrePacienteDesdeContexto(a) || 'Paciente de la atención');
     setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
     setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
-    setText('auroRecMedico',txt(a.nombre_medico || a.medico_nombre || '—'));
-    setText('auroRecFecha',fechaVisual(a.fecha_atencion || a.creado_en));
+    setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
+    setText('auroRecFecha',fechaVisual(a.fecha_atencion || a.fecha_consulta || a.creado_en));
 
     aplicarModo();
   }
@@ -631,7 +743,7 @@
 
   async function cargar(forzar){
     if(state.cargando) return null;
-    const ctx=contextoAtencion();
+    let ctx=contextoAtencion();
 
     state.contexto=ctx;
     renderContexto();
@@ -649,12 +761,16 @@
     setMsg('Cargando recomendaciones de esta atención...','info');
 
     try{
-      const [registro] = await Promise.all([
+      const [registro, contextoEnriquecido] = await Promise.all([
         apiGet('buscarRecomendacionPorAtencion',{id_atencion:ctx.id}),
+        enriquecerContextoDesdeServidor(ctx),
         cargarDiagnosticos(ctx.id)
-      ]);
+      ]).then(resultados => [resultados[0], resultados[1]]);
 
       if(token !== state.tokenCarga) return null;
+
+      ctx=contextoEnriquecido || ctx;
+      state.contexto=ctx;
 
       limpiar();
 
@@ -749,7 +865,8 @@
     }finally{
       state.guardando=false;
       if(btn){
-        btn.disabled=!ctx.editable;
+        const ctxActual=contextoAtencion();
+        btn.disabled=!(ctxActual.editable && ctxActual.id);
         btn.innerHTML='<i class="bi bi-save2 me-1"></i> Guardar recomendaciones';
       }
     }
