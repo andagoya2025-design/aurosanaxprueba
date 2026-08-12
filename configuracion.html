@@ -780,6 +780,35 @@
      Panel aislado. No guarda por navegación.
      La lógica vive exclusivamente en config-finanzas.js.
      ========================================================== -->
+<style id="auroFinanzasPremiumResponsive">
+  /* AUROSANAX FINANZAS — cierre visual premium, aislado y responsive */
+  #finanzas .fin-actions{display:flex;gap:6px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+  #finanzas .fin-actions .btn{min-width:34px;min-height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center}
+  #finanzas .fin-base-box{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:12px 14px;margin-bottom:14px}
+  #finanzas .fin-base-box small{color:#64748b;font-weight:650;line-height:1.4}
+  #finanzas .fin-mobile-list{display:none}
+  #finanzas .fin-mobile-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;padding:14px;margin-bottom:12px;box-shadow:0 8px 24px rgba(15,23,42,.05)}
+  #finanzas .fin-mobile-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+  #finanzas .fin-mobile-title strong{font-size:15px;color:#0f172a}
+  #finanzas .fin-mobile-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;font-size:13px}
+  #finanzas .fin-mobile-grid span{color:#64748b}.fin-mobile-grid b{color:#0f172a;text-align:right}
+  #finanzas .fin-mobile-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9}
+  #finanzas .fin-mobile-actions button{flex:1 1 95px;min-height:38px;border-radius:11px}
+  #finanzas .fin-state-active{background:#dcfce7;color:#166534;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+  #finanzas .fin-state-inactive{background:#f1f5f9;color:#475569;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+  @media(max-width:980px){
+    #finanzas .table-responsive{display:none!important}
+    #finanzas .fin-mobile-list{display:block!important}
+    #finanzas .cardx{padding:16px!important}
+    #finanzas .row.g-3>[class*="col-"]{width:100%}
+    #finanzas .fin-base-box .btn-line{width:100%;justify-content:center}
+  }
+  @media(max-width:520px){
+    #finanzas .fin-mobile-grid{grid-template-columns:1fr}
+    #finanzas .fin-mobile-grid b{text-align:left;margin-top:-4px}
+    #finanzas .fin-mobile-actions button{flex:1 1 100%}
+  }
+</style>
 <section class="screen" id="finanzas">
   <div class="cardx p-4 mb-4">
     <div class="section-head">
@@ -837,6 +866,11 @@
       </div>
     </div>
 
+    <div class="fin-base-box">
+      <small><b>Plantilla base AUROSANAX:</b> carga únicamente los gastos faltantes del modelo financiero aprobado. No sobrescribe registros existentes y usa la Fecha inicio seleccionada.</small>
+      <button id="btnCargarBaseGastosFinanzas" type="button" class="btn-line"><i class="bi bi-magic me-1"></i> Cargar gastos base</button>
+    </div>
+
     <div id="finanzasGastosMsg" class="notice mb-3">
       <i class="bi bi-info-circle me-1"></i> Cargando gastos fijos...
     </div>
@@ -851,9 +885,9 @@
           <option value="Luz">Luz</option>
           <option value="Agua">Agua</option>
           <option value="Internet">Internet</option>
-          <option value="Mantenimiento de aire">Mantenimiento de aire</option>
-          <option value="Permiso de funcionamiento">Permiso de funcionamiento</option>
-          <option value="Bomberos">Bomberos</option>
+          <option value="Mantenimiento aire acondicionado">Mantenimiento aire acondicionado</option>
+          <option value="Permiso de funcionamiento ACESS">Permiso de funcionamiento ACESS</option>
+          <option value="Permiso de Bomberos">Permiso de Bomberos</option>
           <option value="Patente">Patente</option>
           <option value="Tasa de Habilitación">Tasa de Habilitación</option>
           <option value="Publicidad">Publicidad</option>
@@ -926,6 +960,7 @@
         </tbody>
       </table>
     </div>
+    <div id="finGastosMobile" class="fin-mobile-list" aria-live="polite"></div>
   </div>
 
   <!-- AUROSANAX FINANZAS: configuración económica de médicos.
@@ -965,6 +1000,7 @@
         <tbody id="finMedicosTbody"><tr><td colspan="8" class="text-center text-muted py-3">Sin configuraciones económicas cargadas.</td></tr></tbody>
       </table>
     </div>
+    <div id="finMedicosMobile" class="fin-mobile-list" aria-live="polite"></div>
   </div>
 </section>
 
