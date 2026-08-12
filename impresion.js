@@ -531,3 +531,14 @@ function generarPDFConsentimiento(){
   window.print();
 }
 
+
+/* AUROSANAX - delegación segura de certificados */
+function generarPDFCertificado(){
+  try{
+    if(window.auroCertificados && typeof window.auroCertificados.imprimir === 'function') return window.auroCertificados.imprimir();
+    alert('El módulo de certificados no está disponible para impresión.');
+  }catch(error){
+    console.error('AUROSANAX IMPRESION: error generando certificado.', error);
+    alert('No se pudo generar la impresión del certificado.');
+  }
+}
