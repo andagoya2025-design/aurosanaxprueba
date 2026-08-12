@@ -434,6 +434,32 @@
     return y + '-' + m + '-' + d;
   }
 
+  function normalizarFechaInputFinanzas(valor){
+    if(valor === null || valor === undefined || valor === '') return '';
+
+    if(valor instanceof Date && !Number.isNaN(valor.getTime())){
+      const y = valor.getFullYear();
+      const m = String(valor.getMonth() + 1).padStart(2, '0');
+      const d = String(valor.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+
+    const txt = finTexto(valor);
+    if(!txt) return '';
+
+    const iso = txt.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+
+    const latam = txt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(latam){
+      return latam[3] + '-' +
+        String(latam[2]).padStart(2, '0') + '-' +
+        String(latam[1]).padStart(2, '0');
+    }
+
+    return '';
+  }
+
   function aplicarSugerenciasGastoFinanzas(){
     const nombre = obtenerNombreGastoFinanzas();
     const sugerencia = AURO_FIN_GASTO_SUGERENCIAS[nombre];
@@ -569,8 +595,8 @@
     finAsignarValor('finGastoValor', gasto.valor);
     finAsignarValor('finGastoPeriodicidad', gasto.periodicidad || 'Mensual');
     finAsignarValor('finGastoValorMensual', gasto.valor_mensual_prorrateado);
-    finAsignarValor('finGastoFechaInicio', gasto.fecha_inicio);
-    finAsignarValor('finGastoFechaFin', gasto.fecha_fin);
+    finAsignarValor('finGastoFechaInicio', normalizarFechaInputFinanzas(gasto.fecha_inicio));
+    finAsignarValor('finGastoFechaFin', normalizarFechaInputFinanzas(gasto.fecha_fin));
     finAsignarValor('finGastoObservaciones', gasto.observaciones);
   }
 
