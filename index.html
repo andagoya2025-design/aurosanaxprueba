@@ -7653,7 +7653,7 @@ function imprimirHistoriaClinica(){
       const lista = raw ? JSON.parse(raw) : [];
       if(!Array.isArray(lista)) return [];
 
-      return lista
+      const candidatas = lista
         .filter(r => String(r?.id_atencion || '').trim() === idAtencionPDF)
         .filter(r => {
           const idRecetaPaciente = String(r?.id_paciente || '').trim();
@@ -7664,6 +7664,40 @@ function imprimirHistoriaClinica(){
         ).localeCompare(String(
           a?.actualizado_en || a?.creado_en || a?.fecha_receta || ''
         )));
+
+      /*
+        Anti-duplicidad exclusivamente visual:
+        1) mismo id_receta => se conserva solo la versión más reciente;
+        2) si dos registros distintos tienen exactamente el mismo contenido
+           clínico dentro de la misma atención, se muestra uno solo.
+        No elimina ni reescribe registros almacenados.
+      */
+      const vistosId = new Set();
+      const vistasFirma = new Set();
+      const salida = [];
+
+      const firmaRecetaPDF = r => [
+        String(r?.diagnostico_cie10 || r?.cie10 || '').trim(),
+        String(r?.diagnostico || '').trim(),
+        String(r?.medicamento || r?.medicamentos || '').trim(),
+        String(r?.indicaciones || '').trim(),
+        String(r?.recomendaciones || r?.observaciones || '').trim(),
+        String(r?.estado || '').trim()
+      ].join('||');
+
+      candidatas.forEach(r => {
+        const idReceta = String(r?.id_receta || r?.id || '').trim();
+        const firma = firmaRecetaPDF(r);
+
+        if(idReceta && vistosId.has(idReceta)) return;
+        if(firma && vistasFirma.has(firma)) return;
+
+        if(idReceta) vistosId.add(idReceta);
+        if(firma) vistasFirma.add(firma);
+        salida.push(r);
+      });
+
+      return salida;
     }catch(_e){
       return [];
     }
