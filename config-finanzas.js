@@ -1,6 +1,6 @@
 /* ==========================================================
    AUROSANAX ERP DEMO - CONFIG FINANZAS JS
-   Versión: 2026-08-11 / 02
+   Versión: 2026-08-11 / 06 CIERRE PREMIUM
    Fase 3 - Archivo independiente ampliado
 
    OBJETIVO:
@@ -36,6 +36,8 @@
    - finGastosTbody
    - finanzasGastosMsg
    - btnGuardarGastoFinanzas
+   - btnCargarBaseGastosFinanzas
+   - finGastosMobile
 
    Configuración económica de médicos:
    - finMedicoConfigId
@@ -52,6 +54,7 @@
    - finanzasMedicosMsg
    - btnGuardarMedicoFinanzas
    - btnLimpiarMedicoFinanzas
+   - finMedicosMobile
    ========================================================== */
 
 (function(){
@@ -73,8 +76,11 @@
     'Agua': { categoria: 'Servicios básicos', periodicidad: 'Mensual' },
     'Internet': { categoria: 'Servicios básicos', periodicidad: 'Mensual' },
     'Mantenimiento de aire': { categoria: 'Mantenimiento', periodicidad: 'Anual' },
+    'Mantenimiento aire acondicionado': { categoria: 'Mantenimiento', periodicidad: 'Anual' },
     'Permiso de funcionamiento': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
+    'Permiso de funcionamiento ACESS': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
     'Bomberos': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
+    'Permiso de Bomberos': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
     'Patente': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
     'Tasa de Habilitación': { categoria: 'Permisos e impuestos', periodicidad: 'Anual' },
     'Publicidad': { categoria: 'Marketing/Publicidad', periodicidad: 'Anual' },
@@ -83,6 +89,26 @@
     'Mantenimiento de equipos': { categoria: 'Mantenimiento', periodicidad: 'Anual' },
     'Depreciación de equipos': { categoria: 'Equipos/Depreciación', periodicidad: 'Mensual' }
   });
+
+  /* Modelo financiero base entregado para AUROSANAX.
+     La carga es manual por botón, nunca automática al abrir.
+     Tasa de Habilitación permanece disponible en catálogo pero no se precarga
+     porque el documento base no proporciona un valor. */
+  const AURO_FIN_GASTOS_BASE_AUROSANAX = Object.freeze([
+    { nombre_gasto:'Alquiler', categoria:'Infraestructura', valor:950, periodicidad:'Mensual' },
+    { nombre_gasto:'Luz', categoria:'Servicios básicos', valor:40, periodicidad:'Mensual' },
+    { nombre_gasto:'Agua', categoria:'Servicios básicos', valor:10, periodicidad:'Mensual' },
+    { nombre_gasto:'Internet', categoria:'Servicios básicos', valor:35, periodicidad:'Mensual' },
+    { nombre_gasto:'Mantenimiento aire acondicionado', categoria:'Mantenimiento', valor:50, periodicidad:'Anual' },
+    { nombre_gasto:'Permiso de funcionamiento ACESS', categoria:'Permisos e impuestos', valor:400, periodicidad:'Anual' },
+    { nombre_gasto:'Permiso de Bomberos', categoria:'Permisos e impuestos', valor:150, periodicidad:'Anual' },
+    { nombre_gasto:'Patente', categoria:'Permisos e impuestos', valor:120, periodicidad:'Anual' },
+    { nombre_gasto:'Publicidad', categoria:'Marketing/Publicidad', valor:1000, periodicidad:'Anual' },
+    { nombre_gasto:'Contabilidad', categoria:'Administración', valor:200, periodicidad:'Anual' },
+    { nombre_gasto:'Limpieza e insumos', categoria:'Limpieza e insumos', valor:300, periodicidad:'Anual' },
+    { nombre_gasto:'Mantenimiento de equipos', categoria:'Mantenimiento', valor:300, periodicidad:'Anual' },
+    { nombre_gasto:'Depreciación de equipos', categoria:'Equipos/Depreciación', valor:350, periodicidad:'Mensual' }
+  ]);
 
   let auroFinanzasConfigCargada = false;
   let auroFinanzasGastosCargados = false;
@@ -474,6 +500,38 @@
     }
   }
 
+  function finNormalizarClaveGasto(valor){
+    let txt = finTexto(valor).toLowerCase();
+    try{ txt = txt.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }catch(_e){}
+    txt = txt.replace(/\s+/g, ' ').trim();
+
+    const alias = {
+      'mantenimiento de aire': 'mantenimiento aire acondicionado',
+      'permiso de funcionamiento': 'permiso de funcionamiento acess',
+      'bomberos': 'permiso de bomberos'
+    };
+    return alias[txt] || txt;
+  }
+
+  function finBuscarGastoActivoDuplicado(nombre, excluirId){
+    const clave = finNormalizarClaveGasto(nombre);
+    const excluir = finTexto(excluirId);
+    return auroFinanzasGastos.find(function(g){
+      return finTexto(g.id_gasto) !== excluir &&
+        finNormalizarClaveGasto(g.nombre_gasto) === clave &&
+        finTexto(g.estado || 'Activo').toLowerCase() === 'activo';
+    }) || null;
+  }
+
+  function finEstadoActivo(valor){
+    return finTexto(valor || 'Activo').toLowerCase() === 'activo';
+  }
+
+  function finDinero(valor){
+    const n = Number(String(valor === null || valor === undefined ? 0 : valor).replace(',', '.'));
+    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
+  }
+
   function finPeriodicidadMensual(valor, periodicidad){
     const v = finNumero(valor);
     const p = finTexto(periodicidad).toLowerCase();
@@ -525,40 +583,56 @@
 
   function renderGastosFijosFinanzas(){
     const tbody = finEl('finGastosTbody');
-    if(!tbody) return;
+    const mobile = finEl('finGastosMobile');
 
     if(!auroFinanzasGastos.length){
-      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
+      if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
+      if(mobile) mobile.innerHTML = '<div class="text-muted text-center py-3">Sin gastos fijos registrados.</div>';
       return;
     }
 
-    tbody.innerHTML = auroFinanzasGastos.map(function(g){
-      return '<tr>' +
-        '<td>' + finEscape(g.nombre_gasto) + '</td>' +
-        '<td>' + finEscape(g.categoria) + '</td>' +
-        '<td>' + finEscape(g.valor) + '</td>' +
-        '<td>' + finEscape(g.periodicidad) + '</td>' +
-        '<td>' + finEscape(g.valor_mensual_prorrateado) + '</td>' +
-        '<td>' + finEscape(normalizarFechaInputFinanzas(g.fecha_inicio)) + '</td>' +
-        '<td>' + finEscape(normalizarFechaInputFinanzas(g.fecha_fin)) + '</td>' +
-        '<td>' + finEscape(g.estado) + '</td>' +
-        '<td class="text-end">' +
-          '<button type="button" class="btn btn-sm btn-outline-primary me-1" ' +
-          'data-fin-editar-gasto="' + finEscape(g.id_gasto) + '" title="Editar">' +
-          '<i class="bi bi-pencil"></i></button>' +
-          '<button type="button" class="btn btn-sm ' +
-          (finTexto(g.estado).toLowerCase() === 'activo' ? 'btn-outline-warning' : 'btn-outline-success') + '" ' +
-          'data-fin-estado-gasto="' + finEscape(g.id_gasto) + '" ' +
-          'data-fin-nuevo-estado="' +
-          (finTexto(g.estado).toLowerCase() === 'activo' ? 'Inactivo' : 'Activo') + '" ' +
-          'title="' +
-          (finTexto(g.estado).toLowerCase() === 'activo' ? 'Desactivar' : 'Reactivar') + '">' +
-          '<i class="bi ' +
-          (finTexto(g.estado).toLowerCase() === 'activo' ? 'bi-pause-circle' : 'bi-play-circle') +
-          '"></i></button>' +
-        '</td>' +
-      '</tr>';
-    }).join('');
+    if(tbody){
+      tbody.innerHTML = auroFinanzasGastos.map(function(g){
+        const activo = finEstadoActivo(g.estado);
+        return '<tr>' +
+          '<td>' + finEscape(g.nombre_gasto) + '</td>' +
+          '<td>' + finEscape(g.categoria) + '</td>' +
+          '<td>' + finEscape(g.valor) + '</td>' +
+          '<td>' + finEscape(g.periodicidad) + '</td>' +
+          '<td>' + finEscape(g.valor_mensual_prorrateado) + '</td>' +
+          '<td>' + finEscape(normalizarFechaInputFinanzas(g.fecha_inicio)) + '</td>' +
+          '<td>' + finEscape(normalizarFechaInputFinanzas(g.fecha_fin)) + '</td>' +
+          '<td>' + finEscape(g.estado) + '</td>' +
+          '<td class="text-end"><div class="fin-actions">' +
+            '<button type="button" class="btn btn-sm btn-outline-primary" data-fin-editar-gasto="' + finEscape(g.id_gasto) + '" title="Editar"><i class="bi bi-pencil"></i></button>' +
+            '<button type="button" class="btn btn-sm ' + (activo ? 'btn-outline-warning' : 'btn-outline-success') + '" data-fin-estado-gasto="' + finEscape(g.id_gasto) + '" data-fin-nuevo-estado="' + (activo ? 'Inactivo' : 'Activo') + '" title="' + (activo ? 'Desactivar' : 'Reactivar') + '"><i class="bi ' + (activo ? 'bi-pause-circle' : 'bi-play-circle') + '"></i></button>' +
+            '<button type="button" class="btn btn-sm btn-outline-danger" data-fin-eliminar-gasto="' + finEscape(g.id_gasto) + '" title="Eliminar registro creado por error"><i class="bi bi-trash3"></i></button>' +
+          '</div></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    if(mobile){
+      mobile.innerHTML = auroFinanzasGastos.map(function(g){
+        const activo = finEstadoActivo(g.estado);
+        return '<article class="fin-mobile-card">' +
+          '<div class="fin-mobile-title"><strong>' + finEscape(g.nombre_gasto) + '</strong><span class="' + (activo ? 'fin-state-active' : 'fin-state-inactive') + '">' + finEscape(g.estado || 'Activo') + '</span></div>' +
+          '<div class="fin-mobile-grid">' +
+            '<span>Categoría</span><b>' + finEscape(g.categoria) + '</b>' +
+            '<span>Valor</span><b>$' + finDinero(g.valor) + '</b>' +
+            '<span>Periodicidad</span><b>' + finEscape(g.periodicidad) + '</b>' +
+            '<span>Mensual</span><b>$' + finDinero(g.valor_mensual_prorrateado) + '</b>' +
+            '<span>Desde</span><b>' + finEscape(normalizarFechaInputFinanzas(g.fecha_inicio) || '—') + '</b>' +
+            '<span>Hasta</span><b>' + finEscape(normalizarFechaInputFinanzas(g.fecha_fin) || '—') + '</b>' +
+          '</div>' +
+          '<div class="fin-mobile-actions">' +
+            '<button type="button" class="btn btn-outline-primary" data-fin-editar-gasto="' + finEscape(g.id_gasto) + '"><i class="bi bi-pencil me-1"></i> Editar</button>' +
+            '<button type="button" class="btn ' + (activo ? 'btn-outline-warning' : 'btn-outline-success') + '" data-fin-estado-gasto="' + finEscape(g.id_gasto) + '" data-fin-nuevo-estado="' + (activo ? 'Inactivo' : 'Activo') + '"><i class="bi ' + (activo ? 'bi-pause-circle' : 'bi-play-circle') + ' me-1"></i> ' + (activo ? 'Desactivar' : 'Reactivar') + '</button>' +
+            '<button type="button" class="btn btn-outline-danger" data-fin-eliminar-gasto="' + finEscape(g.id_gasto) + '"><i class="bi bi-trash3 me-1"></i> Eliminar</button>' +
+          '</div>' +
+        '</article>';
+      }).join('');
+    }
   }
 
   function limpiarFormularioGastoFinanzas(){
@@ -662,6 +736,106 @@
     }
   }
 
+  async function eliminarGastoFinanzas(idGasto){
+    finValidarApi();
+
+    const id = finTexto(idGasto);
+    const gasto = auroFinanzasGastos.find(function(g){ return finTexto(g.id_gasto) === id; });
+    if(!gasto){ alert('No se encontró el gasto seleccionado.'); return; }
+
+    if(!confirm('Eliminar se usa únicamente para registros creados por error. ¿Desea continuar con "' + finTexto(gasto.nombre_gasto) + '"?')) return;
+
+    const palabra = prompt('Confirmación final: escriba ELIMINAR para borrar este registro.');
+    if(finTexto(palabra).toUpperCase() !== 'ELIMINAR'){
+      finSetMsg('finanzasGastosMsg', 'Eliminación cancelada. No se modificó ningún registro.', 'info');
+      return;
+    }
+
+    finSetMsg('finanzasGastosMsg', 'Verificando y eliminando gasto...', 'info');
+    try{
+      const respuesta = await window.apiPost('eliminarGastoFijoFinanciero', {
+        id_gasto: id,
+        confirmar_eliminacion: 'ELIMINAR'
+      });
+      if(!respuesta || respuesta.success !== true){
+        throw new Error((respuesta && respuesta.message) || 'No se pudo eliminar el gasto.');
+      }
+
+      limpiarFormularioGastoFinanzas();
+      auroFinanzasGastosCargados = false;
+      await cargarGastosFijosFinanzas(true);
+      finSetMsg('finanzasGastosMsg', 'Gasto eliminado correctamente.', 'ok');
+    }catch(e){
+      console.error('AUROSANAX Finanzas - eliminar gasto:', e);
+      finSetMsg('finanzasGastosMsg', 'No se eliminó el gasto: ' + finTexto(e.message || e), 'error');
+      alert('No se pudo eliminar: ' + finTexto(e.message || e));
+    }
+  }
+
+  async function cargarGastosBaseAurosanaxFinanzas(){
+    finValidarApi();
+
+    const fechaInicio = finTexto(finEl('finGastoFechaInicio')?.value) || fechaHoyFinanzas();
+    const faltantes = AURO_FIN_GASTOS_BASE_AUROSANAX.filter(function(base){
+      const clave = finNormalizarClaveGasto(base.nombre_gasto);
+      return !auroFinanzasGastos.some(function(g){
+        return finNormalizarClaveGasto(g.nombre_gasto) === clave;
+      });
+    });
+
+    if(!faltantes.length){
+      finSetMsg('finanzasGastosMsg', 'La plantilla base ya está cargada; no se crearon duplicados.', 'ok');
+      return;
+    }
+
+    const confirmar = confirm(
+      'Se cargarán ' + faltantes.length + ' gastos base faltantes con fecha de inicio ' + fechaInicio + '.\n\n' +
+      'Los registros existentes NO serán sobrescritos. ¿Continuar?'
+    );
+    if(!confirmar) return;
+
+    finSetBoton('btnCargarBaseGastosFinanzas', true, 'Cargando...');
+    finSetMsg('finanzasGastosMsg', 'Cargando plantilla base sin sobrescribir registros...', 'info');
+
+    let creados = 0;
+    const errores = [];
+    try{
+      for(const base of faltantes){
+        const mensual = finPeriodicidadMensual(base.valor, base.periodicidad);
+        try{
+          const r = await window.apiPost('guardarGastoFijoFinanciero', {
+            nombre_gasto: base.nombre_gasto,
+            categoria: base.categoria,
+            valor: base.valor,
+            periodicidad: base.periodicidad,
+            valor_mensual_prorrateado: mensual,
+            fecha_inicio: fechaInicio,
+            fecha_fin: '',
+            estado: 'Activo',
+            observaciones: 'Carga inicial desde modelo financiero base AUROSANAX'
+          });
+          if(!r || r.success !== true) throw new Error((r && r.message) || 'Error no especificado');
+          creados++;
+        }catch(e){
+          errores.push(base.nombre_gasto + ': ' + finTexto(e.message || e));
+        }
+      }
+
+      auroFinanzasGastosCargados = false;
+      await cargarGastosFijosFinanzas(true);
+      finSetMsg(
+        'finanzasGastosMsg',
+        errores.length
+          ? ('Carga parcial: ' + creados + ' creados; ' + errores.length + ' con error.')
+          : ('Plantilla base cargada correctamente: ' + creados + ' gastos creados sin duplicados.'),
+        errores.length ? 'error' : 'ok'
+      );
+      if(errores.length) console.warn('AUROSANAX Finanzas - errores carga base:', errores);
+    }finally{
+      finSetBoton('btnCargarBaseGastosFinanzas', false);
+    }
+  }
+
   function cargarGastoEnFormularioFinanzas(idGasto){
     const id = finTexto(idGasto);
     const gasto = auroFinanzasGastos.find(function(g){
@@ -707,6 +881,16 @@
     if(!fechaInicio){
       alert('La fecha de inicio es obligatoria.');
       return;
+    }
+
+    if(!idGasto){
+      const duplicadoActivo = finBuscarGastoActivoDuplicado(nombre, '');
+      if(duplicadoActivo){
+        cargarGastoEnFormularioFinanzas(duplicadoActivo.id_gasto);
+        finSetMsg('finanzasGastosMsg', 'Ese gasto ya existe activo. Se cargó el registro existente para editarlo y evitar duplicados.', 'info');
+        alert('Ya existe un gasto activo con ese nombre. Se cargó para edición en lugar de crear un duplicado.');
+        return;
+      }
     }
 
     const data = {
@@ -831,31 +1015,45 @@
 
   function renderConfiguracionMedicosFinanzas(){
     const tbody = finEl('finMedicosTbody');
-    if(!tbody) return;
+    const mobile = finEl('finMedicosMobile');
 
     if(!auroFinanzasConfigMedicos.length){
-      tbody.innerHTML =
-        '<tr><td colspan="8" class="text-center text-muted py-3">' +
-        'Sin configuraciones económicas de médicos registradas.</td></tr>';
+      if(tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin configuraciones económicas de médicos registradas.</td></tr>';
+      if(mobile) mobile.innerHTML = '<div class="text-muted text-center py-3">Sin configuraciones económicas de médicos registradas.</div>';
       return;
     }
 
-    tbody.innerHTML = auroFinanzasConfigMedicos.map(function(c){
-      return '<tr>' +
-        '<td>' + finEscape(finBuscarNombreMedico(c.id_medico)) + '</td>' +
-        '<td>' + finEscape(c.tipo_pago) + '</td>' +
-        '<td>' + finEscape(c.porcentaje) + '</td>' +
-        '<td>' + finEscape(c.valor_fijo) + '</td>' +
-        '<td>' + finEscape(c.valor_hora) + '</td>' +
-        '<td>' + finEscape(c.vigencia_desde) + '</td>' +
-        '<td>' + finEscape(c.estado) + '</td>' +
-        '<td class="text-end">' +
-          '<button type="button" class="btn btn-sm btn-outline-primary" ' +
-          'data-fin-editar-medico="' + finEscape(c.id_config_medico) + '">' +
-          '<i class="bi bi-pencil"></i></button>' +
-        '</td>' +
-      '</tr>';
-    }).join('');
+    if(tbody){
+      tbody.innerHTML = auroFinanzasConfigMedicos.map(function(c){
+        return '<tr>' +
+          '<td>' + finEscape(finBuscarNombreMedico(c.id_medico)) + '</td>' +
+          '<td>' + finEscape(c.tipo_pago) + '</td>' +
+          '<td>' + finEscape(c.porcentaje) + '</td>' +
+          '<td>' + finEscape(c.valor_fijo) + '</td>' +
+          '<td>' + finEscape(c.valor_hora) + '</td>' +
+          '<td>' + finEscape(normalizarFechaInputFinanzas(c.vigencia_desde)) + '</td>' +
+          '<td>' + finEscape(c.estado) + '</td>' +
+          '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary" data-fin-editar-medico="' + finEscape(c.id_config_medico) + '"><i class="bi bi-pencil"></i></button></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    if(mobile){
+      mobile.innerHTML = auroFinanzasConfigMedicos.map(function(c){
+        const activo = finEstadoActivo(c.estado);
+        return '<article class="fin-mobile-card">' +
+          '<div class="fin-mobile-title"><strong>' + finEscape(finBuscarNombreMedico(c.id_medico)) + '</strong><span class="' + (activo ? 'fin-state-active' : 'fin-state-inactive') + '">' + finEscape(c.estado || 'Activo') + '</span></div>' +
+          '<div class="fin-mobile-grid">' +
+            '<span>Tipo de pago</span><b>' + finEscape(c.tipo_pago || '—') + '</b>' +
+            '<span>Porcentaje</span><b>' + finEscape(c.porcentaje || '—') + '</b>' +
+            '<span>Valor fijo</span><b>' + finEscape(c.valor_fijo || '—') + '</b>' +
+            '<span>Valor hora</span><b>' + finEscape(c.valor_hora || '—') + '</b>' +
+            '<span>Vigencia desde</span><b>' + finEscape(normalizarFechaInputFinanzas(c.vigencia_desde) || '—') + '</b>' +
+          '</div>' +
+          '<div class="fin-mobile-actions"><button type="button" class="btn btn-outline-primary" data-fin-editar-medico="' + finEscape(c.id_config_medico) + '"><i class="bi bi-pencil me-1"></i> Editar</button></div>' +
+        '</article>';
+      }).join('');
+    }
   }
 
   function actualizarCamposTipoPagoMedicoFinanzas(){
@@ -1051,10 +1249,10 @@
       }
     });
 
-    const tbody = finEl('finGastosTbody');
-    if(tbody && tbody.dataset.auroFinInit !== '1'){
-      tbody.dataset.auroFinInit = '1';
-      tbody.addEventListener('click', function(ev){
+    function enlazarAccionesGastos_(contenedor){
+      if(!contenedor || contenedor.dataset.auroFinAccionesInit === '1') return;
+      contenedor.dataset.auroFinAccionesInit = '1';
+      contenedor.addEventListener('click', function(ev){
         const btnEditar = ev.target.closest('[data-fin-editar-gasto]');
         if(btnEditar){
           cargarGastoEnFormularioFinanzas(btnEditar.getAttribute('data-fin-editar-gasto'));
@@ -1067,8 +1265,23 @@
             btnEstado.getAttribute('data-fin-estado-gasto'),
             btnEstado.getAttribute('data-fin-nuevo-estado')
           );
+          return;
+        }
+
+        const btnEliminar = ev.target.closest('[data-fin-eliminar-gasto]');
+        if(btnEliminar){
+          eliminarGastoFinanzas(btnEliminar.getAttribute('data-fin-eliminar-gasto'));
         }
       });
+    }
+
+    enlazarAccionesGastos_(finEl('finGastosTbody'));
+    enlazarAccionesGastos_(finEl('finGastosMobile'));
+
+    const btnBase = finEl('btnCargarBaseGastosFinanzas');
+    if(btnBase && btnBase.dataset.auroFinInit !== '1'){
+      btnBase.dataset.auroFinInit = '1';
+      btnBase.addEventListener('click', cargarGastosBaseAurosanaxFinanzas);
     }
 
     const btnMedico = finEl('btnGuardarMedicoFinanzas');
@@ -1090,15 +1303,17 @@
       actualizarCamposTipoPagoMedicoFinanzas();
     }
 
-    const tbodyMedicos = finEl('finMedicosTbody');
-    if(tbodyMedicos && tbodyMedicos.dataset.auroFinInit !== '1'){
-      tbodyMedicos.dataset.auroFinInit = '1';
-      tbodyMedicos.addEventListener('click', function(ev){
+    function enlazarEdicionMedicos_(contenedor){
+      if(!contenedor || contenedor.dataset.auroFinMedInit === '1') return;
+      contenedor.dataset.auroFinMedInit = '1';
+      contenedor.addEventListener('click', function(ev){
         const btn = ev.target.closest('[data-fin-editar-medico]');
         if(!btn) return;
         cargarMedicoEnFormularioFinanzas(btn.getAttribute('data-fin-editar-medico'));
       });
     }
+    enlazarEdicionMedicos_(finEl('finMedicosTbody'));
+    enlazarEdicionMedicos_(finEl('finMedicosMobile'));
   }
 
   function prepararConfigFinanzas(){
@@ -1122,6 +1337,8 @@
     guardarGasto: guardarGastoFijoFinanzas,
     limpiarGasto: limpiarFormularioGastoFinanzas,
     cambiarEstadoGasto: cambiarEstadoGastoFinanzas,
+    eliminarGasto: eliminarGastoFinanzas,
+    cargarGastosBase: cargarGastosBaseAurosanaxFinanzas,
     guardarMedico: guardarConfiguracionMedicoFinanzas,
     limpiarMedico: limpiarFormularioMedicoFinanzas,
     preparar: prepararConfigFinanzas
