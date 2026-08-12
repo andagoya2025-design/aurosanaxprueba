@@ -7363,10 +7363,43 @@ function imprimirHistoriaClinica(){
   const nombrePaciente = paciente?.nombre || paciente?.nombres || auroInformeValue('hcCardNombre') || auroInformeValue('hcPacienteResumen') || 'Paciente';
   const cedula = paciente?.cedula || paciente?.numero_documento || auroInformeValue('hcCardCedula') || '—';
   const telefono = paciente?.telefono || paciente?.whatsapp || auroInformeValue('hcCardTelefono') || '—';
-  const nacimiento = paciente?.fecha_nacimiento || auroInformeValue('hcCardNacimiento') || '—';
+  const nacimientoRaw = paciente?.fecha_nacimiento || auroInformeValue('hcCardNacimiento') || '—';
+  const nacimiento = (() => {
+    const raw = String(nacimientoRaw || '').trim();
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (raw || '—');
+  })();
   const edad = paciente?.edad || auroInformeValue('hcCardEdad') || '—';
   const fecha = new Date().toLocaleDateString('es-EC', {year:'numeric', month:'2-digit', day:'2-digit'});
   const hora = new Date().toLocaleTimeString('es-EC', {hour:'2-digit', minute:'2-digit'});
+
+  // AUROSANAX HC PDF - contexto de atención solo lectura.
+  // Usa los helpers seguros ya existentes del index; no guarda ni altera módulos.
+  const atencionPDF = (typeof auroHistoriaAtencionActivaObjetoSeguro === 'function')
+    ? auroHistoriaAtencionActivaObjetoSeguro()
+    : null;
+  const idAtencionPDF = (typeof auroHistoriaIdAtencionActivaSeguro === 'function')
+    ? String(auroHistoriaIdAtencionActivaSeguro() || '').trim()
+    : String(atencionPDF?.id_atencion || '').trim();
+
+  if(
+    atencionPDF?.id_paciente &&
+    String(atencionPDF.id_paciente).trim() !== String(idPaciente).trim()
+  ){
+    alert('La atención activa no pertenece al paciente seleccionado. Se bloqueó el PDF para evitar mezclar consultas.');
+    return;
+  }
+
+  const fechaAtencionRaw = String(
+    atencionPDF?.fecha_atencion || atencionPDF?.fecha || atencionPDF?.fecha_apertura || ''
+  ).trim();
+  const fechaAtencionPDF = (() => {
+    const m = fechaAtencionRaw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : fechaAtencionRaw;
+  })();
+  const horaAtencionPDF = String(atencionPDF?.hora || atencionPDF?.hora_inicio || '').trim();
+  const numeroConsultaPDF = String(atencionPDF?.numero_consulta || '').trim();
+  const estadoAtencionPDF = String(atencionPDF?.estado_atencion || '').trim();
 
   // AUROSANAX HC PDF - cambio quirúrgico antirregresión:
   // reutiliza SOLO la configuración institucional ya cargada por el index.
@@ -7399,8 +7432,15 @@ function imprimirHistoriaClinica(){
       ${auroInformeSiDato('Nacimiento', nacimiento)}
       ${auroInformeSiDato('WhatsApp', telefono)}
       ${auroInformeSiDato('Fecha de emisión', fecha)}
-      ${auroInformeSiDato('Hora', hora)}
-    </div>`;
+      ${auroInformeSiDato('Hora de emisión', hora)}
+    </div>
+    ${idAtencionPDF ? `
+      <div class="auro-info-grid compact auro-attention-grid">
+        ${auroInformeSiDato('Consulta', numeroConsultaPDF ? '#' + numeroConsultaPDF : 'Atención activa')}
+        ${auroInformeSiDato('Fecha de atención', fechaAtencionPDF)}
+        ${auroInformeSiDato('Hora de atención', horaAtencionPDF)}
+        ${auroInformeSiDato('Estado', estadoAtencionPDF)}
+      </div>` : ''}`;
 
   const anamnesis = `
     ${auroInformeBloque('Motivo de consulta', '01', auroInformeParrafo(auroInformeValue('hcMotivoConsulta')))}
@@ -7480,8 +7520,8 @@ function imprimirHistoriaClinica(){
   .auro-report-detail{display:grid;gap:3px}
   .auro-report-detail small{display:block;color:#475569;font-size:11px;font-weight:700;line-height:1.2}
   .auro-footer{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:14px;color:#6b7280;font-size:11px;display:flex;justify-content:space-between;gap:12px}
-  @page{size:A4;margin:8mm} @media print{body{background:white;font-size:10.5px;line-height:1.25}.auro-report{max-width:none;padding:0;box-shadow:none;min-height:auto}.no-print{display:none!important}.auro-header{padding:12px 16px;margin-bottom:8px;border-radius:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.auro-header h1{font-size:20px}.auro-section-title{margin:9px 0 5px;font-size:13px;padding-bottom:4px}.auro-patient-band{padding:7px 9px;margin-bottom:6px}.auro-info-grid{gap:5px;margin-bottom:5px}.auro-info-row{padding:5px 7px;border-radius:9px}.auro-report-card{box-shadow:none;margin-bottom:5px;border-radius:10px}.auro-report-card-head{padding:5px 7px}.auro-report-card-body{padding:6px 7px}.auro-report-card,.auro-patient-band,.auro-report-item{break-inside:avoid;page-break-inside:avoid}.auro-section-title{break-after:avoid}.auro-footer{margin-top:10px;padding-top:6px}}
-  @media print{.auro-report-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.auro-report-item{padding:4px 6px;border-radius:8px}.auro-report-item strong{font-size:10.5px}.auro-report-detail small{font-size:9.5px}.auro-clinical-text{padding:5px 7px}.auro-chip-grid{gap:4px}.auro-chip-grid span{padding:4px 6px;font-size:10px}.auro-list-item{padding:4px 6px}}
+  @page{size:A4;margin:8mm} @media print{body{background:white;font-size:10.5px;line-height:1.25}.auro-report{max-width:none;padding:0;box-shadow:none;min-height:auto}.no-print{display:none!important}.auro-header{padding:12px 16px;margin-bottom:8px;border-radius:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.auro-header h1{font-size:20px}.auro-section-title{margin:7px 0 4px;font-size:13px;padding-bottom:3px}.auro-patient-band{padding:7px 9px;margin-bottom:6px}.auro-info-grid{gap:5px;margin-bottom:5px}.auro-info-row{padding:5px 7px;border-radius:9px}.auro-report-card{box-shadow:none;margin-bottom:5px;border-radius:10px}.auro-report-card-head{padding:4px 6px}.auro-report-card-body{padding:5px 6px}.auro-report-card,.auro-patient-band,.auro-report-item{break-inside:avoid;page-break-inside:avoid}.auro-section-title{break-after:avoid}.auro-footer{margin-top:10px;padding-top:6px}}
+  @media print{.auro-report-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.auro-report-item{padding:4px 6px;border-radius:8px}.auro-report-item strong{font-size:10.5px}.auro-report-detail small{font-size:9.5px}.auro-clinical-text{padding:4px 6px}.auro-chip-grid{gap:4px}.auro-chip-grid span{padding:4px 6px;font-size:10px}.auro-list-item{padding:4px 6px}}
   @media(max-width:700px){.auro-report{padding:20px}.auro-info-grid,.auro-info-grid.compact{grid-template-columns:1fr}.auro-header h1{font-size:22px}}
 </style>
 </head>
