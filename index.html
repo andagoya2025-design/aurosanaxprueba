@@ -7352,6 +7352,104 @@ function auroInformeDiagnosticos(){
   return auroInformeParrafo(auroInformeValue('hcDiagnosticoPrincipal') || auroInformeValue('hcCie10Principal') || auroInformeValue('recDiagnostico'));
 }
 
+
+/* =========================================================
+   AUROSANAX HC PDF - FASE 2 INTEGRAL / ANTIRREGRESIÓN
+   Alcance exclusivo de impresión:
+   - Solo lectura del DOM/estado ya cargado para la atención activa.
+   - No guarda, no consulta backend, no modifica Sheets ni módulos.
+   - Los estados clínicos variables se aceptan únicamente si coinciden
+     con la misma id_atencion que se está imprimiendo.
+========================================================= */
+function auroInformeFechaClinica(valor){
+  const raw = String(valor || '').trim();
+  if(!raw) return '';
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : raw;
+}
+
+function auroInformeTablaBody(bodyId, maxCeldas){
+  const body = document.getElementById(bodyId);
+  if(!body) return '';
+  const filas = Array.from(body.querySelectorAll('tr')).filter(tr => {
+    const txt = String(tr.innerText || '').trim();
+    return txt && !/sin (medicamentos|registros|diagn[oó]sticos)/i.test(txt);
+  });
+  const items = filas.map(tr => {
+    const celdas = Array.from(tr.querySelectorAll('td'))
+      .slice(0, Number(maxCeldas || 99))
+      .map(td => String(td.innerText || '').replace(/\s+/g,' ').trim())
+      .filter(Boolean)
+      .filter(x => !/^(eliminar|acción|accion)$/i.test(x));
+    if(!celdas.length) return '';
+    return `<div class="auro-list-item"><strong>${auroInformeEscape(celdas[0])}</strong>${celdas.length > 1 ? `<small>${auroInformeEscape(celdas.slice(1).join(' · '))}</small>` : ''}</div>`;
+  }).filter(Boolean);
+  return items.length ? `<div class="auro-list-premium">${items.join('')}</div>` : '';
+}
+
+function auroInformePanelClinico(panelId){
+  const panel = document.getElementById(panelId);
+  if(!panel) return '';
+
+  const controles = Array.from(panel.querySelectorAll('input, textarea, select')).filter(el => {
+    if(!el || el.type === 'hidden' || el.type === 'file' || el.disabled) return false;
+    if(el.closest('.auro-previos-box')) return false;
+    return true;
+  });
+
+  const registros = [];
+  let evidenciaReal = false;
+
+  controles.forEach(el => {
+    let valor = '';
+    if(el.type === 'checkbox' || el.type === 'radio'){
+      if(!el.checked) return;
+      valor = el.value && !/^(on)$/i.test(el.value) ? el.value : 'Sí';
+      evidenciaReal = true;
+    }else if(el.tagName === 'SELECT'){
+      valor = String(el.options[el.selectedIndex]?.text || el.value || '').trim();
+      if(!valor || /^(seleccione|sin seleccionar|pendiente)$/i.test(valor)) return;
+    }else{
+      valor = String(el.value || '').trim();
+      if(!valor) return;
+      evidenciaReal = true;
+    }
+
+    let label = '';
+    const contenedor = el.closest('.col-12,.col-md-12,.col-md-6,.col-md-4,.col-md-3,.col-md-2,.col-md-8,.col-lg-6,.col-lg-4,.mb-3,.form-group');
+    const lab = contenedor?.querySelector('label') || (el.id ? document.querySelector(`label[for="${el.id}"]`) : null);
+    label = String(lab?.innerText || el.getAttribute('aria-label') || el.name || '').replace(/\s+/g,' ').trim();
+    if(!label) return;
+    registros.push({label, valor, esSelect:el.tagName === 'SELECT'});
+  });
+
+  /* Evita imprimir valores por defecto de selects en módulos aún vacíos. */
+  if(!evidenciaReal) return '';
+
+  const vistos = new Set();
+  const items = registros.filter(r => {
+    const firma = (r.label + '|' + r.valor).toLowerCase();
+    if(vistos.has(firma)) return false;
+    vistos.add(firma);
+    return true;
+  });
+
+  if(!items.length) return '';
+  return `<div class="auro-report-grid">${items.map(r => `<div class="auro-report-item"><strong>${auroInformeEscape(r.label)}</strong><div class="auro-report-detail"><small>${auroInformeEscape(r.valor)}</small></div></div>`).join('')}</div>`;
+}
+
+function auroInformeEvaluacionesPlan(){
+  const ids = [
+    ['hcEvalMalaActitud','Denota mala actitud ante el examinador'],
+    ['hcEvalAnimo','Alteraciones del estado de ánimo'],
+    ['hcEvalAbusoNegligencia','Sospecha psicológica: paciente víctima de abuso o negligencia'],
+    ['hcEvalAnomaliasMotoras','Evidencia actividades y anomalías motoras'],
+    ['hcEvalOdontologica','Requiere evaluación odontológica']
+  ];
+  const lista = ids.filter(([id]) => document.getElementById(id)?.checked).map(([,txt]) => txt);
+  return lista.length ? `<div class="auro-chip-grid">${lista.map(x=>`<span>${auroInformeEscape(x)}</span>`).join('')}</div>` : '';
+}
+
 function imprimirHistoriaClinica(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || '';
   if(!idPaciente){
@@ -7401,6 +7499,21 @@ function imprimirHistoriaClinica(){
   const numeroConsultaPDF = String(atencionPDF?.numero_consulta || '').trim();
   const estadoAtencionPDF = String(atencionPDF?.estado_atencion || '').trim();
 
+  const contextoAtencionPDF = (() => {
+    try{
+      return typeof window.obtenerContextoAtencionActual === 'function'
+        ? window.obtenerContextoAtencionActual()
+        : null;
+    }catch(_e){ return null; }
+  })();
+  const contextoCoincidePDF = !contextoAtencionPDF?.id_atencion || String(contextoAtencionPDF.id_atencion).trim() === idAtencionPDF;
+  const medicoAtencionPDF = contextoCoincidePDF ? String(contextoAtencionPDF?.nombre_medico || atencionPDF?.nombre_medico || '').trim() : '';
+  const especialidadAtencionPDF = contextoCoincidePDF ? String(contextoAtencionPDF?.especialidad_medico || contextoAtencionPDF?.especialidad_servicio_solicitado || atencionPDF?.especialidad || '').trim() : '';
+  const tipoAtencionPDF = String(atencionPDF?.tipo_atencion || atencionPDF?.tipo || '').trim();
+
+  const planCoincideAtencionPDF = !!idAtencionPDF && String(window.planState?.atencionActual || '').trim() === idAtencionPDF;
+  const diagnosticoCoincideAtencionPDF = !!idAtencionPDF && String(window.auroDiagnosticosState?.atencionActual || '').trim() === idAtencionPDF;
+
   // AUROSANAX HC PDF - cambio quirúrgico antirregresión:
   // reutiliza SOLO la configuración institucional ya cargada por el index.
   // No consulta backend, no escribe datos y no modifica otros módulos.
@@ -7439,12 +7552,17 @@ function imprimirHistoriaClinica(){
         ${auroInformeSiDato('Consulta', numeroConsultaPDF ? '#' + numeroConsultaPDF : 'Atención activa')}
         ${auroInformeSiDato('Fecha de atención', fechaAtencionPDF)}
         ${auroInformeSiDato('Hora de atención', horaAtencionPDF)}
+        ${auroInformeSiDato('Médico', medicoAtencionPDF)}
+        ${auroInformeSiDato('Especialidad', especialidadAtencionPDF)}
+        ${auroInformeSiDato('Tipo', tipoAtencionPDF)}
         ${auroInformeSiDato('Estado', estadoAtencionPDF)}
       </div>` : ''}`;
 
   const anamnesis = `
     ${auroInformeBloque('Motivo de consulta', '01', auroInformeParrafo(auroInformeValue('hcMotivoConsulta')))}
     ${auroInformeBloque('Enfermedad actual', '02', auroInformeParrafo(auroInformeValue('hcEnfermedadActual')))}
+    ${auroInformeBloque('Revisión por sistemas', 'RS', auroInformeParrafo(auroInformeValue('hcRevisionSistemas')))}
+    ${auroInformeBloque('Síntomas de alarma / observaciones', 'SA', auroInformeParrafo(auroInformeValue('hcSintomasAlarma')), 'danger')}
   `;
 
   // PDF v3.2: antecedentes desde campos ocultos/serializados, no desde la tabla visual.
@@ -7469,8 +7587,54 @@ function imprimirHistoriaClinica(){
   `;
 
   const diagnosticos = auroInformeDiagnosticos();
-  const plan = auroInformeParrafo(auroInformeValue('hcPlanTratamiento'));
+
+  /* Especialidades: se imprimen únicamente cuando el panel activo contiene datos reales. */
+  const obstetriciaHTML = auroInformePanelClinico('hc_obstetricia');
+  const esteticaHTML = auroInformePanelClinico('hc_estetica');
+
+  /* Integración diagnóstica: solo si su estado pertenece exactamente a esta atención. */
+  const integracionHTML = diagnosticoCoincideAtencionPDF ? `
+    ${auroInformeBloque('Resumen clínico integrado', 'RC', auroInformeParrafo(window.auroDiagnosticosState?.resumenClinico || auroInformeValue('auroDxResumen')))}
+    ${auroInformeBloque('Análisis / impresión clínica', 'AI', auroInformeParrafo(window.auroDiagnosticosState?.analisisClinico || auroInformeValue('auroDxAnalisis')))}
+    ${auroInformeBloque('Conducta sugerida', 'CS', auroInformeParrafo(window.auroDiagnosticosState?.conducta || auroInformeValue('auroDxConducta')))}
+  ` : '';
+
+  /* Plan: no se lee ningún DOM de Plan si su id_atencion no coincide. */
+  const medicamentosPlanHTML = planCoincideAtencionPDF ? auroInformeTablaBody('hcMedicamentosTableBody', 8) : '';
+  const ordenesPlanHTML = planCoincideAtencionPDF ? auroInformeTablaBody('hcOrdenesTableBody', 3) : '';
+  const planTratamientoHTML = planCoincideAtencionPDF ? auroInformeParrafo(auroInformeValue('hcPlanTratamiento')) : '';
+  const interconsultaHTML = planCoincideAtencionPDF ? (() => {
+    const partes = [
+      ['Tipo', auroInformeValue('hcInterconsultaTipo')],
+      ['Especialidad', auroInformeValue('hcInterconsultaEspecialidad')],
+      ['Prioridad', auroInformeValue('hcInterconsultaPrioridad')],
+      ['Profesional', auroInformeValue('hcInterconsultaProfesional')],
+      ['Estado', auroInformeValue('hcInterconsultaEstado')],
+      ['Motivo', auroInformeValue('hcInterconsultaMotivo')],
+      ['Observaciones', auroInformeValue('hcInterconsultaObservaciones')]
+    ].filter(([,v]) => String(v || '').trim() && !/^(seleccione|pendiente)$/i.test(String(v).trim()));
+    if(!partes.length) return '';
+    return `<div class="auro-report-grid">${partes.map(([l,v])=>`<div class="auro-report-item"><strong>${auroInformeEscape(l)}</strong><div class="auro-report-detail"><small>${auroInformeEscape(v)}</small></div></div>`).join('')}</div>`;
+  })() : '';
+  const evaluacionesHTML = planCoincideAtencionPDF ? auroInformeEvaluacionesPlan() : '';
+  const indicacionesHTML = planCoincideAtencionPDF ? auroInformeParrafo(auroInformeValue('hcIndicacionesPaciente')) : '';
+  const controlHTML = planCoincideAtencionPDF ? (() => {
+    const prox = auroInformeFechaClinica(auroInformeValue('hcControl'));
+    const estado = auroInformeValue('hcEstadoHistoria');
+    const items = `${auroInformeSiDato('Próximo control', prox)}${auroInformeSiDato('Estado del plan', estado)}`;
+    return items ? `<div class="auro-info-grid compact">${items}</div>` : '';
+  })() : '';
   const observaciones = auroInformeParrafo(auroInformeValue('hcObservaciones'));
+  const planIntegralHTML = `
+    ${auroInformeBloque('Medicamentos indicados', 'RX', medicamentosPlanHTML)}
+    ${auroInformeBloque('Plan terapéutico', 'PT', planTratamientoHTML)}
+    ${auroInformeBloque('Órdenes médicas', 'OM', ordenesPlanHTML)}
+    ${auroInformeBloque('Interconsulta', 'IC', interconsultaHTML)}
+    ${auroInformeBloque('Evaluaciones', 'EV', evaluacionesHTML)}
+    ${auroInformeBloque('Indicaciones para paciente', 'IP', indicacionesHTML)}
+    ${controlHTML}
+    ${auroInformeBloque('Observaciones', 'OB', observaciones)}
+  `;
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -7545,12 +7709,17 @@ function imprimirHistoriaClinica(){
     <div class="auro-section-title"><span>Examen</span> Signos vitales y examen físico</div>
     ${examenFisico || '<div class="auro-clinical-text">Sin datos registrados.</div>'}
 
+    ${obstetriciaHTML ? `<div class="auro-section-title"><span>Obstetricia</span> Evaluación obstétrica</div>${auroInformeBloque('Datos obstétricos de la atención', 'OB', obstetriciaHTML)}` : ''}
+
+    ${esteticaHTML ? `<div class="auro-section-title"><span>Estética</span> Evaluación estética funcional</div>${auroInformeBloque('Evaluación estética de la atención', 'ES', esteticaHTML)}` : ''}
+
     <div class="auro-section-title"><span>CIE-10</span> Diagnósticos</div>
     ${auroInformeBloque('Diagnósticos seleccionados', 'DX', diagnosticos) || '<div class="auro-clinical-text">Sin diagnóstico registrado.</div>'}
 
-    <div class="auro-section-title"><span>Plan</span> Tratamiento y observaciones</div>
-    ${auroInformeBloque('Plan terapéutico', 'PT', plan)}
-    ${auroInformeBloque('Observaciones', 'OB', observaciones)}
+    ${integracionHTML ? `<div class="auro-section-title"><span>Integración</span> Correlación clínica</div>${integracionHTML}` : ''}
+
+    <div class="auro-section-title"><span>Plan</span> Tratamiento e indicaciones</div>
+    ${planIntegralHTML || '<div class="auro-clinical-text">Sin plan registrado para esta atención.</div>'}
 
     <footer class="auro-footer">
       <div>AUROSANAX · Informe clínico generado en entorno ERP.</div>
