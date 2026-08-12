@@ -528,7 +528,7 @@
     if(!tbody) return;
 
     if(!auroFinanzasGastos.length){
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
       return;
     }
 
@@ -539,6 +539,8 @@
         '<td>' + finEscape(g.valor) + '</td>' +
         '<td>' + finEscape(g.periodicidad) + '</td>' +
         '<td>' + finEscape(g.valor_mensual_prorrateado) + '</td>' +
+        '<td>' + finEscape(normalizarFechaInputFinanzas(g.fecha_inicio)) + '</td>' +
+        '<td>' + finEscape(normalizarFechaInputFinanzas(g.fecha_fin)) + '</td>' +
         '<td>' + finEscape(g.estado) + '</td>' +
         '<td class="text-end">' +
           '<button type="button" class="btn btn-sm btn-outline-primary" ' +
