@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.1';
+const VERSION='1.3.2';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -1102,7 +1102,16 @@ html,body{background:#dfe3e8}
     border-radius:8px;font-size:14px;line-height:1.15
   }
   .auro-cert-preview-btn.secondary{width:auto;min-width:74px}
-  .auro-cert-preview-stage{padding:10px 0 18px;overflow-x:hidden}
+  .auro-cert-preview-stage{
+    display:block;min-height:calc(100vh - 58px);
+    padding:10px 8px 18px;overflow-x:hidden
+  }
+  .auro-cert-preview-sheet{
+    width:100%!important;max-width:100%!important;min-height:0!important;
+    margin:0 auto!important;padding:16px 14px!important;
+    transform:none!important;
+    box-shadow:0 8px 24px rgba(15,23,42,.18)
+  }
 }
 @media print{
   @page{size:A4 portrait;margin:12mm 15mm}
@@ -1130,9 +1139,17 @@ html,body{background:#dfe3e8}
   function ajustar(){
     var hoja=document.getElementById('auroCertPreviewSheet');
     if(!hoja) return;
-    if(window.innerWidth>980){hoja.style.transform='none';hoja.style.marginBottom='0';return;}
-    /* Solo visor móvil. La impresión conserva el A4 real. */
-    var margen=window.innerWidth<=760?2:28;
+    if(window.innerWidth<=760){
+      hoja.style.transform='none';
+      hoja.style.marginBottom='0';
+      return;
+    }
+    if(window.innerWidth>980){
+      hoja.style.transform='none';
+      hoja.style.marginBottom='0';
+      return;
+    }
+    var margen=28;
     var disponible=Math.max(220,window.innerWidth-margen);
     var anchoA4=794;
     var escala=Math.min(1,disponible/anchoA4);
