@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.0';
+const VERSION='1.3.1';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -1087,9 +1087,22 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-sheet{transform-origin:top center}
 }
 @media(max-width:760px){
-  .auro-cert-preview-toolbar{align-items:stretch;flex-direction:column;gap:9px;padding:10px}
-  .auro-cert-preview-actions{display:grid;grid-template-columns:1fr;width:100%;gap:7px}
-  .auro-cert-preview-btn{width:100%;min-height:42px}
+  .auro-cert-preview-toolbar{
+    position:sticky;top:0;
+    align-items:center;flex-direction:row;
+    gap:8px;padding:8px 10px
+  }
+  .auro-cert-preview-toolbar strong{display:none}
+  .auro-cert-preview-actions{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;
+    width:100%;gap:8px;align-items:center
+  }
+  .auro-cert-preview-btn{
+    width:100%;min-height:40px;padding:8px 10px;
+    border-radius:8px;font-size:14px;line-height:1.15
+  }
+  .auro-cert-preview-btn.secondary{width:auto;min-width:74px}
+  .auro-cert-preview-stage{padding:10px 0 18px;overflow-x:hidden}
 }
 @media print{
   @page{size:A4 portrait;margin:12mm 15mm}
@@ -1118,7 +1131,8 @@ html,body{background:#dfe3e8}
     var hoja=document.getElementById('auroCertPreviewSheet');
     if(!hoja) return;
     if(window.innerWidth>980){hoja.style.transform='none';hoja.style.marginBottom='0';return;}
-    var margen=window.innerWidth<=760?8:28;
+    /* Solo visor móvil. La impresión conserva el A4 real. */
+    var margen=window.innerWidth<=760?2:28;
     var disponible=Math.max(220,window.innerWidth-margen);
     var anchoA4=794;
     var escala=Math.min(1,disponible/anchoA4);
