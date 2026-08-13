@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.3';
+const VERSION='1.3.4';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -402,7 +402,7 @@ function instalarCSS(){
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
 .ac-firma-area{display:grid;grid-template-columns:1fr .9fr;gap:22px;align-items:end;margin-top:42px}
-.ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}
+.ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45;display:flex;flex-direction:column;justify-content:flex-end;min-height:94px;padding-bottom:8px}
 .ac-sign{text-align:center;font-size:11.5px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
@@ -998,7 +998,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   align-items:end;
   margin-top:44px;
 }
-.ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere;display:flex;flex-direction:column;justify-content:flex-end;min-height:94px;padding-bottom:8px}
 .ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
