@@ -532,10 +532,22 @@ function generarPDFConsentimiento(){
 }
 
 
-/* AUROSANAX - delegación segura de certificados */
+/* AUROSANAX - delegación segura de certificados, patrón Recetas */
 function generarPDFCertificado(){
   try{
-    if(window.auroCertificados && typeof window.auroCertificados.imprimir === 'function') return window.auroCertificados.imprimir();
+    if(window.auroCertificados && typeof window.auroCertificados.obtenerDatos === 'function'){
+      const datos = window.auroCertificados.obtenerDatos();
+
+      if(typeof window.__auroCertificadosConstruirPDFSeguro === 'function'){
+        return window.__auroCertificadosConstruirPDFSeguro(datos);
+      }
+
+      /* Respaldo antirregresión: solo si el motor seguro todavía no cargó. */
+      if(typeof window.auroCertificados.imprimir === 'function'){
+        return window.auroCertificados.imprimir();
+      }
+    }
+
     alert('El módulo de certificados no está disponible para impresión.');
   }catch(error){
     console.error('AUROSANAX IMPRESION: error generando certificado.', error);
