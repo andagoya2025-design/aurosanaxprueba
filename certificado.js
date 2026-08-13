@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.2';
+const VERSION='1.3.3';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -957,11 +957,13 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:270mm;
+  min-height:273mm;
   margin:0;
   padding:0;
   background:#fff;
   overflow:visible;
+  display:flex;
+  flex-direction:column;
 }
 .ac-paper,.ac-paper *{min-width:0}
 .ac-paper p,.ac-paper span,.ac-paper b,.ac-paper div{
@@ -996,39 +998,28 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   grid-template-columns:minmax(0,1fr) minmax(0,.9fr);
   gap:22px;
   align-items:end;
-  margin-top:44px;
+  margin-top:auto;
+  padding-top:18mm;
 }
 .ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
 .ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
 
-/* Vista de la ventana auxiliar en iPhone / Android: nunca genera ancho extra. */
-@media screen and (max-width:640px){
-  html,body{width:100%;max-width:100%;overflow-x:hidden}
-  body{padding:14px}
-  .ac-paper{width:100%;max-width:100%;min-height:0}
-  .ac-doc-head{grid-template-columns:1fr;gap:7px;align-items:start}
-  .ac-logo-wrap{width:46px;height:46px}
-  .ac-doc-date{text-align:left}
-  h1{font-size:18px;margin:20px 0 22px}
-  p{font-size:12px;line-height:1.55}
-  .ac-cert-line b:first-child{min-width:0;display:inline}
-  .ac-firma-area{grid-template-columns:1fr;gap:24px;margin-top:36px}
-  .ac-centro-contacto,.ac-sign{text-align:left}
-  .ac-sign-line{max-width:100%}
-}
-
+/* A4 maestro: no existe remaquetación interna para móvil.
+   El visor solo escala proporcionalmente esta misma hoja. */
 /* Impresión: el área útil la define @page. No se vuelve a forzar 210 mm en html/body. */
 @media print{
   html,body{
     width:auto!important;
     max-width:none!important;
     min-width:0!important;
-    min-height:0!important;
+    min-height:273mm!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
+    display:flex!important;
+    flex-direction:column!important;
     -webkit-print-color-adjust:exact!important;
     print-color-adjust:exact!important;
   }
@@ -1081,7 +1072,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-height:297mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:0!important}
+.auro-cert-preview-sheet>.ac-paper{min-height:273mm!important;display:flex!important;flex-direction:column!important}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 4px 20px;overflow-x:hidden}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1102,16 +1093,7 @@ html,body{background:#dfe3e8}
     border-radius:8px;font-size:14px;line-height:1.15
   }
   .auro-cert-preview-btn.secondary{width:auto;min-width:74px}
-  .auro-cert-preview-stage{
-    display:block;min-height:calc(100vh - 58px);
-    padding:10px 8px 18px;overflow-x:hidden
-  }
-  .auro-cert-preview-sheet{
-    width:100%!important;max-width:100%!important;min-height:0!important;
-    margin:0 auto!important;padding:16px 14px!important;
-    transform:none!important;
-    box-shadow:0 8px 24px rgba(15,23,42,.18)
-  }
+  .auro-cert-preview-stage{padding:10px 0 18px;overflow-x:hidden}
 }
 @media print{
   @page{size:A4 portrait;margin:12mm 15mm}
@@ -1119,7 +1101,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:273mm!important;margin:0!important;padding:0!important;transform:none!important;display:flex!important;flex-direction:column!important}
 }
 </style>
 </head>
@@ -1139,22 +1121,14 @@ html,body{background:#dfe3e8}
   function ajustar(){
     var hoja=document.getElementById('auroCertPreviewSheet');
     if(!hoja) return;
-    if(window.innerWidth<=760){
-      hoja.style.transform='none';
-      hoja.style.marginBottom='0';
-      return;
-    }
-    if(window.innerWidth>980){
-      hoja.style.transform='none';
-      hoja.style.marginBottom='0';
-      return;
-    }
-    var margen=28;
+    if(window.innerWidth>980){hoja.style.transform='none';hoja.style.marginBottom='0';return;}
+    /* Miniatura fiel del mismo A4: solo escala, nunca reordena contenido. */
+    var margen=window.innerWidth<=760?8:28;
     var disponible=Math.max(220,window.innerWidth-margen);
-    var anchoA4=794;
+    var anchoA4=hoja.offsetWidth||794;
     var escala=Math.min(1,disponible/anchoA4);
     hoja.style.transform='scale('+escala+')';
-    hoja.style.marginBottom=((escala-1)*297)+'mm';
+    hoja.style.marginBottom=((escala-1)*(hoja.offsetHeight||1123))+'px';
   }
   window.addEventListener('resize',ajustar);
   ajustar();
