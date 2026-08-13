@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.4';
+const VERSION='1.3.5';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -401,8 +401,8 @@ function instalarCSS(){
 .ac-dx-doc-row{font-size:12.1px;line-height:1.45}
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
-.ac-firma-area{display:grid;grid-template-columns:1fr .9fr;gap:22px;align-items:end;margin-top:42px}
-.ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45;display:flex;flex-direction:column;justify-content:flex-end;min-height:94px;padding-bottom:8px}
+.ac-firma-area{display:grid;grid-template-columns:1fr .9fr;gap:22px;align-items:end;margin-top:92px}
+.ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}
 .ac-sign{text-align:center;font-size:11.5px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
@@ -996,9 +996,9 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   grid-template-columns:minmax(0,1fr) minmax(0,.9fr);
   gap:22px;
   align-items:end;
-  margin-top:44px;
+  margin-top:94px;
 }
-.ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere;display:flex;flex-direction:column;justify-content:flex-end;min-height:94px;padding-bottom:8px}
+.ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
 .ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
