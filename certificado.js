@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.2.2';
+const VERSION='1.2.3';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -1083,7 +1083,33 @@ function vista(imprimir){
 </html>`);
   w.document.close();
   w.focus();
-  setTimeout(()=>w.print(),ios?500:250);
+
+  /* AUROSANAX: ventana auxiliar exclusiva de impresión.
+     Al imprimir o cancelar, afterprint la cierra y devuelve al ERP.
+     Vista previa (vista(false)) permanece intacta. */
+  let cierreProgramado=false;
+  const cerrarVentanaImpresion=()=>{
+    if(cierreProgramado) return;
+    cierreProgramado=true;
+    setTimeout(()=>{
+      try{ if(w && !w.closed) w.close(); }catch(e){}
+    },120);
+  };
+
+  try{
+    w.addEventListener('afterprint',cerrarVentanaImpresion,{once:true});
+  }catch(e){
+    w.onafterprint=cerrarVentanaImpresion;
+  }
+
+  setTimeout(()=>{
+    try{
+      w.focus();
+      w.print();
+    }catch(e){
+      try{ if(w && !w.closed) w.close(); }catch(_){}
+    }
+  },ios?500:250);
 }
 
 async function inicializar(){
