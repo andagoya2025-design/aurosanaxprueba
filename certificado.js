@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.2.3';
+const VERSION='1.3.0';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -1050,6 +1050,91 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
 }`;
 }
 
+function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
+  const data=dataOpcional||datos();
+  const htmlDoc=docHTML(data);
+  const ventana=window.open('','_blank');
+
+  if(!ventana){
+    msg('warn','El navegador bloqueó la vista previa. Permita ventanas emergentes para este sitio.');
+    return;
+  }
+
+  ventana.document.open();
+  ventana.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vista previa de certificado médico AUROSANAX</title>
+<style>
+${estilosImpresion()}
+html,body{background:#dfe3e8}
+.auro-cert-preview-toolbar{
+  position:sticky;top:0;z-index:9999;display:flex;justify-content:space-between;
+  align-items:center;gap:12px;padding:12px 18px;background:#fff;
+  border-bottom:1px solid #d1d5db;box-shadow:0 3px 14px rgba(15,23,42,.14)
+}
+.auro-cert-preview-toolbar strong{color:#7a174f;font-size:15px}
+.auro-cert-preview-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.auro-cert-preview-btn{border:0;border-radius:10px;padding:9px 14px;font-weight:850;cursor:pointer;background:#8b1e5a;color:#fff}
+.auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
+.auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
+.auro-cert-preview-sheet{width:210mm;min-height:297mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
+.auro-cert-preview-sheet>.ac-paper{min-height:0!important}
+@media(max-width:980px){
+  .auro-cert-preview-stage{padding:12px 4px 20px;overflow-x:hidden}
+  .auro-cert-preview-sheet{transform-origin:top center}
+}
+@media(max-width:760px){
+  .auro-cert-preview-toolbar{align-items:stretch;flex-direction:column;gap:9px;padding:10px}
+  .auro-cert-preview-actions{display:grid;grid-template-columns:1fr;width:100%;gap:7px}
+  .auro-cert-preview-btn{width:100%;min-height:42px}
+}
+@media print{
+  @page{size:A4 portrait;margin:12mm 15mm}
+  html,body{background:#fff!important;width:auto!important;min-width:0!important;max-width:none!important;margin:0!important;padding:0!important;overflow:visible!important}
+  .auro-cert-preview-toolbar{display:none!important}
+  .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
+  .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;transform:none!important}
+}
+</style>
+</head>
+<body>
+  <div class="auro-cert-preview-toolbar">
+    <strong>Vista previa A4 · Certificado médico</strong>
+    <div class="auro-cert-preview-actions">
+      <button type="button" class="auro-cert-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      <button type="button" class="auro-cert-preview-btn secondary" onclick="window.close()">Cerrar</button>
+    </div>
+  </div>
+  <main class="auro-cert-preview-stage">
+    <div class="auro-cert-preview-sheet" id="auroCertPreviewSheet">${htmlDoc}</div>
+  </main>
+<script>
+(function(){
+  function ajustar(){
+    var hoja=document.getElementById('auroCertPreviewSheet');
+    if(!hoja) return;
+    if(window.innerWidth>980){hoja.style.transform='none';hoja.style.marginBottom='0';return;}
+    var margen=window.innerWidth<=760?8:28;
+    var disponible=Math.max(220,window.innerWidth-margen);
+    var anchoA4=794;
+    var escala=Math.min(1,disponible/anchoA4);
+    hoja.style.transform='scale('+escala+')';
+    hoja.style.marginBottom=((escala-1)*297)+'mm';
+  }
+  window.addEventListener('resize',ajustar);
+  ajustar();
+})();
+<\/script>
+</body>
+</html>`);
+  ventana.document.close();
+  ventana.focus();
+}
+
 function vista(imprimir){
   const data=datos();
   const htmlDoc=docHTML(data);
@@ -1064,53 +1149,16 @@ function vista(imprimir){
     return;
   }
 
-  const w=window.open('','_blank','width=1000,height=900');
-  if(!w){
-    msg('warn','Permita ventanas emergentes para imprimir el certificado.');
-    return;
-  }
-
-  const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);
-  w.document.write(`<!doctype html>
-<html class="${ios?'auro-ios':''}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Certificado médico</title>
-<style>${estilosImpresion()}</style>
-</head>
-<body>${htmlDoc}</body>
-</html>`);
-  w.document.close();
-  w.focus();
-
-  /* AUROSANAX: ventana auxiliar exclusiva de impresión.
-     Al imprimir o cancelar, afterprint la cierra y devuelve al ERP.
-     Vista previa (vista(false)) permanece intacta. */
-  let cierreProgramado=false;
-  const cerrarVentanaImpresion=()=>{
-    if(cierreProgramado) return;
-    cierreProgramado=true;
-    setTimeout(()=>{
-      try{ if(w && !w.closed) w.close(); }catch(e){}
-    },120);
-  };
-
-  try{
-    w.addEventListener('afterprint',cerrarVentanaImpresion,{once:true});
-  }catch(e){
-    w.onafterprint=cerrarVentanaImpresion;
-  }
-
-  setTimeout(()=>{
-    try{
-      w.focus();
-      w.print();
-    }catch(e){
-      try{ if(w && !w.closed) w.close(); }catch(_){}
-    }
-  },ios?500:250);
+  return auroGenerarVistaImpresionCertificadoUnificada(data);
 }
+
+function auroInstalarMotorImpresionCertificadoUnificado(){
+  window.__auroCertificadosConstruirPDFSeguro=function(data){
+    return auroGenerarVistaImpresionCertificadoUnificada(data||datos());
+  };
+}
+
+auroInstalarMotorImpresionCertificadoUnificado();
 
 async function inicializar(){
   mount();
@@ -1170,5 +1218,9 @@ if(document.readyState==='loading'){
 }else{
   mount();
 }
+
+window.addEventListener('load',()=>{
+  auroInstalarMotorImpresionCertificadoUnificado();
+});
 
 })();
