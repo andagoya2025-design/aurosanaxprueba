@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: certificado.js
  Módulo: Certificados médicos por atención
- Versión: 1.2.2 - fix raíz impresión + responsive antirregresión
+ Versión: 1.3.3 - documento maestro A4 + visor móvil escalado antirregresión
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.0';
+const VERSION='1.3.3';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -1003,21 +1003,11 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
 
-/* Vista de la ventana auxiliar en iPhone / Android: nunca genera ancho extra. */
-@media screen and (max-width:640px){
-  html,body{width:100%;max-width:100%;overflow-x:hidden}
-  body{padding:14px}
-  .ac-paper{width:100%;max-width:100%;min-height:0}
-  .ac-doc-head{grid-template-columns:1fr;gap:7px;align-items:start}
-  .ac-logo-wrap{width:46px;height:46px}
-  .ac-doc-date{text-align:left}
-  h1{font-size:18px;margin:20px 0 22px}
-  p{font-size:12px;line-height:1.55}
-  .ac-cert-line b:first-child{min-width:0;display:inline}
-  .ac-firma-area{grid-template-columns:1fr;gap:24px;margin-top:36px}
-  .ac-centro-contacto,.ac-sign{text-align:left}
-  .ac-sign-line{max-width:100%}
-}
+/*
+  DOCUMENTO MAESTRO A4:
+  La geometría interna NO se remaqueta por ancho de pantalla.
+  iPhone / Android reciben el mismo documento; solo cambia la escala del visor.
+*/
 
 /* Impresión: el área útil la define @page. No se vuelve a forzar 210 mm en html/body. */
 @media print{
@@ -1080,16 +1070,38 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn{border:0;border-radius:10px;padding:9px 14px;font-weight:850;cursor:pointer;background:#8b1e5a;color:#fff}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
-.auro-cert-preview-sheet{width:210mm;min-height:297mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
+.auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
 .auro-cert-preview-sheet>.ac-paper{min-height:0!important}
 @media(max-width:980px){
-  .auro-cert-preview-stage{padding:12px 4px 20px;overflow-x:hidden}
+  .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
 }
 @media(max-width:760px){
-  .auro-cert-preview-toolbar{align-items:stretch;flex-direction:column;gap:9px;padding:10px}
-  .auro-cert-preview-actions{display:grid;grid-template-columns:1fr;width:100%;gap:7px}
-  .auro-cert-preview-btn{width:100%;min-height:42px}
+  .auro-cert-preview-toolbar{
+    position:sticky;top:0;
+    align-items:center;flex-direction:row;
+    gap:8px;padding:8px 10px
+  }
+  .auro-cert-preview-toolbar strong{display:none}
+  .auro-cert-preview-actions{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;
+    width:100%;gap:8px;align-items:center
+  }
+  .auro-cert-preview-btn{
+    width:100%;min-height:40px;padding:8px 10px;
+    border-radius:8px;font-size:14px;line-height:1.15
+  }
+  .auro-cert-preview-btn.secondary{width:auto;min-width:74px}
+  .auro-cert-preview-stage{
+    display:flex;justify-content:center;min-height:calc(100vh - 58px);
+    padding:10px 0 18px;overflow-x:hidden
+  }
+  .auro-cert-preview-sheet{
+    width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;
+    flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;
+    transform-origin:top center!important;
+    box-shadow:0 8px 24px rgba(15,23,42,.18)
+  }
 }
 @media print{
   @page{size:A4 portrait;margin:12mm 15mm}
@@ -1117,13 +1129,16 @@ html,body{background:#dfe3e8}
   function ajustar(){
     var hoja=document.getElementById('auroCertPreviewSheet');
     if(!hoja) return;
-    if(window.innerWidth>980){hoja.style.transform='none';hoja.style.marginBottom='0';return;}
-    var margen=window.innerWidth<=760?8:28;
-    var disponible=Math.max(220,window.innerWidth-margen);
-    var anchoA4=794;
-    var escala=Math.min(1,disponible/anchoA4);
-    hoja.style.transform='scale('+escala+')';
-    hoja.style.marginBottom=((escala-1)*297)+'mm';
+
+    var anchoVentana=window.innerWidth||document.documentElement.clientWidth||794;
+    var anchoHoja=hoja.offsetWidth||794;
+    var altoHoja=hoja.offsetHeight||1123;
+    var margen=anchoVentana<=760?16:28;
+    var disponible=Math.max(220,anchoVentana-margen);
+    var escala=anchoVentana>980?1:Math.min(1,disponible/anchoHoja);
+
+    hoja.style.transform=escala<1?'scale('+escala+')':'none';
+    hoja.style.marginBottom=escala<1?(-altoHoja*(1-escala))+'px':'0';
   }
   window.addEventListener('resize',ajustar);
   ajustar();
