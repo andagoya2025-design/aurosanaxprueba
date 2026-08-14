@@ -8,7 +8,7 @@
   <title id="auroTituloDocumento">AUROSANAX Clinical ERP</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet"> 
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
   <link rel="stylesheet" href="examenfisico.css?v=1">
 
@@ -4438,7 +4438,7 @@ function showClinicalTab(id,btn){
         if(window.auroDocumentos && typeof window.auroDocumentos.inicializar==='function'){
           window.auroDocumentos.inicializar({forzar:true});
         }else{
-          console.warn('AUROSANAX: documentos.js no está disponible; se conserva el panel de Documentos del index como respaldo.');
+          console.warn('AUROSANAX: documento.js no está disponible; se conserva el panel de Documentos del index como respaldo.');
         }
       }catch(error){
         console.warn('AUROSANAX: no se pudo inicializar Documentos; se conserva el panel de respaldo.', error);
@@ -9581,7 +9581,7 @@ document.addEventListener('click',e=>{
 <script src="certificado.js?v=20260813_certificados_1_3_8_dx_visual_premium"></script>
 <!-- AUROSANAX - Documentos clínicos por atención
      Fallback seguro: si este JS no carga, el panel antiguo de #hc_docs permanece visible. -->
-<script src="documento.js?v=20260814_documentos_1_1_0_guardado_categoria"></script>
+<script src="documentos.js?v=20260814_documentos_1_1_0_guardado_categoria"></script>
 <script>
 (function auroConectarDiagnosticosIndex(){
   'use strict';
