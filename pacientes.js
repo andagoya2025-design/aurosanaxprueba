@@ -486,7 +486,7 @@ function auroValidarCedulaPacienteAntesDeGuardar(){
 }
 
 function limpiarFormularioPaciente(){
-  ['pNombre','pCedula','pNacimiento','pSexo','pEstadoCivil','pOcupacion','pTelefono','pEmail','pDireccion','pSeguro','pContactoEmergencia','pTelefonoEmergencia','pTipoSangre','pAlergias','pNotas'].forEach(id=>{
+  ['pNombres','pApellidos','pNombre','pCedula','pNacimiento','pSexo','pEstadoCivil','pOcupacion','pTelefono','pEmail','pDireccion','pSeguro','pContactoEmergencia','pTelefonoEmergencia','pTipoSangre','pAlergias','pNotas'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.value='';
   });
@@ -547,6 +547,44 @@ function auroNombrePacienteLecturaSegura(p){
   return [nombres, apellidos].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
 }
 
+function auroPartesNombrePacienteLecturaSegura(p){
+  p = p || {};
+
+  const nombres = String(
+    p.nombres ||
+    p.primer_nombre ||
+    ''
+  ).replace(/\s+/g,' ').trim();
+
+  const apellidos = String(
+    p.apellidos ||
+    p.apellido ||
+    p.primer_apellido ||
+    ''
+  ).replace(/\s+/g,' ').trim();
+
+  if(nombres || apellidos){
+    return {nombres:nombres, apellidos:apellidos};
+  }
+
+  /*
+   * Compatibilidad exclusivamente para registros históricos que solo
+   * traigan un nombre completo. Los registros normales de AUROSANAX
+   * conservan nombres y apellidos en columnas separadas.
+   */
+  const completo = auroNombrePacienteLecturaSegura(p);
+  const partes = String(completo || '').split(/\s+/).filter(Boolean);
+
+  if(partes.length <= 1){
+    return {nombres:completo, apellidos:''};
+  }
+
+  return {
+    nombres:partes.slice(0, -1).join(' '),
+    apellidos:partes.slice(-1).join(' ')
+  };
+}
+
 function editarPacienteModal(idPaciente){
   auroConfigurarCampoCedulaPaciente();
 
@@ -562,7 +600,14 @@ function editarPacienteModal(idPaciente){
   editingPatientId = idPaciente;
   setTextIfExists('patientModalTitle','Editar paciente');
   setTextIfExists('patientSaveBtn','Actualizar paciente');
-  setValueIfExists('pNombre', auroNombrePacienteLecturaSegura(p));
+  const partesNombrePaciente = auroPartesNombrePacienteLecturaSegura(p);
+  if(document.getElementById('pNombres') || document.getElementById('pApellidos')){
+    setValueIfExists('pNombres', partesNombrePaciente.nombres || '');
+    setValueIfExists('pApellidos', partesNombrePaciente.apellidos || '');
+  }else{
+    /* Compatibilidad con un Index anterior si todavía estuviera en caché. */
+    setValueIfExists('pNombre', auroNombrePacienteLecturaSegura(p));
+  }
   setValueIfExists('pCedula', p.cedula || '');
   setValueIfExists('pNacimiento', normalizarFechaInput(p.fecha_nacimiento || ''));
   setValueIfExists('pSexo', p.sexo || '');
@@ -627,16 +672,47 @@ async function cargarPacientesDesdeSheets(){
 }
 
 async function savePatient(){
-  const nombreCompleto=document.getElementById('pNombre').value.trim();
-  if(!nombreCompleto){ alert('Ingrese nombres y apellidos del paciente'); return; }
+  const campoNombres = document.getElementById('pNombres');
+  const campoApellidos = document.getElementById('pApellidos');
+  const campoNombreLegacy = document.getElementById('pNombre');
+
+  let nombres = '';
+  let apellidos = '';
+
+  if(campoNombres || campoApellidos){
+    nombres = String(campoNombres?.value || '').replace(/\s+/g,' ').trim();
+    apellidos = String(campoApellidos?.value || '').replace(/\s+/g,' ').trim();
+
+    if(!nombres){
+      alert('Ingrese los nombres del paciente');
+      campoNombres?.focus();
+      return;
+    }
+    if(!apellidos){
+      alert('Ingrese los apellidos del paciente');
+      campoApellidos?.focus();
+      return;
+    }
+  }else{
+    /*
+     * Compatibilidad temporal con un Index antiguo en caché.
+     * El Index 57E utiliza siempre pNombres + pApellidos.
+     */
+    const nombreCompletoLegacy = String(campoNombreLegacy?.value || '').replace(/\s+/g,' ').trim();
+    if(!nombreCompletoLegacy){
+      alert('Ingrese nombres y apellidos del paciente');
+      return;
+    }
+    const partesLegacy = nombreCompletoLegacy.split(/\s+/).filter(Boolean);
+    nombres = partesLegacy.slice(0, Math.max(1, partesLegacy.length - 1)).join(' ');
+    apellidos = partesLegacy.length > 1 ? partesLegacy.slice(-1).join(' ') : '';
+  }
+
+  const nombreCompleto = [nombres, apellidos].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
 
   const validacionCedula = auroValidarCedulaPacienteAntesDeGuardar();
   if(!validacionCedula.ok) return;
   const cedulaPaciente = validacionCedula.valor;
-
-  const partes = nombreCompleto.split(' ');
-  const nombres = partes.slice(0, Math.max(1, partes.length - 1)).join(' ');
-  const apellidos = partes.length > 1 ? partes.slice(-1).join(' ') : '';
 
   const pacienteSheet = {
     tipo_documento: 'Cédula',
