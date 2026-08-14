@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.7';
+const VERSION='1.3.8';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -367,8 +367,14 @@ function instalarCSS(){
 .ac-field label{display:block;font-size:12px;font-weight:800;color:#4b5563;margin-bottom:5px}
 .ac-field input,.ac-field select,.ac-field textarea{width:100%;border:1px solid #d1d5db;border-radius:12px;padding:10px 11px;font:inherit}
 .ac-field textarea{min-height:92px;resize:vertical}
-.ac-dx{display:grid;gap:7px}
-.ac-dx label{display:flex;gap:8px;padding:9px;border:1px solid #e5e7eb;border-radius:11px;background:#fafafa}
+.ac-dx{display:grid;gap:8px}
+.ac-dx label{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #ead7e2;border-radius:12px;background:linear-gradient(135deg,#fff,#fff9fc);min-height:46px;cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
+.ac-dx label:hover{border-color:#d9a7c3;box-shadow:0 5px 14px rgba(139,30,90,.06)}
+.ac-dx label:has(input:checked){border-color:#d79ab9;background:#fff7fb;box-shadow:0 5px 14px rgba(139,30,90,.07)}
+.ac-dx input[type="checkbox"]{width:18px;height:18px;flex:0 0 auto;margin:0;accent-color:#8b1e5a}
+.ac-dx span{display:flex;align-items:center;gap:9px;min-width:0;flex:1;color:#374151;font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.ac-dx span b{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:58px;padding:4px 8px;border-radius:999px;background:#fdf2f8;border:1px solid #f3c8df;color:#8b1e5a;font-size:11.5px;font-weight:900;letter-spacing:.025em;line-height:1.1}
+@media(max-width:700px){.ac-dx label{padding:10px}.ac-dx span{font-size:12.5px;gap:8px}.ac-dx span b{min-width:54px;font-size:11px;padding:4px 7px}}
 .ac-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .ac-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:850;cursor:pointer}
 .ac-primary{background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
