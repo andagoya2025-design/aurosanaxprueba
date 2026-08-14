@@ -3791,7 +3791,7 @@
         </div>
 
 <div class="clinical-panel" id="hc_docs"><div class="clinical-subtitle"><i class="bi bi-folder2-open"></i> Documentos, resultados y archivos</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Ecografías / imágenes</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Fotografías clínicas</label><input type="file" class="form-control" multiple></div><div class="col-md-12"><div class="clinical-note"><i class="bi bi-info-circle me-1"></i> Los archivos clínicos se almacenarán de forma segura y quedarán vinculados a la historia del paciente.</div></div></div></div>
-        <div class="clinical-actions"><button class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
+        <div class="clinical-actions"><button class="btn-soft" data-auro-receta-global="1" aria-pressed="false" onclick="return auroRecetaAccesoPiloto(this)"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
       </div>
     </section>
 
@@ -3887,7 +3887,7 @@
             <p class="text-muted">Registro de receta médica en una sola fila por paciente/atención, con medicamentos escritos en formato libre.</p>
           </div>
           <div class="d-flex gap-2 flex-wrap">
-            <button class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-filetype-pdf me-1"></i> PDF / imprimir</button>
+            <button class="btn-soft" onclick="return auroRecetaAbrirOficialDesdeIndex()"><i class="bi bi-filetype-pdf me-1"></i> PDF / imprimir</button>
             <button class="btn-auro" onclick="guardarRecetaERP()"><i class="bi bi-save me-1"></i> Guardar receta</button>
           </div>
         </div>
@@ -4356,7 +4356,72 @@ async function cargarHistoriasClinicasDesdeSheets(){
 }
 
 
+
+/* ============================================================
+   AUROSANAX INDEX 58 - PUENTE ÚNICO A RECETAS.JS
+   Piloto: Documentos + Recomendaciones + Certificados.
+   - No construye recetas en Index.
+   - No toca Consentimiento.
+   - No guarda ni modifica datos.
+   - Recetas.js sigue siendo el propietario exclusivo.
+============================================================ */
+function auroRecetaModuloPilotoActivo(){
+  const activo = document.querySelector('.clinical-panel.active')?.id || '';
+  return ['hc_docs','hc_recomendaciones','hc_certificados'].includes(activo);
+}
+
+async function auroRecetaAccesoPiloto(btn){
+  /*
+    En los tres módulos piloto, el mismo botón abre/cierra la vista paciente
+    oficial. Fuera del piloto se conserva el comportamiento histórico.
+  */
+  if(auroRecetaModuloPilotoActivo()){
+    if(window.auroRecetas && typeof window.auroRecetas.toggleVistaPaciente === 'function'){
+      return await window.auroRecetas.toggleVistaPaciente();
+    }
+
+    console.warn('AUROSANAX: API oficial de Recetas aún no disponible; se usa fallback.');
+  }
+
+  if(typeof window.generarPDFReceta === 'function'){
+    return window.generarPDFReceta();
+  }
+
+  alert('El módulo de Recetas todavía no está disponible.');
+  return null;
+}
+
+async function auroRecetaAbrirOficialDesdeIndex(){
+  /*
+    El botón superior PDF / imprimir del módulo Recetas debe ser exactamente
+    la misma representación paciente que "Vista paciente / imprimir".
+  */
+  if(window.auroRecetas && typeof window.auroRecetas.abrirVistaPacienteOficial === 'function'){
+    return await window.auroRecetas.abrirVistaPacienteOficial();
+  }
+
+  if(typeof window.generarPDFReceta === 'function'){
+    return window.generarPDFReceta();
+  }
+
+  alert('El módulo de Recetas todavía no está disponible.');
+  return null;
+}
+
 function showClinicalTab(id,btn){
+  /*
+    Higiene visual del piloto:
+    al cambiar de pestaña clínica no se arrastra una vista paciente abierta.
+    Cerrar la ventana NO borra ni modifica la receta.
+  */
+  try{
+    if(window.auroRecetas && typeof window.auroRecetas.vistaPacienteAbierta === 'function' &&
+       window.auroRecetas.vistaPacienteAbierta() &&
+       typeof window.auroRecetas.cerrarVistaPaciente === 'function'){
+      window.auroRecetas.cerrarVistaPaciente();
+    }
+  }catch(e){}
+
   document.querySelectorAll('.clinical-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById(id)?.classList.add('active');
   document.querySelectorAll('.clinical-tabs button').forEach(b=>b.classList.remove('active'));
