@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documento.js
  Módulo: Documentos clínicos por atención
- Versión: 1.0.0
+ Versión: 1.1.0
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -13,7 +13,8 @@
  - Los archivos NO se descargan al abrir la historia; se abren bajo demanda.
  - Imágenes: optimización cliente -> JPEG antes de subir.
  - PDF: no se re-renderiza ni altera clínicamente; se controla peso máximo.
- - Subidas secuenciales para evitar saturar navegador / Apps Script.
+ - Selección en cola por categoría; NO sube al elegir.
+ - Guardado explícito por categoría, con subidas secuenciales para evitar saturar navegador / Apps Script.
  - NO modifica Plan, Recetas, Diagnóstico, Certificados, Recomendaciones,
    Examen Físico, Anamnesis ni Atenciones.
  - NO depende del botón global "Guardar historia".
@@ -30,7 +31,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -124,7 +125,12 @@
     contexto:null,
     registros:[],
     filtro:'TODOS',
-    cola:[],
+    colas:{
+      LABORATORIO:{files:[], idAtencion:''},
+      ECOGRAFIA_IMAGEN:{files:[], idAtencion:''},
+      FOTOGRAFIA_CLINICA:{files:[], idAtencion:''},
+      OTRO:{files:[], idAtencion:''}
+    },
     ultimoError:''
   };
 
@@ -445,6 +451,12 @@
 .auro-doc-count{font-size:11px;color:#64748b;font-weight:800}
 .auro-doc-upload-btn{width:100%;border:1px solid #f3c7df;background:#fff7fb;color:#8b1e5a;border-radius:11px;padding:8px 9px;font-weight:850;font-size:12px;cursor:pointer}
 .auro-doc-upload-btn:disabled{opacity:.45;cursor:not-allowed}
+.auro-doc-queue{display:grid;gap:7px}
+.auro-doc-queue-info{min-height:18px;font-size:10.5px;color:#64748b;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
+.auro-doc-queue-actions{display:grid;grid-template-columns:1fr auto;gap:7px}
+.auro-doc-save-btn{border:0;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;border-radius:11px;padding:8px 9px;font-weight:900;font-size:11.5px;cursor:pointer}
+.auro-doc-clear-btn{border:1px solid #e5e7eb;background:#fff;color:#64748b;border-radius:11px;padding:8px 9px;font-weight:850;font-size:11px;cursor:pointer}
+.auro-doc-save-btn:disabled,.auro-doc-clear-btn:disabled{opacity:.42;cursor:not-allowed}
 .auro-doc-card{border:1px solid #e5e7eb;border-radius:20px;background:#fff;overflow:hidden;box-shadow:0 8px 25px rgba(15,23,42,.04)}
 .auro-doc-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;background:#2f1f3a;color:#fff}
 .auro-doc-card-head b{font-size:13px}
@@ -515,8 +527,28 @@
           </div>
         </div>
         <button type="button" class="auro-doc-upload-btn" data-auro-doc-upload="${esc(c.key)}">
-          <i class="bi bi-cloud-arrow-up me-1"></i> Agregar archivo
+          <i class="bi bi-paperclip me-1"></i> Elegir archivo(s)
         </button>
+        <div class="auro-doc-queue">
+          <div class="auro-doc-queue-info" id="auroDocQueueInfo_${esc(c.key)}">
+            Sin archivos seleccionados
+          </div>
+          <div class="auro-doc-queue-actions">
+            <button type="button"
+              class="auro-doc-save-btn"
+              data-auro-doc-save="${esc(c.key)}"
+              disabled>
+              <i class="bi bi-cloud-arrow-up me-1"></i> Guardar
+            </button>
+            <button type="button"
+              class="auro-doc-clear-btn"
+              data-auro-doc-clear="${esc(c.key)}"
+              disabled
+              title="Quitar selección">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+        </div>
         <input
           class="auro-doc-hidden-input"
           type="file"
@@ -577,7 +609,7 @@
             <div class="auro-doc-categories">${categorias}</div>
             <div class="auro-doc-note">
               Imágenes: se optimizan a JPG antes de subir. PDF: máximo ${Math.round(LIMITES.pdfBytes/1024/1024)} MB.
-              Los archivos se cargan a Drive únicamente al seleccionarlos y no se descargan al abrir la historia.
+              Elegir un archivo solo lo deja pendiente. Se carga a Drive únicamente al pulsar Guardar en su categoría y no se descarga al abrir la historia.
             </div>
           </section>
 
@@ -657,6 +689,70 @@
     el.hidden = !texto;
   }
 
+  function colaCategoria(categoria){
+    if(!state.colas[categoria]){
+      state.colas[categoria] = {files:[], idAtencion:''};
+    }
+    return state.colas[categoria];
+  }
+
+  function resumenArchivos(files){
+    const lista = Array.from(files || []);
+    if(!lista.length) return 'Sin archivos seleccionados';
+
+    const total = lista.reduce((acc,file)=>acc + Number(file?.size || 0),0);
+    const nombres = lista.slice(0,2).map(file=>txt(file?.name)).filter(Boolean);
+    const extra = lista.length > 2 ? ` +${lista.length-2} más` : '';
+
+    return `${lista.length} seleccionado${lista.length===1?'':'s'} · ${bytesVisual(total)} · ${nombres.join(', ')}${extra}`;
+  }
+
+  function renderCola(categoria){
+    const cola = colaCategoria(categoria);
+    const info = document.getElementById('auroDocQueueInfo_'+categoria);
+    const btnGuardar = document.querySelector(`[data-auro-doc-save="${categoria}"]`);
+    const btnLimpiar = document.querySelector(`[data-auro-doc-clear="${categoria}"]`);
+
+    if(info) info.textContent = resumenArchivos(cola.files);
+
+    const habilitada = !!(
+      cola.files.length &&
+      cola.idAtencion &&
+      state.contexto?.id === cola.idAtencion &&
+      state.contexto?.editable &&
+      !state.subiendo
+    );
+
+    if(btnGuardar) btnGuardar.disabled = !habilitada;
+    if(btnLimpiar) btnLimpiar.disabled = !cola.files.length || state.subiendo;
+  }
+
+  function renderTodasLasColas(){
+    CATEGORIAS.forEach(c=>renderCola(c.key));
+  }
+
+  function limpiarCola(categoria, opciones){
+    const cola = colaCategoria(categoria);
+    cola.files = [];
+    cola.idAtencion = '';
+
+    const input = document.getElementById('auroDocInput_'+categoria);
+    if(input) input.value = '';
+
+    renderCola(categoria);
+
+    if(opciones?.mensaje){
+      setMsg(opciones.mensaje, opciones.tipo || 'info');
+    }
+  }
+
+  function limpiarTodasLasColas(opciones){
+    CATEGORIAS.forEach(c=>limpiarCola(c.key));
+    if(opciones?.mensaje){
+      setMsg(opciones.mensaje, opciones.tipo || 'info');
+    }
+  }
+
   function renderContexto(){
     const ctx = state.contexto || contextoAtencion();
 
@@ -690,6 +786,8 @@
     document.querySelectorAll('[data-auro-doc-upload]').forEach(btn=>{
       btn.disabled = !ctx.id || !ctx.editable || state.subiendo;
     });
+
+    renderTodasLasColas();
   }
 
   function registrosActivos(){
@@ -1143,35 +1241,99 @@
     return r;
   }
 
-  async function seleccionarArchivos(categoria, files){
+  function seleccionarArchivos(categoria, files){
     const ctx = contextoAtencion();
     state.contexto = ctx;
     renderContexto();
 
     if(!ctx.id){
-      setMsg('Seleccione una atención antes de cargar documentos.','error');
+      setMsg('Seleccione una atención antes de elegir documentos.','error');
+      limpiarCola(categoria);
       return;
     }
 
     if(!ctx.editable){
       setMsg('La atención seleccionada está anulada, cancelada o archivada.','error');
+      limpiarCola(categoria);
       return;
     }
 
     if(state.subiendo){
-      setMsg('Ya existe una carga en proceso. Espere a que finalice.','warn');
+      setMsg('Existe una carga en proceso. Espere a que finalice antes de cambiar la selección.','warn');
       return;
     }
 
     const lista = Array.from(files || []);
 
-    if(!lista.length) return;
+    if(!lista.length){
+      limpiarCola(categoria);
+      return;
+    }
 
     if(lista.length > LIMITES.maxArchivosPorLote){
       setMsg(
         `Seleccione máximo ${LIMITES.maxArchivosPorLote} archivos por lote para mantener estable el navegador.`,
         'error'
       );
+      limpiarCola(categoria);
+      return;
+    }
+
+    /*
+      IMPORTANTE:
+      Elegir NO sube nada.
+      Se guarda una referencia temporal en memoria del navegador asociada
+      a la id_atencion que estaba activa en el momento de seleccionar.
+    */
+    const cola = colaCategoria(categoria);
+    cola.files = lista;
+    cola.idAtencion = ctx.id;
+
+    renderCola(categoria);
+    setMsg(
+      `${lista.length} archivo(s) seleccionado(s) en ${categoriaInfo(categoria).label}. Revise y pulse Guardar para subirlos.`,
+      'info'
+    );
+  }
+
+  async function guardarCategoria(categoria){
+    const cola = colaCategoria(categoria);
+    const lista = Array.from(cola.files || []);
+    const ctx = contextoAtencion();
+
+    state.contexto = ctx;
+    renderContexto();
+
+    if(!lista.length){
+      setMsg('No hay archivos seleccionados en esta categoría.','warn');
+      return;
+    }
+
+    if(!ctx.id){
+      limpiarCola(categoria);
+      setMsg('La atención dejó de estar seleccionada. La selección pendiente fue limpiada por seguridad.','error');
+      return;
+    }
+
+    /*
+      DOBLE BARRERA ANTIRREGRESIÓN:
+      la atención actual debe ser exactamente la misma en la que se hizo
+      la selección. Si cambió paciente/consulta, NO se permite subir.
+    */
+    if(!cola.idAtencion || cola.idAtencion !== ctx.id){
+      limpiarCola(categoria);
+      setMsg('Cambió la atención desde que eligió los archivos. La selección fue limpiada para evitar asociarla a otra consulta.','error');
+      return;
+    }
+
+    if(!ctx.editable){
+      limpiarCola(categoria);
+      setMsg('La atención está anulada, cancelada o archivada. No se pueden adjuntar documentos.','error');
+      return;
+    }
+
+    if(state.subiendo){
+      setMsg('Ya existe una carga en proceso. Espere a que finalice.','warn');
       return;
     }
 
@@ -1192,7 +1354,8 @@
       for(let i=0;i<lista.length;i++){
         try{
           const idAntes = contextoAtencion().id;
-          if(idAntes !== ctx.id){
+
+          if(idAntes !== cola.idAtencion){
             throw new Error('Cambió la atención durante la carga. Se detuvo el proceso por seguridad.');
           }
 
@@ -1205,6 +1368,11 @@
       }
 
       if(ok){
+        /*
+          Una vez enviado el lote confirmado, la cola de ESTA categoría
+          se limpia antes de refrescar el índice.
+        */
+        limpiarCola(categoria);
         await cargar(true);
 
         try{
@@ -1217,11 +1385,16 @@
         }catch(e){}
 
         window.dispatchEvent(new CustomEvent('aurosanax:documentos-actualizados',{
-          detail:{id_atencion:ctx.id, cantidad:ok}
+          detail:{id_atencion:ctx.id, cantidad:ok, categoria}
         }));
       }
 
       if(errores.length){
+        /*
+          Si hubo errores parciales, no se arrastra la selección original.
+          El usuario puede volver a elegir únicamente lo que quiera reintentar.
+        */
+        limpiarCola(categoria);
         setMsg(
           `${ok} archivo(s) guardado(s). ${errores.length} no pudieron procesarse: ${errores.join(' | ')}`,
           ok ? 'warn' : 'error'
@@ -1233,20 +1406,13 @@
       state.subiendo = false;
       renderContexto();
 
-      /*
-        Limpia inputs para permitir seleccionar el mismo archivo otra vez
-        en caso de que una subida haya fallado.
-      */
-      document.querySelectorAll('[data-auro-doc-input]').forEach(input=>{
-        input.value = '';
-      });
-
       setTimeout(()=>{
         const card = document.getElementById('auroDocProgresoCard');
         if(card && !state.subiendo) card.hidden = true;
       },2500);
     }
   }
+
 
   function abrirDocumento(idDocumento){
     const r = state.registros.find(x=>txt(x.id_documento) === txt(idDocumento));
@@ -1324,6 +1490,23 @@
         return;
       }
 
+      const guardar = e.target.closest('[data-auro-doc-save]');
+      if(guardar){
+        const categoria = txt(guardar.dataset.auroDocSave);
+        guardarCategoria(categoria).catch(error=>{
+          console.error(MODULO+':',error);
+          setMsg('No se pudo guardar: '+txt(error.message || error),'error');
+        });
+        return;
+      }
+
+      const limpiar = e.target.closest('[data-auro-doc-clear]');
+      if(limpiar){
+        const categoria = txt(limpiar.dataset.auroDocClear);
+        limpiarCola(categoria,{mensaje:'Selección pendiente eliminada.','tipo':'info'});
+        return;
+      }
+
       const filtro = e.target.closest('[data-auro-doc-filter]');
       if(filtro){
         state.filtro = txt(filtro.dataset.auroDocFilter) || 'TODOS';
@@ -1389,14 +1572,29 @@
     const nuevoId = idAtencionActiva();
 
     if(nuevoId !== state.idAtencion){
+      const teniaPendientes = CATEGORIAS.some(c=>colaCategoria(c.key).files.length > 0);
+
       state.tokenCarga++;
       state.idAtencion = nuevoId;
       state.registros = [];
       state.contexto = contextoAtencion();
 
+      /*
+        Nunca arrastrar archivos seleccionados de una consulta/paciente
+        hacia otra atención.
+      */
+      limpiarTodasLasColas();
+
       if(state.montado){
         renderContexto();
         renderLista();
+
+        if(teniaPendientes){
+          setMsg(
+            'Cambió la atención. Se limpiaron los archivos pendientes para evitar asociarlos a otra consulta.',
+            'info'
+          );
+        }
       }
 
       if(panelActivo()){
@@ -1415,6 +1613,8 @@
   window.addEventListener('aurosanax:atencion-cambiada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-seleccionada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-actualizada',onAtencionCambio);
+  window.addEventListener('aurosanax:paciente-cambiado',onAtencionCambio);
+  window.addEventListener('aurosanax:paciente-seleccionado',onAtencionCambio);
 
   /*
     Compatibilidad con index actual:
@@ -1448,6 +1648,9 @@
     version:VERSION,
     inicializar,
     cargar:function(){ return cargar(true); },
+    guardarCategoria,
+    limpiarCola,
+    limpiarTodasLasColas,
     abrir:abrirDocumento,
     anular:anularDocumento,
     estado:state,
