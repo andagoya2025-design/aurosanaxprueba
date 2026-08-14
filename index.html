@@ -3790,7 +3790,10 @@
           <div id="auroCertificadosMount"></div>
         </div>
 
-<div class="clinical-panel" id="hc_docs"><div class="clinical-subtitle"><i class="bi bi-folder2-open"></i> Documentos, resultados y archivos</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Ecografías / imágenes</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Fotografías clínicas</label><input type="file" class="form-control" multiple></div><div class="col-md-12"><div class="clinical-note"><i class="bi bi-info-circle me-1"></i> Los archivos clínicos se almacenarán de forma segura y quedarán vinculados a la historia del paciente.</div></div></div></div>
+<!-- AUROSANAX DOCUMENTOS: panel visual aislado; lógica en documento.js -->
+        <div class="clinical-panel" id="hc_docs">
+          <div id="auroDocumentosMount"></div>
+        </div>
         <div class="clinical-actions"><button class="btn-soft" onclick="generarPDFReceta()"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
       </div>
     </section>
@@ -3980,10 +3983,9 @@
     </div>
     <div class="modalx-body">
       <div class="row g-3">
-        <div class="col-md-4"><label class="form-label fw-bold">Nombres *</label><input id="pNombres" class="form-control" autocomplete="given-name"></div>
-        <div class="col-md-4"><label class="form-label fw-bold">Apellidos *</label><input id="pApellidos" class="form-control" autocomplete="family-name"></div>
-        <div class="col-md-2"><label class="form-label fw-bold">Cédula</label><input id="pCedula" class="form-control" type="text" inputmode="numeric" maxlength="10" autocomplete="off"></div>
-        <div class="col-md-2"><label class="form-label fw-bold">Fecha nacimiento</label><input id="pNacimiento" type="date" class="form-control"></div>
+        <div class="col-md-6"><label class="form-label fw-bold">Nombres y apellidos *</label><input id="pNombre" class="form-control"></div>
+        <div class="col-md-3"><label class="form-label fw-bold">Cédula</label><input id="pCedula" class="form-control"></div>
+        <div class="col-md-3"><label class="form-label fw-bold">Fecha nacimiento</label><input id="pNacimiento" type="date" class="form-control"></div>
         <div class="col-md-3"><label class="form-label fw-bold">Sexo</label><select id="pSexo" class="form-select"><option value="">Seleccione</option><option>Femenino</option><option>Masculino</option><option>Otro</option></select></div>
         <div class="col-md-3"><label class="form-label fw-bold">Estado civil</label><select id="pEstadoCivil" class="form-select"><option value="">Seleccione</option><option>Soltero/a</option><option>Casado/a</option><option>Unión libre</option><option>Divorciado/a</option><option>Viudo/a</option><option>Separado/a</option><option>No especifica</option></select></div>
         <div class="col-md-3"><label class="form-label fw-bold">Ocupación</label><input id="pOcupacion" class="form-control"></div>
@@ -4429,6 +4431,18 @@ function showClinicalTab(id,btn){
         }
       }catch(error){
         console.warn('AUROSANAX: no se pudo actualizar visualmente Certificados.', error);
+      }
+    },60);
+  }
+
+  if(id==='hc_docs'){
+    setTimeout(()=>{
+      try{
+        if(window.auroDocumentos && typeof window.auroDocumentos.inicializar==='function'){
+          window.auroDocumentos.inicializar({forzar:true});
+        }
+      }catch(error){
+        console.warn('AUROSANAX: no se pudo actualizar visualmente Documentos.', error);
       }
     },60);
   }
@@ -9519,7 +9533,7 @@ document.addEventListener('click',e=>{
 })();
 </script>
 
-<script src="pacientes.js?v=20260814_pacientes_nombres_cedula_antiduplicado_v1"></script>
+<script src="pacientes.js?v=20260629_fase2_final"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
 <script src="agenda.js?v=20260719_agenda_v1"></script>
 <script id="auro-erp-inicio-despues-seguridad">
@@ -9566,6 +9580,8 @@ document.addEventListener('click',e=>{
 <script src="recomendaciones.js?v=20260812_recomendaciones_1_0_0"></script>
 <!-- AUROSANAX - Certificados médicos por atención -->
 <script src="certificado.js?v=20260813_certificados_1_3_8_dx_visual_premium"></script>
+<!-- AUROSANAX - Documentos clínicos por atención -->
+<script src="documento.js?v=20260814_documentos_1_1_0_guardado_categoria"></script>
 <script>
 (function auroConectarDiagnosticosIndex(){
   'use strict';
