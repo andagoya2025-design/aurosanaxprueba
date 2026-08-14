@@ -401,7 +401,7 @@ function resetPatients(){
 }
 
 function limpiarFormularioPaciente(){
-  ['pNombre','pCedula','pNacimiento','pSexo','pEstadoCivil','pOcupacion','pTelefono','pEmail','pDireccion','pSeguro','pContactoEmergencia','pTelefonoEmergencia','pTipoSangre','pAlergias','pNotas'].forEach(id=>{
+  ['pNombres','pApellidos','pCedula','pNacimiento','pSexo','pEstadoCivil','pOcupacion','pTelefono','pEmail','pDireccion','pSeguro','pContactoEmergencia','pTelefonoEmergencia','pTipoSangre','pAlergias','pNotas'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.value='';
   });
@@ -437,7 +437,8 @@ function editarPacienteModal(idPaciente){
   editingPatientId = idPaciente;
   setTextIfExists('patientModalTitle','Editar paciente');
   setTextIfExists('patientSaveBtn','Actualizar paciente');
-  setValueIfExists('pNombre', p.nombre || [p.nombres||'', p.apellidos||''].join(' ').trim());
+  setValueIfExists('pNombres', p.nombres || '');
+  setValueIfExists('pApellidos', p.apellidos || '');
   setValueIfExists('pCedula', p.cedula || '');
   setValueIfExists('pNacimiento', normalizarFechaInput(p.fecha_nacimiento || ''));
   setValueIfExists('pSexo', p.sexo || '');
@@ -501,17 +502,47 @@ async function cargarPacientesDesdeSheets(){
   }
 }
 
-async function savePatient(){
-  const nombreCompleto=document.getElementById('pNombre').value.trim();
-  if(!nombreCompleto){ alert('Ingrese nombres y apellidos del paciente'); return; }
+let auroGuardandoPaciente = false;
 
-  const partes = nombreCompleto.split(' ');
-  const nombres = partes.slice(0, Math.max(1, partes.length - 1)).join(' ');
-  const apellidos = partes.length > 1 ? partes.slice(-1).join(' ') : '';
+function auroNormalizarCedulaPaciente(valor){
+  return String(valor || '').replace(/\D/g, '').trim();
+}
+
+function auroPacienteDuplicadoPorCedula(cedula, idExcluir){
+  const buscada = auroNormalizarCedulaPaciente(cedula);
+  if(!buscada) return null;
+
+  return (Array.isArray(patients) ? patients : []).find(p => {
+    const idPaciente = String(p?.id_paciente || '').trim();
+    if(idExcluir && idPaciente === String(idExcluir).trim()) return false;
+    return auroNormalizarCedulaPaciente(p?.cedula || p?.numero_documento || '') === buscada;
+  }) || null;
+}
+
+async function savePatient(){
+  if(auroGuardandoPaciente) return;
+
+  const nombres = document.getElementById('pNombres')?.value.trim() || '';
+  const apellidos = document.getElementById('pApellidos')?.value.trim() || '';
+  const cedula = auroNormalizarCedulaPaciente(document.getElementById('pCedula')?.value || '');
+
+  if(!nombres){ alert('Ingrese los nombres del paciente.'); return; }
+  if(!apellidos){ alert('Ingrese los apellidos del paciente.'); return; }
+  if(!cedula){ alert('Ingrese la cédula del paciente.'); return; }
+  if(cedula.length !== 10){ alert('La cédula debe contener 10 dígitos. Verifique también el cero inicial.'); return; }
+
+  const esEdicion = !!editingPatientId;
+  const duplicado = auroPacienteDuplicadoPorCedula(cedula, esEdicion ? editingPatientId : '');
+  if(duplicado){
+    alert('Ya existe un paciente registrado con esta cédula: ' + (duplicado.nombre || [duplicado.nombres||'', duplicado.apellidos||''].join(' ').trim() || duplicado.id_paciente || 'Paciente registrado') + '.');
+    return;
+  }
+
+  const nombreCompleto = [nombres, apellidos].filter(Boolean).join(' ').trim();
 
   const pacienteSheet = {
     tipo_documento: 'Cédula',
-    numero_documento: document.getElementById('pCedula').value.trim(),
+    numero_documento: cedula,
     nombres: nombres,
     apellidos: apellidos,
     fecha_nacimiento: document.getElementById('pNacimiento').value,
@@ -560,8 +591,16 @@ async function savePatient(){
     estado: 'Activa'
   };
 
+  const btnGuardar = document.getElementById('patientSaveBtn');
+  const textoBoton = btnGuardar?.innerHTML || '';
+
   try{
-    const esEdicion = !!editingPatientId;
+    auroGuardandoPaciente = true;
+    if(btnGuardar){
+      btnGuardar.disabled = true;
+      btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
+    }
+
     const payloadData = esEdicion ? {...pacienteSheet, id_paciente: editingPatientId} : pacienteSheet;
 
     await fetch(API_URL, {
@@ -599,6 +638,12 @@ async function savePatient(){
   }catch(error){
     console.error(error);
     alert('No se pudo guardar en Google Sheets. Revise la conexión o la implementación del Apps Script.');
+  }finally{
+    auroGuardandoPaciente = false;
+    if(btnGuardar){
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = textoBoton || '<i class="bi bi-save me-1"></i> Guardar paciente';
+    }
   }
 }
 
