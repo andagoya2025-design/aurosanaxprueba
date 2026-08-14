@@ -46,6 +46,7 @@
     No modifica guardado, Plan, backend ni base de datos.
   */
   let recetaVentanaPaciente = null;
+  let recetaPreviewVisible = false;
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -620,13 +621,202 @@
       #recetasHistorialBox .auro-receta-filter-label{display:block;color:#64748b;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.035em;margin:0 0 4px 2px;}
       #recetasHistorialBox .auro-receta-dx-cell b{display:block;color:#111827;font-size:12px;line-height:1.25;}
       #recetasHistorialBox .auro-receta-dx-cell small{display:block;color:#64748b;margin-top:2px;}
+      #recetasHistorialBox .auro-receta-medico-cell{min-width:190px;line-height:1.22;}
+      #recetasHistorialBox .auro-receta-medico-cell b{
+        display:block;
+        color:#111827;
+        font-size:12.5px;
+        font-weight:900;
+        margin-bottom:3px;
+        white-space:normal;
+        overflow-wrap:anywhere;
+      }
+      #recetasHistorialBox .auro-receta-medico-cell small{
+        display:block;
+        color:#64748b;
+        font-size:12px;
+        font-weight:650;
+        line-height:1.25;
+        white-space:normal;
+        overflow-wrap:anywhere;
+      }
+
+      /* AUROSANAX RECETAS 2.6B - PULIDO VISUAL PREMIUM COMPLETO */
+      #recetas > .cardx > .section-head{
+        align-items:flex-end!important;
+        gap:18px!important;
+        padding-bottom:14px!important;
+        border-bottom:1px solid #f1e7ed!important;
+        margin-bottom:15px!important;
+      }
+      #recetas > .cardx > .section-head h4{
+        margin:0!important;
+        color:#111827!important;
+        font-size:22px!important;
+        line-height:1.12!important;
+        font-weight:950!important;
+        letter-spacing:-.015em!important;
+      }
+      #recetas > .cardx > .section-head p{
+        margin:4px 0 0!important;
+        color:#64748b!important;
+        font-size:13px!important;
+        line-height:1.35!important;
+        max-width:680px!important;
+      }
+      #recetas .auro-receta-main-actions{
+        display:grid!important;
+        grid-template-columns:repeat(3,max-content)!important;
+        gap:9px!important;
+        align-items:stretch!important;
+        justify-content:end!important;
+        flex-wrap:nowrap!important;
+      }
+      #recetas .auro-receta-main-actions button{
+        min-height:43px!important;
+        padding:9px 13px!important;
+        border-radius:13px!important;
+        font-size:12.5px!important;
+        line-height:1.15!important;
+        font-weight:850!important;
+        white-space:nowrap!important;
+        display:inline-flex!important;
+        align-items:center!important;
+        justify-content:center!important;
+        gap:0!important;
+        box-shadow:0 5px 14px rgba(15,23,42,.045)!important;
+      }
+      #recetas .auro-receta-main-actions button i.bi,
+      #recetas .auro-receta-context-actions button i.bi{
+        margin-right:6px!important;
+        flex:0 0 auto!important;
+      }
+      #recetas #btnVistaPreviaReceta[aria-pressed="true"]{
+        background:#fdf2f8!important;
+        color:#8b1e5a!important;
+        border-color:#e9a9ca!important;
+        box-shadow:0 0 0 3px rgba(194,59,131,.08)!important;
+      }
+      #recetas #btnPdfRecetaOficial{
+        border-color:#d7c3d1!important;
+        background:#fff!important;
+      }
+      #recetas .auro-receta-context-kicker{
+        letter-spacing:.09em!important;
+      }
+      #recetas .auro-receta-context-name{
+        font-size:20px!important;
+        line-height:1.18!important;
+      }
+      #recetas .auro-receta-consulta-item{
+        text-align:center!important;
+        border:1px solid #dbeafe!important;
+        background:linear-gradient(135deg,#eff6ff,#ffffff)!important;
+        border-radius:14px!important;
+        margin:5px 8px 5px 0!important;
+        padding:9px 10px!important;
+        align-self:stretch!important;
+      }
+      #recetas .auro-receta-consulta-item small{
+        color:#1d4ed8!important;
+        margin-bottom:3px!important;
+      }
+      #recetas .auro-receta-consulta-item b{
+        color:#1e3a8a!important;
+        font-size:17px!important;
+        font-weight:950!important;
+        letter-spacing:.01em!important;
+      }
+      #recetas .auro-receta-profesional-item{
+        border-left:3px solid #ead5e2!important;
+        padding-left:12px!important;
+      }
+      #recetas .auro-receta-profesional-item .auro-receta-especialidad{
+        display:block!important;
+        color:#111827!important;
+        font-size:13px!important;
+        font-weight:950!important;
+        line-height:1.22!important;
+        margin-bottom:3px!important;
+      }
+      #recetas .auro-receta-profesional-item .auro-receta-medico{
+        display:block!important;
+        color:#64748b!important;
+        font-size:12.5px!important;
+        font-weight:650!important;
+        line-height:1.25!important;
+        overflow-wrap:anywhere!important;
+      }
+      #recetas #recetaPreview{
+        border:1px solid #ead5e2!important;
+        box-shadow:0 12px 30px rgba(15,23,42,.07)!important;
+        margin-top:14px!important;
+      }
+      #recetas #recetaPreview.auro-receta-preview-hidden{
+        display:none!important;
+      }
+      #recetasHistorialBox th.auro-receta-consulta-th,
+      #recetasHistorialBox td.auro-receta-consulta-td{
+        text-align:center!important;
+        vertical-align:middle!important;
+      }
+      #recetasHistorialBox .auro-receta-consulta-badge{
+        min-width:58px!important;
+        display:inline-flex!important;
+        align-items:center!important;
+        justify-content:center!important;
+        padding:7px 10px!important;
+        border-radius:12px!important;
+        background:#eff6ff!important;
+        border:1px solid #bfdbfe!important;
+        color:#1e40af!important;
+        font-size:13px!important;
+        font-weight:950!important;
+        line-height:1!important;
+        white-space:nowrap!important;
+      }
+      #recetasHistorialBox .table-modern th{
+        vertical-align:middle!important;
+      }
+      #recetasHistorialBox .table-modern td{
+        padding-top:12px!important;
+        padding-bottom:12px!important;
+      }
+
+      @media(max-width:1180px){
+        #recetas .auro-receta-main-actions{
+          grid-template-columns:repeat(3,1fr)!important;
+          width:100%!important;
+          justify-content:stretch!important;
+        }
+        #recetas > .cardx > .section-head{
+          align-items:flex-start!important;
+          flex-wrap:wrap!important;
+        }
+        #recetas > .cardx > .section-head > div:first-child{
+          width:100%!important;
+        }
+      }
       @media(max-width:980px){
         #recetas .auro-receta-context-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+        #recetas .auro-receta-profesional-item{grid-column:1/-1!important;}
+        #recetas .auro-receta-main-actions button{min-height:44px!important;}
       }
       @media(max-width:760px){
         #recetas .cardx{padding:14px!important;border-radius:18px!important;}
         #recetas .section-head{gap:10px!important;}
         #recetas .section-head h4{font-size:20px!important;line-height:1.08!important;}
+        #recetas .auro-receta-main-actions{
+          width:100%!important;
+          grid-template-columns:1fr 1fr 1fr!important;
+          gap:7px!important;
+        }
+        #recetas .auro-receta-main-actions button{
+          min-width:0!important;
+          padding:8px 7px!important;
+          font-size:11.5px!important;
+          white-space:normal!important;
+        }
         #recetas .row.g-3{row-gap:10px!important;}
         #recMedicamento,#recIndicaciones,#recRecomendaciones{
           font-size:13px!important;
@@ -641,12 +831,77 @@
         #recetas .auro-receta-context-actions{justify-content:flex-start;margin-top:9px;}
         #recetas .auro-receta-context-grid{grid-template-columns:1fr 1fr;padding:0 12px 10px;}
         #recetas .auro-receta-context-item{padding:8px 8px 5px 0;}
-        #recetas .auro-receta-context-name{font-size:16px;}
+        #recetas .auro-receta-context-name{font-size:17px!important;}
+        #recetas .auro-receta-consulta-item{
+          margin:4px 6px 4px 0!important;
+          padding:8px!important;
+        }
+        #recetas .auro-receta-consulta-item b{font-size:16px!important;}
+        #recetas .auro-receta-profesional-item{
+          grid-column:1/-1!important;
+          border-left:3px solid #ead5e2!important;
+          padding-left:10px!important;
+        }
         #recetas .auro-receta-modebar{display:block;font-size:12px;}
         #recetas .auro-receta-modebar .badge-auro{display:inline-block;margin-top:6px;}
       }
+      @media(max-width:520px){
+        #recetas .auro-receta-main-actions{
+          grid-template-columns:1fr!important;
+          gap:7px!important;
+        }
+        #recetas .auro-receta-main-actions button{
+          width:100%!important;
+          min-height:43px!important;
+          font-size:12.5px!important;
+          white-space:normal!important;
+        }
+        #recetas .auro-receta-context-grid{
+          grid-template-columns:1fr 1fr!important;
+        }
+        #recetas .auro-receta-consulta-item{
+          grid-column:1/-1!important;
+          margin-right:0!important;
+        }
+      }
     `;
     document.head.appendChild(style);
+  }
+
+  function auroRecetaAfinarInterfazPremium(){
+    const seccion = el('recetas');
+    if(!seccion) return;
+
+    const head = seccion.querySelector(':scope > .cardx > .section-head');
+    if(head){
+      const titulo = head.querySelector('h4');
+      const subtitulo = head.querySelector('p');
+      const acciones = head.querySelector('.d-flex');
+
+      if(titulo) titulo.textContent = 'Prescripción clínica';
+      if(subtitulo) subtitulo.textContent = 'Emisión, revisión e impresión de la prescripción asociada a la atención activa.';
+
+      if(acciones){
+        acciones.classList.add('auro-receta-main-actions');
+
+        const pdf = acciones.querySelector('button[onclick*="auroRecetaAbrirOficialDesdeIndex"]');
+        if(pdf){
+          pdf.id = 'btnPdfRecetaOficial';
+          pdf.setAttribute('data-auro-receta-action','pdf');
+          pdf.innerHTML = '<i class="bi bi-filetype-pdf"></i> PDF / imprimir';
+        }
+
+        const guardar = acciones.querySelector('button[onclick*="guardarRecetaERP"]');
+        if(guardar){
+          guardar.setAttribute('data-auro-receta-action','guardar');
+        }
+      }
+    }
+
+    const nota = seccion.querySelector(':scope > .cardx > .clinical-note.mt-3');
+    if(nota){
+      nota.innerHTML = '<i class="bi bi-info-circle me-1"></i> La prescripción se conserva como un único documento clínico asociado a la atención activa, aunque incluya varios medicamentos.';
+    }
   }
 
   function recetaMedicamentosPlanActualesSeguros(){
@@ -686,6 +941,7 @@
     recetaEditandoId = null;
     recetaNuevaForzada = false;
     recetaEstadoVisual = '';
+    auroRecetaMostrarPreview(false);
     recetaBloqueoPostGuardadoHasta = 0;
     if(recetaEstadoTimer){ clearTimeout(recetaEstadoTimer); recetaEstadoTimer = null; }
 
@@ -1523,6 +1779,7 @@
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
     recetaNuevaForzada = true;
+    auroRecetaMostrarPreview(false);
     recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     recetaEstadoVisual = '';
@@ -1607,13 +1864,51 @@
 
     box = document.createElement('div');
     box.id = 'recetaPreview';
-    box.className = 'cardx p-4 bg-white mt-4';
-    box.innerHTML = `<div class="text-muted text-center py-4">Vista previa de receta pendiente. Complete los campos y presione <b>Vista previa</b> o <b>PDF / imprimir</b>.</div>`;
+    box.className = 'cardx p-4 bg-white mt-4 auro-receta-preview-hidden';
+    box.style.display = 'none';
+    box.innerHTML = `<div class="text-muted text-center py-4">Vista previa pendiente. Complete los campos y presione <b>Vista previa</b> cuando desee revisarla.</div>`;
 
     const nota = seccion.querySelector('.clinical-note.mt-3');
     if(nota && nota.parentNode) nota.parentNode.insertBefore(box, nota.nextSibling);
     else seccion.querySelector('.cardx')?.appendChild(box);
     return box;
+  }
+
+  function auroRecetaActualizarBotonVistaPrevia(){
+    const btn = el('btnVistaPreviaReceta');
+    if(!btn) return;
+    btn.setAttribute('aria-pressed', recetaPreviewVisible ? 'true' : 'false');
+    btn.innerHTML = recetaPreviewVisible
+      ? '<i class="bi bi-eye-slash"></i> Ocultar vista'
+      : '<i class="bi bi-eye"></i> Vista previa';
+  }
+
+  function auroRecetaMostrarPreview(mostrar){
+    recetaPreviewVisible = !!mostrar;
+    const box = asegurarVistaPreviaReceta();
+    if(box){
+      box.classList.toggle('auro-receta-preview-hidden', !recetaPreviewVisible);
+      box.style.display = recetaPreviewVisible ? '' : 'none';
+    }
+    auroRecetaActualizarBotonVistaPrevia();
+    return recetaPreviewVisible;
+  }
+
+  function auroRecetaTogglePreview(){
+    if(recetaPreviewVisible){
+      auroRecetaMostrarPreview(false);
+      return false;
+    }
+
+    auroRecetaMostrarPreview(true);
+    window.vistaPreviaReceta();
+    const box = el('recetaPreview');
+    if(box){
+      setTimeout(function(){
+        try{ box.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
+      }, 40);
+    }
+    return true;
   }
 
   function auroRecetaBuscarPacientePorReceta(r){
@@ -2244,7 +2539,7 @@
 
       if(!paciente){
         card.classList.add('empty');
-        card.innerHTML = '<div class="p-3"><b>Receta médica</b><div class="small mt-1">Seleccione o abra un paciente antes de trabajar con recetas.</div></div>';
+        card.innerHTML = '<div class="p-3"><b>Paciente activo</b><div class="small mt-1">Seleccione o abra un paciente antes de trabajar con la prescripción.</div></div>';
       }else{
         card.classList.remove('empty');
         const nombre = String(paciente.nombre || ((paciente.nombres || '') + ' ' + (paciente.apellidos || ''))).replace(/\s+/g,' ').trim() || 'Paciente';
@@ -2264,7 +2559,7 @@
         card.innerHTML = `
           <div class="auro-receta-context-head">
             <div>
-              <div class="auro-receta-context-kicker">Receta médica · paciente activo</div>
+              <div class="auro-receta-context-kicker">Paciente activo</div>
               <div class="auro-receta-context-name">${safe(nombre)}</div>
             </div>
             <div class="auro-receta-context-actions">
@@ -2277,10 +2572,9 @@
             <div class="auro-receta-context-item"><small>Edad</small><b>${safe(edad)}</b></div>
             <div class="auro-receta-context-item"><small>WhatsApp</small><b>${safe(whatsapp)}</b></div>
             <div class="auro-receta-context-item"><small>ID paciente</small><b>${safe(idPaciente)}</b></div>
-            <div class="auro-receta-context-item"><small>Consulta</small><b>${consulta ? 'Consulta #' + safe(consulta) : '—'}</b></div>
+            <div class="auro-receta-context-item auro-receta-consulta-item"><small>Consulta</small><b>${consulta ? 'N.º ' + safe(consulta) : '—'}</b></div>
             <div class="auro-receta-context-item"><small>Fecha de atención</small><b>${safe(fechaAtencion)}</b></div>
-            <div class="auro-receta-context-item"><small>Médico responsable</small><b>${safe(nombreMedico)}</b></div>
-            <div class="auro-receta-context-item"><small>Especialidad</small><b>${safe(especialidad)}</b></div>
+            <div class="auro-receta-context-item auro-receta-profesional-item" style="grid-column:span 2"><small>Especialidad / médico</small><span class="auro-receta-especialidad">${safe(especialidad)}</span><span class="auro-receta-medico">${safe(nombreMedico)}</span></div>
             <div class="auro-receta-context-item" style="grid-column:1/-1"><small>ID atención</small><b>${safe(idAtencion)}</b></div>
           </div>`;
       }
@@ -2295,7 +2589,7 @@
       row.parentNode.insertBefore(modebar, row);
     }
     if(modebar){
-      modebar.innerHTML = `<span><i class="bi bi-info-circle me-1"></i> La receta puede originarse desde el Plan clínico. Los cambios realizados aquí afectan únicamente el documento de receta y no modifican el Plan de la atención.</span><span class="badge-auro ${safe(modo.clase)}">${safe(modo.texto)}</span>`;
+      modebar.innerHTML = `<span><i class="bi bi-info-circle me-1"></i> Origen clínico: puede cargarse desde Plan. Los cambios realizados aquí afectan únicamente este documento y no modifican el Plan de la atención.</span><span class="badge-auro ${safe(modo.clase)}">${safe(modo.texto)}</span>`;
     }
 
     let formTitle = el('auroRecetaFormTitle');
@@ -2306,7 +2600,7 @@
       row.parentNode.insertBefore(formTitle, row);
     }
     if(formTitle){
-      formTitle.innerHTML = `<b>Receta actual</b><small>Vista y edición sobre la misma receta clínica.</small>`;
+      formTitle.innerHTML = `<b>Tratamiento e indicaciones</b><small>Edición del documento asociado a la atención actual.</small>`;
     }
   }
 
@@ -3553,8 +3847,8 @@
     box.innerHTML = `
       <div class="section-head">
         <div>
-          <h4 class="fw-bold mb-1">Recetas emitidas del paciente</h4>
-          <p class="text-muted mb-1">Historial clínico del paciente activo. Puede filtrar, revisar, editar o reimprimir.</p>
+          <h4 class="fw-bold mb-1">Historial de recetas</h4>
+          <p class="text-muted mb-1">Paciente activo · filtre, revise, edite o reimprima una prescripción emitida.</p>
           <div class="small text-muted" id="recetasContador">Total recetas encontradas: 0</div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
@@ -3616,17 +3910,16 @@
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Consulta</th>
+                <th class="auro-receta-consulta-th">Consulta</th>
                 <th>Paciente</th>
-                <th>Médico</th>
-                <th>Especialidad</th>
+                <th>Especialidad / médico</th>
                 <th>CIE-10 / diagnóstico</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody id="recetasHistorialBody">
-              <tr><td colspan="8" class="text-center text-muted py-4">Sin recetas emitidas.</td></tr>
+              <tr><td colspan="7" class="text-center text-muted py-4">Sin recetas emitidas.</td></tr>
             </tbody>
           </table>
         </div>
@@ -3754,7 +4047,7 @@
     if(btnSig) btnSig.disabled = recetasPaginaActual >= totalPaginas;
 
     if(!pagina.length){
-      body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Sin recetas emitidas para este paciente activo.</td></tr>';
+      body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Sin recetas emitidas para este paciente activo.</td></tr>';
       if(mobile) mobile.innerHTML = '<div class="text-muted small py-3">Sin recetas emitidas para este paciente activo.</div>';
       return;
     }
@@ -3770,10 +4063,9 @@
 
       const fila = `<tr>
         <td><b>${safe(fechaVisual(r.fecha_receta))}</b></td>
-        <td><span class="badge-auro badge-blue">${safe(consulta)}</span></td>
+        <td class="auro-receta-consulta-td"><span class="auro-receta-consulta-badge">${r.__consulta ? 'N.º ' + safe(r.__consulta) : '—'}</span></td>
         <td>${safe(pacienteCorto)}<br><small class="text-muted">${safe(r.__paciente_cedula || '')}</small></td>
-        <td>${safe(r.__medico_nombre || '—')}</td>
-        <td>${safe(r.__especialidad || '—')}</td>
+        <td class="auro-receta-medico-cell"><b>${safe(r.__especialidad || '—')}</b><small>${safe(r.__medico_nombre || '—')}</small></td>
         <td class="auro-receta-dx-cell"><b>${safe(r.diagnostico_cie10 || '—')}</b><small>${safe(diagnostico)}</small></td>
         <td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td>
         <td>
@@ -3782,7 +4074,7 @@
       </tr>`;
 
       const detalle = abierto ? `<tr class="receta-acciones-row">
-        <td colspan="8">
+        <td colspan="7">
           <div class="cardx p-3 bg-white mt-1 mb-2" style="border-left:4px solid #8b1e5a;">
             <div class="fw-bold mb-2">Acciones de receta</div>
             <div class="d-flex flex-column gap-2" style="max-width:220px;">
@@ -3826,10 +4118,9 @@
             '<div><b>' + safe(fechaVisual(r.fecha_receta)) + '</b><br><small class="text-muted">' + idSeguro + '</small></div>' +
             '<span class="badge-auro ' + estadoClase + '">' + safe(r.estado || 'Emitida') + '</span>' +
           '</div>' +
-          '<div class="small"><b>Consulta:</b> ' + safe(consulta) + '</div>' +
+          '<div class="small"><b>Consulta:</b> ' + (r.__consulta ? 'N.º ' + safe(r.__consulta) : '—') + '</div>' +
           '<div class="small"><b>Paciente:</b> ' + safe(pacienteCorto) + (r.__paciente_cedula ? '<br><span class="text-muted">' + safe(r.__paciente_cedula) + '</span>' : '') + '</div>' +
-          '<div class="small"><b>Médico:</b> ' + safe(r.__medico_nombre || '—') + '</div>' +
-          '<div class="small"><b>Especialidad:</b> ' + safe(r.__especialidad || '—') + '</div>' +
+          '<div class="small" style="margin-top:6px;"><b>Especialidad / médico:</b><br><span style="font-weight:900;color:#111827;">' + safe(r.__especialidad || '—') + '</span><br><span class="text-muted">' + safe(r.__medico_nombre || '—') + '</span></div>' +
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || '—') + '</div>' +
           '<div class="small"><b>Diagnóstico:</b> ' + safe(diagnostico) + '</div>' +
           '<div class="d-grid gap-2 mt-2">' +
@@ -3886,6 +4177,7 @@
 
     await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
 
+    auroRecetaMostrarPreview(true);
     const box = asegurarVistaPreviaReceta();
     if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r), 'administrativo');
 
@@ -3928,8 +4220,16 @@
     const seccion = el('recetas'); if(!seccion) return;
     const actions = seccion.querySelector('.section-head .d-flex');
     if(actions && !el('btnVistaPreviaReceta')){
-      const btn = document.createElement('button'); btn.id = 'btnVistaPreviaReceta'; btn.type = 'button'; btn.className = 'btn-soft'; btn.innerHTML = '<i class="bi bi-eye me-1"></i> Vista previa'; btn.onclick = window.vistaPreviaReceta; actions.insertBefore(btn, actions.firstChild);
+      const btn = document.createElement('button');
+      btn.id = 'btnVistaPreviaReceta';
+      btn.type = 'button';
+      btn.className = 'btn-soft';
+      btn.setAttribute('data-auro-receta-action','preview');
+      btn.onclick = auroRecetaTogglePreview;
+      actions.insertBefore(btn, actions.firstChild);
+      auroRecetaActualizarBotonVistaPrevia();
     }
+    auroRecetaAfinarInterfazPremium();
   }
 
 
@@ -3939,6 +4239,7 @@
         if(el('recetas') && el('recetas').classList.contains('active')){
           verificarCambioAtencionReceta();
           sincronizarMedicoRecetaDesdeAtencion();
+          auroRecetaAfinarInterfazPremium();
           auroRecetaActualizarCabeceraClinicaPremium();
           asegurarHistorialRecetas();
           recetasPaginaActual = 1;
@@ -3988,6 +4289,7 @@
     recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     instalarEstilosEdicionRecetaPremium();
+    auroRecetaAfinarInterfazPremium();
     cargarMedicosActivosReceta(false).then(function(){
       sincronizarMedicoRecetaDesdeAtencion();
       if(el('recetaPreview')) vistaPreviaReceta();
@@ -3999,6 +4301,7 @@
     }, 250);
     agregarBotonVistaPrevia();
     asegurarVistaPreviaReceta();
+    auroRecetaMostrarPreview(false);
     auroRecetaActualizarCabeceraClinicaPremium();
     asegurarHistorialRecetas();
     actualizarBotonGuardarReceta();
@@ -4040,8 +4343,8 @@
       );
     };
   });
-  document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
-  document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
+  document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(recetaPreviewVisible && ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
+  document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(recetaPreviewVisible && ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
 
   /*
     API PÚBLICA OFICIAL DE RECETAS
@@ -4050,7 +4353,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'2.6 cabecera e historial clínico',
+    version:'2.6B pulido visual premium',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
