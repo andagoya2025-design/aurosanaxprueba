@@ -2044,39 +2044,10 @@
           .auro-receta-brand h2{margin:0;color:#8b1e5a;font-weight:950;letter-spacing:.04em;font-size:22px;line-height:1.05}.auro-receta-brand small{color:#6b7280;font-weight:750;font-size:11px;line-height:1.3;display:block;margin-top:3px}
           .auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
           .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;overflow-wrap:anywhere;word-break:normal}
-          .modo-paciente .auro-receta-grid{
-            grid-template-columns:minmax(0,2.15fr) minmax(0,1.15fr) minmax(0,.82fr) minmax(0,1.35fr) minmax(0,2.05fr);
-            align-items:stretch
-          }
-          .modo-paciente .auro-receta-grid .auro-rx-dato{
-            display:flex;
-            flex-direction:column;
-            justify-content:flex-start;
-            min-height:52px
-          }
-          .modo-paciente .auro-rx-diagnostico{
-            grid-column:1/-1;
-            min-height:44px!important
-          }
-          .modo-paciente .auro-rx-paciente b,
-          .modo-paciente .auro-rx-diagnostico b{
-            white-space:normal;
-            overflow-wrap:anywhere;
-            word-break:normal
-          }
-          .modo-paciente .auro-rx-fecha span,
-          .modo-paciente .auro-rx-numero span{
-            white-space:nowrap;
-            letter-spacing:.025em
-          }
-          .modo-paciente .auro-rx-fecha b{
-            white-space:nowrap
-          }
-          .modo-paciente .auro-rx-numero b{
-            white-space:nowrap;
-            font-size:10.9px;
-            letter-spacing:-.01em
-          }
+          .modo-paciente .auro-receta-grid{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr) minmax(0,.72fr) minmax(0,1fr) minmax(0,1.35fr) minmax(0,1.9fr);align-items:stretch}
+          .modo-paciente .auro-receta-grid .auro-rx-dato{display:flex;flex-direction:column;justify-content:flex-start;min-height:52px}
+          .modo-paciente .auro-receta-grid .auro-rx-paciente b,
+          .modo-paciente .auro-receta-grid .auro-rx-diagnostico b{white-space:normal;overflow-wrap:anywhere}
           .auro-receta-section{margin-top:9px;break-inside:avoid}.auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950}.auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;white-space:normal;word-break:break-word;background:#fff;box-shadow:0 4px 14px rgba(139,30,90,.035)}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
@@ -2089,9 +2060,7 @@
             .auro-receta-grid{grid-template-columns:1fr 1fr}
             .modo-paciente .auro-receta-grid{grid-template-columns:1fr 1fr}
             .modo-paciente .auro-rx-paciente,
-            .modo-paciente .auro-rx-numero,
             .modo-paciente .auro-rx-diagnostico{grid-column:1/-1}
-            .modo-paciente .auro-rx-numero b{white-space:normal;font-size:11.5px}
             .auro-receta-footer{grid-template-columns:1fr}
             .auro-rx-table-wrap{overflow-x:auto}
             .auro-rx-table{min-width:720px}
@@ -2242,7 +2211,7 @@
         }
 
         .auro-media-receta .auro-receta-grid{
-          grid-template-columns:minmax(0,2.15fr) minmax(0,1.15fr) minmax(0,.82fr) minmax(0,1.35fr) minmax(0,2.05fr)!important;
+          grid-template-columns:minmax(0,1.55fr) minmax(0,1fr) minmax(0,.72fr) minmax(0,1fr) minmax(0,1.35fr) minmax(0,1.9fr)!important;
           gap:3px!important;
           padding:4px!important;
           margin:0 0 5px!important;
@@ -2265,28 +2234,6 @@
         .auro-media-receta .auro-receta-grid b{
           font-size:11.9px!important;
           line-height:1.10!important;
-        }
-
-        .auro-media-receta .auro-rx-diagnostico{
-          grid-column:1/-1!important;
-          min-height:36px!important;
-        }
-
-        .auro-media-receta .auro-rx-paciente b{
-          white-space:normal!important;
-          overflow-wrap:anywhere!important;
-        }
-
-        .auro-media-receta .auro-rx-fecha span,
-        .auro-media-receta .auro-rx-numero span,
-        .auro-media-receta .auro-rx-fecha b,
-        .auro-media-receta .auro-rx-numero b{
-          white-space:nowrap!important;
-        }
-
-        .auro-media-receta .auro-rx-numero b{
-          font-size:10.6px!important;
-          letter-spacing:-.01em!important;
         }
 
         .auro-media-receta .auro-receta-section{
@@ -3118,6 +3065,16 @@
       .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || '')));
   }
 
+  function conectarBotonNuevaRecetaSuperior(){
+    const btn = el('btnNuevaRecetaSuperiorERP');
+    if(!btn || btn.dataset.auroNuevaRecetaConectada === '1') return;
+
+    btn.dataset.auroNuevaRecetaConectada = '1';
+    btn.addEventListener('click', function(){
+      limpiarFormularioReceta();
+    });
+  }
+
   function asegurarHistorialRecetas(){
     const seccion = el('recetas'); if(!seccion) return null;
     let box = el('recetasHistorialBox'); if(box) return box;
@@ -3544,6 +3501,7 @@
     agregarBotonVistaPrevia();
     asegurarVistaPreviaReceta();
     asegurarHistorialRecetas();
+    conectarBotonNuevaRecetaSuperior();
     actualizarBotonGuardarReceta();
     renderHistorialRecetas();
     cargarRecetasDesdeSheets(false).then(renderHistorialRecetas);
@@ -3764,16 +3722,4 @@
    - Mantiene original/copia A4, medicamentos, firma, guardado,
      Plan, Google Sheets, Apps Script, IDs y eventos.
    - Responsive: escritorio, Android, iPhone y iPad.
-===================================================== */
-
-
-/* =====================================================
-   AUROSANAX RECETAS 3.6 - ENCABEZADO PREMIUM DEFINITIVO
-   - Primera fila: Paciente, Cédula, Edad, Fecha de emisión y N.º de receta.
-   - Diagnóstico pasa a segunda fila completa.
-   - Paciente recibe mayor ancho para mostrar el nombre completo.
-   - Fecha de emisión y N.º de receta se mantienen en una sola línea en A4.
-   - Conserva cédula independiente, edad "N años", firma inferior,
-     original/copia, medicamentos, guardado, Plan y backend.
-   - Responsive para escritorio, iPhone, iPad y Android.
 ===================================================== */
