@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.1.0
+ Versión: 1.2.0
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -31,7 +31,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -316,21 +316,111 @@
     ) || 'Paciente';
   }
 
-  function nombreMedico(ctx){
-    const a = ctx?.atencion || {};
+  function nombreCompletoPersona(p){
+    if(!p || typeof p !== 'object') return '';
     return txt(
+      p.nombre_completo ||
+      p.nombre ||
+      p.nombres_apellidos ||
+      [
+        p.nombres || p.nombre1 || '',
+        p.apellidos || [p.apellido_paterno,p.apellido_materno].filter(Boolean).join(' ')
+      ].filter(Boolean).join(' ')
+    );
+  }
+
+  function resolverMedico(ctx){
+    const a = ctx?.atencion || {};
+    const id = txt(ctx?.idMedico || a.id_medico);
+
+    /*
+      Mismo criterio clínico usado por Certificados:
+      resolver por id_medico contra catálogos de médicos.
+      IMPORTANTE: no usar .doctor-pill porque puede representar
+      al usuario/administrador conectado y no al médico tratante.
+    */
+    const listas = [
+      window.medicos,
+      window.medicosActivos,
+      window.listaMedicos,
+      window.configuracionMedicos,
+      window.medicosConfiguracion
+    ].filter(Array.isArray);
+
+    let m = null;
+    if(id){
+      for(const lista of listas){
+        m = lista.find(x=>txt(x?.id_medico || x?.id || x?.codigo) === id) || null;
+        if(m) break;
+      }
+    }
+
+    const nombre = nombreCompletoPersona(m) || txt(
       a.nombre_medico ||
       a.medico_nombre ||
       window.currentAttention?.nombre_medico ||
-      window.atencionActual?.nombre_medico ||
-      document.querySelector('.doctor-pill strong')?.textContent ||
-      document.querySelector('.doctor-pill b')?.textContent
-    ) || '—';
+      window.atencionActual?.nombre_medico
+    );
+
+    const especialidad = txt(
+      m?.especialidad_principal ||
+      m?.especialidad ||
+      m?.especialidad_medica ||
+      a.especialidad ||
+      a.especialidad_principal ||
+      a.medico_especialidad ||
+      window.currentAttention?.especialidad ||
+      window.currentAttention?.medico_especialidad ||
+      window.atencionActual?.especialidad ||
+      window.atencionActual?.medico_especialidad
+    );
+
+    return {
+      id_medico:id,
+      nombre:nombre || 'Profesional tratante',
+      especialidad
+    };
+  }
+
+  function nombreMedico(ctx){
+    return resolverMedico(ctx).nombre;
+  }
+
+  function especialidadMedico(ctx){
+    return resolverMedico(ctx).especialidad;
   }
 
   function fechaAtencion(ctx){
     const a = ctx?.atencion || {};
-    return txt(a.fecha_atencion || a.fecha_consulta || a.creado_en);
+    return txt(
+      a.fecha_atencion ||
+      a.fecha_consulta ||
+      a.fecha ||
+      a.creado_en
+    );
+  }
+
+  function fechaAtencionVisual(valor){
+    const raw = txt(valor);
+    if(!raw) return '—';
+
+    /*
+      Documentos muestra FECHA clínica, no una hora artificial 00:00.
+      Si el dato viene como ISO/fecha-hora, conserva solo DD/MM/AAAA.
+    */
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m) return `${m[3]}/${m[2]}/${m[1]}`;
+
+    const d = new Date(raw);
+    if(!Number.isNaN(d.getTime())){
+      return d.toLocaleDateString('es-EC',{
+        day:'2-digit',
+        month:'2-digit',
+        year:'numeric'
+      });
+    }
+
+    return raw;
   }
 
   function usuarioActual(){
@@ -595,7 +685,9 @@
                 <span>Fecha atención</span><b id="auroDocFecha">—</b>
               </div>
               <div class="auro-doc-context-item">
-                <span>Médico</span><b id="auroDocMedico">—</b>
+                <span>Médico responsable</span>
+                <b id="auroDocMedico">—</b>
+                <small id="auroDocEspecialidad" style="display:block;margin-top:2px;color:#64748b;font-size:10px;font-weight:750"></small>
               </div>
               <div class="auro-doc-context-item">
                 <span>ID atención</span><b id="auroDocIdAtencion">—</b>
@@ -764,8 +856,9 @@
         : 'Seleccione una atención para consultar o cargar archivos.'
     );
     setText('auroDocConsulta', ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
-    setText('auroDocFecha', fechaVisual(fechaAtencion(ctx)));
+    setText('auroDocFecha', fechaAtencionVisual(fechaAtencion(ctx)));
     setText('auroDocMedico', ctx.id ? nombreMedico(ctx) : '—');
+    setText('auroDocEspecialidad', ctx.id ? especialidadMedico(ctx) : '');
     setText('auroDocIdAtencion', ctx.id || '—');
 
     const estado = document.getElementById('auroDocEstado');
@@ -1197,6 +1290,7 @@
       id_historia:ctx.idHistoria,
       id_medico:ctx.idMedico,
       nombre_medico:nombreMedico(ctx),
+      especialidad:especialidadMedico(ctx),
       id_cita:txt(ctx.atencion?.id_cita),
       id_procedimiento:txt(ctx.atencion?.id_procedimiento),
       fecha_documento:new Date().toISOString(),
