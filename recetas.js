@@ -2409,11 +2409,33 @@
     return partes[0] || '—';
   }
 
+  function auroRecetaIdEspecialidadRegistroMedico(m){
+    if(!m || typeof m !== 'object') return '';
+    const especialidadObj = (m.especialidad && typeof m.especialidad === 'object')
+      ? m.especialidad
+      : null;
+
+    return String(
+      m.id_especialidad ||
+      m.especialidad_id ||
+      m.id_especialidad_principal ||
+      especialidadObj?.id_especialidad ||
+      especialidadObj?.id ||
+      ''
+    ).trim();
+  }
+
   function auroRecetaEspecialidadRegistroMedico(m){
+    const especialidadObj = (m?.especialidad && typeof m.especialidad === 'object')
+      ? m.especialidad
+      : null;
+
     return String(
       m?.especialidad_nombre ||
       m?.nombre_especialidad ||
-      m?.especialidad ||
+      especialidadObj?.nombre_especialidad ||
+      especialidadObj?.nombre ||
+      (typeof m?.especialidad === 'string' ? m.especialidad : '') ||
       m?.especialidad_principal ||
       m?.area ||
       ''
@@ -2462,9 +2484,19 @@
       ''
     ).replace(/\s+/g,' ').trim();
 
+    const idEspecialidad = String(
+      r.id_especialidad ||
+      r.especialidad_id ||
+      auroRecetaIdEspecialidadRegistroMedico(registro) ||
+      atencion.id_especialidad ||
+      atencion.especialidad_id ||
+      ''
+    ).trim();
+
     return {
       id_medico:idMedico,
       nombre:nombre || 'Profesional no identificado',
+      id_especialidad:idEspecialidad,
       especialidad:especialidad || 'Especialidad no registrada'
     };
   }
@@ -2488,6 +2520,7 @@
       __paciente_cedula:String(paciente?.cedula || r?.paciente_cedula || '').trim(),
       __medico_nombre:medico.nombre,
       __medico_id:medico.id_medico,
+      __especialidad_id:medico.id_especialidad,
       __especialidad:medico.especialidad,
       __consulta:auroRecetaNumeroConsultaLectura(r)
     });
@@ -3787,24 +3820,136 @@
     renderHistorialRecetas();
   }
 
+  function auroRecetaClaveTextoFiltro(valor){
+    return String(valor || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+
+  function auroRecetaClaveMedicoFiltro(r){
+    const id = String(r?.__medico_id || r?.id_medico || '').trim();
+    if(id) return 'ID:' + id;
+    const nombre = auroRecetaClaveTextoFiltro(r?.__medico_nombre || r?.medico || '');
+    return nombre ? 'NOMBRE:' + nombre : '';
+  }
+
+  function auroRecetaClaveEspecialidadFiltro(r){
+    const id = String(r?.__especialidad_id || r?.id_especialidad || r?.especialidad_id || '').trim();
+    if(id) return 'ID:' + id;
+    const nombre = auroRecetaClaveTextoFiltro(r?.__especialidad || r?.especialidad || '');
+    return nombre ? 'NOMBRE:' + nombre : '';
+  }
+
+  function auroRecetaNumeroConsultaFiltro(valor){
+    const txt = String(valor || '').trim();
+    if(!txt) return '';
+    const numero = txt.match(/\d+/)?.[0] || '';
+    return numero || txt.replace(/^#/, '').trim();
+  }
+
   function auroRecetaActualizarOpcionesFiltrosHistorial(recetasPaciente){
-    const consultaSel = el('recHistorialConsulta');
+    const consultaInput = el('recHistorialConsulta');
+    const consultaLista = el('recHistorialConsultaLista');
     const medicoSel = el('recHistorialMedico');
     const espSel = el('recHistorialEspecialidad');
+    const recetas = Array.isArray(recetasPaciente) ? recetasPaciente : [];
 
-    function llenar(select, valores, etiqueta){
-      if(!select) return;
-      const actual = String(select.value || '');
-      const unicos = Array.from(new Set((valores || []).map(v => String(v || '').trim()).filter(Boolean)))
-        .sort((a,b) => a.localeCompare(b, 'es', {numeric:true,sensitivity:'base'}));
-      select.innerHTML = '<option value="">' + etiqueta + '</option>' +
-        unicos.map(v => '<option value="' + safe(v) + '">' + safe(v) + '</option>').join('');
-      if(unicos.includes(actual)) select.value = actual;
+    /* CONSULTA:
+       datalist = sugerencias existentes;
+       input = permite escribir manualmente N.º 20, 20, #20, etc. */
+    if(consultaLista){
+      const consultas = Array.from(new Set(
+        recetas.map(r => String(r.__consulta || '').trim()).filter(Boolean)
+      )).sort((a,b) => a.localeCompare(b, 'es', {numeric:true,sensitivity:'base'}));
+
+      consultaLista.innerHTML = consultas
+        .map(n => '<option value="N.º ' + safe(n) + '"></option>')
+        .join('');
     }
 
-    llenar(consultaSel, recetasPaciente.map(r => r.__consulta ? ('Consulta #' + r.__consulta) : ''), 'Todas las consultas');
-    llenar(medicoSel, recetasPaciente.map(r => r.__medico_nombre), 'Todos los médicos');
-    llenar(espSel, recetasPaciente.map(r => r.__especialidad), 'Todas las especialidades');
+    function cargarSelect(select, opciones, etiqueta){
+      if(!select) return;
+      const actual = String(select.value || '');
+      const mapa = new Map();
+
+      (opciones || []).forEach(op => {
+        const value = String(op?.value || '').trim();
+        const label = String(op?.label || '').replace(/\s+/g,' ').trim();
+        if(!value || !label || mapa.has(value)) return;
+        mapa.set(value, label);
+      });
+
+      const ordenadas = Array.from(mapa.entries())
+        .map(([value,label]) => ({value,label}))
+        .sort((a,b) => a.label.localeCompare(b.label, 'es', {numeric:true,sensitivity:'base'}));
+
+      select.innerHTML = '<option value="">' + etiqueta + '</option>' +
+        ordenadas.map(op =>
+          '<option value="' + safe(op.value) + '">' + safe(op.label) + '</option>'
+        ).join('');
+
+      if(ordenadas.some(op => op.value === actual)){
+        select.value = actual;
+      }
+    }
+
+    /* MÉDICOS:
+       prioridad por id_medico desde Configuración/listarMedicosActivos;
+       recetas históricas aportan un fallback por nombre si falta ID. */
+    const medicosConfig = Array.isArray(recetaMedicosActivos)
+      ? recetaMedicosActivos.map(m => {
+          const id = recetaIdMedicoRegistro(m);
+          const nombre = recetaNombreMedicoRegistro(m);
+          return {
+            value: id ? 'ID:' + id : (nombre ? 'NOMBRE:' + auroRecetaClaveTextoFiltro(nombre) : ''),
+            label: nombre
+          };
+        })
+      : [];
+
+    const medicosHistorial = recetas.map(r => ({
+      value: auroRecetaClaveMedicoFiltro(r),
+      label: r.__medico_nombre
+    }));
+
+    cargarSelect(
+      medicoSel,
+      medicosConfig.concat(medicosHistorial),
+      'Todos los médicos'
+    );
+
+    /* ESPECIALIDADES:
+       se resuelven desde el registro configurado del médico por ID.
+       Si un registro histórico no tiene ID, se conserva fallback por nombre. */
+    const especialidadesConfig = Array.isArray(recetaMedicosActivos)
+      ? recetaMedicosActivos.map(m => {
+          const id = auroRecetaIdEspecialidadRegistroMedico(m);
+          const nombre = auroRecetaEspecialidadRegistroMedico(m);
+          return {
+            value: id ? 'ID:' + id : (nombre ? 'NOMBRE:' + auroRecetaClaveTextoFiltro(nombre) : ''),
+            label: nombre
+          };
+        })
+      : [];
+
+    const especialidadesHistorial = recetas.map(r => ({
+      value: auroRecetaClaveEspecialidadFiltro(r),
+      label: r.__especialidad
+    }));
+
+    cargarSelect(
+      espSel,
+      especialidadesConfig.concat(especialidadesHistorial),
+      'Todas las especialidades'
+    );
+
+    /* El valor escrito de consulta nunca se reemplaza al refrescar opciones. */
+    if(consultaInput){
+      consultaInput.value = String(consultaInput.value || '');
+    }
   }
 
   function obtenerRecetasPacienteActivo(){
@@ -3823,11 +3968,13 @@
 
     auroRecetaActualizarOpcionesFiltrosHistorial(recetasPaciente);
 
+    const consultaNumero = auroRecetaNumeroConsultaFiltro(consultaFiltro);
+
     return recetasPaciente
       .filter(r => !fecha || String(r.fecha_receta || '').slice(0,10) === fecha)
-      .filter(r => !consultaFiltro || ('Consulta #' + String(r.__consulta || '')) === consultaFiltro)
-      .filter(r => !medicoFiltro || String(r.__medico_nombre || '') === medicoFiltro)
-      .filter(r => !especialidadFiltro || String(r.__especialidad || '') === especialidadFiltro)
+      .filter(r => !consultaNumero || String(r.__consulta || '').trim() === String(consultaNumero))
+      .filter(r => !medicoFiltro || auroRecetaClaveMedicoFiltro(r) === medicoFiltro)
+      .filter(r => !especialidadFiltro || auroRecetaClaveEspecialidadFiltro(r) === especialidadFiltro)
       .filter(r => !q || [
         r.diagnostico_cie10,
         r.diagnostico,
@@ -3857,33 +4004,141 @@
         </div>
       </div>
 
-      <div class="row g-2 mb-3" id="recetasFiltrosBox">
-        <div class="col-lg-3 col-md-6">
+      <div id="recetasFiltrosBox" class="auro-receta-filtros-premium">
+        <div class="auro-receta-filtro auro-receta-filtro-buscar">
           <label class="auro-receta-filter-label" for="recHistorialBuscar">Buscar</label>
           <input id="recHistorialBuscar" class="form-control" placeholder="Diagnóstico, CIE-10 o ID de receta">
         </div>
-        <div class="col-lg-2 col-md-6">
+        <div class="auro-receta-filtro auro-receta-filtro-fecha">
           <label class="auro-receta-filter-label" for="recHistorialFecha">Fecha</label>
           <input id="recHistorialFecha" type="date" class="form-control">
         </div>
-        <div class="col-lg-2 col-md-6">
+        <div class="auro-receta-filtro auro-receta-filtro-consulta">
           <label class="auro-receta-filter-label" for="recHistorialConsulta">Consulta</label>
-          <select id="recHistorialConsulta" class="form-select"><option value="">Todas las consultas</option></select>
+          <input id="recHistorialConsulta" class="form-control" list="recHistorialConsultaLista" inputmode="numeric" autocomplete="off" placeholder="Todas / N.º 20">
+          <datalist id="recHistorialConsultaLista"></datalist>
         </div>
-        <div class="col-lg-2 col-md-6">
+        <div class="auro-receta-filtro auro-receta-filtro-medico">
           <label class="auro-receta-filter-label" for="recHistorialMedico">Médico</label>
           <select id="recHistorialMedico" class="form-select"><option value="">Todos los médicos</option></select>
         </div>
-        <div class="col-lg-2 col-md-6">
+        <div class="auro-receta-filtro auro-receta-filtro-especialidad">
           <label class="auro-receta-filter-label" for="recHistorialEspecialidad">Especialidad</label>
           <select id="recHistorialEspecialidad" class="form-select"><option value="">Todas las especialidades</option></select>
         </div>
-        <div class="col-lg-1 col-md-6 d-flex align-items-end">
-          <button type="button" class="btn-soft w-100" id="btnLimpiarFiltroRecetas" title="Limpiar filtros"><i class="bi bi-arrow-counterclockwise"></i></button>
+        <div class="auro-receta-filtro auro-receta-filtro-limpiar">
+          <button type="button" class="btn-soft" id="btnLimpiarFiltroRecetas" title="Limpiar filtros" aria-label="Limpiar filtros"><i class="bi bi-arrow-counterclockwise"></i></button>
         </div>
       </div>
 
       <style>
+        #recetasFiltrosBox.auro-receta-filtros-premium{
+          display:flex;
+          flex-wrap:wrap;
+          gap:10px;
+          align-items:flex-end;
+          padding:13px;
+          margin:0 0 16px;
+          border:1px solid #eee4ea;
+          border-radius:17px;
+          background:linear-gradient(135deg,#ffffff,#fffafd);
+          box-shadow:0 7px 20px rgba(15,23,42,.035);
+        }
+        #recetasFiltrosBox .auro-receta-filtro{
+          min-width:0;
+        }
+        #recetasFiltrosBox .auro-receta-filtro-buscar{flex:2 1 280px;}
+        #recetasFiltrosBox .auro-receta-filtro-fecha{flex:1 1 165px;}
+        #recetasFiltrosBox .auro-receta-filtro-consulta{flex:1 1 190px;}
+        #recetasFiltrosBox .auro-receta-filtro-medico{flex:1.65 1 260px;}
+        #recetasFiltrosBox .auro-receta-filtro-especialidad{flex:1.65 1 260px;}
+        #recetasFiltrosBox .auro-receta-filtro-limpiar{
+          flex:0 0 48px;
+          display:flex;
+          align-items:flex-end;
+        }
+        #recetasFiltrosBox .form-control,
+        #recetasFiltrosBox .form-select{
+          width:100%;
+          min-height:44px;
+          border-radius:13px!important;
+          font-size:13px!important;
+          color:#111827!important;
+          background-color:#fff!important;
+          text-overflow:ellipsis;
+        }
+        #recetasFiltrosBox .auro-receta-filtro-medico .form-select,
+        #recetasFiltrosBox .auro-receta-filtro-especialidad .form-select{
+          min-width:220px;
+        }
+        #recetasFiltrosBox #btnLimpiarFiltroRecetas{
+          width:48px;
+          height:44px;
+          min-height:44px;
+          padding:0!important;
+          border-radius:13px!important;
+          display:grid;
+          place-items:center;
+        }
+
+        #recetasHistorialBox .receta-acciones-row td{
+          padding:4px 8px 10px!important;
+          border-bottom:0!important;
+        }
+        #recetasHistorialBox .auro-receta-actions-panel{
+          display:flex;
+          align-items:center;
+          gap:10px;
+          flex-wrap:wrap;
+          padding:10px 12px;
+          border:1px solid #ead5e2;
+          border-left:4px solid #8b1e5a;
+          border-radius:14px;
+          background:linear-gradient(135deg,#ffffff,#fffafd);
+          box-shadow:0 7px 18px rgba(15,23,42,.045);
+        }
+        #recetasHistorialBox .auro-receta-actions-title{
+          color:#7a174f;
+          font-size:12px;
+          font-weight:900;
+          white-space:nowrap;
+          margin-right:2px;
+        }
+        #recetasHistorialBox .auro-receta-actions-buttons{
+          display:flex;
+          align-items:center;
+          gap:8px;
+          flex-wrap:wrap;
+        }
+        #recetasHistorialBox .auro-receta-actions-buttons .btn-action{
+          min-height:38px;
+          padding:7px 11px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          gap:6px;
+          border-radius:11px;
+          white-space:nowrap;
+        }
+        #recetasHistorialBox .auro-receta-actions-buttons .btn-action i{
+          margin:0!important;
+        }
+        #recetasHistorialBox .auro-receta-actions-trigger{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          gap:6px;
+          min-height:36px;
+          padding:7px 10px;
+          white-space:nowrap;
+        }
+        @media (max-width: 1100px){
+          #recetasFiltrosBox .auro-receta-filtro-buscar{flex:2 1 320px;}
+          #recetasFiltrosBox .auro-receta-filtro-fecha{flex:1 1 190px;}
+          #recetasFiltrosBox .auro-receta-filtro-consulta{flex:1 1 190px;}
+          #recetasFiltrosBox .auro-receta-filtro-medico{flex:1 1 320px;}
+          #recetasFiltrosBox .auro-receta-filtro-especialidad{flex:1 1 320px;}
+        }
         @media (max-width: 768px){
           #recetasHistorialBox{padding:14px!important;}
           #recetasHistorialBox .table-responsive{display:none!important;}
@@ -3892,7 +4147,16 @@
           #recetasHistorialBox .section-head h4{font-size:20px!important;line-height:1.08;}
           #recetasHistorialBox .section-head .d-flex{display:grid!important;grid-template-columns:1fr;gap:8px;}
           #recetasHistorialBox .section-head button{min-width:130px;white-space:normal;}
-          #recetasFiltrosBox > div{width:100%!important;}
+          #recetasFiltrosBox{padding:10px!important;gap:8px!important;}
+          #recetasFiltrosBox > div{width:100%!important;flex:1 1 100%!important;}
+          #recetasFiltrosBox .auro-receta-filtro-medico .form-select,
+          #recetasFiltrosBox .auro-receta-filtro-especialidad .form-select{min-width:0!important;}
+          #recetasFiltrosBox .auro-receta-filtro-limpiar{align-items:stretch!important;}
+          #recetasFiltrosBox #btnLimpiarFiltroRecetas{width:100%!important;}
+          #recetasHistorialBox .auro-receta-actions-panel{display:block;padding:10px;}
+          #recetasHistorialBox .auro-receta-actions-title{display:block;margin-bottom:8px;}
+          #recetasHistorialBox .auro-receta-actions-buttons{display:grid;grid-template-columns:1fr;gap:7px;}
+          #recetasHistorialBox .auro-receta-actions-buttons .btn-action{width:100%;}
           .auro-receta-mobile-card{border:1px solid #e5e7eb;border-radius:16px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.06);}
           .auro-receta-mobile-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px;}
           .auro-receta-mobile-head b{font-size:14px;}
@@ -3957,14 +4221,14 @@
         renderHistorialRecetas();
       });
 
-      ['recHistorialBuscar'].forEach(function(id){
+      ['recHistorialBuscar','recHistorialConsulta'].forEach(function(id){
         el(id)?.addEventListener('input', function(){
           recetasPaginaActual = 1;
           renderHistorialRecetas();
         });
       });
 
-      ['recHistorialFecha','recHistorialConsulta','recHistorialMedico','recHistorialEspecialidad'].forEach(function(id){
+      ['recHistorialFecha','recHistorialMedico','recHistorialEspecialidad'].forEach(function(id){
         el(id)?.addEventListener('change', function(){
           recetasPaginaActual = 1;
           renderHistorialRecetas();
@@ -4069,18 +4333,18 @@
         <td class="auro-receta-dx-cell"><b>${safe(r.diagnostico_cie10 || '—')}</b><small>${safe(diagnostico)}</small></td>
         <td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td>
         <td>
-          <button type="button" class="btn-action primary" onclick="toggleAccionesReceta('${menuId}')">Acciones ▾</button>
+          <button type="button" class="btn-action primary auro-receta-actions-trigger" onclick="toggleAccionesReceta('${menuId}')"><i class="bi bi-three-dots"></i> Acciones</button>
         </td>
       </tr>`;
 
       const detalle = abierto ? `<tr class="receta-acciones-row">
         <td colspan="7">
-          <div class="cardx p-3 bg-white mt-1 mb-2" style="border-left:4px solid #8b1e5a;">
-            <div class="fw-bold mb-2">Acciones de receta</div>
-            <div class="d-flex flex-column gap-2" style="max-width:220px;">
-              <button type="button" class="btn-action soft text-start" onclick="verRecetaEmitida('${id}')">👁 Vista administrativa</button>
-              <button type="button" class="btn-action soft text-start" onclick="editarRecetaEmitida('${id}')">✏ Editar receta</button>
-              <button type="button" class="btn-action success text-start" onclick="pdfRecetaEmitida('${id}')">📄 Vista paciente / imprimir</button>
+          <div class="auro-receta-actions-panel">
+            <div class="auro-receta-actions-title">Acciones de receta</div>
+            <div class="auro-receta-actions-buttons">
+              <button type="button" class="btn-action soft" onclick="verRecetaEmitida('${id}')"><i class="bi bi-eye"></i> Vista administrativa</button>
+              <button type="button" class="btn-action soft" onclick="editarRecetaEmitida('${id}')"><i class="bi bi-pencil-square"></i> Editar receta</button>
+              <button type="button" class="btn-action success" onclick="pdfRecetaEmitida('${id}')"><i class="bi bi-file-earmark-medical"></i> Vista paciente / imprimir</button>
             </div>
           </div>
         </td>
@@ -4124,9 +4388,9 @@
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || '—') + '</div>' +
           '<div class="small"><b>Diagnóstico:</b> ' + safe(diagnostico) + '</div>' +
           '<div class="d-grid gap-2 mt-2">' +
-            '<button type="button" class="btn-action soft" onclick="verRecetaEmitida(\'' + idSeguro + '\')">👁 Vista administrativa</button>' +
-            '<button type="button" class="btn-action soft" onclick="editarRecetaEmitida(\'' + idSeguro + '\')">✏ Editar receta</button>' +
-            '<button type="button" class="btn-action success" onclick="pdfRecetaEmitida(\'' + idSeguro + '\')">📄 Vista paciente / imprimir</button>' +
+            '<button type="button" class="btn-action soft" onclick="verRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-eye me-2"></i>Vista administrativa</button>' +
+            '<button type="button" class="btn-action soft" onclick="editarRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-pencil-square me-2"></i>Editar receta</button>' +
+            '<button type="button" class="btn-action success" onclick="pdfRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-file-earmark-medical me-2"></i>Vista paciente / imprimir</button>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -4292,7 +4556,8 @@
     auroRecetaAfinarInterfazPremium();
     cargarMedicosActivosReceta(false).then(function(){
       sincronizarMedicoRecetaDesdeAtencion();
-      if(el('recetaPreview')) vistaPreviaReceta();
+      if(el('recetasHistorialBox')) renderHistorialRecetas();
+      if(recetaPreviewVisible && el('recetaPreview')) vistaPreviaReceta();
     });
     if(el('recFecha') && !val('recFecha')) setVal('recFecha', fechaHoyReceta());
     setTimeout(function(){
@@ -4353,7 +4618,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'2.6B pulido visual premium',
+    version:'2.7 filtros clínicos y acciones premium',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
