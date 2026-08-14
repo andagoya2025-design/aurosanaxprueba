@@ -1,6 +1,6 @@
 /***********************************************************************
  AUROSANAX ERP DEMO
- Archivo: documento.js
+ Archivo: documentos.js
  Módulo: Documentos clínicos por atención
  Versión: 1.1.0
  Fecha: 2026-08-14
