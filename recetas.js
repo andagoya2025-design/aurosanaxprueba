@@ -34,6 +34,19 @@
   let recetaMedicosCargados = false;
   let recetaMedicosCargando = null;
 
+  /*
+    AUROSANAX RECETAS 2.5 - VISTA PACIENTE OFICIAL ÚNICA
+    ---------------------------------------------------
+    Referencia funcional oficial:
+    "Vista paciente / imprimir" del historial de recetas emitidas.
+    Esta referencia se reutiliza para:
+    - botón superior PDF / imprimir;
+    - acceso piloto desde Documentos/Recomendaciones/Certificados;
+    - historial de recetas emitidas.
+    No modifica guardado, Plan, backend ni base de datos.
+  */
+  let recetaVentanaPaciente = null;
+
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
   function setVal(id, value){ if(el(id)) el(id).value = value || ''; }
@@ -2468,8 +2481,15 @@
 
     if(!ventana){
       alert('El navegador bloqueó la vista previa. Permita ventanas emergentes para este sitio.');
-      return;
+      return null;
     }
+
+    /*
+      Se conserva una sola referencia de la vista paciente oficial para
+      permitir el comportamiento toggle desde la Historia clínica.
+      No altera el contenido ni la impresión.
+    */
+    recetaVentanaPaciente = ventana;
 
     ventana.document.write(`<!DOCTYPE html>
       <html lang="es">
@@ -2756,6 +2776,20 @@
 
     ventana.document.close();
     ventana.focus();
+
+    try{
+      ventana.addEventListener('beforeunload', function(){
+        setTimeout(function(){
+          if(recetaVentanaPaciente === ventana){
+            recetaVentanaPaciente = null;
+            auroRecetaActualizarBotonesAccesoGlobal();
+          }
+        }, 80);
+      });
+    }catch(e){}
+
+    auroRecetaActualizarBotonesAccesoGlobal();
+    return ventana;
   }
 
   /*
@@ -2765,6 +2799,105 @@
      - Evita recursión o sobrescritura por impresion.js.
      - No modifica botones, IDs, eventos, guardado, Plan ni sincronización.
   */
+  function auroRecetaVistaPacienteAbierta(){
+    try{
+      return !!(recetaVentanaPaciente && !recetaVentanaPaciente.closed);
+    }catch(e){
+      return false;
+    }
+  }
+
+  function auroRecetaActualizarBotonesAccesoGlobal(){
+    const abierta = auroRecetaVistaPacienteAbierta();
+
+    document.querySelectorAll('[data-auro-receta-global="1"]').forEach(function(btn){
+      btn.setAttribute('aria-pressed', abierta ? 'true' : 'false');
+
+      /*
+        Solo cambia el texto del acceso global de Historia clínica.
+        No modifica botones de Guardar receta ni las acciones del historial.
+      */
+      if(abierta){
+        btn.innerHTML = '<i class="bi bi-eye-slash me-1"></i> Ocultar receta';
+      }else{
+        btn.innerHTML = '<i class="bi bi-capsule me-1"></i> Receta';
+      }
+    });
+  }
+
+  function auroRecetaCerrarVistaPaciente(){
+    try{
+      if(recetaVentanaPaciente && !recetaVentanaPaciente.closed){
+        recetaVentanaPaciente.close();
+      }
+    }catch(e){}
+
+    recetaVentanaPaciente = null;
+    auroRecetaActualizarBotonesAccesoGlobal();
+    return {abierta:false};
+  }
+
+  async function auroRecetaDatosOficialesAtencionActual(){
+    verificarCambioAtencionReceta();
+    await cargarMedicosActivosReceta(false);
+
+    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
+
+    /*
+      Si existe receta emitida/guardada para la atención, esa es la fuente
+      prioritaria, igual que al pulsar "Vista paciente / imprimir" en Acciones.
+      Si aún no existe, se usa el formulario/Plan actual pero con LA MISMA
+      plantilla A4 oficial.
+    */
+    if(idAtencion){
+      await cargarRecetasDesdeSheets(true);
+      const guardada = buscarRecetaActivaPorAtencion(idAtencion);
+
+      if(guardada){
+        await auroRecetaResolverDiagnosticoPorRecetaGuardada(guardada);
+        return recetaGuardadaAFormatoPreview(guardada);
+      }
+    }
+
+    sincronizarMedicoRecetaDesdeAtencion();
+    auroRecetaAutocompletarDiagnosticoSiVacio();
+    auroRecetaNormalizarMedicamentosEdicionSiSeguro();
+
+    return auroRecetaPrepararDatosParaRepresentacion(
+      window.obtenerDatosReceta()
+    );
+  }
+
+  async function auroRecetaAbrirVistaPacienteOficial(){
+    /*
+      Abrir siempre usa el mismo motor visual de "Vista paciente / imprimir".
+      Si ya existe una ventana oficial abierta, se enfoca en vez de duplicarla.
+    */
+    if(auroRecetaVistaPacienteAbierta()){
+      try{ recetaVentanaPaciente.focus(); }catch(e){}
+      auroRecetaActualizarBotonesAccesoGlobal();
+      return recetaVentanaPaciente;
+    }
+
+    const datos = await auroRecetaDatosOficialesAtencionActual();
+
+    if(!datos?.paciente || !datos.paciente.nombre){
+      alert('Seleccione primero un paciente para generar la receta.');
+      return null;
+    }
+
+    return auroGenerarPDFRecetaUnificada(datos);
+  }
+
+  async function auroRecetaToggleVistaPaciente(){
+    if(auroRecetaVistaPacienteAbierta()){
+      return auroRecetaCerrarVistaPaciente();
+    }
+
+    const ventana = await auroRecetaAbrirVistaPacienteOficial();
+    return {abierta:!!ventana, ventana:ventana || null};
+  }
+
   function auroInstalarMotorPDFRecetaUnificado(){
     /*
       impresion.js envía obtenerDatosReceta() como argumento. El motor vuelve
@@ -3063,16 +3196,6 @@
       .filter(r => !fecha || String(r.fecha_receta || '').slice(0,10) === fecha)
       .filter(r => !q || [r.paciente_nombre,r.paciente_cedula,r.fecha_receta,r.diagnostico_cie10,r.diagnostico,r.medicamento,r.estado,r.id_atencion].join(' ').toLowerCase().includes(q))
       .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || '')));
-  }
-
-  function conectarBotonNuevaRecetaSuperior(){
-    const btn = el('btnNuevaRecetaSuperiorERP');
-    if(!btn || btn.dataset.auroNuevaRecetaConectada === '1') return;
-
-    btn.dataset.auroNuevaRecetaConectada = '1';
-    btn.addEventListener('click', function(){
-      limpiarFormularioReceta();
-    });
   }
 
   function asegurarHistorialRecetas(){
@@ -3426,7 +3549,15 @@
     if(!r) return alert('No se encontró la receta.');
 
     await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
-    window.generarPDFReceta(recetaGuardadaAFormatoPreview(r));
+
+    /*
+      REFERENCIA OFICIAL:
+      esta acción sigue siendo la fuente maestra de representación paciente,
+      pero ahora llama directamente al mismo motor interno compartido.
+    */
+    return auroGenerarPDFRecetaUnificada(
+      recetaGuardadaAFormatoPreview(r)
+    );
   };
 
   function agregarBotonVistaPrevia(){
@@ -3501,7 +3632,6 @@
     agregarBotonVistaPrevia();
     asegurarVistaPreviaReceta();
     asegurarHistorialRecetas();
-    conectarBotonNuevaRecetaSuperior();
     actualizarBotonGuardarReceta();
     renderHistorialRecetas();
     cargarRecetasDesdeSheets(false).then(renderHistorialRecetas);
@@ -3543,6 +3673,24 @@
   });
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
+
+  /*
+    API PÚBLICA OFICIAL DE RECETAS
+    ------------------------------
+    Único contrato para accesos externos del ERP.
+    No expone funciones de guardado nuevas ni duplica lógica clínica.
+  */
+  window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
+    version:'2.5 motor oficial vista paciente',
+    abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
+    cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
+    toggleVistaPaciente:auroRecetaToggleVistaPaciente,
+    vistaPacienteAbierta:auroRecetaVistaPacienteAbierta,
+    sincronizarEstadoVistaPaciente:auroRecetaActualizarBotonesAccesoGlobal,
+    imprimirActual:function(){
+      return auroRecetaAbrirVistaPacienteOficial();
+    }
+  });
 
   window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
   window.refrescarRecetasDesdeSheets = function(){
