@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.2.0
+ Versión: 1.3.0
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -31,7 +31,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -124,6 +124,8 @@
     idAtencion:'',
     contexto:null,
     registros:[],
+    medicos:[],
+    medicosCargados:false,
     filtro:'TODOS',
     colas:{
       LABORATORIO:{files:[], idAtencion:''},
@@ -340,6 +342,7 @@
       al usuario/administrador conectado y no al médico tratante.
     */
     const listas = [
+      state.medicos,
       window.medicos,
       window.medicosActivos,
       window.listaMedicos,
@@ -380,6 +383,26 @@
       nombre:nombre || 'Profesional tratante',
       especialidad
     };
+  }
+
+  async function cargarMedicosActivos(){
+    /*
+      Patrón clínico homologado con Certificados:
+      el médico responsable se resuelve por id_medico de la atención
+      contra el catálogo real de médicos activos.
+      Esta llamada es SOLO LECTURA.
+    */
+    try{
+      const r = await apiGet('listarMedicosActivos',{});
+      state.medicos = arr(r);
+      state.medicosCargados = true;
+      return state.medicos;
+    }catch(error){
+      console.warn(MODULO+': no se pudo cargar listarMedicosActivos.', error);
+      state.medicos = [];
+      state.medicosCargados = true;
+      return [];
+    }
   }
 
   function nombreMedico(ctx){
@@ -1015,6 +1038,15 @@
 
     const ctx = contextoAtencion();
     state.contexto = ctx;
+
+    /*
+      Cargar catálogo de médicos una sola vez por sesión del módulo.
+      No bloquea otras áreas y no escribe en base de datos.
+    */
+    if(ctx.id && !state.medicosCargados){
+      await cargarMedicosActivos();
+    }
+
     renderContexto();
 
     if(!ctx.id){
@@ -1658,6 +1690,11 @@
     }
 
     state.contexto = contextoAtencion();
+
+    if(state.contexto.id && !state.medicosCargados){
+      await cargarMedicosActivos();
+    }
+
     renderContexto();
     return [];
   }
@@ -1680,8 +1717,19 @@
       limpiarTodasLasColas();
 
       if(state.montado){
-        renderContexto();
-        renderLista();
+        const refrescarContexto = async ()=>{
+          if(state.contexto?.id && !state.medicosCargados){
+            await cargarMedicosActivos();
+          }
+          renderContexto();
+          renderLista();
+        };
+
+        refrescarContexto().catch(error=>{
+          console.warn(MODULO+': no se pudo refrescar contexto médico.', error);
+          renderContexto();
+          renderLista();
+        });
 
         if(teniaPendientes){
           setMsg(
@@ -1750,7 +1798,9 @@
     estado:state,
     limites:LIMITES,
     endpoints:ENDPOINTS,
-    obtenerContexto:contextoAtencion
+    obtenerContexto:contextoAtencion,
+    resolverMedico,
+    cargarMedicosActivos
   };
 
 })();
