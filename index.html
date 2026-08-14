@@ -3980,9 +3980,10 @@
     </div>
     <div class="modalx-body">
       <div class="row g-3">
-        <div class="col-md-6"><label class="form-label fw-bold">Nombres y apellidos *</label><input id="pNombre" class="form-control"></div>
-        <div class="col-md-3"><label class="form-label fw-bold">Cédula</label><input id="pCedula" class="form-control"></div>
-        <div class="col-md-3"><label class="form-label fw-bold">Fecha nacimiento</label><input id="pNacimiento" type="date" class="form-control"></div>
+        <div class="col-md-4"><label class="form-label fw-bold">Nombres *</label><input id="pNombres" class="form-control" autocomplete="given-name"></div>
+        <div class="col-md-4"><label class="form-label fw-bold">Apellidos *</label><input id="pApellidos" class="form-control" autocomplete="family-name"></div>
+        <div class="col-md-2"><label class="form-label fw-bold">Cédula</label><input id="pCedula" class="form-control" type="text" inputmode="numeric" maxlength="10" autocomplete="off"></div>
+        <div class="col-md-2"><label class="form-label fw-bold">Fecha nacimiento</label><input id="pNacimiento" type="date" class="form-control"></div>
         <div class="col-md-3"><label class="form-label fw-bold">Sexo</label><select id="pSexo" class="form-select"><option value="">Seleccione</option><option>Femenino</option><option>Masculino</option><option>Otro</option></select></div>
         <div class="col-md-3"><label class="form-label fw-bold">Estado civil</label><select id="pEstadoCivil" class="form-select"><option value="">Seleccione</option><option>Soltero/a</option><option>Casado/a</option><option>Unión libre</option><option>Divorciado/a</option><option>Viudo/a</option><option>Separado/a</option><option>No especifica</option></select></div>
         <div class="col-md-3"><label class="form-label fw-bold">Ocupación</label><input id="pOcupacion" class="form-control"></div>
@@ -9518,7 +9519,7 @@ document.addEventListener('click',e=>{
 })();
 </script>
 
-<script src="pacientes.js?v=20260629_fase2_final"></script>
+<script src="pacientes.js?v=20260814_pacientes_nombres_cedula_antiduplicado_v1"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
 <script src="agenda.js?v=20260719_agenda_v1"></script>
 <script id="auro-erp-inicio-despues-seguridad">
