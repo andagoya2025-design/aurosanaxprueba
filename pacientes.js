@@ -24,6 +24,17 @@ function setTextIfExists(id, value){
   if(el) el.textContent = value;
 }
 
+/* Configuración defensiva del campo de cédula al cargar el módulo. */
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){
+    try{ auroConfigurarCampoCedulaPaciente(); }catch(_e){}
+  });
+}else{
+  setTimeout(function(){
+    try{ auroConfigurarCampoCedulaPaciente(); }catch(_e){}
+  }, 0);
+}
+
 function getPacienteActivo(){
   const selectId = document.getElementById('hcPacienteSelect')?.value || '';
 
@@ -400,8 +411,82 @@ function resetPatients(){
   renderPatients();
 }
 
+/* ============================================================
+   AUROSANAX PACIENTES 0.5 - CÉDULA ECUATORIANA SEGURA EN FORMULARIO
+   Alcance exclusivo: input pCedula.
+   - Se mantiene como TEXTO: conserva cero inicial.
+   - Solo permite dígitos.
+   - Máximo 10 dígitos mientras se escribe.
+   - Si se informa una cédula, exige exactamente 10 dígitos al guardar.
+   - NO altera backend, Google Sheets, nombres/apellidos, WhatsApp,
+     Historia Clínica, Atenciones, Documentos ni otros campos.
+============================================================ */
+function auroCedulaPacienteSoloDigitos(valor){
+  return String(valor === null || valor === undefined ? '' : valor)
+    .replace(/\D/g, '');
+}
+
+function auroConfigurarCampoCedulaPaciente(){
+  const input = document.getElementById('pCedula');
+  if(!input) return;
+
+  /*
+   * type=text es deliberado:
+   * evita conversiones numéricas que podrían eliminar un cero inicial.
+   */
+  input.type = 'text';
+  input.inputMode = 'numeric';
+  input.maxLength = 10;
+  input.setAttribute('pattern', '[0-9]{10}');
+  input.setAttribute('autocomplete', 'off');
+
+  if(input.dataset.auroCedulaConfigurada === '1') return;
+  input.dataset.auroCedulaConfigurada = '1';
+
+  input.addEventListener('input', function(){
+    const limpia = auroCedulaPacienteSoloDigitos(input.value).slice(0, 10);
+    if(input.value !== limpia) input.value = limpia;
+  });
+
+  input.addEventListener('paste', function(){
+    setTimeout(function(){
+      const limpia = auroCedulaPacienteSoloDigitos(input.value).slice(0, 10);
+      if(input.value !== limpia) input.value = limpia;
+    }, 0);
+  });
+}
+
+function auroValidarCedulaPacienteAntesDeGuardar(){
+  const input = document.getElementById('pCedula');
+  if(!input) return {ok:true, valor:''};
+
+  const original = String(input.value || '');
+  const soloDigitos = auroCedulaPacienteSoloDigitos(original);
+
+  /*
+   * No se hace obligatoria la cédula porque el comportamiento previo
+   * permitía pacientes sin documento. Pero si se registra, debe tener 10.
+   */
+  if(!soloDigitos){
+    input.value = '';
+    return {ok:true, valor:''};
+  }
+
+  if(soloDigitos.length !== 10){
+    alert('La cédula debe contener exactamente 10 dígitos.');
+    input.focus();
+    return {ok:false, valor:soloDigitos};
+  }
+
+  /*
+   * Se asigna como string. Ej.: 0981128465 permanece 0981128465.
+   */
+  input.value = soloDigitos;
+  return {ok:true, valor:soloDigitos};
+}
+
 function limpiarFormularioPaciente(){
-  ['pNombres','pApellidos','pCedula','pNacimiento','pSexo','pEstadoCivil','pOcupacion','pTelefono','pEmail','pDireccion','pSeguro','pContactoEmergencia','pTelefonoEmergencia','pTipoSangre','pAlergias','pNotas'].forEach(id=>{
+  ['pNombre','pCedula','pNacimiento','pSexo','pEstadoCivil','pOcupacion','pTelefono','pEmail','pDireccion','pSeguro','pContactoEmergencia','pTelefonoEmergencia','pTipoSangre','pAlergias','pNotas'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.value='';
   });
@@ -413,6 +498,7 @@ function limpiarFormularioPaciente(){
 
 function openPatientModal(){
   editingPatientId = null;
+  auroConfigurarCampoCedulaPaciente();
   limpiarFormularioPaciente();
   setTextIfExists('patientModalTitle','Nuevo paciente');
   setTextIfExists('patientSaveBtn','Guardar paciente');
@@ -424,7 +510,46 @@ function closePatientModal(){
   editingPatientId = null;
 }
 
+/* ============================================================
+   AUROSANAX PACIENTES 0.4 - NOMBRE COMPATIBLE DE SOLO LECTURA
+   Alcance:
+   - Resuelve el nombre visible desde estructuras actuales o históricas.
+   - No modifica Google Sheets.
+   - No cambia guardado, separación de nombres/apellidos, cédula,
+     WhatsApp, Historia Clínica, Atenciones ni Documentos.
+============================================================ */
+function auroNombrePacienteLecturaSegura(p){
+  p = p || {};
+
+  const nombreDirecto = String(
+    p.nombre ||
+    p.nombre_completo ||
+    p.nombre_paciente ||
+    p.paciente_nombre ||
+    ''
+  ).replace(/\s+/g,' ').trim();
+
+  if(nombreDirecto) return nombreDirecto;
+
+  const nombres = String(
+    p.nombres ||
+    p.primer_nombre ||
+    ''
+  ).replace(/\s+/g,' ').trim();
+
+  const apellidos = String(
+    p.apellidos ||
+    p.apellido ||
+    p.primer_apellido ||
+    ''
+  ).replace(/\s+/g,' ').trim();
+
+  return [nombres, apellidos].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+}
+
 function editarPacienteModal(idPaciente){
+  auroConfigurarCampoCedulaPaciente();
+
   if(!idPaciente){
     alert('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
     return;
@@ -437,8 +562,7 @@ function editarPacienteModal(idPaciente){
   editingPatientId = idPaciente;
   setTextIfExists('patientModalTitle','Editar paciente');
   setTextIfExists('patientSaveBtn','Actualizar paciente');
-  setValueIfExists('pNombres', p.nombres || '');
-  setValueIfExists('pApellidos', p.apellidos || '');
+  setValueIfExists('pNombre', auroNombrePacienteLecturaSegura(p));
   setValueIfExists('pCedula', p.cedula || '');
   setValueIfExists('pNacimiento', normalizarFechaInput(p.fecha_nacimiento || ''));
   setValueIfExists('pSexo', p.sexo || '');
@@ -465,17 +589,17 @@ async function cargarPacientesDesdeSheets(){
     const data = await res.json();
 
     patients = data.map(p => ({
-      id_paciente: p.id_paciente || '',
-      nombre: [p.nombres || '', p.apellidos || ''].join(' ').trim(),
-      nombres: p.nombres || '',
-      apellidos: p.apellidos || '',
-      cedula: p.numero_documento || '',
+      id_paciente: p.id_paciente || p.id || '',
+      nombre: auroNombrePacienteLecturaSegura(p),
+      nombres: p.nombres || p.primer_nombre || '',
+      apellidos: p.apellidos || p.apellido || p.primer_apellido || '',
+      cedula: p.numero_documento || p.cedula || p.documento || '',
       fecha_nacimiento: p.fecha_nacimiento || '',
       edad: p.edad || '',
       sexo: p.sexo || '',
       estado_civil: p.estado_civil || '',
       ocupacion: p.ocupacion || '',
-      telefono: p.whatsapp || p.telefono || '',
+      telefono: p.whatsapp || p.telefono || p.celular || '',
       email: p.email || '',
       direccion: p.direccion || '',
       ciudad: p.ciudad || '',
@@ -502,47 +626,21 @@ async function cargarPacientesDesdeSheets(){
   }
 }
 
-let auroGuardandoPaciente = false;
-
-function auroNormalizarCedulaPaciente(valor){
-  return String(valor || '').replace(/\D/g, '').trim();
-}
-
-function auroPacienteDuplicadoPorCedula(cedula, idExcluir){
-  const buscada = auroNormalizarCedulaPaciente(cedula);
-  if(!buscada) return null;
-
-  return (Array.isArray(patients) ? patients : []).find(p => {
-    const idPaciente = String(p?.id_paciente || '').trim();
-    if(idExcluir && idPaciente === String(idExcluir).trim()) return false;
-    return auroNormalizarCedulaPaciente(p?.cedula || p?.numero_documento || '') === buscada;
-  }) || null;
-}
-
 async function savePatient(){
-  if(auroGuardandoPaciente) return;
+  const nombreCompleto=document.getElementById('pNombre').value.trim();
+  if(!nombreCompleto){ alert('Ingrese nombres y apellidos del paciente'); return; }
 
-  const nombres = document.getElementById('pNombres')?.value.trim() || '';
-  const apellidos = document.getElementById('pApellidos')?.value.trim() || '';
-  const cedula = auroNormalizarCedulaPaciente(document.getElementById('pCedula')?.value || '');
+  const validacionCedula = auroValidarCedulaPacienteAntesDeGuardar();
+  if(!validacionCedula.ok) return;
+  const cedulaPaciente = validacionCedula.valor;
 
-  if(!nombres){ alert('Ingrese los nombres del paciente.'); return; }
-  if(!apellidos){ alert('Ingrese los apellidos del paciente.'); return; }
-  if(!cedula){ alert('Ingrese la cédula del paciente.'); return; }
-  if(cedula.length !== 10){ alert('La cédula debe contener 10 dígitos. Verifique también el cero inicial.'); return; }
-
-  const esEdicion = !!editingPatientId;
-  const duplicado = auroPacienteDuplicadoPorCedula(cedula, esEdicion ? editingPatientId : '');
-  if(duplicado){
-    alert('Ya existe un paciente registrado con esta cédula: ' + (duplicado.nombre || [duplicado.nombres||'', duplicado.apellidos||''].join(' ').trim() || duplicado.id_paciente || 'Paciente registrado') + '.');
-    return;
-  }
-
-  const nombreCompleto = [nombres, apellidos].filter(Boolean).join(' ').trim();
+  const partes = nombreCompleto.split(' ');
+  const nombres = partes.slice(0, Math.max(1, partes.length - 1)).join(' ');
+  const apellidos = partes.length > 1 ? partes.slice(-1).join(' ') : '';
 
   const pacienteSheet = {
     tipo_documento: 'Cédula',
-    numero_documento: cedula,
+    numero_documento: cedulaPaciente,
     nombres: nombres,
     apellidos: apellidos,
     fecha_nacimiento: document.getElementById('pNacimiento').value,
@@ -591,16 +689,8 @@ async function savePatient(){
     estado: 'Activa'
   };
 
-  const btnGuardar = document.getElementById('patientSaveBtn');
-  const textoBoton = btnGuardar?.innerHTML || '';
-
   try{
-    auroGuardandoPaciente = true;
-    if(btnGuardar){
-      btnGuardar.disabled = true;
-      btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
-    }
-
+    const esEdicion = !!editingPatientId;
     const payloadData = esEdicion ? {...pacienteSheet, id_paciente: editingPatientId} : pacienteSheet;
 
     await fetch(API_URL, {
@@ -638,12 +728,6 @@ async function savePatient(){
   }catch(error){
     console.error(error);
     alert('No se pudo guardar en Google Sheets. Revise la conexión o la implementación del Apps Script.');
-  }finally{
-    auroGuardandoPaciente = false;
-    if(btnGuardar){
-      btnGuardar.disabled = false;
-      btnGuardar.innerHTML = textoBoton || '<i class="bi bi-save me-1"></i> Guardar paciente';
-    }
   }
 }
 
