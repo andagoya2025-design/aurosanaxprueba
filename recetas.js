@@ -47,6 +47,7 @@
   */
   let recetaVentanaPaciente = null;
   let recetaPreviewVisible = false;
+  let recetaModoTrabajo = 'lectura';
 
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
@@ -940,6 +941,7 @@
   function limpiarFormularioRecetaPorCambioAtencion(){
     recetaEditandoId = null;
     recetaNuevaForzada = false;
+    recetaModoTrabajo = 'lectura';
     recetaEstadoVisual = '';
     auroRecetaMostrarPreview(false);
     recetaBloqueoPostGuardadoHasta = 0;
@@ -1687,6 +1689,29 @@
     }, 2800);
   }
 
+  function auroRecetaPreparadaDesdePlan(){
+    return !!(
+      recetaPlanPerteneceAtencionActiva() &&
+      recetaTieneMedicamentosReales(val('recMedicamento'))
+    );
+  }
+
+  function auroRecetaPuedeGuardar(){
+    return !!(
+      recetaModoTrabajo === 'edicion' ||
+      recetaModoTrabajo === 'nueva' ||
+      auroRecetaPreparadaDesdePlan()
+    );
+  }
+
+  function auroRecetaEntrarModoLectura(){
+    recetaModoTrabajo = 'lectura';
+    recetaNuevaForzada = false;
+    recetaEditandoId = null;
+    actualizarBotonGuardarReceta();
+    auroRecetaActualizarCabeceraClinicaPremium();
+  }
+
   function obtenerBotonesGuardarReceta(){
     const botones = [];
 
@@ -1749,6 +1774,16 @@
         return;
       }
 
+      if(!auroRecetaPuedeGuardar()){
+        btn.disabled = true;
+        btn.removeAttribute('aria-busy');
+        btn.style.opacity = '0.72';
+        btn.style.cursor = 'not-allowed';
+        btn.style.pointerEvents = 'none';
+        btn.innerHTML = '<i class="bi bi-lock me-1"></i> Solo lectura';
+        return;
+      }
+
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
       btn.style.opacity = '1';
@@ -1779,6 +1814,7 @@
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
     recetaNuevaForzada = true;
+    recetaModoTrabajo = 'nueva';
     auroRecetaMostrarPreview(false);
     recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
@@ -1795,13 +1831,14 @@
     setVal('recRecomendaciones', '');
     actualizarBotonGuardarReceta();
     auroRecetaActualizarCabeceraClinicaPremium();
-    mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Nueva receta. Puede escribir o cargar datos desde Plan.', '');
+    mostrarMensajeReceta('<i class="bi bi-plus-circle me-1"></i> Nueva receta habilitada. Puede escribir o cargar datos desde Plan.', '');
     vistaPreviaReceta();
   }
 
   function limpiarEstadoRecetaNuevaDespuesDeGuardar(){
     recetaEditandoId = null;
     recetaNuevaForzada = false;
+    recetaModoTrabajo = 'lectura';
     recetaAtencionActualId = obtenerIdAtencionActivaSeguro() || '';
 
     setVal('recDiagnostico', '');
@@ -2544,17 +2581,23 @@
   }
 
   function auroRecetaModoActualTexto(){
-    if(recetaEditandoId) return {texto:'Editando receta emitida', clase:'badge-warn'};
-    if(recetaNuevaForzada) return {texto:'Nueva receta independiente', clase:'badge-blue'};
+    if(recetaModoTrabajo === 'edicion' && recetaEditandoId){
+      return {texto:'Editando receta emitida', clase:'badge-warn'};
+    }
+
+    if(recetaModoTrabajo === 'nueva'){
+      return {texto:'Nueva receta', clase:'badge-blue'};
+    }
+
+    if(auroRecetaPreparadaDesdePlan()){
+      return {texto:'Preparada desde Plan', clase:'badge-blue'};
+    }
 
     const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
     const existente = idAtencion ? buscarRecetaActivaPorAtencion(idAtencion) : null;
-    if(existente) return {texto:'Receta emitida', clase:'badge-ok'};
+    if(existente) return {texto:'Emitida · solo lectura', clase:'badge-ok'};
 
-    const preparada = recetaPlanPerteneceAtencionActiva() && recetaTieneMedicamentosReales(val('recMedicamento'));
-    if(preparada) return {texto:'Preparada desde Plan', clase:'badge-blue'};
-
-    return {texto:'Receta en preparación', clase:'badge-auro'};
+    return {texto:'Solo lectura', clase:'badge-auro'};
   }
 
   function auroRecetaActualizarCabeceraClinicaPremium(){
@@ -3579,6 +3622,7 @@
   function cargarRecetaEnFormulario(receta){
     if(!receta) return;
     recetaNuevaForzada = false;
+    recetaModoTrabajo = 'edicion';
     recetaEditandoId = receta.id_receta || receta.id || '';
     recetaAtencionActualId = receta.id_atencion || obtenerIdAtencionActivaSeguro() || '';
     setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
@@ -3597,6 +3641,15 @@
   }
 
   window.guardarRecetaERP = async function(){
+    if(!auroRecetaPuedeGuardar()){
+      actualizarBotonGuardarReceta();
+      mostrarMensajeReceta(
+        '<i class="bi bi-lock me-1"></i> Esta receta está en modo lectura. Use <b>Editar receta</b> o <b>Nueva receta</b> antes de guardar.',
+        ''
+      );
+      return;
+    }
+
     if(recetaGuardando){
       mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> La receta ya se está guardando. Espere unos segundos para evitar duplicados.', '');
       actualizarBotonGuardarReceta();
@@ -4440,13 +4493,14 @@
     if(!r) return alert('No se encontró la receta.');
 
     await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
+    auroRecetaEntrarModoLectura();
 
     auroRecetaMostrarPreview(true);
     const box = asegurarVistaPreviaReceta();
     if(box) box.innerHTML = construirHTMLReceta(recetaGuardadaAFormatoPreview(r), 'administrativo');
 
     mostrarMensajeReceta(
-      '<i class="bi bi-eye me-1"></i> Receta cargada en vista previa en modo lectura.',
+      '<i class="bi bi-lock me-1"></i> Modo lectura activo. Para modificar esta prescripción use <b>Editar receta</b>.',
       ''
     );
   };
@@ -4569,6 +4623,7 @@
     auroRecetaMostrarPreview(false);
     auroRecetaActualizarCabeceraClinicaPremium();
     asegurarHistorialRecetas();
+    recetaModoTrabajo = 'lectura';
     actualizarBotonGuardarReceta();
     renderHistorialRecetas();
     cargarRecetasDesdeSheets(false).then(renderHistorialRecetas);
@@ -4618,7 +4673,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'2.7 filtros clínicos y acciones premium',
+    version:'2.8 modo lectura y guardado seguro',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
