@@ -3858,9 +3858,22 @@
   function seccion(titulo, icono, contenido, abierta){
     if(!texto(contenido)) return '';
 
+    /*
+      AUROSANAX VISTA INTEGRAL ÉLITE:
+      contador exclusivamente visual calculado sobre el HTML ya renderizado.
+      No modifica datos, IDs, guardado ni relaciones clínicas.
+    */
+    const coincidencias = String(contenido || '').match(
+      /class="[^"]*(?:avi-line|avi-med-card|avi-rx-card)[^"]*"/g
+    ) || [];
+    const totalVisual = coincidencias.length;
+    const contador = totalVisual
+      ? '<small class="avi-section-count">'+totalVisual+'</small>'
+      : '';
+
     return '<details class="avi-section" '+(abierta?'open':'')+'>'+
       '<summary>'+
-        '<span><i class="bi '+esc(icono)+'"></i>'+esc(titulo)+'</span>'+
+        '<span class="avi-section-label"><i class="bi '+esc(icono)+'"></i>'+esc(titulo)+contador+'</span>'+
         '<i class="bi bi-chevron-down avi-chevron"></i>'+
       '</summary>'+
       '<div class="avi-section-body">'+contenido+'</div>'+
@@ -3995,9 +4008,10 @@
 
       return '<article class="avi-rx-card">'+
         '<div class="avi-rx-head">'+
-          '<div>'+
+          '<div class="avi-rx-heading">'+
+            '<span class="avi-rx-kicker"><i class="bi bi-prescription2"></i> Receta emitida</span>'+
             '<h4>Receta médica</h4>'+
-            '<small>'+esc(r.id_receta || r.id || '')+'</small>'+
+            '<small><b>ID receta</b> · '+esc(r.id_receta || r.id || '')+'</small>'+
           '</div>'+
           '<button type="button" class="avi-btn avi-btn-primary" data-avi-rx="'+esc(r.id_receta || r.id || '')+'">'+
             '<i class="bi bi-eye"></i> Ver receta completa'+
@@ -4020,75 +4034,180 @@
     const s = document.createElement('style');
     s.id = 'auroVistaIntegralCSS';
     s.textContent = `
+      /* ============================================================
+         AUROSANAX VISTA INTEGRAL ÉLITE - SOLO PRESENTACIÓN
+         - No cambia IDs clínicos, estado, eventos, backend ni guardado.
+         - Mantiene Expandir / Contraer / Actualizar / Solo lectura.
+         - Mantiene apertura exacta por id_atencion.
+      ============================================================ */
       .avi-overlay{
-        position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.68);
-        display:flex;align-items:center;justify-content:center;padding:16px;
+        position:fixed;inset:0;z-index:100000;
+        background:rgba(15,23,42,.72);
+        backdrop-filter:blur(4px);
+        display:flex;align-items:center;justify-content:center;padding:18px;
       }
       .avi-shell{
-        width:min(1240px,100%);max-height:96vh;background:#f8fafc;
-        border-radius:24px;overflow:hidden;display:flex;flex-direction:column;
-        box-shadow:0 30px 90px rgba(15,23,42,.38);
+        width:min(1320px,100%);max-height:96vh;
+        background:#f7f8fb;border:1px solid rgba(255,255,255,.45);
+        border-radius:26px;overflow:hidden;display:flex;flex-direction:column;
+        box-shadow:0 36px 110px rgba(15,23,42,.42);
       }
+
       .avi-head{
-        display:flex;justify-content:space-between;gap:14px;align-items:flex-start;
-        padding:16px 18px;background:linear-gradient(135deg,#fff7fb,#fff);
-        border-bottom:1px solid #f3d4e8;
+        display:flex;justify-content:space-between;gap:18px;align-items:flex-start;
+        padding:18px 20px;
+        background:
+          radial-gradient(circle at 100% 0,rgba(194,59,131,.11),transparent 34%),
+          linear-gradient(135deg,#fff 0%,#fff8fc 54%,#fbf6fa 100%);
+        border-bottom:1px solid #ecd8e4;
       }
-      .avi-head h3{margin:0;color:#4a1334;font-weight:950}
-      .avi-head p{margin:4px 0 0;color:#64748b;font-size:12px;overflow-wrap:anywhere}
-      .avi-head-context{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
-      .avi-chip{
-        display:inline-flex;align-items:center;gap:5px;border:1px solid #ead7e2;
-        background:#fff;color:#6c1d52;border-radius:999px;padding:4px 8px;
-        font-size:11px;font-weight:850;
+      .avi-head-main{display:flex;gap:14px;align-items:flex-start;min-width:0}
+      .avi-head-icon{
+        width:48px;height:48px;flex:0 0 auto;border-radius:16px;
+        display:grid;place-items:center;
+        background:linear-gradient(135deg,#7a174f,#b52d76);
+        color:#fff;font-size:20px;
+        box-shadow:0 10px 24px rgba(122,23,79,.20);
       }
-      .avi-close,.avi-btn{
-        border:1px solid #ead7e2;background:#fff;color:#6c1d52;
-        border-radius:11px;padding:8px 11px;font-weight:850;cursor:pointer;
+      .avi-head-copy{min-width:0}
+      .avi-head-kicker{
+        display:block;margin-bottom:3px;color:#9d174d;
+        font-size:10px;font-weight:950;text-transform:uppercase;
+        letter-spacing:.08em;
       }
-      .avi-btn-primary{background:#7a174f;color:#fff;border-color:#7a174f}
-      .avi-toolbar{
-        display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;
-        background:#fff;border-bottom:1px solid #e5e7eb;
+      .avi-head h3{
+        margin:0;color:#2f1526;font-size:21px;line-height:1.2;font-weight:950;
       }
-      .avi-body{overflow:auto;padding:16px;-webkit-overflow-scrolling:touch}
-      .avi-group-title{
-        margin:0 0 10px;font-size:14px;color:#6c1d52;font-weight:950;
-        text-transform:uppercase;letter-spacing:.05em;
+      .avi-head-patient{
+        margin-top:5px;color:#111827;font-size:15px;font-weight:950;
+        line-height:1.25;overflow-wrap:anywhere;
       }
-      .avi-data-grid{
-        display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
-        gap:8px;margin-bottom:14px;
+      .avi-head-subcontext{
+        margin-top:2px;color:#64748b;font-size:12px;font-weight:750;
+        line-height:1.3;overflow-wrap:anywhere;
       }
-      .avi-data{
-        background:#fff;border:1px solid #e5e7eb;border-radius:14px;
-        padding:10px;min-width:0;min-height:64px;display:flex;
-        flex-direction:column;justify-content:center;
-      }
-      .avi-data span{
-        display:block;font-size:10px;color:#64748b;text-transform:uppercase;
-        font-weight:900;letter-spacing:.04em;
-      }
-      .avi-data b{
-        display:block;margin-top:4px;color:#111827;font-size:12px;
+      .avi-technical-id{
+        margin:5px 0 0!important;color:#94a3b8!important;
+        font-size:10.5px!important;font-weight:700;letter-spacing:.01em;
         overflow-wrap:anywhere;
       }
+      .avi-head-context{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
+      .avi-chip{
+        display:inline-flex;align-items:center;gap:5px;
+        border:1px solid #e7d8e1;background:#fff;color:#6c1d52;
+        border-radius:999px;padding:4px 8px;font-size:10.5px;font-weight:850;
+        line-height:1.1;
+      }
+      .avi-chip-strong{background:#fdf2f8;border-color:#f3cfe2;color:#7a174f}
+      .avi-chip-status{background:#ecfdf5;border-color:#bbf7d0;color:#166534}
+      .avi-chip-readonly{background:#f8fafc;border-color:#e2e8f0;color:#475569}
+
+      .avi-close,.avi-btn{
+        border:1px solid #e4d6df;background:#fff;color:#6c1d52;
+        border-radius:12px;padding:8px 11px;font-weight:850;cursor:pointer;
+        transition:transform .16s ease,box-shadow .16s ease,background .16s ease;
+      }
+      .avi-close:hover,.avi-btn:hover{
+        transform:translateY(-1px);
+        box-shadow:0 7px 16px rgba(15,23,42,.08);
+      }
+      .avi-close{flex:0 0 auto}
+      .avi-btn-primary{
+        background:linear-gradient(135deg,#7a174f,#a9286c);
+        color:#fff;border-color:transparent;
+      }
+
+      .avi-toolbar{
+        display:flex;gap:8px;flex-wrap:wrap;padding:10px 18px;
+        background:#fff;border-bottom:1px solid #e5e7eb;
+        box-shadow:0 3px 12px rgba(15,23,42,.025);
+      }
+      .avi-toolbar .avi-btn{font-size:11.5px;padding:7px 10px}
+
+      .avi-body{
+        overflow:auto;padding:18px;
+        -webkit-overflow-scrolling:touch;
+        scrollbar-width:thin;
+      }
+
+      .avi-overview-block{
+        border:1px solid #e5e7eb;border-radius:19px;
+        background:#fff;padding:13px;margin-bottom:12px;
+        box-shadow:0 7px 20px rgba(15,23,42,.035);
+      }
+      .avi-group-title{
+        display:flex;align-items:center;gap:7px;
+        margin:0 0 10px;font-size:12px;color:#6c1d52;font-weight:950;
+        text-transform:uppercase;letter-spacing:.055em;
+      }
+      .avi-group-title i{font-size:13px}
+      .avi-data-grid{
+        display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:8px;margin:0;
+      }
+      .avi-data{
+        background:linear-gradient(180deg,#fff,#fcfdff);
+        border:1px solid #e7ebf0;border-radius:13px;
+        padding:9px 10px;min-width:0;min-height:58px;
+        display:flex;flex-direction:column;justify-content:center;
+      }
+      .avi-data span{
+        display:block;font-size:9.5px;color:#7c8798;text-transform:uppercase;
+        font-weight:900;letter-spacing:.045em;
+      }
+      .avi-data b{
+        display:block;margin-top:3px;color:#172033;font-size:11.8px;
+        line-height:1.35;overflow-wrap:anywhere;
+      }
       .avi-col-2{grid-column:span 2}
-      .avi-id-card b{font-size:11px;color:#475569}
+      .avi-id-card{
+        background:#f8fafc;border-style:dashed;
+      }
+      .avi-id-card b{font-size:10.5px;color:#64748b;font-weight:750}
+
+      .avi-clinical-divider{
+        display:flex;align-items:center;gap:10px;
+        margin:16px 2px 11px;color:#7a174f;
+        font-size:11px;font-weight:950;text-transform:uppercase;
+        letter-spacing:.065em;
+      }
+      .avi-clinical-divider::before,.avi-clinical-divider::after{
+        content:"";height:1px;background:#e9d5e1;flex:1 1 auto;
+      }
+      .avi-clinical-divider span{flex:0 0 auto}
+
       .avi-section{
-        background:#fff;border:1px solid #e5e7eb;border-radius:17px;
-        margin-bottom:10px;overflow:hidden;
+        background:#fff;border:1px solid #e2e7ed;border-radius:17px;
+        margin-bottom:9px;overflow:hidden;
+        box-shadow:0 5px 16px rgba(15,23,42,.028);
       }
       .avi-section summary{
-        list-style:none;cursor:pointer;padding:13px 15px;display:flex;
-        justify-content:space-between;gap:10px;align-items:center;
-        font-weight:950;color:#334155;
+        list-style:none;cursor:pointer;padding:12px 14px;
+        display:flex;justify-content:space-between;gap:10px;align-items:center;
+        font-weight:900;color:#2f3b4d;
+        transition:background .15s ease,color .15s ease;
+      }
+      .avi-section summary:hover{background:#fffafd}
+      .avi-section[open] summary{
+        background:linear-gradient(90deg,#fff8fc 0%,#fff 60%);
+        color:#5a1740;border-bottom:1px solid #f1e4ec;
       }
       .avi-section summary::-webkit-details-marker{display:none}
-      .avi-section summary span{display:flex;align-items:center;gap:8px}
+      .avi-section-label{display:flex;align-items:center;gap:8px;min-width:0}
+      .avi-section-label>i{
+        width:28px;height:28px;border-radius:9px;display:grid;place-items:center;
+        color:#8b1e5a;background:#fdf2f8;border:1px solid #f5d5e6;
+        flex:0 0 auto;font-size:12px;
+      }
+      .avi-section-count{
+        display:inline-grid;place-items:center;min-width:22px;height:20px;
+        padding:0 6px;border-radius:999px;background:#f1f5f9;color:#64748b;
+        font-size:9.5px;font-weight:900;
+      }
       .avi-section[open] .avi-chevron{transform:rotate(180deg)}
-      .avi-chevron{transition:.18s}
-      .avi-section-body{padding:0 15px 15px}
+      .avi-chevron{transition:.18s;color:#94a3b8}
+      .avi-section-body{padding:12px 14px 14px}
+
       .avi-lines{
         display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
       }
@@ -4098,71 +4217,103 @@
       }
       .avi-span-full{grid-column:1/-1}
       .avi-line b,.avi-note b{
-        display:block;color:#6c1d52;font-size:11px;
-        text-transform:uppercase;letter-spacing:.03em;
+        display:block;color:#7a174f;font-size:10px;
+        text-transform:uppercase;letter-spacing:.045em;font-weight:900;
       }
       .avi-line p,.avi-note p{
         margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;
-        color:#1f2937;line-height:1.45;
+        color:#1f2937;font-size:12.2px;line-height:1.48;
       }
       .avi-clean-list{
-        margin:6px 0 0;padding-left:20px;color:#1f2937;line-height:1.5;
+        margin:6px 0 0;padding-left:19px;color:#1f2937;
+        font-size:12.2px;line-height:1.5;
       }
       .avi-clean-list li+li{margin-top:4px}
-      .avi-subgroup+.avi-subgroup{margin-top:14px}
-      .avi-subgroup>h5{
-        margin:0 0 8px;color:#334155;font-size:13px;font-weight:950;
+
+      .avi-subgroup{
+        border-top:1px dashed #e7eaf0;padding-top:11px;
       }
+      .avi-subgroup:first-child{border-top:0;padding-top:0}
+      .avi-subgroup+.avi-subgroup{margin-top:12px}
+      .avi-subgroup>h5{
+        margin:0 0 8px;color:#334155;font-size:12.5px;font-weight:950;
+      }
+
       .avi-med-grid{
-        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
+        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;
       }
       .avi-med-card{
-        border:1px solid #ead7e2;border-radius:15px;padding:12px;
+        border:1px solid #ead7e2;border-radius:14px;padding:11px;
         background:linear-gradient(180deg,#fff,#fffafd);
+        box-shadow:0 3px 10px rgba(122,23,79,.025);
       }
-      .avi-med-card h5{margin:0 0 8px;color:#6c1d52;font-size:14px;font-weight:950}
-      .avi-med-card p{margin:0;color:#334155;line-height:1.5}
-      .avi-med-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+      .avi-med-card h5{
+        margin:0 0 8px;color:#541536;font-size:13px;font-weight:900;
+        line-height:1.3;
+      }
+      .avi-med-card p{margin:0;color:#334155;font-size:12px;line-height:1.48}
+      .avi-med-details{
+        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;
+      }
       .avi-med-details div{
-        border:1px solid #edf0f3;background:#fff;border-radius:10px;padding:8px;
+        border:1px solid #edf0f3;background:#fff;border-radius:10px;padding:7px 8px;
       }
       .avi-med-details span{
-        display:block;color:#64748b;font-size:9px;font-weight:900;
-        text-transform:uppercase;
+        display:block;color:#7c8798;font-size:8.8px;font-weight:900;
+        text-transform:uppercase;letter-spacing:.035em;
       }
       .avi-med-details b{
-        display:block;margin-top:3px;color:#1f2937;font-size:11px;
-        overflow-wrap:anywhere;
+        display:block;margin-top:3px;color:#1f2937;font-size:10.8px;
+        line-height:1.35;overflow-wrap:anywhere;
       }
-      .avi-rx-list{display:grid;gap:12px}
+
+      .avi-rx-list{display:grid;gap:11px}
       .avi-rx-card{
         border:1px solid #e4c7da;border-radius:18px;padding:14px;background:#fff;
-        box-shadow:0 8px 24px rgba(122,23,79,.07);
+        box-shadow:0 8px 22px rgba(122,23,79,.055);
       }
       .avi-rx-head{
-        display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
-        margin-bottom:10px;
+        display:flex;justify-content:space-between;gap:12px;align-items:flex-start;
+        margin-bottom:9px;padding-bottom:10px;border-bottom:1px solid #f1e5ec;
       }
-      .avi-rx-head h4{margin:0;color:#4a1334;font-size:16px;font-weight:950}
+      .avi-rx-heading{min-width:0}
+      .avi-rx-kicker{
+        display:flex;align-items:center;gap:5px;
+        color:#9d174d;font-size:9.5px;font-weight:950;text-transform:uppercase;
+        letter-spacing:.055em;margin-bottom:3px;
+      }
+      .avi-rx-head h4{
+        margin:0;color:#341224;font-size:14px;font-weight:950;line-height:1.25;
+      }
       .avi-rx-head small{
-        display:block;color:#64748b;margin-top:3px;overflow-wrap:anywhere;
+        display:block;color:#94a3b8;margin-top:4px;
+        font-size:9.8px;line-height:1.3;overflow-wrap:anywhere;
       }
+      .avi-rx-head small b{color:#64748b}
       .avi-rx-meta{
         display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:7px;margin:10px 0;
+        gap:7px;margin:9px 0 11px;
       }
-      .avi-note{margin-top:12px;border-top:1px solid #e5e7eb;padding-top:10px}
-      .avi-loading{padding:30px;text-align:center;color:#64748b}
+      .avi-rx-meta .avi-data{min-height:50px;padding:7px 9px}
+      .avi-note{
+        margin-top:11px;border-top:1px solid #e5e7eb;padding-top:10px;
+        background:#fcfdff;
+      }
+      .avi-loading{padding:34px;text-align:center;color:#64748b;font-weight:750}
+
       .avi-rx-overlay{
-        position:fixed;inset:0;z-index:100010;background:rgba(15,23,42,.7);
+        position:fixed;inset:0;z-index:100010;background:rgba(15,23,42,.74);
+        backdrop-filter:blur(3px);
         display:flex;align-items:center;justify-content:center;padding:14px;
       }
       .avi-rx-shell{
-        width:min(1100px,100%);max-height:95vh;background:#fff;
-        border-radius:20px;overflow:hidden;display:flex;flex-direction:column;
+        width:min(1120px,100%);max-height:95vh;background:#fff;
+        border-radius:22px;overflow:hidden;display:flex;flex-direction:column;
+        box-shadow:0 30px 90px rgba(15,23,42,.38);
       }
       .avi-rx-view{
-        overflow:auto;padding:14px;background:#f8fafc;-webkit-overflow-scrolling:touch;
+        overflow:auto;padding:14px;background:#f8fafc;
+        -webkit-overflow-scrolling:touch;
       }
 
       @media(max-width:980px){
@@ -4174,34 +4325,51 @@
       @media(max-width:760px){
         .avi-overlay,.avi-rx-overlay{padding:0;align-items:flex-end}
         .avi-shell,.avi-rx-shell{
-          width:100%;max-width:100%;max-height:96dvh;border-radius:20px 20px 0 0;
+          width:100%;max-width:100%;max-height:96dvh;
+          border-radius:20px 20px 0 0;
         }
         .avi-head{
           padding:12px calc(12px + env(safe-area-inset-right)) 12px
             calc(12px + env(safe-area-inset-left));
           align-items:flex-start;
         }
-        .avi-head h3{font-size:18px}
-        .avi-close{min-height:44px;flex:0 0 auto}
+        .avi-head-main{gap:10px}
+        .avi-head-icon{width:40px;height:40px;border-radius:13px;font-size:17px}
+        .avi-head h3{font-size:17px}
+        .avi-head-patient{font-size:13.5px}
+        .avi-head-subcontext{font-size:11px}
+        .avi-close{min-height:42px;flex:0 0 auto;padding:8px 9px;font-size:11px}
         .avi-toolbar{
-          display:grid;grid-template-columns:1fr 1fr;padding:9px 12px;
+          display:grid;grid-template-columns:1fr 1fr;padding:8px 10px;gap:7px;
         }
-        .avi-toolbar .avi-btn{width:100%;min-height:44px}
+        .avi-toolbar .avi-btn{width:100%;min-height:41px;font-size:11px}
         .avi-toolbar .avi-btn:last-child{grid-column:1/-1}
         .avi-body{
-          padding:12px calc(12px + env(safe-area-inset-right))
+          padding:10px calc(10px + env(safe-area-inset-right))
             calc(14px + env(safe-area-inset-bottom))
-            calc(12px + env(safe-area-inset-left));
+            calc(10px + env(safe-area-inset-left));
         }
+        .avi-overview-block{padding:10px;border-radius:16px;margin-bottom:9px}
         .avi-data-grid,.avi-lines,.avi-rx-meta,.avi-med-grid,.avi-med-details{
           grid-template-columns:1fr;
         }
         .avi-col-2,.avi-span-full{grid-column:auto}
-        .avi-section summary{padding:12px}
-        .avi-section-body{padding:0 12px 12px}
+        .avi-clinical-divider{margin:13px 2px 9px;font-size:9.5px}
+        .avi-section{border-radius:15px;margin-bottom:8px}
+        .avi-section summary{padding:10px 11px;font-size:12px}
+        .avi-section-label>i{width:26px;height:26px}
+        .avi-section-body{padding:9px 10px 11px}
         .avi-rx-head{display:grid;grid-template-columns:1fr}
-        .avi-rx-head .avi-btn{width:100%;min-height:44px}
-        .avi-chip{font-size:10px}
+        .avi-rx-head .avi-btn{width:100%;min-height:41px}
+        .avi-chip{font-size:9.3px;padding:4px 7px}
+        .avi-rx-card{padding:11px;border-radius:16px}
+      }
+
+      @media(max-width:430px){
+        .avi-head-icon{display:none}
+        .avi-head-kicker{font-size:9px}
+        .avi-head h3{font-size:16px}
+        .avi-close span{display:none}
       }
     `;
     document.head.appendChild(s);
@@ -4267,10 +4435,12 @@
 
   function encabezadoContexto(a){
     return [
-      a?.numero_consulta ? '<span class="avi-chip">Consulta #'+esc(a.numero_consulta)+'</span>' : '',
-      a?.fecha_atencion ? '<span class="avi-chip">'+esc(fechaVisual(a.fecha_atencion))+'</span>' : '',
-      a?.estado_atencion ? '<span class="avi-chip">'+esc(a.estado_atencion)+'</span>' : '',
-      '<span class="avi-chip"><i class="bi bi-lock"></i>Solo lectura</span>'
+      a?.numero_consulta ? '<span class="avi-chip avi-chip-strong">Consulta #'+esc(a.numero_consulta)+'</span>' : '',
+      a?.fecha_atencion ? '<span class="avi-chip"><i class="bi bi-calendar3"></i>'+esc(fechaVisual(a.fecha_atencion))+'</span>' : '',
+      a?.hora_atencion ? '<span class="avi-chip"><i class="bi bi-clock"></i>'+esc(horaVisual(a.hora_atencion))+'</span>' : '',
+      a?.tipo_atencion ? '<span class="avi-chip">'+esc(a.tipo_atencion)+'</span>' : '',
+      a?.estado_atencion ? '<span class="avi-chip avi-chip-status">'+esc(a.estado_atencion)+'</span>' : '',
+      '<span class="avi-chip avi-chip-readonly"><i class="bi bi-lock"></i>Solo lectura</span>'
     ].filter(Boolean).join('');
   }
 
@@ -4340,17 +4510,57 @@
 
     body.innerHTML =
       (datosPaciente
-        ? '<h4 class="avi-group-title">Datos personales</h4>'+
-          '<div class="avi-data-grid">'+datosPaciente+'</div>'
+        ? '<section class="avi-overview-block">'+
+            '<h4 class="avi-group-title"><i class="bi bi-person-vcard"></i> Datos personales</h4>'+
+            '<div class="avi-data-grid">'+datosPaciente+'</div>'+
+          '</section>'
         : '')+
       (datosAtencion
-        ? '<h4 class="avi-group-title">Datos de la atención</h4>'+
-          '<div class="avi-data-grid">'+datosAtencion+'</div>'
+        ? '<section class="avi-overview-block">'+
+            '<h4 class="avi-group-title"><i class="bi bi-clipboard2-pulse"></i> Datos de la atención</h4>'+
+            '<div class="avi-data-grid">'+datosAtencion+'</div>'+
+          '</section>'
         : '')+
+      '<div class="avi-clinical-divider"><span>Resumen clínico de la consulta</span></div>'+
       anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+recetas;
 
     const contextBox = overlay.querySelector('[data-avi-contexto]');
     if(contextBox) contextBox.innerHTML = encabezadoContexto(a);
+
+    /*
+      Cabecera clínica: utiliza únicamente datos ya disponibles en memoria.
+      No consulta ni modifica backend y no cambia el contexto de la atención.
+    */
+    const p = pacienteActual();
+    const nombreCabecera =
+      nombrePaciente(p) ||
+      primero(a,['nombre_paciente','paciente_nombre']) ||
+      texto(a?.id_paciente) ||
+      'Paciente';
+
+    let ctxCabecera = {};
+    try{
+      ctxCabecera = typeof window.obtenerContextoAtencionActual === 'function'
+        ? (window.obtenerContextoAtencionActual() || {})
+        : {};
+    }catch(_){}
+
+    const medicoCabecera = texto(ctxCabecera.nombre_medico || a?.nombre_medico || a?.id_medico);
+    const especialidadCabecera = texto(ctxCabecera.especialidad_atencion || ctxCabecera.especialidad_medico);
+
+    const pacienteBox = overlay.querySelector('[data-avi-paciente]');
+    if(pacienteBox) pacienteBox.textContent = nombreCabecera;
+
+    const subcontextoBox = overlay.querySelector('[data-avi-subcontexto]');
+    if(subcontextoBox){
+      subcontextoBox.textContent = [
+        medicoCabecera,
+        especialidadCabecera
+      ].filter(Boolean).join(' · ');
+    }
+
+    const idTecnicoBox = overlay.querySelector('[data-avi-id-tecnico]');
+    if(idTecnicoBox) idTecnicoBox.textContent = 'ID atención · ' + texto(a.id_atencion || idAtencion);
 
     body.querySelectorAll('[data-avi-rx]').forEach(btn=>{
       btn.addEventListener('click',()=>{
@@ -4392,13 +4602,19 @@
     o.innerHTML =
       '<div class="avi-shell" role="dialog" aria-modal="true" aria-label="Vista integral de la atención">'+
         '<div class="avi-head">'+
-          '<div>'+
-            '<h3><i class="bi bi-grid-1x2-fill"></i> Vista integral de la atención</h3>'+
-            '<p>ID atención: '+esc(id)+'</p>'+
-            '<div class="avi-head-context" data-avi-contexto></div>'+
+          '<div class="avi-head-main">'+
+            '<div class="avi-head-icon"><i class="bi bi-file-medical-fill"></i></div>'+
+            '<div class="avi-head-copy">'+
+              '<span class="avi-head-kicker">Historia clínica · Vista de consulta</span>'+
+              '<h3>Vista integral de la atención</h3>'+
+              '<div class="avi-head-patient" data-avi-paciente>Paciente</div>'+
+              '<div class="avi-head-subcontext" data-avi-subcontexto></div>'+
+              '<p class="avi-technical-id" data-avi-id-tecnico>ID atención · '+esc(id)+'</p>'+
+              '<div class="avi-head-context" data-avi-contexto></div>'+
+            '</div>'+
           '</div>'+
           '<button type="button" class="avi-close" data-avi-cerrar>'+
-            '<i class="bi bi-x-lg"></i> Cerrar'+
+            '<i class="bi bi-x-lg"></i> <span>Cerrar</span>'+
           '</button>'+
         '</div>'+
         '<div class="avi-toolbar">'+
