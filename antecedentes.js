@@ -1577,8 +1577,12 @@ function recopilarAntecedentesGinecologicosEstructurados(){
     mamografia: { fecha: auroGet('hcGinMamografiaFecha'), resultado: auroGet('hcGinMamografiaResultado') },
     eco_mamario: { fecha: auroGet('hcGinEcoMamarioFecha'), resultado: auroGet('hcGinEcoMamarioResultado') },
     densitometria_osea: { fecha: auroGet('hcGinDensitometriaFecha'), resultado: auroGet('hcGinDensitometriaResultado') },
-    pap: { estado: auroGet('hcGinPapEstado'), resultado: auroGet('hcGinPapResultado') },
-    colposcopia: { fecha: auroGet('hcGinColposcopiaFecha'), estado: auroGet('hcGinColposcopiaEstado'), resultado: auroGet('hcGinColposcopiaResultado') }
+    // Compatibilidad anti-regresión:
+    // - "estado" se conserva como dato histórico oculto para historias ya existentes.
+    // - Las nuevas capturas usan Fecha + Resultado / observación.
+    pap: { fecha: auroGet('hcGinPapFecha'), estado: auroGet('hcGinPapEstado'), resultado: auroGet('hcGinPapResultado') },
+    colposcopia: { fecha: auroGet('hcGinColposcopiaFecha'), estado: auroGet('hcGinColposcopiaEstado'), resultado: auroGet('hcGinColposcopiaResultado') },
+    biopsia: { fecha: auroGet('hcGinBiopsiaFecha'), resultado: auroGet('hcGinBiopsiaResultado') }
   });
 }
 
@@ -1606,11 +1610,16 @@ function cargarAntecedentesGinecologicosEstructurados(data){
   auroSet('hcGinEcoMamarioResultado', d.eco_mamario?.resultado);
   auroSet('hcGinDensitometriaFecha', d.densitometria_osea?.fecha);
   auroSet('hcGinDensitometriaResultado', d.densitometria_osea?.resultado);
+  auroSet('hcGinPapFecha', d.pap?.fecha);
+  // Conserva el estado histórico aunque ya no se muestre como selector.
   auroSet('hcGinPapEstado', d.pap?.estado);
   auroSet('hcGinPapResultado', d.pap?.resultado);
   auroSet('hcGinColposcopiaFecha', d.colposcopia?.fecha);
+  // Conserva el estado histórico aunque ya no se muestre como selector.
   auroSet('hcGinColposcopiaEstado', d.colposcopia?.estado);
   auroSet('hcGinColposcopiaResultado', d.colposcopia?.resultado);
+  auroSet('hcGinBiopsiaFecha', d.biopsia?.fecha);
+  auroSet('hcGinBiopsiaResultado', d.biopsia?.resultado);
 }
 
 function recopilarAntecedentesPersonalesCompletos(){
@@ -2932,7 +2941,8 @@ function auroResumenGinecologicosItemsDesdeJson(dataGineco){
   const titulos = {
     menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa',
     planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales',
-    ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea', colposcopia:'Colposcopia'
+    ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea',
+    pap:'Citología / PAP', colposcopia:'Colposcopia', biopsia:'Biopsia'
   };
   return Object.keys(g).map(k => {
     const v = g[k] || {};
