@@ -69,6 +69,8 @@
     ultimaEdicionLocal: '',
     protocoloVisualCodigo: '',
     protocoloVisualModoLectura: false,
+    correccionClinicaActiva: false,
+    correccionClinicaMeta: null,
 
     /*
       AUROSANAX OPTIMIZACIÓN QUIRÚRGICA 2026-08-03:
@@ -227,6 +229,214 @@
 
     return await respuesta.json();
   }
+  /* ==========================================================
+     AUROSANAX DIAGNÓSTICO 18 - CORRECCIÓN EXPLÍCITA HISTÓRICA
+     - Atención abierta: flujo original intacto.
+     - Atención finalizada: desbloqueo explícito y temporal.
+     - Guardado directo por id_atencion, sin crear Examen Físico.
+     - Motivo/enmienda definidos por backend y Configuración.
+  ========================================================== */
+  function auroDxTokenControlClinico(){
+    try{
+      if(window.AUROSANAX_SEGURIDAD && typeof window.AUROSANAX_SEGURIDAD.obtenerToken === 'function'){
+        return texto(window.AUROSANAX_SEGURIDAD.obtenerToken());
+      }
+    }catch(e){}
+    try{ return texto(sessionStorage.getItem('aurosanax_seguridad_token')); }catch(e){}
+    return '';
+  }
+
+  if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
+    window.auroSolicitarMotivoCorreccionClinica = function(opciones){
+      opciones = opciones || {};
+      const excepcional = !!opciones.excepcional;
+      const entrada = window.prompt(
+        (excepcional ? 'ENMIENDA EXCEPCIONAL' : 'CORRECCIÓN CLÍNICA') +
+        ' - JUSTIFICATIVO OBLIGATORIO\n\n' +
+        '1. Error de digitación\n' +
+        '2. Omisión\n' +
+        '3. Fallo del sistema\n' +
+        '4. Emergencia\n' +
+        '5. Corrección clínica\n' +
+        '6. Otro\n\n' +
+        'Escriba el número del motivo:'
+      );
+      if(entrada === null) return null;
+      const mapa = {
+        '1':'Error de digitación', '2':'Omisión', '3':'Fallo del sistema',
+        '4':'Emergencia', '5':'Corrección clínica', '6':'Otro'
+      };
+      const tipo = mapa[String(entrada || '').trim()];
+      if(!tipo){ window.alert('Seleccione un motivo válido del 1 al 6.'); return null; }
+      let detalle = '';
+      if(tipo === 'Otro'){
+        const otro = window.prompt('Escriba un justificativo breve:');
+        if(otro === null) return null;
+        detalle = String(otro || '').trim();
+        if(detalle.length < 3){ window.alert('El justificativo es obligatorio.'); return null; }
+      }
+      return {
+        motivo_correccion_tipo:tipo,
+        motivo_correccion_detalle:detalle,
+        motivo_correccion:detalle ? (tipo + ': ' + detalle) : tipo,
+        correccion_excepcional:excepcional ? 'SI' : 'NO'
+      };
+    };
+  }
+
+  async function auroDxPostJSON(accion, data){
+    const API = apiUrl();
+    if(!API) throw new Error('API_URL no está definida.');
+    const respuesta = await fetch(API, {
+      method:'POST',
+      body:JSON.stringify({accion:accion, data:data || {}})
+    });
+    if(!respuesta.ok) throw new Error('Error HTTP ' + respuesta.status);
+    return await respuesta.json();
+  }
+
+  function auroDxElementosEditorCie(){
+    const panel = document.getElementById('hc_diagnostico') || buscarPanelExistente();
+    if(!panel) return [];
+    const selectores = [
+      '#hcDxCodigoBuscar','#hcDxNombreBuscar',
+      '.diagnostico-add','.diagnostico-delete','.diagnostico-radio','.diagnostico-tipo-select',
+      'button[onclick*="buscarDiagnosticoCie10"]',
+      'button[onclick*="agregarDiagnosticoCie10Manual"]'
+    ];
+    const salida = [];
+    selectores.forEach(sel => {
+      panel.querySelectorAll(sel).forEach(el => { if(!salida.includes(el)) salida.push(el); });
+    });
+    return salida;
+  }
+
+  function auroDxAplicarEstadoEditorHistorico(){
+    const ctx = contextoAtencionSeleccionada();
+    const bloquear = ctx.historica && !state.correccionClinicaActiva;
+    auroDxElementosEditorCie().forEach(el => {
+      if(el.dataset.auroDxDisabledOriginal === undefined){
+        el.dataset.auroDxDisabledOriginal = el.disabled ? '1' : '0';
+      }
+      if(bloquear){
+        el.disabled = true;
+      }else{
+        el.disabled = el.dataset.auroDxDisabledOriginal === '1';
+      }
+    });
+  }
+
+  async function auroDxEvaluarCorreccionHistorica(){
+    const ctx = contextoAtencionSeleccionada();
+    if(!ctx.id) return {success:false,message:'No existe una atención seleccionada.'};
+    return await getJSON('evaluarEdicionClinica', {
+      token: auroDxTokenControlClinico(),
+      modulo:'DIAGNOSTICO',
+      id_atencion:ctx.id
+    });
+  }
+
+  async function auroDxIniciarCorreccionHistorica(){
+    const ctx = contextoAtencionSeleccionada();
+    if(!ctx.historica){
+      mensaje('aviso','La atención está abierta; puede editar el diagnóstico normalmente.');
+      return;
+    }
+    if(state.correccionClinicaActiva) return;
+
+    try{
+      const evaluacion = await auroDxEvaluarCorreccionHistorica();
+      if(evaluacion && evaluacion.success === false && !evaluacion.requiere_motivo && !evaluacion.requiere_excepcion){
+        mensaje('error', evaluacion.message || 'La corrección está bloqueada por Configuración.');
+        return;
+      }
+
+      const motivo = window.auroSolicitarMotivoCorreccionClinica({
+        excepcional: !!(evaluacion && evaluacion.requiere_excepcion)
+      });
+      if(!motivo) return;
+
+      state.correccionClinicaMeta = motivo;
+      state.correccionClinicaActiva = true;
+      renderContextoSuperior();
+      auroDxAplicarEstadoEditorHistorico();
+      mensaje('aviso', (motivo.correccion_excepcional === 'SI' ? 'Enmienda excepcional' : 'Corrección clínica') + ' habilitada temporalmente. Modifique el diagnóstico y pulse “Guardar corrección”.');
+    }catch(error){
+      console.error(MODULO + ': no se pudo iniciar corrección histórica.', error);
+      mensaje('error', error.message || 'No se pudo validar la corrección clínica.');
+    }
+  }
+
+  function auroDxDiagnosticosParaCorreccion(){
+    let registros = [];
+    try{
+      registros = typeof window.auroRecopilarDiagnosticosEstructurados === 'function'
+        ? window.auroRecopilarDiagnosticosEstructurados()
+        : [];
+    }catch(e){ registros = []; }
+    if(!Array.isArray(registros)) registros = [];
+
+    return registros.map(r => {
+      const codigo = texto(r.codigo_cie10 || r.codigo || '').replace(/\./g,'').toUpperCase();
+      const previo = state.diagnosticos.find(d =>
+        texto(d.codigo_cie10 || d.codigo || '').replace(/\./g,'').toUpperCase() === codigo
+      ) || null;
+      return Object.assign({}, r, {
+        id_diagnostico: texto(r.id_diagnostico || previo?.id_diagnostico || ''),
+        id_atencion: contextoAtencionSeleccionada().id
+      });
+    });
+  }
+
+  async function auroDxGuardarCorreccionHistorica(){
+    if(!state.correccionClinicaActiva || !state.correccionClinicaMeta){
+      mensaje('error','Primero habilite la corrección clínica.');
+      return;
+    }
+
+    const ctx = contextoAtencionSeleccionada();
+    const registros = auroDxDiagnosticosParaCorreccion();
+    const idExamen = texto(
+      (window.examenFisicoState?.atencionActual === ctx.id
+        ? (window.examenFisicoState?.examenesSheets?.[ctx.id]?.id_examen || '')
+        : '')
+    );
+
+    const payload = Object.assign({
+      id_atencion:ctx.id,
+      id_examen:idExamen,
+      registros:registros,
+      token:auroDxTokenControlClinico()
+    }, state.correccionClinicaMeta);
+
+    try{
+      const resultado = await auroDxPostJSON('guardarDiagnosticos', payload);
+      if(!resultado || resultado.success === false){
+        throw new Error(resultado?.message || 'No se pudo guardar la corrección diagnóstica.');
+      }
+
+      state.correccionClinicaActiva = false;
+      state.correccionClinicaMeta = null;
+      await cargarAtencionActual(true);
+      auroDxAplicarEstadoEditorHistorico();
+      renderContextoSuperior();
+      mensaje('ok','Corrección diagnóstica guardada con trazabilidad clínica.');
+    }catch(error){
+      console.error(MODULO + ': error guardando corrección histórica.', error);
+      mensaje('error', error.message || 'No se pudo guardar la corrección diagnóstica.');
+    }
+  }
+
+  async function auroDxCancelarCorreccionHistorica(){
+    state.correccionClinicaActiva = false;
+    state.correccionClinicaMeta = null;
+    try{ await cargarAtencionActual(true); }catch(e){}
+    auroDxAplicarEstadoEditorHistorico();
+    renderContextoSuperior();
+    mensaje('aviso','Corrección cancelada. Se restauró el diagnóstico guardado.');
+  }
+
+
 
   function getValue(id){
     try{
@@ -462,6 +672,18 @@
           ${escapeHtml(estadoTexto)}
         </div>
       </div>
+      ${ctx.historica ? `
+        <div class="auro-dx-correccion-actions">
+          ${state.correccionClinicaActiva ? `
+            <span class="auro-dx-correccion-note"><i class="bi bi-unlock"></i> Corrección habilitada temporalmente</span>
+            <button type="button" class="auro-dx-btn primary" onclick="window.auroDxGuardarCorreccionHistorica()"><i class="bi bi-save"></i> Guardar corrección</button>
+            <button type="button" class="auro-dx-btn ghost" onclick="window.auroDxCancelarCorreccionHistorica()">Cancelar</button>
+          ` : `
+            <span class="auro-dx-correccion-note"><i class="bi bi-shield-lock"></i> El original permanece protegido</span>
+            <button type="button" class="auro-dx-btn ghost" onclick="window.auroDxIniciarCorreccionHistorica()"><i class="bi bi-pencil-square"></i> Corregir diagnóstico</button>
+          `}
+        </div>
+      ` : ''}
       <div class="auro-dx-contexto-stats">
         <div class="auro-dx-contexto-stat">
           <span>Total</span><strong>${escapeHtml(totalTexto)}</strong>
@@ -474,6 +696,7 @@
         </div>
       </div>
     `;
+    setTimeout(auroDxAplicarEstadoEditorHistorico, 0);
   }
 
   function optimizarTitulosResumenExistente(){
@@ -739,6 +962,8 @@
       .auro-dx-contexto-state{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;font-size:11px;font-weight:900;white-space:nowrap}
       .auro-dx-contexto-state.editable{background:#eaf8f0;color:#216344}
       .auro-dx-contexto-state.historica{background:#f1f5f9;color:#475569}
+      .auro-dx-correccion-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:10px 0 2px}
+      .auro-dx-correccion-note{font-size:12px;font-weight:800;color:#64748b;margin-right:auto}
       .auro-dx-contexto-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid #f0e1e9;background:rgba(255,255,255,.72)}
       .auro-dx-contexto-stat{padding:11px 14px;border-right:1px solid #f0e1e9;min-width:0}
       .auro-dx-contexto-stat:last-child{border-right:0}
@@ -3879,6 +4104,10 @@
 
     console.log(MODULO + ' v' + VERSION + ' [' + RELEASE + '] cargado correctamente.');
   }
+
+  window.auroDxIniciarCorreccionHistorica = auroDxIniciarCorreccionHistorica;
+  window.auroDxGuardarCorreccionHistorica = auroDxGuardarCorreccionHistorica;
+  window.auroDxCancelarCorreccionHistorica = auroDxCancelarCorreccionHistorica;
 
   window.auroDiagnosticos = {
     version: VERSION,
