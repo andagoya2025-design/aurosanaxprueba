@@ -796,29 +796,17 @@
   #finanzas .fin-mobile-actions button{flex:1 1 95px;min-height:38px;border-radius:11px}
   #finanzas .fin-state-active{background:#dcfce7;color:#166534;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
   #finanzas .fin-state-inactive{background:#f1f5f9;color:#475569;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
-  #finanzas .fin-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-  #finanzas .fin-summary-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;padding:14px;min-height:92px;box-shadow:0 8px 24px rgba(15,23,42,.045)}
-  #finanzas .fin-summary-card small{display:block;color:#64748b;font-weight:800;margin-bottom:6px}
-  #finanzas .fin-summary-card strong{font-size:23px;color:#0f172a;letter-spacing:-.02em}
-  #finanzas .fin-result-ok{background:#f0fdf4;border-color:#bbf7d0}
-  #finanzas .fin-result-ok strong{color:#166534}
-  #finanzas .fin-result-bad{background:#fff1f2;border-color:#fecdd3}
-  #finanzas .fin-result-bad strong{color:#be123c}
-  #finanzas .fin-result-neutral{background:#f8fafc}
-  #finanzas .fin-method-note{font-size:12px;color:#64748b;line-height:1.55}
   @media(max-width:980px){
     #finanzas .table-responsive{display:none!important}
     #finanzas .fin-mobile-list{display:block!important}
     #finanzas .cardx{padding:16px!important}
     #finanzas .row.g-3>[class*="col-"]{width:100%}
     #finanzas .fin-base-box .btn-line{width:100%;justify-content:center}
-    #finanzas .fin-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   }
   @media(max-width:520px){
     #finanzas .fin-mobile-grid{grid-template-columns:1fr}
     #finanzas .fin-mobile-grid b{text-align:left;margin-top:-4px}
     #finanzas .fin-mobile-actions button{flex:1 1 100%}
-    #finanzas .fin-summary-grid{grid-template-columns:1fr}
   }
 </style>
 <section class="screen" id="finanzas">
@@ -873,8 +861,8 @@
   <div class="cardx p-4">
     <div class="section-head">
       <div>
-        <h4>Gastos y costos</h4>
-        <p>Registre y clasifique costos fijos, variables, periódicos y extraordinarios. El sistema los organiza para rentabilidad sin afectar módulos clínicos.</p>
+        <h4>Gastos fijos</h4>
+        <p>Registre gastos recurrentes para futuras métricas de rentabilidad. No generan movimientos clínicos ni cobros al paciente.</p>
       </div>
     </div>
 
@@ -884,7 +872,7 @@
     </div>
 
     <div id="finanzasGastosMsg" class="notice mb-3">
-      <i class="bi bi-info-circle me-1"></i> Cargando gastos y costos...
+      <i class="bi bi-info-circle me-1"></i> Cargando gastos fijos...
     </div>
 
     <input id="finGastoId" type="hidden">
@@ -927,21 +915,11 @@
         </select>
         <input id="finGastoCategoriaOtro" class="form-control mt-2 d-none" placeholder="Escriba la categoría">
       </div>
-      <div class="col-md-3">
-        <label class="form-label fw-bold">Tipo de gasto</label>
-        <select id="finGastoTipo" class="form-select">
-          <option value="Fijo">Fijo</option>
-          <option value="Variable">Variable</option>
-          <option value="Periódico">Periódico</option>
-          <option value="Extraordinario">Extraordinario</option>
-        </select>
-        <div class="text-muted small mt-1">El ERP usa esta clasificación para rentabilidad y punto de equilibrio.</div>
-      </div>
       <div class="col-md-2">
         <label class="form-label fw-bold">Valor</label>
         <input id="finGastoValor" type="number" min="0" step="0.01" class="form-control" placeholder="0.00">
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label fw-bold">Periodicidad</label>
         <select id="finGastoPeriodicidad" class="form-select">
           <option value="Mensual">Mensual</option>
@@ -950,11 +928,10 @@
           <option value="Trimestral">Trimestral</option>
           <option value="Semestral">Semestral</option>
           <option value="Anual">Anual</option>
-          <option value="Único">Único</option>
         </select>
       </div>
       <div class="col-md-4">
-        <label class="form-label fw-bold">Costo mensual estimado</label>
+        <label class="form-label fw-bold">Valor mensual prorrateado</label>
         <input id="finGastoValorMensual" class="form-control" readonly placeholder="0.00">
       </div>
       <div class="col-md-4">
@@ -977,57 +954,13 @@
 
     <div class="table-responsive">
       <table class="table table-modern">
-        <thead><tr><th>Gasto</th><th>Categoría</th><th>Tipo</th><th>Valor</th><th>Periodicidad</th><th>Mensual</th><th>Desde</th><th>Hasta</th><th>Estado</th><th>Acción</th></tr></thead>
+        <thead><tr><th>Gasto</th><th>Categoría</th><th>Valor</th><th>Periodicidad</th><th>Mensual</th><th>Desde</th><th>Hasta</th><th>Estado</th><th>Acción</th></tr></thead>
         <tbody id="finGastosTbody">
-          <tr><td colspan="10" class="text-center text-muted py-3">Sin gastos o costos cargados.</td></tr>
+          <tr><td colspan="9" class="text-center text-muted py-3">Sin gastos fijos cargados.</td></tr>
         </tbody>
       </table>
     </div>
     <div id="finGastosMobile" class="fin-mobile-list" aria-live="polite"></div>
-  </div>
-
-
-  <div class="cardx p-4 mt-4">
-    <div class="section-head">
-      <div>
-        <h4>Resultado mensual</h4>
-        <p>Resumen gerencial del período basado en ingresos realmente cobrados y costos configurados o registrados.</p>
-      </div>
-      <div class="d-flex gap-2 flex-wrap align-items-end">
-        <div>
-          <label class="form-label fw-bold mb-1">Período</label>
-          <input id="finResumenPeriodo" type="month" class="form-control">
-        </div>
-        <button id="btnActualizarResumenFinanzas" type="button" class="btn-line">
-          <i class="bi bi-arrow-clockwise me-1"></i> Actualizar resumen
-        </button>
-      </div>
-    </div>
-
-    <div id="finResumenMsg" class="notice mb-3">
-      <i class="bi bi-info-circle me-1"></i> Seleccione un período para analizar ingresos, gastos y rentabilidad.
-    </div>
-
-    <div class="fin-summary-grid">
-      <div class="fin-summary-card"><small>Ingresos cobrados</small><strong id="finResIngresos">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Facturación generada</small><strong id="finResFacturacion">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Por cobrar</small><strong id="finResCartera">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Gastos fijos</small><strong id="finResFijos">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Gastos periódicos</small><strong id="finResPeriodicos">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Costos variables</small><strong id="finResVariables">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Gastos extraordinarios</small><strong id="finResExtraordinarios">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Comisiones registradas</small><strong id="finResComisiones">$0.00</strong></div>
-      <div id="finResResultadoCard" class="fin-summary-card fin-result-neutral"><small>Resultado operativo estimado</small><strong id="finResResultado">$0.00</strong></div>
-      <div class="fin-summary-card"><small>Margen operativo</small><strong id="finResMargen">0.0%</strong></div>
-      <div class="fin-summary-card"><small>Punto de equilibrio</small><strong id="finResPuntoEquilibrio">—</strong></div>
-      <div class="fin-summary-card"><small>Atenciones / Ticket promedio</small><strong><span id="finResAtenciones">0</span> · <span id="finResTicket">$0.00</span></strong></div>
-    </div>
-
-    <div class="notice mt-3">
-      <b>Base gerencial:</b> el punto de equilibrio usa costos fijos + periódicos y el margen de contribución del período.
-      Los gastos variables y extraordinarios se reconocen en el mes de su fecha de inicio.
-      Los gastos recurrentes usan su costo mensual estimado.
-    </div>
   </div>
 
   <!-- AUROSANAX FINANZAS: configuración económica de médicos.
@@ -1092,6 +1025,9 @@
       </button>
       <button class="security-subtab" type="button" data-security-target="securityBitacora" data-permiso="bitacora" onclick="showSecurityPanel('securityBitacora',this)">
         <i class="bi bi-journal-text me-1"></i> Bitácora
+      </button>
+      <button id="tabAuditoriaClinica" class="security-subtab" type="button" data-security-target="securityAuditoriaClinica" onclick="showSecurityPanel('securityAuditoriaClinica',this)">
+        <i class="bi bi-clipboard2-pulse me-1"></i> Auditoría clínica
       </button>
     </div>
 
@@ -1182,6 +1118,78 @@
       </div>
       <div id="bitacoraSeguridadMobile" class="mobile-cards">
         <div class="mobile-card security-empty"><i class="bi bi-journal-check"></i>Aún no existen eventos registrados. Los accesos y acciones aparecerán aquí automáticamente.</div>
+      </div>
+    </div>
+
+    <div id="securityAuditoriaClinica" class="security-panel">
+      <div class="security-summary">
+        <div class="security-summary-card"><small>Eventos visibles</small><strong id="audClinTotal">0</strong></div>
+        <div class="security-summary-card"><small>Dentro de 24 h</small><strong id="audClinDentro24">0</strong></div>
+        <div class="security-summary-card"><small>Fuera de 24 h</small><strong id="audClinFuera24">0</strong></div>
+        <div class="security-summary-card"><small>Último evento</small><strong id="audClinUltimo" style="font-size:16px">—</strong></div>
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h4 style="font-size:22px!important">Auditoría clínica</h4>
+          <p>Historial independiente de cambios en Diagnóstico, Plan clínico y Recetas. No se mezcla con la bitácora de accesos.</p>
+        </div>
+        <span class="readonly-pill"><i class="bi bi-eye"></i> Solo lectura · Administrador</span>
+      </div>
+
+      <div id="audClinEstado" class="notice mb-3">
+        <i class="bi bi-shield-check me-1"></i>
+        La auditoría clínica se carga únicamente al abrir esta pestaña.
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinDesde">Desde</label>
+          <input id="audClinDesde" type="date" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinHasta">Hasta</label>
+          <input id="audClinHasta" type="date" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinModulo">Módulo</label>
+          <select id="audClinModulo" class="form-select">
+            <option value="">Todos</option>
+            <option value="DIAGNOSTICO">Diagnóstico</option>
+            <option value="PLAN">Plan clínico</option>
+            <option value="RECETA">Receta</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinAccion">Acción</label>
+          <select id="audClinAccion" class="form-select">
+            <option value="">Todas</option>
+            <option value="REGISTRO">Registro</option>
+            <option value="EMISION">Emisión</option>
+            <option value="CORRECCION">Corrección</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold" for="audClinBuscar">Buscar</label>
+          <input id="audClinBuscar" class="form-control" placeholder="Paciente, CIE-10, médico, usuario o ID">
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap mb-3">
+        <button id="audClinRefrescar" type="button" class="btn-soft"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar auditoría</button>
+        <button id="audClinLimpiar" type="button" class="btn-line"><i class="bi bi-eraser me-1"></i> Limpiar filtros</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-modern">
+          <thead><tr><th>Fecha y hora</th><th>Paciente</th><th>Consulta</th><th>Módulo</th><th>Acción</th><th>Médico / usuario</th><th>Ventana</th><th>Detalle</th></tr></thead>
+          <tbody id="audClinBody">
+            <tr><td colspan="8" class="security-empty"><i class="bi bi-clipboard2-pulse"></i>Abra esta pestaña para cargar la auditoría clínica.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="audClinMobile" class="mobile-cards">
+        <div class="mobile-card security-empty"><i class="bi bi-clipboard2-pulse"></i>Abra esta pestaña para cargar la auditoría clínica.</div>
       </div>
     </div>
   </div>
@@ -2429,6 +2437,7 @@ function showSecurityPanel(id,btn){
 <script src="config-centro.js"></script>
 <script src="config-finanzas.js"></script>
 <script src="seguridad.js?v=1.4.0"></script>
+<script src="auditoria_clinica.js?v=1.0.0"></script>
 
 </body>
 </html>
