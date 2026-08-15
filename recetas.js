@@ -784,6 +784,166 @@
         padding-bottom:12px!important;
       }
 
+      /* AUROSANAX RECETAS 2.9 - EDITOR ESPEJO DEL DOCUMENTO OFICIAL
+         Solo presentación del formulario existente. */
+      #recetas .auro-receta-editor-espejo{
+        display:grid!important;
+        grid-template-columns:repeat(12,minmax(0,1fr))!important;
+        gap:10px!important;
+        margin:0!important;
+        padding:14px!important;
+        border:1px solid #e7d8e1!important;
+        border-top:3px solid #8b1e5a!important;
+        border-radius:18px!important;
+        background:#fff!important;
+        box-shadow:0 10px 26px rgba(15,23,42,.045)!important;
+      }
+      #recetas .auro-receta-editor-espejo > [class*="col-"]{
+        width:auto!important;
+        max-width:none!important;
+        padding:0!important;
+        margin:0!important;
+        min-width:0!important;
+      }
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-meta{
+        grid-column:span 3;
+        border:1px solid #eee4ea;
+        border-radius:13px;
+        padding:9px 10px!important;
+        background:#fffafd;
+      }
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-dx{
+        grid-column:1/-1;
+        border:1px solid #ead5e2;
+        border-radius:14px;
+        padding:10px!important;
+        background:linear-gradient(135deg,#fffafd,#ffffff);
+      }
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment,
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones,
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
+        grid-column:1/-1;
+        border:1px solid #e5e7eb;
+        border-radius:15px;
+        padding:11px!important;
+        background:#fff;
+      }
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment{
+        border-color:#dfc6d5;
+        background:linear-gradient(180deg,#ffffff,#fffafd);
+      }
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
+        background:#f8fafc;
+      }
+      #recetas .auro-receta-editor-espejo .form-label{
+        display:flex!important;
+        align-items:center!important;
+        gap:9px!important;
+        margin:0 0 6px!important;
+        color:#7a174f!important;
+        font-size:10.5px!important;
+        line-height:1.2!important;
+        font-weight:900!important;
+        text-transform:uppercase!important;
+        letter-spacing:.05em!important;
+      }
+      #recetas .auro-receta-editor-espejo .form-control,
+      #recetas .auro-receta-editor-espejo .form-select{
+        width:100%!important;
+        min-height:42px!important;
+        border:1px solid #e5e7eb!important;
+        border-radius:10px!important;
+        background:#fff!important;
+        color:#111827!important;
+        font-size:13px!important;
+        font-weight:700!important;
+        box-shadow:none!important;
+      }
+      #recetas .auro-receta-editor-espejo #recMedico{
+        background:#f8fafc!important;
+        color:#475569!important;
+      }
+      #recetas .auro-receta-editor-espejo #recDiagnostico{
+        font-size:13.5px!important;
+        font-weight:800!important;
+      }
+      #recetas .auro-receta-editor-espejo #recMedicamento{
+        min-height:180px!important;
+        border-color:#dfc6d5!important;
+        border-radius:12px!important;
+        background:#fff!important;
+        font-family:Arial,system-ui,sans-serif!important;
+        font-size:13.5px!important;
+        line-height:1.48!important;
+        padding:12px 13px!important;
+      }
+      #recetas .auro-receta-editor-espejo #recIndicaciones{
+        min-height:104px!important;
+        background:#fff!important;
+      }
+      #recetas .auro-receta-editor-espejo #recRecomendaciones{
+        min-height:92px!important;
+        background:#fff!important;
+      }
+      #recetas .auro-receta-editor-espejo .form-text{
+        margin:7px 2px 0!important;
+        color:#64748b!important;
+        font-size:10.5px!important;
+        line-height:1.35!important;
+      }
+      #recetas .auro-receta-editor-espejo[data-auro-modo="edicion"],
+      #recetas .auro-receta-editor-espejo[data-auro-modo="nueva"]{
+        border-top-color:#c23b83!important;
+        box-shadow:0 12px 30px rgba(139,30,90,.075)!important;
+      }
+      #recetas .auro-receta-editor-espejo[data-auro-modo="edicion"] .form-control:focus,
+      #recetas .auro-receta-editor-espejo[data-auro-modo="edicion"] .form-select:focus,
+      #recetas .auro-receta-editor-espejo[data-auro-modo="nueva"] .form-control:focus,
+      #recetas .auro-receta-editor-espejo[data-auro-modo="nueva"] .form-select:focus{
+        border-color:#c23b83!important;
+        box-shadow:0 0 0 3px rgba(194,59,131,.10)!important;
+      }
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment > .hc-plan-narrow,
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones > .hc-plan-narrow,
+      #recetas .auro-receta-editor-espejo .auro-rx-editor-internas > .hc-plan-narrow{
+        width:100%!important;
+        max-width:none!important;
+      }
+
+      @media(max-width:980px){
+        #recetas .auro-receta-editor-espejo{
+          grid-template-columns:repeat(2,minmax(0,1fr))!important;
+          padding:12px!important;
+          gap:9px!important;
+        }
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-meta{
+          grid-column:span 1!important;
+        }
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-dx,
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment,
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones,
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
+          grid-column:1/-1!important;
+        }
+      }
+      @media(max-width:560px){
+        #recetas .auro-receta-editor-espejo{
+          grid-template-columns:1fr!important;
+          padding:10px!important;
+          border-radius:16px!important;
+        }
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-meta,
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-dx,
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment,
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones,
+        #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
+          grid-column:1/-1!important;
+        }
+        #recetas .auro-receta-editor-espejo #recMedicamento{min-height:155px!important;}
+        #recetas .auro-receta-editor-espejo #recIndicaciones{min-height:92px!important;}
+        #recetas .auro-receta-editor-espejo #recRecomendaciones{min-height:84px!important;}
+      }
+
       @media(max-width:1180px){
         #recetas .auro-receta-main-actions{
           grid-template-columns:repeat(3,1fr)!important;
@@ -869,6 +1029,48 @@
     document.head.appendChild(style);
   }
 
+  function auroRecetaMontarEditorEspejo(){
+    const seccion = el('recetas');
+    if(!seccion) return null;
+
+    const row = seccion.querySelector(':scope > .cardx > .row.g-3');
+    if(!row) return null;
+
+    row.classList.add('auro-receta-editor-espejo');
+    row.setAttribute('data-auro-modo', String(recetaModoTrabajo || 'lectura'));
+
+    const configuracion = [
+      ['recFecha','auro-rx-editor-meta','Fecha de emisión'],
+      ['recMedico','auro-rx-editor-meta','Médico emisor'],
+      ['recCie10','auro-rx-editor-meta','CIE-10'],
+      ['recEstado','auro-rx-editor-meta','Estado'],
+      ['recDiagnostico','auro-rx-editor-dx','Diagnóstico'],
+      ['recMedicamento','auro-rx-editor-treatment','Tratamiento prescrito'],
+      ['recIndicaciones','auro-rx-editor-indicaciones','Indicaciones para el paciente'],
+      ['recRecomendaciones','auro-rx-editor-internas','Observaciones internas / recomendaciones']
+    ];
+
+    configuracion.forEach(function(item){
+      const campo = el(item[0]);
+      if(!campo) return;
+
+      const col = campo.closest('.row.g-3 > [class*="col-"]') ||
+        campo.closest('[class*="col-"]');
+
+      if(col){
+        col.classList.add(item[1]);
+      }
+
+      const scope = col || campo.parentElement;
+      const label = scope?.querySelector('.form-label');
+      if(label){
+        label.textContent = item[2];
+      }
+    });
+
+    return row;
+  }
+
   function auroRecetaAfinarInterfazPremium(){
     const seccion = el('recetas');
     if(!seccion) return;
@@ -903,6 +1105,8 @@
     if(nota){
       nota.innerHTML = '<i class="bi bi-info-circle me-1"></i> La prescripción se conserva como un único documento clínico asociado a la atención activa, aunque incluya varios medicamentos.';
     }
+
+    auroRecetaMontarEditorEspejo();
   }
 
   function recetaMedicamentosPlanActualesSeguros(){
@@ -2609,6 +2813,10 @@
     const atencion = obtenerAtencionActivaSegura() || {};
     const medico = obtenerMedicoDesdeAtencionActiva();
     const modo = auroRecetaModoActualTexto();
+    const editorEspejo = auroRecetaMontarEditorEspejo();
+    if(editorEspejo){
+      editorEspejo.setAttribute('data-auro-modo', String(recetaModoTrabajo || 'lectura'));
+    }
 
     if(card){
       card.classList.add('auro-receta-context-card');
@@ -2676,7 +2884,7 @@
       row.parentNode.insertBefore(formTitle, row);
     }
     if(formTitle){
-      formTitle.innerHTML = `<b>Tratamiento e indicaciones</b><small>Edición del documento asociado a la atención actual.</small>`;
+      formTitle.innerHTML = `<b>Contenido de la prescripción</b><small>Mismos datos clínicos utilizados por Vista paciente / imprimir.</small>`;
     }
   }
 
@@ -4673,7 +4881,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'2.8 modo lectura y guardado seguro',
+    version:'2.9 editor espejo del documento oficial',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
