@@ -2680,6 +2680,100 @@ async function auroPlanApiPost(accion, data){
     return await res.json();
 }
 
+
+/* ============================================================
+   AUROSANAX PLAN 26 - CONTROL DE CORRECCIÓN CLÍNICA
+   - Atención abierta: guardado normal sin preguntas.
+   - Atención finalizada: el backend solicita justificativo.
+   - Fuera de plazo: enmienda excepcional si Configuración la permite.
+   - La decisión temporal pertenece al servidor.
+============================================================ */
+function auroPlanTokenControlClinico(){
+    try{
+        if(window.AUROSANAX_SEGURIDAD && typeof window.AUROSANAX_SEGURIDAD.obtenerToken === 'function'){
+            return String(window.AUROSANAX_SEGURIDAD.obtenerToken() || '').trim();
+        }
+    }catch(e){}
+    try{ return String(sessionStorage.getItem('aurosanax_seguridad_token') || '').trim(); }catch(e){}
+    return '';
+}
+
+if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
+    window.auroSolicitarMotivoCorreccionClinica = function(opciones){
+        opciones = opciones || {};
+        const excepcional = !!opciones.excepcional;
+        const titulo = excepcional
+            ? 'ENMIENDA EXCEPCIONAL - JUSTIFICATIVO OBLIGATORIO'
+            : 'CORRECCIÓN CLÍNICA - MOTIVO OBLIGATORIO';
+        const entrada = window.prompt(
+            titulo + '\n\n' +
+            '1. Error de digitación\n' +
+            '2. Omisión\n' +
+            '3. Fallo del sistema\n' +
+            '4. Emergencia\n' +
+            '5. Corrección clínica\n' +
+            '6. Otro\n\n' +
+            'Escriba el número del motivo:'
+        );
+        if(entrada === null) return null;
+
+        const mapa = {
+            '1':'Error de digitación',
+            '2':'Omisión',
+            '3':'Fallo del sistema',
+            '4':'Emergencia',
+            '5':'Corrección clínica',
+            '6':'Otro'
+        };
+        const tipo = mapa[String(entrada || '').trim()];
+        if(!tipo){
+            window.alert('Seleccione un motivo válido del 1 al 6.');
+            return null;
+        }
+
+        let detalle = '';
+        if(tipo === 'Otro'){
+            const otro = window.prompt('Escriba un justificativo breve:');
+            if(otro === null) return null;
+            detalle = String(otro || '').trim();
+            if(detalle.length < 3){
+                window.alert('El justificativo es obligatorio.');
+                return null;
+            }
+        }
+
+        return {
+            motivo_correccion_tipo: tipo,
+            motivo_correccion_detalle: detalle,
+            motivo_correccion: detalle ? (tipo + ': ' + detalle) : tipo,
+            correccion_excepcional: excepcional ? 'SI' : 'NO'
+        };
+    };
+}
+
+async function auroPlanApiPostConControlClinico(accion, data){
+    const payload = Object.assign({}, data || {}, {
+        token: auroPlanTokenControlClinico()
+    });
+
+    let resultado = await auroPlanApiPost(accion, payload);
+
+    if(
+        resultado && resultado.success === false &&
+        ['AURO_MOTIVO_REQUERIDO','AURO_EXCEPCION_REQUERIDA'].includes(String(resultado.code || ''))
+    ){
+        const motivo = window.auroSolicitarMotivoCorreccionClinica({
+            excepcional: resultado.code === 'AURO_EXCEPCION_REQUERIDA' || resultado.requiere_excepcion === true
+        });
+        if(!motivo) return resultado;
+
+        Object.assign(payload, motivo);
+        resultado = await auroPlanApiPost(accion, payload);
+    }
+
+    return resultado;
+}
+
 function auroPlanObtenerContextoAtencionSeguro(){
     /*
       AUROSANAX - integración quirúrgica con atenciones.js
@@ -2959,12 +3053,14 @@ async function guardarPlanClinicoDesdeSheets(){
 
     if(existente && existente.id_plan){
         data.id_plan = existente.id_plan;
-        resultado = await auroPlanApiPost('editarPlanClinico', data);
+        resultado = await auroPlanApiPostConControlClinico('editarPlanClinico', data);
     }else{
-        resultado = await auroPlanApiPost('guardarPlanClinico', data);
+        resultado = await auroPlanApiPostConControlClinico('guardarPlanClinico', data);
     }
 
-    guardarPlanTemporal();
+    if(resultado && resultado.success !== false){
+        guardarPlanTemporal();
+    }
 
     return resultado;
 }
@@ -3524,7 +3620,7 @@ async function guardarPlanClinicoConUX(btn){
     }catch(e){
 
         console.error('AUROSANAX PLAN: error guardando plan clínico.', e);
-        alert('Error al guardar el Plan clínico.');
+        alert('No se pudo guardar el Plan clínico.\n\n' + (e && e.message ? e.message : 'Revise el control de correcciones.'));
 
         if(btn){
             btn.disabled = false;
