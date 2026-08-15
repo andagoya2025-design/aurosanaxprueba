@@ -703,6 +703,8 @@ function inicializarPlan(){
     instalarEventosOrdenesMedicasPlan();
     instalarEventosEvaluacionesPlan();
     auroPlanInstalarAyudasMedicamentos();
+    auroPlanInstalarVisorSugerenciasDiagnosticas();
+    auroPlanRenderSugerenciasDiagnosticas();
     auroPlanRefrescarVistas();
 }
 
@@ -990,6 +992,441 @@ function limpiarPlanTemporal(){
 
 
 /* ============================================================
+   SUGERENCIAS TERAPÉUTICAS AGRUPADAS POR DIAGNÓSTICO CIE-10
+   AUROSANAX PLAN 25
+   ------------------------------------------------------------
+   OBJETIVO
+   - Mostrar en Plan todos los protocolos ya consultados por Diagnóstico.
+   - Separar las sugerencias por cada CIE-10 de la atención.
+   - Diferenciar diagnóstico principal y asociado.
+   - NO agregar medicamentos automáticamente.
+   - NO modificar el JSON del Plan.
+   - NO modificar Diagnóstico, Recetas, Sheets ni backend desde este visor.
+   ============================================================ */
+
+function auroPlanNormalizarCodigoCie(valor){
+    return String(valor || '')
+        .replace(/\./g,'')
+        .trim()
+        .toUpperCase();
+}
+
+function auroPlanTextoSugerenciaMedicamento(item){
+    if(typeof item === 'string'){
+        return String(item || '').trim();
+    }
+
+    if(!item || typeof item !== 'object') return '';
+
+    return String(
+        item.med ||
+        item.medicamento ||
+        item.nombre ||
+        item.nombre_medicamento ||
+        item.principio_activo ||
+        item.farmaco ||
+        ''
+    ).trim();
+}
+
+function auroPlanProtocolosDiagnosticosActuales(){
+    try{
+        if(
+            window.auroDiagnosticos &&
+            typeof window.auroDiagnosticos.obtenerProtocolos === 'function'
+        ){
+            const lista = window.auroDiagnosticos.obtenerProtocolos();
+            if(Array.isArray(lista)) return lista;
+        }
+    }catch(error){
+        console.warn('AUROSANAX PLAN: no se pudieron leer protocolos desde Diagnóstico.', error);
+    }
+
+    const lista = window.auroDiagnosticosState?.protocolos;
+    return Array.isArray(lista) ? lista : [];
+}
+
+function auroPlanDiagnosticosActuales(){
+    try{
+        if(
+            window.auroDiagnosticos &&
+            typeof window.auroDiagnosticos.obtenerDiagnosticos === 'function'
+        ){
+            const lista = window.auroDiagnosticos.obtenerDiagnosticos();
+            if(Array.isArray(lista)) return lista;
+        }
+    }catch(error){
+        console.warn('AUROSANAX PLAN: no se pudieron leer diagnósticos.', error);
+    }
+
+    const lista = window.auroDiagnosticosState?.diagnosticos;
+    return Array.isArray(lista) ? lista : [];
+}
+
+function auroPlanMedicamentoYaEnPlan(nombre){
+    const objetivo = normalizarTextoPlan(nombre);
+    if(!objetivo) return false;
+
+    return (window.medicamentosPlanSeleccionados || []).some(function(m){
+        const actual = normalizarTextoPlan(m?.med || m?.medicamento || m?.nombre || '');
+        if(!actual) return false;
+        return actual === objetivo ||
+            (actual.length >= 6 && objetivo.includes(actual)) ||
+            (objetivo.length >= 6 && actual.includes(objetivo));
+    });
+}
+
+function auroPlanAgruparSugerenciasPorDiagnostico(){
+    const diagnosticos = auroPlanDiagnosticosActuales();
+    const protocolos = auroPlanProtocolosDiagnosticosActuales();
+
+    const ordenados = [...diagnosticos].sort(function(a,b){
+        return Number(b?.principal === true) - Number(a?.principal === true);
+    });
+
+    return ordenados.map(function(dx){
+        const codigo = auroPlanNormalizarCodigoCie(
+            dx?.codigo_cie10 || dx?.codigo || dx?.cie10
+        );
+
+        const protocolosDx = protocolos.filter(function(p){
+            return auroPlanNormalizarCodigoCie(p?.codigo_cie10) === codigo;
+        });
+
+        const mapa = new Map();
+
+        protocolosDx.forEach(function(p){
+            (Array.isArray(p?.medicamentos) ? p.medicamentos : []).forEach(function(item){
+                const nombre = auroPlanTextoSugerenciaMedicamento(item);
+                const clave = normalizarTextoPlan(nombre);
+                if(!clave || mapa.has(clave)) return;
+
+                mapa.set(clave, {
+                    nombre:nombre,
+                    enPlan:auroPlanMedicamentoYaEnPlan(nombre)
+                });
+            });
+        });
+
+        return {
+            codigo:codigo,
+            descripcion:String(dx?.descripcion || dx?.nombre || dx?.diagnostico || '').trim(),
+            principal:dx?.principal === true,
+            tipo:String(dx?.tipo_diagnostico || dx?.tipo || '').trim(),
+            protocolos:protocolosDx,
+            medicamentos:Array.from(mapa.values())
+        };
+    }).filter(function(grupo){
+        return grupo.codigo || grupo.descripcion;
+    });
+}
+
+function auroPlanInstalarEstilosSugerenciasDiagnosticas(){
+    if(document.getElementById('auroPlanSugerenciasDxStyles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'auroPlanSugerenciasDxStyles';
+    style.textContent = `
+      #auroPlanSugerenciasDx{
+        width:100%;
+        margin:0 0 14px;
+        border:1px solid #ead7e2;
+        border-radius:18px;
+        background:linear-gradient(135deg,#fff,#fffafd);
+        box-shadow:0 8px 22px rgba(139,30,90,.055);
+        overflow:hidden;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-head{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+        padding:12px 14px;
+        border-bottom:1px solid #f0e1e9;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-head-main{
+        min-width:0;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-kicker{
+        color:#8b1e5a;
+        font-size:10px;
+        font-weight:950;
+        letter-spacing:.065em;
+        text-transform:uppercase;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-title{
+        margin-top:2px;
+        color:#1f2937;
+        font-size:14px;
+        line-height:1.25;
+        font-weight:950;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-help{
+        margin-top:4px;
+        color:#64748b;
+        font-size:11px;
+        line-height:1.4;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-badge{
+        flex:0 0 auto;
+        padding:5px 8px;
+        border-radius:999px;
+        background:#fdf2f8;
+        color:#8b1e5a;
+        border:1px solid #fbcfe8;
+        font-size:10px;
+        font-weight:900;
+        white-space:nowrap;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-grid{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:10px;
+        padding:12px;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-card{
+        min-width:0;
+        border:1px solid #e5e7eb;
+        border-radius:14px;
+        background:#fff;
+        padding:11px;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-card.principal{
+        border-color:#efc7dd;
+        box-shadow:inset 3px 0 0 #8b1e5a;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-card-top{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:8px;
+        margin-bottom:8px;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-code{
+        color:#8b1e5a;
+        font-size:13px;
+        font-weight:950;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-name{
+        margin-top:2px;
+        color:#1f2937;
+        font-size:12px;
+        line-height:1.3;
+        font-weight:850;
+        overflow-wrap:anywhere;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-kind{
+        flex:0 0 auto;
+        padding:3px 7px;
+        border-radius:999px;
+        background:#f1f5f9;
+        color:#475569;
+        font-size:9px;
+        font-weight:900;
+        white-space:nowrap;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-card.principal .auro-plan-dx-kind{
+        background:#fdf2f8;
+        color:#8b1e5a;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-meds{
+        display:flex;
+        flex-wrap:wrap;
+        gap:6px;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-med{
+        display:inline-flex;
+        align-items:center;
+        gap:5px;
+        max-width:100%;
+        padding:5px 8px;
+        border:1px solid #e2e8f0;
+        border-radius:999px;
+        background:#f8fafc;
+        color:#334155;
+        font-size:10.5px;
+        font-weight:800;
+        line-height:1.2;
+        overflow-wrap:anywhere;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-med.en-plan{
+        border-color:#bbf7d0;
+        background:#f0fdf4;
+        color:#166534;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-med small{
+        font-size:8.5px;
+        font-weight:950;
+        opacity:.8;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-empty{
+        padding:14px;
+        color:#64748b;
+        font-size:11px;
+        line-height:1.4;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-foot{
+        padding:8px 12px;
+        border-top:1px solid #f0e1e9;
+        background:#fff;
+        color:#64748b;
+        font-size:10px;
+        line-height:1.4;
+      }
+
+      @media(max-width:900px){
+        #auroPlanSugerenciasDx .auro-plan-dx-grid{
+          grid-template-columns:1fr;
+        }
+      }
+      @media(max-width:560px){
+        #auroPlanSugerenciasDx{
+          border-radius:15px;
+        }
+        #auroPlanSugerenciasDx .auro-plan-dx-head{
+          display:block;
+          padding:11px;
+        }
+        #auroPlanSugerenciasDx .auro-plan-dx-badge{
+          display:inline-flex;
+          margin-top:8px;
+        }
+        #auroPlanSugerenciasDx .auro-plan-dx-grid{
+          padding:9px;
+          gap:8px;
+        }
+        #auroPlanSugerenciasDx .auro-plan-dx-card{
+          padding:10px;
+        }
+        #auroPlanSugerenciasDx .auro-plan-dx-card-top{
+          display:block;
+        }
+        #auroPlanSugerenciasDx .auro-plan-dx-kind{
+          display:inline-flex;
+          margin-top:6px;
+        }
+        #auroPlanSugerenciasDx .auro-plan-dx-med{
+          width:100%;
+          border-radius:10px;
+          justify-content:space-between;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+}
+
+function auroPlanInstalarVisorSugerenciasDiagnosticas(){
+    auroPlanInstalarEstilosSugerenciasDiagnosticas();
+
+    if(document.getElementById('auroPlanSugerenciasDx')) return true;
+
+    const busqueda = document.getElementById('hcMedBusqueda');
+    const cajaMedicamentos = busqueda?.closest('.receta-medicamentos-box');
+
+    if(!cajaMedicamentos) return false;
+
+    const visor = document.createElement('div');
+    visor.id = 'auroPlanSugerenciasDx';
+    visor.setAttribute('aria-live','polite');
+
+    cajaMedicamentos.insertAdjacentElement('beforebegin', visor);
+    return true;
+}
+
+function auroPlanRenderSugerenciasDiagnosticas(){
+    if(!auroPlanInstalarVisorSugerenciasDiagnosticas()) return;
+
+    const visor = document.getElementById('auroPlanSugerenciasDx');
+    if(!visor) return;
+
+    const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+    const conProtocolo = grupos.filter(function(g){ return g.protocolos.length > 0; }).length;
+
+    if(!grupos.length){
+        visor.innerHTML = `
+          <div class="auro-plan-dx-head">
+            <div class="auro-plan-dx-head-main">
+              <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div>
+              <div class="auro-plan-dx-title">Sugerencias terapéuticas por diagnóstico</div>
+              <div class="auro-plan-dx-help">Aún no hay diagnósticos sincronizados para esta atención.</div>
+            </div>
+            <span class="auro-plan-dx-badge">Sin diagnósticos</span>
+          </div>`;
+        return;
+    }
+
+    visor.innerHTML = `
+      <div class="auro-plan-dx-head">
+        <div class="auro-plan-dx-head-main">
+          <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div>
+          <div class="auro-plan-dx-title">Sugerencias terapéuticas organizadas por diagnóstico</div>
+          <div class="auro-plan-dx-help">Las opciones se muestran separadas por CIE-10. No se agregan al tratamiento hasta que el médico aplique o seleccione el manejo correspondiente.</div>
+        </div>
+        <span class="auro-plan-dx-badge">${grupos.length} diagnóstico(s) · ${conProtocolo} con protocolo</span>
+      </div>
+
+      <div class="auro-plan-dx-grid">
+        ${grupos.map(function(g){
+            const meds = g.medicamentos || [];
+            return `
+              <div class="auro-plan-dx-card ${g.principal ? 'principal' : ''}">
+                <div class="auro-plan-dx-card-top">
+                  <div>
+                    <div class="auro-plan-dx-code">${escapeHtmlPlan(g.codigo || 'S/C')}</div>
+                    <div class="auro-plan-dx-name">${escapeHtmlPlan(g.descripcion || 'Sin descripción')}</div>
+                  </div>
+                  <span class="auro-plan-dx-kind">${g.principal ? 'Principal' : 'Asociado'}</span>
+                </div>
+
+                ${
+                    !g.protocolos.length
+                      ? '<div class="auro-plan-dx-empty">No hay protocolo clínico configurado para este CIE-10.</div>'
+                      : !meds.length
+                        ? '<div class="auro-plan-dx-empty">El protocolo existe, pero no contiene medicamentos automáticos.</div>'
+                        : `<div class="auro-plan-dx-meds">${
+                            meds.map(function(m){
+                                return `<span class="auro-plan-dx-med ${m.enPlan ? 'en-plan' : ''}">
+                                  <span>${escapeHtmlPlan(m.nombre)}</span>
+                                  ${m.enPlan ? '<small>EN PLAN</small>' : ''}
+                                </span>`;
+                            }).join('')
+                          }</div>`
+                }
+              </div>`;
+        }).join('')}
+      </div>
+
+      <div class="auro-plan-dx-foot">
+        Una misma opción puede aparecer bajo más de un diagnóstico porque pertenece a varios protocolos. Esto no duplica el medicamento ya agregado al Plan.
+      </div>`;
+}
+
+function auroPlanInstalarEventosSugerenciasDiagnosticas(){
+    if(window.__auroPlanEventosSugerenciasDxInstalados) return;
+    window.__auroPlanEventosSugerenciasDxInstalados = true;
+
+    document.addEventListener('aurosanax:protocolos-diagnostico-listos', function(){
+        auroPlanRenderSugerenciasDiagnosticas();
+    });
+
+    document.addEventListener('aurosanax:diagnosticos-actualizados', function(){
+        setTimeout(auroPlanRenderSugerenciasDiagnosticas, 0);
+    });
+
+    document.addEventListener('aurosanax:diagnostico-aplicado-plan', function(){
+        setTimeout(auroPlanRenderSugerenciasDiagnosticas, 0);
+    });
+
+    document.addEventListener('aurosanax:atencion-cambiada', function(){
+        setTimeout(auroPlanRenderSugerenciasDiagnosticas, 40);
+    });
+}
+
+auroPlanInstalarEventosSugerenciasDiagnosticas();
+
+
+/* ============================================================
    MEDICAMENTOS DEL PLAN
 ============================================================ */
 
@@ -1129,6 +1566,7 @@ function agregarMedicamentoDesdeFormulario(){
     renderMedicamentosPlanTabla();
     sincronizarPlanConReceta();
     guardarPlanTemporal();
+    auroPlanRenderSugerenciasDiagnosticas();
 }
 
 function editarMedicamentoPlan(i){
@@ -1201,6 +1639,7 @@ function eliminarMedicamentoPlan(i){
     renderMedicamentosPlanTabla();
     sincronizarPlanConReceta();
     guardarPlanTemporal();
+    auroPlanRenderSugerenciasDiagnosticas();
 }
 
 function textoRecetaMedicamentosPlan(){
