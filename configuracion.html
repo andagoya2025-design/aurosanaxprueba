@@ -1124,17 +1124,65 @@
     <div id="securityAuditoriaClinica" class="security-panel">
       <div class="security-summary">
         <div class="security-summary-card"><small>Eventos visibles</small><strong id="audClinTotal">0</strong></div>
-        <div class="security-summary-card"><small>Dentro de 24 h</small><strong id="audClinDentro24">0</strong></div>
-        <div class="security-summary-card"><small>Fuera de 24 h</small><strong id="audClinFuera24">0</strong></div>
+        <div class="security-summary-card"><small>Dentro del plazo</small><strong id="audClinDentro24">0</strong></div>
+        <div class="security-summary-card"><small>Fuera del plazo</small><strong id="audClinFuera24">0</strong></div>
         <div class="security-summary-card"><small>Último evento</small><strong id="audClinUltimo" style="font-size:16px">—</strong></div>
       </div>
 
       <div class="section-head">
         <div>
           <h4 style="font-size:22px!important">Auditoría clínica</h4>
-          <p>Historial independiente de cambios en Diagnóstico, Plan clínico y Recetas. No se mezcla con la bitácora de accesos.</p>
+          <p>Control y trazabilidad independiente de correcciones en Diagnóstico, Plan clínico y Recetas.</p>
         </div>
-        <span class="readonly-pill"><i class="bi bi-eye"></i> Solo lectura · Administrador</span>
+        <span class="readonly-pill"><i class="bi bi-shield-check"></i> Auditoría siempre activa · Administrador</span>
+      </div>
+
+      <div class="auro-audit-control-card mb-3" id="audClinControlCard">
+        <div class="auro-audit-control-head">
+          <div>
+            <strong><i class="bi bi-sliders2 me-1"></i> Control de correcciones</strong>
+            <small>La atención en proceso permanece libre. Estas reglas se aplican al finalizarla.</small>
+          </div>
+          <span id="audClinConfigEstado" class="readonly-pill"><i class="bi bi-clock-history"></i> Cargando…</span>
+        </div>
+        <div class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label fw-bold" for="audClinControlEdicion">Control de edición</label>
+            <select id="audClinControlEdicion" class="form-select">
+              <option value="SI">Activado</option>
+              <option value="NO">Desactivado</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold" for="audClinPlazoPreset">Plazo normal</label>
+            <select id="audClinPlazoPreset" class="form-select">
+              <option value="24">24 horas</option>
+              <option value="48">48 horas</option>
+              <option value="72">72 horas</option>
+              <option value="PERSONALIZADO">Personalizado</option>
+            </select>
+          </div>
+          <div class="col-md-2" id="audClinHorasCustomWrap" style="display:none">
+            <label class="form-label fw-bold" for="audClinHorasCustom">Horas</label>
+            <input id="audClinHorasCustom" type="number" min="1" max="720" step="1" class="form-control" value="24">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold" for="audClinCorreccionExcepcional">Corrección excepcional</label>
+            <select id="audClinCorreccionExcepcional" class="form-select">
+              <option value="SI">Activada</option>
+              <option value="NO">Desactivada</option>
+            </select>
+          </div>
+          <div class="col-md-auto">
+            <button id="audClinGuardarConfig" type="button" class="btn-auro">
+              <i class="bi bi-save me-1"></i> Guardar control
+            </button>
+          </div>
+        </div>
+        <div class="auro-audit-control-note">
+          <i class="bi bi-info-circle me-1"></i>
+          Toda corrección posterior al cierre exige justificativo. Fuera del plazo se registra como enmienda excepcional cuando esté habilitada.
+        </div>
       </div>
 
       <div id="audClinEstado" class="notice mb-3">
@@ -1155,6 +1203,7 @@
           <label class="form-label fw-bold" for="audClinModulo">Módulo</label>
           <select id="audClinModulo" class="form-select">
             <option value="">Todos</option>
+            <option value="ATENCION">Atención</option>
             <option value="DIAGNOSTICO">Diagnóstico</option>
             <option value="PLAN">Plan clínico</option>
             <option value="RECETA">Receta</option>
@@ -1164,9 +1213,11 @@
           <label class="form-label fw-bold" for="audClinAccion">Acción</label>
           <select id="audClinAccion" class="form-select">
             <option value="">Todas</option>
+            <option value="FINALIZACION">Finalización</option>
             <option value="REGISTRO">Registro</option>
             <option value="EMISION">Emisión</option>
             <option value="CORRECCION">Corrección</option>
+            <option value="ENMIENDA">Enmienda</option>
           </select>
         </div>
         <div class="col-md-4">
@@ -2437,7 +2488,7 @@ function showSecurityPanel(id,btn){
 <script src="config-centro.js"></script>
 <script src="config-finanzas.js"></script>
 <script src="seguridad.js?v=1.4.0"></script>
-<script src="auditoria_clinica.js?v=1.0.0"></script>
+<script src="auditoria_clinica.js?v=2.0.0"></script>
 
 </body>
 </html>
