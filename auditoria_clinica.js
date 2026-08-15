@@ -2,13 +2,14 @@
  AUROSANAX ERP DEMO
  Archivo: auditoria_clinica.js
  Módulo: Auditoría clínica independiente
- Versión: 2.0.0
+ Versión: 3.0.0
  -----------------------------------------------------------------------
  OBJETIVO
  - Consultar la hoja auditoria_clinica y administrar el control de correcciones.
  - Mantener esta auditoría separada de seguridad.js y de la bitácora
    administrativa de accesos/usuarios.
  - Mostrar cambios de Diagnóstico, Plan clínico y Recetas.
+ - Estructura preparada para Historia clínica futura sin activarla todavía.
  - Mostrar la ventana configurable de corrección y las enmiendas excepcionales.
  - La atención en proceso continúa libre; el control inicia al finalizarla.
  - Acceso exclusivo para Administrador; el backend vuelve a validar token.
@@ -155,6 +156,7 @@
     if(n === 'DIAGNOSTICO') return 'Diagnóstico';
     if(n === 'PLAN') return 'Plan clínico';
     if(n === 'RECETA') return 'Receta';
+    if(n === 'HISTORIA_CLINICA') return 'Historia clínica';
     return texto(valor) || '—';
   }
 
@@ -220,6 +222,7 @@
         evento.nombre_paciente,
         evento.id_atencion,
         evento.numero_consulta,
+        evento.id_historia,
         evento.id_registro,
         evento.id_receta,
         evento.id_plan,
@@ -232,6 +235,7 @@
         evento.rol,
         evento.modulo,
         evento.accion,
+        evento.tipo_justificativo,
         evento.motivo
       ].join(' '));
       if(!bolsa.includes(q)) return false;
@@ -255,7 +259,10 @@
     const mobile = document.getElementById('audClinMobile');
 
     if(!state.filtrados.length){
-      const vacio = '<i class="bi bi-clipboard2-check"></i>No existen eventos clínicos para los filtros seleccionados.';
+      const hayEventos = state.eventos.length > 0;
+      const vacio = hayEventos
+        ? '<i class="bi bi-funnel"></i>No hay eventos que coincidan con los filtros seleccionados.'
+        : '<i class="bi bi-clipboard2-check"></i><b>Aún no hay correcciones auditadas.</b><br><span>Es normal mientras no se haya corregido una atención finalizada. La primera corrección de Diagnóstico, Plan o Receta aparecerá aquí automáticamente.</span>';
       if(body) body.innerHTML = `<tr><td colspan="8" class="security-empty">${vacio}</td></tr>`;
       if(mobile) mobile.innerHTML = `<div class="mobile-card security-empty">${vacio}</div>`;
       return;
@@ -319,9 +326,10 @@
         Paciente: ${escapar(e.nombre_paciente || '—')} · Consulta: ${escapar(e.numero_consulta || '—')}<br>
         Fecha: ${escapar(formatearFechaHora(e.fecha_hora || e.creado_en))}<br>
         Actor: ${escapar(e.nombre_medico || e.usuario || '—')}<br>
-        Motivo: ${escapar(e.motivo || '—')}<br>
+        Justificativo: ${escapar(e.tipo_justificativo || '—')}${texto(e.motivo) ? ' · '+escapar(e.motivo) : ''}<br>
         Estado de auditoría: ${escapar(e.estado || '—')}<br>
-        Ventana: ${escapar(e.dentro_ventana || e.dentro_24h || 'NO_APLICA')}${texto(e.horas_desde_referencia) ? ' · '+escapar(e.horas_desde_referencia)+' h' : ''}
+        Ventana: ${escapar(e.dentro_ventana || e.dentro_24h || 'NO_APLICA')}${texto(e.horas_desde_referencia) ? ' · '+escapar(e.horas_desde_referencia)+' h' : ''}${texto(e.plazo_horas_configurado) ? ' / límite '+escapar(e.plazo_horas_configurado)+' h' : ''}<br>
+        Referencia de cierre: ${escapar(e.fecha_referencia || '—')} · Excepcional: ${escapar(e.correccion_excepcional || 'NO')}
       </div>
       <div class="auro-audit-detail-grid">
         <div class="auro-audit-detail-box"><h6>Valor anterior</h6><pre>${escapar(jsonLegible(e.valor_anterior))}</pre></div>
