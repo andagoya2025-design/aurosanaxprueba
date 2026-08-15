@@ -2010,6 +2010,72 @@
     return '';
   }
 
+  /* ============================================================
+     AUROSANAX RECETA 31 - CONTROL DE CORRECCIÓN CLÍNICA
+     La atención abierta sigue editable. El servidor decide cuándo
+     corresponde motivo, bloqueo o enmienda excepcional.
+  ============================================================ */
+  function auroRecetaTokenControlClinico(){
+    try{
+      if(window.AUROSANAX_SEGURIDAD && typeof window.AUROSANAX_SEGURIDAD.obtenerToken === 'function'){
+        return String(window.AUROSANAX_SEGURIDAD.obtenerToken() || '').trim();
+      }
+    }catch(e){}
+    try{ return String(sessionStorage.getItem('aurosanax_seguridad_token') || '').trim(); }catch(e){}
+    return '';
+  }
+
+  if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
+    window.auroSolicitarMotivoCorreccionClinica = function(opciones){
+      opciones = opciones || {};
+      const excepcional = !!opciones.excepcional;
+      const entrada = window.prompt(
+        (excepcional ? 'ENMIENDA EXCEPCIONAL' : 'CORRECCIÓN CLÍNICA') +
+        ' - JUSTIFICATIVO OBLIGATORIO\n\n' +
+        '1. Error de digitación\n' +
+        '2. Omisión\n' +
+        '3. Fallo del sistema\n' +
+        '4. Emergencia\n' +
+        '5. Corrección clínica\n' +
+        '6. Otro\n\n' +
+        'Escriba el número del motivo:'
+      );
+      if(entrada === null) return null;
+
+      const mapa = {
+        '1':'Error de digitación',
+        '2':'Omisión',
+        '3':'Fallo del sistema',
+        '4':'Emergencia',
+        '5':'Corrección clínica',
+        '6':'Otro'
+      };
+      const tipo = mapa[String(entrada || '').trim()];
+      if(!tipo){
+        window.alert('Seleccione un motivo válido del 1 al 6.');
+        return null;
+      }
+
+      let detalle = '';
+      if(tipo === 'Otro'){
+        const otro = window.prompt('Escriba un justificativo breve:');
+        if(otro === null) return null;
+        detalle = String(otro || '').trim();
+        if(detalle.length < 3){
+          window.alert('El justificativo es obligatorio.');
+          return null;
+        }
+      }
+
+      return {
+        motivo_correccion_tipo:tipo,
+        motivo_correccion_detalle:detalle,
+        motivo_correccion:detalle ? (tipo + ': ' + detalle) : tipo,
+        correccion_excepcional:excepcional ? 'SI' : 'NO'
+      };
+    };
+  }
+
   async function enviarRecetaGoogleSheets(receta){
     try{
       if(!receta) return { success:false, message:'No hay receta para enviar' };
@@ -2040,24 +2106,39 @@
         creado_en: receta.creado_en || fechaHoraEcuadorISO(),
         actualizado_en: fechaHoraEcuadorISO(),
         id_atencion: receta.id_atencion || obtenerIdAtencionActivaSeguro() || '',
-        forzar_nueva_receta: receta.forzar_nueva_receta || 'NO'
+        forzar_nueva_receta: receta.forzar_nueva_receta || 'NO',
+        token: auroRecetaTokenControlClinico()
       };
 
-      await fetch(API_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          accion: 'guardarReceta',
-          data: data
-        })
-      });
+      async function enviar(payload){
+        const respuesta = await fetch(API_URL, {
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body:JSON.stringify({accion:'guardarReceta', data:payload})
+        });
+        if(!respuesta.ok) throw new Error('Error HTTP ' + respuesta.status);
+        return await respuesta.json();
+      }
 
-      return { success:true, message:'Receta enviada a Google Sheets' };
+      let resultado = await enviar(data);
+
+      if(
+        resultado && resultado.success === false &&
+        ['AURO_MOTIVO_REQUERIDO','AURO_EXCEPCION_REQUERIDA'].includes(String(resultado.code || ''))
+      ){
+        const motivo = window.auroSolicitarMotivoCorreccionClinica({
+          excepcional: resultado.code === 'AURO_EXCEPCION_REQUERIDA' || resultado.requiere_excepcion === true
+        });
+        if(!motivo) return resultado;
+        Object.assign(data, motivo);
+        resultado = await enviar(data);
+      }
+
+      return resultado || {success:false,message:'Apps Script no devolvió respuesta.'};
 
     }catch(error){
       console.error('Error enviando receta a Google Sheets:', error);
-      return { success:false, message:error.message };
+      return { success:false, message:error.message || String(error) };
     }
   }
 
@@ -4360,6 +4441,7 @@
       recetaAtencionActualId = r.id_atencion || recetaAtencionActualId || '';
 
       const lista = leerRecetasStorage();
+      const listaAntesDeGuardar = JSON.parse(JSON.stringify(lista));
       const ahoraGuardado = fechaHoraEcuadorISO();
       let idx = lista.findIndex(x =>
         String(x.id_receta || '').trim() === String(r.id_receta || '').trim()
@@ -4405,12 +4487,10 @@
       const resultado = await enviarRecetaGoogleSheets(r);
 
       /*
-        FIX QUIRÚRGICO:
-        No recargar inmediatamente desde Google Sheets después del POST.
-        El envío usa mode:'no-cors' y puede terminar antes de que la hoja
-        publique la versión actualizada. La recarga inmediata era la tercera
-        escritura tardía que devolvía la hora anterior al localStorage.
-        Se conserva y renderiza la copia local recién guardada.
+        CONTROL DEFINITIVO:
+        No se recarga inmediatamente desde Sheets. La respuesta JSON del backend
+        ya confirmó el guardado o el bloqueo; se conserva la copia local únicamente
+        cuando el servidor confirmó la escritura.
       */
       recetasPaginaActual = 1;
       renderHistorialRecetas();
@@ -4418,8 +4498,16 @@
       if(resultado && resultado.success){
         mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente. Ya fue asociada a la consulta activa.`, 'ok');
       }else{
-        mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> Receta guardada localmente, pero no se pudo enviar a Google Sheets.`, '');
-        alert('Receta guardada localmente, pero no se pudo enviar a Google Sheets.');
+        /* El backend es la autoridad. Si bloquea una corrección o falla el POST,
+           se revierte únicamente la copia local recién escrita para no mostrar
+           como guardado un cambio que no existe en Google Sheets. */
+        guardarRecetasStorage(listaAntesDeGuardar);
+        renderHistorialRecetas();
+        const motivoError = resultado?.message || 'No se pudo guardar la receta en Google Sheets.';
+        mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> ${safe(motivoError)}`, '');
+        alert(motivoError);
+        actualizarBotonGuardarReceta();
+        return;
       }
 
       recetaNuevaForzada = false;
