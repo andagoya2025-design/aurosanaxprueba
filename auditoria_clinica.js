@@ -2,15 +2,15 @@
  AUROSANAX ERP DEMO
  Archivo: auditoria_clinica.js
  Módulo: Auditoría clínica independiente
- Versión: 1.0.0
+ Versión: 2.0.0
  -----------------------------------------------------------------------
  OBJETIVO
- - Consultar en modo SOLO LECTURA la hoja auditoria_clinica.
+ - Consultar la hoja auditoria_clinica y administrar el control de correcciones.
  - Mantener esta auditoría separada de seguridad.js y de la bitácora
    administrativa de accesos/usuarios.
  - Mostrar cambios de Diagnóstico, Plan clínico y Recetas.
- - Clasificar visualmente la referencia de 24 horas sin modificar ni
-   bloquear el flujo clínico existente.
+ - Mostrar la ventana configurable de corrección y las enmiendas excepcionales.
+ - La atención en proceso continúa libre; el control inicia al finalizarla.
  - Acceso exclusivo para Administrador; el backend vuelve a validar token.
 ************************************************************************/
 
@@ -23,7 +23,8 @@
     cargando: false,
     cargado: false,
     eventos: [],
-    filtrados: []
+    filtrados: [],
+    config: {control_edicion:'SI', horas_edicion:24, correccion_excepcional:'SI'}
   };
 
   function texto(valor){
@@ -99,7 +100,12 @@
       .auro-audit-detail-box h6{font-weight:900;margin:0 0 8px;color:#334155}
       .auro-audit-detail-box pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.45;max-height:360px;overflow:auto;color:#0f172a}
       .auro-audit-meta{border:1px solid #f1d4e5;background:#fff7fb;border-radius:16px;padding:12px;margin-bottom:12px;font-size:13px;line-height:1.55}
-      @media(max-width:720px){.auro-audit-detail-grid{grid-template-columns:1fr}}
+      #securityAuditoriaClinica .auro-audit-control-card{border:1px solid #ead5e2;border-radius:18px;padding:16px;background:linear-gradient(180deg,#fff,#fffafd);box-shadow:0 7px 22px rgba(15,23,42,.045)}
+      #securityAuditoriaClinica .auro-audit-control-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+      #securityAuditoriaClinica .auro-audit-control-head strong{display:block;color:#111827;font-size:15px;font-weight:900}
+      #securityAuditoriaClinica .auro-audit-control-head small{display:block;color:#64748b;font-size:12px;font-weight:650;margin-top:3px}
+      #securityAuditoriaClinica .auro-audit-control-note{margin-top:12px;padding:9px 11px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;font-size:12px;font-weight:700}
+      @media(max-width:720px){.auro-audit-detail-grid{grid-template-columns:1fr}.auro-audit-control-head{display:grid!important;grid-template-columns:1fr!important}}
     `;
     document.head.appendChild(style);
   }
@@ -145,6 +151,7 @@
 
   function nombreModulo(valor){
     const n = normalizar(valor);
+    if(n === 'ATENCION') return 'Atención';
     if(n === 'DIAGNOSTICO') return 'Diagnóstico';
     if(n === 'PLAN') return 'Plan clínico';
     if(n === 'RECETA') return 'Receta';
@@ -153,26 +160,32 @@
 
   function nombreAccion(valor){
     const n = normalizar(valor);
+    if(n === 'FINALIZACION') return 'Finalización';
     if(n === 'REGISTRO') return 'Registro';
     if(n === 'EMISION') return 'Emisión';
     if(n === 'CORRECCION') return 'Corrección';
+    if(n === 'ENMIENDA') return 'Enmienda';
     return texto(valor) || '—';
   }
 
   function ventanaHTML(evento){
-    const v = normalizar(evento && evento.dentro_24h);
+    const v = normalizar(evento && (evento.dentro_ventana || evento.dentro_24h));
     const horas = texto(evento && evento.horas_desde_referencia);
+    const limite = Number(state.config.horas_edicion || 24);
 
     if(v === 'SI'){
-      return `<span class="auro-audit-badge auro-audit-24-si">Dentro de 24 h${horas ? ' · '+escapar(horas)+' h' : ''}</span>`;
+      return `<span class="auro-audit-badge auro-audit-24-si">Dentro del plazo${horas ? ' · '+escapar(horas)+' h' : ''}</span>`;
     }
     if(v === 'NO'){
-      return `<span class="auro-audit-badge auro-audit-24-no">Fuera de 24 h${horas ? ' · '+escapar(horas)+' h' : ''}</span>`;
+      return `<span class="auro-audit-badge auro-audit-24-no">Fuera del plazo${horas ? ' · '+escapar(horas)+' h' : ''}</span>`;
     }
     if(v === 'ABIERTA'){
       return '<span class="auro-audit-badge auro-audit-24-open">Atención abierta</span>';
     }
-    return '<span class="auro-audit-badge auro-audit-24-na">No aplica</span>';
+    if(v === 'SIN_LIMITE'){
+      return '<span class="auro-audit-badge auro-audit-24-open">Control temporal desactivado</span>';
+    }
+    return `<span class="auro-audit-badge auro-audit-24-na">No aplica${limite ? ' · regla '+escapar(limite)+' h' : ''}</span>`;
   }
 
   function actorHTML(evento){
@@ -229,8 +242,8 @@
   function actualizarResumen(){
     const lista = state.filtrados;
     setTexto('audClinTotal', String(lista.length));
-    setTexto('audClinDentro24', String(lista.filter(e => normalizar(e.dentro_24h) === 'SI').length));
-    setTexto('audClinFuera24', String(lista.filter(e => normalizar(e.dentro_24h) === 'NO').length));
+    setTexto('audClinDentro24', String(lista.filter(e => normalizar(e.dentro_ventana || e.dentro_24h) === 'SI').length));
+    setTexto('audClinFuera24', String(lista.filter(e => normalizar(e.dentro_ventana || e.dentro_24h) === 'NO').length));
     setTexto('audClinUltimo', lista.length ? formatearFechaHora(lista[0].fecha_hora || lista[0].creado_en) : '—');
   }
 
@@ -307,7 +320,8 @@
         Fecha: ${escapar(formatearFechaHora(e.fecha_hora || e.creado_en))}<br>
         Actor: ${escapar(e.nombre_medico || e.usuario || '—')}<br>
         Motivo: ${escapar(e.motivo || '—')}<br>
-        Ventana: ${escapar(e.dentro_24h || 'NO_APLICA')}${texto(e.horas_desde_referencia) ? ' · '+escapar(e.horas_desde_referencia)+' h' : ''}
+        Estado de auditoría: ${escapar(e.estado || '—')}<br>
+        Ventana: ${escapar(e.dentro_ventana || e.dentro_24h || 'NO_APLICA')}${texto(e.horas_desde_referencia) ? ' · '+escapar(e.horas_desde_referencia)+' h' : ''}
       </div>
       <div class="auro-audit-detail-grid">
         <div class="auro-audit-detail-box"><h6>Valor anterior</h6><pre>${escapar(jsonLegible(e.valor_anterior))}</pre></div>
@@ -316,8 +330,138 @@
     modal.classList.add('show');
   }
 
+  function aplicarHorasConfig(horas){
+    horas = Number(horas || 24);
+    const preset = document.getElementById('audClinPlazoPreset');
+    const custom = document.getElementById('audClinHorasCustom');
+    const wrap = document.getElementById('audClinHorasCustomWrap');
+    if(!preset || !custom || !wrap) return;
+
+    if([24,48,72].includes(horas)){
+      preset.value = String(horas);
+      wrap.style.display = 'none';
+    }else{
+      preset.value = 'PERSONALIZADO';
+      custom.value = String(horas);
+      wrap.style.display = '';
+    }
+  }
+
+  function horasConfigSeleccionadas(){
+    const preset = texto(document.getElementById('audClinPlazoPreset')?.value);
+    if(preset === 'PERSONALIZADO'){
+      return Number(document.getElementById('audClinHorasCustom')?.value || 24);
+    }
+    return Number(preset || 24);
+  }
+
+  function actualizarEstadoConfig(){
+    const badge = document.getElementById('audClinConfigEstado');
+    if(!badge) return;
+    const control = normalizar(state.config.control_edicion) === 'SI';
+    const excepcion = normalizar(state.config.correccion_excepcional) === 'SI';
+    const horas = Number(state.config.horas_edicion || 24);
+    badge.innerHTML = control
+      ? `<i class="bi bi-lock me-1"></i> Control activo · ${escapar(horas)} h${excepcion ? ' · Excepción habilitada' : ''}`
+      : '<i class="bi bi-unlock me-1"></i> Sin límite temporal · Auditoría activa';
+  }
+
+  async function cargarConfiguracionControl(){
+    if(!esAdministrador()) return;
+    const API = apiUrl();
+    const token = tokenActual();
+    if(!API || !token) return;
+
+    try{
+      const q = new URLSearchParams({
+        accion:'obtenerConfiguracionAuditoriaClinica',
+        token:token,
+        t:String(Date.now())
+      });
+      const respuesta = await fetch(API + '?' + q.toString(), {cache:'no-store'});
+      const resultado = await respuesta.json();
+      if(!resultado || resultado.success === false){
+        throw new Error(resultado?.message || 'No se pudo cargar el control de correcciones.');
+      }
+
+      state.config = {
+        control_edicion: resultado.control_edicion || 'SI',
+        horas_edicion: Number(resultado.horas_edicion || 24),
+        correccion_excepcional: resultado.correccion_excepcional || 'SI'
+      };
+
+      const control = document.getElementById('audClinControlEdicion');
+      const excepcion = document.getElementById('audClinCorreccionExcepcional');
+      if(control) control.value = state.config.control_edicion;
+      if(excepcion) excepcion.value = state.config.correccion_excepcional;
+      aplicarHorasConfig(state.config.horas_edicion);
+      actualizarEstadoConfig();
+    }catch(error){
+      console.error(MODULO + ': configuración', error);
+      const badge = document.getElementById('audClinConfigEstado');
+      if(badge) badge.textContent = 'No se pudo cargar configuración';
+    }
+  }
+
+  async function guardarConfiguracionControl(){
+    if(!esAdministrador()) return;
+    const API = apiUrl();
+    const token = tokenActual();
+    const boton = document.getElementById('audClinGuardarConfig');
+    if(!API || !token){
+      setEstado('No existe una sesión administrativa válida.', true);
+      return;
+    }
+
+    const horas = horasConfigSeleccionadas();
+    if(!Number.isFinite(horas) || horas < 1 || horas > 720){
+      setEstado('El plazo personalizado debe estar entre 1 y 720 horas.', true);
+      return;
+    }
+
+    const data = {
+      token:token,
+      control_edicion:texto(document.getElementById('audClinControlEdicion')?.value || 'SI'),
+      horas_edicion:Math.round(horas),
+      correccion_excepcional:texto(document.getElementById('audClinCorreccionExcepcional')?.value || 'SI')
+    };
+
+    const original = boton ? boton.innerHTML : '';
+    try{
+      if(boton){
+        boton.disabled = true;
+        boton.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando…';
+      }
+      const respuesta = await fetch(API, {
+        method:'POST',
+        body:JSON.stringify({accion:'guardarConfiguracionAuditoriaClinica', data:data})
+      });
+      const resultado = await respuesta.json();
+      if(!resultado || resultado.success === false){
+        throw new Error(resultado?.message || 'No se pudo guardar el control de correcciones.');
+      }
+
+      state.config = {
+        control_edicion:data.control_edicion,
+        horas_edicion:data.horas_edicion,
+        correccion_excepcional:data.correccion_excepcional
+      };
+      actualizarEstadoConfig();
+      setEstado('Configuración guardada. La auditoría clínica permanece siempre activa.', false);
+    }catch(error){
+      console.error(MODULO + ': guardar configuración', error);
+      setEstado(error?.message || 'No se pudo guardar la configuración.', true);
+    }finally{
+      if(boton){
+        boton.disabled = false;
+        boton.innerHTML = original || '<i class="bi bi-save me-1"></i> Guardar control';
+      }
+    }
+  }
+
   async function cargar(forzar){
     if(state.cargando) return;
+    await cargarConfiguracionControl();
     if(state.cargado && !forzar){ render(); return; }
 
     if(!esAdministrador()){
@@ -394,6 +538,11 @@
     document.getElementById('audClinBuscar')?.addEventListener('input', render);
     document.getElementById('audClinRefrescar')?.addEventListener('click', function(){ cargar(true); });
     document.getElementById('audClinLimpiar')?.addEventListener('click', limpiarFiltros);
+    document.getElementById('audClinGuardarConfig')?.addEventListener('click', guardarConfiguracionControl);
+    document.getElementById('audClinPlazoPreset')?.addEventListener('change', function(){
+      const wrap = document.getElementById('audClinHorasCustomWrap');
+      if(wrap) wrap.style.display = this.value === 'PERSONALIZADO' ? '' : 'none';
+    });
   }
 
   window.auroAuditoriaClinica = {
@@ -401,7 +550,9 @@
     cargar: cargar,
     render: render,
     verDetalle: verDetalle,
-    limpiarFiltros: limpiarFiltros
+    limpiarFiltros: limpiarFiltros,
+    cargarConfiguracionControl: cargarConfiguracionControl,
+    guardarConfiguracionControl: guardarConfiguracionControl
   };
 
   if(document.readyState === 'loading'){
