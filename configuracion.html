@@ -1132,7 +1132,7 @@
       <div class="section-head">
         <div>
           <h4 style="font-size:22px!important">Auditoría clínica</h4>
-          <p>Control y trazabilidad independiente de correcciones en Diagnóstico, Plan clínico y Recetas.</p>
+          <p>Control y trazabilidad independiente de correcciones en Diagnóstico, Plan clínico y Recetas. Historia clínica queda preparada para una fase futura.</p>
         </div>
         <span class="readonly-pill"><i class="bi bi-shield-check"></i> Auditoría siempre activa · Administrador</span>
       </div>
@@ -1207,6 +1207,7 @@
             <option value="DIAGNOSTICO">Diagnóstico</option>
             <option value="PLAN">Plan clínico</option>
             <option value="RECETA">Receta</option>
+            <option value="HISTORIA_CLINICA" disabled>Historia clínica (futuro)</option>
           </select>
         </div>
         <div class="col-md-2">
@@ -1235,12 +1236,12 @@
         <table class="table table-modern">
           <thead><tr><th>Fecha y hora</th><th>Paciente</th><th>Consulta</th><th>Módulo</th><th>Acción</th><th>Médico / usuario</th><th>Ventana</th><th>Detalle</th></tr></thead>
           <tbody id="audClinBody">
-            <tr><td colspan="8" class="security-empty"><i class="bi bi-clipboard2-pulse"></i>Abra esta pestaña para cargar la auditoría clínica.</td></tr>
+            <tr><td colspan="8" class="security-empty"><i class="bi bi-clipboard2-check"></i><b>Aún no hay correcciones auditadas.</b><br><span>Cuando se corrija una atención finalizada en Diagnóstico, Plan o Receta, el evento aparecerá aquí automáticamente.</span></td></tr>
           </tbody>
         </table>
       </div>
       <div id="audClinMobile" class="mobile-cards">
-        <div class="mobile-card security-empty"><i class="bi bi-clipboard2-pulse"></i>Abra esta pestaña para cargar la auditoría clínica.</div>
+        <div class="mobile-card security-empty"><i class="bi bi-clipboard2-check"></i><b>Aún no hay correcciones auditadas.</b><br><span>Cuando se corrija una atención finalizada en Diagnóstico, Plan o Receta, el evento aparecerá aquí automáticamente.</span></div>
       </div>
     </div>
   </div>
