@@ -3433,6 +3433,22 @@
         state.protocolos = await consultarProtocolos();
         if(!cargaSigueVigente()) return null;
 
+        /*
+          AUROSANAX DIAGNÓSTICO 17:
+          Señal visual de solo lectura para que Plan pueda presentar,
+          agrupadas por CIE-10, las sugerencias ya consultadas.
+          No guarda, no aplica y no modifica ningún protocolo.
+        */
+        try{
+          document.dispatchEvent(new CustomEvent('aurosanax:protocolos-diagnostico-listos', {
+            detail: {
+              id_atencion: idAtencion,
+              diagnosticos: clonar(state.diagnosticos, []),
+              protocolos: clonar(state.protocolos, [])
+            }
+          }));
+        }catch(_e){}
+
         if(state.protocolos.length && state.protocoloSeleccionado === null){
           state.protocoloSeleccionado = 0;
         }
