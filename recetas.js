@@ -49,6 +49,15 @@
   let recetaPreviewVisible = false;
   let recetaModoTrabajo = 'lectura';
 
+  /*
+    AUROSANAX RECETAS 3.0 - EDITOR ESTRUCTURADO ESPEJO
+    recMedicamento continúa siendo el campo canónico consumido
+    por guardarRecetaERP(). El editor solo sincroniza ese mismo dato.
+  */
+  let recetaEditorMedicamentos = [];
+  let recetaEditorTratamientoSucio = false;
+  let recetaEditorTratamientoMontado = false;
+
   function el(id){ return document.getElementById(id); }
   function val(id){ return (el(id)?.value || '').trim(); }
   function setVal(id, value){ if(el(id)) el(id).value = value || ''; }
@@ -369,6 +378,15 @@
   function auroRecetaNormalizarMedicamentosEdicionSiSeguro(){
     const campo = el('recMedicamento');
     if(!campo) return;
+
+    if(recetaEditorTratamientoMontado){
+      if(recetaEditorTratamientoSucio){
+        auroRecetaEditorSincronizarCampoCanonico();
+      }else{
+        auroRecetaEditorRenderDesdeCampo(true);
+      }
+      return;
+    }
 
     const actual = campo.value || '';
     const nuevo = recetaMedicamentosEdicionTexto(actual);
@@ -784,164 +802,290 @@
         padding-bottom:12px!important;
       }
 
-      /* AUROSANAX RECETAS 2.9 - EDITOR ESPEJO DEL DOCUMENTO OFICIAL
-         Solo presentación del formulario existente. */
-      #recetas .auro-receta-editor-espejo{
-        display:grid!important;
-        grid-template-columns:repeat(12,minmax(0,1fr))!important;
-        gap:10px!important;
-        margin:0!important;
-        padding:14px!important;
-        border:1px solid #e7d8e1!important;
-        border-top:3px solid #8b1e5a!important;
-        border-radius:18px!important;
-        background:#fff!important;
-        box-shadow:0 10px 26px rgba(15,23,42,.045)!important;
+      /* AUROSANAX RECETAS 3.0 - Editor tabulado espejo del PDF oficial */
+      #recetas .auro-rx-editor-shell{
+        margin-top:4px;
+        border:1px solid #f0d9e6;
+        border-radius:16px;
+        background:#fff;
+        overflow:hidden;
+        box-shadow:0 8px 22px rgba(139,30,90,.045);
       }
-      #recetas .auro-receta-editor-espejo > [class*="col-"]{
-        width:auto!important;
-        max-width:none!important;
-        padding:0!important;
-        margin:0!important;
-        min-width:0!important;
+      #recetas .auro-rx-editor-head{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        padding:11px 13px;
+        border-bottom:2px solid #8b1e5a;
+        background:linear-gradient(135deg,#ffffff,#fffafd);
       }
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-meta{
-        grid-column:span 3;
-        border:1px solid #eee4ea;
-        border-radius:13px;
-        padding:9px 10px!important;
-        background:#fffafd;
+      #recetas .auro-rx-editor-head-title b{
+        display:block;
+        color:#8b1e5a;
+        font-size:14px;
+        font-weight:950;
+        line-height:1.15;
       }
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-dx{
-        grid-column:1/-1;
-        border:1px solid #ead5e2;
-        border-radius:14px;
-        padding:10px!important;
-        background:linear-gradient(135deg,#fffafd,#ffffff);
+      #recetas .auro-rx-editor-head-title small{
+        display:block;
+        margin-top:2px;
+        color:#64748b;
+        font-size:10.5px;
+        line-height:1.3;
       }
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment,
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones,
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
-        grid-column:1/-1;
-        border:1px solid #e5e7eb;
-        border-radius:15px;
-        padding:11px!important;
+      #recetas .auro-rx-editor-add{
+        flex:0 0 auto;
+        min-height:38px!important;
+        padding:7px 11px!important;
+        border-radius:11px!important;
+        display:inline-flex!important;
+        align-items:center!important;
+        justify-content:center!important;
+        gap:6px!important;
+        white-space:nowrap!important;
+      }
+      #recetas .auro-rx-editor-table-wrap{
+        width:100%;
+        overflow-x:auto;
         background:#fff;
       }
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment{
-        border-color:#dfc6d5;
-        background:linear-gradient(180deg,#ffffff,#fffafd);
+      #recetas .auro-rx-editor-table{
+        width:100%;
+        min-width:900px;
+        border-collapse:collapse;
+        table-layout:fixed;
+        font-size:12px;
       }
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
-        background:#f8fafc;
+      #recetas .auro-rx-editor-table col.auro-col-num{width:5%}
+      #recetas .auro-rx-editor-table col.auro-col-med{width:22%}
+      #recetas .auro-rx-editor-table col.auro-col-pres{width:22%}
+      #recetas .auro-rx-editor-table col.auro-col-cant{width:10%}
+      #recetas .auro-rx-editor-table col.auro-col-ind{width:36%}
+      #recetas .auro-rx-editor-table col.auro-col-act{width:5%}
+      #recetas .auro-rx-editor-table th{
+        padding:7px 6px;
+        border-right:1px solid #d8e0e5;
+        border-bottom:1px solid #cbd5e1;
+        background:#edf3f6;
+        color:#263238;
+        text-align:center;
+        font-size:9.5px;
+        font-weight:950;
+        line-height:1.15;
+        text-transform:uppercase;
+        letter-spacing:.025em;
       }
-      #recetas .auro-receta-editor-espejo .form-label{
-        display:flex!important;
-        align-items:center!important;
-        gap:9px!important;
-        margin:0 0 6px!important;
-        color:#7a174f!important;
-        font-size:10.5px!important;
-        line-height:1.2!important;
-        font-weight:900!important;
-        text-transform:uppercase!important;
-        letter-spacing:.05em!important;
+      #recetas .auro-rx-editor-table th:last-child{border-right:0}
+      #recetas .auro-rx-editor-main td{
+        padding:7px 6px;
+        vertical-align:top;
+        border-right:1px solid #e1e7eb;
+        background:#fff;
       }
-      #recetas .auro-receta-editor-espejo .form-control,
-      #recetas .auro-receta-editor-espejo .form-select{
-        width:100%!important;
-        min-height:42px!important;
-        border:1px solid #e5e7eb!important;
-        border-radius:10px!important;
+      #recetas .auro-rx-editor-main td:last-child{border-right:0}
+      #recetas .auro-rx-num{
+        text-align:center;
+        color:#8b1e5a;
+        font-weight:950;
+        padding-top:13px!important;
+      }
+      #recetas .auro-rx-editor-input,
+      #recetas .auro-rx-editor-textarea,
+      #recetas .auro-rx-editor-select{
+        width:100%;
+        min-height:36px!important;
+        padding:7px 8px!important;
+        border:1px solid transparent!important;
+        border-radius:9px!important;
         background:#fff!important;
         color:#111827!important;
-        font-size:13px!important;
-        font-weight:700!important;
         box-shadow:none!important;
+        font-size:12.5px!important;
+        line-height:1.3!important;
       }
-      #recetas .auro-receta-editor-espejo #recMedico{
-        background:#f8fafc!important;
-        color:#475569!important;
+      #recetas .auro-rx-editor-med{font-weight:850!important}
+      #recetas .auro-rx-editor-cantidad{text-align:center;font-weight:850!important}
+      #recetas .auro-rx-editor-textarea{min-height:58px!important;resize:vertical!important}
+      #recetas .auro-rx-editor-input:focus,
+      #recetas .auro-rx-editor-textarea:focus,
+      #recetas .auro-rx-editor-select:focus{
+        border-color:#d89abd!important;
+        box-shadow:0 0 0 3px rgba(194,59,131,.08)!important;
+        outline:none!important;
       }
-      #recetas .auro-receta-editor-espejo #recDiagnostico{
-        font-size:13.5px!important;
-        font-weight:800!important;
+      #recetas .auro-rx-editor-remove{
+        width:34px;height:34px;min-height:34px!important;
+        padding:0!important;border-radius:9px!important;
+        display:grid!important;place-items:center!important;
+        margin:1px auto 0;
       }
-      #recetas .auro-receta-editor-espejo #recMedicamento{
-        min-height:180px!important;
-        border-color:#dfc6d5!important;
-        border-radius:12px!important;
-        background:#fff!important;
-        font-family:Arial,system-ui,sans-serif!important;
-        font-size:13.5px!important;
-        line-height:1.48!important;
-        padding:12px 13px!important;
+      #recetas .auro-rx-editor-remove i{margin:0!important}
+      #recetas .auro-rx-editor-detail td{
+        padding:0 8px 9px;
+        border-bottom:1px solid #e2e8f0;
+        background:#fffafd;
       }
-      #recetas .auro-receta-editor-espejo #recIndicaciones{
-        min-height:104px!important;
-        background:#fff!important;
+      #recetas .auro-rx-editor-detail-grid{
+        display:grid;
+        grid-template-columns:1.15fr 1.35fr 1.2fr .9fr;
+        gap:8px;
+        padding:8px;
+        border:1px solid #f1e4ec;
+        border-radius:11px;
+        background:#fff;
       }
-      #recetas .auro-receta-editor-espejo #recRecomendaciones{
-        min-height:92px!important;
-        background:#fff!important;
-      }
-      #recetas .auro-receta-editor-espejo .form-text{
-        margin:7px 2px 0!important;
+      #recetas .auro-rx-editor-detail-item label{
+        display:block!important;
+        margin:0 0 4px!important;
         color:#64748b!important;
-        font-size:10.5px!important;
-        line-height:1.35!important;
+        font-size:9.5px!important;
+        font-weight:900!important;
+        line-height:1.15!important;
+        letter-spacing:.035em!important;
+        text-transform:uppercase!important;
       }
-      #recetas .auro-receta-editor-espejo[data-auro-modo="edicion"],
-      #recetas .auro-receta-editor-espejo[data-auro-modo="nueva"]{
-        border-top-color:#c23b83!important;
-        box-shadow:0 12px 30px rgba(139,30,90,.075)!important;
+      #recetas .auro-rx-editor-detail-item .auro-rx-editor-input,
+      #recetas .auro-rx-editor-detail-item .auro-rx-editor-select{
+        border-color:#e5e7eb!important;
       }
-      #recetas .auro-receta-editor-espejo[data-auro-modo="edicion"] .form-control:focus,
-      #recetas .auro-receta-editor-espejo[data-auro-modo="edicion"] .form-select:focus,
-      #recetas .auro-receta-editor-espejo[data-auro-modo="nueva"] .form-control:focus,
-      #recetas .auro-receta-editor-espejo[data-auro-modo="nueva"] .form-select:focus{
-        border-color:#c23b83!important;
-        box-shadow:0 0 0 3px rgba(194,59,131,.10)!important;
+      #recetas .auro-rx-editor-empty{
+        padding:22px 16px;
+        text-align:center;
+        color:#64748b;
+        font-size:12.5px;
       }
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment > .hc-plan-narrow,
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones > .hc-plan-narrow,
-      #recetas .auro-receta-editor-espejo .auro-rx-editor-internas > .hc-plan-narrow{
-        width:100%!important;
-        max-width:none!important;
+      #recetas .auro-rx-editor-readonly-note{
+        display:none;
+        padding:8px 12px;
+        border-top:1px solid #f1e4ec;
+        background:#f8fafc;
+        color:#64748b;
+        font-size:10.5px;
+        line-height:1.35;
+      }
+      #recetas .auro-rx-editor-shell[data-mode="lectura"] .auro-rx-editor-add,
+      #recetas .auro-rx-editor-shell[data-mode="lectura"] .auro-rx-editor-remove{
+        display:none!important;
+      }
+      #recetas .auro-rx-editor-shell[data-mode="lectura"] .auro-rx-editor-readonly-note{
+        display:block;
+      }
+      #recetas .auro-rx-editor-shell[data-mode="lectura"] .auro-rx-editor-input,
+      #recetas .auro-rx-editor-shell[data-mode="lectura"] .auro-rx-editor-textarea,
+      #recetas .auro-rx-editor-shell[data-mode="lectura"] .auro-rx-editor-select{
+        pointer-events:none!important;
+        border-color:transparent!important;
+        background:transparent!important;
+      }
+
+      /* recMedicamento se conserva como contrato canónico, oculto visualmente. */
+      #recetas .auro-rx-canonical-hidden{
+        position:absolute!important;
+        width:1px!important;height:1px!important;min-height:1px!important;
+        opacity:0!important;pointer-events:none!important;overflow:hidden!important;
+        clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;
+        white-space:nowrap!important;margin:0!important;padding:0!important;border:0!important;
+      }
+      #recetas .auro-rx-original-help{display:none!important}
+      #recetas .auro-rx-secondary-block{
+        margin-top:10px;
+        padding:11px!important;
+        border:1px solid #e5e7eb;
+        border-radius:14px;
+        background:#f8fafc;
+      }
+      #recetas .auro-rx-secondary-block textarea{
+        min-height:82px!important;
+        background:#fff!important;
+      }
+      #recetas .auro-rx-internal-label{
+        display:inline-flex!important;
+        align-items:center!important;
+        gap:7px!important;
+      }
+      #recetas .auro-rx-internal-label:after{
+        content:"Uso interno";
+        display:inline-flex;
+        align-items:center;
+        padding:2px 7px;
+        border-radius:999px;
+        background:#e2e8f0;
+        color:#475569;
+        font-size:9px;
+        font-weight:900;
       }
 
       @media(max-width:980px){
-        #recetas .auro-receta-editor-espejo{
-          grid-template-columns:repeat(2,minmax(0,1fr))!important;
-          padding:12px!important;
-          gap:9px!important;
-        }
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-meta{
-          grid-column:span 1!important;
-        }
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-dx,
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment,
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones,
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
-          grid-column:1/-1!important;
+        #recetas .auro-rx-editor-detail-grid{
+          grid-template-columns:repeat(2,minmax(0,1fr));
         }
       }
-      @media(max-width:560px){
-        #recetas .auro-receta-editor-espejo{
-          grid-template-columns:1fr!important;
-          padding:10px!important;
-          border-radius:16px!important;
+      @media(max-width:760px){
+        #recetas .auro-rx-editor-table-wrap{overflow:visible}
+        #recetas .auro-rx-editor-table{min-width:0;display:block}
+        #recetas .auro-rx-editor-table colgroup,
+        #recetas .auro-rx-editor-table thead{display:none}
+        #recetas .auro-rx-editor-table tbody{display:block}
+        #recetas .auro-rx-editor-main,
+        #recetas .auro-rx-editor-detail{
+          display:block;
+          margin:10px;
+          border:1px solid #e5e7eb;
+          border-radius:14px;
+          overflow:hidden;
+          background:#fff;
         }
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-meta,
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-dx,
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-treatment,
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-indicaciones,
-        #recetas .auro-receta-editor-espejo .auro-rx-editor-internas{
-          grid-column:1/-1!important;
+        #recetas .auro-rx-editor-main{
+          padding:8px;
+          box-shadow:0 5px 14px rgba(15,23,42,.045);
         }
-        #recetas .auro-receta-editor-espejo #recMedicamento{min-height:155px!important;}
-        #recetas .auro-receta-editor-espejo #recIndicaciones{min-height:92px!important;}
-        #recetas .auro-receta-editor-espejo #recRecomendaciones{min-height:84px!important;}
+        #recetas .auro-rx-editor-main td{
+          display:block;
+          width:100%!important;
+          border:0!important;
+          padding:5px 4px!important;
+        }
+        #recetas .auro-rx-editor-main td:before{
+          display:block;
+          margin:0 0 3px;
+          color:#64748b;
+          font-size:9px;
+          font-weight:900;
+          text-transform:uppercase;
+          letter-spacing:.035em;
+        }
+        #recetas .auro-rx-editor-main td:nth-child(1):before{content:"N.º"}
+        #recetas .auro-rx-editor-main td:nth-child(2):before{content:"Medicamento"}
+        #recetas .auro-rx-editor-main td:nth-child(3):before{content:"Presentación / concentración"}
+        #recetas .auro-rx-editor-main td:nth-child(4):before{content:"Cantidad"}
+        #recetas .auro-rx-editor-main td:nth-child(5):before{content:"Indicaciones"}
+        #recetas .auro-rx-editor-main td:nth-child(6):before{content:"Acción"}
+        #recetas .auro-rx-num{text-align:left;padding-top:5px!important}
+        #recetas .auro-rx-editor-remove{margin:0}
+        #recetas .auro-rx-editor-detail{
+          margin-top:-11px;
+          border-top:0;
+          border-radius:0 0 14px 14px;
+        }
+        #recetas .auro-rx-editor-detail td{
+          display:block;
+          padding:8px!important;
+          border:0!important;
+        }
+        #recetas .auro-rx-editor-detail-grid{
+          grid-template-columns:1fr 1fr;
+        }
+      }
+      @media(max-width:520px){
+        #recetas .auro-rx-editor-head{
+          align-items:flex-start;
+          flex-direction:column;
+        }
+        #recetas .auro-rx-editor-add{width:100%}
+        #recetas .auro-rx-editor-detail-grid{grid-template-columns:1fr}
+        #recetas .auro-rx-editor-main,
+        #recetas .auro-rx-editor-detail{margin-left:7px;margin-right:7px}
       }
 
       @media(max-width:1180px){
@@ -1029,46 +1173,292 @@
     document.head.appendChild(style);
   }
 
-  function auroRecetaMontarEditorEspejo(){
-    const seccion = el('recetas');
-    if(!seccion) return null;
+  function auroRecetaEditorObjetoDesdeItem(item){
+    if(!item) return {
+      med:'', pres:'', via:'', cantidad:'', frec:'', dur:'', ind:'', continuo:'No',
+      __legacy:false, __legacyText:''
+    };
 
-    const row = seccion.querySelector(':scope > .cardx > .row.g-3');
-    if(!row) return null;
+    if(item.texto){
+      const raw = String(item.texto || '').replace(/^\s*\d+\.\s*/, '').trim();
+      const interpretado = recetaMedicamentoTextoAObjeto(raw);
 
-    row.classList.add('auro-receta-editor-espejo');
-    row.setAttribute('data-auro-modo', String(recetaModoTrabajo || 'lectura'));
-
-    const configuracion = [
-      ['recFecha','auro-rx-editor-meta','Fecha de emisión'],
-      ['recMedico','auro-rx-editor-meta','Médico emisor'],
-      ['recCie10','auro-rx-editor-meta','CIE-10'],
-      ['recEstado','auro-rx-editor-meta','Estado'],
-      ['recDiagnostico','auro-rx-editor-dx','Diagnóstico'],
-      ['recMedicamento','auro-rx-editor-treatment','Tratamiento prescrito'],
-      ['recIndicaciones','auro-rx-editor-indicaciones','Indicaciones para el paciente'],
-      ['recRecomendaciones','auro-rx-editor-internas','Observaciones internas / recomendaciones']
-    ];
-
-    configuracion.forEach(function(item){
-      const campo = el(item[0]);
-      if(!campo) return;
-
-      const col = campo.closest('.row.g-3 > [class*="col-"]') ||
-        campo.closest('[class*="col-"]');
-
-      if(col){
-        col.classList.add(item[1]);
+      if(interpretado && !interpretado.texto){
+        return {
+          ...normalizarMedicamentoRecetaObjeto(interpretado),
+          __legacy:false,
+          __legacyText:''
+        };
       }
 
-      const scope = col || campo.parentElement;
-      const label = scope?.querySelector('.form-label');
-      if(label){
-        label.textContent = item[2];
-      }
+      return {
+        med:raw, pres:'', via:'', cantidad:'', frec:'', dur:'', ind:'', continuo:'No',
+        __legacy:true, __legacyText:raw
+      };
+    }
+
+    return {
+      ...normalizarMedicamentoRecetaObjeto(item),
+      __legacy:false,
+      __legacyText:''
+    };
+  }
+
+  function auroRecetaEditorLeerCampoCanonico(){
+    /*
+      Fuente única: recMedicamento.
+      Plan ya sincroniza ese campo mediante sincronizarPlanConReceta();
+      edición histórica carga en él el JSON guardado. De esta forma
+      el editor no crea una segunda ruta de datos ni sustituye recetas.
+    */
+    const campo = el('recMedicamento');
+    if(!campo) return [];
+
+    return recetaMedicamentosALista(campo.value || '')
+      .map(auroRecetaEditorObjetoDesdeItem)
+      .filter(m => String(m.med || m.__legacyText || '').trim());
+  }
+
+  function auroRecetaEditorDatoPersistible(m){
+    m = m || {};
+
+    if(
+      m.__legacy &&
+      String(m.__legacyText || '').trim() &&
+      String(m.med || '').trim() === String(m.__legacyText || '').trim() &&
+      !String(m.pres || '').trim() &&
+      !String(m.via || '').trim() &&
+      !String(m.cantidad || '').trim() &&
+      !String(m.frec || '').trim() &&
+      !String(m.dur || '').trim() &&
+      !String(m.ind || '').trim() &&
+      String(m.continuo || 'No') !== 'Sí'
+    ){
+      return {texto:String(m.__legacyText || '').trim()};
+    }
+
+    return normalizarMedicamentoRecetaObjeto(m);
+  }
+
+  function auroRecetaEditorSincronizarCampoCanonico(){
+    const campo = el('recMedicamento');
+    if(!campo || !recetaEditorTratamientoMontado) return '';
+
+    const lista = recetaEditorMedicamentos
+      .map(auroRecetaEditorDatoPersistible)
+      .filter(m => m && (String(m.texto || '').trim() || String(m.med || '').trim()));
+
+    const valor = lista.length ? JSON.stringify(lista) : '';
+    campo.value = valor;
+    return valor;
+  }
+
+  function auroRecetaEditorSetDato(index, clave, valor){
+    const i = Number(index);
+    if(!Number.isInteger(i) || !recetaEditorMedicamentos[i]) return;
+
+    recetaEditorMedicamentos[i][clave] = String(valor ?? '');
+    recetaEditorMedicamentos[i].__legacy = false;
+    recetaEditorTratamientoSucio = true;
+    auroRecetaEditorSincronizarCampoCanonico();
+
+    if(recetaPreviewVisible){
+      clearTimeout(window.__auroRecetaPreviewTimer);
+      window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 220);
+    }
+  }
+
+  function auroRecetaEditorAgregarMedicamento(){
+    if(recetaModoTrabajo === 'lectura') return;
+
+    recetaEditorMedicamentos.push({
+      med:'', pres:'', via:'', cantidad:'', frec:'', dur:'', ind:'', continuo:'No',
+      __legacy:false, __legacyText:''
     });
+    recetaEditorTratamientoSucio = true;
+    auroRecetaEditorRenderFilas();
+  }
 
-    return row;
+  function auroRecetaEditorEliminarMedicamento(index){
+    if(recetaModoTrabajo === 'lectura') return;
+
+    const i = Number(index);
+    if(!Number.isInteger(i) || !recetaEditorMedicamentos[i]) return;
+
+    recetaEditorMedicamentos.splice(i,1);
+    recetaEditorTratamientoSucio = true;
+    auroRecetaEditorSincronizarCampoCanonico();
+    auroRecetaEditorRenderFilas();
+  }
+
+  function auroRecetaEditorFilasHTML(){
+    if(!recetaEditorMedicamentos.length){
+      return '<tr><td colspan="6"><div class="auro-rx-editor-empty">No hay medicamentos cargados en esta receta.</div></td></tr>';
+    }
+
+    return recetaEditorMedicamentos.map((m,index) => {
+      const n = index + 1;
+      const continuo = String(m.continuo || 'No') === 'Sí' ? 'Sí' : 'No';
+
+      return `
+        <tr class="auro-rx-editor-main">
+          <td class="auro-rx-num">${n}</td>
+          <td><input class="auro-rx-editor-input auro-rx-editor-med" value="${safe(m.med || '')}" oninput="window.auroRecetaEditorSetDato(${index},'med',this.value)"></td>
+          <td><input class="auro-rx-editor-input" value="${safe(m.pres || '')}" oninput="window.auroRecetaEditorSetDato(${index},'pres',this.value)"></td>
+          <td><input class="auro-rx-editor-input auro-rx-editor-cantidad" value="${safe(m.cantidad || '')}" oninput="window.auroRecetaEditorSetDato(${index},'cantidad',this.value)"></td>
+          <td><textarea class="auro-rx-editor-textarea" oninput="window.auroRecetaEditorSetDato(${index},'ind',this.value)">${safe(m.ind || '')}</textarea></td>
+          <td>
+            <button type="button" class="btn-soft auro-rx-editor-remove" title="Quitar medicamento" onclick="window.auroRecetaEditorEliminarMedicamento(${index})">
+              <i class="bi bi-trash3"></i>
+            </button>
+          </td>
+        </tr>
+        <tr class="auro-rx-editor-detail">
+          <td colspan="6">
+            <div class="auro-rx-editor-detail-grid">
+              <div class="auro-rx-editor-detail-item">
+                <label>Vía</label>
+                <input class="auro-rx-editor-input" value="${safe(m.via || '')}" placeholder="Ej. Vía oral" oninput="window.auroRecetaEditorSetDato(${index},'via',this.value)">
+              </div>
+              <div class="auro-rx-editor-detail-item">
+                <label>Frecuencia</label>
+                <input class="auro-rx-editor-input" value="${safe(m.frec || '')}" placeholder="Ej. Cada 24 horas" oninput="window.auroRecetaEditorSetDato(${index},'frec',this.value)">
+              </div>
+              <div class="auro-rx-editor-detail-item">
+                <label>Duración</label>
+                <input class="auro-rx-editor-input" value="${safe(m.dur || '')}" placeholder="Ej. 30 días" oninput="window.auroRecetaEditorSetDato(${index},'dur',this.value)">
+              </div>
+              <div class="auro-rx-editor-detail-item">
+                <label>Continuo</label>
+                <select class="auro-rx-editor-select" onchange="window.auroRecetaEditorSetDato(${index},'continuo',this.value)">
+                  <option value="No" ${continuo === 'No' ? 'selected' : ''}>No</option>
+                  <option value="Sí" ${continuo === 'Sí' ? 'selected' : ''}>Sí</option>
+                </select>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  function auroRecetaEditorRenderFilas(){
+    const body = el('auroRecetaEditorBody');
+    const shell = el('auroRecetaEditorTratamiento');
+
+    if(shell){
+      shell.setAttribute('data-mode', String(recetaModoTrabajo || 'lectura'));
+    }
+    if(body){
+      body.innerHTML = auroRecetaEditorFilasHTML();
+    }
+
+    auroRecetaEditorActualizarModo();
+    auroRecetaEditorSincronizarCampoCanonico();
+  }
+
+  function auroRecetaEditorRenderDesdeCampo(forzar){
+    if(!recetaEditorTratamientoMontado) return;
+    if(recetaEditorTratamientoSucio && !forzar) return;
+
+    recetaEditorMedicamentos = auroRecetaEditorLeerCampoCanonico();
+    recetaEditorTratamientoSucio = false;
+    auroRecetaEditorRenderFilas();
+  }
+
+  function auroRecetaEditorActualizarModo(){
+    const shell = el('auroRecetaEditorTratamiento');
+    if(shell){
+      shell.setAttribute('data-mode', String(recetaModoTrabajo || 'lectura'));
+    }
+
+    document.querySelectorAll(
+      '#auroRecetaEditorTratamiento .auro-rx-editor-input,' +
+      '#auroRecetaEditorTratamiento .auro-rx-editor-textarea,' +
+      '#auroRecetaEditorTratamiento .auro-rx-editor-select'
+    ).forEach(campo => {
+      campo.disabled = recetaModoTrabajo === 'lectura';
+    });
+  }
+
+  function auroRecetaEditorMontar(){
+    if(recetaEditorTratamientoMontado) {
+      auroRecetaEditorActualizarModo();
+      return;
+    }
+
+    const campo = el('recMedicamento');
+    if(!campo) return;
+
+    const narrow = campo.closest('.hc-plan-narrow');
+    if(!narrow) return;
+
+    const label = narrow.querySelector('label');
+    const ayuda = narrow.querySelector('.form-text');
+
+    if(label) label.style.display = 'none';
+    if(ayuda) ayuda.classList.add('auro-rx-original-help');
+
+    campo.classList.add('auro-rx-canonical-hidden');
+    campo.setAttribute('aria-hidden','true');
+    campo.tabIndex = -1;
+
+    const shell = document.createElement('div');
+    shell.id = 'auroRecetaEditorTratamiento';
+    shell.className = 'auro-rx-editor-shell';
+    shell.setAttribute('data-mode', String(recetaModoTrabajo || 'lectura'));
+    shell.innerHTML = `
+      <div class="auro-rx-editor-head">
+        <div class="auro-rx-editor-head-title">
+          <b>Tratamiento prescrito</b>
+          <small>Misma jerarquía del formato oficial: medicamento, presentación/concentración, cantidad e indicaciones.</small>
+        </div>
+        <button type="button" class="btn-soft auro-rx-editor-add" onclick="window.auroRecetaEditorAgregarMedicamento()">
+          <i class="bi bi-plus-circle"></i> Agregar medicamento
+        </button>
+      </div>
+      <div class="auro-rx-editor-table-wrap">
+        <table class="auro-rx-editor-table" aria-label="Editor de tratamiento prescrito">
+          <colgroup>
+            <col class="auro-col-num"><col class="auro-col-med"><col class="auro-col-pres">
+            <col class="auro-col-cant"><col class="auro-col-ind"><col class="auro-col-act">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>N.º</th><th>Medicamento</th><th>Presentación / concentración</th>
+              <th>Cantidad</th><th>Indicaciones</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="auroRecetaEditorBody"></tbody>
+        </table>
+      </div>
+      <div class="auro-rx-editor-readonly-note">
+        <i class="bi bi-lock me-1"></i> Modo lectura. Use <b>Editar receta</b> para modificar el tratamiento.
+      </div>`;
+
+    narrow.insertBefore(shell,campo);
+    recetaEditorTratamientoMontado = true;
+
+    const indicaciones = el('recIndicaciones');
+    const recomendaciones = el('recRecomendaciones');
+
+    if(indicaciones){
+      const col = indicaciones.closest('.col-12');
+      const l = indicaciones.closest('.hc-plan-narrow')?.querySelector('label');
+      if(col) col.classList.add('auro-rx-secondary-block');
+      if(l) l.textContent = 'Indicaciones generales para el paciente';
+    }
+
+    if(recomendaciones){
+      const col = recomendaciones.closest('.col-12');
+      const l = recomendaciones.closest('.hc-plan-narrow')?.querySelector('label');
+      if(col) col.classList.add('auro-rx-secondary-block');
+      if(l){
+        l.textContent = 'Observaciones internas / recomendaciones';
+        l.classList.add('auro-rx-internal-label');
+      }
+    }
+
+    auroRecetaEditorRenderDesdeCampo(true);
   }
 
   function auroRecetaAfinarInterfazPremium(){
@@ -1106,7 +1496,7 @@
       nota.innerHTML = '<i class="bi bi-info-circle me-1"></i> La prescripción se conserva como un único documento clínico asociado a la atención activa, aunque incluya varios medicamentos.';
     }
 
-    auroRecetaMontarEditorEspejo();
+    auroRecetaEditorMontar();
   }
 
   function recetaMedicamentosPlanActualesSeguros(){
@@ -1163,6 +1553,7 @@
        de datos hasta que el Plan corresponda a la nueva atención. */
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     actualizarBotonGuardarReceta();
+    auroRecetaEditorRenderDesdeCampo(true);
 
     const box = el('recetaPreview');
     if(box){
@@ -2035,6 +2426,7 @@
     setVal('recRecomendaciones', '');
     actualizarBotonGuardarReceta();
     auroRecetaActualizarCabeceraClinicaPremium();
+    auroRecetaEditorRenderDesdeCampo(true);
     mostrarMensajeReceta('<i class="bi bi-plus-circle me-1"></i> Nueva receta habilitada. Puede escribir o cargar datos desde Plan.', '');
     vistaPreviaReceta();
   }
@@ -2051,6 +2443,7 @@
     setVal('recRecomendaciones', '');
 
     actualizarBotonGuardarReceta();
+    auroRecetaEditorRenderDesdeCampo(true);
 
     const box = el('recetaPreview');
     if(box){
@@ -2813,10 +3206,7 @@
     const atencion = obtenerAtencionActivaSegura() || {};
     const medico = obtenerMedicoDesdeAtencionActiva();
     const modo = auroRecetaModoActualTexto();
-    const editorEspejo = auroRecetaMontarEditorEspejo();
-    if(editorEspejo){
-      editorEspejo.setAttribute('data-auro-modo', String(recetaModoTrabajo || 'lectura'));
-    }
+    auroRecetaEditorActualizarModo();
 
     if(card){
       card.classList.add('auro-receta-context-card');
@@ -2884,7 +3274,7 @@
       row.parentNode.insertBefore(formTitle, row);
     }
     if(formTitle){
-      formTitle.innerHTML = `<b>Contenido de la prescripción</b><small>Mismos datos clínicos utilizados por Vista paciente / imprimir.</small>`;
+      formTitle.innerHTML = `<b>Tratamiento e indicaciones</b><small>Edición del documento asociado a la atención actual.</small>`;
     }
   }
 
@@ -3838,12 +4228,13 @@
     setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
     setVal('recEstado', receta.estado || 'Emitida');
     setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
-    setVal('recMedicamento', recetaMedicamentosEdicionTexto(receta.medicamento || receta.medicamentos || ''));
+    setVal('recMedicamento', receta.medicamento || receta.medicamentos || '');
     setVal('recIndicaciones', recetaListaParaFormulario(receta.indicaciones || ''));
     setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones || receta.observaciones || ''));
     if(!receta.id_atencion) receta.id_atencion = obtenerIdAtencionActivaSeguro();
     actualizarBotonGuardarReceta();
     auroRecetaActualizarCabeceraClinicaPremium();
+    auroRecetaEditorRenderDesdeCampo(true);
     mostrarMensajeReceta('<i class="bi bi-pencil-square me-1"></i> Editando receta. Los cambios se aplican solo a Recetas y no modifican el Plan de la historia clínica.', '');
     vistaPreviaReceta();
   }
@@ -4694,6 +5085,10 @@
     };
   }
 
+  window.auroRecetaEditorSetDato = auroRecetaEditorSetDato;
+  window.auroRecetaEditorAgregarMedicamento = auroRecetaEditorAgregarMedicamento;
+  window.auroRecetaEditorEliminarMedicamento = auroRecetaEditorEliminarMedicamento;
+
   window.toggleAccionesReceta = toggleAccionesReceta;
 
   window.verRecetaEmitida = async function(id){
@@ -4766,6 +5161,7 @@
           verificarCambioAtencionReceta();
           sincronizarMedicoRecetaDesdeAtencion();
           auroRecetaAfinarInterfazPremium();
+          auroRecetaEditorRenderDesdeCampo(false);
           auroRecetaActualizarCabeceraClinicaPremium();
           asegurarHistorialRecetas();
           recetasPaginaActual = 1;
@@ -4829,6 +5225,8 @@
     agregarBotonVistaPrevia();
     asegurarVistaPreviaReceta();
     auroRecetaMostrarPreview(false);
+    auroRecetaEditorMontar();
+    auroRecetaEditorRenderDesdeCampo(true);
     auroRecetaActualizarCabeceraClinicaPremium();
     asegurarHistorialRecetas();
     recetaModoTrabajo = 'lectura';
@@ -4881,7 +5279,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'2.9 editor espejo del documento oficial',
+    version:'3.0 editor tabulado espejo del PDF oficial',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
