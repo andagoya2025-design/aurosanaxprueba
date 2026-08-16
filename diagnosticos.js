@@ -45,7 +45,7 @@
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
   const VERSION = '1.5.7';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260816_correccion_historica_aplicar_plan_v1';
+  const RELEASE = '20260730_sincronizacion_atencion_maestra_v1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -246,6 +246,66 @@
     return '';
   }
 
+  /*
+    AUROSANAX DIAGNÓSTICO 20 - PUENTE QUIRÚRGICO DE CORRECCIÓN HISTÓRICA
+    --------------------------------------------------------------------
+    El botón oficial "Aplicar al Plan" está interceptado por Examen Físico y,
+    en el flujo normal, exige guardar primero el diagnóstico mediante
+    window.auroGuardarDiagnosticosAtencionActual().
+
+    En una atención finalizada esa escritura normal NO corresponde:
+    la corrección debe persistirse únicamente con "Guardar corrección",
+    porque ese flujo sí envía token + justificativo y deja una sola auditoría.
+
+    Este puente actúa SOLO mientras state.correccionClinicaActiva === true.
+    Fuera de la corrección histórica, restaura y conserva exactamente el
+    guardado normal existente.
+  */
+  let auroDxGuardarDiagnosticosOriginal = null;
+  let auroDxPuenteGuardadoCorreccionInstalado = false;
+
+  function auroDxInstalarPuenteGuardadoCorreccion(){
+    if(!state.correccionClinicaActiva) return false;
+    if(auroDxPuenteGuardadoCorreccionInstalado) return true;
+    if(typeof window.auroGuardarDiagnosticosAtencionActual !== 'function') return false;
+
+    auroDxGuardarDiagnosticosOriginal = window.auroGuardarDiagnosticosAtencionActual;
+
+    window.auroGuardarDiagnosticosAtencionActual = async function(){
+      const ctx = contextoAtencionSeleccionada();
+
+      if(state.correccionClinicaActiva && ctx.historica){
+        const registros = auroDxDiagnosticosParaCorreccion();
+        return {
+          success:true,
+          correccion_clinica_activa:true,
+          guardado_diferido:true,
+          id_atencion:ctx.id,
+          diagnosticos:Array.isArray(registros) ? registros.length : 0,
+          message:'Corrección histórica activa: el diagnóstico se guardará exclusivamente con “Guardar corrección”.'
+        };
+      }
+
+      return await Promise.resolve(
+        auroDxGuardarDiagnosticosOriginal.apply(this, arguments)
+      );
+    };
+
+    auroDxPuenteGuardadoCorreccionInstalado = true;
+    return true;
+  }
+
+  function auroDxRestaurarPuenteGuardadoCorreccion(){
+    if(
+      auroDxPuenteGuardadoCorreccionInstalado &&
+      typeof auroDxGuardarDiagnosticosOriginal === 'function'
+    ){
+      window.auroGuardarDiagnosticosAtencionActual = auroDxGuardarDiagnosticosOriginal;
+    }
+    auroDxGuardarDiagnosticosOriginal = null;
+    auroDxPuenteGuardadoCorreccionInstalado = false;
+  }
+
   if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
     window.auroSolicitarMotivoCorreccionClinica = function(opciones){
       opciones = opciones || {};
@@ -358,10 +418,11 @@
 
       state.correccionClinicaMeta = motivo;
       state.correccionClinicaActiva = true;
+      auroDxInstalarPuenteGuardadoCorreccion();
       renderContextoSuperior();
       auroDxAplicarEstadoEditorHistorico();
       configurarModoProtocoloMaestro();
-      mensaje('aviso', (motivo.correccion_excepcional === 'SI' ? 'Enmienda excepcional' : 'Corrección clínica') + ' habilitada temporalmente. Puede corregir el diagnóstico y aplicar sus sugerencias al Plan antes de guardar la corrección.');
+      mensaje('aviso', (motivo.correccion_excepcional === 'SI' ? 'Enmienda excepcional' : 'Corrección clínica') + ' habilitada temporalmente. Puede corregir el diagnóstico y aplicar su protocolo al Plan; finalice con “Guardar corrección”.');
     }catch(error){
       console.error(MODULO + ': no se pudo iniciar corrección histórica.', error);
       mensaje('error', error.message || 'No se pudo validar la corrección clínica.');
@@ -418,9 +479,9 @@
 
       state.correccionClinicaActiva = false;
       state.correccionClinicaMeta = null;
+      auroDxRestaurarPuenteGuardadoCorreccion();
       await cargarAtencionActual(true);
       auroDxAplicarEstadoEditorHistorico();
-      configurarModoProtocoloMaestro();
       renderContextoSuperior();
       mensaje('ok','Corrección diagnóstica guardada con trazabilidad clínica.');
     }catch(error){
@@ -432,9 +493,9 @@
   async function auroDxCancelarCorreccionHistorica(){
     state.correccionClinicaActiva = false;
     state.correccionClinicaMeta = null;
+    auroDxRestaurarPuenteGuardadoCorreccion();
     try{ await cargarAtencionActual(true); }catch(e){}
     auroDxAplicarEstadoEditorHistorico();
-    configurarModoProtocoloMaestro();
     renderContextoSuperior();
     mensaje('aviso','Corrección cancelada. Se restauró el diagnóstico guardado.');
   }
@@ -627,7 +688,7 @@
 
   function puedeAplicarAlPlan(){
     const ctx = contextoAtencionSeleccionada();
-    return ctx.editable === true || (ctx.historica === true && state.correccionClinicaActiva === true);
+    return ctx.editable === true || (ctx.historica && state.correccionClinicaActiva === true);
   }
 
   function diagnosticosConteo(){
@@ -3451,6 +3512,10 @@
   }
 
   function limpiarContextoHistoriaNueva(){
+    auroDxRestaurarPuenteGuardadoCorreccion();
+    state.correccionClinicaActiva = false;
+    state.correccionClinicaMeta = null;
+
     /*
       Limpieza exclusivamente en memoria y visual.
       No elimina cache histórico de otras atenciones, no llama Apps Script
@@ -3827,7 +3892,7 @@
   async function aplicarAlPlan(){
     const ctx = contextoAtencionSeleccionada();
     if(!puedeAplicarAlPlan()){
-      mensaje('error','La atención está cerrada o es histórica. Active “Corregir diagnóstico” para aplicar el protocolo al Plan.');
+      mensaje('error','El protocolo solo puede aplicarse desde una atención activa o desde una corrección clínica histórica habilitada.');
       configurarModoProtocoloMaestro();
       return;
     }
@@ -3890,12 +3955,12 @@
       }
 
       /*
-        Persistencia normal únicamente en atención abierta.
-        En corrección histórica, el diagnóstico se confirma exclusivamente con
-        “Guardar corrección”, evitando un segundo guardado/auditoría implícita
-        al transferir sugerencias al Plan.
+        Persistencia del diagnóstico estructurado:
+        - Atención abierta: conserva EXACTAMENTE el guardado normal previo.
+        - Corrección histórica activa: NO ejecuta el guardado normal sin token.
+          La persistencia única y auditada se realiza con “Guardar corrección”.
       */
-      if(ctx.editable){
+      if(!(ctx.historica && state.correccionClinicaActiva)){
         try{
           if(typeof window.auroGuardarDiagnosticosAtencionActual === 'function'){
             const resultadoDx = await Promise.resolve(
@@ -3969,13 +4034,17 @@
       }catch(e){}
 
       const algunaCaja = Object.values(aplicados).some(Boolean);
+      const pendienteCorreccion = ctx.historica && state.correccionClinicaActiva;
       mensaje(
         'ok',
         'Protocolo transferido al Plan. Medicamentos agregados: ' + medicamentos +
         '. Órdenes agregadas: ' + ordenes +
         (algunaCaja
           ? '.'
-          : '. El Plan no expuso campos de texto compatibles; revise las tablas del Plan.')
+          : '. El Plan no expuso campos de texto compatibles; revise las tablas del Plan.') +
+        (pendienteCorreccion
+          ? ' La corrección diagnóstica sigue pendiente: pulse “Guardar corrección” para registrarla con trazabilidad.'
+          : '')
       );
 
       sincronizarEditorCie10DesdeDiagnosticos();
@@ -3992,6 +4061,17 @@
 
   function cambiarPorAtencion(idAtencion){
     idAtencion = texto(idAtencion);
+
+    if(
+      state.correccionClinicaActiva &&
+      state.atencionActual &&
+      idAtencion &&
+      texto(state.atencionActual) !== idAtencion
+    ){
+      auroDxRestaurarPuenteGuardadoCorreccion();
+      state.correccionClinicaActiva = false;
+      state.correccionClinicaMeta = null;
+    }
 
     /*
       El evento de Atenciones contiene el id maestro. Se registra primero para
