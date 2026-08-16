@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: auditoria_clinica.js
  Módulo: Auditoría clínica independiente
- Versión: 3.0.0
+ Versión: 4.0.0
  -----------------------------------------------------------------------
  OBJETIVO
  - Consultar la hoja auditoria_clinica y administrar el control de correcciones.
@@ -330,10 +330,6 @@
         Estado de auditoría: ${escapar(e.estado || '—')}<br>
         Ventana: ${escapar(e.dentro_ventana || e.dentro_24h || 'NO_APLICA')}${texto(e.horas_desde_referencia) ? ' · '+escapar(e.horas_desde_referencia)+' h' : ''}${texto(e.plazo_horas_configurado) ? ' / límite '+escapar(e.plazo_horas_configurado)+' h' : ''}<br>
         Referencia de cierre: ${escapar(e.fecha_referencia || '—')} · Excepcional: ${escapar(e.correccion_excepcional || 'NO')}
-      </div>
-      <div class="auro-audit-detail-grid">
-        <div class="auro-audit-detail-box"><h6>Valor anterior</h6><pre>${escapar(jsonLegible(e.valor_anterior))}</pre></div>
-        <div class="auro-audit-detail-box"><h6>Valor nuevo</h6><pre>${escapar(jsonLegible(e.valor_nuevo))}</pre></div>
       </div>`;
     modal.classList.add('show');
   }
