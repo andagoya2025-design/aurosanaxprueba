@@ -326,10 +326,10 @@
         Paciente: ${escapar(e.nombre_paciente || '—')} · Consulta: ${escapar(e.numero_consulta || '—')}<br>
         Fecha: ${escapar(formatearFechaHora(e.fecha_hora || e.creado_en))}<br>
         Actor: ${escapar(e.nombre_medico || e.usuario || '—')}<br>
-        Justificativo: ${escapar(e.tipo_justificativo || '—')}${texto(e.motivo) ? ' · '+escapar(e.motivo) : ''}<br>
+        Justificativo: ${escapar(e.tipo_justificativo || e.motivo || '—')}${texto(e.tipo_justificativo) && texto(e.motivo) && normalizar(e.motivo) !== normalizar(e.tipo_justificativo) ? ' · '+escapar(e.motivo) : ''}<br>
         Estado de auditoría: ${escapar(e.estado || '—')}<br>
         Ventana: ${escapar(e.dentro_ventana || e.dentro_24h || 'NO_APLICA')}${texto(e.horas_desde_referencia) ? ' · '+escapar(e.horas_desde_referencia)+' h' : ''}${texto(e.plazo_horas_configurado) ? ' / límite '+escapar(e.plazo_horas_configurado)+' h' : ''}<br>
-        Referencia de cierre: ${escapar(e.fecha_referencia || '—')} · Excepcional: ${escapar(e.correccion_excepcional || 'NO')}
+        Referencia de cierre: ${escapar(formatearFechaHora(e.fecha_referencia))} · Excepcional: ${escapar(e.correccion_excepcional || 'NO')}
       </div>`;
     modal.classList.add('show');
   }
