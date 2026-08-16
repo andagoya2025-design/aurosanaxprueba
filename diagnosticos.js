@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.6';
+  const VERSION = '1.5.7';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260730_sincronizacion_atencion_maestra_v1';
+  const RELEASE = '20260816_correccion_historica_aplicar_plan_v1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -360,7 +360,8 @@
       state.correccionClinicaActiva = true;
       renderContextoSuperior();
       auroDxAplicarEstadoEditorHistorico();
-      mensaje('aviso', (motivo.correccion_excepcional === 'SI' ? 'Enmienda excepcional' : 'Corrección clínica') + ' habilitada temporalmente. Modifique el diagnóstico y pulse “Guardar corrección”.');
+      configurarModoProtocoloMaestro();
+      mensaje('aviso', (motivo.correccion_excepcional === 'SI' ? 'Enmienda excepcional' : 'Corrección clínica') + ' habilitada temporalmente. Puede corregir el diagnóstico y aplicar sus sugerencias al Plan antes de guardar la corrección.');
     }catch(error){
       console.error(MODULO + ': no se pudo iniciar corrección histórica.', error);
       mensaje('error', error.message || 'No se pudo validar la corrección clínica.');
@@ -419,6 +420,7 @@
       state.correccionClinicaMeta = null;
       await cargarAtencionActual(true);
       auroDxAplicarEstadoEditorHistorico();
+      configurarModoProtocoloMaestro();
       renderContextoSuperior();
       mensaje('ok','Corrección diagnóstica guardada con trazabilidad clínica.');
     }catch(error){
@@ -432,6 +434,7 @@
     state.correccionClinicaMeta = null;
     try{ await cargarAtencionActual(true); }catch(e){}
     auroDxAplicarEstadoEditorHistorico();
+    configurarModoProtocoloMaestro();
     renderContextoSuperior();
     mensaje('aviso','Corrección cancelada. Se restauró el diagnóstico guardado.');
   }
@@ -623,7 +626,8 @@
   }
 
   function puedeAplicarAlPlan(){
-    return contextoAtencionSeleccionada().editable === true;
+    const ctx = contextoAtencionSeleccionada();
+    return ctx.editable === true || (ctx.historica === true && state.correccionClinicaActiva === true);
   }
 
   function diagnosticosConteo(){
@@ -3822,8 +3826,8 @@
 
   async function aplicarAlPlan(){
     const ctx = contextoAtencionSeleccionada();
-    if(!ctx.editable){
-      mensaje('error','El protocolo solo puede aplicarse al Plan desde la última atención activa y editable.');
+    if(!puedeAplicarAlPlan()){
+      mensaje('error','La atención está cerrada o es histórica. Active “Corregir diagnóstico” para aplicar el protocolo al Plan.');
       configurarModoProtocoloMaestro();
       return;
     }
@@ -3885,26 +3889,33 @@
         console.warn(MODULO + ': no se pudo sincronizar Plan antes de aplicar.', error);
       }
 
-      /* Persistencia obligatoria del diagnóstico estructurado. */
-      try{
-        if(typeof window.auroGuardarDiagnosticosAtencionActual === 'function'){
-          const resultadoDx = await Promise.resolve(
-            window.auroGuardarDiagnosticosAtencionActual()
-          );
-          if(resultadoDx && resultadoDx.success === false){
-            throw new Error(
-              resultadoDx.message ||
-              'No se pudo guardar el diagnóstico estructurado de esta atención.'
+      /*
+        Persistencia normal únicamente en atención abierta.
+        En corrección histórica, el diagnóstico se confirma exclusivamente con
+        “Guardar corrección”, evitando un segundo guardado/auditoría implícita
+        al transferir sugerencias al Plan.
+      */
+      if(ctx.editable){
+        try{
+          if(typeof window.auroGuardarDiagnosticosAtencionActual === 'function'){
+            const resultadoDx = await Promise.resolve(
+              window.auroGuardarDiagnosticosAtencionActual()
             );
+            if(resultadoDx && resultadoDx.success === false){
+              throw new Error(
+                resultadoDx.message ||
+                'No se pudo guardar el diagnóstico estructurado de esta atención.'
+              );
+            }
           }
+        }catch(error){
+          console.error(MODULO + ': no se pudo persistir el diagnóstico estructurado.', error);
+          mensaje(
+            'error',
+            'No se pudo guardar el diagnóstico estructurado de esta atención antes de aplicar el protocolo.'
+          );
+          return;
         }
-      }catch(error){
-        console.error(MODULO + ': no se pudo persistir el diagnóstico estructurado.', error);
-        mensaje(
-          'error',
-          'No se pudo guardar el diagnóstico estructurado de esta atención antes de aplicar el protocolo.'
-        );
-        return;
       }
 
       const medicamentos = agregarMedicamentosAlPlan(p.medicamentos);
