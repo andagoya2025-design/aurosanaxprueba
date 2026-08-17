@@ -1854,7 +1854,7 @@
   }
 
   /* =====================================================
-     AUROSANAX RECETAS 2.7 - DIAGNÓSTICO MÚLTIPLE POR ATENCIÓN
+     AUROSANAX RECETAS 2.8 - MULTIDIAGNÓSTICO + PRESENTACIÓN HORIZONTAL
      ---------------------------------------------------------
      - Diagnóstico sigue siendo la fuente clínica oficial.
      - La receta conserva diagnostico_cie10 principal para compatibilidad.
@@ -1982,6 +1982,59 @@
         <b>${safe(dx.texto || '—')}</b>
       </div>`;
     }).join('')}</div>`;
+  }
+
+  /*
+     AUROSANAX RECETAS 2.8 - PRESENTACIÓN MULTIDIAGNÓSTICO QUIRÚRGICA
+     - Un solo diagnóstico conserva la cabecera histórica.
+     - Con dos o más, la cabecera muestra solo el principal.
+     - Todos los diagnósticos se muestran en una franja horizontal
+       inmediatamente después del tratamiento prescrito.
+     - No modifica la fuente de diagnósticos, guardado, historial ni backend.
+  */
+  function auroRecetaDiagnosticosListaImpresion(r){
+    return auroRecetaDiagnosticosNormalizados(r?.diagnosticos || []);
+  }
+
+  function auroRecetaDiagnosticoCabeceraPacienteHTML(r){
+    const lista = auroRecetaDiagnosticosListaImpresion(r);
+    if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
+
+    const principal = lista.find(dx => dx.principal) || lista[0];
+    return `<b>${safe(principal?.texto || r?.diagnostico || '—')}</b>`;
+  }
+
+  function auroRecetaTipoDiagnosticoVisual(valor){
+    const n = recetaNormalizarPlano(valor);
+    if(n === 'definitivo') return 'Definitivo';
+    if(n === 'presuntivo') return 'Presuntivo';
+    return String(valor || '').trim();
+  }
+
+  function auroRecetaDiagnosticosMultiplesPacienteHTML(r){
+    const lista = auroRecetaDiagnosticosListaImpresion(r);
+    if(lista.length <= 1) return '';
+
+    const columnas = Math.min(Math.max(lista.length, 2), 3);
+
+    return `
+      <div class="auro-receta-section auro-rx-diagnosticos-section">
+        <h4>Diagnósticos de la atención</h4>
+        <div class="auro-rx-diagnosticos-grid" style="--auro-rx-dx-cols:${columnas}">
+          ${lista.map(function(dx){
+            const tipo = auroRecetaTipoDiagnosticoVisual(dx.tipo_diagnostico);
+            return `
+              <div class="auro-rx-diagnostico-card ${dx.principal ? 'principal' : 'asociado'}">
+                <div class="auro-rx-diagnostico-card-head">
+                  <strong>${safe(dx.codigo || 'S/C')}</strong>
+                  <span class="auro-rx-dx-jerarquia">${dx.principal ? 'Principal' : 'Asociado'}</span>
+                  ${tipo ? `<span class="auro-rx-dx-tipo ${recetaNormalizarPlano(tipo) === 'definitivo' ? 'definitivo' : ''}">${safe(tipo)}</span>` : ''}
+                </div>
+                <div class="auro-rx-diagnostico-card-name">${safe(dx.descripcion || dx.texto || '—')}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
   }
 
   function auroRecetaObtenerDiagnosticoEstructurado(lista, cie){
@@ -3518,6 +3571,14 @@
     const centro = cfg.nombre || 'AUROSANAX';
     const estadoClass = String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
     const diagnosticosRepresentacion = auroRecetaDiagnosticosRepresentacionHTML(r);
+    const diagnosticosPaciente = auroRecetaDiagnosticosListaImpresion(r);
+    const diagnosticoCabeceraPaciente = auroRecetaDiagnosticoCabeceraPacienteHTML(r);
+    const diagnosticosMultiplesPaciente = !esAdministrativo
+      ? auroRecetaDiagnosticosMultiplesPacienteHTML(r)
+      : '';
+    const etiquetaDiagnosticoPaciente = diagnosticosPaciente.length > 1
+      ? 'Diagnóstico principal'
+      : 'Diagnóstico';
     const ubicacion = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais].filter(Boolean).join(' · ');
     const contacto = [cfg.telefono, cfg.email, cfg.web].filter(Boolean).join(' · ');
     const registros = [
@@ -3543,7 +3604,7 @@
           <div class="auro-rx-dato auro-rx-edad"><span>Edad</span><b>${safe(edad)}</b></div>
           <div class="auro-rx-dato auro-rx-fecha"><span>Fecha de emisión</span><b>${safe(fechaVisual(r.fecha))}</b></div>
           <div class="auro-rx-dato auro-rx-numero"><span>N.º de receta</span><b>${safe(idReceta === '—' ? '—' : idReceta)}</b></div>
-          <div class="auro-rx-dato auro-rx-diagnostico"><span>Diagnóstico</span>${diagnosticosRepresentacion}</div>`;
+          <div class="auro-rx-dato auro-rx-diagnostico"><span>${safe(etiquetaDiagnosticoPaciente)}</span>${diagnosticoCabeceraPaciente}</div>`;
 
     return `
       <div class="auro-receta-documento ${esAdministrativo ? 'modo-administrativo' : 'modo-paciente'}">
@@ -3563,11 +3624,12 @@
           .auro-rx-diagnostico-linea b{font-size:10.5px!important;line-height:1.18!important;font-weight:800!important}
           .auro-rx-diagnostico-linea.principal b{font-weight:950!important}
           .auro-receta-section{margin-top:9px;break-inside:avoid}.auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950}.auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;white-space:normal;word-break:break-word;background:#fff;box-shadow:0 4px 14px rgba(139,30,90,.035)}
+          .auro-rx-diagnosticos-section{margin-top:7px!important}.auro-rx-diagnosticos-section h4{margin-bottom:5px!important;font-size:11.5px!important;padding-bottom:4px!important}.auro-rx-diagnosticos-grid{display:grid;grid-template-columns:repeat(var(--auro-rx-dx-cols,3),minmax(0,1fr));gap:5px}.auro-rx-diagnostico-card{min-width:0;border:1px solid #e2e8f0;border-radius:9px;background:#fff;padding:6px 7px;box-shadow:none}.auro-rx-diagnostico-card.principal{border-color:#e8b8d2;background:#fffafd}.auro-rx-diagnostico-card-head{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:3px}.auro-rx-diagnostico-card-head strong{color:#8b1e5a;font-size:10px;font-weight:950}.auro-rx-dx-jerarquia,.auro-rx-dx-tipo{display:inline-flex;align-items:center;border-radius:999px;padding:2px 5px;font-size:7.5px;font-weight:900;line-height:1.1;white-space:nowrap}.auro-rx-dx-jerarquia{background:#f1f5f9;color:#475569}.auro-rx-diagnostico-card.principal .auro-rx-dx-jerarquia{background:#fdf2f8;color:#8b1e5a}.auro-rx-dx-tipo{background:#fff7ed;color:#9a3412}.auro-rx-dx-tipo.definitivo{background:#ecfdf5;color:#166534}.auro-rx-diagnostico-card-name{color:#1f2937;font-size:9.2px;font-weight:750;line-height:1.22;overflow-wrap:anywhere}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
           .auro-receta-footer{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:24px;align-items:end}.auro-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}.auro-firma{text-align:center;padding-top:20px;font-size:11px}.auro-linea{border-top:1px solid #111827;margin-bottom:5px}.badge-auro{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:900;margin-top:3px}.badge-ok{background:#dcfce7;color:#166534}.badge-danger{background:#fee2e2;color:#991b1b}
           .auro-admin-alert{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:7px 9px;margin-bottom:9px;font-weight:800;font-size:11px}
-          @page{size:A4;margin:10mm}@media print{.no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-table-wrap,.auro-rx-table tr{break-inside:avoid;page-break-inside:avoid}.auro-receta-grid{gap:4px;padding:6px}.auro-receta-grid div{padding:4px 6px}.auro-rx-table{font-size:9.4px}.auro-rx-table th{font-size:8.3px;padding:4px}.auro-rx-table td{padding:4px 5px}.auro-rx-col-med strong{font-size:9.8px}.auro-receta-footer{margin-top:18px}.auro-admin-alert{display:none}}
+          @page{size:A4;margin:10mm}@media print{.no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-table-wrap,.auro-rx-table tr,.auro-rx-diagnosticos-section{break-inside:avoid;page-break-inside:avoid}.auro-receta-grid{gap:4px;padding:6px}.auro-receta-grid div{padding:4px 6px}.auro-rx-table{font-size:9.4px}.auro-rx-table th{font-size:8.3px;padding:4px}.auro-rx-table td{padding:4px 5px}.auro-rx-col-med strong{font-size:9.8px}.auro-rx-diagnosticos-grid{gap:4px}.auro-rx-diagnostico-card{padding:4px 5px}.auro-rx-diagnostico-card-name{font-size:8.4px}.auro-receta-footer{margin-top:18px}.auro-admin-alert{display:none}}
           @media(max-width:700px){
             .auro-receta-header{grid-template-columns:auto 1fr}
             .auro-receta-title{grid-column:1/-1;text-align:left}
@@ -3576,6 +3638,7 @@
             .modo-paciente .auro-rx-paciente,
             .modo-paciente .auro-rx-diagnostico{grid-column:1/-1}
             .auro-receta-footer{grid-template-columns:1fr}
+            .auro-rx-diagnosticos-grid{grid-template-columns:1fr!important}
             .auro-rx-table-wrap{overflow-x:auto}
             .auro-rx-table{min-width:720px}
           }
@@ -3588,6 +3651,7 @@
         </div>
         <div class="auro-receta-grid">${datosPaciente}</div>
         <div class="auro-receta-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box">${auroRecetaMedicamentosPacienteHTML(r.medicamento)}</div></div>
+        ${diagnosticosMultiplesPaciente}
         ${esAdministrativo && r.indicaciones ? `<div class="auro-receta-section"><h4>Indicaciones para el paciente</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.indicaciones, '—')}</div></div>` : ''}
         ${esAdministrativo && r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.recomendaciones, '—')}</div></div>` : ''}
         <div class="auro-receta-footer">
