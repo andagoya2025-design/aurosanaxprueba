@@ -4358,8 +4358,10 @@ async function cargarHistoriasClinicasDesdeSheets(){
 
 
 /* ============================================================
-   AUROSANAX INDEX 58 - PUENTE ÚNICO A RECETAS.JS
-   Piloto: Documentos + Recomendaciones + Certificados.
+   AUROSANAX INDEX 62 - PUENTE ÚNICO A RECETAS.JS
+   Acceso oficial habilitado en todos los módulos de Historia clínica:
+   Datos generales, Anamnesis, Antecedentes, Examen físico, Obstetricia,
+   Estética, Diagnóstico, Plan, Recomendaciones, Certificados y Documentos.
    - No construye recetas en Index.
    - No toca Consentimiento.
    - No guarda ni modifica datos.
@@ -4367,13 +4369,26 @@ async function cargarHistoriasClinicasDesdeSheets(){
 ============================================================ */
 function auroRecetaModuloPilotoActivo(){
   const activo = document.querySelector('.clinical-panel.active')?.id || '';
-  return ['hc_docs','hc_recomendaciones','hc_certificados'].includes(activo);
+  return [
+    'hc_datos',
+    'hc_anamnesis',
+    'hc_antecedentes',
+    'hc_examen',
+    'hc_obstetricia',
+    'hc_estetica',
+    'hc_diagnostico',
+    'hc_plan',
+    'hc_recomendaciones',
+    'hc_certificados',
+    'hc_docs'
+  ].includes(activo);
 }
 
 async function auroRecetaAccesoPiloto(btn){
   /*
-    En los tres módulos piloto, el mismo botón abre/cierra la vista paciente
-    oficial. Fuera del piloto se conserva el comportamiento histórico.
+    En todos los módulos de Historia clínica, el mismo botón abre/cierra
+    la vista paciente oficial de Recetas.js. El nombre de la función se
+    conserva por compatibilidad antirregresión con el botón ya existente.
   */
   if(auroRecetaModuloPilotoActivo()){
     if(window.auroRecetas && typeof window.auroRecetas.toggleVistaPaciente === 'function'){
