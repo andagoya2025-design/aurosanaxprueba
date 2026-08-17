@@ -994,7 +994,7 @@ function limpiarPlanTemporal(){
 
 /* ============================================================
    SUGERENCIAS TERAPÉUTICAS AGRUPADAS POR DIAGNÓSTICO CIE-10
-   AUROSANAX PLAN 27 - SELECCIÓN MÉDICA CONTROLADA
+   AUROSANAX PLAN 28 - TARJETAS COMPACTAS + REACTIVACIÓN CONTROLADA
    ------------------------------------------------------------
    OBJETIVO
    - Mantener las tarjetas por cada diagnóstico de la atención.
@@ -1136,6 +1136,13 @@ window.__auroPlanSeleccionSugerenciasDx =
         ? window.__auroPlanSeleccionSugerenciasDx
         : new Set();
 
+/*
+   AUROSANAX PLAN 28 - ESTADO VISUAL COMPACTO
+   Solo controla qué tarjeta diagnóstica está desplegada.
+   No se persiste, no modifica Plan, Diagnóstico ni Google Sheets.
+*/
+window.__auroPlanDxExpandidoCodigo = String(window.__auroPlanDxExpandidoCodigo || '').trim();
+
 function auroPlanAgruparSugerenciasPorDiagnostico(){
     const diagnosticos = auroPlanDiagnosticosActuales();
     const protocolos = auroPlanProtocolosDiagnosticosActuales();
@@ -1270,53 +1277,66 @@ function auroPlanInstalarEstilosSugerenciasDiagnosticas(){
     style.id = 'auroPlanSugerenciasDxStyles';
     style.textContent = `
       #auroPlanSugerenciasDx{
-        width:100%;margin:0 0 14px;border:1px solid #ead7e2;border-radius:18px;
-        background:linear-gradient(135deg,#fff,#fffafd);box-shadow:0 8px 22px rgba(139,30,90,.055);overflow:hidden;
+        width:100%;margin:0 0 14px;border:1px solid #ead7e2;border-radius:16px;
+        background:#fff;box-shadow:0 7px 20px rgba(139,30,90,.045);overflow:hidden;
       }
-      #auroPlanSugerenciasDx .auro-plan-dx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #f0e1e9}
+      #auroPlanSugerenciasDx .auro-plan-dx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid #f0e1e9;background:linear-gradient(135deg,#fff,#fffafd)}
       #auroPlanSugerenciasDx .auro-plan-dx-head-main{min-width:0}
-      #auroPlanSugerenciasDx .auro-plan-dx-kicker{color:#8b1e5a;font-size:10px;font-weight:950;letter-spacing:.065em;text-transform:uppercase}
-      #auroPlanSugerenciasDx .auro-plan-dx-title{margin-top:2px;color:#1f2937;font-size:14px;line-height:1.25;font-weight:950}
-      #auroPlanSugerenciasDx .auro-plan-dx-help{margin-top:4px;color:#64748b;font-size:11px;line-height:1.4}
-      #auroPlanSugerenciasDx .auro-plan-dx-head-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
-      #auroPlanSugerenciasDx .auro-plan-dx-badge{flex:0 0 auto;padding:5px 8px;border-radius:999px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;font-size:10px;font-weight:900;white-space:nowrap}
-      #auroPlanSugerenciasDx .auro-plan-dx-apply-all,
-      #auroPlanSugerenciasDx .auro-plan-dx-apply-card{border:1px solid #d8a6c2;background:#fff;color:#8b1e5a;border-radius:10px;padding:6px 9px;font-size:10px;font-weight:900;cursor:pointer}
-      #auroPlanSugerenciasDx .auro-plan-dx-apply-card{width:100%;margin-top:9px;background:linear-gradient(135deg,#8b1e5a,#a82d70);color:#fff;border-color:#8b1e5a;padding:7px 9px}
-      #auroPlanSugerenciasDx .auro-plan-dx-apply-all:disabled,
-      #auroPlanSugerenciasDx .auro-plan-dx-apply-card:disabled{opacity:.45;cursor:not-allowed}
-      #auroPlanSugerenciasDx .auro-plan-dx-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px}
-      #auroPlanSugerenciasDx .auro-plan-dx-card{min-width:0;border:1px solid #e5e7eb;border-radius:14px;background:#fff;padding:11px}
+      #auroPlanSugerenciasDx .auro-plan-dx-kicker{color:#8b1e5a;font-size:9px;font-weight:950;letter-spacing:.06em;text-transform:uppercase}
+      #auroPlanSugerenciasDx .auro-plan-dx-title{margin-top:1px;color:#1f2937;font-size:13px;line-height:1.2;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-help{margin-top:3px;color:#64748b;font-size:10.5px;line-height:1.35}
+      #auroPlanSugerenciasDx .auro-plan-dx-head-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      #auroPlanSugerenciasDx .auro-plan-dx-badge{flex:0 0 auto;padding:4px 7px;border-radius:999px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;font-size:9px;font-weight:900;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-grid{display:grid;grid-template-columns:1fr;gap:7px;padding:9px}
+      #auroPlanSugerenciasDx .auro-plan-dx-card{min-width:0;border:1px solid #e5e7eb;border-radius:12px;background:#fff;padding:9px 10px;transition:border-color .15s ease,box-shadow .15s ease}
       #auroPlanSugerenciasDx .auro-plan-dx-card.principal{border-color:#efc7dd;box-shadow:inset 3px 0 0 #8b1e5a}
-      #auroPlanSugerenciasDx .auro-plan-dx-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
-      #auroPlanSugerenciasDx .auro-plan-dx-code{color:#8b1e5a;font-size:13px;font-weight:950}
-      #auroPlanSugerenciasDx .auro-plan-dx-name{margin-top:2px;color:#1f2937;font-size:12px;line-height:1.3;font-weight:850;overflow-wrap:anywhere}
-      #auroPlanSugerenciasDx .auro-plan-dx-kind{flex:0 0 auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:9px;font-weight:900;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.expandida{box-shadow:0 8px 20px rgba(15,23,42,.055),inset 3px 0 0 #8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-card-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
+      #auroPlanSugerenciasDx .auro-plan-dx-code-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-code{color:#8b1e5a;font-size:12px;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-name{color:#1f2937;font-size:11px;line-height:1.25;font-weight:850;overflow-wrap:anywhere}
+      #auroPlanSugerenciasDx .auro-plan-dx-kind{flex:0 0 auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:8.5px;font-weight:900;white-space:nowrap}
       #auroPlanSugerenciasDx .auro-plan-dx-card.principal .auro-plan-dx-kind{background:#fdf2f8;color:#8b1e5a}
-      #auroPlanSugerenciasDx .auro-plan-dx-section{margin-top:9px;padding-top:8px;border-top:1px solid #f1f5f9}
-      #auroPlanSugerenciasDx .auro-plan-dx-section:first-of-type{margin-top:0;padding-top:0;border-top:0}
-      #auroPlanSugerenciasDx .auro-plan-dx-section-title{display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#475569;font-size:9px;font-weight:950;letter-spacing:.035em;text-transform:uppercase}
-      #auroPlanSugerenciasDx .auro-plan-dx-options{display:grid;gap:5px}
-      #auroPlanSugerenciasDx .auro-plan-dx-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:7px;align-items:flex-start;padding:6px 7px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#334155;font-size:10.5px;font-weight:750;line-height:1.3;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-resumen{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;color:#334155;font-size:9.5px;font-weight:800;line-height:1.15}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip.en-plan{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip input{margin:0;accent-color:#8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip small{font-size:7.8px;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-mini-info{margin-top:6px;color:#64748b;font-size:9px;line-height:1.25}
+      #auroPlanSugerenciasDx .auro-plan-dx-actions-row{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:7px;flex-wrap:wrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-toggle{border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:9px;padding:5px 8px;font-size:9px;font-weight:900;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-toggle:hover{background:#f8fafc}
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-card{border:1px solid #8b1e5a;background:#8b1e5a;color:#fff;border-radius:9px;padding:5px 8px;font-size:9px;font-weight:900;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-card:disabled{opacity:.42;cursor:not-allowed}
+      #auroPlanSugerenciasDx .auro-plan-dx-details{display:none;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.expandida .auro-plan-dx-details{display:block}
+      #auroPlanSugerenciasDx .auro-plan-dx-section{margin-top:8px;padding-top:7px;border-top:1px solid #f1f5f9}
+      #auroPlanSugerenciasDx .auro-plan-dx-section:first-child{margin-top:0;padding-top:0;border-top:0}
+      #auroPlanSugerenciasDx .auro-plan-dx-section-title{display:flex;align-items:center;gap:6px;margin-bottom:5px;color:#475569;font-size:8.7px;font-weight:950;letter-spacing:.03em;text-transform:uppercase}
+      #auroPlanSugerenciasDx .auro-plan-dx-options{display:grid;gap:4px}
+      #auroPlanSugerenciasDx .auro-plan-dx-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:flex-start;padding:5px 6px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;color:#334155;font-size:10px;font-weight:750;line-height:1.25;cursor:pointer}
       #auroPlanSugerenciasDx .auro-plan-dx-option input{margin-top:2px;accent-color:#8b1e5a}
       #auroPlanSugerenciasDx .auro-plan-dx-option.en-plan{border-color:#bbf7d0;background:#f0fdf4;color:#166534;cursor:default}
-      #auroPlanSugerenciasDx .auro-plan-dx-option small{font-size:8.5px;font-weight:950;white-space:nowrap}
-      #auroPlanSugerenciasDx .auro-plan-dx-readonly{display:grid;gap:5px}
-      #auroPlanSugerenciasDx .auro-plan-dx-note{padding:6px 7px;border-radius:9px;background:#f8fafc;color:#475569;font-size:10.5px;line-height:1.35;border:1px solid #e2e8f0}
-      #auroPlanSugerenciasDx .auro-plan-dx-alert{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
-      #auroPlanSugerenciasDx .auro-plan-dx-empty{padding:12px;color:#64748b;font-size:11px;line-height:1.4}
-      #auroPlanSugerenciasDx .auro-plan-dx-status{display:none;margin:0 12px 10px;padding:8px 10px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:10.5px;font-weight:800}
+      #auroPlanSugerenciasDx .auro-plan-dx-option small{font-size:8px;font-weight:950;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-readonly{display:grid;gap:4px}
+      #auroPlanSugerenciasDx .auro-plan-dx-note{padding:5px 6px;border-radius:8px;background:#f8fafc;color:#475569;font-size:9.5px;line-height:1.3}
+      #auroPlanSugerenciasDx .auro-plan-dx-alert{background:#fff7ed;color:#9a3412}
+      #auroPlanSugerenciasDx .auro-plan-dx-empty{padding:6px 0;color:#64748b;font-size:9.5px;line-height:1.3}
+      #auroPlanSugerenciasDx .auro-plan-dx-status{display:none;margin:7px 9px 0;padding:6px 8px;border-radius:9px;background:#ecfdf5;color:#166534;font-size:9.5px;font-weight:850}
       #auroPlanSugerenciasDx .auro-plan-dx-status.show{display:block}
-      #auroPlanSugerenciasDx .auro-plan-dx-foot{padding:8px 12px;border-top:1px solid #f0e1e9;background:#fff;color:#64748b;font-size:10px;line-height:1.4}
-      @media(max-width:900px){#auroPlanSugerenciasDx .auro-plan-dx-grid{grid-template-columns:1fr}}
+      #auroPlanSugerenciasDx .auro-plan-dx-foot{padding:7px 10px;border-top:1px solid #f0e1e9;background:#fff;color:#64748b;font-size:9px;line-height:1.35}
       @media(max-width:560px){
-        #auroPlanSugerenciasDx{border-radius:15px}
-        #auroPlanSugerenciasDx .auro-plan-dx-head{display:block;padding:11px}
-        #auroPlanSugerenciasDx .auro-plan-dx-head-actions{justify-content:flex-start;margin-top:8px}
-        #auroPlanSugerenciasDx .auro-plan-dx-grid{padding:9px;gap:8px}
-        #auroPlanSugerenciasDx .auro-plan-dx-card{padding:10px}
-        #auroPlanSugerenciasDx .auro-plan-dx-card-top{display:block}
-        #auroPlanSugerenciasDx .auro-plan-dx-kind{display:inline-flex;margin-top:6px}
+        #auroPlanSugerenciasDx{border-radius:14px}
+        #auroPlanSugerenciasDx .auro-plan-dx-head{display:block;padding:9px 10px}
+        #auroPlanSugerenciasDx .auro-plan-dx-head-actions{justify-content:flex-start;margin-top:6px}
+        #auroPlanSugerenciasDx .auro-plan-dx-grid{padding:7px;gap:6px}
+        #auroPlanSugerenciasDx .auro-plan-dx-card{padding:8px}
+        #auroPlanSugerenciasDx .auro-plan-dx-card-top{grid-template-columns:1fr}
+        #auroPlanSugerenciasDx .auro-plan-dx-kind{justify-self:start}
+        #auroPlanSugerenciasDx .auro-plan-dx-med-chip{border-radius:9px}
+        #auroPlanSugerenciasDx .auro-plan-dx-actions-row{justify-content:stretch}
+        #auroPlanSugerenciasDx .auro-plan-dx-toggle,
+        #auroPlanSugerenciasDx .auro-plan-dx-apply-card{flex:1 1 auto}
       }
     `;
 
@@ -1383,6 +1403,30 @@ function auroPlanSeccionLecturaDx(titulo, icono, items, alerta){
       </div>`;
 }
 
+function auroPlanMedicamentosResumenCompactoDx(grupo, grupoIndex){
+    const lista = Array.isArray(grupo?.medicamentos) ? grupo.medicamentos : [];
+    if(!lista.length){
+        return '<div class="auro-plan-dx-mini-info">Sin medicamentos automáticos sugeridos.</div>';
+    }
+
+    return `<div class="auro-plan-dx-med-resumen">${lista.map(function(item, itemIndex){
+        const textoItem = String(item?.nombre || item?.texto || '').trim();
+        const enPlan = !!item?.enPlan;
+        const clave = auroPlanClaveSugerencia(grupo?.codigo, 'medicamento', textoItem);
+        const seleccionada = !enPlan && window.__auroPlanSeleccionSugerenciasDx.has(clave);
+        return `<label class="auro-plan-dx-med-chip ${enPlan ? 'en-plan' : ''}">
+          <input type="checkbox"
+                 data-auro-dx-select="1"
+                 data-grupo-index="${grupoIndex}"
+                 data-tipo="medicamento"
+                 data-item-index="${itemIndex}"
+                 ${enPlan ? 'checked disabled' : (seleccionada ? 'checked' : '')}>
+          <span>${escapeHtmlPlan(textoItem)}</span>
+          ${enPlan ? '<small>EN PLAN</small>' : ''}
+        </label>`;
+    }).join('')}</div>`;
+}
+
 function auroPlanRenderSugerenciasDiagnosticas(){
     if(!auroPlanInstalarVisorSugerenciasDiagnosticas()) return;
 
@@ -1391,12 +1435,6 @@ function auroPlanRenderSugerenciasDiagnosticas(){
 
     const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
     const conProtocolo = grupos.filter(function(g){ return g.protocolos.length > 0; }).length;
-    const totalPendientes = grupos.reduce(function(total,g){
-        return total +
-          (g.medicamentos || []).filter(x => !x.enPlan).length +
-          (g.ordenes || []).filter(x => !x.enPlan).length +
-          (g.indicaciones || []).filter(x => !x.enPlan).length;
-    },0);
 
     if(!grupos.length){
         visor.innerHTML = `
@@ -1415,14 +1453,11 @@ function auroPlanRenderSugerenciasDiagnosticas(){
       <div class="auro-plan-dx-head">
         <div class="auro-plan-dx-head-main">
           <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div>
-          <div class="auro-plan-dx-title">Sugerencias terapéuticas organizadas por diagnóstico</div>
-          <div class="auro-plan-dx-help">Revise cada protocolo y marque únicamente lo que desea incorporar. Las tarjetas no prescriben ni guardan automáticamente.</div>
+          <div class="auro-plan-dx-title">Sugerencias terapéuticas por diagnóstico</div>
+          <div class="auro-plan-dx-help">Seleccione medicamentos directamente. Use “Ver más” solo para órdenes, indicaciones, seguimiento y alertas.</div>
         </div>
         <div class="auro-plan-dx-head-actions">
           <span class="auro-plan-dx-badge">${grupos.length} diagnóstico(s) · ${conProtocolo} con protocolo</span>
-          <button type="button" class="auro-plan-dx-apply-all" data-auro-dx-aplicar-todos="1" ${totalPendientes ? '' : 'disabled'}>
-            <i class="bi bi-plus-circle me-1"></i> Añadir seleccionados
-          </button>
         </div>
       </div>
 
@@ -1430,13 +1465,14 @@ function auroPlanRenderSugerenciasDiagnosticas(){
 
       <div class="auro-plan-dx-grid">
         ${grupos.map(function(g, grupoIndex){
+            const codigo = String(g.codigo || '').trim();
+            const expandida = !!codigo && window.__auroPlanDxExpandidoCodigo === codigo;
             const pendientes =
               (g.medicamentos || []).filter(x => !x.enPlan).length +
               (g.ordenes || []).filter(x => !x.enPlan).length +
               (g.indicaciones || []).filter(x => !x.enPlan).length;
 
-            const contenido = [
-              auroPlanSeccionSeleccionableDx('Medicamentos sugeridos','bi-capsule','medicamento',g.medicamentos,grupoIndex,g.codigo),
+            const detalles = [
               auroPlanSeccionSeleccionableDx('Órdenes / estudios / procedimientos','bi-file-earmark-medical','orden',g.ordenes,grupoIndex,g.codigo),
               auroPlanSeccionSeleccionableDx('Indicaciones para el paciente','bi-clipboard-check','indicacion',g.indicaciones,grupoIndex,g.codigo),
               auroPlanSeccionLecturaDx('Seguimiento sugerido','bi-calendar-check',g.controles,false),
@@ -1444,30 +1480,47 @@ function auroPlanRenderSugerenciasDiagnosticas(){
               auroPlanSeccionLecturaDx('Notas del protocolo','bi-info-circle',g.notas,false)
             ].filter(Boolean).join('');
 
+            const cantidadAdicional =
+              (g.ordenes || []).length +
+              (g.indicaciones || []).length +
+              (g.controles || []).length +
+              (g.alertas || []).length +
+              (g.notas || []).length;
+
             return `
-              <div class="auro-plan-dx-card ${g.principal ? 'principal' : ''}" data-auro-dx-card-index="${grupoIndex}">
+              <div class="auro-plan-dx-card ${g.principal ? 'principal' : ''} ${expandida ? 'expandida' : ''}" data-auro-dx-card-index="${grupoIndex}">
                 <div class="auro-plan-dx-card-top">
                   <div>
-                    <div class="auro-plan-dx-code">${escapeHtmlPlan(g.codigo || 'S/C')}</div>
-                    <div class="auro-plan-dx-name">${escapeHtmlPlan(g.descripcion || 'Sin descripción')}</div>
+                    <div class="auro-plan-dx-code-line">
+                      <span class="auro-plan-dx-code">${escapeHtmlPlan(g.codigo || 'S/C')}</span>
+                      <span class="auro-plan-dx-name">${escapeHtmlPlan(g.descripcion || 'Sin descripción')}</span>
+                    </div>
                   </div>
                   <span class="auro-plan-dx-kind">${g.principal ? 'Principal' : 'Asociado'}${g.tipo ? ' · ' + escapeHtmlPlan(g.tipo) : ''}</span>
                 </div>
 
                 ${!g.protocolos.length
                     ? '<div class="auro-plan-dx-empty">No hay protocolo clínico configurado para este CIE-10.</div>'
-                    : (contenido || '<div class="auro-plan-dx-empty">El protocolo está disponible, pero no contiene sugerencias transferibles.</div>')}
+                    : auroPlanMedicamentosResumenCompactoDx(g, grupoIndex)}
 
                 ${g.protocolos.length ? `
-                  <button type="button" class="auro-plan-dx-apply-card" data-auro-dx-aplicar-card="${grupoIndex}" ${pendientes ? '' : 'disabled'}>
-                    <i class="bi bi-arrow-down-circle me-1"></i> ${pendientes ? 'Añadir seleccionados al Plan' : 'Todo lo seleccionado ya está en Plan'}
-                  </button>` : ''}
+                  <div class="auro-plan-dx-actions-row">
+                    ${cantidadAdicional ? `<button type="button" class="auro-plan-dx-toggle" data-auro-dx-toggle="${grupoIndex}" aria-expanded="${expandida ? 'true' : 'false'}">
+                      <i class="bi ${expandida ? 'bi-chevron-up' : 'bi-chevron-down'} me-1"></i>${expandida ? 'Ocultar detalles' : 'Ver más'}
+                    </button>` : ''}
+                    <button type="button" class="auro-plan-dx-apply-card" data-auro-dx-aplicar-card="${grupoIndex}" ${pendientes ? '' : 'disabled'}>
+                      <i class="bi bi-arrow-down-circle me-1"></i>${pendientes ? 'Añadir seleccionados' : 'En Plan'}
+                    </button>
+                  </div>
+                  <div class="auro-plan-dx-details">
+                    ${detalles || '<div class="auro-plan-dx-empty">No hay información adicional configurada.</div>'}
+                  </div>` : ''}
               </div>`;
         }).join('')}
       </div>
 
       <div class="auro-plan-dx-foot">
-        Diagnóstico define qué tiene el paciente; estas tarjetas solo apoyan la decisión terapéutica. El Plan inferior sigue siendo el registro definitivo y se guarda únicamente con su botón habitual.
+        Las tarjetas son sugerencias clínicas. Solo pasa al Plan lo que el médico seleccione expresamente.
       </div>`;
 }
 
@@ -1664,6 +1717,7 @@ function auroPlanInstalarEventosSugerenciasDiagnosticas(){
 
     document.addEventListener('aurosanax:atencion-cambiada', function(){
         window.__auroPlanSeleccionSugerenciasDx.clear();
+        window.__auroPlanDxExpandidoCodigo = '';
         setTimeout(auroPlanRenderSugerenciasDiagnosticas, 40);
     });
 
@@ -1692,16 +1746,28 @@ function auroPlanInstalarEventosSugerenciasDiagnosticas(){
         else window.__auroPlanSeleccionSugerenciasDx.delete(clave);
     });
 
+    document.addEventListener('input', function(evento){
+        if(evento.target?.id !== 'hcIndicacionesPaciente') return;
+        clearTimeout(window.__auroPlanDxIndicacionesRenderTimer);
+        window.__auroPlanDxIndicacionesRenderTimer = setTimeout(function(){
+            auroPlanRenderSugerenciasDiagnosticas();
+        }, 120);
+    });
+
     document.addEventListener('click', function(evento){
-        const card = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-aplicar-card]');
-        if(card){
-            auroPlanAplicarSeleccionadosSugerenciasDx(Number(card.dataset.auroDxAplicarCard));
+        const toggle = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-toggle]');
+        if(toggle){
+            const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+            const grupo = grupos[Number(toggle.dataset.auroDxToggle)];
+            const codigo = String(grupo?.codigo || '').trim();
+            window.__auroPlanDxExpandidoCodigo = window.__auroPlanDxExpandidoCodigo === codigo ? '' : codigo;
+            auroPlanRenderSugerenciasDiagnosticas();
             return;
         }
 
-        const todos = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-aplicar-todos]');
-        if(todos){
-            auroPlanAplicarSeleccionadosSugerenciasDx(null);
+        const card = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-aplicar-card]');
+        if(card){
+            auroPlanAplicarSeleccionadosSugerenciasDx(Number(card.dataset.auroDxAplicarCard));
         }
     });
 }
@@ -2168,6 +2234,9 @@ function eliminarOrdenMedica(i){
     renderOrdenesMedicasTabla();
     recopilarOrdenesMedicasPlan();
     guardarPlanTemporal();
+
+    /* AUROSANAX PLAN 28: al retirar una orden del Plan, vuelve a quedar seleccionable en su tarjeta. */
+    auroPlanRenderSugerenciasDiagnosticas();
 }
 
 function renderOrdenesMedicasTabla(){
