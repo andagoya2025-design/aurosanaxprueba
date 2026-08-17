@@ -509,6 +509,7 @@ function auroPlanOrdenesUnicas(lista){
         if(!orden) return;
 
         const normalizada = {
+            ...(item && typeof item === 'object' ? item : {}),
             orden: orden,
             cat: String(item?.cat || item?.categoria || 'OTROS').trim() || 'OTROS',
             obs: String(item?.obs || item?.observacion || '').trim()
@@ -993,15 +994,16 @@ function limpiarPlanTemporal(){
 
 /* ============================================================
    SUGERENCIAS TERAPÉUTICAS AGRUPADAS POR DIAGNÓSTICO CIE-10
-   AUROSANAX PLAN 25
+   AUROSANAX PLAN 27 - SELECCIÓN MÉDICA CONTROLADA
    ------------------------------------------------------------
    OBJETIVO
-   - Mostrar en Plan todos los protocolos ya consultados por Diagnóstico.
-   - Separar las sugerencias por cada CIE-10 de la atención.
-   - Diferenciar diagnóstico principal y asociado.
-   - NO agregar medicamentos automáticamente.
-   - NO modificar el JSON del Plan.
-   - NO modificar Diagnóstico, Recetas, Sheets ni backend desde este visor.
+   - Mantener las tarjetas por cada diagnóstico de la atención.
+   - Mostrar medicamentos, órdenes/estudios, indicaciones, controles y alertas.
+   - Permitir seleccionar SOLO los elementos que el médico decide incorporar.
+   - Transferir únicamente lo seleccionado al Plan real inferior.
+   - NO guardar automáticamente en Google Sheets.
+   - NO modificar Diagnóstico, Recetas, backend ni la atención.
+   - Mantener id_atencion como aislamiento clínico.
    ============================================================ */
 
 function auroPlanNormalizarCodigoCie(valor){
@@ -1027,6 +1029,21 @@ function auroPlanTextoSugerenciaMedicamento(item){
         item.farmaco ||
         ''
     ).trim();
+}
+
+function auroPlanTextoSugerenciaGenerica(item, campos){
+    if(typeof item === 'string') return String(item || '').trim();
+    if(!item || typeof item !== 'object') return '';
+
+    for(const campo of (campos || [])){
+        const valor = String(item?.[campo] || '').trim();
+        if(valor) return valor;
+    }
+
+    return Object.values(item)
+        .map(v => String(v || '').trim())
+        .filter(Boolean)
+        .join(' - ');
 }
 
 function auroPlanProtocolosDiagnosticosActuales(){
@@ -1076,12 +1093,57 @@ function auroPlanMedicamentoYaEnPlan(nombre){
     });
 }
 
+function auroPlanOrdenYaEnPlan(textoOrden){
+    const objetivo = normalizarTextoPlan(textoOrden);
+    if(!objetivo) return false;
+
+    return (window.ordenesMedicasPlanSeleccionadas || []).some(function(o){
+        return normalizarTextoPlan(o?.orden || o?.nombre || '') === objetivo;
+    });
+}
+
+function auroPlanLineaYaEnCampo(idCampo, textoLinea){
+    const objetivo = normalizarTextoPlan(textoLinea);
+    if(!objetivo) return false;
+
+    return auroPlanListaClinicaDesdeValor(auroPlanGetValue(idCampo))
+        .some(linea => normalizarTextoPlan(linea) === objetivo);
+}
+
+function auroPlanEsNotaNoFarmacologica(textoItem){
+    const n = normalizarTextoPlan(textoItem);
+    if(!n) return true;
+
+    return (
+        n.includes('no sugerir tratamiento automatico') ||
+        n.includes('no sugerir medicamentos automaticos') ||
+        n.includes('no aplicar automaticamente') ||
+        n.startsWith('manejo hemostatico') ||
+        n.startsWith('manejo hormonal')
+    );
+}
+
+function auroPlanClaveSugerencia(codigo, tipo, textoItem){
+    return [
+        auroPlanNormalizarCodigoCie(codigo),
+        String(tipo || '').trim().toLowerCase(),
+        normalizarTextoPlan(textoItem)
+    ].join('|');
+}
+
+window.__auroPlanSeleccionSugerenciasDx =
+    window.__auroPlanSeleccionSugerenciasDx instanceof Set
+        ? window.__auroPlanSeleccionSugerenciasDx
+        : new Set();
+
 function auroPlanAgruparSugerenciasPorDiagnostico(){
     const diagnosticos = auroPlanDiagnosticosActuales();
     const protocolos = auroPlanProtocolosDiagnosticosActuales();
 
     const ordenados = [...diagnosticos].sort(function(a,b){
-        return Number(b?.principal === true) - Number(a?.principal === true);
+        const ap = a?.principal === true || String(a?.principal || '').toUpperCase() === 'SI';
+        const bp = b?.principal === true || String(b?.principal || '').toUpperCase() === 'SI';
+        return Number(bp) - Number(ap);
     });
 
     return ordenados.map(function(dx){
@@ -1093,28 +1155,108 @@ function auroPlanAgruparSugerenciasPorDiagnostico(){
             return auroPlanNormalizarCodigoCie(p?.codigo_cie10) === codigo;
         });
 
-        const mapa = new Map();
+        const medicamentos = new Map();
+        const ordenes = new Map();
+        const indicaciones = new Map();
+        const controles = new Map();
+        const alertas = new Map();
+        const notas = new Map();
+
+        function guardarUnico(mapa, textoItem, datos){
+            const textoLimpio = String(textoItem || '').trim();
+            const clave = normalizarTextoPlan(textoLimpio);
+            if(!textoLimpio || !clave || mapa.has(clave)) return;
+            mapa.set(clave, Object.assign({texto:textoLimpio}, datos || {}));
+        }
 
         protocolosDx.forEach(function(p){
+            const idProtocolo = String(p?.id_protocolo || '').trim();
+
             (Array.isArray(p?.medicamentos) ? p.medicamentos : []).forEach(function(item){
                 const nombre = auroPlanTextoSugerenciaMedicamento(item);
-                const clave = normalizarTextoPlan(nombre);
-                if(!clave || mapa.has(clave)) return;
+                if(!nombre) return;
 
-                mapa.set(clave, {
+                if(auroPlanEsNotaNoFarmacologica(nombre)){
+                    guardarUnico(notas, nombre, {id_protocolo:idProtocolo});
+                    return;
+                }
+
+                guardarUnico(medicamentos, nombre, {
+                    item:item,
                     nombre:nombre,
+                    id_protocolo:idProtocolo,
                     enPlan:auroPlanMedicamentoYaEnPlan(nombre)
                 });
             });
+
+            const gruposOrden = [
+                {lista:p?.ordenes, categoria:'OTROS'},
+                {lista:p?.imagenes, categoria:'IMÁGENES'},
+                {lista:p?.procedimientos, categoria:'PROCEDIMIENTOS'}
+            ];
+
+            gruposOrden.forEach(function(grupoOrden){
+                (Array.isArray(grupoOrden.lista) ? grupoOrden.lista : []).forEach(function(item){
+                    const nombre = auroPlanTextoSugerenciaGenerica(
+                        item,
+                        ['orden','nombre','descripcion','texto']
+                    );
+                    guardarUnico(ordenes, nombre, {
+                        item:item,
+                        id_protocolo:idProtocolo,
+                        categoria: String(
+                            item?.cat || item?.categoria || grupoOrden.categoria || 'OTROS'
+                        ).trim() || 'OTROS',
+                        enPlan:auroPlanOrdenYaEnPlan(nombre)
+                    });
+                });
+            });
+
+            (Array.isArray(p?.indicaciones) ? p.indicaciones : []).forEach(function(item){
+                const textoItem = auroPlanTextoSugerenciaGenerica(
+                    item,
+                    ['indicacion','recomendacion','descripcion','texto','nombre']
+                );
+                guardarUnico(indicaciones, textoItem, {
+                    item:item,
+                    id_protocolo:idProtocolo,
+                    enPlan:auroPlanLineaYaEnCampo('hcIndicacionesPaciente', textoItem)
+                });
+            });
+
+            (Array.isArray(p?.controles) ? p.controles : []).forEach(function(item){
+                const textoItem = auroPlanTextoSugerenciaGenerica(
+                    item,
+                    ['control','seguimiento','descripcion','texto','nombre']
+                );
+                guardarUnico(controles, textoItem, {id_protocolo:idProtocolo});
+            });
+
+            (Array.isArray(p?.alertas) ? p.alertas : []).forEach(function(item){
+                const textoItem = auroPlanTextoSugerenciaGenerica(
+                    item,
+                    ['alerta','descripcion','texto','nombre']
+                );
+                guardarUnico(alertas, textoItem, {id_protocolo:idProtocolo});
+            });
+
+            const conducta = String(p?.conducta || '').trim();
+            if(conducta) guardarUnico(notas, conducta, {id_protocolo:idProtocolo});
         });
 
         return {
+            id_diagnostico:String(dx?.id_diagnostico || '').trim(),
             codigo:codigo,
             descripcion:String(dx?.descripcion || dx?.nombre || dx?.diagnostico || '').trim(),
-            principal:dx?.principal === true,
+            principal:dx?.principal === true || String(dx?.principal || '').toUpperCase() === 'SI',
             tipo:String(dx?.tipo_diagnostico || dx?.tipo || '').trim(),
             protocolos:protocolosDx,
-            medicamentos:Array.from(mapa.values())
+            medicamentos:Array.from(medicamentos.values()),
+            ordenes:Array.from(ordenes.values()),
+            indicaciones:Array.from(indicaciones.values()),
+            controles:Array.from(controles.values()),
+            alertas:Array.from(alertas.values()),
+            notas:Array.from(notas.values())
         };
     }).filter(function(grupo){
         return grupo.codigo || grupo.descripcion;
@@ -1128,188 +1270,53 @@ function auroPlanInstalarEstilosSugerenciasDiagnosticas(){
     style.id = 'auroPlanSugerenciasDxStyles';
     style.textContent = `
       #auroPlanSugerenciasDx{
-        width:100%;
-        margin:0 0 14px;
-        border:1px solid #ead7e2;
-        border-radius:18px;
-        background:linear-gradient(135deg,#fff,#fffafd);
-        box-shadow:0 8px 22px rgba(139,30,90,.055);
-        overflow:hidden;
+        width:100%;margin:0 0 14px;border:1px solid #ead7e2;border-radius:18px;
+        background:linear-gradient(135deg,#fff,#fffafd);box-shadow:0 8px 22px rgba(139,30,90,.055);overflow:hidden;
       }
-      #auroPlanSugerenciasDx .auro-plan-dx-head{
-        display:flex;
-        align-items:flex-start;
-        justify-content:space-between;
-        gap:12px;
-        padding:12px 14px;
-        border-bottom:1px solid #f0e1e9;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-head-main{
-        min-width:0;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-kicker{
-        color:#8b1e5a;
-        font-size:10px;
-        font-weight:950;
-        letter-spacing:.065em;
-        text-transform:uppercase;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-title{
-        margin-top:2px;
-        color:#1f2937;
-        font-size:14px;
-        line-height:1.25;
-        font-weight:950;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-help{
-        margin-top:4px;
-        color:#64748b;
-        font-size:11px;
-        line-height:1.4;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-badge{
-        flex:0 0 auto;
-        padding:5px 8px;
-        border-radius:999px;
-        background:#fdf2f8;
-        color:#8b1e5a;
-        border:1px solid #fbcfe8;
-        font-size:10px;
-        font-weight:900;
-        white-space:nowrap;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-grid{
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:10px;
-        padding:12px;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-card{
-        min-width:0;
-        border:1px solid #e5e7eb;
-        border-radius:14px;
-        background:#fff;
-        padding:11px;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-card.principal{
-        border-color:#efc7dd;
-        box-shadow:inset 3px 0 0 #8b1e5a;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-card-top{
-        display:flex;
-        align-items:flex-start;
-        justify-content:space-between;
-        gap:8px;
-        margin-bottom:8px;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-code{
-        color:#8b1e5a;
-        font-size:13px;
-        font-weight:950;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-name{
-        margin-top:2px;
-        color:#1f2937;
-        font-size:12px;
-        line-height:1.3;
-        font-weight:850;
-        overflow-wrap:anywhere;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-kind{
-        flex:0 0 auto;
-        padding:3px 7px;
-        border-radius:999px;
-        background:#f1f5f9;
-        color:#475569;
-        font-size:9px;
-        font-weight:900;
-        white-space:nowrap;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-card.principal .auro-plan-dx-kind{
-        background:#fdf2f8;
-        color:#8b1e5a;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-meds{
-        display:flex;
-        flex-wrap:wrap;
-        gap:6px;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-med{
-        display:inline-flex;
-        align-items:center;
-        gap:5px;
-        max-width:100%;
-        padding:5px 8px;
-        border:1px solid #e2e8f0;
-        border-radius:999px;
-        background:#f8fafc;
-        color:#334155;
-        font-size:10.5px;
-        font-weight:800;
-        line-height:1.2;
-        overflow-wrap:anywhere;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-med.en-plan{
-        border-color:#bbf7d0;
-        background:#f0fdf4;
-        color:#166534;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-med small{
-        font-size:8.5px;
-        font-weight:950;
-        opacity:.8;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-empty{
-        padding:14px;
-        color:#64748b;
-        font-size:11px;
-        line-height:1.4;
-      }
-      #auroPlanSugerenciasDx .auro-plan-dx-foot{
-        padding:8px 12px;
-        border-top:1px solid #f0e1e9;
-        background:#fff;
-        color:#64748b;
-        font-size:10px;
-        line-height:1.4;
-      }
-
-      @media(max-width:900px){
-        #auroPlanSugerenciasDx .auro-plan-dx-grid{
-          grid-template-columns:1fr;
-        }
-      }
+      #auroPlanSugerenciasDx .auro-plan-dx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #f0e1e9}
+      #auroPlanSugerenciasDx .auro-plan-dx-head-main{min-width:0}
+      #auroPlanSugerenciasDx .auro-plan-dx-kicker{color:#8b1e5a;font-size:10px;font-weight:950;letter-spacing:.065em;text-transform:uppercase}
+      #auroPlanSugerenciasDx .auro-plan-dx-title{margin-top:2px;color:#1f2937;font-size:14px;line-height:1.25;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-help{margin-top:4px;color:#64748b;font-size:11px;line-height:1.4}
+      #auroPlanSugerenciasDx .auro-plan-dx-head-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+      #auroPlanSugerenciasDx .auro-plan-dx-badge{flex:0 0 auto;padding:5px 8px;border-radius:999px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;font-size:10px;font-weight:900;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-all,
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-card{border:1px solid #d8a6c2;background:#fff;color:#8b1e5a;border-radius:10px;padding:6px 9px;font-size:10px;font-weight:900;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-card{width:100%;margin-top:9px;background:linear-gradient(135deg,#8b1e5a,#a82d70);color:#fff;border-color:#8b1e5a;padding:7px 9px}
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-all:disabled,
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-card:disabled{opacity:.45;cursor:not-allowed}
+      #auroPlanSugerenciasDx .auro-plan-dx-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px}
+      #auroPlanSugerenciasDx .auro-plan-dx-card{min-width:0;border:1px solid #e5e7eb;border-radius:14px;background:#fff;padding:11px}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.principal{border-color:#efc7dd;box-shadow:inset 3px 0 0 #8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+      #auroPlanSugerenciasDx .auro-plan-dx-code{color:#8b1e5a;font-size:13px;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-name{margin-top:2px;color:#1f2937;font-size:12px;line-height:1.3;font-weight:850;overflow-wrap:anywhere}
+      #auroPlanSugerenciasDx .auro-plan-dx-kind{flex:0 0 auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:9px;font-weight:900;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.principal .auro-plan-dx-kind{background:#fdf2f8;color:#8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-section{margin-top:9px;padding-top:8px;border-top:1px solid #f1f5f9}
+      #auroPlanSugerenciasDx .auro-plan-dx-section:first-of-type{margin-top:0;padding-top:0;border-top:0}
+      #auroPlanSugerenciasDx .auro-plan-dx-section-title{display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#475569;font-size:9px;font-weight:950;letter-spacing:.035em;text-transform:uppercase}
+      #auroPlanSugerenciasDx .auro-plan-dx-options{display:grid;gap:5px}
+      #auroPlanSugerenciasDx .auro-plan-dx-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:7px;align-items:flex-start;padding:6px 7px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#334155;font-size:10.5px;font-weight:750;line-height:1.3;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-option input{margin-top:2px;accent-color:#8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-option.en-plan{border-color:#bbf7d0;background:#f0fdf4;color:#166534;cursor:default}
+      #auroPlanSugerenciasDx .auro-plan-dx-option small{font-size:8.5px;font-weight:950;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-readonly{display:grid;gap:5px}
+      #auroPlanSugerenciasDx .auro-plan-dx-note{padding:6px 7px;border-radius:9px;background:#f8fafc;color:#475569;font-size:10.5px;line-height:1.35;border:1px solid #e2e8f0}
+      #auroPlanSugerenciasDx .auro-plan-dx-alert{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+      #auroPlanSugerenciasDx .auro-plan-dx-empty{padding:12px;color:#64748b;font-size:11px;line-height:1.4}
+      #auroPlanSugerenciasDx .auro-plan-dx-status{display:none;margin:0 12px 10px;padding:8px 10px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:10.5px;font-weight:800}
+      #auroPlanSugerenciasDx .auro-plan-dx-status.show{display:block}
+      #auroPlanSugerenciasDx .auro-plan-dx-foot{padding:8px 12px;border-top:1px solid #f0e1e9;background:#fff;color:#64748b;font-size:10px;line-height:1.4}
+      @media(max-width:900px){#auroPlanSugerenciasDx .auro-plan-dx-grid{grid-template-columns:1fr}}
       @media(max-width:560px){
-        #auroPlanSugerenciasDx{
-          border-radius:15px;
-        }
-        #auroPlanSugerenciasDx .auro-plan-dx-head{
-          display:block;
-          padding:11px;
-        }
-        #auroPlanSugerenciasDx .auro-plan-dx-badge{
-          display:inline-flex;
-          margin-top:8px;
-        }
-        #auroPlanSugerenciasDx .auro-plan-dx-grid{
-          padding:9px;
-          gap:8px;
-        }
-        #auroPlanSugerenciasDx .auro-plan-dx-card{
-          padding:10px;
-        }
-        #auroPlanSugerenciasDx .auro-plan-dx-card-top{
-          display:block;
-        }
-        #auroPlanSugerenciasDx .auro-plan-dx-kind{
-          display:inline-flex;
-          margin-top:6px;
-        }
-        #auroPlanSugerenciasDx .auro-plan-dx-med{
-          width:100%;
-          border-radius:10px;
-          justify-content:space-between;
-        }
+        #auroPlanSugerenciasDx{border-radius:15px}
+        #auroPlanSugerenciasDx .auro-plan-dx-head{display:block;padding:11px}
+        #auroPlanSugerenciasDx .auro-plan-dx-head-actions{justify-content:flex-start;margin-top:8px}
+        #auroPlanSugerenciasDx .auro-plan-dx-grid{padding:9px;gap:8px}
+        #auroPlanSugerenciasDx .auro-plan-dx-card{padding:10px}
+        #auroPlanSugerenciasDx .auro-plan-dx-card-top{display:block}
+        #auroPlanSugerenciasDx .auro-plan-dx-kind{display:inline-flex;margin-top:6px}
       }
     `;
 
@@ -1334,6 +1341,48 @@ function auroPlanInstalarVisorSugerenciasDiagnosticas(){
     return true;
 }
 
+function auroPlanSeccionSeleccionableDx(titulo, icono, tipo, items, grupoIndex, codigoGrupo){
+    const lista = Array.isArray(items) ? items : [];
+    if(!lista.length) return '';
+
+    return `
+      <div class="auro-plan-dx-section">
+        <div class="auro-plan-dx-section-title"><i class="bi ${icono}"></i> ${escapeHtmlPlan(titulo)}</div>
+        <div class="auro-plan-dx-options">
+          ${lista.map(function(item, itemIndex){
+              const textoItem = String(item?.nombre || item?.texto || '').trim();
+              const enPlan = !!item?.enPlan;
+              const clave = auroPlanClaveSugerencia(codigoGrupo, tipo, textoItem);
+              const seleccionada = !enPlan && window.__auroPlanSeleccionSugerenciasDx.has(clave);
+              return `
+                <label class="auro-plan-dx-option ${enPlan ? 'en-plan' : ''}">
+                  <input type="checkbox"
+                         data-auro-dx-select="1"
+                         data-grupo-index="${grupoIndex}"
+                         data-tipo="${escapeHtmlPlan(tipo)}"
+                         data-item-index="${itemIndex}"
+                         ${enPlan ? 'checked disabled' : (seleccionada ? 'checked' : '')}>
+                  <span>${escapeHtmlPlan(textoItem)}</span>
+                  ${enPlan ? '<small>EN PLAN</small>' : '<small>Seleccionar</small>'}
+                </label>`;
+          }).join('')}
+        </div>
+      </div>`;
+}
+
+function auroPlanSeccionLecturaDx(titulo, icono, items, alerta){
+    const lista = Array.isArray(items) ? items : [];
+    if(!lista.length) return '';
+
+    return `
+      <div class="auro-plan-dx-section">
+        <div class="auro-plan-dx-section-title"><i class="bi ${icono}"></i> ${escapeHtmlPlan(titulo)}</div>
+        <div class="auro-plan-dx-readonly">
+          ${lista.map(item => `<div class="auro-plan-dx-note ${alerta ? 'auro-plan-dx-alert' : ''}">${escapeHtmlPlan(item?.texto || '')}</div>`).join('')}
+        </div>
+      </div>`;
+}
+
 function auroPlanRenderSugerenciasDiagnosticas(){
     if(!auroPlanInstalarVisorSugerenciasDiagnosticas()) return;
 
@@ -1342,6 +1391,12 @@ function auroPlanRenderSugerenciasDiagnosticas(){
 
     const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
     const conProtocolo = grupos.filter(function(g){ return g.protocolos.length > 0; }).length;
+    const totalPendientes = grupos.reduce(function(total,g){
+        return total +
+          (g.medicamentos || []).filter(x => !x.enPlan).length +
+          (g.ordenes || []).filter(x => !x.enPlan).length +
+          (g.indicaciones || []).filter(x => !x.enPlan).length;
+    },0);
 
     if(!grupos.length){
         visor.innerHTML = `
@@ -1361,45 +1416,234 @@ function auroPlanRenderSugerenciasDiagnosticas(){
         <div class="auro-plan-dx-head-main">
           <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div>
           <div class="auro-plan-dx-title">Sugerencias terapéuticas organizadas por diagnóstico</div>
-          <div class="auro-plan-dx-help">Las opciones se muestran separadas por CIE-10. No se agregan al tratamiento hasta que el médico aplique o seleccione el manejo correspondiente.</div>
+          <div class="auro-plan-dx-help">Revise cada protocolo y marque únicamente lo que desea incorporar. Las tarjetas no prescriben ni guardan automáticamente.</div>
         </div>
-        <span class="auro-plan-dx-badge">${grupos.length} diagnóstico(s) · ${conProtocolo} con protocolo</span>
+        <div class="auro-plan-dx-head-actions">
+          <span class="auro-plan-dx-badge">${grupos.length} diagnóstico(s) · ${conProtocolo} con protocolo</span>
+          <button type="button" class="auro-plan-dx-apply-all" data-auro-dx-aplicar-todos="1" ${totalPendientes ? '' : 'disabled'}>
+            <i class="bi bi-plus-circle me-1"></i> Añadir seleccionados
+          </button>
+        </div>
       </div>
 
+      <div class="auro-plan-dx-status" id="auroPlanSugerenciasDxStatus"></div>
+
       <div class="auro-plan-dx-grid">
-        ${grupos.map(function(g){
-            const meds = g.medicamentos || [];
+        ${grupos.map(function(g, grupoIndex){
+            const pendientes =
+              (g.medicamentos || []).filter(x => !x.enPlan).length +
+              (g.ordenes || []).filter(x => !x.enPlan).length +
+              (g.indicaciones || []).filter(x => !x.enPlan).length;
+
+            const contenido = [
+              auroPlanSeccionSeleccionableDx('Medicamentos sugeridos','bi-capsule','medicamento',g.medicamentos,grupoIndex,g.codigo),
+              auroPlanSeccionSeleccionableDx('Órdenes / estudios / procedimientos','bi-file-earmark-medical','orden',g.ordenes,grupoIndex,g.codigo),
+              auroPlanSeccionSeleccionableDx('Indicaciones para el paciente','bi-clipboard-check','indicacion',g.indicaciones,grupoIndex,g.codigo),
+              auroPlanSeccionLecturaDx('Seguimiento sugerido','bi-calendar-check',g.controles,false),
+              auroPlanSeccionLecturaDx('Alertas clínicas','bi-exclamation-triangle',g.alertas,true),
+              auroPlanSeccionLecturaDx('Notas del protocolo','bi-info-circle',g.notas,false)
+            ].filter(Boolean).join('');
+
             return `
-              <div class="auro-plan-dx-card ${g.principal ? 'principal' : ''}">
+              <div class="auro-plan-dx-card ${g.principal ? 'principal' : ''}" data-auro-dx-card-index="${grupoIndex}">
                 <div class="auro-plan-dx-card-top">
                   <div>
                     <div class="auro-plan-dx-code">${escapeHtmlPlan(g.codigo || 'S/C')}</div>
                     <div class="auro-plan-dx-name">${escapeHtmlPlan(g.descripcion || 'Sin descripción')}</div>
                   </div>
-                  <span class="auro-plan-dx-kind">${g.principal ? 'Principal' : 'Asociado'}</span>
+                  <span class="auro-plan-dx-kind">${g.principal ? 'Principal' : 'Asociado'}${g.tipo ? ' · ' + escapeHtmlPlan(g.tipo) : ''}</span>
                 </div>
 
-                ${
-                    !g.protocolos.length
-                      ? '<div class="auro-plan-dx-empty">No hay protocolo clínico configurado para este CIE-10.</div>'
-                      : !meds.length
-                        ? '<div class="auro-plan-dx-empty">El protocolo existe, pero no contiene medicamentos automáticos.</div>'
-                        : `<div class="auro-plan-dx-meds">${
-                            meds.map(function(m){
-                                return `<span class="auro-plan-dx-med ${m.enPlan ? 'en-plan' : ''}">
-                                  <span>${escapeHtmlPlan(m.nombre)}</span>
-                                  ${m.enPlan ? '<small>EN PLAN</small>' : ''}
-                                </span>`;
-                            }).join('')
-                          }</div>`
-                }
+                ${!g.protocolos.length
+                    ? '<div class="auro-plan-dx-empty">No hay protocolo clínico configurado para este CIE-10.</div>'
+                    : (contenido || '<div class="auro-plan-dx-empty">El protocolo está disponible, pero no contiene sugerencias transferibles.</div>')}
+
+                ${g.protocolos.length ? `
+                  <button type="button" class="auro-plan-dx-apply-card" data-auro-dx-aplicar-card="${grupoIndex}" ${pendientes ? '' : 'disabled'}>
+                    <i class="bi bi-arrow-down-circle me-1"></i> ${pendientes ? 'Añadir seleccionados al Plan' : 'Todo lo seleccionado ya está en Plan'}
+                  </button>` : ''}
               </div>`;
         }).join('')}
       </div>
 
       <div class="auro-plan-dx-foot">
-        Una misma opción puede aparecer bajo más de un diagnóstico porque pertenece a varios protocolos. Esto no duplica el medicamento ya agregado al Plan.
+        Diagnóstico define qué tiene el paciente; estas tarjetas solo apoyan la decisión terapéutica. El Plan inferior sigue siendo el registro definitivo y se guarda únicamente con su botón habitual.
       </div>`;
+}
+
+function auroPlanBuscarMedicamentoBaseSugerido(nombre){
+    const objetivo = normalizarTextoPlan(nombre);
+    if(!objetivo) return null;
+
+    const base = Array.isArray(window.MEDICAMENTOS_AUROSANAX_BASE)
+        ? window.MEDICAMENTOS_AUROSANAX_BASE
+        : [];
+
+    let exacto = base.find(item =>
+        normalizarTextoPlan(item?.med || item?.medicamento || item?.nombre || '') === objetivo
+    );
+    if(exacto) return exacto;
+
+    return base.find(item => {
+        const actual = normalizarTextoPlan(item?.med || item?.medicamento || item?.nombre || '');
+        return actual && actual.length >= 5 &&
+            (objetivo.includes(actual) || actual.includes(objetivo));
+    }) || null;
+}
+
+function auroPlanConstruirMedicamentoDesdeSugerencia(itemSugerido, grupo){
+    const original = itemSugerido?.item;
+    const obj = original && typeof original === 'object' && !Array.isArray(original)
+        ? original
+        : {};
+    const nombre = String(itemSugerido?.nombre || itemSugerido?.texto || '').trim();
+    const base = auroPlanBuscarMedicamentoBaseSugerido(nombre) || {};
+
+    return {
+        med:String(obj.med || obj.medicamento || obj.nombre || base.med || nombre || '').trim(),
+        pres:String(obj.pres || obj.presentacion || base.pres || '').trim(),
+        via:String(obj.via || base.via || '').trim(),
+        cantidad:String(obj.cantidad || obj.cant || base.cantidad || '').trim(),
+        frec:String(obj.frec || obj.frecuencia || base.frec || '').trim(),
+        dur:String(obj.dur || obj.duracion || base.dur || '').trim(),
+        ind:String(obj.ind || obj.indicaciones || base.ind || '').trim(),
+        continuo:String(obj.continuo || 'No').trim() || 'No',
+        codigo_cie10:String(grupo?.codigo || '').trim(),
+        id_diagnostico:String(grupo?.id_diagnostico || '').trim(),
+        id_protocolo:String(itemSugerido?.id_protocolo || '').trim(),
+        origen:'PROTOCOLO'
+    };
+}
+
+function auroPlanAgregarLineaClinicaUnica(idCampo, textoLinea){
+    const linea = String(textoLinea || '').trim();
+    if(!linea) return false;
+
+    const lista = auroPlanListaClinicaDesdeValor(auroPlanGetValue(idCampo));
+    const clave = normalizarTextoPlan(linea);
+    if(lista.some(x => normalizarTextoPlan(x) === clave)) return false;
+
+    auroPlanSetValue(idCampo, [...lista, linea].join('\n'));
+    const campo = document.getElementById(idCampo);
+    if(campo){
+        campo.dispatchEvent(new Event('input',{bubbles:true}));
+        campo.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    return true;
+}
+
+function auroPlanSugerenciasSeleccionadasDesdeDOM(grupoLimitado){
+    const visor = document.getElementById('auroPlanSugerenciasDx');
+    if(!visor) return [];
+
+    const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+    const selector = grupoLimitado === null || grupoLimitado === undefined
+        ? 'input[data-auro-dx-select="1"]:checked:not(:disabled)'
+        : `[data-auro-dx-card-index="${grupoLimitado}"] input[data-auro-dx-select="1"]:checked:not(:disabled)`;
+
+    return Array.from(visor.querySelectorAll(selector)).map(input => {
+        const grupoIndex = Number(input.dataset.grupoIndex);
+        const itemIndex = Number(input.dataset.itemIndex);
+        const tipo = String(input.dataset.tipo || '');
+        const grupo = grupos[grupoIndex];
+        if(!grupo) return null;
+
+        const coleccion = tipo === 'medicamento'
+            ? grupo.medicamentos
+            : (tipo === 'orden' ? grupo.ordenes : grupo.indicaciones);
+        const item = Array.isArray(coleccion) ? coleccion[itemIndex] : null;
+        if(!item) return null;
+
+        return {grupoIndex, tipo, grupo, item, input};
+    }).filter(Boolean);
+}
+
+function auroPlanAplicarSeleccionadosSugerenciasDx(grupoLimitado){
+    const idAtencionActiva = String(
+        typeof auroPlanObtenerIdAtencionActivaSeguro === 'function'
+            ? auroPlanObtenerIdAtencionActivaSeguro()
+            : ''
+    ).trim();
+    const idPlan = String(window.planState?.atencionActual || '').trim();
+
+    if(idAtencionActiva && idPlan && idAtencionActiva !== idPlan){
+        alert('El Plan visible pertenece a otra atención. Abra nuevamente la consulta correcta antes de incorporar sugerencias.');
+        return;
+    }
+
+    const seleccionados = auroPlanSugerenciasSeleccionadasDesdeDOM(grupoLimitado);
+    if(!seleccionados.length){
+        alert('Seleccione al menos una sugerencia antes de añadirla al Plan.');
+        return;
+    }
+
+    window.medicamentosPlanSeleccionados = Array.isArray(window.medicamentosPlanSeleccionados)
+        ? window.medicamentosPlanSeleccionados
+        : [];
+    window.ordenesMedicasPlanSeleccionadas = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
+        ? window.ordenesMedicasPlanSeleccionadas
+        : [];
+
+    let medsAgregados = 0;
+    let ordenesAgregadas = 0;
+    let indicacionesAgregadas = 0;
+
+    seleccionados.forEach(sel => {
+        if(sel.tipo === 'medicamento'){
+            const nuevo = auroPlanConstruirMedicamentoDesdeSugerencia(sel.item, sel.grupo);
+            if(!nuevo.med || auroPlanMedicamentoYaEnPlan(nuevo.med)) return;
+            window.medicamentosPlanSeleccionados.push(nuevo);
+            medsAgregados++;
+        }
+
+        if(sel.tipo === 'orden'){
+            const nombreOrden = String(sel.item?.texto || '').trim();
+            if(!nombreOrden || auroPlanOrdenYaEnPlan(nombreOrden)) return;
+
+            window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas([
+                ...(window.ordenesMedicasPlanSeleccionadas || []),
+                {
+                    orden:nombreOrden,
+                    cat:String(sel.item?.categoria || 'OTROS').trim() || 'OTROS',
+                    obs:'',
+                    codigo_cie10:String(sel.grupo?.codigo || '').trim(),
+                    id_diagnostico:String(sel.grupo?.id_diagnostico || '').trim(),
+                    id_protocolo:String(sel.item?.id_protocolo || '').trim(),
+                    origen:'PROTOCOLO'
+                }
+            ]);
+            ordenesAgregadas++;
+        }
+
+        if(sel.tipo === 'indicacion'){
+            if(auroPlanAgregarLineaClinicaUnica('hcIndicacionesPaciente', sel.item?.texto || '')){
+                indicacionesAgregadas++;
+            }
+        }
+
+        const textoItem = String(sel.item?.nombre || sel.item?.texto || '').trim();
+        window.__auroPlanSeleccionSugerenciasDx.delete(
+            auroPlanClaveSugerencia(sel.grupo?.codigo, sel.tipo, textoItem)
+        );
+    });
+
+    renderMedicamentosPlanTabla();
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    sincronizarPlanConReceta();
+    guardarPlanTemporal();
+    auroPlanRenderSugerenciasDiagnosticas();
+
+    const status = document.getElementById('auroPlanSugerenciasDxStatus');
+    if(status){
+        status.textContent = [
+            medsAgregados ? medsAgregados + ' medicamento(s)' : '',
+            ordenesAgregadas ? ordenesAgregadas + ' orden(es)' : '',
+            indicacionesAgregadas ? indicacionesAgregadas + ' indicación(es)' : ''
+        ].filter(Boolean).join(' · ') || 'Los elementos seleccionados ya estaban incorporados.';
+        status.classList.add('show');
+        setTimeout(() => status.classList.remove('show'), 4500);
+    }
 }
 
 function auroPlanInstalarEventosSugerenciasDiagnosticas(){
@@ -1419,7 +1663,46 @@ function auroPlanInstalarEventosSugerenciasDiagnosticas(){
     });
 
     document.addEventListener('aurosanax:atencion-cambiada', function(){
+        window.__auroPlanSeleccionSugerenciasDx.clear();
         setTimeout(auroPlanRenderSugerenciasDiagnosticas, 40);
+    });
+
+    document.addEventListener('change', function(evento){
+        const input = evento.target?.closest?.('#auroPlanSugerenciasDx input[data-auro-dx-select="1"]');
+        if(!input || input.disabled) return;
+
+        const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+        const grupo = grupos[Number(input.dataset.grupoIndex)];
+        const tipo = String(input.dataset.tipo || '');
+        if(!grupo) return;
+
+        const coleccion = tipo === 'medicamento'
+            ? grupo.medicamentos
+            : (tipo === 'orden' ? grupo.ordenes : grupo.indicaciones);
+        const item = Array.isArray(coleccion) ? coleccion[Number(input.dataset.itemIndex)] : null;
+        if(!item) return;
+
+        const clave = auroPlanClaveSugerencia(
+            grupo.codigo,
+            tipo,
+            item.nombre || item.texto || ''
+        );
+
+        if(input.checked) window.__auroPlanSeleccionSugerenciasDx.add(clave);
+        else window.__auroPlanSeleccionSugerenciasDx.delete(clave);
+    });
+
+    document.addEventListener('click', function(evento){
+        const card = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-aplicar-card]');
+        if(card){
+            auroPlanAplicarSeleccionadosSugerenciasDx(Number(card.dataset.auroDxAplicarCard));
+            return;
+        }
+
+        const todos = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-aplicar-todos]');
+        if(todos){
+            auroPlanAplicarSeleccionadosSugerenciasDx(null);
+        }
     });
 }
 
@@ -2400,6 +2683,8 @@ function auroPlanRefrescarVistas(){
     if(typeof recopilarEvaluacionesPlan === 'function'){
         recopilarEvaluacionesPlan();
     }
+
+    auroPlanRenderSugerenciasDiagnosticas();
 }
 
 
