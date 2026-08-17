@@ -1823,11 +1823,11 @@
     }
   }
 
-  async function auroRecetaConsultarDiagnosticosAtencion(idAtencion){
+  async function auroRecetaConsultarDiagnosticosAtencion(idAtencion, forzar){
     idAtencion = String(idAtencion || '').trim();
     if(!idAtencion) return [];
 
-    if(recetaDiagnosticosPorAtencionCache.has(idAtencion)){
+    if(!forzar && recetaDiagnosticosPorAtencionCache.has(idAtencion)){
       return recetaDiagnosticosPorAtencionCache.get(idAtencion);
     }
 
@@ -1851,6 +1851,137 @@
       console.warn('AUROSANAX RECETAS: no se pudieron consultar diagnósticos de la atención.', error);
       return [];
     }
+  }
+
+  /* =====================================================
+     AUROSANAX RECETAS 2.7 - DIAGNÓSTICO MÚLTIPLE POR ATENCIÓN
+     ---------------------------------------------------------
+     - Diagnóstico sigue siendo la fuente clínica oficial.
+     - La receta conserva diagnostico_cie10 principal para compatibilidad.
+     - La representación oficial muestra TODOS los diagnósticos activos
+       de la misma id_atencion, principal primero.
+     - No depende de que un protocolo haya sido aplicado al Plan.
+     - No agrega columnas ni modifica Google Sheets o Apps Script.
+  ===================================================== */
+  function auroRecetaDiagnosticosNormalizados(lista){
+    const salida = [];
+    const vistos = new Set();
+
+    (Array.isArray(lista) ? lista : []).forEach(function(dx, index){
+      dx = dx || {};
+      const estado = recetaNormalizarPlano(dx.estado || 'Activo');
+      if(['inactivo','inactiva','anulado','anulada','eliminado','eliminada'].includes(estado)) return;
+
+      const codigo = String(
+        dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || dx.codigo || ''
+      ).trim();
+      const descripcion = String(
+        dx.descripcion || dx.diagnostico || dx.nombre || dx.detalle || ''
+      ).trim();
+      if(!codigo && !descripcion) return;
+
+      const principal = dx.principal === true ||
+        ['SI','SÍ','TRUE','1'].includes(String(dx.principal || '').trim().toUpperCase());
+      const clave = [auroRecetaCodigoNormalizado(codigo), recetaNormalizarPlano(descripcion)].join('|');
+      if(!clave.replace('|','') || vistos.has(clave)) return;
+      vistos.add(clave);
+
+      const codigoNorm = auroRecetaCodigoNormalizado(codigo);
+      const descripcionNorm = auroRecetaCodigoNormalizado(descripcion);
+      const textoDx = codigo && descripcion && !descripcionNorm.includes(codigoNorm)
+        ? `${codigo} - ${descripcion}`
+        : (descripcion || codigo);
+
+      salida.push({
+        id_diagnostico:String(dx.id_diagnostico || '').trim(),
+        codigo:codigo,
+        descripcion:descripcion,
+        texto:textoDx,
+        principal:principal,
+        tipo_diagnostico:String(dx.tipo_diagnostico || dx.tipo || '').trim(),
+        orden_original:index
+      });
+    });
+
+    if(salida.length && !salida.some(x => x.principal)) salida[0].principal = true;
+
+    return salida.sort(function(a,b){
+      if(a.principal !== b.principal) return Number(b.principal) - Number(a.principal);
+      return a.orden_original - b.orden_original;
+    });
+  }
+
+  function auroRecetaDiagnosticosActualesSincronos(idAtencion){
+    const id = String(idAtencion || '').trim();
+    const fuentes = [];
+
+    try{
+      if(window.auroDiagnosticos && typeof window.auroDiagnosticos.obtenerDiagnosticos === 'function'){
+        const lista = window.auroDiagnosticos.obtenerDiagnosticos();
+        if(Array.isArray(lista)) fuentes.push(lista);
+      }
+    }catch(e){}
+
+    if(Array.isArray(window.auroDiagnosticosState?.diagnosticos)){
+      fuentes.push(window.auroDiagnosticosState.diagnosticos);
+    }
+    if(Array.isArray(window.hcDiagnosticosSeleccionados)){
+      fuentes.push(window.hcDiagnosticosSeleccionados);
+    }
+
+    for(const fuente of fuentes){
+      const filtrada = fuente.filter(function(dx){
+        const dxAtencion = String(dx?.id_atencion || '').trim();
+        return !id || !dxAtencion || dxAtencion === id;
+      });
+      const normalizados = auroRecetaDiagnosticosNormalizados(filtrada);
+      if(normalizados.length) return normalizados;
+    }
+
+    return [];
+  }
+
+  async function auroRecetaAdjuntarDiagnosticosAtencion(receta, forzar){
+    receta = receta || {};
+    const idAtencion = String(receta.id_atencion || obtenerIdAtencionActivaSeguro() || '').trim();
+    if(!idAtencion) return receta;
+
+    let lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion, forzar === true);
+    let diagnosticos = auroRecetaDiagnosticosNormalizados(lista);
+
+    if(!diagnosticos.length){
+      diagnosticos = auroRecetaDiagnosticosActualesSincronos(idAtencion);
+    }
+
+    if(diagnosticos.length){
+      receta.diagnosticos = diagnosticos;
+      const principal = diagnosticos.find(x => x.principal) || diagnosticos[0];
+
+      if(!String(receta.cie10 || receta.diagnostico_cie10 || '').trim()){
+        receta.cie10 = principal.codigo || '';
+        receta.diagnostico_cie10 = principal.codigo || '';
+      }
+
+      if(!String(receta.diagnostico || '').trim() || auroRecetaDiagnosticoGenerico(receta.diagnostico)){
+        receta.diagnostico = principal.texto || '';
+      }
+    }
+
+    return receta;
+  }
+
+  function auroRecetaDiagnosticosRepresentacionHTML(r){
+    const lista = auroRecetaDiagnosticosNormalizados(r?.diagnosticos || []);
+
+    if(!lista.length){
+      return `<b>${safe(r?.diagnostico || '—')}</b>`;
+    }
+
+    return `<div class="auro-rx-diagnosticos-lista">${lista.map(function(dx){
+      return `<div class="auro-rx-diagnostico-linea ${dx.principal ? 'principal' : ''}">
+        <b>${safe(dx.texto || '—')}</b>
+      </div>`;
+    }).join('')}</div>`;
   }
 
   function auroRecetaObtenerDiagnosticoEstructurado(lista, cie){
@@ -1912,7 +2043,7 @@
 
     if(!idAtencion) return auroRecetaObtenerDiagnosticoAutomatico();
 
-    const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion);
+    const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion, true);
     const estructurado = auroRecetaObtenerDiagnosticoEstructurado(lista, cie);
 
     if(estructurado){
@@ -1935,10 +2066,6 @@
       ''
     ).trim();
 
-    if(actual && !auroRecetaDiagnosticoGenerico(actual)){
-      return actual;
-    }
-
     const idAtencion = String(receta.id_atencion || '').trim();
     const cie = String(
       receta.diagnostico_cie10 ||
@@ -1947,10 +2074,22 @@
     ).trim();
 
     if(!idAtencion){
-      return '';
+      return actual && !auroRecetaDiagnosticoGenerico(actual) ? actual : '';
     }
 
-    const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion);
+    /*
+      Siempre consulta la atención para adjuntar el conjunto completo.
+      El diagnóstico principal ya guardado se conserva para compatibilidad;
+      únicamente se completa si estaba vacío o era genérico.
+    */
+    const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion, true);
+    const diagnosticos = auroRecetaDiagnosticosNormalizados(lista);
+    if(diagnosticos.length) receta.diagnosticos = diagnosticos;
+
+    if(actual && !auroRecetaDiagnosticoGenerico(actual)){
+      return actual;
+    }
+
     const real = auroRecetaElegirDiagnosticoEstructurado(lista, cie);
 
     if(real){
@@ -2556,6 +2695,7 @@
       id_paciente: idPaciente,
       id_historia: idHistoriaActiva || ultimaHistoria?.id_historia || ultimaHistoria?.id || '',
       id_atencion: obtenerIdAtencionActivaSeguro(),
+      diagnosticos: auroRecetaDiagnosticosActualesSincronos(obtenerIdAtencionActivaSeguro()),
       paciente: paciente || {},
       fecha: val('recFecha') || fechaHoyReceta(),
       medico: obtenerNombreMedicoReal(),
@@ -3377,6 +3517,7 @@
     const idMedico = medico.id_medico || '—';
     const centro = cfg.nombre || 'AUROSANAX';
     const estadoClass = String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok';
+    const diagnosticosRepresentacion = auroRecetaDiagnosticosRepresentacionHTML(r);
     const ubicacion = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais].filter(Boolean).join(' · ');
     const contacto = [cfg.telefono, cfg.email, cfg.web].filter(Boolean).join(' · ');
     const registros = [
@@ -3395,14 +3536,14 @@
           <div><span>ID paciente</span><b>${safe(idPaciente)}</b></div><div><span>ID atención</span><b>${safe(idAtencion)}</b></div>
           <div><span>ID receta</span><b>${safe(idReceta)}</b></div><div><span>ID médico</span><b>${safe(idMedico)}</b></div>
           <div><span>CIE-10</span><b>${safe(r.cie10 || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
-          <div style="grid-column:1/-1"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>`
+          <div style="grid-column:1/-1"><span>Diagnóstico</span>${diagnosticosRepresentacion}</div>`
       : `
           <div class="auro-rx-dato auro-rx-paciente"><span>Paciente</span><b>${safe(nombre)}</b></div>
           <div class="auro-rx-dato auro-rx-cedula"><span>Cédula</span><b>${safe(cedula)}</b></div>
           <div class="auro-rx-dato auro-rx-edad"><span>Edad</span><b>${safe(edad)}</b></div>
           <div class="auro-rx-dato auro-rx-fecha"><span>Fecha de emisión</span><b>${safe(fechaVisual(r.fecha))}</b></div>
           <div class="auro-rx-dato auro-rx-numero"><span>N.º de receta</span><b>${safe(idReceta === '—' ? '—' : idReceta)}</b></div>
-          <div class="auro-rx-dato auro-rx-diagnostico"><span>Diagnóstico</span><b>${safe(r.diagnostico || '—')}</b></div>`;
+          <div class="auro-rx-dato auro-rx-diagnostico"><span>Diagnóstico</span>${diagnosticosRepresentacion}</div>`;
 
     return `
       <div class="auro-receta-documento ${esAdministrativo ? 'modo-administrativo' : 'modo-paciente'}">
@@ -3417,6 +3558,10 @@
           .modo-paciente .auro-receta-grid .auro-rx-dato{display:flex;flex-direction:column;justify-content:flex-start;min-height:52px}
           .modo-paciente .auro-receta-grid .auro-rx-paciente b,
           .modo-paciente .auro-receta-grid .auro-rx-diagnostico b{white-space:normal;overflow-wrap:anywhere}
+          .auro-rx-diagnosticos-lista{display:grid;gap:2px;margin-top:1px}
+          .auro-rx-diagnostico-linea{display:block;padding:0!important;border:0!important;background:transparent!important;min-height:0!important}
+          .auro-rx-diagnostico-linea b{font-size:10.5px!important;line-height:1.18!important;font-weight:800!important}
+          .auro-rx-diagnostico-linea.principal b{font-weight:950!important}
           .auro-receta-section{margin-top:9px;break-inside:avoid}.auro-receta-section h4{margin:0 0 6px;color:#7a174f;font-size:13px;border-bottom:1px solid #f3d4e8;padding-bottom:5px;font-weight:950}.auro-receta-box{border:1px solid #e9d5e3;border-radius:16px;padding:10px 11px;white-space:normal;word-break:break-word;background:#fff;box-shadow:0 4px 14px rgba(139,30,90,.035)}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
@@ -4219,9 +4364,11 @@
     auroRecetaAutocompletarDiagnosticoSiVacio();
     auroRecetaNormalizarMedicamentosEdicionSiSeguro();
 
-    return auroRecetaPrepararDatosParaRepresentacion(
+    const datosActuales = auroRecetaPrepararDatosParaRepresentacion(
       window.obtenerDatosReceta()
     );
+    await auroRecetaAdjuntarDiagnosticosAtencion(datosActuales, true);
+    return datosActuales;
   }
 
   async function auroRecetaAbrirVistaPacienteOficial(){
@@ -5164,6 +5311,7 @@
       medico:r.medico || obtenerNombreMedicoReal(),
       cie10:r.diagnostico_cie10,
       estado:r.estado,
+      diagnosticos:Array.isArray(r.diagnosticos) ? r.diagnosticos : [],
       diagnostico: auroRecetaDiagnosticoGenerico(r.diagnostico)
         ? ''
         : r.diagnostico,
@@ -5359,6 +5507,13 @@
   });
   document.addEventListener('input', function(e){ const ids = ['recFecha','recMedico','recCie10','recDiagnostico','recMedicamento','recIndicaciones','recRecomendaciones']; if(recetaPreviewVisible && ids.includes(e.target?.id || '') && el('recetaPreview')){ clearTimeout(window.__auroRecetaPreviewTimer); window.__auroRecetaPreviewTimer = setTimeout(window.vistaPreviaReceta, 250); } });
   document.addEventListener('change', function(e){ const ids = ['recFecha','recEstado']; if(recetaPreviewVisible && ids.includes(e.target?.id || '') && el('recetaPreview')) window.vistaPreviaReceta(); });
+
+  document.addEventListener('aurosanax:diagnosticos-actualizados', function(evento){
+    const id = String(
+      evento?.detail?.id_atencion || obtenerIdAtencionActivaSeguro() || ''
+    ).trim();
+    if(id) recetaDiagnosticosPorAtencionCache.delete(id);
+  });
 
   /*
     API PÚBLICA OFICIAL DE RECETAS
