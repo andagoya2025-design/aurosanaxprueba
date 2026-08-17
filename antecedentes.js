@@ -1249,7 +1249,7 @@ function cargarAlergiasEstructuradas(valor){
 
   if(/^Niega alergias conocidas\.?$/i.test(texto)){
     if(panel) panel.dataset.auroNiegaAlergias = '1';
-    if(document.getElementById('hcAlergiasResumen')) document.getElementById('hcAlergiasResumen').textContent = 'Niega alergias';
+    if(document.getElementById('hcAlergiasResumen')) document.getElementById('hcAlergiasResumen').textContent = 'Niega alergias conocidas';
     if(typeof auroV21SincronizarEstadosAyudas === 'function') auroV21SincronizarEstadosAyudas();
     return;
   }
@@ -1676,10 +1676,44 @@ function cargarAntecedentesGinecoObstetricosCompletos(valor){
   cargarAntecedentesGinecologicosEstructurados(data.ginecologicos || {});
 }
 
+function auroResumenAlergiasClinico(valor){
+  const texto = String(valor || '').trim();
+  if(!texto) return 'No registrado';
+
+  if(/^Niega alergias conocidas\.?$/i.test(texto)){
+    return 'Niega alergias conocidas';
+  }
+
+  const items = texto
+    .split(';')
+    .map(x => String(x || '').trim())
+    .filter(Boolean)
+    .filter(x => !/^Niega alergias conocidas\.?$/i.test(x))
+    .map(x => {
+      const partes = x.split('|').map(v => String(v || '').trim()).filter(Boolean);
+      return {
+        alergia: partes[0] || '',
+        detalle: partes.slice(1).join(' | ')
+      };
+    })
+    .filter(x => x.alergia);
+
+  if(!items.length) return 'No registrado';
+
+  if(items.length === 1){
+    return 'Refiere: ' + items[0].alergia;
+  }
+
+  return 'Refiere ' + items.length + ' alergias';
+}
+
+window.auroResumenAlergiasClinico = auroResumenAlergiasClinico;
+
+
 function actualizarResumenAntecedentesCompletos(){
   const alergias = recopilarAlergiasEstructuradas();
   if(document.getElementById('hcAlergiasResumen')){
-    document.getElementById('hcAlergiasResumen').textContent = alergias ? (alergias.length > 18 ? alergias.slice(0,18) + '...' : alergias) : 'No registradas';
+    document.getElementById('hcAlergiasResumen').textContent = auroResumenAlergiasClinico(alergias);
   }
   updateClinicalSummary();
 }
@@ -2046,7 +2080,7 @@ function auroV21InsertarPanelAyudas(){
     alert('Se registrará: Niega antecedentes quirúrgicos.');
   }, 'niega_quirurgicos'));
 
-  actions.appendChild(auroV21AgregarBoton('Niega alergias', 'bi-shield-check', () => {
+  actions.appendChild(auroV21AgregarBoton('Niega alergias conocidas', 'bi-shield-check', () => {
     const key = 'niega_alergias';
 
     if(auroV21BotonRapidoEstaActivo(key)){
@@ -2073,7 +2107,7 @@ function auroV21InsertarPanelAyudas(){
     panel.dataset.auroNiegaAlergias = '1';
     document.querySelectorAll('.hcAlergiaCheck').forEach(chk => chk.checked = false);
     document.querySelectorAll('.hcAlergiaDetalle').forEach(i => i.value = '');
-    if(document.getElementById('hcAlergiasResumen')) document.getElementById('hcAlergiasResumen').textContent = 'Niega alergias';
+    if(document.getElementById('hcAlergiasResumen')) document.getElementById('hcAlergiasResumen').textContent = 'Niega alergias conocidas';
     auroV21SetBotonRapidoActivo(key, true);
     alert('Se registrará: Niega alergias conocidas.');
   }, 'niega_alergias'));
@@ -2458,6 +2492,10 @@ function recopilarAlergiasEstructuradas(){
       filas.push([alergia, detalle].filter(Boolean).join(' | '));
     }
   });
+
+  if(filas.length && panel?.dataset?.auroNiegaAlergias === '1'){
+    delete panel.dataset.auroNiegaAlergias;
+  }
 
   if(!filas.length && panel?.dataset?.auroNiegaAlergias === '1'){
     filas.push('Niega alergias conocidas');
