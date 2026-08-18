@@ -796,17 +796,31 @@
   #finanzas .fin-mobile-actions button{flex:1 1 95px;min-height:38px;border-radius:11px}
   #finanzas .fin-state-active{background:#dcfce7;color:#166534;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
   #finanzas .fin-state-inactive{background:#f1f5f9;color:#475569;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+
+  /* AUROSANAX 2026-08-18 — recuperación quirúrgica del resumen financiero */
+  #finanzas .fin-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  #finanzas .fin-summary-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;padding:14px;min-height:92px;box-shadow:0 8px 24px rgba(15,23,42,.045)}
+  #finanzas .fin-summary-card small{display:block;color:#64748b;font-weight:800;margin-bottom:6px}
+  #finanzas .fin-summary-card strong{font-size:23px;color:#0f172a;letter-spacing:-.02em}
+  #finanzas .fin-result-ok{background:#f0fdf4;border-color:#bbf7d0}
+  #finanzas .fin-result-ok strong{color:#166534}
+  #finanzas .fin-result-bad{background:#fff1f2;border-color:#fecdd3}
+  #finanzas .fin-result-bad strong{color:#be123c}
+  #finanzas .fin-result-neutral{background:#f8fafc}
+
   @media(max-width:980px){
     #finanzas .table-responsive{display:none!important}
     #finanzas .fin-mobile-list{display:block!important}
     #finanzas .cardx{padding:16px!important}
     #finanzas .row.g-3>[class*="col-"]{width:100%}
     #finanzas .fin-base-box .btn-line{width:100%;justify-content:center}
+    #finanzas .fin-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   }
   @media(max-width:520px){
     #finanzas .fin-mobile-grid{grid-template-columns:1fr}
     #finanzas .fin-mobile-grid b{text-align:left;margin-top:-4px}
     #finanzas .fin-mobile-actions button{flex:1 1 100%}
+    #finanzas .fin-summary-grid{grid-template-columns:1fr}
   }
 </style>
 <section class="screen" id="finanzas">
@@ -961,6 +975,54 @@
       </table>
     </div>
     <div id="finGastosMobile" class="fin-mobile-list" aria-live="polite"></div>
+  </div>
+
+
+  <!-- ==========================================================
+       AUROSANAX FINANZAS — RESULTADO MENSUAL RECUPERADO 2026-08-18
+       Bloque exclusivamente de lectura. No altera Caja ni guardadores.
+       ========================================================== -->
+  <div class="cardx p-4 mt-4">
+    <div class="section-head">
+      <div>
+        <h4>Resultado mensual</h4>
+        <p>Resumen gerencial del período basado en ingresos realmente cobrados y costos configurados o registrados.</p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div>
+          <label class="form-label fw-bold mb-1">Período</label>
+          <input id="finResumenPeriodo" type="month" class="form-control">
+        </div>
+        <button id="btnActualizarResumenFinanzas" type="button" class="btn-line">
+          <i class="bi bi-arrow-clockwise me-1"></i> Actualizar resumen
+        </button>
+      </div>
+    </div>
+
+    <div id="finResumenMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Seleccione un período para analizar ingresos, gastos y rentabilidad.
+    </div>
+
+    <div class="fin-summary-grid">
+      <div class="fin-summary-card"><small>Ingresos cobrados</small><strong id="finResIngresos">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Facturación generada</small><strong id="finResFacturacion">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Por cobrar</small><strong id="finResCartera">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Gastos fijos</small><strong id="finResFijos">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Gastos periódicos</small><strong id="finResPeriodicos">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Costos variables</small><strong id="finResVariables">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Gastos extraordinarios</small><strong id="finResExtraordinarios">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Comisiones registradas</small><strong id="finResComisiones">$0.00</strong></div>
+      <div id="finResResultadoCard" class="fin-summary-card fin-result-neutral"><small>Resultado operativo estimado</small><strong id="finResResultado">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Margen operativo</small><strong id="finResMargen">0.0%</strong></div>
+      <div class="fin-summary-card"><small>Punto de equilibrio</small><strong id="finResPuntoEquilibrio">—</strong></div>
+      <div class="fin-summary-card"><small>Atenciones / Ticket promedio</small><strong><span id="finResAtenciones">0</span> · <span id="finResTicket">$0.00</span></strong></div>
+    </div>
+
+    <div class="notice mt-3">
+      <b>Base gerencial:</b> el punto de equilibrio usa costos fijos + periódicos y el margen de contribución del período.
+      Los gastos variables y extraordinarios se reconocen en el mes de su fecha de inicio.
+      Los gastos recurrentes usan su costo mensual estimado.
+    </div>
   </div>
 
   <!-- AUROSANAX FINANZAS: configuración económica de médicos.
