@@ -2,8 +2,8 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.3.1
-   Fecha: 2026-07-29
+   Versión: 1.3.2
+   Fecha base: 2026-07-29 · Fase permisos Preconsulta: 2026-08-18
 
    OBJETIVO
    - Mantener toda la lógica fuera de login.html.
@@ -53,6 +53,14 @@
     { clave: 'agenda', etiqueta: 'Agenda' },
     { clave: 'disponibilidad', etiqueta: 'Disponibilidad' },
     { clave: 'pacientes', etiqueta: 'Pacientes' },
+
+    /* AUROSANAX PRECONSULTA - permisos configurables por usuario.
+       Fase 1: solo catálogo/plantillas de permisos; no abre módulos clínicos. */
+    { clave: 'preconsulta', etiqueta: 'Preconsulta' },
+    { clave: 'preconsulta_datos_administrativos', etiqueta: 'Preconsulta: datos administrativos' },
+    { clave: 'preconsulta_signos_vitales', etiqueta: 'Preconsulta: signos vitales' },
+    { clave: 'preconsulta_antecedentes_referidos', etiqueta: 'Preconsulta: antecedentes referidos' },
+
     { clave: 'historia_clinica', etiqueta: 'Historia clínica' },
     { clave: 'recetas', etiqueta: 'Recetas y órdenes' },
     { clave: 'apoyo_ia', etiqueta: 'Apoyo con IA' },
@@ -74,24 +82,30 @@
     }, {}),
     MEDICO_PRINCIPAL: {
       dashboard: true, secretaria: true, formulario: true, agenda: true,
-      disponibilidad: true, pacientes: true, historia_clinica: true,
-      recetas: true, apoyo_ia: true, reportes: true, configuracion: true,
+      disponibilidad: true, pacientes: true,
+      preconsulta: false, preconsulta_datos_administrativos: false,
+      preconsulta_signos_vitales: false, preconsulta_antecedentes_referidos: false,
+      historia_clinica: true, recetas: true, apoyo_ia: true, reportes: true, configuracion: true,
       configuracion_medicos: true, configuracion_servicios: true,
       configuracion_horarios: true, configuracion_centro: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     MEDICO_COLABORADOR: {
       dashboard: true, secretaria: false, formulario: false, agenda: true,
-      disponibilidad: false, pacientes: true, historia_clinica: true,
-      recetas: true, apoyo_ia: true, reportes: false, configuracion: false,
+      disponibilidad: false, pacientes: true,
+      preconsulta: false, preconsulta_datos_administrativos: false,
+      preconsulta_signos_vitales: false, preconsulta_antecedentes_referidos: false,
+      historia_clinica: true, recetas: true, apoyo_ia: true, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     SECRETARIA: {
       dashboard: true, secretaria: true, formulario: true, agenda: true,
-      disponibilidad: true, pacientes: true, historia_clinica: false,
-      recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
+      disponibilidad: true, pacientes: true,
+      preconsulta: false, preconsulta_datos_administrativos: false,
+      preconsulta_signos_vitales: false, preconsulta_antecedentes_referidos: false,
+      historia_clinica: false, recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
