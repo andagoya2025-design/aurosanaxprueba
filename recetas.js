@@ -2687,6 +2687,23 @@
   }
 
   function auroRecetaPuedeGuardar(){
+    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    const existente = idAtencion ? buscarRecetaActivaPorAtencion(idAtencion) : null;
+
+    /*
+      AUROSANAX RECETA 3.8 - EDICIÓN EXPLÍCITA DE RECETA EMITIDA
+      Una receta ya existente nunca se corrige solo porque Plan tenga
+      medicamentos cargados. Primero debe entrar explícitamente en edición.
+      La primera receta conserva el flujo Plan → Receta original.
+    */
+    if(
+      existente &&
+      recetaModoTrabajo !== 'edicion' &&
+      !recetaNuevaForzada
+    ){
+      return false;
+    }
+
     return !!(
       recetaModoTrabajo === 'edicion' ||
       recetaModoTrabajo === 'nueva' ||
@@ -2714,6 +2731,7 @@
     agregar(el('btnGuardarRecetaERP'));
 
     document.querySelectorAll('[data-auro-receta-save-btn="1"]').forEach(agregar);
+    document.querySelectorAll('[data-auro-receta-plan-btn="1"]').forEach(agregar);
     document.querySelectorAll('button[onclick*="guardarRecetaERP"], a[onclick*="guardarRecetaERP"]').forEach(agregar);
 
     document.querySelectorAll('button, a').forEach(btn => {
@@ -2734,6 +2752,15 @@
 
   function actualizarBotonGuardarReceta(){
     const botones = obtenerBotonesGuardarReceta();
+    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    const existenteAtencion = idAtencion ? buscarRecetaActivaPorAtencion(idAtencion) : null;
+    const idRecetaExistente = String(existenteAtencion?.id_receta || existenteAtencion?.id || '').trim();
+    const editandoRecetaAtencion = !!(
+      recetaModoTrabajo === 'edicion' &&
+      recetaEditandoId &&
+      idRecetaExistente &&
+      String(recetaEditandoId).trim() === idRecetaExistente
+    );
 
     botones.forEach((btn, i) => {
       if(!btn.id && i === 0){
@@ -2741,6 +2768,7 @@
       }
 
       btn.setAttribute('data-auro-receta-save-btn','1');
+      const esBotonPlan = btn.getAttribute('data-auro-receta-plan-btn') === '1';
 
       if(recetaGuardando){
         btn.disabled = true;
@@ -2761,6 +2789,32 @@
         btn.innerHTML = recetaEstadoVisual === 'actualizada'
           ? '<i class="bi bi-check-circle me-1"></i> Receta actualizada ✓'
           : '<i class="bi bi-check-circle me-1"></i> Receta guardada ✓';
+        return;
+      }
+
+      /*
+        Botón inteligente exclusivo del panel Plan:
+        - receta emitida + lectura  -> Editar receta
+        - receta emitida + edición  -> Guardar corrección
+        El botón Guardar/Actualizar Plan clínico no participa aquí.
+      */
+      if(esBotonPlan && existenteAtencion && !editandoRecetaAtencion){
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.style.pointerEvents = '';
+        btn.innerHTML = '<i class="bi bi-pencil-square me-1"></i> Editar receta';
+        return;
+      }
+
+      if(esBotonPlan && editandoRecetaAtencion){
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.style.pointerEvents = '';
+        btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar corrección';
         return;
       }
 
@@ -2800,6 +2854,116 @@
           .localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || ''))
       )[0] || null;
   }
+
+  /* =====================================================
+     AUROSANAX RECETAS 3.8 - BOTÓN INTELIGENTE DESDE PLAN
+     ---------------------------------------------------------
+     Un solo botón dentro de Plan:
+     - Sin receta oficial: Guardar receta.
+     - Con receta oficial: Editar receta.
+     - En edición: Guardar corrección.
+
+     La corrección conserva id_receta y usa guardarRecetaERP(), por lo que
+     el backend mantiene el justificativo / enmienda y la auditoría clínica.
+     No guarda ni modifica el Plan clínico.
+  ===================================================== */
+  window.auroRecetaAccionDesdePlan = async function(){
+    verificarCambioAtencionReceta();
+
+    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    if(!idAtencion){
+      alert('No existe una consulta activa. Abra o seleccione una atención antes de trabajar con la receta.');
+      return {success:false, message:'Sin atención activa'};
+    }
+
+    if(recetaGuardando){
+      actualizarBotonGuardarReceta();
+      return {success:false, message:'Guardado en progreso'};
+    }
+
+    await cargarRecetasDesdeSheets(true);
+
+    const existente = buscarRecetaActivaPorAtencion(idAtencion);
+    const idExistente = String(existente?.id_receta || existente?.id || '').trim();
+    const editandoMisma = !!(
+      existente &&
+      recetaModoTrabajo === 'edicion' &&
+      recetaEditandoId &&
+      String(recetaEditandoId).trim() === idExistente
+    );
+
+    /* Primera receta: conserva el flujo histórico Plan → Receta. */
+    if(!existente){
+      recetaEditandoId = null;
+      recetaNuevaForzada = false;
+      recetaModoTrabajo = 'nueva';
+      recetaAtencionActualId = idAtencion;
+      recetaPlanAtencionId = String(window.planState?.atencionActual || idAtencion || '').trim();
+
+      if(typeof window.sincronizarPlanConReceta === 'function'){
+        window.sincronizarPlanConReceta();
+      }else if(typeof sincronizarPlanConReceta === 'function'){
+        sincronizarPlanConReceta();
+      }
+
+      auroRecetaEditorRenderDesdeCampo(true);
+      actualizarBotonGuardarReceta();
+      auroRecetaActualizarCabeceraClinicaPremium();
+
+      return await window.guardarRecetaERP();
+    }
+
+    /* Primer clic sobre una receta ya emitida: habilita corrección, no guarda. */
+    if(!editandoMisma){
+      await auroRecetaResolverDiagnosticoPorRecetaGuardada(existente);
+      cargarRecetaEnFormulario(existente);
+
+      /*
+        Plan es únicamente la interfaz de trabajo visible. La receta conserva
+        su id_receta oficial; los medicamentos visibles de la misma atención
+        se sincronizan al campo canónico sin ejecutar guardado del Plan.
+      */
+      if(typeof window.sincronizarPlanConReceta === 'function'){
+        window.sincronizarPlanConReceta();
+      }else if(typeof sincronizarPlanConReceta === 'function'){
+        sincronizarPlanConReceta();
+      }
+
+      recetaAtencionActualId = idAtencion;
+      recetaPlanAtencionId = String(window.planState?.atencionActual || idAtencion || '').trim();
+      auroRecetaEditorRenderDesdeCampo(true);
+      actualizarBotonGuardarReceta();
+      auroRecetaActualizarCabeceraClinicaPremium();
+
+      if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+        window.auroPlanActualizarMiniStatus('Edición de receta habilitada · modifique y guarde la corrección');
+      }
+
+      return {success:true, modo:'edicion', id_receta:idExistente};
+    }
+
+    /* Segundo clic: guarda la corrección de la MISMA receta. */
+    if(typeof window.sincronizarPlanConReceta === 'function'){
+      window.sincronizarPlanConReceta();
+    }else if(typeof sincronizarPlanConReceta === 'function'){
+      sincronizarPlanConReceta();
+    }
+
+    auroRecetaEditorRenderDesdeCampo(true);
+    const resultado = await window.guardarRecetaERP();
+
+    if(resultado && resultado.success){
+      auroRecetaEntrarModoLectura();
+      auroRecetaEditorActualizarModo();
+      auroRecetaActualizarCabeceraClinicaPremium();
+
+      if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+        window.auroPlanActualizarMiniStatus('Corrección de receta registrada');
+      }
+    }
+
+    return resultado;
+  };
 
   /* =====================================================
      AUROSANAX RECETAS 3.7 - PRIMERA RECETA DE LA ATENCIÓN
@@ -5047,6 +5211,8 @@
       }else{
         actualizarBotonGuardarReceta();
       }
+
+      return resultado;
 
     }catch(error){
       console.error('Error guardando receta:', error);
