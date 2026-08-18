@@ -1,11 +1,11 @@
 /* ============================================================
    AUROSANAX ERP — CAJA.JS
-   Versión 1.0 · separación quirúrgica antirregresión
+   Versión 1.1 · anticipos por cita · antirregresión
 
    RESPONSABILIDAD:
    - Lógica exclusiva de Caja.
    - Servicios/precios referenciales.
-   - Cuenta por id_atencion.
+   - Cuenta por id_atencion y anticipo por id_cita antes de la atención.
    - Pagos, abonos, saldo y recibos.
    - Búsqueda/filtros y responsive específico de Caja.
 
@@ -25,8 +25,8 @@
 
   /* ============================================================
      AUROSANAX — CAJA PREMIUM FINAL
-     - Clave maestra: id_atencion.
-     - id_cita es opcional.
+     - Flujo histórico: id_atencion.
+     - Flujo anticipado: id_cita hasta que exista id_atencion.
      - Servicios y precios referenciales provienen de Configuración.
      - El valor aplicado es editable por atención.
      - Admite varios servicios, pagos completos y múltiples abonos.
@@ -49,24 +49,40 @@
   function cajaMoney(v){ return '$' + cajaNum(v).toLocaleString('es-EC',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function cajaEsc(v){ return cajaTxt(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
   function cajaFecha(v){ const t=cajaTxt(v); if(!t)return '—'; const m=t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:t; }
-  function cajaFechaISO(v){
-    const t=cajaTxt(v);
-    if(!t) return '';
-
-    let m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
-
-    m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if(m) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
-
-    const d=new Date(t);
-    if(!Number.isNaN(d.getTime())){
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    }
-
-    return '';
+  function cajaIdAtencion(a){ return cajaTxt(a?.id_atencion || (a?._caja_contexto==='cita'?'':a?.id)); }
+  function cajaIdCita(a){ return cajaTxt(a?.id_cita || (a?._caja_contexto==='cita'?a?.id:'')); }
+  function cajaEsCitaPendiente(a){ return a?._caja_contexto==='cita' && !cajaIdAtencion(a); }
+  function cajaClaveContexto(a){
+    return cajaEsCitaPendiente(a) ? 'CITA:'+cajaIdCita(a) : 'ATN:'+cajaIdAtencion(a);
   }
-  function cajaIdAtencion(a){ return cajaTxt(a?.id_atencion || a?.id); }
+  function cajaMovimientoContexto(a){
+    const idAtn=cajaIdAtencion(a);
+    if(idAtn){
+      const porAtn=cajaMovimientos.find(m=>cajaTxt(m.id_atencion)===idAtn && cajaTxt(m.estado_financiero).toLowerCase()!=='anulado');
+      if(porAtn) return porAtn;
+    }
+    const idCita=cajaIdCita(a);
+    if(idCita){
+      return cajaMovimientos.find(m=>cajaTxt(m.id_cita)===idCita && cajaTxt(m.estado_financiero).toLowerCase()!=='anulado') || null;
+    }
+    return null;
+  }
+  function cajaCitasConfirmadasSinAtencion(){
+    const citasConAtencion=new Set(cajaAtenciones.map(a=>cajaTxt(a.id_cita)).filter(Boolean));
+    return cajaCitas.filter(c=>{
+      const id=cajaTxt(c.id_cita||c.id);
+      if(!id || citasConAtencion.has(id)) return false;
+      const estado=cajaNormalizar(c.estado_cita||c.estado||c.status);
+      return estado==='confirmada' || estado==='confirmado';
+    }).map(c=>({
+      ...c,
+      _caja_contexto:'cita',
+      id_cita:cajaTxt(c.id_cita||c.id),
+      id_atencion:'',
+      fecha_atencion:c.fecha_cita||c.fecha||c.fecha_atencion||'',
+      numero_consulta:''
+    }));
+  }
   function cajaNormalizar(v){
     return cajaTxt(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
   }
@@ -178,9 +194,8 @@
       cajaActualizarStats();
 
       if(cajaSeleccion){
-        const id=cajaIdAtencion(cajaSeleccion);
-        const nueva=cajaAtenciones.find(a=>cajaIdAtencion(a)===id);
-        if(nueva) await cajaSeleccionarAtencion(id);
+        const clave=cajaClaveContexto(cajaSeleccion);
+        await cajaSeleccionarContexto(clave);
       }
     }catch(e){
       console.error('AUROSANAX Caja:',e);
@@ -328,73 +343,53 @@
     const q=cajaNormalizar(document.getElementById('cajaBuscar')?.value);
     const filtro=cajaTxt(document.getElementById('cajaFiltro')?.value).toLowerCase();
     const campo=cajaTxt(document.getElementById('cajaBuscarPor')?.value || 'todos').toLowerCase();
-    const fechaSeleccionada=cajaTxt(document.getElementById('cajaBuscarFecha')?.value);
+    const origen=[...cajaAtenciones,...cajaCitasConfirmadasSinAtencion()];
 
-    const rows=[...cajaAtenciones].filter(a=>{
-      const id=cajaIdAtencion(a);
-      if(!id)return false;
+    const rows=origen.filter(a=>{
+      const idAtn=cajaIdAtencion(a);
+      const idCita=cajaIdCita(a);
+      if(!idAtn && !idCita)return false;
 
-      const m=cajaMovimientoAtencion(id);
+      const m=cajaMovimientoContexto(a);
       const estado=m?cajaTxt(m.estado_pago).toLowerCase():'sin_cuenta';
       if(filtro && estado!==filtro)return false;
 
-      if(campo==='fecha'){
-        if(!fechaSeleccionada) return true;
-        return cajaFechaISO(a.fecha_atencion || a.creado_en) === fechaSeleccionada;
-      }
-
       const servicio=cajaServicioTextoOrigen(a);
       const valores={
-        todos:[
-          id,
-          a.id_cita,
-          a.numero_consulta,
-          cajaPaciente(a),
-          cajaCedulaPaciente(a),
-          cajaMedico(a),
-          a.fecha_atencion,
-          a.estado_atencion,
-          servicio
-        ],
+        todos:[idAtn,idCita,a.numero_consulta,cajaPaciente(a),cajaCedulaPaciente(a),cajaMedico(a),a.fecha_atencion,a.estado_atencion,a.estado,servicio],
         paciente:[cajaPaciente(a)],
         cedula:[cajaCedulaPaciente(a)],
         medico:[cajaMedico(a)],
-        atencion:[id,a.id_cita,a.numero_consulta]
+        atencion:[idAtn,idCita,a.numero_consulta]
       };
 
-      const txt=(valores[campo]||valores.todos)
-        .map(cajaNormalizar)
-        .join(' ');
-
+      const txt=(valores[campo]||valores.todos).map(cajaNormalizar).join(' ');
       return !q || txt.includes(q);
-    }).sort((a,b)=>
-      cajaTxt(b.fecha_atencion||b.creado_en).localeCompare(cajaTxt(a.fecha_atencion||a.creado_en))
-    );
+    }).sort((a,b)=>cajaTxt(b.fecha_atencion||b.creado_en).localeCompare(cajaTxt(a.fecha_atencion||a.creado_en)));
 
     box.innerHTML=rows.map(a=>{
-      const id=cajaIdAtencion(a);
-      const m=cajaMovimientoAtencion(id);
+      const idAtn=cajaIdAtencion(a);
+      const idCita=cajaIdCita(a);
+      const m=cajaMovimientoContexto(a);
       const servicio=cajaServicioTextoOrigen(a);
-      const active=cajaSeleccion&&cajaIdAtencion(cajaSeleccion)===id?' active':'';
+      const clave=cajaClaveContexto(a);
+      const active=cajaSeleccion&&cajaClaveContexto(cajaSeleccion)===clave?' active':'';
+      const esCita=cajaEsCitaPendiente(a);
 
-      return `<div class="caja-item${active}" onclick="cajaSeleccionarAtencion('${cajaEsc(id)}')">
+      return `<div class="caja-item${active}" onclick="cajaSeleccionarContexto('${cajaEsc(clave)}')">
         <div class="caja-item-top">
           <div>
             <div class="caja-item-title">${cajaEsc(cajaPaciente(a))}</div>
-            <div class="caja-item-meta">${cajaCedulaPaciente(a)?'C.I. '+cajaEsc(cajaCedulaPaciente(a))+' · ':''}${cajaEsc(cajaFecha(a.fecha_atencion))} · Consulta ${cajaEsc(a.numero_consulta||'—')} · ${cajaEsc(cajaMedico(a))}</div>
-            <div class="caja-item-meta">${cajaEsc(id)}${a.id_cita?' · Con cita':' · Sin cita'}${servicio?' · '+cajaEsc(servicio):''}</div>
+            <div class="caja-item-meta">${cajaCedulaPaciente(a)?'C.I. '+cajaEsc(cajaCedulaPaciente(a))+' · ':''}${cajaEsc(cajaFecha(a.fecha_atencion))} · ${esCita?'Cita confirmada · Pendiente de atención':'Consulta '+cajaEsc(a.numero_consulta||'—')+' · '+cajaEsc(cajaMedico(a))}</div>
+            <div class="caja-item-meta">${esCita?cajaEsc(idCita):cajaEsc(idAtn)}${esCita?' · Anticipo habilitado':(idCita?' · Con cita':' · Sin cita')}${servicio?' · '+cajaEsc(servicio):''}</div>
           </div>
           <div class="text-end">
             ${cajaEstadoBadge(m)}
-            <div class="caja-money mt-1">${m
-              ? (cajaTxt(m.estado_pago).toLowerCase()==='pagado'
-                  ? 'Saldo ' + cajaMoney(0)
-                  : 'Saldo ' + cajaMoney(m.saldo_pendiente))
-              : '—'}</div>
+            <div class="caja-money mt-1">${m ? (cajaTxt(m.estado_pago).toLowerCase()==='pagado'?'Saldo '+cajaMoney(0):'Saldo '+cajaMoney(m.saldo_pendiente)) : '—'}</div>
           </div>
         </div>
       </div>`;
-    }).join('')||'<div class="caja-empty">No hay atenciones que coincidan con el filtro.</div>';
+    }).join('')||'<div class="caja-empty">No hay atenciones ni citas confirmadas que coincidan con el filtro.</div>';
 
     const count=document.getElementById('cajaAtencionesCount');
     if(count) count.textContent=rows.length;
@@ -420,7 +415,7 @@
 
       if(info){
         info.innerHTML=a.id_cita
-          ? `<i class="bi bi-link-45deg me-1"></i>Servicio propuesto automáticamente desde la cita: <b>${cajaEsc(cajaNombreServicio(servicioOrigen))}</b>. Confirme que realmente fue realizado.`
+          ? `<i class="bi bi-link-45deg me-1"></i>Servicio asociado a la cita: <b>${cajaEsc(cajaNombreServicio(servicioOrigen))}</b>. Puede registrar un anticipo antes de iniciar la atención.`
           : `<i class="bi bi-check2-circle me-1"></i>Servicio propuesto desde la atención: <b>${cajaEsc(cajaNombreServicio(servicioOrigen))}</b>.`;
       }
     }else{
@@ -444,23 +439,58 @@
     if(warn) warn.style.display='none';
   }
 
-  async function cajaSeleccionarAtencion(id){
-    const a=cajaAtenciones.find(x=>cajaIdAtencion(x)===cajaTxt(id));
+  async function cajaSeleccionarContexto(clave){
+    const k=cajaTxt(clave);
+    let a=null;
+
+    if(k.startsWith('CITA:')){
+      const id=k.slice(5);
+      a=cajaCitasConfirmadasSinAtencion().find(x=>cajaIdCita(x)===id) || null;
+    }else{
+      const id=k.startsWith('ATN:')?k.slice(4):k;
+      a=cajaAtenciones.find(x=>cajaIdAtencion(x)===id) || null;
+    }
     if(!a)return;
 
     cajaSeleccion=a;
-    cajaMovimientoActual=cajaMovimientoAtencion(id);
+    cajaMovimientoActual=cajaMovimientoContexto(a);
     cajaUltimoPago=null;
     cajaEditandoCuenta=false;
+
+    const esCita=cajaEsCitaPendiente(a);
+    const idAtn=cajaIdAtencion(a);
+    const idCita=cajaIdCita(a);
+
+    /* Si la atención acaba de nacer desde una cita que ya tenía anticipo,
+       enlaza el MISMO movimiento a id_atencion. No crea cobro ni pago nuevo. */
+    if(!esCita && idAtn && idCita && cajaMovimientoActual && !cajaTxt(cajaMovimientoActual.id_atencion)){
+      try{
+        const r=await apiPost('guardarMovimientoFinanciero',{
+          id_atencion:idAtn,
+          id_cita:idCita,
+          valor_estimado:cajaMovimientoActual.valor_estimado,
+          valor_final:cajaMovimientoActual.valor_final,
+          estado_financiero:cajaMovimientoActual.estado_financiero||'Abierto',
+          observaciones:cajaMovimientoActual.observaciones||'',
+          creado_por:cajaMovimientoActual.creado_por||cajaTxt(document.getElementById('secSesionNombre')?.textContent)||'Secretaría'
+        });
+        if(r?.success===false) throw new Error(r.message||'No se pudo vincular el anticipo');
+        cajaMovimientos=await apiGet('listarMovimientosFinancieros');
+        if(!Array.isArray(cajaMovimientos)) cajaMovimientos=[];
+        cajaMovimientoActual=cajaMovimientoContexto(a);
+      }catch(e){
+        console.error('AUROSANAX Caja · vínculo anticipo-atención:',e);
+      }
+    }
 
     document.getElementById('cajaSinSeleccion').style.display='none';
     document.getElementById('cajaOperacion').style.display='block';
     document.getElementById('cajaPacienteNombre').textContent=cajaPaciente(a);
-    document.getElementById('cajaIdAtencion').textContent=id;
-    document.getElementById('cajaNumeroConsulta').textContent=a.numero_consulta||'—';
+    document.getElementById('cajaIdAtencion').textContent=esCita?idCita:idAtn;
+    document.getElementById('cajaNumeroConsulta').textContent=esCita?'Pendiente':(a.numero_consulta||'—');
     document.getElementById('cajaMedicoNombre').textContent=cajaMedico(a);
     document.getElementById('cajaFechaAtencion').textContent=cajaFecha(a.fecha_atencion);
-    document.getElementById('cajaOrigenAtencion').textContent=a.id_cita?'Cita agendada':'Atención sin cita';
+    document.getElementById('cajaOrigenAtencion').textContent=esCita?'Cita confirmada · anticipo':'Atención clínica';
 
     renderCajaAtenciones();
 
@@ -473,6 +503,10 @@
       document.getElementById('cajaCuentaActiva').style.display='none';
       cajaPrepararCuentaDesdeAtencion(a);
     }
+  }
+
+  async function cajaSeleccionarAtencion(id){
+    return cajaSeleccionarContexto('ATN:'+cajaTxt(id));
   }
 
   async function cajaCargarDetallesMovimiento(){
@@ -665,7 +699,7 @@
 
     const totales=cajaRecalcularServicios();
     if(!totales.filas.length){
-      alert('Seleccione al menos un servicio realmente realizado.');
+      alert(cajaEsCitaPendiente(cajaSeleccion)?'Seleccione el servicio asociado a la cita para registrar el anticipo.':'Seleccione al menos un servicio realmente realizado.');
       return;
     }
 
@@ -708,6 +742,7 @@
     try{
       const payload={
         id_atencion:cajaIdAtencion(cajaSeleccion),
+        id_cita:cajaIdCita(cajaSeleccion),
         valor_estimado:totales.referencial,
         valor_final:totales.final,
         estado_financiero:'Abierto',
@@ -719,7 +754,10 @@
       if(r?.success===false) throw new Error(r.message||'No se pudo confirmar la cuenta');
 
       await cargarCaja(true);
-      cajaMovimientoActual=cajaMovimientoAtencion(payload.id_atencion);
+      cajaMovimientoActual=cajaMovimientos.find(m=>
+        (payload.id_atencion && cajaTxt(m.id_atencion)===payload.id_atencion) ||
+        (!payload.id_atencion && payload.id_cita && cajaTxt(m.id_cita)===payload.id_cita)
+      ) || null;
       if(!cajaMovimientoActual?.id_movimiento){
         throw new Error('La cuenta se guardó, pero no se pudo recuperar su ID financiero.');
       }
@@ -730,8 +768,9 @@
         totales.filas
       );
 
+      const claveRetorno=payload.id_atencion?'ATN:'+payload.id_atencion:'CITA:'+payload.id_cita;
       await cargarCaja(true);
-      await cajaSeleccionarAtencion(payload.id_atencion);
+      await cajaSeleccionarContexto(claveRetorno);
 
       alert(cajaEditandoCuenta
         ? 'Cuenta actualizada correctamente.'
@@ -811,8 +850,9 @@
       document.getElementById('cajaReferenciaPago').value='';
       document.getElementById('cajaObservacionPago').value='';
 
+      const claveRetorno=cajaClaveContexto(cajaSeleccion);
       await cargarCaja(true);
-      await cajaSeleccionarAtencion(payload.id_atencion);
+      await cajaSeleccionarContexto(claveRetorno);
 
       const pagos=await apiGetParams('listarPagosFinancieros',{
         id_movimiento:cajaMovimientoActual.id_movimiento
@@ -906,7 +946,7 @@
       return `<div class="row"><span>${cajaEsc(nombre)}</span><b>${cajaMoney(d.subtotal!==undefined?d.subtotal:d.precio_unitario)}</b></div>`;
     }).join('');
 
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Recibo ${cajaEsc(recibo)}</title><style>@page{size:80mm auto;margin:5mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:11px}.r{width:70mm;margin:auto}.logo{max-width:34mm;max-height:18mm;object-fit:contain;display:block;margin:0 auto 5px}.c{text-align:center}.title{font-size:16px;font-weight:800}.sub{font-size:10px;color:#555}.rule{border-top:1px dashed #777;margin:8px 0}.row{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.row span:first-child{color:#555;max-width:43mm}.row b{text-align:right}.total{font-size:16px;font-weight:900}.foot{text-align:center;font-size:9px;color:#666;line-height:1.4;margin-top:8px}@media print{button{display:none}}</style></head><body><div class="r"><div class="c">${logo?`<img class="logo" src="${cajaEsc(logo)}">`:''}<div class="title">${cajaEsc(centro)}</div>${direccion?`<div class="sub">${cajaEsc(direccion)}</div>`:''}${telefono?`<div class="sub">${cajaEsc(telefono)}</div>`:''}<div class="rule"></div><b>COMPROBANTE DE CAJA</b><div class="sub">${cajaEsc(recibo)}</div></div><div class="rule"></div><div class="row"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="row"><span>Atención</span><b>${cajaEsc(cajaIdAtencion(a))}</b></div><div class="row"><span>Consulta</span><b>${cajaEsc(a.numero_consulta||'—')}</b></div><div class="row"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rule"></div>${detalleHtml}<div class="rule"></div><div class="row"><span>Fecha pago</span><b>${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))}</b></div><div class="row"><span>Forma pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="row"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}<div class="rule"></div><div class="row total"><span>${cajaNum(m.saldo_pendiente)<=0.001?'PAGO FINAL':'ABONO RECIBIDO'}</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="row"><span>Total cuenta</span><b>${cajaMoney(m.valor_final)}</b></div><div class="row"><span>Abonado acumulado</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="row"><span>Saldo pendiente</span><b>${cajaMoney(m.saldo_pendiente)}</b></div><div class="rule"></div><div class="c sub">Recibido por: ${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</div><div class="foot">Comprobante interno de Caja generado por AUROSANAX ERP.<br>No sustituye factura o comprobante tributario cuando corresponda.</div></div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Recibo ${cajaEsc(recibo)}</title><style>@page{size:80mm auto;margin:5mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:11px}.r{width:70mm;margin:auto}.logo{max-width:34mm;max-height:18mm;object-fit:contain;display:block;margin:0 auto 5px}.c{text-align:center}.title{font-size:16px;font-weight:800}.sub{font-size:10px;color:#555}.rule{border-top:1px dashed #777;margin:8px 0}.row{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.row span:first-child{color:#555;max-width:43mm}.row b{text-align:right}.total{font-size:16px;font-weight:900}.foot{text-align:center;font-size:9px;color:#666;line-height:1.4;margin-top:8px}@media print{button{display:none}}</style></head><body><div class="r"><div class="c">${logo?`<img class="logo" src="${cajaEsc(logo)}">`:''}<div class="title">${cajaEsc(centro)}</div>${direccion?`<div class="sub">${cajaEsc(direccion)}</div>`:''}${telefono?`<div class="sub">${cajaEsc(telefono)}</div>`:''}<div class="rule"></div><b>COMPROBANTE DE CAJA</b><div class="sub">${cajaEsc(recibo)}</div></div><div class="rule"></div><div class="row"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="row"><span>${cajaEsCitaPendiente(a)?'Cita':'Atención'}</span><b>${cajaEsc(cajaEsCitaPendiente(a)?cajaIdCita(a):cajaIdAtencion(a))}</b></div><div class="row"><span>Consulta</span><b>${cajaEsc(cajaEsCitaPendiente(a)?'Pendiente de atención':(a.numero_consulta||'—'))}</b></div><div class="row"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rule"></div>${detalleHtml}<div class="rule"></div><div class="row"><span>Fecha pago</span><b>${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))}</b></div><div class="row"><span>Forma pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="row"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}<div class="rule"></div><div class="row total"><span>${cajaNum(m.saldo_pendiente)<=0.001?'PAGO FINAL':'ABONO RECIBIDO'}</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="row"><span>Total cuenta</span><b>${cajaMoney(m.valor_final)}</b></div><div class="row"><span>Abonado acumulado</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="row"><span>Saldo pendiente</span><b>${cajaMoney(m.saldo_pendiente)}</b></div><div class="rule"></div><div class="c sub">Recibido por: ${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</div><div class="foot">Comprobante interno de Caja generado por AUROSANAX ERP.<br>No sustituye factura o comprobante tributario cuando corresponda.</div></div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
 
     const w=window.open('','_blank','width=430,height=720');
     if(!w){
@@ -948,7 +988,7 @@ function cajaAplicarMejorasInterfaz(){
       style.textContent=`
         #caja .caja-search-grid{
           display:grid;
-          grid-template-columns:minmax(145px,.80fr) minmax(220px,1.45fr) minmax(150px,.90fr);
+          grid-template-columns:minmax(135px,.72fr) minmax(220px,1.45fr) minmax(145px,.83fr);
           gap:8px;
           margin-bottom:12px;
           align-items:stretch;
@@ -965,12 +1005,6 @@ function cajaAplicarMejorasInterfaz(){
         }
         #caja .caja-search-grid .form-control{
           padding-right:11px;
-        }
-        #caja .caja-search-date{
-          display:none;
-        }
-        #caja .caja-search-date.is-visible{
-          display:block;
         }
         #caja .caja-actions{
           align-items:stretch;
@@ -1062,62 +1096,21 @@ function cajaAplicarMejorasInterfaz(){
         '<option value="paciente">Paciente</option>'+
         '<option value="cedula">Cédula</option>'+
         '<option value="medico">Médico</option>'+
-        '<option value="atencion">Atención / cita</option>'+
-        '<option value="fecha">Fecha específica</option>';
+        '<option value="atencion">Atención / cita</option>';
+      select.addEventListener('change',renderCajaAtenciones);
 
       const main=document.createElement('div');
       main.className='caja-search-main';
       main.appendChild(buscar);
       buscar.placeholder='Escriba nombre, cédula, médico o ID...';
 
-      const fechaBox=document.createElement('div');
-      fechaBox.className='caja-search-date';
-      const fechaInput=document.createElement('input');
-      fechaInput.id='cajaBuscarFecha';
-      fechaInput.type='date';
-      fechaInput.className='form-control';
-      fechaInput.setAttribute('aria-label','Fecha específica de atención');
-      fechaInput.addEventListener('input',renderCajaAtenciones);
-      fechaInput.addEventListener('change',renderCajaAtenciones);
-      fechaBox.appendChild(fechaInput);
-
       const status=document.createElement('div');
       status.appendChild(filtro);
 
-      /* Solo cambia el texto visible; conserva los values internos. */
-      [...filtro.options].forEach(opt=>{
-        const v=cajaTxt(opt.value).toLowerCase();
-        if(v==='sin_cuenta') opt.textContent='Sin cobrar';
-        else if(v==='pendiente') opt.textContent='Pendiente de pago';
-        else if(v==='parcial') opt.textContent='Saldo pendiente';
-        else if(v==='pagado') opt.textContent='Pagado';
-        else if(v==='') opt.textContent='Todas';
-      });
-
-      function actualizarModoBusquedaCaja(){
-        const esFecha=select.value==='fecha';
-        main.style.display=esFecha?'none':'';
-        fechaBox.classList.toggle('is-visible',esFecha);
-
-        if(esFecha){
-          buscar.value='';
-          if(!fechaInput.value){
-            const hoy=new Date();
-            fechaInput.value=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
-          }
-        }
-
-        renderCajaAtenciones();
-      }
-
-      select.addEventListener('change',actualizarModoBusquedaCaja);
-
       wrap.appendChild(select);
       wrap.appendChild(main);
-      wrap.appendChild(fechaBox);
       wrap.appendChild(status);
       oldRow.replaceWith(wrap);
-      actualizarModoBusquedaCaja();
     }
 
     /* Valor recibido: al tocarlo se selecciona completo para escribir encima. */
