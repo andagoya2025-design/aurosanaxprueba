@@ -3257,14 +3257,13 @@
 
     <div class="menu">
       <div class="menu-title">Principal</div>
-      <button class="active" data-permiso="dashboard" onclick="showScreen('dashboard', this)"><i class="bi bi-speedometer2"></i> Dashboard</button>
-      <button data-permiso="pacientes" onclick="showScreen('pacientes', this)"><i class="bi bi-people"></i> Pacientes</button>
-      <button data-permiso="agenda" onclick="showScreen('agenda', this)"><i class="bi bi-calendar-check"></i> Agenda médica</button>
-      <button data-permiso="preconsulta" onclick="window.location.href='secretaria.html?from=erp#preconsulta'"><i class="bi bi-clipboard2-pulse"></i> Preconsulta</button>
-      <button data-permiso="historia_clinica" onclick="showScreen('historia', this)"><i class="bi bi-file-medical"></i> Historia clínica</button>
+      <button class="active" onclick="showScreen('dashboard', this)"><i class="bi bi-speedometer2"></i> Dashboard</button>
+      <button onclick="showScreen('pacientes', this)"><i class="bi bi-people"></i> Pacientes</button>
+      <button onclick="showScreen('agenda', this)"><i class="bi bi-calendar-check"></i> Agenda médica</button>
+      <button onclick="showScreen('historia', this)"><i class="bi bi-file-medical"></i> Historia clínica</button>
 
       <div class="menu-title">Atención activa</div>
-      <div class="menu-attention" data-permiso="historia_clinica">
+      <div class="menu-attention">
         <button type="button" onclick="navegarAtencionActiva('hc_datos', this)"><i class="bi bi-person-vcard"></i> Datos generales</button>
         <button type="button" onclick="navegarAtencionActiva('hc_anamnesis', this)"><i class="bi bi-chat-square-text"></i> Anamnesis</button>
         <button type="button" onclick="navegarAtencionActiva('hc_antecedentes', this)"><i class="bi bi-journal-medical"></i> Antecedentes</button>
@@ -3279,18 +3278,18 @@
       </div>
 
       <div class="menu-title">Módulos por paciente</div>
-      <button data-permiso="historia_clinica" onclick="showScreen('estetica', this)"><i class="bi bi-stars"></i> Estética funcional</button>
-      <button data-permiso="historia_clinica" onclick="showScreen('bioimpedancia', this)"><i class="bi bi-graph-up-arrow"></i> Bioimpedancia</button>
+      <button onclick="showScreen('estetica', this)"><i class="bi bi-stars"></i> Estética funcional</button>
+      <button onclick="showScreen('bioimpedancia', this)"><i class="bi bi-graph-up-arrow"></i> Bioimpedancia</button>
 
       <div class="menu-title">Gestión</div>
-      <button data-permiso="historia_clinica" onclick="showScreen('procedimientos', this)"><i class="bi bi-clipboard2-pulse"></i> Procedimientos</button>
-      <button data-permiso="historia_clinica" onclick="showScreen('consentimientos', this)"><i class="bi bi-pen"></i> Consentimientos</button>
-      <button data-permiso="recetas" onclick="showScreen('recetas', this)"><i class="bi bi-capsule"></i> Recetas</button>
-      <button data-permiso="historia_clinica" onclick="showScreen('seguimiento', this)"><i class="bi bi-whatsapp"></i> Seguimiento</button>
+      <button onclick="showScreen('procedimientos', this)"><i class="bi bi-clipboard2-pulse"></i> Procedimientos</button>
+      <button onclick="showScreen('consentimientos', this)"><i class="bi bi-pen"></i> Consentimientos</button>
+      <button onclick="showScreen('recetas', this)"><i class="bi bi-capsule"></i> Recetas</button>
+      <button onclick="showScreen('seguimiento', this)"><i class="bi bi-whatsapp"></i> Seguimiento</button>
 
       <div class="menu-title">Administración</div>
-      <button data-permiso="configuracion_medicos" onclick="showScreen('medicos', this)"><i class="bi bi-person-badge"></i> Médicos</button>
-      <button data-permiso="configuracion" onclick="showScreen('configuracion', this)"><i class="bi bi-gear"></i> Configuración</button>
+      <button onclick="showScreen('medicos', this)"><i class="bi bi-person-badge"></i> Médicos</button>
+      <button onclick="showScreen('configuracion', this)"><i class="bi bi-gear"></i> Configuración</button>
     </div>
   </aside>
 
@@ -3344,8 +3343,8 @@
           <p>Plataforma clínica integral para la gestión de pacientes, agenda, historias clínicas, especialidades y seguimiento médico.</p>
         </div>
         <div class="quick-actions">
-          <button class="btn btn-light fw-bold" data-permiso="pacientes" onclick="openPatientModal()"><i class="bi bi-person-plus me-1"></i> Nuevo paciente</button>
-          <button class="btn btn-light fw-bold" data-permiso="agenda" onclick="showScreen('agenda')"><i class="bi bi-calendar-check me-1"></i> Ver agenda</button>
+          <button class="btn btn-light fw-bold" onclick="openPatientModal()"><i class="bi bi-person-plus me-1"></i> Nuevo paciente</button>
+          <button class="btn btn-light fw-bold" onclick="showScreen('agenda')"><i class="bi bi-calendar-check me-1"></i> Ver agenda</button>
         </div>
       </div>
 
@@ -3364,7 +3363,7 @@
                 <h4>Agenda rápida</h4>
                 <p>Próximas citas reales recibidas desde la agenda web.</p>
               </div>
-              <button class="btn-auro" data-permiso="agenda" onclick="showScreen('agenda')"><i class="bi bi-calendar-plus me-1"></i> Ver agenda</button>
+              <button class="btn-auro" onclick="showScreen('agenda')"><i class="bi bi-calendar-plus me-1"></i> Ver agenda</button>
             </div>
             <div class="table-responsive">
               <table class="table table-modern">
@@ -3387,9 +3386,9 @@
               </div>
             </div>
             <div class="d-grid gap-2">
-              <button class="btn-soft text-start" data-permiso="pacientes" onclick="showScreen('pacientes')"><i class="bi bi-search me-2"></i> Buscar paciente</button>
-              <button class="btn-soft text-start" data-permiso="historia_clinica" onclick="showScreen('historia'); setTimeout(openHistoriasModal, 150)"><i class="bi bi-file-earmark-medical me-2"></i> Buscar historia clínica</button>
-              <button class="btn-soft text-start" data-permiso="historia_clinica" onclick="showScreen('procedimientos')"><i class="bi bi-clipboard2-pulse me-2"></i> Procedimientos</button>
+              <button class="btn-soft text-start" onclick="showScreen('pacientes')"><i class="bi bi-search me-2"></i> Buscar paciente</button>
+              <button class="btn-soft text-start" onclick="showScreen('historia'); setTimeout(openHistoriasModal, 150)"><i class="bi bi-file-earmark-medical me-2"></i> Buscar historia clínica</button>
+              <button class="btn-soft text-start" onclick="showScreen('procedimientos')"><i class="bi bi-clipboard2-pulse me-2"></i> Procedimientos</button>
               <button class="btn-soft text-start" onclick="abrirWhatsAppConsultorio()"><i class="bi bi-whatsapp me-2"></i> WhatsApp <span class="auroNombreCentroWhatsapp">AUROSANAX</span></button>
             </div>
           </div>
@@ -4713,46 +4712,9 @@ function calcAge(){const v=document.getElementById('hcNacimiento')?.value;if(!v)
 function calcIMC(){const p=parseFloat((document.getElementById('hcPeso')?.value||'').replace(',','.'));const tc=parseFloat((document.getElementById('hcTalla')?.value||'').replace(',','.'));if(!p||!tc)return;const t=tc/100;const imc=(p/(t*t)).toFixed(1);document.getElementById('hcIMC').value=imc;document.getElementById('hcImcResumen').textContent=imc;setTextIfExists('hcCardIMC', imc)}
 function calcObstetricia(){const fur=document.getElementById('hcFUR')?.value;if(!fur)return;const d=new Date(fur+'T00:00:00');const f=new Date(d);f.setDate(f.getDate()+280);document.getElementById('hcFPP').value=f.toISOString().slice(0,10);const h=new Date();const diff=Math.floor((h-d)/(1000*60*60*24));if(diff>=0){document.getElementById('hcEG').value=Math.floor(diff/7)+' sem + '+(diff%7)+' días'}}
 
-function auroPermisoPantallaIndex_(id){
-  const mapa = {
-    dashboard:'dashboard',
-    pacientes:'pacientes',
-    agenda:'agenda',
-    historia:'historia_clinica',
-    ginecologia:'historia_clinica',
-    obstetricia:'historia_clinica',
-    estetica:'historia_clinica',
-    bioimpedancia:'historia_clinica',
-    procedimientos:'historia_clinica',
-    consentimientos:'historia_clinica',
-    recetas:'recetas',
-    seguimiento:'historia_clinica',
-    medicos:'configuracion_medicos',
-    configuracion:'configuracion'
-  };
-  return mapa[id] || '';
-}
-
-function auroIndexTienePermiso_(clave){
-  const seguridad = window.AUROSANAX_SEGURIDAD;
-  if(!seguridad || typeof seguridad.tienePermiso !== 'function') return true;
-  const usuario = typeof seguridad.obtenerUsuario === 'function' ? seguridad.obtenerUsuario() : null;
-  if(!usuario) return true;
-  return seguridad.tienePermiso(clave, usuario) === true;
-}
-
 function showScreen(id, btn){
-  const permiso = auroPermisoPantallaIndex_(id);
-  if(permiso && !auroIndexTienePermiso_(permiso)){
-    alert('Su usuario no tiene permiso para este módulo.');
-    return false;
-  }
-
-  const pantalla = document.getElementById(id);
-  if(!pantalla) return false;
-
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  pantalla.classList.add('active');
+  document.getElementById(id)?.classList.add('active');
 
   document.querySelectorAll('.menu button').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -4779,14 +4741,13 @@ function showScreen(id, btn){
   if(id === 'agenda') cargarCitasAgendaWeb();
   if(id === 'pacientes') cargarCitasAgendaWeb();
   if(['ginecologia','obstetricia','estetica','bioimpedancia','procedimientos','consentimientos','recetas'].includes(id)) renderModulePatientCards();
-  return true;
 }
 
 /* AUROSANAX - Navegación espejo de Atención activa
    Abre Historia clínica y reutiliza las pestañas existentes.
    No crea paneles, no duplica módulos y no modifica la lógica de guardado. */
 function navegarAtencionActiva(panelId, sidebarButton){
-  if(showScreen('historia', sidebarButton) === false) return false;
+  showScreen('historia', sidebarButton);
 
   const tabButton = Array.from(document.querySelectorAll('.clinical-tabs button')).find(button => {
     const onclick = String(button.getAttribute('onclick') || '');
@@ -9827,7 +9788,6 @@ document.addEventListener('click',e=>{
 <script src="plan.js?v=20260703_plan_ux_panel_final"></script>
 
 <!-- AUROSANAX - Módulo Atenciones -->
-<script src="preconsulta.js?v=20260818_preconsulta_1_0_0"></script>
 <script src="atenciones.js?v=20260807_contexto_2_5_1"></script>
 
 <!-- AUROSANAX - Módulo Obstetricia por atención -->
@@ -10244,7 +10204,7 @@ document.addEventListener('click',e=>{
 
 
 <!-- AUROSANAX FASE 4: protección de acceso del ERP -->
-<script src="seguridad.js?v=20260818-09"></script>
+<script src="seguridad.js?v=20260730-07"></script>
 <script id="auro-seguridad-index-guard">
 (function(){
   'use strict';
@@ -10368,38 +10328,28 @@ document.addEventListener('click',e=>{
           : null) || {};
 
       /*
-        AUROSANAX - ACCESO MODULAR AL INDEX
-        Dashboard deja de ser una puerta obligatoria. El usuario puede entrar
-        al ERP principal cuando tenga al menos un módulo propio del Index.
+        AUROSANAX - CONTROL QUIRÚRGICO DE ACCESO AL INDEX
+        La Configuración determina si el usuario tiene permiso "dashboard".
+        El Administrador conserva acceso total mediante seguridad.tienePermiso().
       */
       if(typeof seguridad.tienePermiso !== 'function'){
-        bloquearYVolverLogin('No se pudo comprobar los permisos de acceso al ERP.');
+        bloquearYVolverLogin('No se pudo comprobar el permiso de acceso al ERP.');
         return;
       }
 
-      const permisosIndex = [
-        'dashboard','pacientes','agenda','historia_clinica','recetas',
-        'apoyo_ia','reportes','configuracion','configuracion_medicos'
-      ];
-
-      const autorizadoIndex = permisosIndex.some(clave => seguridad.tienePermiso(clave, usuario));
-      if(!autorizadoIndex){
-        bloquearYVolverLogin('Su usuario no tiene módulos habilitados en el sistema principal.');
+      if(!seguridad.tienePermiso('dashboard', usuario)){
+        bloquearYVolverLogin('Acceso no autorizado al sistema principal.');
         return;
       }
 
       pintarUsuario(usuario);
 
-      if(typeof seguridad.aplicarPermisos === 'function'){
-        seguridad.aplicarPermisos(document);
-      }
-
-      document.querySelectorAll('[data-permiso-cualquiera]').forEach(elemento => {
-        const claves = String(elemento.getAttribute('data-permiso-cualquiera') || '')
-          .split(',').map(x => x.trim()).filter(Boolean);
-        elemento.style.display = claves.some(clave => seguridad.tienePermiso(clave, usuario)) ? '' : 'none';
-      });
-
+      /*
+        La sesión ya fue validada y el permiso Dashboard fue confirmado.
+        Se revela el ERP inmediatamente para no mantener la cortina durante
+        la carga clínica. Los datos continúan cargándose sin volver a pedir
+        autenticación ni bloquear la navegación.
+      */
       revelarErp();
 
       if(typeof window.auroIniciarERPTrasSeguridad !== 'function'){
@@ -10407,35 +10357,6 @@ document.addEventListener('click',e=>{
       }
 
       await window.auroIniciarERPTrasSeguridad();
-
-      /* Selecciona la primera pantalla realmente autorizada. */
-      const ordenPantallas = [
-        ['dashboard','dashboard'],
-        ['historia','historia_clinica'],
-        ['pacientes','pacientes'],
-        ['agenda','agenda'],
-        ['recetas','recetas'],
-        ['medicos','configuracion_medicos'],
-        ['configuracion','configuracion']
-      ];
-
-      const activa = document.querySelector('.screen.active');
-      const idActiva = activa ? activa.id : '';
-      const permisoActiva = typeof window.auroPermisoPantallaIndex_ === 'function'
-        ? window.auroPermisoPantallaIndex_(idActiva)
-        : '';
-
-      if(permisoActiva && !seguridad.tienePermiso(permisoActiva, usuario)){
-        for(const par of ordenPantallas){
-          if(seguridad.tienePermiso(par[1], usuario)){
-            const boton = Array.from(document.querySelectorAll('.menu button')).find(b =>
-              String(b.getAttribute('onclick') || '').includes("showScreen('" + par[0] + "'")
-            );
-            if(typeof window.showScreen === 'function') window.showScreen(par[0], boton || null);
-            break;
-          }
-        }
-      }
     }catch(error){
       console.error('AUROSANAX: error validando sesión del ERP:', error);
       bloquearYVolverLogin('No fue posible validar la sesión.');
@@ -10476,11 +10397,9 @@ document.addEventListener('click',e=>{
       usuario &&
       seguridad &&
       typeof seguridad.tienePermiso === 'function' &&
-      ['dashboard','pacientes','agenda','historia_clinica','recetas','apoyo_ia','reportes','configuracion','configuracion_medicos']
-        .some(clave => seguridad.tienePermiso(clave, usuario))
+      seguridad.tienePermiso('dashboard', usuario)
     ){
       pintarUsuario(usuario);
-      if(typeof seguridad.aplicarPermisos === 'function') seguridad.aplicarPermisos(document);
       revelarErp();
     }
   });
