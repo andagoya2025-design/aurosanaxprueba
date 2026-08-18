@@ -738,6 +738,32 @@
     }
   }
 
+  function finActualizarModoEdicionGastoFinanzas(gasto){
+    const btn = finEl('btnGuardarGastoFinanzas');
+    if(!btn) return;
+
+    const editando = !!gasto;
+    const etiqueta = editando
+      ? '<i class="bi bi-save me-1"></i> Guardar cambios'
+      : '<i class="bi bi-save me-1"></i> Guardar gasto';
+
+    /* Mantiene compatible finSetBoton(): al finalizar Guardando...,
+       restaura la etiqueta correcta según el modo actual. */
+    btn.dataset.auroTextoOriginal = etiqueta;
+    if(!btn.disabled) btn.innerHTML = etiqueta;
+  }
+
+  function finMostrarFormularioGastoFinanzas(){
+    const destino = finEl('finGastoNombre') || finEl('finGastoValor');
+    if(!destino || typeof destino.scrollIntoView !== 'function') return;
+
+    try{
+      destino.scrollIntoView({ behavior:'smooth', block:'center' });
+    }catch(_){
+      destino.scrollIntoView();
+    }
+  }
+
   function limpiarFormularioGastoFinanzas(){
     [
       'finGastoNombre',
@@ -768,6 +794,8 @@
 
     const id = finEl('finGastoId');
     if(id) id.value = '';
+
+    finActualizarModoEdicionGastoFinanzas(null);
   }
 
   async function cambiarEstadoGastoFinanzas(idGasto, nuevoEstado){
@@ -945,7 +973,10 @@
       return finTexto(g.id_gasto) === id;
     });
 
-    if(!gasto) return;
+    if(!gasto){
+      finSetMsg('finanzasGastosMsg', 'No se encontró el gasto seleccionado para editar.', 'error');
+      return;
+    }
 
     finAsignarValor('finGastoId', gasto.id_gasto);
     asignarNombreGastoFinanzas(gasto.nombre_gasto);
@@ -956,6 +987,15 @@
     finAsignarValor('finGastoFechaInicio', normalizarFechaInputFinanzas(gasto.fecha_inicio));
     finAsignarValor('finGastoFechaFin', normalizarFechaInputFinanzas(gasto.fecha_fin));
     finAsignarValor('finGastoObservaciones', gasto.observaciones);
+
+    /* FASE 1A: hacer visible la edición sin alterar persistencia ni cálculos. */
+    finActualizarModoEdicionGastoFinanzas(gasto);
+    finSetMsg(
+      'finanzasGastosMsg',
+      'Editando gasto: ' + finTexto(gasto.nombre_gasto) + '. Revise los datos y pulse “Guardar cambios”.',
+      'info'
+    );
+    finMostrarFormularioGastoFinanzas();
   }
 
   async function guardarGastoFijoFinanzas(){
