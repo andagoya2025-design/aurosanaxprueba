@@ -2386,6 +2386,94 @@
     })[0];
   }
 
+  /* =====================================================
+     AUROSANAX RECETAS 3.6 - ALERGIAS DESDE HISTORIA CLÍNICA
+     ---------------------------------------------------------
+     Fuente prioritaria: historia clínica vinculada a la receta/atención.
+     Respaldo: dato del paciente solo si la historia no contiene alergias.
+     No persiste, duplica ni modifica antecedentes.
+  ===================================================== */
+  function auroRecetaHistoriaExactaParaAlergias(r){
+    r = r || {};
+    const idHistoria = String(
+      r.id_historia ||
+      r.historia?.id_historia ||
+      r.paciente?.id_historia ||
+      ''
+    ).trim();
+    const idPaciente = String(
+      r.id_paciente ||
+      r.paciente?.id_paciente ||
+      r.paciente?.id ||
+      ''
+    ).trim();
+
+    const objetos = [
+      r.historia,
+      window.historiaActual,
+      window.currentHistoria
+    ].filter(x => x && typeof x === 'object' && !Array.isArray(x));
+
+    for(const h of objetos){
+      const hId = String(h.id_historia || h.id || '').trim();
+      const hPaciente = String(h.id_paciente || h.paciente_id || '').trim();
+      if(
+        (!idHistoria || !hId || hId === idHistoria) &&
+        (!idPaciente || !hPaciente || hPaciente === idPaciente)
+      ){
+        const alergias = String(h.alergias || '').trim();
+        if(alergias) return {historia:h, alergias};
+      }
+    }
+
+    const listas = [
+      window.historiasClinicas,
+      window.historias,
+      window.listaHistorias,
+      window.historialHistorias
+    ].filter(Array.isArray);
+
+    for(const lista of listas){
+      const h = lista.find(function(item){
+        const hId = String(item?.id_historia || item?.id || '').trim();
+        const hPaciente = String(item?.id_paciente || item?.paciente_id || '').trim();
+        if(idHistoria) return hId === idHistoria;
+        return !!(idPaciente && hPaciente === idPaciente);
+      });
+
+      if(h){
+        const alergias = String(h.alergias || '').trim();
+        if(alergias) return {historia:h, alergias};
+      }
+    }
+
+    /*
+      Para la atención actualmente abierta, hcAlergias ya representa el
+      antecedente cargado/guardado por el módulo Antecedentes. Solo se usa
+      si corresponde a la misma historia para no mezclar consultas.
+    */
+    const idHistoriaActiva = String(obtenerIdHistoriaActivaSeguro(idPaciente) || '').trim();
+    if(!idHistoria || !idHistoriaActiva || idHistoria === idHistoriaActiva){
+      const alergiasDOM = String(el('hcAlergias')?.value || '').trim();
+      if(alergiasDOM) return {historia:null, alergias:alergiasDOM};
+    }
+
+    return {historia:null, alergias:''};
+  }
+
+  function auroRecetaAlergiasClinicasParaImpresion(r, pBase, pEncontrado){
+    const desdeHistoria = auroRecetaHistoriaExactaParaAlergias(r);
+    if(desdeHistoria.alergias) return desdeHistoria.alergias;
+
+    return String(
+      pBase?.alergias ||
+      r?.paciente_alergias ||
+      r?.alergias ||
+      pEncontrado?.alergias ||
+      ''
+    ).trim();
+  }
+
   function leerRecetasStorage(){
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -2713,6 +2801,34 @@
       )[0] || null;
   }
 
+  /* =====================================================
+     AUROSANAX RECETAS 3.7 - PRIMERA RECETA DE LA ATENCIÓN
+     ---------------------------------------------------------
+     Si la atención activa ya fue verificada contra Sheets y no tiene
+     ninguna receta emitida, habilita el editor como primera receta.
+     No fuerza una segunda receta ni altera el control anti-duplicidad.
+  ===================================================== */
+  function auroRecetaSincronizarModoPrimeraReceta(){
+    if(recetaEditandoId || recetaNuevaForzada) return false;
+
+    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    if(!idAtencion || !recetasSheetsCargadas) return false;
+
+    const existente = buscarRecetaActivaPorAtencion(idAtencion);
+
+    if(!existente){
+      recetaModoTrabajo = 'nueva';
+      recetaNuevaForzada = false;
+    }else if(recetaModoTrabajo === 'nueva' && !recetaNuevaForzada){
+      recetaModoTrabajo = 'lectura';
+    }
+
+    actualizarBotonGuardarReceta();
+    auroRecetaEditorActualizarModo();
+    auroRecetaActualizarCabeceraClinicaPremium();
+    return !existente;
+  }
+
   function limpiarFormularioReceta(){
     recetaEditandoId = null;
     recetaNuevaForzada = true;
@@ -3026,13 +3142,7 @@
     ).trim();
     p.genero = p.sexo; // compatibilidad histórica interna; en la receta se presenta como Sexo.
 
-    p.alergias = String(
-      pBase.alergias ||
-      r?.paciente_alergias ||
-      r?.alergias ||
-      pEncontrado.alergias ||
-      ''
-    ).trim();
+    p.alergias = auroRecetaAlergiasClinicasParaImpresion(r, pBase, pEncontrado);
 
     p.edad = auroRecetaFormatearEdad(
       pBase.edad || r?.paciente_edad || pEncontrado.edad || '',
@@ -3623,7 +3733,7 @@
 
   function auroRecetaAlergiasVisual(valor){
     const raw = String(valor || '').trim();
-    if(!raw) return 'No registrados';
+    if(!raw) return 'No registrado';
 
     const n = recetaNormalizarPlano(raw);
     if(
@@ -3638,7 +3748,20 @@
       return raw;
     }
 
-    return `Refiere: ${raw}`;
+    const items = raw.split(';').map(x => String(x || '').trim()).filter(Boolean);
+    if(items.length){
+      const detalle = items.map(function(item){
+        const partes = item.split('|').map(x => String(x || '').trim()).filter(Boolean);
+        if(partes.length >= 2){
+          return `${partes[0]} (${partes.slice(1).join(' · ')})`;
+        }
+        return item;
+      }).join(' · ');
+
+      return `Refiere alergias: ${detalle}`;
+    }
+
+    return `Refiere alergias: ${raw}`;
   }
 
   function construirHTMLReceta(r, modo){
@@ -5422,6 +5545,8 @@
       return;
     }
 
+    auroRecetaSincronizarModoPrimeraReceta();
+
     if(contador){
       contador.textContent = 'Total recetas encontradas: ' + recetas.length;
     }
@@ -5541,6 +5666,7 @@
   function recetaGuardadaAFormatoPreview(r){
     const pacienteCompleto = auroRecetaCompletarPacienteParaImpresion({
       id_paciente: r.id_paciente,
+      id_historia: r.id_historia,
       paciente_nombre: r.paciente_nombre,
       paciente_cedula: r.paciente_cedula,
       paciente_telefono: r.paciente_telefono,
@@ -5557,6 +5683,7 @@
     return {
       id_receta:r.id_receta,
       id_atencion:r.id_atencion,
+      id_historia:r.id_historia || '',
       id_medico:r.id_medico || obtenerIdMedicoReal(),
       codigo_medico:r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
       paciente: pacienteCompleto,
@@ -5654,6 +5781,7 @@
           auroRecetaActualizarCabeceraClinicaPremium();
           asegurarHistorialRecetas();
           recetasPaginaActual = 1;
+          auroRecetaSincronizarModoPrimeraReceta();
           renderHistorialRecetas();
         }
       }catch(e){}
@@ -5692,7 +5820,10 @@
     recetaAtencionActualId = idEvento;
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     setTimeout(function(){
-      try{ auroRecetaActualizarCabeceraClinicaPremium(); }catch(e){}
+      try{
+        auroRecetaSincronizarModoPrimeraReceta();
+        auroRecetaActualizarCabeceraClinicaPremium();
+      }catch(e){}
     }, 0);
   }
 
@@ -5721,7 +5852,10 @@
     recetaModoTrabajo = 'lectura';
     actualizarBotonGuardarReceta();
     renderHistorialRecetas();
-    cargarRecetasDesdeSheets(false).then(renderHistorialRecetas);
+    cargarRecetasDesdeSheets(false).then(function(){
+      auroRecetaSincronizarModoPrimeraReceta();
+      renderHistorialRecetas();
+    });
 
     envolverRecetasFuncion('showScreen', refrescarRecetasAlEntrar);
     envolverRecetasFuncion('seleccionarPacienteHistoria', refrescarRecetasAlEntrar);
