@@ -2881,6 +2881,22 @@ function auroCargarExamenFisicoDesdeSheet(registro){
   return true;
 }
 
+function auroCargarSignosVitalesPreatencion_(registro){
+  if(!registro || String(registro.origen_preatencion || '').toUpperCase() !== 'SI') return false;
+  setValueIfExists('hcPeso', registro.peso_kg || '');
+  setValueIfExists('hcTalla', registro.talla_cm || '');
+  setValueIfExists('hcIMC', auroIMCClinicoSeguro(registro.imc, registro.peso_kg, registro.talla_cm));
+  setValueIfExists('hcPA', registro.presion_arterial || '');
+  auroPASincronizarDesdeCompatibilidad();
+  setValueIfExists('hcFC', registro.frecuencia_cardiaca || '');
+  setValueIfExists('hcFR', registro.frecuencia_respiratoria || '');
+  setValueIfExists('hcTemperatura', registro.temperatura || '');
+  setValueIfExists('hcSaturacion', registro.saturacion || '');
+  guardarExamenFisicoTemporal();
+  console.log('AUROSANAX EXAMEN: signos vitales cargados desde Preatención; aún no existe id_examen.');
+  return true;
+}
+
 async function auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion){
   idAtencion = String(idAtencion || auroExamenFisicoIdAtencionActual() || '').trim();
   if(!idAtencion) return null;
@@ -2895,6 +2911,10 @@ async function auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion){
     if(registro && registro.id_examen){
       auroCargarExamenFisicoDesdeSheet(registro);
       console.log('AUROSANAX EXAMEN: cargado desde examenes_fisicos:', idAtencion);
+    }else if(registro && String(registro.origen_preatencion || '').toUpperCase() === 'SI'){
+      limpiarExamenFisicoTemporal();
+      auroMostrarExamenFisicoPrevio(null);
+      auroCargarSignosVitalesPreatencion_(registro);
     }else{
       limpiarExamenFisicoTemporal();
       auroMostrarExamenFisicoPrevio(null);
