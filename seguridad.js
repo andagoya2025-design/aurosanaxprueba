@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    MÓDULO: SEGURIDAD / LOGIN
    Archivo: seguridad.js
-   Versión: 1.3.2
+   Versión: 1.4.0
    Fecha base: 2026-07-29 · Fase permisos Preconsulta: 2026-08-18
 
    OBJETIVO
@@ -55,7 +55,7 @@
     { clave: 'pacientes', etiqueta: 'Pacientes' },
 
     /* AUROSANAX PRECONSULTA - permisos configurables por usuario.
-       Fase 1: solo catálogo/plantillas de permisos; no abre módulos clínicos. */
+       Fase operativa: catálogo reutilizado por navegación modular y Preconsulta. */
     { clave: 'preconsulta', etiqueta: 'Preconsulta' },
     { clave: 'preconsulta_datos_administrativos', etiqueta: 'Preconsulta: datos administrativos' },
     { clave: 'preconsulta_signos_vitales', etiqueta: 'Preconsulta: signos vitales' },
@@ -105,6 +105,16 @@
       disponibilidad: true, pacientes: true,
       preconsulta: false, preconsulta_datos_administrativos: false,
       preconsulta_signos_vitales: false, preconsulta_antecedentes_referidos: false,
+      historia_clinica: false, recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
+      configuracion_medicos: false, configuracion_servicios: false,
+      configuracion_horarios: false, configuracion_centro: false,
+      configuracion_seguridad: false, usuarios: false, bitacora: false
+    },
+    ENFERMERIA: {
+      dashboard: false, secretaria: false, formulario: false, agenda: false,
+      disponibilidad: false, pacientes: false,
+      preconsulta: true, preconsulta_datos_administrativos: false,
+      preconsulta_signos_vitales: true, preconsulta_antecedentes_referidos: true,
       historia_clinica: false, recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
@@ -313,15 +323,54 @@
      AUTENTICACIÓN
      ======================================================== */
 
+  function tieneAlgunPermiso_(claves, usuario) {
+    const actual = usuario || obtenerUsuarioActual() || {};
+    return (Array.isArray(claves) ? claves : []).some(function(clave) {
+      return tienePermiso(clave, actual);
+    });
+  }
+
   function resolverPaginaAutorizada_(usuario) {
     const actual = usuario || obtenerUsuarioActual() || {};
 
+    /*
+      AUROSANAX - NAVEGACIÓN MODULAR CONFIGURABLE
+      El rol sirve como plantilla, pero la página inicial se resuelve por
+      permisos efectivos del usuario. Preconsulta no queda amarrada a
+      SECRETARIA y un usuario operativo puede entrar sin permiso Dashboard.
+    */
+    const permisosClinicosIndex = [
+      'historia_clinica', 'recetas', 'apoyo_ia', 'reportes'
+    ];
+
+    const permisosOperativos = [
+      'preconsulta', 'secretaria', 'disponibilidad', 'agenda', 'pacientes'
+    ];
+
+    const permisosConfiguracion = [
+      'configuracion', 'configuracion_medicos', 'configuracion_servicios',
+      'configuracion_horarios', 'configuracion_centro', 'configuracion_seguridad',
+      'usuarios', 'bitacora'
+    ];
+
+    /* Un usuario con funciones clínicas entra al ERP principal. */
+    if (tieneAlgunPermiso_(permisosClinicosIndex, actual)) {
+      return SEGURIDAD_CONFIG.paginaErp;
+    }
+
+    /* Un usuario operativo (incluida Preconsulta) entra al portal operativo. */
+    if (tieneAlgunPermiso_(permisosOperativos, actual)) {
+      return 'secretaria.html';
+    }
+
+    /* Dashboard aislado sigue siendo una entrada válida al ERP. */
     if (tienePermiso('dashboard', actual)) {
       return SEGURIDAD_CONFIG.paginaErp;
     }
 
-    if (tienePermiso('secretaria', actual)) {
-      return 'secretaria.html';
+    /* Un usuario configurador puede entrar directamente a Configuración. */
+    if (tieneAlgunPermiso_(permisosConfiguracion, actual)) {
+      return 'configuracion.html';
     }
 
     return '';
@@ -1316,6 +1365,7 @@
               'Médico colaborador'
             ) +
             opcionSeleccionada('SECRETARIA', usuario.rol || 'SECRETARIA', 'Secretaría') +
+            opcionSeleccionada('ENFERMERIA', usuario.rol, 'Enfermería') +
           '</select></div>' +
         '<div class="col-md-6"><label class="form-label fw-bold">Estado</label>' +
           '<select id="segEstado" class="form-select">' +
@@ -1860,6 +1910,7 @@
       valor === 'MEDICO_PRINCIPAL' ? 'Médico principal' :
       (valor === 'MEDICO_COLABORADOR' || valor === 'MEDICO') ? 'Médico colaborador' :
       valor === 'SECRETARIA' ? 'Secretaría' :
+      valor === 'ENFERMERIA' ? 'Enfermería' :
       valor || 'Sin rol';
 
     return '<span class="badgex badge-blue">' + escaparHtml(texto) + '</span>';
