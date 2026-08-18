@@ -52,14 +52,14 @@
     { clave: 'formulario', etiqueta: 'Formulario interno' },
     { clave: 'agenda', etiqueta: 'Agenda' },
     { clave: 'disponibilidad', etiqueta: 'Disponibilidad' },
-    { clave: 'pacientes', etiqueta: 'Pacientes' },
+    { clave: 'pacientes', etiqueta: 'Pacientes · datos generales' },
 
     /* AUROSANAX PRECONSULTA - permisos configurables por usuario.
        Fase 1: solo catálogo/plantillas de permisos; no abre módulos clínicos. */
-    { clave: 'preconsulta', etiqueta: 'Preconsulta' },
-    { clave: 'preconsulta_datos_administrativos', etiqueta: 'Preconsulta: datos administrativos' },
-    { clave: 'preconsulta_signos_vitales', etiqueta: 'Preconsulta: signos vitales' },
-    { clave: 'preconsulta_antecedentes_referidos', etiqueta: 'Preconsulta: antecedentes referidos' },
+    { clave: 'preconsulta', etiqueta: 'Preatención' },
+    { clave: 'preconsulta_datos_administrativos', etiqueta: 'Preatención: datos administrativos' },
+    { clave: 'preconsulta_signos_vitales', etiqueta: 'Preatención: signos vitales' },
+    { clave: 'preconsulta_antecedentes_referidos', etiqueta: 'Preatención: antecedentes referidos' },
 
     { clave: 'historia_clinica', etiqueta: 'Historia clínica' },
     { clave: 'recetas', etiqueta: 'Recetas y órdenes' },
@@ -315,12 +315,38 @@
 
   function resolverPaginaAutorizada_(usuario) {
     const actual = usuario || obtenerUsuarioActual() || {};
+    const rol = textoSeguro(actual.rol).toUpperCase();
+
+    /* AUROSANAX 2026-08-18 · ACCESO MODULAR QUIRÚRGICO
+       - Secretaría no depende de un único permiso contenedor.
+       - Un usuario puede ingresar si posee al menos un módulo administrativo.
+       - MEDICO/ADMINISTRADOR conservan prioridad por el ERP clínico cuando
+         tienen dashboard autorizado.
+       - No modifica login, token, sesión ni administración de usuarios. */
+    const permisosPortalSecretaria = [
+      'secretaria',
+      'agenda',
+      'disponibilidad',
+      'pacientes',
+      'preconsulta',
+      'preconsulta_datos_administrativos',
+      'preconsulta_signos_vitales',
+      'preconsulta_antecedentes_referidos'
+    ];
+
+    const tieneModuloSecretaria = permisosPortalSecretaria.some(function (clave) {
+      return tienePermiso(clave, actual);
+    });
+
+    if (rol === 'SECRETARIA' && tieneModuloSecretaria) {
+      return 'secretaria.html';
+    }
 
     if (tienePermiso('dashboard', actual)) {
       return SEGURIDAD_CONFIG.paginaErp;
     }
 
-    if (tienePermiso('secretaria', actual)) {
+    if (tieneModuloSecretaria) {
       return 'secretaria.html';
     }
 
