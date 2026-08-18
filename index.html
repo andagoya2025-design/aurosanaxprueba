@@ -9566,7 +9566,7 @@ document.addEventListener('click',e=>{
       const html = `
         <div id="auroPlanActionButtons" class="auro-plan-actions">
           <button type="button" class="btn-auro" data-auro-plan-btn="1" onclick="guardarPlanClinicoConUX(this)" title="Guarda únicamente el Plan clínico de la consulta activa. No modifica recetas ni otras consultas."><i class="bi bi-list-check me-1"></i> Guardar plan clínico</button>
-          <button type="button" class="btn-soft" data-auro-receta-plan-btn="1" onclick="guardarRecetaERP()" title="Guarda la receta asociada a la consulta activa. No modifica el Plan clínico."><i class="bi bi-save me-1"></i> Guardar receta</button>
+          <button type="button" class="btn-soft" data-auro-receta-plan-btn="1" onclick="auroRecetaAccionDesdePlan()" title="Guarda la primera receta o habilita la corrección de la receta emitida de esta consulta. No modifica el Plan clínico."><i class="bi bi-save me-1"></i> Guardar receta</button>
           <button type="button" class="btn-soft" onclick="auroRecetaAbrirOficialDesdeIndex()" title="Genera PDF de la receta actual."><i class="bi bi-filetype-pdf me-1"></i> PDF receta</button>
         </div>
         <div id="auroPlanMiniStatus" class="auro-plan-mini-status" aria-live="polite"></div>`;
