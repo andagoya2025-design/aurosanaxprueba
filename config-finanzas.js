@@ -532,37 +532,24 @@
     return Number.isFinite(n) ? n.toFixed(2) : '0.00';
   }
 
-  function finTipoGastoVisible(gasto){
-    const directo = finTexto(gasto?.tipo_gasto);
-    if(directo) return directo;
 
-    const p = finTexto(gasto?.periodicidad).toLowerCase();
-    if(p === 'anual' || p === 'semestral' || p === 'trimestral') return 'Periódico';
-    if(p === 'único' || p === 'unico') return 'Variable';
-    return 'Fijo';
-  }
+  /* ==========================================================
+     AUROSANAX FINANZAS - RECUPERACIÓN QUIRÚRGICA RENTABILIDAD
+     2026-08-18 · ANTIRREGRESIÓN
 
-  function finEsGastoRecurrente(tipo){
-    const t = finTexto(tipo).toLowerCase();
-    return t === 'fijo' || t === 'periódico' || t === 'periodico';
-  }
+     Recupera exclusivamente el resumen mensual existente en la
+     rama CONTROL_GASTOS_RENTABILIDAD.
 
-  function actualizarTipoGastoFinanzas(){
-    const tipo = finTexto(finEl('finGastoTipo')?.value || 'Fijo');
-    const periodicidad = finEl('finGastoPeriodicidad');
+     NO modifica:
+     - guardado de parámetros financieros,
+     - gastos fijos existentes,
+     - configuración económica de médicos,
+     - Caja,
+     - backend,
+     - módulos clínicos.
 
-    if(!periodicidad) return;
-
-    if(tipo === 'Variable' || tipo === 'Extraordinario'){
-      periodicidad.value = 'Único';
-    }else if(finTexto(periodicidad.value).toLowerCase() === 'único' ||
-             finTexto(periodicidad.value).toLowerCase() === 'unico'){
-      periodicidad.value = tipo === 'Periódico' ? 'Anual' : 'Mensual';
-    }
-
-    actualizarProrrateoGastoFinanzas();
-  }
-
+     Solo lectura: consulta obtenerResumenFinancieroPeriodo.
+     ========================================================== */
   function finMesActual(){
     const d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
@@ -578,6 +565,10 @@
   async function cargarResumenMensualFinanzas(forzar){
     finValidarApi();
 
+    if(typeof window.apiGetParams !== 'function'){
+      throw new Error('Configuración no tiene disponible apiGetParams para consultar el período financiero.');
+    }
+
     const periodo = finTexto(finEl('finResumenPeriodo')?.value) || finMesActual();
     if(finEl('finResumenPeriodo') && !finEl('finResumenPeriodo').value){
       finEl('finResumenPeriodo').value = periodo;
@@ -586,7 +577,7 @@
     finSetMsg('finResumenMsg', 'Calculando resultado financiero del período...', 'info');
 
     try{
-      const r = await window.apiGet('obtenerResumenFinancieroPeriodo', { periodo: periodo });
+      const r = await window.apiGetParams('obtenerResumenFinancieroPeriodo', { periodo: periodo });
       const data = r && typeof r === 'object' ? r : {};
 
       const asignar = function(id, valor){
@@ -655,7 +646,6 @@
     if(p === 'trimestral') return Math.round((v / 3) * 100) / 100;
     if(p === 'semestral') return Math.round((v / 6) * 100) / 100;
     if(p === 'anual') return Math.round((v / 12) * 100) / 100;
-    if(p === 'único' || p === 'unico') return v;
 
     return v;
   }
@@ -699,7 +689,7 @@
     const mobile = finEl('finGastosMobile');
 
     if(!auroFinanzasGastos.length){
-      if(tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
+      if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin gastos fijos registrados.</td></tr>';
       if(mobile) mobile.innerHTML = '<div class="text-muted text-center py-3">Sin gastos fijos registrados.</div>';
       return;
     }
@@ -710,7 +700,6 @@
         return '<tr>' +
           '<td>' + finEscape(g.nombre_gasto) + '</td>' +
           '<td>' + finEscape(g.categoria) + '</td>' +
-          '<td>' + finEscape(finTipoGastoVisible(g)) + '</td>' +
           '<td>' + finEscape(g.valor) + '</td>' +
           '<td>' + finEscape(g.periodicidad) + '</td>' +
           '<td>' + finEscape(g.valor_mensual_prorrateado) + '</td>' +
@@ -733,7 +722,6 @@
           '<div class="fin-mobile-title"><strong>' + finEscape(g.nombre_gasto) + '</strong><span class="' + (activo ? 'fin-state-active' : 'fin-state-inactive') + '">' + finEscape(g.estado || 'Activo') + '</span></div>' +
           '<div class="fin-mobile-grid">' +
             '<span>Categoría</span><b>' + finEscape(g.categoria) + '</b>' +
-            '<span>Tipo</span><b>' + finEscape(finTipoGastoVisible(g)) + '</b>' +
             '<span>Valor</span><b>$' + finDinero(g.valor) + '</b>' +
             '<span>Periodicidad</span><b>' + finEscape(g.periodicidad) + '</b>' +
             '<span>Mensual</span><b>$' + finDinero(g.valor_mensual_prorrateado) + '</b>' +
@@ -771,9 +759,6 @@
     const otraCategoria = finEl('finGastoCategoriaOtro');
     if(otraCategoria) otraCategoria.value = '';
     actualizarCategoriaOtroGastoFinanzas();
-
-    const tipoGasto = finEl('finGastoTipo');
-    if(tipoGasto) tipoGasto.value = 'Fijo';
 
     const periodicidad = finEl('finGastoPeriodicidad');
     if(periodicidad) periodicidad.value = 'Mensual';
@@ -815,7 +800,6 @@
       const data = {
         nombre_gasto: gasto.nombre_gasto,
         categoria: gasto.categoria,
-        tipo_gasto: finTipoGastoVisible(gasto),
         valor: gasto.valor,
         periodicidad: gasto.periodicidad,
         valor_mensual_prorrateado: gasto.valor_mensual_prorrateado,
@@ -836,7 +820,6 @@
 
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
-      await cargarResumenMensualFinanzas(true);
 
       finSetMsg(
         'finanzasGastosMsg',
@@ -884,7 +867,6 @@
       limpiarFormularioGastoFinanzas();
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
-      await cargarResumenMensualFinanzas(true);
       finSetMsg('finanzasGastosMsg', 'Gasto eliminado correctamente.', 'ok');
     }catch(e){
       console.error('AUROSANAX Finanzas - eliminar gasto:', e);
@@ -927,7 +909,6 @@
           const r = await window.apiPost('guardarGastoFijoFinanciero', {
             nombre_gasto: base.nombre_gasto,
             categoria: base.categoria,
-            tipo_gasto: (base.periodicidad === 'Anual' || base.periodicidad === 'Semestral' || base.periodicidad === 'Trimestral') ? 'Periódico' : 'Fijo',
             valor: base.valor,
             periodicidad: base.periodicidad,
             valor_mensual_prorrateado: mensual,
@@ -945,7 +926,6 @@
 
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
-      await cargarResumenMensualFinanzas(true);
       finSetMsg(
         'finanzasGastosMsg',
         errores.length
@@ -970,7 +950,6 @@
     finAsignarValor('finGastoId', gasto.id_gasto);
     asignarNombreGastoFinanzas(gasto.nombre_gasto);
     asignarCategoriaGastoFinanzas(gasto.categoria);
-    finAsignarValor('finGastoTipo', finTipoGastoVisible(gasto));
     finAsignarValor('finGastoValor', gasto.valor);
     finAsignarValor('finGastoPeriodicidad', gasto.periodicidad || 'Mensual');
     finAsignarValor('finGastoValorMensual', gasto.valor_mensual_prorrateado);
@@ -985,7 +964,6 @@
     const idGasto = finTexto(finEl('finGastoId')?.value);
     const nombre = obtenerNombreGastoFinanzas();
     const categoria = obtenerCategoriaGastoFinanzas();
-    const tipoGasto = finTexto(finEl('finGastoTipo')?.value || 'Fijo');
     const valor = finNumero(finEl('finGastoValor')?.value);
     const periodicidad = finTexto(finEl('finGastoPeriodicidad')?.value || 'Mensual');
     const fechaInicio = finTexto(finEl('finGastoFechaInicio')?.value);
@@ -1008,7 +986,7 @@
       return;
     }
 
-    if(!idGasto && finEsGastoRecurrente(tipoGasto)){
+    if(!idGasto){
       const duplicadoActivo = finBuscarGastoActivoDuplicado(nombre, '');
       if(duplicadoActivo){
         cargarGastoEnFormularioFinanzas(duplicadoActivo.id_gasto);
@@ -1021,7 +999,6 @@
     const data = {
       nombre_gasto: nombre,
       categoria: categoria,
-      tipo_gasto: tipoGasto,
       valor: valor,
       periodicidad: periodicidad,
       valor_mensual_prorrateado: mensual,
@@ -1053,7 +1030,6 @@
       limpiarFormularioGastoFinanzas();
       auroFinanzasGastosCargados = false;
       await cargarGastosFijosFinanzas(true);
-      await cargarResumenMensualFinanzas(true);
       finSetMsg('finanzasGastosMsg', 'Gasto fijo guardado correctamente.', 'ok');
     }catch(e){
       console.error('AUROSANAX Finanzas - guardar gasto:', e);
@@ -1349,12 +1325,6 @@
       actualizarNombreOtroGastoFinanzas();
     }
 
-    const selectorTipoGasto = finEl('finGastoTipo');
-    if(selectorTipoGasto && selectorTipoGasto.dataset.auroFinInit !== '1'){
-      selectorTipoGasto.dataset.auroFinInit = '1';
-      selectorTipoGasto.addEventListener('change', actualizarTipoGastoFinanzas);
-    }
-
     const selectorCategoriaGasto = finEl('finGastoCategoria');
     if(selectorCategoriaGasto && selectorCategoriaGasto.dataset.auroFinCategoriaInit !== '1'){
       selectorCategoriaGasto.dataset.auroFinCategoriaInit = '1';
@@ -1449,6 +1419,7 @@
     enlazarEdicionMedicos_(finEl('finMedicosTbody'));
     enlazarEdicionMedicos_(finEl('finMedicosMobile'));
 
+    /* Resumen mensual recuperado: solo lectura / actualización manual. */
     const resumenPeriodo = finEl('finResumenPeriodo');
     if(resumenPeriodo && resumenPeriodo.dataset.auroFinInit !== '1'){
       resumenPeriodo.dataset.auroFinInit = '1';
