@@ -2883,6 +2883,9 @@ function auroCargarExamenFisicoDesdeSheet(registro){
 
 function auroCargarSignosVitalesPreatencion_(registro){
   if(!registro || String(registro.origen_preatencion || '').toUpperCase() !== 'SI') return false;
+
+  /* AUROSANAX PREATENCIÓN V2: precarga visual únicamente.
+     NO crea id_examen ni escribe en examenes_fisicos. */
   setValueIfExists('hcPeso', registro.peso_kg || '');
   setValueIfExists('hcTalla', registro.talla_cm || '');
   setValueIfExists('hcIMC', auroIMCClinicoSeguro(registro.imc, registro.peso_kg, registro.talla_cm));
@@ -2892,8 +2895,18 @@ function auroCargarSignosVitalesPreatencion_(registro){
   setValueIfExists('hcFR', registro.frecuencia_respiratoria || '');
   setValueIfExists('hcTemperatura', registro.temperatura || '');
   setValueIfExists('hcSaturacion', registro.saturacion || '');
+  setValueIfExists('hcCadera', registro.perimetro_cadera || '');
+  setValueIfExists('hcPorcentajeGrasa', registro.porcentaje_grasa || '');
+  setValueIfExists('hcMasaMuscular', registro.masa_muscular || '');
+  setValueIfExists('hcPerimetroCefalico', registro.perimetro_cefalico || '');
+  setValueIfExists('hcPerimetroToracico', registro.perimetro_toracico || '');
+  setValueIfExists('hcPerimetroAbdominal', registro.perimetro_abdominal || '');
+
+  if(typeof auroActualizarAyudaIMC === 'function') auroActualizarAyudaIMC();
+  if(typeof auroActualizarApoyoSignosVitales === 'function') auroActualizarApoyoSignosVitales();
+
   guardarExamenFisicoTemporal();
-  console.log('AUROSANAX EXAMEN: signos vitales cargados desde Preatención; aún no existe id_examen.');
+  console.log('AUROSANAX EXAMEN: Preatención V2 precargada; el examen real se crea solo al guardar.');
   return true;
 }
 
