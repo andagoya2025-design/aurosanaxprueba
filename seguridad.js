@@ -72,7 +72,6 @@
     { clave: 'configuracion_servicios', etiqueta: 'Config.: Servicios' },
     { clave: 'configuracion_horarios', etiqueta: 'Config.: Horarios rápidos' },
     { clave: 'configuracion_centro', etiqueta: 'Config.: Datos del centro' },
-    { clave: 'configuracion_finanzas', etiqueta: 'Config.: Finanzas' },
     { clave: 'configuracion_seguridad', etiqueta: 'Config.: Seguridad' },
     { clave: 'usuarios', etiqueta: 'Gestión de usuarios' },
     { clave: 'bitacora', etiqueta: 'Bitácora' }
@@ -93,7 +92,6 @@
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: true, configuracion: true,
       configuracion_medicos: true, configuracion_servicios: true,
       configuracion_horarios: true, configuracion_centro: false,
-      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     MEDICO_COLABORADOR: {
@@ -106,7 +104,6 @@
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
-      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     SECRETARIA: {
@@ -119,7 +116,6 @@
       historia_clinica: false, recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
-      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     }
   });
@@ -881,24 +877,50 @@
 
   function normalizarPermisos(permisos, rol) {
     const rolNormalizado = textoSeguro(rol).toUpperCase();
-    const base = Object.assign({}, PERMISOS_POR_ROL[rolNormalizado] || {});
     let personalizados = permisos;
 
     if (typeof personalizados === 'string' && personalizados.trim()) {
       try { personalizados = JSON.parse(personalizados); }
-      catch (error) { personalizados = {}; }
+      catch (error) { personalizados = null; }
     }
 
-    if (personalizados && typeof personalizados === 'object' && !Array.isArray(personalizados)) {
-      Object.keys(personalizados).forEach(function (clave) {
+    /* AUROSANAX 2026-08-19 · PERMISOS PERSONALIZADOS AUTORITATIVOS
+       Si el usuario ya tiene un mapa de permisos guardado, ese mapa manda.
+       El rol queda únicamente como plantilla/base cuando NO existen permisos
+       personalizados válidos. Así evitamos que permisos omitidos se reactiven
+       automáticamente por herencia del rol (ej. Secretaría -> dashboard).
+       No modifica token, sesión, backend, catálogo ni resolución de módulos. */
+    if (
+      personalizados &&
+      typeof personalizados === 'object' &&
+      !Array.isArray(personalizados)
+    ) {
+      const salida = {};
+
+      CATALOGO_PERMISOS.forEach(function (permiso) {
+        const clave = permiso.clave;
         const valor = personalizados[clave];
-        base[clave] =
+
+        salida[clave] =
           valor === true ||
           String(valor).toUpperCase() === 'TRUE' ||
           String(valor).toUpperCase() === 'SI';
       });
+
+      Object.keys(personalizados).forEach(function (clave) {
+        if (Object.prototype.hasOwnProperty.call(salida, clave)) return;
+
+        const valor = personalizados[clave];
+        salida[clave] =
+          valor === true ||
+          String(valor).toUpperCase() === 'TRUE' ||
+          String(valor).toUpperCase() === 'SI';
+      });
+
+      return salida;
     }
-    return base;
+
+    return Object.assign({}, PERMISOS_POR_ROL[rolNormalizado] || {});
   }
 
   function obtenerPermisosFormulario() {
