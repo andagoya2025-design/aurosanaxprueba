@@ -649,7 +649,7 @@
             <i class="bi bi-box-arrow-right"></i>
           </button>
         </div>
-        <button class="btn-line" onclick="refrescarDemo()"><i class="bi bi-arrow-clockwise"></i> Actualizar vista</button>
+        <button id="btnRefrescarConfig" class="btn-line" onclick="refrescarDemo()"><i class="bi bi-arrow-clockwise"></i> <span>Actualizar vista</span></button>
       </div>
     </div>
 
@@ -671,7 +671,7 @@
       <button class="config-tab" data-config-target="servicios" data-permiso="configuracion_servicios" onclick="showConfig('servicios',this)"><i class="bi bi-heart-pulse me-1"></i> Servicios</button>
       <button class="config-tab" data-config-target="horarios" data-permiso="configuracion_horarios" onclick="showConfig('horarios',this)"><i class="bi bi-clock me-1"></i> Horarios rápidos</button>
       <button class="config-tab" data-config-target="centro" data-permiso="configuracion_centro" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
-      <button class="config-tab" data-config-target="finanzas" onclick="showConfig('finanzas',this)"><i class="bi bi-cash-coin me-1"></i> Finanzas</button>
+      <button class="config-tab" data-config-target="finanzas" data-permiso="configuracion_finanzas" onclick="showConfig('finanzas',this)"><i class="bi bi-cash-coin me-1"></i> Finanzas</button>
       <button class="config-tab" data-config-target="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad</button>
     </div>
 
@@ -823,7 +823,7 @@
     #finanzas .fin-summary-grid{grid-template-columns:1fr}
   }
 </style>
-<section class="screen" id="finanzas">
+<section class="screen" id="finanzas" data-permiso="configuracion_finanzas">
   <div class="cardx p-4 mb-4">
     <div class="section-head">
       <div>
@@ -1517,7 +1517,7 @@
       seguridad.obtenerUsuario() ||
       {};
 
-    const permisosEntradaConfiguracion = 'configuracion,configuracion_medicos,configuracion_servicios,configuracion_horarios,configuracion_centro,configuracion_seguridad,usuarios,bitacora'
+    const permisosEntradaConfiguracion = 'configuracion,configuracion_medicos,configuracion_servicios,configuracion_horarios,configuracion_centro,configuracion_finanzas,configuracion_seguridad,usuarios,bitacora'
       .split(',')
       .map(clave => clave.trim())
       .filter(Boolean);
@@ -1746,25 +1746,56 @@ function showSecurityPanel(id,btn){
   async function refrescarDemo(){
     const seguridad = obtenerSeguridadConfiguracion_();
     const usuario = seguridad ? seguridad.obtenerUsuario() || {} : {};
+    const boton = document.getElementById('btnRefrescarConfig');
+    const original = boton ? boton.innerHTML : '';
 
-    if(seguridad && seguridad.tienePermiso('configuracion_medicos', usuario)){
-      await cargarMedicos();
-      await cargarMedicoServicios();
+    if(boton){
+      boton.disabled = true;
+      boton.innerHTML = '<i class="bi bi-arrow-clockwise"></i> <span>Actualizando...</span>';
     }
 
-    if(seguridad && seguridad.tienePermiso('configuracion_servicios', usuario)){
-      await cargarServicios();
-    }
+    try{
+      if(seguridad && seguridad.tienePermiso('configuracion_medicos', usuario)){
+        await cargarMedicos();
+        await cargarMedicoServicios();
+      }
 
-    if(seguridad && seguridad.tienePermiso('configuracion_horarios', usuario)){
-      await cargarPlantillasHorario();
-    }
+      if(seguridad && seguridad.tienePermiso('configuracion_servicios', usuario)){
+        await cargarServicios();
+      }
 
-    if(seguridad && seguridad.tienePermiso('configuracion_centro', usuario)){
-      await cargarConfiguracionCentro();
-    }
+      if(seguridad && seguridad.tienePermiso('configuracion_horarios', usuario)){
+        await cargarPlantillasHorario();
+      }
 
-    alert('Vista actualizada.');
+      if(seguridad && seguridad.tienePermiso('configuracion_centro', usuario)){
+        await cargarConfiguracionCentro();
+      }
+
+      if(seguridad && seguridad.tienePermiso('configuracion_finanzas', usuario) && window.auroConfigFinanzas){
+        await window.auroConfigFinanzas.preparar();
+      }
+
+      if(boton){
+        boton.innerHTML = '<i class="bi bi-check-circle"></i> <span>Actualizado</span>';
+      }
+
+      window.setTimeout(() => {
+        if(boton) boton.innerHTML = original;
+      }, 1200);
+    }catch(error){
+      console.error('Error actualizando Configuración:', error);
+
+      if(boton){
+        boton.innerHTML = '<i class="bi bi-exclamation-triangle"></i> <span>Error al actualizar</span>';
+      }
+
+      window.setTimeout(() => {
+        if(boton) boton.innerHTML = original;
+      }, 1600);
+    }finally{
+      if(boton) boton.disabled = false;
+    }
   }
 
   function renderMedicos(){
