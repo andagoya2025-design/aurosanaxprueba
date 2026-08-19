@@ -671,6 +671,106 @@ async function cargarPacientesDesdeSheets(){
   }
 }
 
+/* ============================================================
+   AUROSANAX PACIENTES 05 - VÍNCULO SEGURO CON CITA DE AGENDA
+   Alcance exclusivo:
+   - Solo se activa cuando el modal fue abierto por Agenda médica.
+   - El guardado normal de pacientes permanece intacto.
+   - id_cita continúa siendo opcional: pacientes, historias y atenciones
+     espontáneas siguen funcionando sin cita.
+   - No crea historia ni atención automáticamente.
+============================================================ */
+function auroContextoPacienteDesdeAgenda(){
+  if(window.auroPacienteDesdeAgendaContexto && window.auroPacienteDesdeAgendaContexto.id_cita){
+    return {...window.auroPacienteDesdeAgendaContexto};
+  }
+
+  try{
+    const raw = sessionStorage.getItem('auro_paciente_desde_agenda') || '';
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    return data && data.id_cita ? data : null;
+  }catch(_e){
+    return null;
+  }
+}
+
+function auroLimpiarContextoPacienteDesdeAgenda(){
+  window.auroPacienteDesdeAgendaContexto = null;
+  try{ sessionStorage.removeItem('auro_paciente_desde_agenda'); }catch(_e){}
+}
+
+function auroDigitosPacienteVinculo(valor){
+  return String(valor || '').replace(/\D/g,'');
+}
+
+function auroBuscarPacienteCreadoParaCita(contexto, datosGuardados){
+  const lista = Array.isArray(patients) ? patients : [];
+  if(!lista.length) return null;
+
+  const cedula = auroDigitosPacienteVinculo(datosGuardados?.numero_documento || contexto?.cedula || '');
+  if(cedula){
+    const porCedula = lista.filter(function(p){
+      return auroDigitosPacienteVinculo(p.cedula || p.numero_documento || p.documento || '') === cedula;
+    });
+    if(porCedula.length === 1 && porCedula[0].id_paciente) return porCedula[0];
+    if(porCedula.length > 1) return null;
+  }
+
+  const telefono = auroDigitosPacienteVinculo(datosGuardados?.telefono || contexto?.telefono || '');
+  const nombre = typeof normalizarTextoComparacion === 'function'
+    ? normalizarTextoComparacion(
+        [datosGuardados?.nombres, datosGuardados?.apellidos].filter(Boolean).join(' ') || contexto?.nombre_completo || ''
+      )
+    : String(contexto?.nombre_completo || '').trim().toLowerCase();
+
+  if(telefono && nombre){
+    const porTelefonoNombre = lista.filter(function(p){
+      const telP = auroDigitosPacienteVinculo(p.telefono || p.whatsapp || p.celular || '');
+      const nomP = typeof normalizarTextoComparacion === 'function'
+        ? normalizarTextoComparacion(p.nombre || [p.nombres,p.apellidos].filter(Boolean).join(' '))
+        : String(p.nombre || '').trim().toLowerCase();
+      return telP && telP.slice(-8) === telefono.slice(-8) && nomP === nombre;
+    });
+    if(porTelefonoNombre.length === 1 && porTelefonoNombre[0].id_paciente) return porTelefonoNombre[0];
+  }
+
+  return null;
+}
+
+async function auroVincularPacienteGuardadoConCita(contexto, datosGuardados){
+  if(!contexto || !contexto.id_cita) return {ok:false, motivo:'sin_contexto'};
+
+  /* Relee la fuente real antes de decidir el vínculo. */
+  await cargarPacientesDesdeSheets();
+
+  const paciente = auroBuscarPacienteCreadoParaCita(contexto, datosGuardados);
+  if(!paciente || !paciente.id_paciente){
+    return {ok:false, motivo:'paciente_no_identificado'};
+  }
+
+  await fetch(API_URL, {
+    method:'POST',
+    mode:'no-cors',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({
+      accion:'editarCita',
+      data:{
+        id_cita:String(contexto.id_cita || '').trim(),
+        id_paciente:String(paciente.id_paciente || '').trim()
+      }
+    })
+  });
+
+  /* La escritura es no-cors; se confirma visualmente releyendo Agenda. */
+  if(typeof window.cargarCitasAgendaWeb === 'function'){
+    await new Promise(resolve => setTimeout(resolve, 700));
+    await window.cargarCitasAgendaWeb();
+  }
+
+  return {ok:true, paciente:paciente};
+}
+
 async function savePatient(){
   const campoNombres = document.getElementById('pNombres');
   const campoApellidos = document.getElementById('pApellidos');
@@ -767,6 +867,7 @@ async function savePatient(){
 
   try{
     const esEdicion = !!editingPatientId;
+    const contextoAgenda = !esEdicion ? auroContextoPacienteDesdeAgenda() : null;
     const payloadData = esEdicion ? {...pacienteSheet, id_paciente: editingPatientId} : pacienteSheet;
 
     await fetch(API_URL, {
@@ -798,9 +899,29 @@ async function savePatient(){
       renderPatients();
       actualizarSelectorPacientesHistoria();
       actualizarDashboard();
+
+      /* Solo Agenda: intenta vincular ESTA cita después de confirmar el
+         paciente en la fuente real. El resto de guardados no entra aquí. */
+      if(contextoAgenda && contextoAgenda.id_cita){
+        try{
+          const vinculo = await auroVincularPacienteGuardadoConCita(contextoAgenda, pacienteSheet);
+          if(vinculo.ok){
+            auroLimpiarContextoPacienteDesdeAgenda();
+            alert('Paciente registrado y vinculado correctamente a la cita.');
+          }else{
+            console.warn('AUROSANAX PACIENTES: paciente guardado, vínculo de cita pendiente.', vinculo);
+            alert('El paciente fue guardado, pero no se pudo confirmar automáticamente el vínculo con la cita. Actualice Agenda antes de continuar.');
+          }
+        }catch(errorVinculo){
+          console.error('AUROSANAX PACIENTES: error al vincular cita.', errorVinculo);
+          alert('El paciente fue guardado, pero no se pudo confirmar el vínculo con la cita. Actualice Agenda antes de continuar.');
+        }
+      }
     }, 1200);
 
-    alert(esEdicion ? 'Paciente actualizado correctamente.' : 'Paciente enviado a Google Sheets correctamente.');
+    if(!contextoAgenda){
+      alert(esEdicion ? 'Paciente actualizado correctamente.' : 'Paciente enviado a Google Sheets correctamente.');
+    }
   }catch(error){
     console.error(error);
     alert('No se pudo guardar en Google Sheets. Revise la conexión o la implementación del Apps Script.');
