@@ -72,6 +72,7 @@
     { clave: 'configuracion_servicios', etiqueta: 'Config.: Servicios' },
     { clave: 'configuracion_horarios', etiqueta: 'Config.: Horarios rápidos' },
     { clave: 'configuracion_centro', etiqueta: 'Config.: Datos del centro' },
+    { clave: 'configuracion_finanzas', etiqueta: 'Config.: Finanzas' },
     { clave: 'configuracion_seguridad', etiqueta: 'Config.: Seguridad' },
     { clave: 'usuarios', etiqueta: 'Gestión de usuarios' },
     { clave: 'bitacora', etiqueta: 'Bitácora' }
@@ -92,6 +93,7 @@
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: true, configuracion: true,
       configuracion_medicos: true, configuracion_servicios: true,
       configuracion_horarios: true, configuracion_centro: false,
+      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     MEDICO_COLABORADOR: {
@@ -104,6 +106,7 @@
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
+      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     SECRETARIA: {
@@ -116,6 +119,7 @@
       historia_clinica: false, recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
+      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     }
   });
