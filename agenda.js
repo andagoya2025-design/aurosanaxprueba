@@ -321,11 +321,121 @@ function auroActualizarFiltroMedicosAgenda(){
   if(Array.from(select.options).some(o => o.value === actual)) select.value = actual;
 }
 
+/* ============================================================
+   AUROSANAX AGENDA 03 - CREAR PACIENTE DESDE CITA
+   Cambio quirúrgico y antirregresivo:
+   - Solo actúa cuando la cita NO tiene un paciente válido vinculado.
+   - Reutiliza el modal normal de Pacientes; no crea otro formulario.
+   - Conserva temporalmente la id_cita para que Pacientes pueda vincularla
+     después del guardado real.
+   - No afecta Historia, Atención espontánea, citas ya vinculadas,
+     estados, disponibilidad, WhatsApp, filtros ni paginación.
+============================================================ */
+function auroDatosPacienteDesdeCitaAgenda(c){
+  c = c || {};
+
+  const nombreCompleto = String(
+    c.nombre_paciente || c.paciente || c.nombre_completo ||
+    c.paciente_nombre || c.nombre || ''
+  ).replace(/\s+/g,' ').trim();
+
+  let nombres = String(c.nombres || c.nombres_paciente || c.primer_nombre || '').replace(/\s+/g,' ').trim();
+  let apellidos = String(c.apellidos || c.apellidos_paciente || c.apellido || '').replace(/\s+/g,' ').trim();
+
+  /* Solo como ayuda visual cuando la cita no trae nombres/apellidos separados.
+     El usuario conserva el control del formulario antes de guardar. */
+  if(!nombres && !apellidos && nombreCompleto){
+    const partes = nombreCompleto.split(/\s+/).filter(Boolean);
+    if(partes.length === 1){
+      nombres = partes[0];
+    }else if(partes.length === 2){
+      nombres = partes[0];
+      apellidos = partes[1];
+    }else if(partes.length === 3){
+      nombres = partes.slice(0,2).join(' ');
+      apellidos = partes[2];
+    }else{
+      nombres = partes.slice(0, partes.length - 2).join(' ');
+      apellidos = partes.slice(-2).join(' ');
+    }
+  }
+
+  return {
+    id_cita: auroIdCitaAgenda(c),
+    nombres: nombres,
+    apellidos: apellidos,
+    nombre_completo: nombreCompleto,
+    cedula: String(c.numero_documento || c.cedula || c.documento || '').trim(),
+    telefono: auroWhatsappPacienteAgenda(c),
+    email: String(c.email || c.correo || c.email_paciente || '').trim(),
+    servicio: auroServicioAgenda(c),
+    origen: 'agenda_medica'
+  };
+}
+
+function abrirCrearPacienteDesdeAgenda(index){
+  const c = citasAgendaWeb[index];
+  if(!c){
+    alert('No se encontró la cita seleccionada.');
+    return;
+  }
+
+  if(auroPacienteVinculadoAgenda(c)){
+    renderAgendaWeb();
+    alert('La cita ya tiene un paciente registrado vinculado.');
+    return;
+  }
+
+  const contexto = auroDatosPacienteDesdeCitaAgenda(c);
+  if(!contexto.id_cita){
+    alert('La cita no tiene un identificador válido. Actualice la agenda antes de crear el paciente.');
+    return;
+  }
+
+  window.auroPacienteDesdeAgendaContexto = contexto;
+  try{
+    sessionStorage.setItem('auro_paciente_desde_agenda', JSON.stringify(contexto));
+  }catch(_e){}
+
+  if(typeof openPatientModal !== 'function'){
+    alert('El módulo Pacientes no está disponible.');
+    return;
+  }
+
+  openPatientModal();
+
+  /* Prellenado defensivo: solo campos existentes del formulario normal. */
+  if(typeof setValueIfExists === 'function'){
+    setValueIfExists('pNombres', contexto.nombres || '');
+    setValueIfExists('pApellidos', contexto.apellidos || '');
+    setValueIfExists('pNombre', contexto.nombre_completo || '');
+    setValueIfExists('pCedula', contexto.cedula || '');
+    setValueIfExists('pTelefono', contexto.telefono || '');
+    setValueIfExists('pEmail', contexto.email || '');
+
+    const servicio = document.getElementById('pServicio');
+    if(servicio && contexto.servicio){
+      const buscado = typeof normalizarTextoComparacion === 'function'
+        ? normalizarTextoComparacion(contexto.servicio)
+        : String(contexto.servicio).trim().toLowerCase();
+      const opcion = Array.from(servicio.options || []).find(function(opt){
+        const valor = typeof normalizarTextoComparacion === 'function'
+          ? normalizarTextoComparacion(opt.value || opt.textContent || '')
+          : String(opt.value || opt.textContent || '').trim().toLowerCase();
+        return valor === buscado;
+      });
+      if(opcion) servicio.value = opcion.value;
+    }
+  }
+
+  setTextIfExists('patientModalTitle','Crear paciente desde cita');
+}
+
 function auroAccionClinicaAgendaHTML(c, modoMovil){
   if(!auroPacienteVinculadoAgenda(c)){
     return modoMovil
-      ? '<button class="btn-soft w-100" disabled><i class="bi bi-link-45deg me-1"></i> Paciente no vinculado</button>'
-      : '<button class="btn-action" disabled title="La cita no tiene un paciente registrado vinculado"><i class="bi bi-link-45deg me-1"></i> Sin vínculo</button>';
+      ? `<button class="btn-auro w-100" onclick="abrirCrearPacienteDesdeAgenda(${c.originalIndex})"><i class="bi bi-person-plus me-1"></i> Crear paciente</button>`
+      : `<button class="btn-action primary" title="Crear y vincular paciente a esta cita" onclick="abrirCrearPacienteDesdeAgenda(${c.originalIndex})"><i class="bi bi-person-plus me-1"></i> Crear paciente</button>`;
   }
 
   if(!auroHistoriaPacienteAgenda(c)){
