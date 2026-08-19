@@ -53,7 +53,6 @@
     { clave: 'agenda', etiqueta: 'Agenda' },
     { clave: 'disponibilidad', etiqueta: 'Disponibilidad' },
     { clave: 'pacientes', etiqueta: 'Pacientes · datos generales' },
-    { clave: 'pacientes_edicion', etiqueta: 'Pacientes: corregir datos existentes' },
 
     /* AUROSANAX PRECONSULTA - permisos configurables por usuario.
        Fase 1: solo catálogo/plantillas de permisos; no abre módulos clínicos. */
@@ -84,7 +83,6 @@
     MEDICO_PRINCIPAL: {
       dashboard: true, secretaria: true, formulario: true, agenda: true,
       disponibilidad: true, pacientes: true,
-      pacientes_edicion: false,
       preconsulta: false, preconsulta_datos_administrativos: false,
       preconsulta_signos_vitales: false, preconsulta_antecedentes_referidos: false,
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: true, configuracion: true,
@@ -95,7 +93,6 @@
     MEDICO_COLABORADOR: {
       dashboard: true, secretaria: false, formulario: false, agenda: true,
       disponibilidad: false, pacientes: true,
-      pacientes_edicion: false,
       preconsulta: false, preconsulta_datos_administrativos: false,
       preconsulta_signos_vitales: false, preconsulta_antecedentes_referidos: false,
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: false, configuracion: false,
@@ -106,7 +103,6 @@
     SECRETARIA: {
       dashboard: true, secretaria: true, formulario: true, agenda: true,
       disponibilidad: true, pacientes: true,
-      pacientes_edicion: false,
       preconsulta: false, preconsulta_datos_administrativos: false,
       preconsulta_signos_vitales: false, preconsulta_antecedentes_referidos: false,
       historia_clinica: false, recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
@@ -332,7 +328,6 @@
       'agenda',
       'disponibilidad',
       'pacientes',
-      'pacientes_edicion',
       'preconsulta',
       'preconsulta_datos_administrativos',
       'preconsulta_signos_vitales',
