@@ -1,5 +1,5 @@
 /* ==========================================================
-   AUROSANAX ERP · PREATENCIÓN 3.0.2
+   AUROSANAX ERP · PREATENCIÓN 3.0.3
    Sala de espera + buscador + colaboración de Secretaría
    Versión quirúrgica / antirregresión
    ----------------------------------------------------------
@@ -155,7 +155,9 @@
 
     document.getElementById('preSignos').style.display=(tiene('preconsulta_signos_vitales')||tiene('preconsulta'))?'':'none';
     document.getElementById('preAntecedentes').style.display=(tiene('preconsulta_antecedentes_referidos')||tiene('preconsulta'))?'':'none';
-    document.getElementById('preEditarPaciente').style.display=puedeCorregirPaciente()?'':'none';
+    /* El botón se muestra solo cuando existe un paciente seleccionado.
+       La autorización se valida al intentar corregir, sin ocultar la función. */
+    document.getElementById('preEditarPaciente').style.display='none';
     document.getElementById('preBuscarPaciente').oninput=renderResultadosPacientes;
     document.getElementById('preBuscarSala').oninput=renderSala;
     document.getElementById('preCitaVisible').onchange=async()=>{set('preCita',val('preCitaVisible'));await cargarPendiente();};
@@ -166,6 +168,20 @@
     document.getElementById('preIrPacientes').onclick=()=>{ if(typeof window.showScreen==='function') window.showScreen('pacientes'); };
     ['prePeso','preTalla'].forEach(id=>document.getElementById(id)?.addEventListener('input',calcIMC));
     cargarTodo();
+  }
+
+
+  function actualizarAccionesPaciente(){
+    const btn=document.getElementById('preEditarPaciente');
+    if(!btn) return;
+    const seleccionado=!!val('prePaciente');
+    btn.style.display=seleccionado?'':'none';
+    btn.disabled=false;
+    btn.title=seleccionado
+      ? (puedeCorregirPaciente()
+          ? 'Corregir datos administrativos del paciente con trazabilidad.'
+          : 'La corrección requiere autorización desde Configuración.')
+      : 'Seleccione un paciente.';
   }
 
   function calcIMC(){ const p=parseFloat(numero(val('prePeso'))),t=parseFloat(numero(val('preTalla')));set('preIMC',p>0&&t>0?(p/((t/100)*(t/100))).toFixed(1):''); }
@@ -228,7 +244,7 @@
     box.querySelectorAll('[data-paciente]').forEach(b=>b.onclick=()=>seleccionarPacienteDirecto(b.dataset.paciente));
   }
   async function seleccionarPacienteDirecto(idPaciente){
-    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));if(!p)return;set('prePaciente',idPaciente);set('preBuscarPaciente',nombrePaciente(p));const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';cerrarEdicionPaciente();await cargarCitasPaciente();await cargarPendiente();
+    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));if(!p)return;set('prePaciente',idPaciente);set('preBuscarPaciente',nombrePaciente(p));const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';cerrarEdicionPaciente();actualizarAccionesPaciente();await cargarCitasPaciente();await cargarPendiente();
   }
 
   function preDeCita(idCita,idPaciente){
@@ -248,7 +264,7 @@
   }
 
   async function seleccionarDesdeSala(idPaciente,idCita){
-    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));set('preBuscarPaciente',p?nombrePaciente(p):'');set('prePaciente',idPaciente);const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';await cargarCitasPaciente(idCita);set('preCita',idCita);set('preCitaVisible',idCita);await cargarPendiente();
+    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));set('preBuscarPaciente',p?nombrePaciente(p):'');set('prePaciente',idPaciente);const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';actualizarAccionesPaciente();await cargarCitasPaciente(idCita);set('preCita',idCita);set('preCitaVisible',idCita);await cargarPendiente();
     document.querySelectorAll('.pre-wait-item').forEach(x=>x.classList.toggle('active',x.dataset.preCita===idCita));
     document.getElementById('preContexto')?.scrollIntoView({behavior:'smooth',block:'center'});
   }
@@ -291,6 +307,6 @@
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.0.2'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.0.3'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
