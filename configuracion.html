@@ -1467,7 +1467,7 @@
     if(panel) panel.classList.add('active');
   }
 
-  function activarPrimeraConfiguracionPermitida_(){
+  function activarPrimeraConfiguracionPermitida_(seguridad, usuario){
     const tabs = Array.from(
       document.querySelectorAll('.config-tab[data-config-target]')
     ).filter(tab => tab.style.display !== 'none');
@@ -1478,7 +1478,22 @@
     document.querySelectorAll('.screen')
       .forEach(screen => screen.classList.remove('active'));
 
-    if(!tabs.length) return false;
+    /* AUROSANAX 2026-08-19 · CONFIGURACIÓN GENERAL SIN SUBMÓDULOS
+       Si el usuario tiene únicamente el permiso general "configuracion",
+       permanece dentro de configuracion.html aunque no tenga ningún
+       submódulo habilitado. No se redirige a Index por tener dashboard.
+       El panel queda sin pestañas internas, tal como fue autorizado. */
+    if(!tabs.length){
+      if(
+        seguridad &&
+        typeof seguridad.tienePermiso === 'function' &&
+        seguridad.tienePermiso('configuracion', usuario)
+      ){
+        return true;
+      }
+
+      return false;
+    }
 
     const primera = tabs[0];
     const destino = primera.getAttribute('data-config-target');
@@ -1534,7 +1549,7 @@
     seguridad.aplicarPermisos(document);
     aplicarPermisosCompuestosConfiguracion_(seguridad, usuario);
 
-    if(!activarPrimeraConfiguracionPermitida_()){
+    if(!activarPrimeraConfiguracionPermitida_(seguridad, usuario)){
       redirigirSegunPermisosConfiguracion_(seguridad, usuario);
       return null;
     }
