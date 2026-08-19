@@ -25,6 +25,7 @@
   let citasCache=[];
   let preatencionesCache=[];
   let pacienteOriginal=null;
+  let preatencionCorreccionOriginal=null;
 
   function tiene(clave){
     return !!(seguridad && typeof seguridad.tienePermiso==='function' && seguridad.tienePermiso(clave));
@@ -118,6 +119,10 @@
       #preatencion .section-head p{margin:4px 0 0;color:var(--pre-muted);font-size:13px;font-weight:650}
       #preatencion .mini-note{margin:0 0 14px!important;padding:10px 13px!important;border:1px solid #eadfe6!important;border-radius:14px!important;background:#fff!important;color:#5f6672!important;font-size:12px!important;font-weight:650!important;box-shadow:0 5px 18px rgba(15,23,42,.025)}
       #preatencion .mini-note i{color:var(--pre-accent)}
+      #preatencion .pre-corr-signos{display:none;margin-top:14px;padding:14px 16px;border:1px solid #e8cbdc;border-radius:16px;background:#fffafd}
+      #preatencion .pre-corr-signos.show{display:block}
+      #preatencion .pre-corr-signos .corr-title{font-weight:900;color:#7a2457;margin-bottom:6px}
+      #preatencion .pre-corr-signos .corr-help{font-size:12px;color:#64748b;margin-bottom:10px}
 
       .pre-v3-grid{display:grid;grid-template-columns:minmax(285px,.78fr) minmax(0,1.65fr);gap:16px;align-items:start}
       .pre-v3-card{border:1px solid var(--pre-border);border-radius:20px;background:#fff;overflow:hidden;box-shadow:0 10px 28px rgba(15,23,42,.045)}
@@ -200,7 +205,7 @@
           <div class="pre-v3-card"><div class="pre-v3-head"><i class="bi bi-person-vcard me-1"></i>Paciente seleccionado</div><div class="pre-v3-body">
             <div class="row g-3">
               <div class="col-md-7"><label class="form-label">Buscar paciente</label><div class="pre-search"><i class="bi bi-search"></i><input id="preBuscarPaciente" class="form-control" autocomplete="off" placeholder="Escriba nombre, cédula o teléfono"></div><div id="preResultadosPaciente" class="pre-results"></div><input type="hidden" id="prePaciente"><input type="hidden" id="preCita"><div id="preCitaAuto" class="pre-cita-auto" style="display:none"></div><div id="preCitasMultiples" class="mt-2" style="display:none"><label class="form-label mb-1">Seleccione la cita de hoy</label><select id="preCitaVisible" class="form-select"></select></div></div>
-              <div class="col-md-5 d-flex align-items-end"><div class="pre-toolbar w-100"><button type="button" class="btn-line" id="preEditarPaciente" style="display:none"><i class="bi bi-pencil-square me-1"></i>Corregir datos</button><button type="button" class="btn-line" id="preIrPacientes"><i class="bi bi-person-plus me-1"></i>Nuevo paciente</button></div></div>
+              <div class="col-md-5 d-flex align-items-end"><div class="pre-toolbar w-100"><button type="button" class="btn-line" id="preCorregirPreatencion" style="display:none"><i class="bi bi-clipboard2-check me-1"></i>Corregir preatención</button><button type="button" class="btn-line" id="preEditarPaciente" style="display:none"><i class="bi bi-pencil-square me-1"></i>Corregir datos paciente</button><button type="button" class="btn-line" id="preIrPacientes"><i class="bi bi-person-plus me-1"></i>Nuevo paciente</button></div></div>
               <div class="col-12"><div id="preContexto" class="pre-patient-summary">Seleccione un paciente.</div></div>
             </div>
             <div id="preEditarBox" class="pre-edit-box">
@@ -220,6 +225,16 @@
               <div class="col-6 col-md-2"><label class="form-label">Perímetro cefálico (cm)</label><input id="preCefalico" class="form-control" inputmode="decimal"></div><div class="col-6 col-md-2"><label class="form-label">Perímetro torácico (cm)</label><input id="preToracico" class="form-control" inputmode="decimal"></div><div class="col-6 col-md-2"><label class="form-label">Perímetro abdominal (cm)</label><input id="preAbdominal" class="form-control" inputmode="decimal"></div>
             </div></div>
             <div id="preAntecedentes" class="mt-4" style="display:none"><h5 class="fw-bold mb-2">Antecedentes referidos</h5><p class="text-muted small">Información referida por el paciente. No sustituye la validación médica ni modifica antecedentes oficiales.</p><textarea id="preAntecedentesTexto" class="form-control" rows="4" placeholder="Registre únicamente lo referido por el paciente."></textarea></div>
+            <div id="preCorregirSignosBox" class="pre-corr-signos">
+              <div class="corr-title"><i class="bi bi-shield-check me-1"></i>Corrección auditable de Preatención</div>
+              <div class="corr-help">Corrija los signos vitales arriba e indique el motivo. Si esta Preatención ya está vinculada a una Atención, se actualizará únicamente el Examen físico de esa misma atención.</div>
+              <label class="form-label">Motivo de la corrección *</label>
+              <input id="preCorregirMotivo" class="form-control" placeholder="Ej.: presión arterial digitada invertida">
+              <div class="d-flex justify-content-end gap-2 mt-3">
+                <button type="button" class="btn-line" id="preCorregirCancelar">Cancelar</button>
+                <button type="button" class="btn-auro" id="preCorregirGuardar"><i class="bi bi-save me-1"></i>Guardar corrección</button>
+              </div>
+            </div>
             <div class="d-flex justify-content-end mt-4"><button type="button" id="preGuardar" class="btn-auro"><i class="bi bi-save me-1"></i>Guardar preatención y continuar</button></div>
           </div></div>
         </div>
@@ -235,6 +250,9 @@
     document.getElementById('preBuscarSala').oninput=renderSala;
     document.getElementById('preCitaVisible').onchange=async()=>{set('preCita',val('preCitaVisible'));await cargarPendiente();};
     document.getElementById('preGuardar').onclick=guardar;
+    document.getElementById('preCorregirPreatencion').onclick=abrirCorreccionPreatencion;
+    document.getElementById('preCorregirCancelar').onclick=cerrarCorreccionPreatencion;
+    document.getElementById('preCorregirGuardar').onclick=guardarCorreccionPreatencion;
     document.getElementById('preEditarPaciente').onclick=abrirEdicionPaciente;
     document.getElementById('preEdCancelar').onclick=cerrarEdicionPaciente;
     document.getElementById('preEdGuardar').onclick=guardarCorreccionPaciente;
@@ -261,18 +279,28 @@
 
 
   function actualizarAccionesPaciente(){
+    const btnCorregirPre=document.getElementById('preCorregirPreatencion');
     const btnEditar=document.getElementById('preEditarPaciente');
     const btnNuevo=document.getElementById('preIrPacientes');
     const seleccionado=!!val('prePaciente');
     const cita=citasCache.find(c=>txt(c.id_cita)===val('preCita'));
     const citaSinPaciente=!!cita&&!seleccionado;
+    const preActual=seleccionado ? preatencionActualSeleccionada_() : null;
+
+    if(btnCorregirPre){
+      btnCorregirPre.style.display=(seleccionado&&preActual)?'':'none';
+      btnCorregirPre.disabled=!(tiene('preconsulta_signos_vitales')||tiene('preconsulta'));
+      btnCorregirPre.title=preActual
+        ? 'Corregir signos vitales de esta Preatención con motivo y auditoría.'
+        : 'No existe una Preatención guardada para corregir.';
+    }
 
     if(btnEditar){
       btnEditar.style.display=seleccionado?'':'none';
       btnEditar.disabled=false;
-      btnEditar.innerHTML='<i class="bi bi-pencil-square me-1"></i>Corregir datos';
+      btnEditar.innerHTML='<i class="bi bi-pencil-square me-1"></i>Corregir datos paciente';
       btnEditar.title=seleccionado
-        ? (puedeCorregirPaciente()?'Corregir datos administrativos del paciente con trazabilidad.':'La corrección requiere autorización desde Configuración.')
+        ? (puedeCorregirPaciente()?'Corregir datos administrativos del paciente con trazabilidad.':'La corrección de datos del paciente requiere autorización desde Configuración.')
         : 'Seleccione un paciente.';
     }
     if(btnNuevo){
@@ -392,7 +420,7 @@
     box.querySelectorAll('[data-paciente]').forEach(b=>b.onclick=()=>seleccionarPacienteDirecto(b.dataset.paciente));
   }
   async function seleccionarPacienteDirecto(idPaciente){
-    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));if(!p)return;set('prePaciente',idPaciente);set('preBuscarPaciente',nombrePaciente(p));const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';cerrarEdicionPaciente();actualizarAccionesPaciente();await cargarCitasPaciente();await cargarPendiente();
+    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));if(!p)return;cerrarCorreccionPreatencion();set('prePaciente',idPaciente);set('preBuscarPaciente',nombrePaciente(p));const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';cerrarEdicionPaciente();actualizarAccionesPaciente();await cargarCitasPaciente();await cargarPendiente();
   }
 
   function preDeCita(idCita,idPaciente){
@@ -455,6 +483,7 @@
   function seleccionarCitaSinPaciente(idCita){
     const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));
     if(!c)return;
+    cerrarCorreccionPreatencion();
     cerrarEdicionPaciente();
     set('prePaciente','');set('preCita',idCita);set('preBuscarPaciente',nombreCita(c));
     limpiarClinico();
@@ -510,6 +539,136 @@
     const btn=document.getElementById('preGuardar');if(btn)btn.disabled=true;try{const r=await post('guardarPreatencion',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo guardar.');await cargarTodo();alert('Preatención guardada. Puede continuar con el siguiente paciente.');}catch(e){alert(e.message||'No se pudo guardar la preatención.');}finally{if(btn)btn.disabled=false;}
   }
 
+
+  function preatencionActualSeleccionada_(){
+    const idPaciente=val('prePaciente');
+    const idCita=val('preCita');
+    if(!idPaciente) return null;
+
+    let lista=preatencionesCache.filter(p=>txt(p.id_paciente)===idPaciente);
+    if(idCita){
+      lista=lista.filter(p=>txt(p.id_cita)===idCita);
+    }else{
+      lista=lista.filter(p=>!txt(p.id_cita));
+    }
+
+    lista.sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)));
+    return lista[0]||null;
+  }
+
+  function cargarSignosDesdePreatencion_(r){
+    if(!r) return;
+    set('prePeso',r.peso_kg);
+    set('preTalla',r.talla_cm);
+    set('preIMC',r.imc);
+    const pa=txt(r.presion_arterial).match(/^(\d{2,3})\/(\d{2,3})$/);
+    set('prePAS',pa?pa[1]:'');
+    set('prePAD',pa?pa[2]:'');
+    set('preFC',r.frecuencia_cardiaca);
+    set('preFR',r.frecuencia_respiratoria);
+    set('preTemp',r.temperatura);
+    set('preSat',r.saturacion);
+    set('preCadera',r.perimetro_cadera);
+    set('preGrasa',r.porcentaje_grasa);
+    set('preMasa',r.masa_muscular);
+    set('preCefalico',r.perimetro_cefalico);
+    set('preToracico',r.perimetro_toracico);
+    set('preAbdominal',r.perimetro_abdominal);
+    set('preAntecedentesTexto',r.antecedentes_referidos);
+    calcIMC();
+  }
+
+  function abrirCorreccionPreatencion(){
+    if(!(tiene('preconsulta_signos_vitales')||tiene('preconsulta'))){
+      alert('Su usuario no tiene autorización para corregir signos vitales de Preatención.');
+      return;
+    }
+
+    const preActual=preatencionActualSeleccionada_();
+    if(!preActual||!preActual.id_preatencion){
+      alert('No existe una Preatención guardada para este paciente y contexto.');
+      return;
+    }
+
+    preatencionCorreccionOriginal=JSON.parse(JSON.stringify(preActual));
+    cargarSignosDesdePreatencion_(preActual);
+    set('preCorregirMotivo','');
+    document.getElementById('preCorregirSignosBox')?.classList.add('show');
+    document.getElementById('preGuardar').style.display='none';
+    document.getElementById('preCorregirMotivo')?.focus();
+  }
+
+  function cerrarCorreccionPreatencion(){
+    document.getElementById('preCorregirSignosBox')?.classList.remove('show');
+    const normal=document.getElementById('preGuardar');
+    if(normal) normal.style.display='';
+    preatencionCorreccionOriginal=null;
+    set('preCorregirMotivo','');
+  }
+
+  async function guardarCorreccionPreatencion(){
+    if(!preatencionCorreccionOriginal||!preatencionCorreccionOriginal.id_preatencion) return;
+
+    const motivo=val('preCorregirMotivo');
+    if(motivo.length<3){
+      alert('Indique el motivo de la corrección.');
+      return;
+    }
+
+    const pas=val('prePAS').replace(/\D/g,'');
+    const pad=val('prePAD').replace(/\D/g,'');
+    if((pas&&!pad)||(!pas&&pad)){
+      alert('Complete presión sistólica y diastólica.');
+      return;
+    }
+
+    const data={
+      id_preatencion:preatencionCorreccionOriginal.id_preatencion,
+      peso_kg:numero(val('prePeso')),
+      talla_cm:numero(val('preTalla')),
+      presion_arterial:pas&&pad?pas+'/'+pad:'',
+      frecuencia_cardiaca:numero(val('preFC')),
+      frecuencia_respiratoria:numero(val('preFR')),
+      temperatura:numero(val('preTemp')),
+      saturacion:numero(val('preSat')),
+      perimetro_cadera:numero(val('preCadera')),
+      porcentaje_grasa:numero(val('preGrasa')),
+      masa_muscular:numero(val('preMasa')),
+      perimetro_cefalico:numero(val('preCefalico')),
+      perimetro_toracico:numero(val('preToracico')),
+      perimetro_abdominal:numero(val('preAbdominal')),
+      motivo_correccion:motivo,
+      token:token()
+    };
+
+    const btn=document.getElementById('preCorregirGuardar');
+    if(btn) btn.disabled=true;
+
+    try{
+      const r=await post('corregirPreatencionAuditable',data);
+      if(!r||r.success===false) throw new Error(r?.message||'No se pudo corregir la Preatención.');
+
+      cerrarCorreccionPreatencion();
+      await cargarTodo();
+      const idPaciente=txt(r.id_paciente||val('prePaciente'));
+      const idCita=txt(r.id_cita||val('preCita'));
+      if(idPaciente){
+        if(idCita) await seleccionarDesdeSala(idPaciente,idCita);
+        else await seleccionarPacienteDirecto(idPaciente);
+      }
+
+      alert(r.sin_cambios
+        ? 'No había cambios para guardar.'
+        : (r.examen_fisico_actualizado
+            ? 'Preatención corregida. También se actualizó el Examen físico vinculado. La modificación quedó auditada.'
+            : 'Preatención corregida y registrada en auditoría.'));
+    }catch(e){
+      alert(e.message||'No se pudo corregir la Preatención.');
+    }finally{
+      if(btn) btn.disabled=false;
+    }
+  }
+
   function abrirEdicionPaciente(){
     if(!puedeCorregirPaciente()){alert('Su usuario no tiene autorización para corregir pacientes existentes.');return;}const p=pacientesCache.find(x=>txt(x.id_paciente)===val('prePaciente'));if(!p){alert('Seleccione un paciente.');return;}pacienteOriginal=JSON.parse(JSON.stringify(p));set('preEdNombres',p.nombres||'');set('preEdApellidos',p.apellidos||'');set('preEdDocumento',documentoPaciente(p));set('preEdTelefono',p.telefono||'');set('preEdWhatsapp',p.whatsapp||'');set('preEdEmail',p.email||p.correo||'');set('preEdDireccion',p.direccion||'');set('preEdMotivo','');document.getElementById('preEditarBox')?.classList.add('show');
   }
@@ -523,6 +682,6 @@
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.3.0'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.4.0'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
