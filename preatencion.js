@@ -1,5 +1,5 @@
 /* ==========================================================
-   AUROSANAX ERP · PREATENCIÓN 3.0.1
+   AUROSANAX ERP · PREATENCIÓN 3.0.2
    Sala de espera + buscador + colaboración de Secretaría
    Versión quirúrgica / antirregresión
    ----------------------------------------------------------
@@ -96,7 +96,7 @@
     const s=document.createElement('style');s.id='auroPreV3CSS';s.textContent=`
       #preatencion *{box-sizing:border-box}.pre-v3-grid{display:grid;grid-template-columns:minmax(280px,.82fr) minmax(420px,1.55fr);gap:14px;align-items:start}
       .pre-v3-card{border:1px solid #ead7e2;border-radius:18px;background:#fff;overflow:hidden}.pre-v3-head{padding:12px 14px;border-bottom:1px solid #f0e1e9;background:#fffafd;font-weight:900;color:#5f1747}
-      .pre-v3-body{padding:13px}.pre-search{position:relative}.pre-search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#8b1e5a}.pre-search input{padding-left:36px}
+      .pre-v3-body{padding:13px}.pre-search{position:relative}.pre-search i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#8b1e5a;pointer-events:none;z-index:2}.pre-search input{padding-left:42px!important}.pre-results{display:grid;gap:6px;margin-top:7px;max-height:240px;overflow:auto}.pre-result{width:100%;text-align:left;border:1px solid #e5e7eb;background:#fff;border-radius:11px;padding:9px 11px;cursor:pointer}.pre-result:hover{border-color:#d89bbb;background:#fff8fc}.pre-result b{display:block;color:#1f2937}.pre-result small{color:#64748b}.pre-cita-auto{margin-top:8px;padding:9px 11px;border:1px solid #e5e7eb;border-radius:11px;background:#f8fafc;font-size:12px;color:#475569}
       .pre-wait{display:grid;gap:7px;max-height:520px;overflow:auto}.pre-wait-item{border:1px solid #e5e7eb;border-radius:13px;padding:10px;background:#fff;cursor:pointer}.pre-wait-item:hover,.pre-wait-item.active{border-color:#d89bbb;background:#fff8fc}
       .pre-wait-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.pre-wait-name{font-weight:900;color:#1f2937}.pre-wait-meta{font-size:11px;color:#64748b;margin-top:3px;line-height:1.35}.pre-badge{font-size:9px;font-weight:900;border-radius:999px;padding:4px 7px;white-space:nowrap}
       .pre-badge.wait{background:#f1f5f9;color:#475569}.pre-badge.ready{background:#ecfdf5;color:#166534}.pre-badge.linked{background:#eff6ff;color:#1d4ed8}.pre-badge.confirm{background:#fff7ed;color:#9a3412}
@@ -117,7 +117,7 @@
     const main=document.querySelector('.main');if(!main)return;
     const section=document.createElement('section');section.className='screen';section.id='preatencion';section.innerHTML=`
       <div class="cardx p-4">
-        <div class="section-head"><div><h4><i class="bi bi-clipboard2-pulse me-2"></i>Preatención</h4><p>Sala de espera y registro previo. No inicia una atención clínica.</p></div><button type="button" class="btn-line" id="preBtnActualizar"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button></div>
+        <div class="section-head"><div><h4><i class="bi bi-clipboard2-pulse me-2"></i>Preatención</h4><p>Sala de espera y registro previo. No inicia una atención clínica.</p></div></div>
         <div class="mini-note mb-3"><i class="bi bi-shield-check me-1"></i>Puede preparar varios pacientes consecutivamente. Cada uno conserva su <b>id_paciente</b> y, cuando existe, su <b>id_cita</b>. Solo hay un formulario activo para evitar cruces.</div>
         <div class="pre-v3-grid">
           <div class="pre-v3-card"><div class="pre-v3-head"><i class="bi bi-people me-1"></i>Sala de espera / preatenciones del día</div><div class="pre-v3-body">
@@ -126,9 +126,7 @@
           </div></div>
           <div class="pre-v3-card"><div class="pre-v3-head"><i class="bi bi-person-vcard me-1"></i>Paciente seleccionado</div><div class="pre-v3-body">
             <div class="row g-3">
-              <div class="col-md-7"><label class="form-label">Buscar paciente</label><div class="pre-search"><i class="bi bi-search"></i><input id="preBuscarPaciente" class="form-control" placeholder="Nombre, apellido, cédula, teléfono o WhatsApp"></div></div>
-              <div class="col-md-5"><label class="form-label">Paciente *</label><select id="prePaciente" class="form-select"><option value="">Cargando…</option></select></div>
-              <div class="col-md-7"><label class="form-label">Cita relacionada <span class="text-muted">(opcional)</span></label><select id="preCita" class="form-select"><option value="">Sin cita / atención espontánea</option></select></div>
+              <div class="col-md-7"><label class="form-label">Buscar paciente</label><div class="pre-search"><i class="bi bi-search"></i><input id="preBuscarPaciente" class="form-control" autocomplete="off" placeholder="Escriba nombre, cédula o teléfono"></div><div id="preResultadosPaciente" class="pre-results"></div><input type="hidden" id="prePaciente"><input type="hidden" id="preCita"><div id="preCitaAuto" class="pre-cita-auto" style="display:none"></div><div id="preCitasMultiples" class="mt-2" style="display:none"><label class="form-label mb-1">Seleccione la cita de hoy</label><select id="preCitaVisible" class="form-select"></select></div></div>
               <div class="col-md-5 d-flex align-items-end"><div class="pre-toolbar w-100"><button type="button" class="btn-line" id="preEditarPaciente" style="display:none"><i class="bi bi-pencil-square me-1"></i>Corregir datos</button><button type="button" class="btn-line" id="preIrPacientes"><i class="bi bi-person-plus me-1"></i>Nuevo paciente</button></div></div>
               <div class="col-12"><div id="preContexto" class="pre-patient-summary">Seleccione un paciente.</div></div>
             </div>
@@ -158,11 +156,9 @@
     document.getElementById('preSignos').style.display=(tiene('preconsulta_signos_vitales')||tiene('preconsulta'))?'':'none';
     document.getElementById('preAntecedentes').style.display=(tiene('preconsulta_antecedentes_referidos')||tiene('preconsulta'))?'':'none';
     document.getElementById('preEditarPaciente').style.display=puedeCorregirPaciente()?'':'none';
-    document.getElementById('preBtnActualizar').onclick=cargarTodo;
-    document.getElementById('preBuscarPaciente').oninput=renderSelectPacientes;
+    document.getElementById('preBuscarPaciente').oninput=renderResultadosPacientes;
     document.getElementById('preBuscarSala').oninput=renderSala;
-    document.getElementById('prePaciente').onchange=async()=>{cerrarEdicionPaciente();await cargarCitasPaciente();await cargarPendiente();};
-    document.getElementById('preCita').onchange=cargarPendiente;
+    document.getElementById('preCitaVisible').onchange=async()=>{set('preCita',val('preCitaVisible'));await cargarPendiente();};
     document.getElementById('preGuardar').onclick=guardar;
     document.getElementById('preEditarPaciente').onclick=abrirEdicionPaciente;
     document.getElementById('preEdCancelar').onclick=cerrarEdicionPaciente;
@@ -182,9 +178,7 @@
       2) Citas y preatenciones son complementarias: si fallan, NO vacían pacientes.
       3) El selector se pinta inmediatamente al recibir pacientes.
     */
-    const sel=document.getElementById('prePaciente');
     const resumen=document.getElementById('preSalaResumen');
-    if(sel && !pacientesCache.length) sel.innerHTML='<option value="">Cargando pacientes…</option>';
 
     try{
       const respuestaPacientes=await get('listarPacientes');
@@ -193,12 +187,12 @@
         throw new Error(respuestaPacientes.message||'No se pudieron cargar pacientes.');
       }
       pacientesCache=listaPacientes;
-      renderSelectPacientes();
+      renderResultadosPacientes();
     }catch(error){
       console.error('AUROSANAX PREATENCIÓN: error cargando pacientes',error);
       pacientesCache=[];
-      if(sel) sel.innerHTML='<option value="">Error cargando pacientes</option>';
-      if(resumen) resumen.textContent='No se pudieron leer pacientes. Use Actualizar después de verificar conexión.';
+      const resultados=document.getElementById('preResultadosPaciente');if(resultados)resultados.innerHTML='<div class="pre-empty">No se pudieron leer pacientes.</div>';
+      if(resumen) resumen.textContent='No se pudieron leer pacientes.';
       renderSala();
       return;
     }
@@ -219,17 +213,22 @@
       preatencionesCache=[];
     }
 
-    renderSelectPacientes();
+    renderResultadosPacientes();
     renderSala();
     await cargarCitasPaciente();
     await cargarPendiente();
   }
 
-  function renderSelectPacientes(){
-    const sel=document.getElementById('prePaciente');if(!sel)return;const actual=sel.value;const q=norm(val('preBuscarPaciente'));
-    const lista=pacientesCache.filter(p=>!q||norm([nombrePaciente(p),documentoPaciente(p),p.telefono,p.whatsapp,p.email,p.correo].join(' ')).includes(q)).slice(0,120);
-    sel.innerHTML='<option value="">Seleccione paciente</option>'+lista.map(p=>`<option value="${esc(p.id_paciente||'')}">${esc(nombrePaciente(p))} · ${esc(documentoPaciente(p)||'S/D')}</option>`).join('');
-    if(actual&&[...sel.options].some(o=>o.value===actual))sel.value=actual;
+  function renderResultadosPacientes(){
+    const box=document.getElementById('preResultadosPaciente');if(!box)return;const q=norm(val('preBuscarPaciente'));
+    if(!q){box.innerHTML='';return;}
+    const lista=pacientesCache.filter(p=>norm([nombrePaciente(p),documentoPaciente(p),p.telefono,p.whatsapp].join(' ')).includes(q)).slice(0,12);
+    if(!lista.length){box.innerHTML='<div class="pre-empty">No se encontraron pacientes.</div>';return;}
+    box.innerHTML=lista.map(p=>`<button type="button" class="pre-result" data-paciente="${esc(p.id_paciente||'')}"><b>${esc(nombrePaciente(p))}</b><small>${esc(documentoPaciente(p)||'Sin documento')} · ${esc(telefonoPaciente(p)||'Sin teléfono')}</small></button>`).join('');
+    box.querySelectorAll('[data-paciente]').forEach(b=>b.onclick=()=>seleccionarPacienteDirecto(b.dataset.paciente));
+  }
+  async function seleccionarPacienteDirecto(idPaciente){
+    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));if(!p)return;set('prePaciente',idPaciente);set('preBuscarPaciente',nombrePaciente(p));const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';cerrarEdicionPaciente();await cargarCitasPaciente();await cargarPendiente();
   }
 
   function preDeCita(idCita,idPaciente){
@@ -249,16 +248,17 @@
   }
 
   async function seleccionarDesdeSala(idPaciente,idCita){
-    set('preBuscarPaciente','');renderSelectPacientes();set('prePaciente',idPaciente);await cargarCitasPaciente();set('preCita',idCita);await cargarPendiente();
+    const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(idPaciente));set('preBuscarPaciente',p?nombrePaciente(p):'');set('prePaciente',idPaciente);const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';await cargarCitasPaciente(idCita);set('preCita',idCita);set('preCitaVisible',idCita);await cargarPendiente();
     document.querySelectorAll('.pre-wait-item').forEach(x=>x.classList.toggle('active',x.dataset.preCita===idCita));
     document.getElementById('preContexto')?.scrollIntoView({behavior:'smooth',block:'center'});
   }
 
-  async function cargarCitasPaciente(){
-    const sel=document.getElementById('preCita');if(!sel)return;const id=val('prePaciente'),actual=sel.value;
-    const rel=citasCache.filter(c=>txt(c.id_paciente)===id&&esCitaUtil(c)).sort((a,b)=>txt(b.fecha_cita||b.fecha).localeCompare(txt(a.fecha_cita||a.fecha)));
-    sel.innerHTML='<option value="">Sin cita / atención espontánea</option>'+rel.map(c=>`<option value="${esc(c.id_cita||'')}">${esc([fechaVista(c.fecha_cita||c.fecha),c.hora_inicio||'',c.tipo_cita||c.motivo||'',c.nombre_medico||''].filter(Boolean).join(' · '))}</option>`).join('');
-    if(actual&&[...sel.options].some(o=>o.value===actual))sel.value=actual;actualizarContexto();
+  async function cargarCitasPaciente(preferida){
+    const id=val('prePaciente'),hoy=hoyEcuador();const rel=citasCache.filter(c=>txt(c.id_paciente)===id&&esCitaUtil(c));const hoyRel=rel.filter(c=>fechaISO(c.fecha_cita||c.fecha)===hoy).sort((a,b)=>txt(a.hora_inicio).localeCompare(txt(b.hora_inicio)));
+    const auto=document.getElementById('preCitaAuto'),multi=document.getElementById('preCitasMultiples'),vis=document.getElementById('preCitaVisible');if(auto){auto.style.display='none';auto.textContent='';}if(multi)multi.style.display='none';
+    let elegida=txt(preferida);if(!elegida&&hoyRel.length===1)elegida=txt(hoyRel[0].id_cita);set('preCita',elegida);
+    if(!hoyRel.length){if(auto){auto.style.display='block';auto.textContent='Sin cita de hoy · Preatención espontánea';}}else if(hoyRel.length===1){const c=hoyRel[0];if(auto){auto.style.display='block';auto.textContent=`Cita de hoy vinculada automáticamente · ${txt(c.hora_inicio)} · ${txt(c.tipo_cita||c.motivo||'Consulta')}`;}}else{if(multi)multi.style.display='block';if(vis){vis.innerHTML=hoyRel.map(c=>`<option value="${esc(c.id_cita||'')}">${esc([c.hora_inicio||'',c.tipo_cita||c.motivo||'Consulta'].filter(Boolean).join(' · '))}</option>`).join('');if(elegida&&[...vis.options].some(o=>o.value===elegida))vis.value=elegida;else{vis.selectedIndex=0;set('preCita',vis.value);}}}
+    actualizarContexto();
   }
   function actualizarContexto(){
     const box=document.getElementById('preContexto');if(!box)return;const p=pacientesCache.find(x=>txt(x.id_paciente)===val('prePaciente'));const c=citasCache.find(x=>txt(x.id_cita)===val('preCita'));
@@ -284,13 +284,13 @@
   function cerrarEdicionPaciente(){document.getElementById('preEditarBox')?.classList.remove('show');pacienteOriginal=null;}
   async function guardarCorreccionPaciente(){
     if(!pacienteOriginal)return;const motivo=val('preEdMotivo');if(motivo.length<3){alert('Indique el motivo de la corrección.');return;}const data={id_paciente:pacienteOriginal.id_paciente,nombres:val('preEdNombres'),apellidos:val('preEdApellidos'),numero_documento:val('preEdDocumento'),telefono:val('preEdTelefono'),whatsapp:val('preEdWhatsapp'),email:val('preEdEmail'),direccion:val('preEdDireccion'),motivo_correccion:motivo,token:token()};const btn=document.getElementById('preEdGuardar');if(btn)btn.disabled=true;
-    try{const r=await post('editarPacienteAuditable',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo corregir el paciente.');const id=pacienteOriginal.id_paciente;cerrarEdicionPaciente();await cargarTodo();set('prePaciente',id);await cargarCitasPaciente();await cargarPendiente();alert(r.sin_cambios?'No había cambios para guardar.':'Datos corregidos. La modificación quedó registrada en auditoría.');}catch(e){alert(e.message||'No se pudo corregir el paciente.');}finally{if(btn)btn.disabled=false;}
+    try{const r=await post('editarPacienteAuditable',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo corregir el paciente.');const id=pacienteOriginal.id_paciente;cerrarEdicionPaciente();await cargarTodo();await seleccionarPacienteDirecto(id);alert(r.sin_cambios?'No había cambios para guardar.':'Datos corregidos. La modificación quedó registrada en auditoría.');}catch(e){alert(e.message||'No se pudo corregir el paciente.');}finally{if(btn)btn.disabled=false;}
   }
 
   async function abrirDesdeCita(idCita){
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.0.1'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.0.2'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
