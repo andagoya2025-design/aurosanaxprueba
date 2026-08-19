@@ -1,5 +1,5 @@
 /* ==========================================================
-   AUROSANAX ERP · PREATENCIÓN 3.0.3
+   AUROSANAX ERP · PREATENCIÓN 3.2.0
    Sala de espera + buscador + colaboración de Secretaría
    Versión quirúrgica / antirregresión
    ----------------------------------------------------------
@@ -87,31 +87,104 @@
     return `${p[2]}/${p[1]}/${p[0]}`;
   }
   function estadoCita(c){ return norm(c?.estado_cita||c?.estado); }
+  function nombreCita(c){ return txt(c?.paciente||c?.nombre_paciente||c?.nombre_completo||c?.paciente_nombre||c?.nombre||'Paciente de cita'); }
+  function documentoCita(c){ return txt(c?.cedula||c?.numero_documento||c?.documento||c?.identificacion||''); }
+  function telefonoCita(c){ return txt(c?.whatsapp||c?.telefono||c?.telefono_paciente||''); }
+  function pacienteRegistradoDeCita(c){
+    const id=txt(c?.id_paciente);
+    return id ? (pacientesCache.find(p=>txt(p.id_paciente)===id)||null) : null;
+  }
+  function estadoRegistroCita(c){
+    const id=txt(c?.id_paciente), p=pacienteRegistradoDeCita(c);
+    if(p) return {key:'registered',label:'Paciente registrado',paciente:p};
+    if(id) return {key:'broken',label:'Vínculo pendiente',paciente:null};
+    return {key:'unregistered',label:'Paciente no registrado',paciente:null};
+  }
   function esCitaUtil(c){ return !/(anulad|cancelad)/.test(estadoCita(c)); }
   function token(){ return typeof seguridad.obtenerToken==='function'?seguridad.obtenerToken():''; }
   function usuario(){ return typeof seguridad.obtenerUsuario==='function'?(seguridad.obtenerUsuario()||{}):{}; }
 
   function instalarCSS(){
     if(document.getElementById('auroPreV3CSS')) return;
-    const s=document.createElement('style');s.id='auroPreV3CSS';s.textContent=`
-      #preatencion *{box-sizing:border-box}.pre-v3-grid{display:grid;grid-template-columns:minmax(280px,.82fr) minmax(420px,1.55fr);gap:14px;align-items:start}
-      .pre-v3-card{border:1px solid #ead7e2;border-radius:18px;background:#fff;overflow:hidden}.pre-v3-head{padding:12px 14px;border-bottom:1px solid #f0e1e9;background:#fffafd;font-weight:900;color:#5f1747}
-      .pre-v3-body{padding:13px}.pre-search{position:relative}.pre-search i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#8b1e5a;pointer-events:none;z-index:2}.pre-search input{padding-left:42px!important}.pre-results{display:grid;gap:6px;margin-top:7px;max-height:240px;overflow:auto}.pre-result{width:100%;text-align:left;border:1px solid #e5e7eb;background:#fff;border-radius:11px;padding:9px 11px;cursor:pointer}.pre-result:hover{border-color:#d89bbb;background:#fff8fc}.pre-result b{display:block;color:#1f2937}.pre-result small{color:#64748b}.pre-cita-auto{margin-top:8px;padding:9px 11px;border:1px solid #e5e7eb;border-radius:11px;background:#f8fafc;font-size:12px;color:#475569}
-      .pre-wait{display:grid;gap:7px;max-height:520px;overflow:auto}.pre-wait-item{border:1px solid #e5e7eb;border-radius:13px;padding:10px;background:#fff;cursor:pointer}.pre-wait-item:hover,.pre-wait-item.active{border-color:#d89bbb;background:#fff8fc}
-      .pre-wait-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.pre-wait-name{font-weight:900;color:#1f2937}.pre-wait-meta{font-size:11px;color:#64748b;margin-top:3px;line-height:1.35}.pre-badge{font-size:9px;font-weight:900;border-radius:999px;padding:4px 7px;white-space:nowrap}
-      .pre-badge.wait{background:#f1f5f9;color:#475569}.pre-badge.ready{background:#ecfdf5;color:#166534}.pre-badge.linked{background:#eff6ff;color:#1d4ed8}.pre-badge.confirm{background:#fff7ed;color:#9a3412}
-      .pre-toolbar{display:flex;gap:8px;flex-wrap:wrap}.pre-patient-summary{padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;font-size:12px}.pre-edit-box{display:none;margin-top:12px;padding:12px;border:1px solid #f0d4e4;border-radius:14px;background:#fffafd}.pre-edit-box.show{display:block}
-      .pre-status-line{font-size:12px;font-weight:800;color:#64748b}.pre-empty{padding:16px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:12px}
-      @media(max-width:900px){.pre-v3-grid{grid-template-columns:1fr}.pre-wait{max-height:340px}}@media(max-width:600px){#preatencion .cardx{padding:12px!important}.pre-toolbar{display:grid;grid-template-columns:1fr}.pre-toolbar button{width:100%}.pre-v3-body{padding:10px}}
-    `;document.head.appendChild(s);
+    const s=document.createElement('style');
+    s.id='auroPreV3CSS';
+    s.textContent=`
+      #preatencion{--pre-accent:#8b1e5a;--pre-accent-2:#c23b83;--pre-border:#ead7e2;--pre-soft:#fff8fc;--pre-text:#1f2937;--pre-muted:#64748b}
+      #preatencion *{box-sizing:border-box}
+      #preatencion .cardx{border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important}
+      #preatencion .section-head{margin:0 0 14px;padding:18px 20px;border:1px solid var(--pre-border);border-radius:22px;background:linear-gradient(135deg,#fff 0%,#fff9fc 100%);box-shadow:0 10px 30px rgba(139,30,90,.06)}
+      #preatencion .section-head h4{margin:0;color:var(--pre-text);font-size:22px;font-weight:950;letter-spacing:-.02em}
+      #preatencion .section-head h4 i{color:var(--pre-accent)}
+      #preatencion .section-head p{margin:4px 0 0;color:var(--pre-muted);font-size:13px;font-weight:650}
+      #preatencion .mini-note{margin:0 0 14px!important;padding:10px 13px!important;border:1px solid #eadfe6!important;border-radius:14px!important;background:#fff!important;color:#5f6672!important;font-size:12px!important;font-weight:650!important;box-shadow:0 5px 18px rgba(15,23,42,.025)}
+      #preatencion .mini-note i{color:var(--pre-accent)}
+
+      .pre-v3-grid{display:grid;grid-template-columns:minmax(285px,.78fr) minmax(0,1.65fr);gap:16px;align-items:start}
+      .pre-v3-card{border:1px solid var(--pre-border);border-radius:20px;background:#fff;overflow:hidden;box-shadow:0 10px 28px rgba(15,23,42,.045)}
+      .pre-v3-head{display:flex;align-items:center;min-height:48px;padding:12px 15px;border-bottom:1px solid #f2e6ed;background:linear-gradient(180deg,#fff,#fffafd);font-weight:950;color:#5f1747;font-size:14px}
+      .pre-v3-head i{color:var(--pre-accent);font-size:15px}.pre-v3-body{padding:14px}
+
+      .pre-search{position:relative;width:100%}.pre-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#9b5d7e;pointer-events:none;z-index:1;font-size:14px}.pre-search input{width:100%;min-height:42px;padding-left:39px!important;padding-right:12px!important;border:1px solid #dfe4ea!important;border-radius:12px!important;background:#fff!important;box-shadow:none!important;font-size:13px!important}.pre-search input:focus{border-color:#d593b7!important;box-shadow:0 0 0 3px rgba(194,59,131,.10)!important;outline:none!important}
+      .pre-results{display:grid;gap:6px;margin-top:7px;max-height:238px;overflow:auto}.pre-result{width:100%;text-align:left;border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:10px 11px;cursor:pointer;transition:.16s ease}.pre-result:hover{border-color:#d89bbb;background:#fff8fc;transform:translateY(-1px)}.pre-result b{display:block;color:#1f2937;font-size:12.5px}.pre-result small{display:block;margin-top:2px;color:#64748b;font-size:10.5px}
+      .pre-cita-auto{margin-top:9px;padding:9px 11px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;font-size:11.5px;color:#475569;font-weight:700}
+      .pre-wait{display:grid;gap:8px;max-height:520px;overflow:auto;padding-right:2px}.pre-wait-item{border:1px solid #e5e7eb;border-radius:14px;padding:10px 11px;background:#fff;cursor:pointer;transition:.16s ease}.pre-wait-item:hover,.pre-wait-item.active{border-color:#d89bbb;background:#fff8fc;box-shadow:0 6px 18px rgba(139,30,90,.06)}
+      .pre-wait-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.pre-wait-name{font-weight:950;color:#1f2937;font-size:12.5px}.pre-wait-meta{font-size:10.5px;color:#64748b;margin-top:3px;line-height:1.35}.pre-badge{font-size:8.5px;font-weight:950;border-radius:999px;padding:4px 7px;white-space:nowrap}.pre-badge.wait{background:#f1f5f9;color:#475569}.pre-badge.ready{background:#ecfdf5;color:#166534}.pre-badge.linked{background:#eff6ff;color:#1d4ed8}.pre-badge.confirm{background:#fff7ed;color:#9a3412}.pre-badge.registered{background:#ecfdf5;color:#166534}.pre-badge.unregistered{background:#fff7ed;color:#9a3412}.pre-badge.broken{background:#fff1f2;color:#be123c}
+
+      .pre-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pre-toolbar .btn-line,.pre-toolbar .btn-auro{min-height:38px;border-radius:11px!important;font-size:12px!important;font-weight:850!important;padding:8px 11px!important}
+      #preEditarPaciente{border-color:#dfbfd1!important;color:#7a2457!important;background:#fff!important}#preEditarPaciente:hover{background:#fff7fb!important;border-color:#cb8fb0!important}
+      #preIrPacientes{border-color:#e5e7eb!important;color:#475569!important;background:#fff!important}
+      .pre-patient-summary{padding:11px 12px;border:1px solid #e5e7eb;border-radius:13px;background:#f8fafc;font-size:11.5px;line-height:1.45;color:#475569}
+      .pre-edit-box{display:none;margin-top:12px;padding:13px;border:1px solid #f0d4e4;border-radius:15px;background:#fffafd}.pre-edit-box.show{display:block}
+      .pre-status-line{font-size:11.5px;font-weight:850;color:#64748b}.pre-empty{padding:17px 12px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:13px;background:#fbfcfd;font-size:11.5px;line-height:1.45}
+
+      #preatencion h5{font-size:15px!important;color:#2f3540!important;letter-spacing:-.01em}
+      #preatencion .form-label{margin-bottom:5px!important;color:#4b5563!important;font-size:11px!important;font-weight:850!important}
+      #preatencion .form-control,#preatencion .form-select{min-height:40px;border-radius:11px!important;border-color:#dfe4ea!important;font-size:13px!important;box-shadow:none!important}
+      #preatencion .form-control:focus,#preatencion .form-select:focus{border-color:#d593b7!important;box-shadow:0 0 0 3px rgba(194,59,131,.10)!important}
+      #preatencion textarea.form-control{min-height:94px;line-height:1.45}
+      #preatencion #preGuardar{min-height:42px;border-radius:12px!important;padding:9px 14px!important;font-weight:900!important;box-shadow:0 7px 16px rgba(139,30,90,.12)}
+
+      @media(max-width:1024px){.pre-v3-grid{grid-template-columns:minmax(250px,.9fr) minmax(0,1.45fr);gap:12px}.pre-v3-body{padding:12px}}
+      @media(max-width:820px){#preatencion .section-head{padding:15px 16px;border-radius:18px}.pre-v3-grid{grid-template-columns:1fr}.pre-wait{max-height:300px}.pre-v3-card{border-radius:17px}}
+      @media(max-width:600px){#preatencion{padding-bottom:calc(18px + env(safe-area-inset-bottom))}#preatencion .section-head{margin-bottom:10px;padding:13px 14px;border-radius:16px}#preatencion .section-head h4{font-size:19px}#preatencion .section-head p{font-size:11.5px}.pre-v3-grid{gap:10px}.pre-v3-card{border-radius:15px}.pre-v3-head{min-height:44px;padding:10px 12px;font-size:13px}.pre-v3-body{padding:10px}.pre-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:7px}.pre-toolbar button{width:100%;min-width:0}.pre-search input{min-height:44px;font-size:16px!important}.pre-wait{max-height:260px}.pre-patient-summary{font-size:11px}#preatencion .row.g-3{--bs-gutter-x:.65rem;--bs-gutter-y:.65rem}#preatencion .form-control,#preatencion .form-select{font-size:16px!important}#preatencion #preGuardar{width:100%;min-height:46px}}
+      @media(max-width:390px){.pre-toolbar{grid-template-columns:1fr}.pre-v3-head{font-size:12.5px}.pre-badge{white-space:normal;text-align:center}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function gestionarTituloGlobalPreatencion(activo){
+    /* UX QUIRÚRGICA: oculta únicamente el título redundante AUROSANAX del área principal.
+       No toca la marca de la barra lateral ni otros módulos. */
+    const candidatos=Array.from(document.querySelectorAll('h1,h2,h3,.page-title,.main-title'));
+    candidatos.forEach(el=>{
+      if(el.closest('.sidebar')||el.closest('#preatencion')) return;
+      if(norm(el.textContent)!=='aurosanax') return;
+      if(el.dataset.auroPreDisplayOriginal===undefined){
+        el.dataset.auroPreDisplayOriginal=el.style.display||'';
+      }
+      el.style.display=activo?'none':el.dataset.auroPreDisplayOriginal;
+    });
+  }
+
+  function instalarControlTituloGlobal(){
+    if(window.__auroPreShowScreenEnvuelto) return;
+    if(typeof window.showScreen!=='function') return;
+    const original=window.showScreen;
+    window.showScreen=function(nombre){
+      const resultado=original.apply(this,arguments);
+      try{ gestionarTituloGlobalPreatencion(String(nombre||'')==='preatencion'); }catch(_e){}
+      return resultado;
+    };
+    window.__auroPreShowScreenEnvuelto=true;
   }
 
   function inyectar(){
     if(!tienePreatencion()||document.getElementById('preatencion')) return;
     instalarCSS();
+    instalarControlTituloGlobal();
     const menu=document.querySelector('.sidebar .menu');
     if(menu){
-      const btn=document.createElement('button');btn.type='button';btn.dataset.screen='preatencion';btn.dataset.permisoCualquiera='preconsulta,preconsulta_datos_administrativos,preconsulta_signos_vitales,preconsulta_antecedentes_referidos';btn.innerHTML='<i class="bi bi-clipboard2-pulse"></i> Preatención';btn.onclick=()=>window.showScreen&&window.showScreen('preatencion',btn);
+      const btn=document.createElement('button');btn.type='button';btn.dataset.screen='preatencion';btn.dataset.permisoCualquiera='preconsulta,preconsulta_datos_administrativos,preconsulta_signos_vitales,preconsulta_antecedentes_referidos';btn.innerHTML='<i class="bi bi-clipboard2-pulse"></i> Preatención';btn.onclick=()=>{ if(window.showScreen) window.showScreen('preatencion',btn); gestionarTituloGlobalPreatencion(true); };
       const configBtn=menu.querySelector('[data-permiso-cualquiera*="configuracion"]');if(configBtn)menu.insertBefore(btn,configBtn);else menu.appendChild(btn);
     }
     const main=document.querySelector('.main');if(!main)return;
@@ -172,17 +245,29 @@
 
 
   function actualizarAccionesPaciente(){
-    const btn=document.getElementById('preEditarPaciente');
-    if(!btn) return;
+    const btnEditar=document.getElementById('preEditarPaciente');
+    const btnNuevo=document.getElementById('preIrPacientes');
     const seleccionado=!!val('prePaciente');
-    btn.style.display=seleccionado?'':'none';
-    btn.disabled=false;
-    btn.title=seleccionado
-      ? (puedeCorregirPaciente()
-          ? 'Corregir datos administrativos del paciente con trazabilidad.'
-          : 'La corrección requiere autorización desde Configuración.')
-      : 'Seleccione un paciente.';
+    const cita=citasCache.find(c=>txt(c.id_cita)===val('preCita'));
+    const citaSinPaciente=!!cita&&!seleccionado;
+
+    if(btnEditar){
+      btnEditar.style.display=seleccionado?'':'none';
+      btnEditar.disabled=false;
+      btnEditar.innerHTML='<i class="bi bi-pencil-square me-1"></i>Corregir datos';
+      btnEditar.title=seleccionado
+        ? (puedeCorregirPaciente()?'Corregir datos administrativos del paciente con trazabilidad.':'La corrección requiere autorización desde Configuración.')
+        : 'Seleccione un paciente.';
+    }
+    if(btnNuevo){
+      btnNuevo.style.display=seleccionado?'none':'';
+      btnNuevo.innerHTML=citaSinPaciente
+        ? '<i class="bi bi-person-plus me-1"></i>Crear paciente'
+        : '<i class="bi bi-person-plus me-1"></i>Nuevo paciente';
+      btnNuevo.title=citaSinPaciente?'Crear el registro del paciente de esta cita.':'Crear un paciente nuevo.';
+    }
   }
+
 
   function calcIMC(){ const p=parseFloat(numero(val('prePeso'))),t=parseFloat(numero(val('preTalla')));set('preIMC',p>0&&t>0?(p/((t/100)*(t/100))).toFixed(1):''); }
   function limpiarClinico(){ ['prePeso','preTalla','preIMC','prePAS','prePAD','preFC','preFR','preTemp','preSat','preCadera','preGrasa','preMasa','preCefalico','preToracico','preAbdominal','preAntecedentesTexto'].forEach(id=>set(id,'')); }
@@ -255,12 +340,68 @@
     const pre=preDeCita(c.id_cita,c.id_paciente);if(pre&&txt(pre.id_atencion))return {key:'linked',label:'Atención iniciada'};if(pre&&norm(pre.estado)==='pendiente')return {key:'ready',label:'Preatención lista'};if(/confirm/.test(estadoCita(c)))return {key:'confirm',label:'Confirmada'};return {key:'wait',label:txt(c.estado_cita||c.estado||'Pendiente')};
   }
   function renderSala(){
-    const box=document.getElementById('preSalaLista'),res=document.getElementById('preSalaResumen');if(!box)return;const q=norm(val('preBuscarSala'));const hoy=hoyEcuador();
-    const lista=citasCache.filter(c=>fechaISO(c.fecha_cita||c.fecha)===hoy&&esCitaUtil(c)&&txt(c.id_paciente)).filter(c=>{const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(c.id_paciente))||{};return !q||norm([nombrePaciente(p),documentoPaciente(p),telefonoPaciente(p),c.hora_inicio,c.estado_cita].join(' ')).includes(q);}).sort((a,b)=>txt(a.hora_inicio).localeCompare(txt(b.hora_inicio)));
-    if(res)res.textContent=`${lista.length} paciente(s) con cita vinculada hoy`;
-    if(!lista.length){box.innerHTML='<div class="pre-empty">No hay pacientes vinculados a citas de hoy con ese filtro.</div>';return;}
-    box.innerHTML=lista.map(c=>{const p=pacientesCache.find(x=>txt(x.id_paciente)===txt(c.id_paciente))||{};const e=estadoSala(c);return `<div class="pre-wait-item" data-pre-cita="${esc(c.id_cita||'')}" data-pre-paciente="${esc(c.id_paciente||'')}"><div class="pre-wait-top"><div><div class="pre-wait-name">${esc(nombrePaciente(p))}</div><div class="pre-wait-meta">${esc(c.hora_inicio||'')} · ${esc(c.tipo_cita||c.motivo||'Consulta')}<br>${esc(documentoPaciente(p)||'Sin documento')} · ${esc(telefonoPaciente(p)||'Sin teléfono')}</div></div><span class="pre-badge ${e.key}">${esc(e.label)}</span></div></div>`;}).join('');
-    box.querySelectorAll('[data-pre-cita]').forEach(el=>el.onclick=()=>seleccionarDesdeSala(el.dataset.prePaciente,el.dataset.preCita));
+    const box=document.getElementById('preSalaLista'),res=document.getElementById('preSalaResumen');
+    if(!box)return;
+    const q=norm(val('preBuscarSala')),hoy=hoyEcuador();
+    const lista=citasCache
+      .filter(c=>fechaISO(c.fecha_cita||c.fecha)===hoy&&esCitaUtil(c))
+      .filter(c=>{
+        const reg=estadoRegistroCita(c),p=reg.paciente||{};
+        const nombre=reg.paciente?nombrePaciente(p):nombreCita(c);
+        const doc=reg.paciente?documentoPaciente(p):documentoCita(c);
+        const tel=reg.paciente?telefonoPaciente(p):telefonoCita(c);
+        return !q||norm([nombre,doc,tel,c.hora_inicio,c.estado_cita,c.tipo_cita,c.motivo].join(' ')).includes(q);
+      })
+      .sort((a,b)=>txt(a.hora_inicio).localeCompare(txt(b.hora_inicio)));
+
+    if(res)res.textContent=`${lista.length} cita(s) de hoy`;
+    if(!lista.length){
+      box.innerHTML='<div class="pre-empty">No hay citas de hoy con ese filtro.</div>';
+      return;
+    }
+
+    box.innerHTML=lista.map(c=>{
+      const reg=estadoRegistroCita(c),p=reg.paciente||{};
+      const nombre=reg.paciente?nombrePaciente(p):nombreCita(c);
+      const doc=reg.paciente?documentoPaciente(p):documentoCita(c);
+      const tel=reg.paciente?telefonoPaciente(p):telefonoCita(c);
+      const e=reg.paciente?estadoSala(c):reg;
+      return `<div class="pre-wait-item" data-pre-cita="${esc(c.id_cita||'')}" data-pre-paciente="${esc(reg.paciente?reg.paciente.id_paciente:'')}" data-pre-registro="${esc(reg.key)}">
+        <div class="pre-wait-top">
+          <div>
+            <div class="pre-wait-name">${esc(nombre)}</div>
+            <div class="pre-wait-meta">${esc(c.hora_inicio||'')} · ${esc(c.tipo_cita||c.motivo||'Consulta')}<br>${esc(doc||'Sin documento')} · ${esc(tel||'Sin teléfono')}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+            <span class="pre-badge ${esc(reg.key)}">${esc(reg.label)}</span>
+            ${reg.paciente?`<span class="pre-badge ${e.key}">${esc(e.label)}</span>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    box.querySelectorAll('[data-pre-cita]').forEach(el=>{
+      el.onclick=()=>{
+        if(el.dataset.prePaciente) seleccionarDesdeSala(el.dataset.prePaciente,el.dataset.preCita);
+        else seleccionarCitaSinPaciente(el.dataset.preCita);
+      };
+    });
+  }
+
+
+  function seleccionarCitaSinPaciente(idCita){
+    const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));
+    if(!c)return;
+    cerrarEdicionPaciente();
+    set('prePaciente','');set('preCita',idCita);set('preBuscarPaciente',nombreCita(c));
+    limpiarClinico();
+    const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';
+    const auto=document.getElementById('preCitaAuto');
+    if(auto){auto.style.display='block';auto.innerHTML='<b>Paciente no registrado.</b> Esta cita aún no está vinculada a un registro de Pacientes. Cree el paciente antes de guardar la Preatención.';}
+    const multi=document.getElementById('preCitasMultiples');if(multi)multi.style.display='none';
+    actualizarAccionesPaciente();
+    actualizarContexto();
+    document.querySelectorAll('.pre-wait-item').forEach(x=>x.classList.toggle('active',x.dataset.preCita===idCita));
   }
 
   async function seleccionarDesdeSala(idPaciente,idCita){
@@ -277,9 +418,21 @@
     actualizarContexto();
   }
   function actualizarContexto(){
-    const box=document.getElementById('preContexto');if(!box)return;const p=pacientesCache.find(x=>txt(x.id_paciente)===val('prePaciente'));const c=citasCache.find(x=>txt(x.id_cita)===val('preCita'));
-    if(!p){box.textContent='Seleccione un paciente.';return;}box.innerHTML=`<b>${esc(nombrePaciente(p))}</b> · Documento: ${esc(documentoPaciente(p)||'—')} · Tel/WhatsApp: ${esc(telefonoPaciente(p)||'—')}<br>${c?`Cita: ${esc(c.id_cita||'')} · ${esc(fechaVista(c.fecha_cita||c.fecha))} ${esc(c.hora_inicio||'')} · ${esc(c.nombre_medico||c.id_medico||'—')}`:'Sin cita seleccionada · atención espontánea'}`;
+    const box=document.getElementById('preContexto');if(!box)return;
+    const p=pacientesCache.find(x=>txt(x.id_paciente)===val('prePaciente'));
+    const c=citasCache.find(x=>txt(x.id_cita)===val('preCita'));
+    if(p){
+      box.innerHTML=`<b>${esc(nombrePaciente(p))}</b> · <span class="pre-badge registered">Paciente registrado</span> · Documento: ${esc(documentoPaciente(p)||'—')} · Tel/WhatsApp: ${esc(telefonoPaciente(p)||'—')}<br>${c?`Cita: ${esc(c.id_cita||'')} · ${esc(fechaVista(c.fecha_cita||c.fecha))} ${esc(c.hora_inicio||'')} · ${esc(c.nombre_medico||c.id_medico||'—')}`:'Sin cita seleccionada · atención espontánea'}`;
+      return;
+    }
+    if(c){
+      const reg=estadoRegistroCita(c);
+      box.innerHTML=`<b>${esc(nombreCita(c))}</b> · <span class="pre-badge ${esc(reg.key)}">${esc(reg.label)}</span> · Documento: ${esc(documentoCita(c)||'—')} · Tel/WhatsApp: ${esc(telefonoCita(c)||'—')}<br>Cita: ${esc(c.id_cita||'')} · ${esc(fechaVista(c.fecha_cita||c.fecha))} ${esc(c.hora_inicio||'')} · ${esc(c.nombre_medico||c.id_medico||'—')}`;
+      return;
+    }
+    box.textContent='Seleccione un paciente.';
   }
+
 
   async function cargarPendiente(){
     limpiarClinico();actualizarContexto();const idPaciente=val('prePaciente'),idCita=val('preCita');if(!idPaciente)return;
@@ -307,6 +460,6 @@
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.0.3'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.2.0'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
