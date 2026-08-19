@@ -228,8 +228,30 @@
             <div id="preCorregirSignosBox" class="pre-corr-signos">
               <div class="corr-title"><i class="bi bi-shield-check me-1"></i>Corrección auditable de Preatención</div>
               <div class="corr-help">Corrija los signos vitales arriba e indique el motivo. Si esta Preatención ya está vinculada a una Atención, se actualizará únicamente el Examen físico de esa misma atención.</div>
-              <label class="form-label">Motivo de la corrección *</label>
-              <input id="preCorregirMotivo" class="form-control" placeholder="Ej.: presión arterial digitada invertida">
+              <label class="form-label">Tipo de justificativo *</label>
+              <select id="preCorregirTipo" class="form-select">
+                <option value="">Seleccione...</option>
+                <option value="Error de digitación">Error de digitación</option>
+                <option value="Omisión">Omisión</option>
+                <option value="Dato incorrecto">Dato incorrecto</option>
+                <option value="Actualización solicitada por el paciente">Actualización solicitada por el paciente</option>
+                <option value="Verificación documental">Verificación documental</option>
+                <option value="Fallo del sistema">Fallo del sistema</option>
+                <option value="Emergencia">Emergencia</option>
+                <option value="Corrección clínica">Corrección clínica</option>
+                <option value="Otro">Otro</option>
+              </select>
+
+              <div id="preCorregirDetalleWrap" style="display:none" class="mt-3">
+                <label class="form-label">Detalle del justificativo *</label>
+                <input id="preCorregirMotivo" class="form-control" placeholder="Especifique el motivo">
+              </div>
+
+              <div id="preCorregirDetalleOpcionalWrap" style="display:none" class="mt-3">
+                <label class="form-label">Observación adicional <span class="text-muted">(opcional)</span></label>
+                <input id="preCorregirObservacion" class="form-control" placeholder="Detalle adicional, si aplica">
+              </div>
+
               <div class="d-flex justify-content-end gap-2 mt-3">
                 <button type="button" class="btn-line" id="preCorregirCancelar">Cancelar</button>
                 <button type="button" class="btn-auro" id="preCorregirGuardar"><i class="bi bi-save me-1"></i>Guardar corrección</button>
@@ -253,6 +275,7 @@
     document.getElementById('preCorregirPreatencion').onclick=abrirCorreccionPreatencion;
     document.getElementById('preCorregirCancelar').onclick=cerrarCorreccionPreatencion;
     document.getElementById('preCorregirGuardar').onclick=guardarCorreccionPreatencion;
+    document.getElementById('preCorregirTipo').onchange=actualizarJustificativoPreatencion_;
     document.getElementById('preEditarPaciente').onclick=abrirEdicionPaciente;
     document.getElementById('preEdCancelar').onclick=cerrarEdicionPaciente;
     document.getElementById('preEdGuardar').onclick=guardarCorreccionPaciente;
@@ -578,6 +601,20 @@
     calcIMC();
   }
 
+
+  function actualizarJustificativoPreatencion_(){
+    const tipo=val('preCorregirTipo');
+    const esOtro=tipo==='Otro';
+    const detalleWrap=document.getElementById('preCorregirDetalleWrap');
+    const obsWrap=document.getElementById('preCorregirDetalleOpcionalWrap');
+
+    if(detalleWrap) detalleWrap.style.display=esOtro?'':'none';
+    if(obsWrap) obsWrap.style.display=(!tipo||esOtro)?'none':'';
+
+    if(!esOtro) set('preCorregirMotivo','');
+    if(!tipo||esOtro) set('preCorregirObservacion','');
+  }
+
   function abrirCorreccionPreatencion(){
     if(!(tiene('preconsulta_signos_vitales')||tiene('preconsulta'))){
       alert('Su usuario no tiene autorización para corregir signos vitales de Preatención.');
@@ -592,7 +629,10 @@
 
     preatencionCorreccionOriginal=JSON.parse(JSON.stringify(preActual));
     cargarSignosDesdePreatencion_(preActual);
+    set('preCorregirTipo','');
     set('preCorregirMotivo','');
+    set('preCorregirObservacion','');
+    actualizarJustificativoPreatencion_();
     document.getElementById('preCorregirSignosBox')?.classList.add('show');
     document.getElementById('preGuardar').style.display='none';
     document.getElementById('preCorregirMotivo')?.focus();
@@ -603,17 +643,32 @@
     const normal=document.getElementById('preGuardar');
     if(normal) normal.style.display='';
     preatencionCorreccionOriginal=null;
+    set('preCorregirTipo','');
     set('preCorregirMotivo','');
+    set('preCorregirObservacion','');
+    actualizarJustificativoPreatencion_();
   }
 
   async function guardarCorreccionPreatencion(){
     if(!preatencionCorreccionOriginal||!preatencionCorreccionOriginal.id_preatencion) return;
 
-    const motivo=val('preCorregirMotivo');
-    if(motivo.length<3){
-      alert('Indique el motivo de la corrección.');
+    const tipoJustificativo=val('preCorregirTipo');
+    const motivoLibre=val('preCorregirMotivo');
+    const observacion=val('preCorregirObservacion');
+
+    if(!tipoJustificativo){
+      alert('Seleccione el tipo de justificativo.');
       return;
     }
+
+    if(tipoJustificativo==='Otro' && motivoLibre.length<3){
+      alert('Especifique el motivo cuando selecciona "Otro".');
+      return;
+    }
+
+    const motivoFinal = tipoJustificativo==='Otro'
+      ? motivoLibre
+      : (observacion || tipoJustificativo);
 
     const pas=val('prePAS').replace(/\D/g,'');
     const pad=val('prePAD').replace(/\D/g,'');
@@ -637,7 +692,9 @@
       perimetro_cefalico:numero(val('preCefalico')),
       perimetro_toracico:numero(val('preToracico')),
       perimetro_abdominal:numero(val('preAbdominal')),
-      motivo_correccion:motivo,
+      tipo_justificativo:tipoJustificativo,
+      motivo_correccion:motivoFinal,
+      observacion_correccion:observacion,
       token:token()
     };
 
@@ -682,6 +739,6 @@
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.4.0'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.5.0'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
