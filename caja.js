@@ -1,6 +1,6 @@
 /* ============================================================
    AUROSANAX ERP — CAJA.JS
-   Versión 1.2 · anticipos + recibo A4 + WhatsApp · antirregresión
+   Versión 1.3 · recibo premium + logo institucional + WhatsApp · antirregresión
 
    RESPONSABILIDAD:
    - Lógica exclusiva de Caja.
@@ -947,11 +947,86 @@
     return n;
   }
 
+  function cajaConfigInstitucional(){
+    const candidatos=[
+      window.auroConfiguracionCentro,
+      window.configuracionCentro,
+      window.configCentro,
+      window.CONFIG_CENTRO,
+      window.configuracionInstitucional,
+      (typeof configuracion!=='undefined' ? configuracion : null)
+    ].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
+
+    let c=candidatos[0]||{};
+    if(c.datos&&typeof c.datos==='object') c=Object.assign({},c,c.datos);
+
+    const pick=(...keys)=>{
+      for(const k of keys){
+        const v=cajaTxt(c?.[k]);
+        if(v) return v;
+      }
+      return '';
+    };
+
+    return {
+      nombre:pick('nombre_clinica','nombre_centro','nombre_comercial','razon_social') || cajaTxt(document.getElementById('secNombreCentro')?.textContent) || 'AUROSANAX',
+      subtitulo:pick('subtitulo_clinica','descripcion_clinica','eslogan_clinica','especialidad'),
+      razon_social:pick('razon_social'),
+      ruc:pick('ruc'),
+      direccion:pick('direccion_clinica','direccion_centro','direccion'),
+      ciudad:pick('ciudad_clinica','ciudad') || 'Guayaquil',
+      provincia:pick('provincia_clinica','provincia'),
+      pais:pick('pais_clinica','pais') || 'Ecuador',
+      telefono:pick('telefono_clinica','whatsapp_clinica','telefono','whatsapp'),
+      email:pick('email_clinica','correo_clinica','email','correo'),
+      web:pick('sitio_web_clinica','web_clinica','web'),
+      logo:pick('logo_url','logo_drive_url','logo_centro_url','logo'),
+      color:pick('color_principal') || '#8b1e5a'
+    };
+  }
+
+  function cajaEstadoComprobante(a,m,p){
+    const saldo=cajaNum(m?.saldo_pendiente);
+    const total=cajaNum(m?.valor_final);
+    const pago=cajaNum(p?.valor_pago);
+    const pagado=cajaNum(m?.total_pagado);
+    const cancelado=saldo<=0.001 && total>=0;
+    const citaPendiente=cajaEsCitaPendiente(a);
+
+    if(cancelado){
+      return {
+        tipo:'COMPROBANTE DE PAGO',
+        clase:'PAGO',
+        etiquetaMovimiento:'Pago realizado',
+        etiquetaAcumulado:'Total pagado',
+        estadoSaldo:'CANCELADO',
+        cancelado:true
+      };
+    }
+
+    if(citaPendiente){
+      return {
+        tipo:'COMPROBANTE DE ANTICIPO',
+        clase:'ANTICIPO',
+        etiquetaMovimiento:'Abono realizado',
+        etiquetaAcumulado:'Total abonado',
+        estadoSaldo:'PENDIENTE',
+        cancelado:false
+      };
+    }
+
+    return {
+      tipo:'COMPROBANTE DE ABONO',
+      clase:'ABONO',
+      etiquetaMovimiento:'Abono realizado',
+      etiquetaAcumulado:'Total abonado',
+      estadoSaldo:'PENDIENTE',
+      cancelado:false
+    };
+  }
+
   function cajaTipoRecibo(a,m,p){
-    if(cajaEsCitaPendiente(a)) return 'RECIBO DE ANTICIPO';
-    const valor=cajaNum(p?.valor_pago);
-    const saldoAntes=cajaNum(m?.saldo_pendiente)+valor;
-    return valor+0.001<saldoAntes ? 'RECIBO DE ABONO' : 'RECIBO DE PAGO';
+    return cajaEstadoComprobante(a,m,p).tipo;
   }
 
   function cajaHoraVisual(v){
@@ -962,31 +1037,44 @@
 
   async function cajaConstruirReciboHTML(){
     if(!cajaUltimoPago||!cajaSeleccion||!cajaMovimientoActual){
-      throw new Error('No existe un pago seleccionado para generar el recibo.');
+      throw new Error('No existe un pago seleccionado para generar el comprobante.');
     }
     if(!cajaDetallesActuales.length) await cajaCargarDetallesMovimiento();
 
     const p=cajaUltimoPago;
     const a=cajaSeleccion;
     const m=cajaMovimientoActual;
-    const centro=cajaTxt(configuracion?.nombre_centro||configuracion?.nombre_comercial||document.getElementById('secNombreCentro')?.textContent)||'AUROSANAX';
-    const logo=cajaTxt(configuracion?.logo_url||configuracion?.logo_centro_url||'');
-    const direccion=cajaTxt(configuracion?.direccion||configuracion?.direccion_centro||'');
-    const telefono=cajaTxt(configuracion?.telefono||configuracion?.whatsapp||'');
-    const email=cajaTxt(configuracion?.email||configuracion?.correo||'');
-    const recibo=cajaTxt(p.id_pago||'RECIBO');
-    const tipo=cajaTipoRecibo(a,m,p);
+    const cfg=cajaConfigInstitucional();
+    const centro=cfg.nombre;
+    const color=cfg.color;
+    const logo=cfg.logo;
+    const recibo=cajaTxt(p.id_pago||'COMPROBANTE');
+    const estado=cajaEstadoComprobante(a,m,p);
+    const tipo=estado.tipo;
     const idAtn=cajaIdAtencion(a);
     const idCita=cajaIdCita(a);
+    const fechaContexto=cajaTxt(a?.fecha_cita||a?.fecha_atencion||'');
     const detalles=cajaDetallesActivos();
     const detalleHtml=detalles.map(d=>{
       const nombre=cajaTxt(d.nombre_servicio)||'Servicio';
       return `<div class="rx-line"><span>${cajaEsc(nombre)}</span><b>${cajaMoney(d.subtotal!==undefined?d.subtotal:d.precio_unitario)}</b></div>`;
     }).join('') || '<div class="rx-muted">Sin detalle de servicios visible.</div>';
 
+    const ubicacion=[cfg.direccion,cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(' · ');
+    const contacto=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
+    const logoHtml=logo
+      ? `<div class="rx-logo-wrap"><img class="rx-logo" src="${cajaEsc(logo)}" alt="" onerror="this.parentElement.style.display='none'"></div>`
+      : '<div class="rx-logo-wrap" style="display:none"></div>';
+    const saldoTexto=estado.cancelado
+      ? `${cajaMoney(0)} · CANCELADO`
+      : cajaMoney(m.saldo_pendiente);
+    const notaLegal=estado.cancelado
+      ? 'Pago completado. La factura correspondiente podrá emitirse con los datos proporcionados conforme al proceso de facturación aplicable.'
+      : 'La factura correspondiente podrá emitirse conforme al proceso de facturación aplicable una vez definidos los servicios y valores finales.';
+
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${cajaEsc(tipo)} · ${cajaEsc(recibo)}</title><style>
-*{box-sizing:border-box}html,body{margin:0;padding:0;background:#eef1f5;color:#1f2937;font-family:Arial,sans-serif}.auro-rx-toolbar{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;background:#fff;border-bottom:1px solid #dbe2ea;box-shadow:0 2px 10px rgba(15,23,42,.08)}.auro-rx-actions{display:flex;gap:8px}.auro-rx-btn{border:0;border-radius:9px;padding:10px 14px;background:#8b1e5a;color:#fff;font-weight:700;cursor:pointer}.auro-rx-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}.auro-rx-stage{min-height:calc(100vh - 62px);padding:20px;display:flex;justify-content:center;align-items:flex-start;overflow:auto}.auro-rx-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;transform-origin:top center}.rx-paper{min-height:273mm;position:relative;padding-bottom:28mm}.rx-head{display:flex;justify-content:space-between;gap:18px;border-bottom:2px solid #8b1e5a;padding-bottom:10px}.rx-logo{max-width:42mm;max-height:22mm;object-fit:contain}.rx-brand h1{font-size:22px;margin:0;color:#8b1e5a}.rx-brand p{margin:3px 0;font-size:11px;color:#6b7280}.rx-title{text-align:right}.rx-title h2{margin:0;font-size:18px}.rx-title small{color:#6b7280}.rx-box{margin-top:14px;border:1px solid #e5e7eb;border-radius:10px;padding:12px}.rx-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}.rx-kv{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #f0f1f3;padding:5px 0;font-size:11px}.rx-kv span{color:#6b7280}.rx-line{display:flex;justify-content:space-between;gap:18px;padding:7px 0;border-bottom:1px solid #f0f1f3}.rx-summary{margin-top:12px;margin-left:auto;width:85mm}.rx-summary .rx-line.total{font-size:15px;color:#8b1e5a;border-top:2px solid #8b1e5a}.rx-muted{font-size:10px;color:#6b7280}.rx-foot{position:absolute;bottom:0;left:0;right:0;border-top:1px solid #e5e7eb;padding-top:8px;text-align:center;font-size:9px;color:#6b7280;line-height:1.45}@media(max-width:980px){.auro-rx-stage{padding:12px 0 20px;overflow-x:hidden}.auro-rx-sheet{transform-origin:top center}}@media(max-width:760px){.auro-rx-toolbar{padding:8px 10px}.auro-rx-toolbar strong{display:none}.auro-rx-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:8px}.auro-rx-btn{width:100%;min-height:40px;padding:8px 10px}.auro-rx-btn.secondary{width:auto;min-width:74px}.auro-rx-stage{padding:10px 0 18px;overflow-x:hidden}.auro-rx-sheet{width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;transform-origin:top center!important;box-shadow:0 8px 24px rgba(15,23,42,.18)}}@media print{@page{size:A4 portrait;margin:12mm 15mm}html,body{background:#fff!important;margin:0!important;padding:0!important;overflow:visible!important}.auro-rx-toolbar{display:none!important}.auro-rx-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}.auro-rx-sheet{width:auto!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}.rx-paper{min-height:273mm!important}}
-</style></head><body><div class="auro-rx-toolbar"><strong>Vista previa A4 · ${cajaEsc(tipo)}</strong><div class="auro-rx-actions"><button class="auro-rx-btn" onclick="window.print()">Imprimir / Guardar PDF</button><button class="auro-rx-btn secondary" onclick="window.close()">Cerrar</button></div></div><main class="auro-rx-stage"><div class="auro-rx-sheet" id="auroCajaReciboSheet"><div class="rx-paper"><header class="rx-head"><div class="rx-brand">${logo?`<img class="rx-logo" src="${cajaEsc(logo)}" alt="Logo">`:''}<h1>${cajaEsc(centro)}</h1>${direccion?`<p>${cajaEsc(direccion)}</p>`:''}<p>${[telefono,email].filter(Boolean).map(cajaEsc).join(' · ')}</p></div><div class="rx-title"><h2>${cajaEsc(tipo)}</h2><small>${cajaEsc(recibo)}</small></div></header><section class="rx-box"><div class="rx-grid"><div class="rx-kv"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="rx-kv"><span>Cédula</span><b>${cajaEsc(cajaCedulaPaciente(a)||'—')}</b></div><div class="rx-kv"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rx-kv"><span>Fecha</span><b>${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))} ${cajaEsc(cajaHoraVisual(p.fecha_pago||p.creado_en))}</b></div>${idCita?`<div class="rx-kv"><span>ID cita</span><b>${cajaEsc(idCita)}</b></div>`:''}${idAtn?`<div class="rx-kv"><span>ID atención</span><b>${cajaEsc(idAtn)}</b></div>`:''}<div class="rx-kv"><span>Consulta</span><b>${cajaEsc(cajaEsCitaPendiente(a)?'Pendiente de atención':(a.numero_consulta||'—'))}</b></div><div class="rx-kv"><span>Forma de pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="rx-kv"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}</div></section><section class="rx-box"><b>Detalle</b>${detalleHtml}<div class="rx-summary"><div class="rx-line"><span>Valor total</span><b>${cajaMoney(m.valor_final)}</b></div><div class="rx-line"><span>Valor recibido</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="rx-line"><span>Pagado acumulado</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="rx-line total"><span>Saldo pendiente</span><b>${cajaMoney(m.saldo_pendiente)}</b></div></div></section><section class="rx-box"><div class="rx-kv"><span>Recibido por</span><b>${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</b></div>${p.observaciones?`<div class="rx-kv"><span>Observaciones</span><b>${cajaEsc(p.observaciones)}</b></div>`:''}</section><footer class="rx-foot">Comprobante interno de Caja generado por AUROSANAX ERP.<br>No sustituye factura o comprobante tributario cuando corresponda.</footer></div></div></main><script>(function(){function ajustar(){var hoja=document.getElementById('auroCajaReciboSheet');if(!hoja)return;var ancho=window.innerWidth||document.documentElement.clientWidth||794;var anchoHoja=hoja.offsetWidth||794;var altoHoja=hoja.offsetHeight||1123;var margen=ancho<=760?16:28;var disponible=Math.max(220,ancho-margen);var escala=ancho>980?1:Math.min(1,disponible/anchoHoja);hoja.style.transform=escala<1?'scale('+escala+')':'none';hoja.style.marginBottom=escala<1?(-altoHoja*(1-escala))+'px':'0'}window.addEventListener('resize',ajustar);ajustar()})();<\/script></body></html>`;
+*{box-sizing:border-box}html,body{margin:0;padding:0;background:#eef1f5;color:#1f2937;font-family:Arial,sans-serif}.auro-rx-toolbar{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;background:#fff;border-bottom:1px solid #dbe2ea;box-shadow:0 2px 10px rgba(15,23,42,.08)}.auro-rx-actions{display:flex;gap:8px}.auro-rx-btn{border:0;border-radius:9px;padding:10px 14px;background:${cajaEsc(color)};color:#fff;font-weight:700;cursor:pointer}.auro-rx-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}.auro-rx-stage{min-height:calc(100vh - 62px);padding:20px;display:flex;justify-content:center;align-items:flex-start;overflow:auto}.auro-rx-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;transform-origin:top center}.rx-paper{min-height:273mm;position:relative;padding-bottom:28mm}.rx-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid ${cajaEsc(color)};padding-bottom:10px}.rx-logo-wrap{width:60px;height:60px;display:grid;place-items:center;border-radius:12px;overflow:hidden}.rx-logo{max-width:100%;max-height:100%;object-fit:contain}.rx-brand h1{font-size:19px;margin:0;color:${cajaEsc(color)};letter-spacing:.035em}.rx-brand p{margin:3px 0;font-size:10.5px;color:#667085}.rx-date{text-align:right;font-size:11.5px;font-weight:750}.rx-doc-title{text-align:center;font-size:19px;margin:20px 0 18px;letter-spacing:.045em}.rx-doc-code{text-align:center;color:#6b7280;font-size:10.5px;margin-top:-11px;margin-bottom:14px}.rx-box{margin-top:11px;border:1px solid #e5e7eb;border-radius:10px;padding:11px}.rx-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px}.rx-kv{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #f0f1f3;padding:5px 0;font-size:11px}.rx-kv span{color:#6b7280}.rx-line{display:flex;justify-content:space-between;gap:18px;padding:7px 0;border-bottom:1px solid #f0f1f3}.rx-summary{margin-top:10px;margin-left:auto;width:88mm}.rx-summary .rx-line.total{font-size:15px;color:${cajaEsc(color)};border-top:2px solid ${cajaEsc(color)};font-weight:800}.rx-muted{font-size:10px;color:#6b7280}.rx-legal{margin-top:12px;border-left:3px solid ${cajaEsc(color)};padding:8px 10px;background:#fafafa;font-size:9.7px;color:#475569;line-height:1.5}.rx-foot{position:absolute;bottom:0;left:0;right:0;border-top:1px solid #e5e7eb;padding-top:8px;text-align:center;font-size:9px;color:#6b7280;line-height:1.45}@media(max-width:980px){.auro-rx-stage{padding:12px 0 20px;overflow-x:hidden}.auro-rx-sheet{transform-origin:top center}}@media(max-width:760px){.auro-rx-toolbar{padding:8px 10px}.auro-rx-toolbar strong{display:none}.auro-rx-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:8px}.auro-rx-btn{width:100%;min-height:40px;padding:8px 10px}.auro-rx-btn.secondary{width:auto;min-width:74px}.auro-rx-stage{padding:10px 0 18px;overflow-x:hidden}.auro-rx-sheet{width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;transform-origin:top center!important;box-shadow:0 8px 24px rgba(15,23,42,.18)}}@media print{@page{size:A4 portrait;margin:12mm 15mm}html,body{background:#fff!important;margin:0!important;padding:0!important;overflow:visible!important}.auro-rx-toolbar{display:none!important}.auro-rx-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}.auro-rx-sheet{width:auto!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}.rx-paper{min-height:273mm!important}}
+</style></head><body><div class="auro-rx-toolbar"><strong>Vista previa A4 · ${cajaEsc(tipo)}</strong><div class="auro-rx-actions"><button class="auro-rx-btn" onclick="window.print()">Imprimir / Guardar PDF</button><button class="auro-rx-btn secondary" onclick="window.close()">Cerrar</button></div></div><main class="auro-rx-stage"><div class="auro-rx-sheet" id="auroCajaReciboSheet"><div class="rx-paper"><header class="rx-head">${logoHtml}<div class="rx-brand"><h1>${cajaEsc(centro)}</h1>${cfg.subtitulo?`<p>${cajaEsc(cfg.subtitulo)}</p>`:''}${ubicacion?`<p>${cajaEsc(ubicacion)}</p>`:''}${contacto?`<p>${cajaEsc(contacto)}</p>`:''}</div><div class="rx-date">${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))}<br>${cajaEsc(cajaHoraVisual(p.fecha_pago||p.creado_en))}</div></header><h2 class="rx-doc-title">${cajaEsc(tipo)}</h2><div class="rx-doc-code">${cajaEsc(recibo)}</div><section class="rx-box"><div class="rx-grid"><div class="rx-kv"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="rx-kv"><span>Cédula</span><b>${cajaEsc(cajaCedulaPaciente(a)||'—')}</b></div><div class="rx-kv"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rx-kv"><span>Fecha de cita/atención</span><b>${cajaEsc(cajaFecha(fechaContexto)||'—')}</b></div>${idCita?`<div class="rx-kv"><span>ID cita</span><b>${cajaEsc(idCita)}</b></div>`:''}${idAtn?`<div class="rx-kv"><span>ID atención</span><b>${cajaEsc(idAtn)}</b></div>`:''}<div class="rx-kv"><span>Consulta</span><b>${cajaEsc(cajaEsCitaPendiente(a)?'Pendiente de atención':(a.numero_consulta||'—'))}</b></div><div class="rx-kv"><span>Forma de pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="rx-kv"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}</div></section><section class="rx-box"><b>Detalle</b>${detalleHtml}<div class="rx-summary"><div class="rx-line"><span>Valor total</span><b>${cajaMoney(m.valor_final)}</b></div><div class="rx-line"><span>${cajaEsc(estado.etiquetaMovimiento)}</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="rx-line"><span>${cajaEsc(estado.etiquetaAcumulado)}</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="rx-line total"><span>Saldo pendiente</span><b>${cajaEsc(saldoTexto)}</b></div></div></section><section class="rx-box"><div class="rx-kv"><span>Recibido por</span><b>${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</b></div>${p.observaciones?`<div class="rx-kv"><span>Observaciones</span><b>${cajaEsc(p.observaciones)}</b></div>`:''}</section><div class="rx-legal"><b>Importante:</b> Este documento es un comprobante interno de Caja y no constituye factura ni comprobante tributario autorizado. ${cajaEsc(notaLegal)}</div><footer class="rx-foot">Generado por AUROSANAX ERP · ${cajaEsc(centro)}${cfg.razon_social?` · ${cajaEsc(cfg.razon_social)}`:''}${cfg.ruc?` · RUC ${cajaEsc(cfg.ruc)}`:''}</footer></div></div></main><script>(function(){function ajustar(){var hoja=document.getElementById('auroCajaReciboSheet');if(!hoja)return;var ancho=window.innerWidth||document.documentElement.clientWidth||794;var anchoHoja=hoja.offsetWidth||794;var altoHoja=hoja.offsetHeight||1123;var margen=ancho<=760?16:28;var disponible=Math.max(220,ancho-margen);var escala=ancho>980?1:Math.min(1,disponible/anchoHoja);hoja.style.transform=escala<1?'scale('+escala+')':'none';hoja.style.marginBottom=escala<1?(-altoHoja*(1-escala))+'px':'0'}window.addEventListener('resize',ajustar);ajustar()})();<\/script></body></html>`;
   }
 
   async function cajaImprimirUltimoRecibo(){
@@ -1003,13 +1091,13 @@
       w.focus();
     }catch(e){
       console.error(e);
-      alert(e.message||'No se pudo generar el recibo.');
+      alert(e.message||'No se pudo generar el comprobante.');
     }
   }
 
   async function cajaEnviarReciboWhatsApp(){
     if(!cajaUltimoPago||!cajaSeleccion||!cajaMovimientoActual){
-      alert('No existe un recibo disponible para enviar.');
+      alert('No existe un comprobante disponible para enviar.');
       return;
     }
     const telefono=cajaTelefonoWhatsAppNormalizado(cajaTelefonoPaciente(cajaSeleccion));
@@ -1017,20 +1105,50 @@
       alert('Este paciente no tiene teléfono o WhatsApp registrado.');
       return;
     }
-    const a=cajaSeleccion, m=cajaMovimientoActual, p=cajaUltimoPago;
-    const tipo=cajaTipoRecibo(a,m,p).replace('RECIBO DE ','');
-    const mensaje=[
-      'AUROSANAX · '+tipo,
-      'Paciente: '+cajaPaciente(a),
-      'Comprobante: '+cajaTxt(p.id_pago||'—'),
-      'Valor recibido: '+cajaMoney(p.valor_pago),
-      'Pagado acumulado: '+cajaMoney(m.total_pagado),
-      'Saldo pendiente: '+cajaMoney(m.saldo_pendiente),
-      cajaIdCita(a)?'Cita: '+cajaIdCita(a):'',
-      cajaIdAtencion(a)?'Atención: '+cajaIdAtencion(a):'',
-      'Gracias.'
-    ].filter(Boolean).join('\n');
-    window.open('https://wa.me/'+telefono+'?text='+encodeURIComponent(mensaje),'_blank','noopener');
+
+    const a=cajaSeleccion;
+    const m=cajaMovimientoActual;
+    const p=cajaUltimoPago;
+    const estado=cajaEstadoComprobante(a,m,p);
+    const cfg=cajaConfigInstitucional();
+    const detalles=cajaDetallesActivos();
+    const servicio=detalles.length
+      ? detalles.map(d=>cajaTxt(d.nombre_servicio)||'Servicio').filter(Boolean).join(', ')
+      : (cajaServicioTextoOrigen(a)||'Servicio de salud');
+    const fechaContexto=cajaTxt(a?.fecha_cita||a?.fecha_atencion||'');
+    const saludo=estado.cancelado
+      ? 'Hemos registrado correctamente el pago de su atención.'
+      : (estado.clase==='ANTICIPO'
+          ? 'Hemos registrado correctamente su anticipo para la cita agendada.'
+          : 'Hemos registrado correctamente su abono.');
+    const cierre=estado.cancelado
+      ? '✅ Su saldo se encuentra cancelado. La factura correspondiente podrá emitirse con los datos proporcionados conforme al proceso de facturación aplicable.'
+      : 'ℹ️ Mantiene un saldo pendiente de '+cajaMoney(m.saldo_pendiente)+'. La factura correspondiente podrá emitirse conforme al proceso de facturación aplicable una vez definidos los servicios y valores finales.';
+
+    const lineas=[
+      '🧾 *'+cajaTxt(cfg.nombre||'AUROSANAX')+' | '+estado.tipo.replace('COMPROBANTE DE ','')+'*',
+      '',
+      'Estimado/a *'+cajaPaciente(a)+'*:',
+      saludo,
+      '',
+      '👩‍⚕️ *Médico:* '+cajaMedico(a),
+      '🩺 *Servicio:* '+servicio,
+      fechaContexto?'📅 *Fecha:* '+cajaFecha(fechaContexto):'',
+      '💳 *Forma de pago:* '+cajaTxt(p.forma_pago||'—'),
+      '💵 *Valor total:* '+cajaMoney(m.valor_final),
+      '💰 *'+estado.etiquetaMovimiento+':* '+cajaMoney(p.valor_pago),
+      '✅ *'+estado.etiquetaAcumulado+':* '+cajaMoney(m.total_pagado),
+      estado.cancelado?'🟢 *Saldo pendiente:* $0.00 · CANCELADO':'🔖 *Saldo pendiente:* '+cajaMoney(m.saldo_pendiente),
+      '🧾 *Comprobante:* '+cajaTxt(p.id_pago||'—'),
+      '',
+      cierre,
+      '',
+      'Este comprobante interno no constituye factura ni comprobante tributario autorizado.',
+      '',
+      'Gracias por confiar en *'+cajaTxt(cfg.nombre||'AUROSANAX')+'*. 🌷'
+    ].filter(Boolean);
+
+    window.open('https://wa.me/'+telefono+'?text='+encodeURIComponent(lineas.join('\n')),'_blank','noopener');
   }
 
 function cajaMejorarCampoValorRecibido(){
