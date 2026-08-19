@@ -238,7 +238,23 @@
     document.getElementById('preEditarPaciente').onclick=abrirEdicionPaciente;
     document.getElementById('preEdCancelar').onclick=cerrarEdicionPaciente;
     document.getElementById('preEdGuardar').onclick=guardarCorreccionPaciente;
-    document.getElementById('preIrPacientes').onclick=()=>{ if(typeof window.showScreen==='function') window.showScreen('pacientes'); };
+    document.getElementById('preIrPacientes').onclick=abrirPacienteDesdePreatencion_;
+
+    /*
+     * Regreso seguro desde el modal de creación:
+     * refresca únicamente las fuentes de Preatención y vuelve a seleccionar
+     * la misma cita ya vinculada. No inicia Historia ni Atención.
+     */
+    window.addEventListener('auro:paciente-vinculado-preatencion', async function(ev){
+      const d=ev?.detail||{};
+      if(!d.id_cita||!d.id_paciente)return;
+      try{
+        await cargarTodo();
+        await seleccionarDesdeSala(d.id_paciente,d.id_cita);
+      }catch(error){
+        console.warn('AUROSANAX PREATENCIÓN: no se pudo refrescar después de crear paciente.',error);
+      }
+    });
     ['prePeso','preTalla'].forEach(id=>document.getElementById(id)?.addEventListener('input',calcIMC));
     cargarTodo();
   }
@@ -268,6 +284,53 @@
     }
   }
 
+
+
+  /* ==========================================================
+     AUROSANAX PREATENCIÓN 12
+     CREAR PACIENTE DESDE CITA · REUTILIZA MODAL DE SECRETARÍA
+     ----------------------------------------------------------
+     - No navega al listado general de Pacientes.
+     - No crea paciente automáticamente.
+     - Prellena solo datos que YA existen en la cita.
+     - No crea columnas, hojas ni cambia el backend.
+     - Mantiene intactos signos vitales y el formulario activo.
+  ========================================================== */
+  function contextoPacienteDesdeCitaPreatencion_(){
+    const c = citasCache.find(x=>txt(x.id_cita)===val('preCita'));
+    if(!c) return null;
+    return {
+      id_cita: txt(c.id_cita),
+      nombre_paciente: nombreCita(c),
+      numero_documento: documentoCita(c),
+      telefono: txt(c.telefono || c.whatsapp || ''),
+      whatsapp: txt(c.whatsapp || c.telefono || ''),
+      email: txt(c.email || c.correo || ''),
+      servicio: txt(c.tipo_cita || c.motivo || c.servicio || ''),
+      ciudad: txt(c.ciudad || 'Guayaquil'),
+      origen: 'preatencion'
+    };
+  }
+
+  function abrirPacienteDesdePreatencion_(){
+    const contexto = contextoPacienteDesdeCitaPreatencion_();
+
+    if(contexto && contexto.id_cita && !val('prePaciente')){
+      if(typeof window.abrirPacienteSecretaria !== 'function'){
+        alert('El formulario de Pacientes no está disponible.');
+        return;
+      }
+      window.abrirPacienteSecretaria('', contexto);
+      return;
+    }
+
+    /* Flujo existente para "Nuevo paciente" sin cita seleccionada. */
+    if(typeof window.abrirPacienteSecretaria === 'function'){
+      window.abrirPacienteSecretaria();
+      return;
+    }
+    if(typeof window.showScreen === 'function') window.showScreen('pacientes');
+  }
 
   function calcIMC(){ const p=parseFloat(numero(val('prePeso'))),t=parseFloat(numero(val('preTalla')));set('preIMC',p>0&&t>0?(p/((t/100)*(t/100))).toFixed(1):''); }
   function limpiarClinico(){ ['prePeso','preTalla','preIMC','prePAS','prePAD','preFC','preFR','preTemp','preSat','preCadera','preGrasa','preMasa','preCefalico','preToracico','preAbdominal','preAntecedentesTexto'].forEach(id=>set(id,'')); }
@@ -344,7 +407,7 @@
     if(!box)return;
     const q=norm(val('preBuscarSala')),hoy=hoyEcuador();
     const lista=citasCache
-      .filter(c=>fechaISO(c.fecha_cita||c.fecha)===hoy&&esCitaUtil(c))
+      .filter(c=>fechaISO(c.fecha_cita||c.fecha||c.fecha_deseada)===hoy&&esCitaUtil(c))
       .filter(c=>{
         const reg=estadoRegistroCita(c),p=reg.paciente||{};
         const nombre=reg.paciente?nombrePaciente(p):nombreCita(c);
@@ -411,7 +474,7 @@
   }
 
   async function cargarCitasPaciente(preferida){
-    const id=val('prePaciente'),hoy=hoyEcuador();const rel=citasCache.filter(c=>txt(c.id_paciente)===id&&esCitaUtil(c));const hoyRel=rel.filter(c=>fechaISO(c.fecha_cita||c.fecha)===hoy).sort((a,b)=>txt(a.hora_inicio).localeCompare(txt(b.hora_inicio)));
+    const id=val('prePaciente'),hoy=hoyEcuador();const rel=citasCache.filter(c=>txt(c.id_paciente)===id&&esCitaUtil(c));const hoyRel=rel.filter(c=>fechaISO(c.fecha_cita||c.fecha||c.fecha_deseada)===hoy).sort((a,b)=>txt(a.hora_inicio).localeCompare(txt(b.hora_inicio)));
     const auto=document.getElementById('preCitaAuto'),multi=document.getElementById('preCitasMultiples'),vis=document.getElementById('preCitaVisible');if(auto){auto.style.display='none';auto.textContent='';}if(multi)multi.style.display='none';
     let elegida=txt(preferida);if(!elegida&&hoyRel.length===1)elegida=txt(hoyRel[0].id_cita);set('preCita',elegida);
     if(!hoyRel.length){if(auto){auto.style.display='block';auto.textContent='Sin cita de hoy · Preatención espontánea';}}else if(hoyRel.length===1){const c=hoyRel[0];if(auto){auto.style.display='block';auto.textContent=`Cita de hoy vinculada automáticamente · ${txt(c.hora_inicio)} · ${txt(c.tipo_cita||c.motivo||'Consulta')}`;}}else{if(multi)multi.style.display='block';if(vis){vis.innerHTML=hoyRel.map(c=>`<option value="${esc(c.id_cita||'')}">${esc([c.hora_inicio||'',c.tipo_cita||c.motivo||'Consulta'].filter(Boolean).join(' · '))}</option>`).join('');if(elegida&&[...vis.options].some(o=>o.value===elegida))vis.value=elegida;else{vis.selectedIndex=0;set('preCita',vis.value);}}}
@@ -422,12 +485,12 @@
     const p=pacientesCache.find(x=>txt(x.id_paciente)===val('prePaciente'));
     const c=citasCache.find(x=>txt(x.id_cita)===val('preCita'));
     if(p){
-      box.innerHTML=`<b>${esc(nombrePaciente(p))}</b> · <span class="pre-badge registered">PACIENTE REGISTRADO</span> · Documento: ${esc(documentoPaciente(p)||'—')} · Tel/WhatsApp: ${esc(telefonoPaciente(p)||'—')}<br>${c?`Cita: ${esc(c.id_cita||'')} · ${esc(fechaVista(c.fecha_cita||c.fecha))} ${esc(c.hora_inicio||'')} · ${esc(c.nombre_medico||c.id_medico||'—')}`:'Sin cita seleccionada · atención espontánea'}`;
+      box.innerHTML=`<b>${esc(nombrePaciente(p))}</b> · <span class="pre-badge registered">PACIENTE REGISTRADO</span> · Documento: ${esc(documentoPaciente(p)||'—')} · Tel/WhatsApp: ${esc(telefonoPaciente(p)||'—')}<br>${c?`Cita: ${esc(c.id_cita||'')} · ${esc(fechaVista(c.fecha_cita||c.fecha||c.fecha_deseada))} ${esc(c.hora_inicio||'')} · ${esc(c.nombre_medico||c.id_medico||'—')}`:'Sin cita seleccionada · atención espontánea'}`;
       return;
     }
     if(c){
       const reg=estadoRegistroCita(c);
-      box.innerHTML=`<b>${esc(nombreCita(c))}</b> · <span class="pre-badge ${esc(reg.key)}">${esc(reg.label)}</span> · Documento: ${esc(documentoCita(c)||'—')} · Tel/WhatsApp: ${esc(telefonoCita(c)||'—')}<br>Cita: ${esc(c.id_cita||'')} · ${esc(fechaVista(c.fecha_cita||c.fecha))} ${esc(c.hora_inicio||'')} · ${esc(c.nombre_medico||c.id_medico||'—')}`;
+      box.innerHTML=`<b>${esc(nombreCita(c))}</b> · <span class="pre-badge ${esc(reg.key)}">${esc(reg.label)}</span> · Documento: ${esc(documentoCita(c)||'—')} · Tel/WhatsApp: ${esc(telefonoCita(c)||'—')}<br>Cita: ${esc(c.id_cita||'')} · ${esc(fechaVista(c.fecha_cita||c.fecha||c.fecha_deseada))} ${esc(c.hora_inicio||'')} · ${esc(c.nombre_medico||c.id_medico||'—')}`;
       return;
     }
     box.textContent='Seleccione un paciente.';
@@ -460,6 +523,6 @@
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.2.0'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.3.0'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
