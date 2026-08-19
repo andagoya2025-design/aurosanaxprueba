@@ -1,7 +1,7 @@
 /* ==========================================================
-   AUROSANAX ERP · PREATENCIÓN 3.2.0
+   AUROSANAX ERP · PREATENCIÓN 3.2.1
    Sala de espera + buscador + colaboración de Secretaría
-   Versión quirúrgica / antirregresión
+   Versión quirúrgica / antirregresión · estado paciente no registrado
    ----------------------------------------------------------
    CONSERVA:
    - Guardado actual en hoja preatencion.
@@ -97,8 +97,8 @@
   function estadoRegistroCita(c){
     const id=txt(c?.id_paciente), p=pacienteRegistradoDeCita(c);
     if(p) return {key:'registered',label:'PACIENTE REGISTRADO',paciente:p};
-    if(id) return {key:'broken',label:'VÍNCULO PENDIENTE',paciente:null};
-    return {key:'unregistered',label:'PACIENTE NUEVO',paciente:null};
+    if(id) return {key:'unregistered',label:'PACIENTE NO REGISTRADO',paciente:null};
+    return {key:'unregistered',label:'PACIENTE NO REGISTRADO',paciente:null};
   }
   function esCitaUtil(c){ return !/(anulad|cancelad)/.test(estadoCita(c)); }
   function token(){ return typeof seguridad.obtenerToken==='function'?seguridad.obtenerToken():''; }
@@ -128,7 +128,7 @@
       .pre-results{display:grid;gap:6px;margin-top:7px;max-height:238px;overflow:auto}.pre-result{width:100%;text-align:left;border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:10px 11px;cursor:pointer;transition:.16s ease}.pre-result:hover{border-color:#d89bbb;background:#fff8fc;transform:translateY(-1px)}.pre-result b{display:block;color:#1f2937;font-size:12.5px}.pre-result small{display:block;margin-top:2px;color:#64748b;font-size:10.5px}
       .pre-cita-auto{margin-top:9px;padding:9px 11px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;font-size:11.5px;color:#475569;font-weight:700}
       .pre-wait{display:grid;gap:8px;max-height:520px;overflow:auto;padding-right:2px}.pre-wait-item{border:1px solid #e5e7eb;border-radius:14px;padding:10px 11px;background:#fff;cursor:pointer;transition:.16s ease}.pre-wait-item:hover,.pre-wait-item.active{border-color:#d89bbb;background:#fff8fc;box-shadow:0 6px 18px rgba(139,30,90,.06)}
-      .pre-wait-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.pre-wait-name{font-weight:950;color:#1f2937;font-size:12.5px}.pre-wait-meta{font-size:10.5px;color:#64748b;margin-top:3px;line-height:1.35}.pre-badge{display:inline-flex;align-items:center;justify-content:center;min-height:27px;font-size:10.5px;font-weight:950;letter-spacing:.025em;border-radius:999px;padding:6px 10px;white-space:nowrap;box-shadow:0 3px 10px rgba(15,23,42,.06)}.pre-badge.wait{background:#f1f5f9;color:#475569}.pre-badge.ready{background:#ecfdf5;color:#166534}.pre-badge.linked{background:#eff6ff;color:#1d4ed8}.pre-badge.confirm{background:#fff7ed;color:#9a3412}.pre-badge.registered{background:#ecfdf5;color:#166534}.pre-badge.unregistered{background:#fff7ed;color:#9a3412}.pre-badge.broken{background:#fff1f2;color:#be123c}
+      .pre-wait-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.pre-wait-name{font-weight:950;color:#1f2937;font-size:12.5px}.pre-wait-meta{font-size:10.5px;color:#64748b;margin-top:3px;line-height:1.35}.pre-badge{display:inline-flex;align-items:center;justify-content:center;min-height:27px;font-size:10.5px;font-weight:950;letter-spacing:.025em;border-radius:999px;padding:6px 10px;white-space:nowrap;box-shadow:0 3px 10px rgba(15,23,42,.06)}.pre-badge.wait{background:#f1f5f9;color:#475569}.pre-badge.ready{background:#ecfdf5;color:#166534}.pre-badge.linked{background:#eff6ff;color:#1d4ed8}.pre-badge.confirm{background:#fff7ed;color:#9a3412}.pre-badge.registered{background:#ecfdf5;color:#166534}.pre-badge.unregistered{background:#fff7ed;color:#9a3412}
 
       .pre-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pre-toolbar .btn-line,.pre-toolbar .btn-auro{min-height:38px;border-radius:11px!important;font-size:12px!important;font-weight:850!important;padding:8px 11px!important}
       #preEditarPaciente{border-color:#dfbfd1!important;color:#7a2457!important;background:#fff!important}#preEditarPaciente:hover{background:#fff7fb!important;border-color:#cb8fb0!important}
@@ -397,7 +397,7 @@
     limpiarClinico();
     const box=document.getElementById('preResultadosPaciente');if(box)box.innerHTML='';
     const auto=document.getElementById('preCitaAuto');
-    if(auto){auto.style.display='block';auto.innerHTML='<b>PACIENTE NUEVO.</b> Esta cita aún no está vinculada a un registro de Pacientes. Cree el paciente antes de guardar la Preatención.';}
+    if(auto){auto.style.display='block';auto.innerHTML='<b>PACIENTE NO REGISTRADO.</b> La cita existe, pero no hay un registro activo correspondiente en Pacientes. Cree el paciente antes de guardar la Preatención.';}
     const multi=document.getElementById('preCitasMultiples');if(multi)multi.style.display='none';
     actualizarAccionesPaciente();
     actualizarContexto();
