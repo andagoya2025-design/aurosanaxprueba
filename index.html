@@ -8804,8 +8804,18 @@ function limpiarFiltrosHistorias(){
 async function inicializarERP(){
   await auroCargarLogoSidebarInstitucional();
   auroInicializarAyudasExamenFisicoV32();
-  await cargarPacientesDesdeSheets();
-  await cargarHistoriasClinicasDesdeSheets();
+
+  /*
+    AUROSANAX - CARGA INICIAL PARALELA SEGURA
+    Pacientes e Historias son lecturas independientes.
+    Se espera a ambas antes de cargar Agenda para conservar
+    exactamente el flujo Paciente -> Historia -> Cita/Atencion.
+  */
+  await Promise.all([
+    cargarPacientesDesdeSheets(),
+    cargarHistoriasClinicasDesdeSheets()
+  ]);
+
   await cargarCitasAgendaWeb();
   actualizarDashboard();
   auroInicializarAyudasExamenFisicoV32();
