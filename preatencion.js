@@ -1,5 +1,5 @@
 /* ==========================================================
-   AUROSANAX ERP · PREATENCIÓN 3.0
+   AUROSANAX ERP · PREATENCIÓN 3.0.1
    Sala de espera + buscador + colaboración de Secretaría
    Versión quirúrgica / antirregresión
    ----------------------------------------------------------
@@ -34,9 +34,18 @@
   }
   function puedeCorregirPaciente(){ return tiene('pacientes_edicion'); }
   function apiUrl(){
-    return (seguridad.config && seguridad.config.apiUrl) ||
-      (seguridad.configuracion && seguridad.configuracion.apiUrl) ||
-      (typeof API_URL!=='undefined'?API_URL:'');
+    /* Mantiene primero el contrato que ya funcionaba en Preatención estable. */
+    return (seguridad.configuracion && seguridad.configuracion.apiUrl) ||
+      (typeof API_URL!=='undefined' ? API_URL : '') ||
+      (seguridad.config && seguridad.config.apiUrl) || '';
+  }
+
+  function extraerLista(respuesta){
+    if(Array.isArray(respuesta)) return respuesta;
+    if(respuesta && Array.isArray(respuesta.data)) return respuesta.data;
+    if(respuesta && Array.isArray(respuesta.registros)) return respuesta.registros;
+    if(respuesta && Array.isArray(respuesta.resultado)) return respuesta.resultado;
+    return [];
   }
   async function get(accion,params){
     const q=new URLSearchParams({accion,_:String(Date.now())});
@@ -63,8 +72,20 @@
     const f=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     return f;
   }
-  function fechaISO(v){ const m=txt(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[1]}-${m[2]}-${m[3]}`:''; }
-  function fechaVista(v){ const m=txt(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:txt(v); }
+  function fechaISO(v){
+    const raw=txt(v);
+    let m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+    return '';
+  }
+  function fechaVista(v){
+    const iso=fechaISO(v);
+    if(!iso) return txt(v);
+    const p=iso.split('-');
+    return `${p[2]}/${p[1]}/${p[0]}`;
+  }
   function estadoCita(c){ return norm(c?.estado_cita||c?.estado); }
   function esCitaUtil(c){ return !/(anulad|cancelad)/.test(estadoCita(c)); }
   function token(){ return typeof seguridad.obtenerToken==='function'?seguridad.obtenerToken():''; }
@@ -155,11 +176,53 @@
   function limpiarClinico(){ ['prePeso','preTalla','preIMC','prePAS','prePAD','preFC','preFR','preTemp','preSat','preCadera','preGrasa','preMasa','preCefalico','preToracico','preAbdominal','preAntecedentesTexto'].forEach(id=>set(id,'')); }
 
   async function cargarTodo(){
-    const resultados=await Promise.allSettled([get('listarPacientes'),get('listarCitas'),get('listarPreatenciones')]);
-    pacientesCache=resultados[0].status==='fulfilled'&&Array.isArray(resultados[0].value)?resultados[0].value:[];
-    citasCache=resultados[1].status==='fulfilled'&&Array.isArray(resultados[1].value)?resultados[1].value:[];
-    preatencionesCache=resultados[2].status==='fulfilled'&&Array.isArray(resultados[2].value)?resultados[2].value:[];
-    renderSelectPacientes();renderSala();await cargarCitasPaciente();await cargarPendiente();
+    /*
+      CARGA ANTIRREGRESIVA:
+      1) Pacientes es crítico y se carga SOLO, igual que en la versión estable.
+      2) Citas y preatenciones son complementarias: si fallan, NO vacían pacientes.
+      3) El selector se pinta inmediatamente al recibir pacientes.
+    */
+    const sel=document.getElementById('prePaciente');
+    const resumen=document.getElementById('preSalaResumen');
+    if(sel && !pacientesCache.length) sel.innerHTML='<option value="">Cargando pacientes…</option>';
+
+    try{
+      const respuestaPacientes=await get('listarPacientes');
+      const listaPacientes=extraerLista(respuestaPacientes);
+      if(!listaPacientes.length && respuestaPacientes && respuestaPacientes.success===false){
+        throw new Error(respuestaPacientes.message||'No se pudieron cargar pacientes.');
+      }
+      pacientesCache=listaPacientes;
+      renderSelectPacientes();
+    }catch(error){
+      console.error('AUROSANAX PREATENCIÓN: error cargando pacientes',error);
+      pacientesCache=[];
+      if(sel) sel.innerHTML='<option value="">Error cargando pacientes</option>';
+      if(resumen) resumen.textContent='No se pudieron leer pacientes. Use Actualizar después de verificar conexión.';
+      renderSala();
+      return;
+    }
+
+    try{
+      const respuestaCitas=await get('listarCitas');
+      citasCache=extraerLista(respuestaCitas);
+    }catch(error){
+      console.warn('AUROSANAX PREATENCIÓN: citas no disponibles; selector de pacientes continúa operativo.',error);
+      citasCache=[];
+    }
+
+    try{
+      const respuestaPre=await get('listarPreatenciones');
+      preatencionesCache=extraerLista(respuestaPre);
+    }catch(error){
+      console.warn('AUROSANAX PREATENCIÓN: listado de preatenciones no disponible; guardado y búsqueda por paciente continúan operativos.',error);
+      preatencionesCache=[];
+    }
+
+    renderSelectPacientes();
+    renderSala();
+    await cargarCitasPaciente();
+    await cargarPendiente();
   }
 
   function renderSelectPacientes(){
@@ -228,6 +291,6 @@
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.0.0'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.0.1'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
