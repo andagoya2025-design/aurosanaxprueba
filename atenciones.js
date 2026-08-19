@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_3';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_4';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4373,6 +4373,69 @@
         .avi-head h3{font-size:16px}
         .avi-close span{display:none}
       }
+
+      /* ============================================================
+         AUROSANAX VISTA INTEGRAL ÉLITE V1.4 - COMPACTACIÓN PREMIUM
+         Solo presentación. No altera datos, eventos ni guardados.
+      ============================================================ */
+      .avi-head{padding:14px 16px}
+      .avi-head-icon{width:44px;height:44px;border-radius:14px}
+      .avi-head h3{font-size:19px}
+      .avi-head-patient{font-size:14px;margin-top:3px}
+      .avi-head-subcontext{font-size:11px}
+      .avi-head-context{margin-top:7px;gap:5px}
+      .avi-chip{padding:3px 7px;font-size:9.8px}
+      .avi-toolbar{padding:8px 14px;gap:7px}
+      .avi-toolbar .avi-btn{min-height:36px}
+      .avi-body{padding:14px}
+      .avi-overview-block{padding:10px 11px;margin-bottom:9px;border-radius:16px}
+      .avi-group-title{margin-bottom:8px;font-size:10.5px}
+      .avi-data-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+      .avi-data{min-height:48px;padding:7px 8px;border-radius:11px}
+      .avi-data span{font-size:8.4px}
+      .avi-data b{font-size:10.8px;margin-top:2px;line-height:1.28}
+      .avi-col-2{grid-column:span 2}
+      .avi-clinical-divider{margin:12px 2px 8px;font-size:9.8px}
+      .avi-section{margin-bottom:7px;border-radius:14px}
+      .avi-section summary{padding:9px 11px;font-size:12px}
+      .avi-section-label>i{width:25px;height:25px;border-radius:8px}
+      .avi-section-count{height:18px;min-width:20px;font-size:8.8px}
+      .avi-section-body{padding:9px 11px 11px}
+      .avi-lines{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+      .avi-line{padding:8px;border-radius:10px}
+      .avi-line b,.avi-note b{font-size:9px}
+      .avi-line p,.avi-note p,.avi-clean-list{font-size:11.2px;line-height:1.4}
+      .avi-subgroup+.avi-subgroup{margin-top:9px}
+      .avi-subgroup>h5{font-size:11.5px;margin-bottom:6px}
+      .avi-med-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+      .avi-med-card{padding:9px;border-radius:12px}
+      .avi-med-card h5{font-size:12px;margin-bottom:6px}
+      .avi-med-details{gap:5px}
+      .avi-med-details div{padding:6px 7px;border-radius:9px}
+      .avi-med-details span{font-size:8px}
+      .avi-med-details b{font-size:10px}
+      .avi-rx-list{gap:8px}
+      .avi-rx-card{padding:11px;border-radius:15px}
+      .avi-rx-head{margin-bottom:7px;padding-bottom:8px}
+      .avi-rx-head h4{font-size:13px}
+      .avi-rx-meta{gap:6px;margin:7px 0 9px}
+      .avi-note{margin-top:8px;padding-top:8px}
+      @media(max-width:1179px) and (min-width:761px){
+        .avi-data-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+        .avi-lines{grid-template-columns:repeat(3,minmax(0,1fr))}
+        .avi-med-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      }
+      @media(max-width:760px){
+        .avi-head{padding-top:calc(10px + env(safe-area-inset-top))}
+        .avi-toolbar{position:sticky;top:0;z-index:3;background:#fff}
+        .avi-body{padding:8px calc(8px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left))}
+        .avi-overview-block{padding:8px;margin-bottom:7px}
+        .avi-data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+        .avi-lines,.avi-med-grid,.avi-med-details{grid-template-columns:1fr}
+        .avi-data{min-height:44px}
+        .avi-section summary{min-height:42px}
+        .avi-toolbar .avi-btn{min-height:42px}
+      }
     `;
     document.head.appendChild(s);
   }
@@ -4709,7 +4772,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.3.0',
+    version:'1.4.0',
     abrir,
     cerrar,
     abrirReceta,
