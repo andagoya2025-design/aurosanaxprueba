@@ -360,14 +360,52 @@ function auroDatosPacienteDesdeCitaAgenda(c){
     }
   }
 
+  /*
+    AUROSANAX AGENDA 04 - PRELLENADO ADMINISTRATIVO DESDE CITA
+    Alcance exclusivo:
+    - Reutiliza datos YA existentes en la cita.
+    - No crea ni guarda pacientes automáticamente.
+    - No modifica cita, historia, atención, estados ni backend.
+    - Si un dato no existe en la cita, el campo queda vacío para revisión manual.
+  */
+  const cedula = String(
+    c.numero_documento ||
+    c.cedula ||
+    c.documento ||
+    c.numero_documento_paciente ||
+    c.cedula_paciente ||
+    c.documento_paciente ||
+    c.identificacion ||
+    c.identificacion_paciente ||
+    ''
+  ).replace(/\D/g,'').slice(0,10);
+
+  const telefono = String(
+    c.whatsapp ||
+    c.telefono ||
+    c.celular ||
+    c.telefono_paciente ||
+    c.whatsapp_paciente ||
+    c.telefono_contacto ||
+    c.numero_telefono ||
+    c.movil ||
+    ''
+  ).replace(/\D/g,'').slice(0,10);
+
   return {
     id_cita: auroIdCitaAgenda(c),
     nombres: nombres,
     apellidos: apellidos,
     nombre_completo: nombreCompleto,
-    cedula: String(c.numero_documento || c.cedula || c.documento || '').trim(),
-    telefono: auroWhatsappPacienteAgenda(c),
-    email: String(c.email || c.correo || c.email_paciente || '').trim(),
+    cedula: cedula,
+    telefono: telefono,
+    email: String(
+      c.email ||
+      c.correo ||
+      c.email_paciente ||
+      c.correo_paciente ||
+      ''
+    ).trim(),
     servicio: auroServicioAgenda(c),
     origen: 'agenda_medica'
   };
