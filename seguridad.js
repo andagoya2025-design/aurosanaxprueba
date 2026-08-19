@@ -72,6 +72,7 @@
     { clave: 'configuracion_servicios', etiqueta: 'Config.: Servicios' },
     { clave: 'configuracion_horarios', etiqueta: 'Config.: Horarios rápidos' },
     { clave: 'configuracion_centro', etiqueta: 'Config.: Datos del centro' },
+    { clave: 'configuracion_finanzas', etiqueta: 'Config.: Finanzas' },
     { clave: 'configuracion_seguridad', etiqueta: 'Config.: Seguridad' },
     { clave: 'usuarios', etiqueta: 'Gestión de usuarios' },
     { clave: 'bitacora', etiqueta: 'Bitácora' }
@@ -92,6 +93,7 @@
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: true, configuracion: true,
       configuracion_medicos: true, configuracion_servicios: true,
       configuracion_horarios: true, configuracion_centro: false,
+      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     MEDICO_COLABORADOR: {
@@ -104,6 +106,7 @@
       historia_clinica: true, recetas: true, apoyo_ia: true, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
+      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     },
     SECRETARIA: {
@@ -116,6 +119,7 @@
       historia_clinica: false, recetas: false, apoyo_ia: false, reportes: false, configuracion: false,
       configuracion_medicos: false, configuracion_servicios: false,
       configuracion_horarios: false, configuracion_centro: false,
+      configuracion_finanzas: false,
       configuracion_seguridad: false, usuarios: false, bitacora: false
     }
   });
@@ -325,73 +329,38 @@
     const actual = usuario || obtenerUsuarioActual() || {};
     const rol = textoSeguro(actual.rol).toUpperCase();
 
-    /* AUROSANAX 2026-08-19 · ROUTING MODULAR QUIRÚRGICO
-       - Configuración puede ser un destino independiente.
-       - Secretaría conserva prioridad sobre sus módulos operativos.
-       - Index se mantiene para perfiles con acceso clínico/dashboard.
-       - No modifica token, sesión, backend, permisos ni páginas. */
+    /* AUROSANAX 2026-08-18 · ACCESO MODULAR QUIRÚRGICO
+       - Secretaría no depende de un único permiso contenedor.
+       - Un usuario puede ingresar si posee al menos un módulo administrativo.
+       - MEDICO/ADMINISTRADOR conservan prioridad por el ERP clínico cuando
+         tienen dashboard autorizado.
+       - No modifica login, token, sesión ni administración de usuarios. */
     const permisosPortalSecretaria = [
       'secretaria',
       'agenda',
       'disponibilidad',
       'pacientes',
       'pacientes_edicion',
-      'pacientes_edicion_administrativa',
       'preconsulta',
       'preconsulta_datos_administrativos',
       'preconsulta_signos_vitales',
       'preconsulta_antecedentes_referidos'
     ];
 
-    const permisosConfiguracion = [
-      'configuracion',
-      'configuracion_medicos',
-      'configuracion_servicios',
-      'configuracion_horarios',
-      'configuracion_centro',
-      'configuracion_finanzas',
-      'configuracion_seguridad',
-      'usuarios',
-      'bitacora'
-    ];
-
     const tieneModuloSecretaria = permisosPortalSecretaria.some(function (clave) {
       return tienePermiso(clave, actual);
     });
 
-    const tieneModuloConfiguracion = permisosConfiguracion.some(function (clave) {
-      return tienePermiso(clave, actual);
-    });
-
-    /* Secretaría: portal operativo primero; si no tiene módulos operativos,
-       Configuración se convierte en su destino directo. */
-    if (rol === 'SECRETARIA') {
-      if (tieneModuloSecretaria) {
-        return 'secretaria.html';
-      }
-
-      if (tieneModuloConfiguracion) {
-        return 'configuracion.html';
-      }
-
-      if (tienePermiso('dashboard', actual)) {
-        return SEGURIDAD_CONFIG.paginaErp;
-      }
-
-      return '';
+    if (rol === 'SECRETARIA' && tieneModuloSecretaria) {
+      return 'secretaria.html';
     }
 
-    /* Perfiles clínicos/administrativos mantienen el ERP como prioridad. */
     if (tienePermiso('dashboard', actual)) {
       return SEGURIDAD_CONFIG.paginaErp;
     }
 
     if (tieneModuloSecretaria) {
       return 'secretaria.html';
-    }
-
-    if (tieneModuloConfiguracion) {
-      return 'configuracion.html';
     }
 
     return '';
@@ -912,50 +881,24 @@
 
   function normalizarPermisos(permisos, rol) {
     const rolNormalizado = textoSeguro(rol).toUpperCase();
+    const base = Object.assign({}, PERMISOS_POR_ROL[rolNormalizado] || {});
     let personalizados = permisos;
 
     if (typeof personalizados === 'string' && personalizados.trim()) {
       try { personalizados = JSON.parse(personalizados); }
-      catch (error) { personalizados = null; }
+      catch (error) { personalizados = {}; }
     }
 
-    /* AUROSANAX 2026-08-19 · PERMISOS PERSONALIZADOS AUTORITATIVOS
-       Si el usuario ya tiene un mapa de permisos guardado, ese mapa manda.
-       El rol queda únicamente como plantilla/base cuando NO existen permisos
-       personalizados válidos. Así evitamos que permisos omitidos se reactiven
-       automáticamente por herencia del rol (ej. Secretaría -> dashboard).
-       No modifica token, sesión, backend, catálogo ni resolución de módulos. */
-    if (
-      personalizados &&
-      typeof personalizados === 'object' &&
-      !Array.isArray(personalizados)
-    ) {
-      const salida = {};
-
-      CATALOGO_PERMISOS.forEach(function (permiso) {
-        const clave = permiso.clave;
-        const valor = personalizados[clave];
-
-        salida[clave] =
-          valor === true ||
-          String(valor).toUpperCase() === 'TRUE' ||
-          String(valor).toUpperCase() === 'SI';
-      });
-
+    if (personalizados && typeof personalizados === 'object' && !Array.isArray(personalizados)) {
       Object.keys(personalizados).forEach(function (clave) {
-        if (Object.prototype.hasOwnProperty.call(salida, clave)) return;
-
         const valor = personalizados[clave];
-        salida[clave] =
+        base[clave] =
           valor === true ||
           String(valor).toUpperCase() === 'TRUE' ||
           String(valor).toUpperCase() === 'SI';
       });
-
-      return salida;
     }
-
-    return Object.assign({}, PERMISOS_POR_ROL[rolNormalizado] || {});
+    return base;
   }
 
   function obtenerPermisosFormulario() {
