@@ -325,38 +325,73 @@
     const actual = usuario || obtenerUsuarioActual() || {};
     const rol = textoSeguro(actual.rol).toUpperCase();
 
-    /* AUROSANAX 2026-08-18 · ACCESO MODULAR QUIRÚRGICO
-       - Secretaría no depende de un único permiso contenedor.
-       - Un usuario puede ingresar si posee al menos un módulo administrativo.
-       - MEDICO/ADMINISTRADOR conservan prioridad por el ERP clínico cuando
-         tienen dashboard autorizado.
-       - No modifica login, token, sesión ni administración de usuarios. */
+    /* AUROSANAX 2026-08-19 · ROUTING MODULAR QUIRÚRGICO
+       - Configuración puede ser un destino independiente.
+       - Secretaría conserva prioridad sobre sus módulos operativos.
+       - Index se mantiene para perfiles con acceso clínico/dashboard.
+       - No modifica token, sesión, backend, permisos ni páginas. */
     const permisosPortalSecretaria = [
       'secretaria',
       'agenda',
       'disponibilidad',
       'pacientes',
       'pacientes_edicion',
+      'pacientes_edicion_administrativa',
       'preconsulta',
       'preconsulta_datos_administrativos',
       'preconsulta_signos_vitales',
       'preconsulta_antecedentes_referidos'
     ];
 
+    const permisosConfiguracion = [
+      'configuracion',
+      'configuracion_medicos',
+      'configuracion_servicios',
+      'configuracion_horarios',
+      'configuracion_centro',
+      'configuracion_finanzas',
+      'configuracion_seguridad',
+      'usuarios',
+      'bitacora'
+    ];
+
     const tieneModuloSecretaria = permisosPortalSecretaria.some(function (clave) {
       return tienePermiso(clave, actual);
     });
 
-    if (rol === 'SECRETARIA' && tieneModuloSecretaria) {
-      return 'secretaria.html';
+    const tieneModuloConfiguracion = permisosConfiguracion.some(function (clave) {
+      return tienePermiso(clave, actual);
+    });
+
+    /* Secretaría: portal operativo primero; si no tiene módulos operativos,
+       Configuración se convierte en su destino directo. */
+    if (rol === 'SECRETARIA') {
+      if (tieneModuloSecretaria) {
+        return 'secretaria.html';
+      }
+
+      if (tieneModuloConfiguracion) {
+        return 'configuracion.html';
+      }
+
+      if (tienePermiso('dashboard', actual)) {
+        return SEGURIDAD_CONFIG.paginaErp;
+      }
+
+      return '';
     }
 
+    /* Perfiles clínicos/administrativos mantienen el ERP como prioridad. */
     if (tienePermiso('dashboard', actual)) {
       return SEGURIDAD_CONFIG.paginaErp;
     }
 
     if (tieneModuloSecretaria) {
       return 'secretaria.html';
+    }
+
+    if (tieneModuloConfiguracion) {
+      return 'configuracion.html';
     }
 
     return '';
