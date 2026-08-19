@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_2';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_3';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4042,14 +4042,14 @@
       ============================================================ */
       .avi-overlay{
         position:fixed;inset:0;z-index:100000;
-        background:rgba(15,23,42,.72);
-        backdrop-filter:blur(4px);
-        display:flex;align-items:center;justify-content:center;padding:18px;
+        background:rgba(15,23,42,.76);
+        backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+        display:flex;align-items:center;justify-content:center;padding:10px;
       }
       .avi-shell{
-        width:min(1320px,100%);max-height:96vh;
-        background:#f7f8fb;border:1px solid rgba(255,255,255,.45);
-        border-radius:26px;overflow:hidden;display:flex;flex-direction:column;
+        width:min(98vw,1680px);height:min(97dvh,1080px);max-height:97dvh;
+        background:#f7f8fb;border:1px solid rgba(255,255,255,.48);
+        border-radius:24px;overflow:hidden;display:flex;flex-direction:column;
         box-shadow:0 36px 110px rgba(15,23,42,.42);
       }
 
@@ -4317,16 +4317,18 @@
       }
 
       @media(max-width:980px){
+        .avi-overlay{padding:6px}
+        .avi-shell{width:100%;height:98dvh;max-height:98dvh;border-radius:20px}
         .avi-data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
         .avi-lines{grid-template-columns:repeat(2,minmax(0,1fr))}
         .avi-col-2{grid-column:span 2}
       }
 
       @media(max-width:760px){
-        .avi-overlay,.avi-rx-overlay{padding:0;align-items:flex-end}
+        .avi-overlay,.avi-rx-overlay{padding:0;align-items:stretch}
         .avi-shell,.avi-rx-shell{
-          width:100%;max-width:100%;max-height:96dvh;
-          border-radius:20px 20px 0 0;
+          width:100%;max-width:100%;height:100dvh;max-height:100dvh;
+          border-radius:0;
         }
         .avi-head{
           padding:12px calc(12px + env(safe-area-inset-right)) 12px
@@ -4385,6 +4387,7 @@
   }
 
   async function abrirReceta(idReceta){
+    instalarEstilos();
     const id = texto(idReceta);
 
     if(!id){
@@ -4641,8 +4644,29 @@
       o.querySelectorAll('details').forEach(d=>d.open=false);
     });
 
-    o.querySelector('[data-avi-actualizar]').addEventListener('click',()=>{
-      renderizar(id);
+    o.querySelector('[data-avi-actualizar]').addEventListener('click',async function(){
+      const btn = this;
+      const htmlOriginal = btn.innerHTML;
+      if(btn.disabled) return;
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Actualizando…';
+
+      try{
+        renderizar(id);
+        await new Promise(r=>setTimeout(r,180));
+        btn.innerHTML = '<i class="bi bi-check2"></i> Actualizada';
+        setTimeout(function(){
+          if(document.body.contains(btn)){
+            btn.innerHTML = htmlOriginal;
+            btn.disabled = false;
+          }
+        },700);
+      }catch(error){
+        console.warn(MODULO,'No se pudo actualizar la vista.',error);
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Reintentar';
+        btn.disabled = false;
+      }
     });
 
     try{
@@ -4659,9 +4683,22 @@
         return;
       }
 
-      await new Promise(r=>setTimeout(r,1600));
+      /*
+        V1.3 - Render temprano seguro.
+        sincronizarContextoAtencion carga Plan/Examen/Recetas en refuerzos de
+        80/140/220 ms. Se mantiene margen corto y un único refuerzo visual
+        posterior, sin alterar esos procesos ni su contexto_epoch.
+      */
+      await new Promise(r=>setTimeout(r,280));
       renderizar(id);
-      setTimeout(()=>renderizar(id),1400);
+      setTimeout(function(){
+        const actual = texto(
+          typeof window.getIdAtencionActiva === 'function'
+            ? window.getIdAtencionActiva()
+            : ''
+        );
+        if(actual === id) renderizar(id);
+      },650);
 
     }catch(e){
       console.error(MODULO,e);
@@ -4672,7 +4709,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.2.0',
+    version:'1.3.0',
     abrir,
     cerrar,
     abrirReceta,
