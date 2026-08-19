@@ -33,7 +33,7 @@
   function tienePreatencion(){
     return ['preconsulta','preconsulta_datos_administrativos','preconsulta_signos_vitales','preconsulta_antecedentes_referidos'].some(tiene);
   }
-  function puedeCorregirPaciente(){ return tiene('pacientes_edicion'); }
+  function puedeCorregirPaciente(){ return tiene('pacientes_edicion_administrativa') || tiene('pacientes_edicion'); }
   function apiUrl(){
     /* Mantiene primero el contrato que ya funcionaba en Preatención estable. */
     return (seguridad.configuracion && seguridad.configuracion.apiUrl) ||
@@ -211,10 +211,36 @@
             <div id="preEditarBox" class="pre-edit-box">
               <div class="fw-bold mb-2"><i class="bi bi-shield-lock me-1"></i>Corrección autorizada de datos generales</div>
               <div class="row g-2">
-                <div class="col-md-6"><label class="form-label">Nombres</label><input id="preEdNombres" class="form-control"></div><div class="col-md-6"><label class="form-label">Apellidos</label><input id="preEdApellidos" class="form-control"></div>
-                <div class="col-md-4"><label class="form-label">Documento</label><input id="preEdDocumento" class="form-control"></div><div class="col-md-4"><label class="form-label">Teléfono</label><input id="preEdTelefono" class="form-control"></div><div class="col-md-4"><label class="form-label">WhatsApp</label><input id="preEdWhatsapp" class="form-control"></div>
-                <div class="col-md-6"><label class="form-label">Correo</label><input id="preEdEmail" class="form-control"></div><div class="col-md-6"><label class="form-label">Dirección</label><input id="preEdDireccion" class="form-control"></div>
-                <div class="col-12"><label class="form-label">Motivo de la corrección *</label><input id="preEdMotivo" class="form-control" placeholder="Ej.: actualización de teléfono informada por el paciente"></div>
+                <div class="col-md-6"><label class="form-label">Nombres</label><input id="preEdNombres" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">Apellidos</label><input id="preEdApellidos" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">Documento</label><input id="preEdDocumento" class="form-control" inputmode="numeric" maxlength="10"></div>
+                <div class="col-md-4"><label class="form-label">Fecha de nacimiento</label><input id="preEdNacimiento" type="date" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">Sexo</label><select id="preEdSexo" class="form-select"><option value="">Seleccione</option><option>Femenino</option><option>Masculino</option><option>Otro</option></select></div>
+                <div class="col-md-4"><label class="form-label">Estado civil</label><select id="preEdEstadoCivil" class="form-select"><option value="">Seleccione</option><option>Soltero/a</option><option>Casado/a</option><option>Unión libre</option><option>Divorciado/a</option><option>Viudo/a</option></select></div>
+                <div class="col-md-4"><label class="form-label">Ocupación</label><input id="preEdOcupacion" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">Ciudad</label><input id="preEdCiudad" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">Teléfono</label><input id="preEdTelefono" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">WhatsApp</label><input id="preEdWhatsapp" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">Aseguradora</label><input id="preEdAseguradora" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">Correo</label><input id="preEdEmail" type="email" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">Dirección</label><input id="preEdDireccion" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">Contacto de emergencia</label><input id="preEdContacto" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">Teléfono de emergencia</label><input id="preEdTelefonoEmergencia" class="form-control"></div>
+
+                <div class="col-md-6"><label class="form-label">Tipo de justificativo *</label>
+                  <select id="preEdTipoJustificativo" class="form-select"><option value="">Seleccione...</option>
+                  <option value="Error de digitación">Error de digitación</option>
+                  <option value="Omisión">Omisión</option>
+                  <option value="Dato incorrecto">Dato incorrecto</option>
+                  <option value="Actualización solicitada por el paciente">Actualización solicitada por el paciente</option>
+                  <option value="Verificación documental">Verificación documental</option>
+                  <option value="Fallo del sistema">Fallo del sistema</option>
+                  <option value="Emergencia">Emergencia</option>
+                  <option value="Corrección clínica">Corrección clínica</option>
+                  <option value="Otro">Otro</option></select>
+                </div>
+                <div class="col-md-6" id="preEdMotivoWrap" style="display:none"><label class="form-label">Detalle del justificativo *</label><input id="preEdMotivo" class="form-control" maxlength="150" placeholder="Especifique el motivo (máx. 150 caracteres)"></div>
+                <div class="col-12" id="preEdObsWrap" style="display:none"><label class="form-label">Observación adicional <span class="text-muted">(opcional)</span></label><input id="preEdObservacion" class="form-control" maxlength="150" placeholder="Detalle adicional, si aplica (máx. 150 caracteres)"></div>
               </div><div class="d-flex justify-content-end gap-2 mt-3"><button type="button" class="btn-line" id="preEdCancelar">Cancelar</button><button type="button" class="btn-auro" id="preEdGuardar"><i class="bi bi-save me-1"></i>Guardar corrección</button></div>
             </div>
             <div id="preSignos" class="mt-4" style="display:none"><h5 class="fw-bold mb-3">Signos vitales y antropometría</h5><div class="row g-3">
@@ -244,12 +270,12 @@
 
               <div id="preCorregirDetalleWrap" style="display:none" class="mt-3">
                 <label class="form-label">Detalle del justificativo *</label>
-                <input id="preCorregirMotivo" class="form-control" placeholder="Especifique el motivo">
+                <input id="preCorregirMotivo" class="form-control" maxlength="150" placeholder="Especifique el motivo (máx. 150 caracteres)">
               </div>
 
               <div id="preCorregirDetalleOpcionalWrap" style="display:none" class="mt-3">
                 <label class="form-label">Observación adicional <span class="text-muted">(opcional)</span></label>
-                <input id="preCorregirObservacion" class="form-control" placeholder="Detalle adicional, si aplica">
+                <input id="preCorregirObservacion" class="form-control" maxlength="150" placeholder="Detalle adicional, si aplica (máx. 150 caracteres)">
               </div>
 
               <div class="d-flex justify-content-end gap-2 mt-3">
@@ -279,6 +305,7 @@
     document.getElementById('preEditarPaciente').onclick=abrirEdicionPaciente;
     document.getElementById('preEdCancelar').onclick=cerrarEdicionPaciente;
     document.getElementById('preEdGuardar').onclick=guardarCorreccionPaciente;
+    document.getElementById('preEdTipoJustificativo').onchange=actualizarJustificativoPaciente_;
     document.getElementById('preIrPacientes').onclick=abrirPacienteDesdePreatencion_;
 
     /*
@@ -666,9 +693,20 @@
       return;
     }
 
+    if(motivoLibre.length>150 || observacion.length>150){
+      alert('El detalle del justificativo no puede superar 150 caracteres.');
+      return;
+    }
+
+    /*
+     * Semántica AUROSANAX:
+     * - tipo_justificativo = categoría normalizada.
+     * - motivo = explicación concreta, solo si realmente se escribió.
+     * Nunca se repite automáticamente la categoría en motivo.
+     */
     const motivoFinal = tipoJustificativo==='Otro'
       ? motivoLibre
-      : (observacion || tipoJustificativo);
+      : observacion;
 
     const pas=val('prePAS').replace(/\D/g,'');
     const pad=val('prePAD').replace(/\D/g,'');
@@ -726,19 +764,125 @@
     }
   }
 
-  function abrirEdicionPaciente(){
-    if(!puedeCorregirPaciente()){alert('Su usuario no tiene autorización para corregir pacientes existentes.');return;}const p=pacientesCache.find(x=>txt(x.id_paciente)===val('prePaciente'));if(!p){alert('Seleccione un paciente.');return;}pacienteOriginal=JSON.parse(JSON.stringify(p));set('preEdNombres',p.nombres||'');set('preEdApellidos',p.apellidos||'');set('preEdDocumento',documentoPaciente(p));set('preEdTelefono',p.telefono||'');set('preEdWhatsapp',p.whatsapp||'');set('preEdEmail',p.email||p.correo||'');set('preEdDireccion',p.direccion||'');set('preEdMotivo','');document.getElementById('preEditarBox')?.classList.add('show');
+  function actualizarJustificativoPaciente_(){
+    const tipo=val('preEdTipoJustificativo');
+    const esOtro=tipo==='Otro';
+    const motivoWrap=document.getElementById('preEdMotivoWrap');
+    const obsWrap=document.getElementById('preEdObsWrap');
+    if(motivoWrap) motivoWrap.style.display=esOtro?'':'none';
+    if(obsWrap) obsWrap.style.display=(!tipo||esOtro)?'none':'';
+    if(!esOtro) set('preEdMotivo','');
+    if(!tipo||esOtro) set('preEdObservacion','');
   }
-  function cerrarEdicionPaciente(){document.getElementById('preEditarBox')?.classList.remove('show');pacienteOriginal=null;}
+
+  function abrirEdicionPaciente(){
+    if(!puedeCorregirPaciente()){
+      alert('Su usuario no tiene autorización para corregir datos administrativos del paciente.');
+      return;
+    }
+    const p=pacientesCache.find(x=>txt(x.id_paciente)===val('prePaciente'));
+    if(!p){alert('Seleccione un paciente.');return;}
+
+    pacienteOriginal=JSON.parse(JSON.stringify(p));
+    set('preEdNombres',p.nombres||'');
+    set('preEdApellidos',p.apellidos||'');
+    set('preEdDocumento',documentoPaciente(p));
+    set('preEdNacimiento',String(p.fecha_nacimiento||'').substring(0,10));
+    set('preEdSexo',p.sexo||'');
+    set('preEdEstadoCivil',p.estado_civil||'');
+    set('preEdOcupacion',p.ocupacion||'');
+    set('preEdCiudad',p.ciudad||'');
+    set('preEdTelefono',p.telefono||'');
+    set('preEdWhatsapp',p.whatsapp||'');
+    set('preEdEmail',p.email||p.correo||'');
+    set('preEdDireccion',p.direccion||'');
+    set('preEdAseguradora',p.aseguradora||'');
+    set('preEdContacto',p.contacto_emergencia||'');
+    set('preEdTelefonoEmergencia',p.telefono_emergencia||'');
+    set('preEdTipoJustificativo','');
+    set('preEdMotivo','');
+    set('preEdObservacion','');
+    actualizarJustificativoPaciente_();
+    document.getElementById('preEditarBox')?.classList.add('show');
+  }
+
+  function cerrarEdicionPaciente(){
+    document.getElementById('preEditarBox')?.classList.remove('show');
+    pacienteOriginal=null;
+    set('preEdTipoJustificativo','');
+    set('preEdMotivo','');
+    set('preEdObservacion','');
+    actualizarJustificativoPaciente_();
+  }
+
   async function guardarCorreccionPaciente(){
-    if(!pacienteOriginal)return;const motivo=val('preEdMotivo');if(motivo.length<3){alert('Indique el motivo de la corrección.');return;}const data={id_paciente:pacienteOriginal.id_paciente,nombres:val('preEdNombres'),apellidos:val('preEdApellidos'),numero_documento:val('preEdDocumento'),telefono:val('preEdTelefono'),whatsapp:val('preEdWhatsapp'),email:val('preEdEmail'),direccion:val('preEdDireccion'),motivo_correccion:motivo,token:token()};const btn=document.getElementById('preEdGuardar');if(btn)btn.disabled=true;
-    try{const r=await post('editarPacienteAuditable',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo corregir el paciente.');const id=pacienteOriginal.id_paciente;cerrarEdicionPaciente();await cargarTodo();await seleccionarPacienteDirecto(id);alert(r.sin_cambios?'No había cambios para guardar.':'Datos corregidos. La modificación quedó registrada en auditoría.');}catch(e){alert(e.message||'No se pudo corregir el paciente.');}finally{if(btn)btn.disabled=false;}
+    if(!pacienteOriginal)return;
+
+    const tipo=val('preEdTipoJustificativo');
+    const motivoLibre=val('preEdMotivo');
+    const observacion=val('preEdObservacion');
+
+    if(!tipo){alert('Seleccione el tipo de justificativo.');return;}
+    if(tipo==='Otro' && motivoLibre.length<3){
+      alert('Especifique el motivo cuando selecciona "Otro".');
+      return;
+    }
+    if(motivoLibre.length>150 || observacion.length>150){
+      alert('El detalle del justificativo no puede superar 150 caracteres.');
+      return;
+    }
+
+    const documento=val('preEdDocumento').replace(/\D/g,'');
+    if(documento && documento.length!==10){
+      alert('La cédula debe contener 10 dígitos.');
+      return;
+    }
+
+    const data={
+      id_paciente:pacienteOriginal.id_paciente,
+      nombres:val('preEdNombres'),
+      apellidos:val('preEdApellidos'),
+      numero_documento:documento,
+      fecha_nacimiento:val('preEdNacimiento'),
+      sexo:val('preEdSexo'),
+      estado_civil:val('preEdEstadoCivil'),
+      ocupacion:val('preEdOcupacion'),
+      ciudad:val('preEdCiudad'),
+      telefono:val('preEdTelefono'),
+      whatsapp:val('preEdWhatsapp'),
+      email:val('preEdEmail'),
+      direccion:val('preEdDireccion'),
+      aseguradora:val('preEdAseguradora'),
+      contacto_emergencia:val('preEdContacto'),
+      telefono_emergencia:val('preEdTelefonoEmergencia'),
+      tipo_justificativo:tipo,
+      motivo_correccion:tipo==='Otro'?motivoLibre:observacion,
+      token:token()
+    };
+
+    const btn=document.getElementById('preEdGuardar');
+    if(btn)btn.disabled=true;
+    try{
+      const r=await post('editarPacienteAuditable',data);
+      if(!r||r.success===false)throw new Error(r?.message||'No se pudo corregir el paciente.');
+      const id=pacienteOriginal.id_paciente;
+      cerrarEdicionPaciente();
+      await cargarTodo();
+      await seleccionarPacienteDirecto(id);
+      alert(r.sin_cambios
+        ? 'No había cambios para guardar.'
+        : 'Datos administrativos corregidos. La modificación quedó registrada en auditoría.');
+    }catch(e){
+      alert(e.message||'No se pudo corregir el paciente.');
+    }finally{
+      if(btn)btn.disabled=false;
+    }
   }
 
   async function abrirDesdeCita(idCita){
     if(!document.getElementById('preatencion'))inyectar();if(!citasCache.length)await cargarTodo();const c=citasCache.find(x=>txt(x.id_cita)===txt(idCita));if(!c){alert('No se encontró la cita.');return;}if(!c.id_paciente){alert('La cita todavía no está vinculada a un paciente. Cree o vincule primero el paciente.');return;}await seleccionarDesdeSala(c.id_paciente,c.id_cita);const btn=document.querySelector('.menu button[data-screen="preatencion"]');if(typeof window.showScreen==='function')window.showScreen('preatencion',btn||null);
   }
 
-  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.5.0'};
+  window.AUROSANAX_PREATENCION={abrirDesdeCita,cargarTodo,version:'3.7.0'};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inyectar,{once:true});else setTimeout(inyectar,0);
 })();
