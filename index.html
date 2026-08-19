@@ -1699,6 +1699,18 @@
     #agenda .mobile-card .line{align-items:flex-start}
     #agenda .mobile-card .line span:last-child{max-width:68%;word-break:break-word}
     #agenda .auro-agenda-mobile-actions{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+    #agenda .auro-agenda-refresh-btn{min-width:190px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .18s ease,box-shadow .18s ease,background .18s ease,color .18s ease,border-color .18s ease}
+    #agenda .auro-agenda-refresh-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 10px 24px rgba(139,30,90,.18)}
+    #agenda .auro-agenda-refresh-btn:disabled{cursor:wait;opacity:.92}
+    #agenda .auro-agenda-refresh-btn.is-loading{background:linear-gradient(135deg,#9f5a16,#d97706)}
+    #agenda .auro-agenda-refresh-btn.is-success{background:linear-gradient(135deg,#15803d,#16a34a)}
+    #agenda .auro-agenda-refresh-btn.is-error{background:linear-gradient(135deg,#b91c1c,#dc2626)}
+    #agenda .auro-agenda-refresh-btn.is-loading .auro-agenda-refresh-icon{animation:auroAgendaRefreshSpin .75s linear infinite}
+    @keyframes auroAgendaRefreshSpin{to{transform:rotate(360deg)}}
+    #agenda #agendaCountInfo.auro-agenda-info-loading{color:#9a3412;font-weight:800}
+    #agenda #agendaCountInfo.auro-agenda-info-ok{color:#166534;font-weight:800}
+    #agenda #agendaCountInfo.auro-agenda-info-error{color:#991b1b;font-weight:800}
+    #agenda .auro-agenda-action-checking{opacity:.76;cursor:wait!important}
     @media(max-width:980px){
       #agenda .cardx{padding:15px!important;border-radius:20px}
       #agenda .section-head{align-items:flex-start}
@@ -3467,7 +3479,7 @@
         <div class="section-head justify-content-end">
           <div class="d-flex gap-2 flex-wrap">
             <button class="btn-soft" onclick="abrirSecretaria()"><i class="bi bi-building me-1"></i> Secretaría</button>
-            <button class="btn-auro" onclick="cargarCitasAgendaWeb()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar agenda</button>
+            <button id="agendaRefreshBtn" class="btn-auro auro-agenda-refresh-btn" type="button" onclick="cargarCitasAgendaWeb()" aria-busy="false"><i class="bi bi-arrow-clockwise auro-agenda-refresh-icon"></i><span class="auro-agenda-refresh-label">Actualizar agenda</span></button>
           </div>
         </div>
 
@@ -9781,7 +9793,7 @@ document.addEventListener('click',e=>{
 
 <script src="pacientes.js?v=20260629_fase2_final"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
-<script src="agenda.js?v=20260719_agenda_v1"></script>
+<script src="agenda.js?v=20260819_agenda_v4_premium"></script>
 <script id="auro-erp-inicio-despues-seguridad">
   /* AUROSANAX: preparar el ERP, pero no cargar datos antes de validar la sesión. */
   window.__auroErpInicializacionPromesa = null;
