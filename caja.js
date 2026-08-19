@@ -1,6 +1,6 @@
 /* ============================================================
    AUROSANAX ERP — CAJA.JS
-   Versión 1.1 · anticipos por cita · antirregresión
+   Versión 1.2 · anticipos + recibo A4 + WhatsApp · antirregresión
 
    RESPONSABILIDAD:
    - Lógica exclusiva de Caja.
@@ -352,7 +352,12 @@
 
       const m=cajaMovimientoContexto(a);
       const estado=m?cajaTxt(m.estado_pago).toLowerCase():'sin_cuenta';
-      if(filtro && estado!==filtro)return false;
+      const esAnticipo=cajaEsCitaPendiente(a) && !!m && cajaNum(m.total_pagado)>0;
+      if(filtro==='anticipo'){
+        if(!esAnticipo) return false;
+      }else if(filtro && estado!==filtro){
+        return false;
+      }
 
       const servicio=cajaServicioTextoOrigen(a);
       const valores={
@@ -865,6 +870,8 @@
       }
 
       document.getElementById('cajaBtnRecibo').style.display='inline-flex';
+      const waBtn=document.getElementById('cajaBtnWhatsAppRecibo');
+      if(waBtn) waBtn.style.display=cajaTelefonoPaciente(cajaSeleccion)?'inline-flex':'none';
       cajaActualizarStats();
       alert(r?.duplicado_evitado
         ? 'El sistema detectó y evitó un pago duplicado.'
@@ -899,6 +906,8 @@
     const validos=pagos.filter(p=>cajaTxt(p.estado).toLowerCase()!=='anulado');
     if(!cajaUltimoPago&&validos.length)cajaUltimoPago=validos[0];
     document.getElementById('cajaBtnRecibo').style.display=cajaUltimoPago?'inline-flex':'none';
+    const waBtn=document.getElementById('cajaBtnWhatsAppRecibo');
+    if(waBtn) waBtn.style.display=(cajaUltimoPago&&cajaTelefonoPaciente(cajaSeleccion))?'inline-flex':'none';
   }
 
   function cajaActualizarStats(){
@@ -921,15 +930,41 @@
     document.getElementById('cajaPagadasCount').textContent=pagadas;
   }
 
-  async function cajaImprimirUltimoRecibo(){
-    if(!cajaUltimoPago||!cajaSeleccion||!cajaMovimientoActual){
-      alert('No existe un pago seleccionado para imprimir.');
-      return;
-    }
+  function cajaTelefonoPaciente(a){
+    const p=cajaPacienteRegistro(a)||{};
+    return cajaTxt(
+      a?.whatsapp || a?.telefono_whatsapp || a?.telefono || a?.celular ||
+      p?.whatsapp || p?.telefono_whatsapp || p?.telefono || p?.celular || p?.movil
+    );
+  }
 
-    if(!cajaDetallesActuales.length){
-      await cajaCargarDetallesMovimiento();
+  function cajaTelefonoWhatsAppNormalizado(valor){
+    let n=cajaTxt(valor).replace(/\D/g,'');
+    if(!n) return '';
+    if(n.startsWith('00')) n=n.slice(2);
+    if(n.startsWith('0') && n.length===10) n='593'+n.slice(1);
+    if(n.length===9 && n.startsWith('9')) n='593'+n;
+    return n;
+  }
+
+  function cajaTipoRecibo(a,m,p){
+    if(cajaEsCitaPendiente(a)) return 'RECIBO DE ANTICIPO';
+    const valor=cajaNum(p?.valor_pago);
+    const saldoAntes=cajaNum(m?.saldo_pendiente)+valor;
+    return valor+0.001<saldoAntes ? 'RECIBO DE ABONO' : 'RECIBO DE PAGO';
+  }
+
+  function cajaHoraVisual(v){
+    const t=cajaTxt(v);
+    const m=t.match(/(?:T|\s)(\d{2}):(\d{2})(?::(\d{2}))?/);
+    return m?`${m[1]}:${m[2]}${m[3]?':'+m[3]:''}`:'—';
+  }
+
+  async function cajaConstruirReciboHTML(){
+    if(!cajaUltimoPago||!cajaSeleccion||!cajaMovimientoActual){
+      throw new Error('No existe un pago seleccionado para generar el recibo.');
     }
+    if(!cajaDetallesActuales.length) await cajaCargarDetallesMovimiento();
 
     const p=cajaUltimoPago;
     const a=cajaSeleccion;
@@ -938,24 +973,64 @@
     const logo=cajaTxt(configuracion?.logo_url||configuracion?.logo_centro_url||'');
     const direccion=cajaTxt(configuracion?.direccion||configuracion?.direccion_centro||'');
     const telefono=cajaTxt(configuracion?.telefono||configuracion?.whatsapp||'');
+    const email=cajaTxt(configuracion?.email||configuracion?.correo||'');
     const recibo=cajaTxt(p.id_pago||'RECIBO');
-
+    const tipo=cajaTipoRecibo(a,m,p);
+    const idAtn=cajaIdAtencion(a);
+    const idCita=cajaIdCita(a);
     const detalles=cajaDetallesActivos();
     const detalleHtml=detalles.map(d=>{
       const nombre=cajaTxt(d.nombre_servicio)||'Servicio';
-      return `<div class="row"><span>${cajaEsc(nombre)}</span><b>${cajaMoney(d.subtotal!==undefined?d.subtotal:d.precio_unitario)}</b></div>`;
-    }).join('');
+      return `<div class="rx-line"><span>${cajaEsc(nombre)}</span><b>${cajaMoney(d.subtotal!==undefined?d.subtotal:d.precio_unitario)}</b></div>`;
+    }).join('') || '<div class="rx-muted">Sin detalle de servicios visible.</div>';
 
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Recibo ${cajaEsc(recibo)}</title><style>@page{size:80mm auto;margin:5mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:11px}.r{width:70mm;margin:auto}.logo{max-width:34mm;max-height:18mm;object-fit:contain;display:block;margin:0 auto 5px}.c{text-align:center}.title{font-size:16px;font-weight:800}.sub{font-size:10px;color:#555}.rule{border-top:1px dashed #777;margin:8px 0}.row{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.row span:first-child{color:#555;max-width:43mm}.row b{text-align:right}.total{font-size:16px;font-weight:900}.foot{text-align:center;font-size:9px;color:#666;line-height:1.4;margin-top:8px}@media print{button{display:none}}</style></head><body><div class="r"><div class="c">${logo?`<img class="logo" src="${cajaEsc(logo)}">`:''}<div class="title">${cajaEsc(centro)}</div>${direccion?`<div class="sub">${cajaEsc(direccion)}</div>`:''}${telefono?`<div class="sub">${cajaEsc(telefono)}</div>`:''}<div class="rule"></div><b>COMPROBANTE DE CAJA</b><div class="sub">${cajaEsc(recibo)}</div></div><div class="rule"></div><div class="row"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="row"><span>${cajaEsCitaPendiente(a)?'Cita':'Atención'}</span><b>${cajaEsc(cajaEsCitaPendiente(a)?cajaIdCita(a):cajaIdAtencion(a))}</b></div><div class="row"><span>Consulta</span><b>${cajaEsc(cajaEsCitaPendiente(a)?'Pendiente de atención':(a.numero_consulta||'—'))}</b></div><div class="row"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rule"></div>${detalleHtml}<div class="rule"></div><div class="row"><span>Fecha pago</span><b>${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))}</b></div><div class="row"><span>Forma pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="row"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}<div class="rule"></div><div class="row total"><span>${cajaNum(m.saldo_pendiente)<=0.001?'PAGO FINAL':'ABONO RECIBIDO'}</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="row"><span>Total cuenta</span><b>${cajaMoney(m.valor_final)}</b></div><div class="row"><span>Abonado acumulado</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="row"><span>Saldo pendiente</span><b>${cajaMoney(m.saldo_pendiente)}</b></div><div class="rule"></div><div class="c sub">Recibido por: ${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</div><div class="foot">Comprobante interno de Caja generado por AUROSANAX ERP.<br>No sustituye factura o comprobante tributario cuando corresponda.</div></div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${cajaEsc(tipo)} · ${cajaEsc(recibo)}</title><style>
+*{box-sizing:border-box}html,body{margin:0;padding:0;background:#eef1f5;color:#1f2937;font-family:Arial,sans-serif}.auro-rx-toolbar{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;background:#fff;border-bottom:1px solid #dbe2ea;box-shadow:0 2px 10px rgba(15,23,42,.08)}.auro-rx-actions{display:flex;gap:8px}.auro-rx-btn{border:0;border-radius:9px;padding:10px 14px;background:#8b1e5a;color:#fff;font-weight:700;cursor:pointer}.auro-rx-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}.auro-rx-stage{min-height:calc(100vh - 62px);padding:20px;display:flex;justify-content:center;align-items:flex-start;overflow:auto}.auro-rx-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;transform-origin:top center}.rx-paper{min-height:273mm;position:relative;padding-bottom:28mm}.rx-head{display:flex;justify-content:space-between;gap:18px;border-bottom:2px solid #8b1e5a;padding-bottom:10px}.rx-logo{max-width:42mm;max-height:22mm;object-fit:contain}.rx-brand h1{font-size:22px;margin:0;color:#8b1e5a}.rx-brand p{margin:3px 0;font-size:11px;color:#6b7280}.rx-title{text-align:right}.rx-title h2{margin:0;font-size:18px}.rx-title small{color:#6b7280}.rx-box{margin-top:14px;border:1px solid #e5e7eb;border-radius:10px;padding:12px}.rx-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}.rx-kv{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #f0f1f3;padding:5px 0;font-size:11px}.rx-kv span{color:#6b7280}.rx-line{display:flex;justify-content:space-between;gap:18px;padding:7px 0;border-bottom:1px solid #f0f1f3}.rx-summary{margin-top:12px;margin-left:auto;width:85mm}.rx-summary .rx-line.total{font-size:15px;color:#8b1e5a;border-top:2px solid #8b1e5a}.rx-muted{font-size:10px;color:#6b7280}.rx-foot{position:absolute;bottom:0;left:0;right:0;border-top:1px solid #e5e7eb;padding-top:8px;text-align:center;font-size:9px;color:#6b7280;line-height:1.45}@media(max-width:980px){.auro-rx-stage{padding:12px 0 20px;overflow-x:hidden}.auro-rx-sheet{transform-origin:top center}}@media(max-width:760px){.auro-rx-toolbar{padding:8px 10px}.auro-rx-toolbar strong{display:none}.auro-rx-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:8px}.auro-rx-btn{width:100%;min-height:40px;padding:8px 10px}.auro-rx-btn.secondary{width:auto;min-width:74px}.auro-rx-stage{padding:10px 0 18px;overflow-x:hidden}.auro-rx-sheet{width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;transform-origin:top center!important;box-shadow:0 8px 24px rgba(15,23,42,.18)}}@media print{@page{size:A4 portrait;margin:12mm 15mm}html,body{background:#fff!important;margin:0!important;padding:0!important;overflow:visible!important}.auro-rx-toolbar{display:none!important}.auro-rx-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}.auro-rx-sheet{width:auto!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}.rx-paper{min-height:273mm!important}}
+</style></head><body><div class="auro-rx-toolbar"><strong>Vista previa A4 · ${cajaEsc(tipo)}</strong><div class="auro-rx-actions"><button class="auro-rx-btn" onclick="window.print()">Imprimir / Guardar PDF</button><button class="auro-rx-btn secondary" onclick="window.close()">Cerrar</button></div></div><main class="auro-rx-stage"><div class="auro-rx-sheet" id="auroCajaReciboSheet"><div class="rx-paper"><header class="rx-head"><div class="rx-brand">${logo?`<img class="rx-logo" src="${cajaEsc(logo)}" alt="Logo">`:''}<h1>${cajaEsc(centro)}</h1>${direccion?`<p>${cajaEsc(direccion)}</p>`:''}<p>${[telefono,email].filter(Boolean).map(cajaEsc).join(' · ')}</p></div><div class="rx-title"><h2>${cajaEsc(tipo)}</h2><small>${cajaEsc(recibo)}</small></div></header><section class="rx-box"><div class="rx-grid"><div class="rx-kv"><span>Paciente</span><b>${cajaEsc(cajaPaciente(a))}</b></div><div class="rx-kv"><span>Cédula</span><b>${cajaEsc(cajaCedulaPaciente(a)||'—')}</b></div><div class="rx-kv"><span>Médico</span><b>${cajaEsc(cajaMedico(a))}</b></div><div class="rx-kv"><span>Fecha</span><b>${cajaEsc(cajaFecha(p.fecha_pago||p.creado_en))} ${cajaEsc(cajaHoraVisual(p.fecha_pago||p.creado_en))}</b></div>${idCita?`<div class="rx-kv"><span>ID cita</span><b>${cajaEsc(idCita)}</b></div>`:''}${idAtn?`<div class="rx-kv"><span>ID atención</span><b>${cajaEsc(idAtn)}</b></div>`:''}<div class="rx-kv"><span>Consulta</span><b>${cajaEsc(cajaEsCitaPendiente(a)?'Pendiente de atención':(a.numero_consulta||'—'))}</b></div><div class="rx-kv"><span>Forma de pago</span><b>${cajaEsc(p.forma_pago||'—')}</b></div>${p.referencia_pago?`<div class="rx-kv"><span>Referencia</span><b>${cajaEsc(p.referencia_pago)}</b></div>`:''}</div></section><section class="rx-box"><b>Detalle</b>${detalleHtml}<div class="rx-summary"><div class="rx-line"><span>Valor total</span><b>${cajaMoney(m.valor_final)}</b></div><div class="rx-line"><span>Valor recibido</span><b>${cajaMoney(p.valor_pago)}</b></div><div class="rx-line"><span>Pagado acumulado</span><b>${cajaMoney(m.total_pagado)}</b></div><div class="rx-line total"><span>Saldo pendiente</span><b>${cajaMoney(m.saldo_pendiente)}</b></div></div></section><section class="rx-box"><div class="rx-kv"><span>Recibido por</span><b>${cajaEsc(p.recibido_por||document.getElementById('secSesionNombre')?.textContent||'Secretaría')}</b></div>${p.observaciones?`<div class="rx-kv"><span>Observaciones</span><b>${cajaEsc(p.observaciones)}</b></div>`:''}</section><footer class="rx-foot">Comprobante interno de Caja generado por AUROSANAX ERP.<br>No sustituye factura o comprobante tributario cuando corresponda.</footer></div></div></main><script>(function(){function ajustar(){var hoja=document.getElementById('auroCajaReciboSheet');if(!hoja)return;var ancho=window.innerWidth||document.documentElement.clientWidth||794;var anchoHoja=hoja.offsetWidth||794;var altoHoja=hoja.offsetHeight||1123;var margen=ancho<=760?16:28;var disponible=Math.max(220,ancho-margen);var escala=ancho>980?1:Math.min(1,disponible/anchoHoja);hoja.style.transform=escala<1?'scale('+escala+')':'none';hoja.style.marginBottom=escala<1?(-altoHoja*(1-escala))+'px':'0'}window.addEventListener('resize',ajustar);ajustar()})();<\/script></body></html>`;
+  }
 
-    const w=window.open('','_blank','width=430,height=720');
-    if(!w){
-      alert('El navegador bloqueó la ventana de impresión. Habilite ventanas emergentes para este sitio.');
+  async function cajaImprimirUltimoRecibo(){
+    try{
+      const html=await cajaConstruirReciboHTML();
+      const w=window.open('','_blank','width=980,height=820');
+      if(!w){
+        alert('El navegador bloqueó la vista previa. Habilite ventanas emergentes para este sitio.');
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+    }catch(e){
+      console.error(e);
+      alert(e.message||'No se pudo generar el recibo.');
+    }
+  }
+
+  async function cajaEnviarReciboWhatsApp(){
+    if(!cajaUltimoPago||!cajaSeleccion||!cajaMovimientoActual){
+      alert('No existe un recibo disponible para enviar.');
       return;
     }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    const telefono=cajaTelefonoWhatsAppNormalizado(cajaTelefonoPaciente(cajaSeleccion));
+    if(!telefono){
+      alert('Este paciente no tiene teléfono o WhatsApp registrado.');
+      return;
+    }
+    const a=cajaSeleccion, m=cajaMovimientoActual, p=cajaUltimoPago;
+    const tipo=cajaTipoRecibo(a,m,p).replace('RECIBO DE ','');
+    const mensaje=[
+      'AUROSANAX · '+tipo,
+      'Paciente: '+cajaPaciente(a),
+      'Comprobante: '+cajaTxt(p.id_pago||'—'),
+      'Valor recibido: '+cajaMoney(p.valor_pago),
+      'Pagado acumulado: '+cajaMoney(m.total_pagado),
+      'Saldo pendiente: '+cajaMoney(m.saldo_pendiente),
+      cajaIdCita(a)?'Cita: '+cajaIdCita(a):'',
+      cajaIdAtencion(a)?'Atención: '+cajaIdAtencion(a):'',
+      'Gracias.'
+    ].filter(Boolean).join('\n');
+    window.open('https://wa.me/'+telefono+'?text='+encodeURIComponent(mensaje),'_blank','noopener');
   }
 
 function cajaMejorarCampoValorRecibido(){
@@ -1084,6 +1159,14 @@ function cajaAplicarMejorasInterfaz(){
     const filtro=document.getElementById('cajaFiltro');
     const oldRow=buscar?.closest('.row.g-2.mb-3');
 
+    /* Estado financiero adicional, sin cambiar los estados persistidos en BD. */
+    if(filtro && !filtro.querySelector('option[value="anticipo"]')){
+      const opt=document.createElement('option');
+      opt.value='anticipo';
+      opt.textContent='Anticipos';
+      filtro.insertBefore(opt,filtro.querySelector('option[value="Pagado"]')||null);
+    }
+
     if(buscar && filtro && oldRow && !document.getElementById('cajaBuscarPor')){
       const wrap=document.createElement('div');
       wrap.className='caja-search-grid';
@@ -1133,6 +1216,24 @@ function cajaAplicarMejorasInterfaz(){
     if(btnSaldo){
       btnSaldo.innerHTML='<i class="bi bi-check-all"></i> Cobrar saldo completo';
       btnSaldo.title='Completa el saldo pendiente. Luego seleccione la forma de pago y pulse Registrar pago.';
+    }
+
+    /* Recibo A4 + WhatsApp: reutiliza la zona de acciones existente de Caja. */
+    const btnRecibo=document.getElementById('cajaBtnRecibo');
+    if(btnRecibo){
+      btnRecibo.innerHTML='<i class="bi bi-file-earmark-text"></i> Ver recibo';
+      btnRecibo.title='Abrir vista previa A4 del último comprobante.';
+      const acciones=btnRecibo.parentElement;
+      if(acciones && !document.getElementById('cajaBtnWhatsAppRecibo')){
+        const wa=document.createElement('button');
+        wa.id='cajaBtnWhatsAppRecibo';
+        wa.type='button';
+        wa.className='btn-line';
+        wa.style.display='none';
+        wa.innerHTML='<i class="bi bi-whatsapp"></i> Enviar por WhatsApp';
+        wa.onclick=cajaEnviarReciboWhatsApp;
+        acciones.appendChild(wa);
+      }
     }
 
     /* Mejor distribución del formulario de pago en tablet/móvil. */
