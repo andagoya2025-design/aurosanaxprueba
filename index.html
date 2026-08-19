@@ -258,6 +258,47 @@
       font-weight:750;
     }
 
+    /* AUROSANAX - Actualización premium de Pacientes
+       Solo presentación/estado visual. No cambia la carga de datos. */
+    .auro-refresh-btn{
+      position:relative;
+      min-width:178px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:4px;
+      transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease,box-shadow .18s ease;
+    }
+    .auro-refresh-btn:hover:not(:disabled){
+      transform:translateY(-1px);
+      box-shadow:0 8px 20px rgba(139,30,90,.10);
+    }
+    .auro-refresh-btn:disabled{
+      cursor:wait;
+      opacity:.82;
+    }
+    .auro-refresh-btn.auro-refresh-loading{
+      background:#fff7ed;
+      color:#9a3412;
+      border-color:#fed7aa;
+    }
+    .auro-refresh-btn.auro-refresh-ok{
+      background:#f0fdf4;
+      color:#166534;
+      border-color:#bbf7d0;
+    }
+    .auro-refresh-btn.auro-refresh-error{
+      background:#fef2f2;
+      color:#991b1b;
+      border-color:#fecaca;
+    }
+    .auro-refresh-btn.auro-refresh-loading .auro-refresh-icon{
+      animation:auroRefreshSpin .75s linear infinite;
+    }
+    @keyframes auroRefreshSpin{
+      to{transform:rotate(360deg)}
+    }
+
     .form-control,.form-select{
       border-radius:14px;
       padding:10px 12px;
@@ -3399,7 +3440,19 @@
     <section class="screen" id="pacientes">
       <div class="cardx p-4">
         <div class="section-head justify-content-end">
-          <button class="btn-auro" onclick="openPatientModal()"><i class="bi bi-person-plus me-1"></i> Nuevo paciente</button>
+          <div class="d-flex gap-2 flex-wrap">
+            <button
+              id="btnActualizarPacientes"
+              type="button"
+              class="btn-soft auro-refresh-btn"
+              onclick="auroActualizarPacientesPremium()"
+              aria-live="polite"
+            >
+              <i class="bi bi-arrow-clockwise me-1 auro-refresh-icon"></i>
+              <span class="auro-refresh-text">Actualizar pacientes</span>
+            </button>
+            <button class="btn-auro" onclick="openPatientModal()"><i class="bi bi-person-plus me-1"></i> Nuevo paciente</button>
+          </div>
         </div>
 
         <div class="row g-2 mb-3">
@@ -8157,6 +8210,73 @@ function imprimirHistoriaClinica(){
       <div>${fecha} ${hora}</div>
     </footer>
   </div>
+
+<script id="auro-pacientes-refresh-premium">
+(function(){
+  'use strict';
+
+  let auroPacientesActualizando = false;
+
+  window.auroActualizarPacientesPremium = async function(){
+    if(auroPacientesActualizando) return;
+
+    const btn = document.getElementById('btnActualizarPacientes');
+    const texto = btn?.querySelector('.auro-refresh-text');
+    const inicio = performance.now();
+
+    auroPacientesActualizando = true;
+
+    if(btn){
+      btn.disabled = true;
+      btn.classList.remove('auro-refresh-ok','auro-refresh-error');
+      btn.classList.add('auro-refresh-loading');
+    }
+    if(texto) texto.textContent = 'Actualizando...';
+
+    try{
+      if(typeof window.cargarPacientesDesdeSheets !== 'function'){
+        throw new Error('La función de actualización de pacientes no está disponible.');
+      }
+
+      await window.cargarPacientesDesdeSheets();
+
+      if(btn){
+        btn.classList.remove('auro-refresh-loading','auro-refresh-error');
+        btn.classList.add('auro-refresh-ok');
+      }
+      if(texto) texto.textContent = 'Pacientes actualizados';
+
+      const ms = Math.round(performance.now() - inicio);
+      console.info('Pacientes actualizados en ' + ms + ' ms');
+
+      setTimeout(function(){
+        if(btn) btn.classList.remove('auro-refresh-ok');
+        if(texto) texto.textContent = 'Actualizar pacientes';
+      }, 1400);
+
+    }catch(error){
+      console.error('Error al actualizar pacientes:', error);
+
+      if(btn){
+        btn.classList.remove('auro-refresh-loading','auro-refresh-ok');
+        btn.classList.add('auro-refresh-error');
+      }
+      if(texto) texto.textContent = 'Error al actualizar';
+
+      setTimeout(function(){
+        if(btn) btn.classList.remove('auro-refresh-error');
+        if(texto) texto.textContent = 'Actualizar pacientes';
+      }, 1800);
+
+      alert('No se pudo actualizar la lista de pacientes. Se conserva la información que ya estaba visible.');
+    }finally{
+      auroPacientesActualizando = false;
+      if(btn) btn.disabled = false;
+    }
+  };
+})();
+</script>
+
 </body>
 
 
