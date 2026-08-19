@@ -178,10 +178,65 @@ function auroNormalizarCitaSecretariaParaERP(c, index){
   };
 }
 
+/* ============================================================
+   AGENDA 04 - CARGA PERCIBIDA RÁPIDA + VERIFICACIÓN SEGURA
+   - Renderiza citas apenas llegan.
+   - Verifica Atenciones después, sin bloquear la vista.
+   - Mientras verifica, bloquea únicamente la acción de iniciar consulta.
+   - No modifica IDs, estados, creación de paciente/historia ni backend.
+============================================================ */
+let auroAgendaVerificacionAtenciones = 'lista'; // lista | verificando | error
+let auroAgendaCargaSecuencia = 0;
+
+function auroAgendaEstadoBotonActualizar(estado, detalle){
+  const btn = document.getElementById('agendaRefreshBtn');
+  if(!btn) return;
+
+  const icon = btn.querySelector('.auro-agenda-refresh-icon');
+  const label = btn.querySelector('.auro-agenda-refresh-label');
+  btn.classList.remove('is-loading','is-success','is-error');
+  btn.disabled = estado === 'loading';
+  btn.setAttribute('aria-busy', estado === 'loading' ? 'true' : 'false');
+
+  if(estado === 'loading'){
+    btn.classList.add('is-loading');
+    if(icon) icon.className = 'bi bi-arrow-clockwise auro-agenda-refresh-icon';
+    if(label) label.textContent = detalle || 'Actualizando…';
+  }else if(estado === 'success'){
+    btn.classList.add('is-success');
+    if(icon) icon.className = 'bi bi-check2-circle auro-agenda-refresh-icon';
+    if(label) label.textContent = detalle || 'Agenda actualizada';
+  }else if(estado === 'error'){
+    btn.classList.add('is-error');
+    if(icon) icon.className = 'bi bi-exclamation-triangle auro-agenda-refresh-icon';
+    if(label) label.textContent = detalle || 'Reintentar';
+  }else{
+    if(icon) icon.className = 'bi bi-arrow-clockwise auro-agenda-refresh-icon';
+    if(label) label.textContent = 'Actualizar agenda';
+  }
+}
+
+function auroAgendaEstadoCargaVisual(texto, tipo){
+  const info = document.getElementById('agendaCountInfo');
+  if(!info) return;
+  info.classList.remove('auro-agenda-info-loading','auro-agenda-info-ok','auro-agenda-info-error');
+  if(tipo) info.classList.add('auro-agenda-info-' + tipo);
+  info.textContent = texto || '';
+}
+
 async function cargarCitasAgendaWeb(){
+  const secuencia = ++auroAgendaCargaSecuencia;
   const body = document.getElementById('agendaBody');
-  if(body){
-    body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Cargando citas desde Secretaría...</td></tr>';
+  const mobile = document.getElementById('agendaMobile');
+
+  auroAgendaEstadoBotonActualizar('loading','Cargando citas…');
+  auroAgendaEstadoCargaVisual('Cargando agenda médica…','loading');
+
+  if(body && !citasAgendaWebCargadas){
+    body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Cargando citas…</td></tr>';
+  }
+  if(mobile && !citasAgendaWebCargadas){
+    mobile.innerHTML = '<div class="mobile-card text-muted"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Cargando citas…</div>';
   }
 
   try{
@@ -189,10 +244,16 @@ async function cargarCitasAgendaWeb(){
       fetch(API_URL + '?accion=listarCitas&t=' + Date.now()),
       fetch(API_URL + '?accion=listarMedicos&t=' + Date.now()).catch(() => null)
     ]);
-    const data = await resCitas.json();
 
+    if(secuencia !== auroAgendaCargaSecuencia) return;
+
+    if(!resCitas || !resCitas.ok){
+      throw new Error('No se pudo consultar la agenda.');
+    }
+
+    const data = await resCitas.json();
     if(!Array.isArray(data)){
-      throw new Error(data.message || 'Secretaría no devolvió una lista válida de citas.');
+      throw new Error(data?.message || 'Secretaría no devolvió una lista válida de citas.');
     }
 
     if(resMedicos){
@@ -207,34 +268,51 @@ async function cargarCitasAgendaWeb(){
     citasAgendaWeb = data.map((c, index) => auroNormalizarCitaSecretariaParaERP(c, index));
     citasAgendaWebCargadas = true;
 
+    /* Primera pintura: la Agenda ya es visible. */
+    auroAgendaVerificacionAtenciones = 'verificando';
+    auroActualizarFiltroMedicosAgenda();
+    renderAgendaWeb();
+    auroAgendaEstadoBotonActualizar('loading','Verificando consultas…');
+
+    const pacientesActivo = document.getElementById('pacientes')?.classList.contains('active');
+    if(pacientesActivo && typeof renderPatients === 'function'){
+      renderPatients();
+    }
+
+    /* Segunda fase: protege la id_cita sin secuestrar el render inicial. */
     try{
       if(typeof window.refrescarAtencionesDesdeSheets === 'function'){
         await window.refrescarAtencionesDesdeSheets();
       }
+      if(secuencia !== auroAgendaCargaSecuencia) return;
+      auroAgendaVerificacionAtenciones = 'lista';
+      renderAgendaWeb();
+      auroAgendaEstadoBotonActualizar('success','Agenda verificada');
+      setTimeout(function(){
+        if(secuencia === auroAgendaCargaSecuencia){
+          auroAgendaEstadoBotonActualizar('idle');
+        }
+      }, 1400);
     }catch(errorAtenciones){
-      console.warn(
-        'AUROSANAX AGENDA: no se pudo refrescar Atenciones antes de renderizar.',
-        errorAtenciones
-      );
-    }
-
-    auroActualizarFiltroMedicosAgenda();
-    renderAgendaWeb();
-
-    const pacientesActivo = document.getElementById('pacientes')?.classList.contains('active');
-    if(pacientesActivo){
-      renderPatients();
+      if(secuencia !== auroAgendaCargaSecuencia) return;
+      auroAgendaVerificacionAtenciones = 'error';
+      console.warn('AGENDA: no se pudo verificar Atenciones.', errorAtenciones);
+      renderAgendaWeb();
+      auroAgendaEstadoBotonActualizar('error','Verificación pendiente');
     }
 
   }catch(error){
+    if(secuencia !== auroAgendaCargaSecuencia) return;
     citasAgendaWebCargadas = false;
+    auroAgendaVerificacionAtenciones = 'error';
     console.error(error);
+    auroAgendaEstadoBotonActualizar('error','Reintentar');
+    auroAgendaEstadoCargaVisual('No se pudo cargar la agenda.','error');
     if(body){
-      body.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">No se pudo cargar la agenda desde Secretaría.</td></tr>';
+      body.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">No se pudo cargar la agenda. Use “Reintentar”.</td></tr>';
     }
-    const mobile = document.getElementById('agendaMobile');
     if(mobile){
-      mobile.innerHTML = '<div class="mobile-card text-danger">No se pudo cargar la agenda desde Secretaría.</div>';
+      mobile.innerHTML = '<div class="mobile-card text-danger">No se pudo cargar la agenda. Use “Reintentar”.</div>';
     }
   }
 }
@@ -360,52 +438,14 @@ function auroDatosPacienteDesdeCitaAgenda(c){
     }
   }
 
-  /*
-    AUROSANAX AGENDA 04 - PRELLENADO ADMINISTRATIVO DESDE CITA
-    Alcance exclusivo:
-    - Reutiliza datos YA existentes en la cita.
-    - No crea ni guarda pacientes automáticamente.
-    - No modifica cita, historia, atención, estados ni backend.
-    - Si un dato no existe en la cita, el campo queda vacío para revisión manual.
-  */
-  const cedula = String(
-    c.numero_documento ||
-    c.cedula ||
-    c.documento ||
-    c.numero_documento_paciente ||
-    c.cedula_paciente ||
-    c.documento_paciente ||
-    c.identificacion ||
-    c.identificacion_paciente ||
-    ''
-  ).replace(/\D/g,'').slice(0,10);
-
-  const telefono = String(
-    c.whatsapp ||
-    c.telefono ||
-    c.celular ||
-    c.telefono_paciente ||
-    c.whatsapp_paciente ||
-    c.telefono_contacto ||
-    c.numero_telefono ||
-    c.movil ||
-    ''
-  ).replace(/\D/g,'').slice(0,10);
-
   return {
     id_cita: auroIdCitaAgenda(c),
     nombres: nombres,
     apellidos: apellidos,
     nombre_completo: nombreCompleto,
-    cedula: cedula,
-    telefono: telefono,
-    email: String(
-      c.email ||
-      c.correo ||
-      c.email_paciente ||
-      c.correo_paciente ||
-      ''
-    ).trim(),
+    cedula: String(c.numero_documento || c.cedula || c.documento || '').trim(),
+    telefono: auroWhatsappPacienteAgenda(c),
+    email: String(c.email || c.correo || c.email_paciente || '').trim(),
     servicio: auroServicioAgenda(c),
     origen: 'agenda_medica'
   };
@@ -480,6 +520,20 @@ function auroAccionClinicaAgendaHTML(c, modoMovil){
     return modoMovil
       ? `<button class="btn-auro w-100" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-earmark-plus me-1"></i> Crear historia</button>`
       : `<button class="btn-action primary" title="Crear historia clínica" onclick="abrirHistoriaDesdeAgenda(${c.originalIndex})"><i class="bi bi-file-earmark-plus me-1"></i> Crear historia</button>`;
+  }
+
+  /* La cita ya se ve, pero no se permite iniciar una consulta hasta confirmar
+     contra Atenciones que esa id_cita no fue utilizada. */
+  if(auroAgendaVerificacionAtenciones === 'verificando'){
+    return modoMovil
+      ? '<button class="btn-auro w-100 auro-agenda-action-checking" type="button" disabled><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Verificando consulta…</button>'
+      : '<button class="btn-action primary auro-agenda-action-checking" type="button" disabled title="Verificando si esta cita ya tiene una atención"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Verificando…</button>';
+  }
+
+  if(auroAgendaVerificacionAtenciones === 'error'){
+    return modoMovil
+      ? '<button class="btn-soft w-100" type="button" disabled><i class="bi bi-shield-exclamation me-1"></i> Actualice para verificar</button>'
+      : '<button class="btn-action soft" type="button" disabled title="No se pudo verificar todavía si esta cita ya tiene una atención"><i class="bi bi-shield-exclamation me-1"></i> Verificación pendiente</button>';
   }
 
   if(auroPuedeIniciarConsultaAgenda(c)){
