@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_5_DOCUMENTAL_DESKTOP';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_6_FILTRO_CLINICO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3615,7 +3615,7 @@
   }
 
   function valorCampo(el){
-    if(!el || el.disabled) return '';
+    if(!el) return '';
 
     if(el.type === 'checkbox' || el.type === 'radio'){
       if(!el.checked) return '';
@@ -3748,7 +3748,7 @@
       const antecedente = interpretarAntecedenteFamiliar(valor);
       if(antecedente){
         antecedente.forEach(item=>{
-          const clave = norm(item.valor);
+          const clave = norm(item.etiqueta) + '||' + norm(item.valor);
           if(!clave || vistos.has(clave)) return;
           vistos.add(clave);
           salida.push(item);
@@ -3756,8 +3756,8 @@
         return;
       }
 
-      const claveContenido = norm(valor);
-      if(!claveContenido || vistos.has(claveContenido)) return;
+      const claveContenido = norm(etiqueta) + '||' + norm(valor);
+      if(!norm(valor) || vistos.has(claveContenido)) return;
 
       vistos.add(claveContenido);
       salida.push({
@@ -3808,7 +3808,7 @@
 
     panel.querySelectorAll(
       '.auro-previos-line,.auro-previos-mini-row,.obs-read,'+
-      '.auro-dx-item,.auro-dx-source-item,.auro-dx-contexto-stat'
+      '.auro-dx-item'
     ).forEach(n=>{
       if(n.closest('button')) return;
 
@@ -4948,7 +4948,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.5.0-documental',
+    version:'1.6.0-filtro-clinico',
     abrir,
     cerrar,
     abrirReceta,
