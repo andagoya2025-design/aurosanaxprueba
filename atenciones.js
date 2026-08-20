@@ -1,5 +1,5 @@
 /* =====================================================
-   AUROSANAX ERP - MÓDULO ATENCIONES
+   AUROSANAX ERP - MÓDULO ATENCIONES 
    Archivo: atenciones.js
    Versión: 2.4 contexto maestro enriquecido no invasivo + resumen premium + paginación segura
    Objetivo:
@@ -4590,7 +4590,7 @@
     }
 
     if(grupos.examenes.length){
-      html += '<div class="avi-subgroup"><h5>Exámenes solicitados</h5>'+
+      html += '<div class="avi-subgroup">'+ 
         paresHTML(grupos.examenes)+'</div>';
     }
 
