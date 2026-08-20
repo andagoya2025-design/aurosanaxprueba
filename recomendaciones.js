@@ -1045,6 +1045,15 @@
       : '';
   }
 
+  function recRecomendacionesHTML(texto){
+    const raw=txt(texto);
+    if(!raw) return '';
+    const items=raw.split(/\r?\n+/).map(x=>x.trim()).filter(Boolean);
+    return items.length>1
+      ? `<ul class="ar-doc-list ar-rec-list">${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
+      : `<p class="ar-rec-text">${esc(raw)}</p>`;
+  }
+
   function recDocumentoHTML(){
     const ctx=state.contexto||contextoAtencion();
     const a=ctx.atencion||{};
@@ -1108,7 +1117,7 @@
       txt(d.recomendaciones_generales) ? `
         <section class="ar-section">
           <h3>RECOMENDACIONES GENERALES</h3>
-          <p>${esc(d.recomendaciones_generales)}</p>
+          ${recRecomendacionesHTML(d.recomendaciones_generales)}
         </section>` : ''
     ].filter(Boolean).join('');
 
@@ -1124,12 +1133,7 @@
 
       <h1>RECOMENDACIONES MÉDICAS</h1>
 
-      <p class="ar-intro">
-        Se emiten las siguientes recomendaciones para
-        <b>${esc(paciente.nombre)}</b>${paciente.documento?`, con documento de identidad <b>${esc(paciente.documento)}</b>`:''},
-        correspondientes a la ${ctx.numeroConsulta?`consulta #${esc(ctx.numeroConsulta)}`:'atención clínica seleccionada'},
-        atendida por <b>${esc(medico.nombre)}</b>.
-      </p>
+      <p class="ar-intro">Se emiten las siguientes recomendaciones para <b>${esc(paciente.nombre)}</b>${paciente.documento?`, con documento de identidad <b>${esc(paciente.documento)}</b>`:''}, correspondientes a la ${ctx.numeroConsulta?`consulta #${esc(ctx.numeroConsulta)}`:'atención clínica seleccionada'}, atendida por <b>${esc(medico.nombre)}</b>.</p>
 
       <div class="ar-lines">
         ${medico.especialidad?`<div class="ar-line"><b>ESPECIALIDAD:</b> ${esc(medico.especialidad)}</div>`:''}
@@ -1182,12 +1186,15 @@ body{overflow-x:hidden}
 .ar-intro{margin-bottom:14px!important}
 .ar-lines{display:grid;gap:5px;margin:12px 0}
 .ar-line{font-size:12px;line-height:1.42}
-.ar-line b{display:inline-block;min-width:145px}
+.ar-line b{display:inline-block;min-width:120px}
 .ar-section,.ar-dx{margin:14px 0;break-inside:avoid;page-break-inside:avoid}
 .ar-section h3,.ar-dx h3{font-size:12px;margin:0 0 6px;font-weight:900}
 .ar-dx-row{font-size:12px;line-height:1.45;margin:2px 0}
 .ar-doc-list{margin:4px 0 7px 18px;padding:0}
 .ar-doc-list li{font-size:12px;line-height:1.48;margin:2px 0}
+.ar-rec-list{margin-top:6px}
+.ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
+.ar-rec-text{line-height:1.62!important}
 .ar-firma-area{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}
 .ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
 .ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
