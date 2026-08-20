@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_ANTECEDENTES_JSON_REAL';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_8_ANTECEDENTES_UI_PRO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3913,13 +3913,22 @@
     const lista = normalizarItemsAntecedente(items);
     if(!lista.length) return '';
 
-    return '<div class="avi-subgroup">'+
+    const grupoVacunas = /vacunas|covid/i.test(titulo);
+    const grupoHabitos = /hábitos|actividad|alimentación/i.test(titulo);
+
+    return '<div class="avi-subgroup avi-ant-group'+
+      (grupoVacunas ? ' avi-ant-vacunas' : '')+
+      (grupoHabitos ? ' avi-ant-habitos' : '')+'">'+
       '<h5>'+esc(titulo)+'</h5>'+
-      '<div class="avi-lines">'+
+      '<div class="avi-ant-grid">'+
         lista.map(item=>
-          '<div class="avi-line'+(item.detalle.length > 150 ? ' avi-span-full' : '')+'">'+
-            '<b>'+esc(item.titulo)+'</b>'+
-            (item.detalle ? '<p>'+esc(item.detalle)+'</p>' : '')+
+          '<div class="avi-ant-card">'+
+            '<b class="avi-ant-title">'+esc(item.titulo)+'</b>'+
+            (item.detalle ? '<p class="avi-ant-detail">'+
+              esc(item.detalle)
+                .replace(/Dosis\s+(\d+)/gi,'Dosis&nbsp;$1')
+                .replace(/Consulta\s+#?(\d+)/gi,'Consulta&nbsp;#$1')+
+            '</p>' : '')+
           '</div>'
         ).join('')+
       '</div>'+
@@ -4517,6 +4526,71 @@
       .avi-subgroup{
         border-top:1px dashed #e7eaf0;padding-top:11px;
       }
+    /* Antecedentes: presentación clínica compacta, sin alterar datos */
+    .avi-ant-group{
+      margin:0 0 18px;
+      min-width:0;
+    }
+    .avi-ant-group>h5{
+      margin:0 0 9px;
+      font-size:13px;
+      line-height:1.25;
+      font-weight:800;
+      color:#25233a;
+    }
+    .avi-ant-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:10px 12px;
+      align-items:start;
+    }
+    .avi-ant-card{
+      min-width:0;
+      border:1px solid #ece8ef;
+      border-radius:12px;
+      padding:10px 12px;
+      background:#fff;
+      overflow-wrap:break-word;
+      word-break:normal;
+    }
+    .avi-ant-title{
+      display:block;
+      margin:0 0 5px;
+      font-size:12px;
+      line-height:1.3;
+      font-weight:800;
+      color:#32223a;
+    }
+    .avi-ant-detail{
+      margin:0;
+      font-size:12px;
+      line-height:1.55;
+      color:#55515b;
+      white-space:normal;
+      overflow-wrap:break-word;
+      word-break:normal;
+    }
+    .avi-ant-detail::first-line{
+      line-height:1.55;
+    }
+    /* Evita cortes visuales como "Dosis 1" dejando el número en otra línea. */
+    .avi-ant-card{
+      text-wrap:pretty;
+    }
+    .avi-ant-vacunas .avi-ant-grid{
+      grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+    .avi-ant-habitos .avi-ant-grid{
+      grid-template-columns:repeat(3,minmax(0,1fr));
+    }
+    @media (max-width:980px){
+      .avi-ant-grid,
+      .avi-ant-vacunas .avi-ant-grid,
+      .avi-ant-habitos .avi-ant-grid{
+        grid-template-columns:1fr;
+      }
+    }
+
       .avi-subgroup:first-child{border-top:0;padding-top:0}
       .avi-subgroup+.avi-subgroup{margin-top:12px}
       .avi-subgroup>h5{
@@ -5232,7 +5306,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.7.0-antecedentes-json-real',
+    version:'1.8.0-antecedentes-ui-pro',
     abrir,
     cerrar,
     abrirReceta,
