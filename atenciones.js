@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_6_FILTRO_CLINICO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_EXAMEN_SIN_DUPLICADOS';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3831,6 +3831,127 @@
     });
 
     return deduplicarPares(pares);
+  }
+
+  /*
+    AUROSANAX VISTA INTEGRAL - FASE 2A
+    EXAMEN FÍSICO SIN DUPLICADOS
+
+    Regla:
+    - Si el módulo Examen Físico ya expone su resumen previo estructurado,
+      Vista Integral lee SOLO las unidades hoja (chips, mini-filas y líneas
+      simples), no el contenedor padre que vuelve a concatenarlas.
+    - En una atención finalizada se prioriza esa representación persistida.
+    - Si no existe resumen estructurado, se conserva el recolector general.
+    - Solo lectura: no habilita controles, no escribe datos y no llama guardados.
+  */
+  function capturarExamenFisico(atencion){
+    const panel = document.getElementById('hc_examen');
+    if(!panel) return [];
+
+    const estadoFinalizado =
+      norm(atencion?.estado_atencion) === 'finalizada' ||
+      norm(atencion?.estado_atencion) === 'finalizado';
+
+    const previo = document.getElementById('auroExamenFisicoPrevioContent');
+    const tienePrevioEstructurado = Boolean(
+      previo &&
+      texto(previo.textContent) &&
+      previo.querySelector(
+        '.auro-previos-mini-row,.auro-previos-chip,.auro-previos-line'
+      )
+    );
+
+    if(!estadoFinalizado || !tienePrevioEstructurado){
+      return capturarPanel('hc_examen');
+    }
+
+    const pares = [];
+
+    /*
+      1. Chips de signos vitales.
+      Cada chip se interpreta como "Etiqueta: valor".
+    */
+    previo.querySelectorAll('.auro-previos-chip').forEach(chip=>{
+      const raw = limpiarTextoClinico(chip.textContent);
+      if(!raw) return;
+
+      const idx = raw.indexOf(':');
+      if(idx > 0){
+        pares.push({
+          etiqueta:raw.slice(0,idx).trim(),
+          valor:raw.slice(idx+1).trim(),
+          anchoCompleto:false
+        });
+      }else{
+        pares.push({
+          etiqueta:'Signo vital',
+          valor:raw,
+          anchoCompleto:false
+        });
+      }
+    });
+
+    /*
+      2. Mini-filas: son la unidad estructurada real de regionales/sistemas.
+      No se lee también su .auro-previos-line padre para evitar duplicación.
+    */
+    previo.querySelectorAll('.auro-previos-mini-row').forEach(row=>{
+      const lab = row.querySelector('b,strong,.label,.title');
+      const val = row.querySelector('em,p,.value');
+
+      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
+      const valor = limpiarTextoClinico(
+        val ? val.textContent : row.textContent
+      );
+
+      if(!valor) return;
+
+      pares.push({
+        etiqueta:etiqueta || 'Dato clínico',
+        valor,
+        anchoCompleto:valor.length > 150
+      });
+    });
+
+    /*
+      3. Líneas simples que NO contienen chips ni mini-filas.
+      Así conservamos hallazgos generales sin volver a capturar tablas internas.
+    */
+    previo.querySelectorAll('.auro-previos-line').forEach(line=>{
+      if(
+        line.querySelector('.auro-previos-mini-row') ||
+        line.querySelector('.auro-previos-chip')
+      ){
+        return;
+      }
+
+      const lab = line.querySelector(
+        ':scope > span,:scope > b,:scope > strong,.auro-previos-label,.label,.title'
+      );
+      const val = line.querySelector(':scope > p,:scope > em,.value');
+
+      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
+      const valor = limpiarTextoClinico(
+        val ? val.textContent : line.textContent
+      );
+
+      if(!valor) return;
+
+      pares.push({
+        etiqueta:etiqueta || 'Dato clínico',
+        valor,
+        anchoCompleto:valor.length > 150
+      });
+    });
+
+    const limpios = deduplicarPares(pares);
+
+    /*
+      Protección: si por una variación de DOM el resumen previo no produjo
+      campos clínicos, se vuelve al recolector anterior sin alterar nada.
+    */
+    return limpios.length ? limpios : capturarPanel('hc_examen');
   }
 
   function paresHTML(pares){
@@ -4724,7 +4845,7 @@
 
     const examen = seccion(
       'Examen físico','bi-person-vcard',
-      paresHTML(capturarPanel('hc_examen')),true
+      paresHTML(capturarExamenFisico(a)),true
     );
 
     const obstetricia = seccion(
@@ -4948,7 +5069,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.6.0-filtro-clinico',
+    version:'1.7.0-examen-sin-duplicados',
     abrir,
     cerrar,
     abrirReceta,
