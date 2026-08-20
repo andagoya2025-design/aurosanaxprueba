@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_9_INTEGRAL_CLINICA';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_CLINICA_ESTABLE';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3833,220 +3833,88 @@
     return deduplicarPares(pares);
   }
 
-  /*
-    AUROSANAX VISTA INTEGRAL - FASE 2A
-    EXAMEN FÍSICO SIN DUPLICADOS
 
-    Regla:
-    - Si el módulo Examen Físico ya expone su resumen previo estructurado,
-      Vista Integral lee SOLO las unidades hoja (chips, mini-filas y líneas
-      simples), no el contenedor padre que vuelve a concatenarlas.
-    - En una atención finalizada se prioriza esa representación persistida.
-    - Si no existe resumen estructurado, se conserva el recolector general.
-    - Solo lectura: no habilita controles, no escribe datos y no llama guardados.
-  */
-  function capturarExamenFisico(atencion){
-    const panel = document.getElementById('hc_examen');
-    if(!panel) return [];
+  /* ============================================================
+     AUROSANAX VISTA INTEGRAL - LECTORES CLÍNICOS DE SOLO LECTURA
+     REGLA:
+     - No escriben ni habilitan controles.
+     - No llaman funciones Guardar / Actualizar / Limpiar.
+     - No modifican los módulos clínicos originales.
+     - Solo seleccionan la representación clínica más útil para el visor.
+  ============================================================ */
 
-    const estadoFinalizado =
-      norm(atencion?.estado_atencion) === 'finalizada' ||
-      norm(atencion?.estado_atencion) === 'finalizado';
-
-    const previo = document.getElementById('auroExamenFisicoPrevioContent');
-    const tienePrevioEstructurado = Boolean(
-      previo &&
-      texto(previo.textContent) &&
-      previo.querySelector(
-        '.auro-previos-mini-row,.auro-previos-chip,.auro-previos-line'
-      )
-    );
-
-    if(!estadoFinalizado || !tienePrevioEstructurado){
-      return depurarExamenFisicoPares(capturarPanel('hc_examen'));
-    }
-
-    const pares = [];
-
-    /*
-      1. Chips de signos vitales.
-      Cada chip se interpreta como "Etiqueta: valor".
-    */
-    previo.querySelectorAll('.auro-previos-chip').forEach(chip=>{
-      const raw = limpiarTextoClinico(chip.textContent);
-      if(!raw) return;
-
-      const idx = raw.indexOf(':');
-      if(idx > 0){
-        pares.push({
-          etiqueta:raw.slice(0,idx).trim(),
-          valor:raw.slice(idx+1).trim(),
-          anchoCompleto:false
-        });
-      }else{
-        pares.push({
-          etiqueta:'Signo vital',
-          valor:raw,
-          anchoCompleto:false
-        });
-      }
-    });
-
-    /*
-      2. Mini-filas: son la unidad estructurada real de regionales/sistemas.
-      No se lee también su .auro-previos-line padre para evitar duplicación.
-    */
-    previo.querySelectorAll('.auro-previos-mini-row').forEach(row=>{
-      const lab = row.querySelector('b,strong,.label,.title');
-      const val = row.querySelector('em,p,.value');
-
-      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
-      const valor = limpiarTextoClinico(
-        val ? val.textContent : row.textContent
-      );
-
-      if(!valor) return;
-
-      pares.push({
-        etiqueta:etiqueta || 'Dato clínico',
-        valor,
-        anchoCompleto:valor.length > 150
-      });
-    });
-
-    /*
-      3. Líneas simples que NO contienen chips ni mini-filas.
-      Así conservamos hallazgos generales sin volver a capturar tablas internas.
-    */
-    previo.querySelectorAll('.auro-previos-line').forEach(line=>{
-      if(
-        line.querySelector('.auro-previos-mini-row') ||
-        line.querySelector('.auro-previos-chip')
-      ){
-        return;
-      }
-
-      const lab = line.querySelector(
-        ':scope > span,:scope > b,:scope > strong,.auro-previos-label,.label,.title'
-      );
-      const val = line.querySelector(':scope > p,:scope > em,.value');
-
-      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
-      const valor = limpiarTextoClinico(
-        val ? val.textContent : line.textContent
-      );
-
-      if(!valor) return;
-
-      pares.push({
-        etiqueta:etiqueta || 'Dato clínico',
-        valor,
-        anchoCompleto:valor.length > 150
-      });
-    });
-
-    const limpios = deduplicarPares(pares);
-
-    /*
-      Protección: si por una variación de DOM el resumen previo no produjo
-      campos clínicos, se vuelve al recolector anterior sin alterar nada.
-    */
-    return limpios.length
-      ? depurarExamenFisicoPares(limpios)
-      : depurarExamenFisicoPares(capturarPanel('hc_examen'));
+  function esPlaceholderVisual(v){
+    const t = texto(v);
+    if(!t) return true;
+    return /^(?:—|–|-|--|n\/a|na|null|undefined|sin dato|sin datos)$/i.test(t);
   }
 
-  /*
-    AUROSANAX VISTA INTEGRAL - FASE 2B
-    ANTECEDENTES CLÍNICOS SIN CAMPOS TÉCNICOS DUPLICADOS
-
-    Principio:
-    - Vista Integral es SOLO LECTURA.
-    - Si Antecedentes ya expone su resumen clínico consolidado
-      (#auroAntecedentesPreviosContent), se usa esa representación.
-    - No se vuelve a imprimir simultáneamente cada input técnico que alimenta
-      vacunas, hábitos, gineco-obstétricos, alergias, etc.
-    - No se modifica el módulo Antecedentes, sus toggles, guardado ni datos.
-    - Si el resumen clínico todavía no está disponible, se conserva el
-      recolector anterior como fallback seguro.
-  */
   function capturarAntecedentesClinicos(){
     const panel = document.getElementById('hc_antecedentes');
     if(!panel) return [];
 
     const previo = document.getElementById('auroAntecedentesPreviosContent');
-    const tienePrevioClinico = Boolean(
-      previo &&
-      texto(previo.textContent) &&
-      previo.querySelector(
-        '.auro-previos-line,.auro-previos-mini-row,.auro-previos-chip'
-      )
-    );
 
-    if(!tienePrevioClinico){
+    if(!previo || !texto(previo.textContent)){
       return capturarPanel('hc_antecedentes');
     }
 
     const pares = [];
 
     /*
-      1. Líneas clínicas consolidadas.
-      Si contienen mini-filas/chips internos, no se captura también el padre.
+      Prioridad: tarjetas/filas clínicas ya consolidadas por Antecedentes.
+      Evita volver a imprimir simultáneamente los inputs técnicos que las alimentan.
     */
-    previo.querySelectorAll('.auro-previos-line').forEach(line=>{
+    const filas = [
+      ...previo.querySelectorAll(
+        '.auro-previos-mini-row,.auro-previos-line,.auro-previos-item,.auro-previos-card'
+      )
+    ];
+
+    filas.forEach(row=>{
+      /*
+        Si esta fila es solo contenedor de otras filas clínicas, no se vuelve
+        a capturar el textContent completo del padre.
+      */
       if(
-        line.querySelector('.auro-previos-mini-row') ||
-        line.querySelector('.auro-previos-chip')
+        row.querySelector(':scope > .auro-previos-mini-row,'+
+                          ':scope > .auro-previos-item,'+
+                          ':scope > .auro-previos-card')
       ){
         return;
       }
 
-      const lab = line.querySelector(
-        ':scope > span,:scope > b,:scope > strong,'+
-        '.auro-previos-label,.label,.title'
+      const lab = row.querySelector(
+        'b,strong,.auro-previos-label,.label,.title,.auro-previos-title'
       );
-      const val = line.querySelector(':scope > p,:scope > em,.value');
-
-      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
-      const valor = limpiarTextoClinico(
-        val ? val.textContent : line.textContent
-      );
-
-      if(!valor || esEstadoInterno(valor)) return;
-
-      pares.push({
-        etiqueta:etiqueta || 'Antecedente',
-        valor,
-        anchoCompleto:valor.length > 150
-      });
-    });
-
-    /*
-      2. Mini-filas clínicas estructuradas:
-      vacunas, hábitos y otros grupos renderizados por Antecedentes.
-    */
-    previo.querySelectorAll('.auro-previos-mini-row').forEach(row=>{
-      const lab = row.querySelector('b,strong,.label,.title');
-      const val = row.querySelector('em,p,.value');
 
       const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
 
       /*
-        Los antecedentes premium ya separan Fecha/Resultado/Marca/Dosis
-        en .auro-previos-detail-pill. Leer cada pill evita concatenaciones
-        como "Fecha...Resultado..." sin espacios.
+        Algunos resúmenes premium separan Fecha / Resultado / Marca / Dosis
+        en pills. Se unen con separadores clínicos legibles.
       */
-      const pills = [...row.querySelectorAll('.auro-previos-detail-pill')]
+      const pills = [...row.querySelectorAll('.auro-previos-detail-pill,.badge,.chip')]
         .map(x=>limpiarTextoClinico(x.textContent))
         .filter(Boolean);
 
-      const valor = limpiarTextoClinico(
-        pills.length
-          ? pills.join(' · ')
-          : (val ? val.textContent : row.textContent)
-      );
+      let valor = '';
 
-      if(!valor || esEstadoInterno(valor)) return;
+      if(pills.length){
+        valor = pills.join(' · ');
+      }else{
+        const val = row.querySelector('em,p,.value,.auro-previos-value');
+        valor = limpiarTextoClinico(val ? val.textContent : row.textContent);
+
+        if(lab && valor){
+          const titulo = limpiarTextoClinico(lab.textContent);
+          if(titulo && valor.toLowerCase().startsWith(titulo.toLowerCase())){
+            valor = valor.slice(titulo.length).replace(/^[\s:·\-–—]+/,'').trim();
+          }
+        }
+      }
+
+      if(!valor || esEstadoInterno(valor) || esPlaceholderVisual(valor)) return;
 
       pares.push({
         etiqueta:etiqueta || 'Antecedente',
@@ -4055,42 +3923,8 @@
       });
     });
 
-    /*
-      3. Chips clínicos sueltos no contenidos dentro de una mini-fila.
-    */
-    previo.querySelectorAll('.auro-previos-chip').forEach(chip=>{
-      if(chip.closest('.auro-previos-mini-row')) return;
-
-      const raw = limpiarTextoClinico(chip.textContent);
-      if(!raw || esEstadoInterno(raw)) return;
-
-      const idx = raw.indexOf(':');
-      pares.push({
-        etiqueta:idx > 0 ? limpiarEtiqueta(raw.slice(0,idx)) : 'Antecedente',
-        valor:idx > 0 ? limpiarTextoClinico(raw.slice(idx+1)) : raw,
-        anchoCompleto:raw.length > 150
-      });
-    });
-
     const limpios = deduplicarPares(pares);
-
-    return limpios.length
-      ? limpios
-      : capturarPanel('hc_antecedentes');
-  }
-
-  /*
-    AUROSANAX VISTA INTEGRAL - FASE 3 INTEGRAL
-    SOLO LECTURA / PRESENTACIÓN CLÍNICA
-
-    Estas funciones NO escriben ni mutan módulos originales.
-    Únicamente deciden qué representación ya existente mostrar.
-  */
-
-  function esPlaceholderVisual(v){
-    const t = texto(v);
-    if(!t) return true;
-    return /^(?:—|–|-|--|n\/a|na|null|undefined|sin dato|sin datos)$/i.test(t);
+    return limpios.length ? limpios : capturarPanel('hc_antecedentes');
   }
 
   function depurarExamenFisicoPares(pares){
@@ -4106,17 +3940,19 @@
       if(!valorNorm) return false;
 
       /*
-        Si una fila-resumen vuelve a contener dos o más regiones que ya
-        aparecen como filas clínicas independientes, se omite SOLO esa
-        representación agregada. El contenido regional individual permanece.
+        Un resumen agregado que vuelve a contener varias regiones ya mostradas
+        individualmente se omite SOLO en Vista Integral.
       */
-      const coincidencias = etiquetas.filter(e =>
-        e !== norm(p.etiqueta) &&
-        valorNorm.includes(e)
+      const otras = etiquetas.filter(e =>
+        e !== norm(p.etiqueta) && valorNorm.includes(e)
       );
 
-      return coincidencias.length < 2;
+      return otras.length < 2;
     });
+  }
+
+  function capturarExamenFisicoClinico(){
+    return depurarExamenFisicoPares(capturarPanel('hc_examen'));
   }
 
   function capturarObstetriciaClinica(){
@@ -4124,10 +3960,9 @@
       capturarPanel('hc_obstetricia').filter(p=>{
         const valor = texto(p?.valor);
         if(esPlaceholderVisual(valor)) return false;
-
         /*
-          Se conservan 0 y "No clasificado": pueden ser datos clínicamente
-          significativos. Solo se eliminan placeholders visuales reales.
+          "0" se conserva: puede ser un valor obstétrico clínicamente válido.
+          "No clasificado" también se conserva si el módulo lo registró así.
         */
         return true;
       })
@@ -4143,39 +3978,41 @@
 
     items.forEach(item=>{
       const codigo = limpiarTextoClinico(
-        item.querySelector('.auro-dx-code')?.textContent || ''
-      );
-      const nombre = limpiarTextoClinico(
-        item.querySelector('.auro-dx-name')?.textContent || ''
+        item.querySelector('.auro-dx-code,[data-cie10],.cie10-code')?.textContent || ''
       );
 
-      const tags = [...item.querySelectorAll('.auro-dx-tag')]
+      const nombre = limpiarTextoClinico(
+        item.querySelector('.auro-dx-name,.auro-dx-desc,[data-diagnostico],.diagnostico-nombre')?.textContent || ''
+      );
+
+      const tags = [...item.querySelectorAll('.auro-dx-tag,.badge-auro,.badge')]
         .map(x=>limpiarTextoClinico(x.textContent))
         .filter(Boolean)
         .filter(x=>{
           const n = norm(x);
           return !(
-            n.includes('protocolo disponible') ||
+            n.includes('protocolo') ||
+            n.includes('disponible para el analisis') ||
             n.includes('consultar protocolo')
           );
         });
 
+      /*
+        Si no existen subclases reconocibles, no se fuerza una interpretación
+        inventada: se conserva el lector anterior como fallback.
+      */
       if(!codigo && !nombre) return;
+
+      const valor = [nombre, ...tags].filter(Boolean).join(' · ');
+      if(!valor) return;
 
       pares.push({
         etiqueta:codigo ? ('CIE-10 ' + codigo) : 'Diagnóstico',
-        valor:[
-          nombre,
-          ...tags
-        ].filter(Boolean).join(' · '),
+        valor,
         anchoCompleto:true
       });
     });
 
-    /*
-      Fallback seguro: si el módulo cambia de DOM, se conserva el lector
-      anterior sin comprometer datos ni guardados.
-    */
     return pares.length
       ? deduplicarPares(pares)
       : capturarPanel('hc_diagnostico');
@@ -4722,6 +4559,70 @@
         .avi-close span{display:none}
       }
 
+
+      /* ============================================================
+         AUROSANAX VISTA INTEGRAL - AJUSTE DOCUMENTAL PROFESIONAL
+         SOLO ESCRITORIO >=981px.
+         El diseño móvil aprobado permanece sin modificación.
+      ============================================================ */
+      @media(min-width:981px){
+        .avi-body > .avi-overview-block,
+        .avi-body > .avi-clinical-divider,
+        .avi-body > .avi-section,
+        .avi-body > .avi-line{
+          width:min(1160px,calc(100% - 32px));
+        }
+
+        .avi-overview-block{
+          padding-left:48px;
+          padding-right:48px;
+        }
+
+        .avi-clinical-divider{
+          padding-left:48px;
+          padding-right:48px;
+        }
+
+        .avi-section summary{
+          padding-left:48px;
+          padding-right:48px;
+        }
+
+        .avi-section-body{
+          padding-left:48px;
+          padding-right:48px;
+        }
+
+        .avi-lines{
+          grid-auto-flow:row dense;
+          gap:12px 28px;
+        }
+
+        .avi-line{
+          min-width:0;
+        }
+
+        .avi-line p,
+        .avi-note p,
+        .avi-clean-list{
+          max-width:100%;
+        }
+
+        .avi-med-grid{
+          grid-template-columns:repeat(auto-fit,minmax(310px,1fr));
+          align-items:start;
+        }
+
+        .avi-med-card{
+          height:auto;
+          min-height:0;
+        }
+
+        .avi-data-grid{
+          grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+        }
+      }
+
       /* ============================================================
          AUROSANAX VISTA INTEGRAL - VISOR DOCUMENTAL CLÍNICO V1.5
          SOLO ESCRITORIO >= 981px.
@@ -4961,80 +4862,6 @@
         }
       }
     `;
-
-      /* ============================================================
-         VISTA INTEGRAL 1.9 - MAQUETACIÓN CLÍNICA DOCUMENTAL
-         Solo escritorio. No modifica responsive móvil ya aprobado.
-      ============================================================ */
-      @media(min-width:981px){
-        .avi-body > .avi-overview-block,
-        .avi-body > .avi-clinical-divider,
-        .avi-body > .avi-section,
-        .avi-body > .avi-line{
-          width:min(1160px,calc(100% - 32px));
-        }
-
-        .avi-overview-block{
-          padding-left:48px;
-          padding-right:48px;
-        }
-
-        .avi-clinical-divider{
-          padding-left:48px;
-          padding-right:48px;
-        }
-
-        .avi-section summary{
-          padding-left:48px;
-          padding-right:48px;
-        }
-
-        .avi-section-body{
-          padding:16px 48px 22px;
-        }
-
-        .avi-lines{
-          grid-template-columns:repeat(2,minmax(0,1fr));
-          grid-auto-flow:row dense;
-          gap:12px 28px;
-        }
-
-        .avi-line{
-          min-width:0;
-          padding:5px 0 10px;
-        }
-
-        .avi-line.avi-span-full{
-          grid-column:1/-1;
-        }
-
-        .avi-line p,
-        .avi-note p,
-        .avi-clean-list{
-          font-size:14px;
-          line-height:1.6;
-          max-width:100%;
-        }
-
-        .avi-line p{
-          margin-top:6px;
-        }
-
-        .avi-med-grid{
-          grid-template-columns:repeat(auto-fit,minmax(310px,1fr));
-          align-items:start;
-        }
-
-        .avi-med-card{
-          height:auto;
-          min-height:0;
-        }
-
-        .avi-data-grid{
-          grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
-        }
-      }
-
     document.head.appendChild(s);
   }
 
@@ -5146,7 +4973,7 @@
 
     const examen = seccion(
       'Examen físico','bi-person-vcard',
-      paresHTML(capturarExamenFisico(a)),true
+      paresHTML(capturarExamenFisicoClinico()),true
     );
 
     const obstetricia = seccion(
@@ -5370,7 +5197,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.9.0-integral-clinica',
+    version:'1.7.0-clinica-estable',
     abrir,
     cerrar,
     abrirReceta,
