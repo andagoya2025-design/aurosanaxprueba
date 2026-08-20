@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_8_ANTECEDENTES_CLINICOS';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_9_INTEGRAL_CLINICA';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3863,7 +3863,7 @@
     );
 
     if(!estadoFinalizado || !tienePrevioEstructurado){
-      return capturarPanel('hc_examen');
+      return depurarExamenFisicoPares(capturarPanel('hc_examen'));
     }
 
     const pares = [];
@@ -3951,7 +3951,9 @@
       Protección: si por una variación de DOM el resumen previo no produjo
       campos clínicos, se vuelve al recolector anterior sin alterar nada.
     */
-    return limpios.length ? limpios : capturarPanel('hc_examen');
+    return limpios.length
+      ? depurarExamenFisicoPares(limpios)
+      : depurarExamenFisicoPares(capturarPanel('hc_examen'));
   }
 
   /*
@@ -4028,8 +4030,20 @@
       const val = row.querySelector('em,p,.value');
 
       const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
+
+      /*
+        Los antecedentes premium ya separan Fecha/Resultado/Marca/Dosis
+        en .auro-previos-detail-pill. Leer cada pill evita concatenaciones
+        como "Fecha...Resultado..." sin espacios.
+      */
+      const pills = [...row.querySelectorAll('.auro-previos-detail-pill')]
+        .map(x=>limpiarTextoClinico(x.textContent))
+        .filter(Boolean);
+
       const valor = limpiarTextoClinico(
-        val ? val.textContent : row.textContent
+        pills.length
+          ? pills.join(' · ')
+          : (val ? val.textContent : row.textContent)
       );
 
       if(!valor || esEstadoInterno(valor)) return;
@@ -4063,6 +4077,108 @@
     return limpios.length
       ? limpios
       : capturarPanel('hc_antecedentes');
+  }
+
+  /*
+    AUROSANAX VISTA INTEGRAL - FASE 3 INTEGRAL
+    SOLO LECTURA / PRESENTACIÓN CLÍNICA
+
+    Estas funciones NO escriben ni mutan módulos originales.
+    Únicamente deciden qué representación ya existente mostrar.
+  */
+
+  function esPlaceholderVisual(v){
+    const t = texto(v);
+    if(!t) return true;
+    return /^(?:—|–|-|--|n\/a|na|null|undefined|sin dato|sin datos)$/i.test(t);
+  }
+
+  function depurarExamenFisicoPares(pares){
+    const lista = deduplicarPares(Array.isArray(pares) ? pares : []);
+    if(lista.length < 2) return lista;
+
+    const etiquetas = lista
+      .map(p=>norm(p.etiqueta))
+      .filter(e=>e && e !== 'dato clinico' && e.length >= 3);
+
+    return lista.filter(p=>{
+      const valorNorm = norm(p.valor);
+      if(!valorNorm) return false;
+
+      /*
+        Si una fila-resumen vuelve a contener dos o más regiones que ya
+        aparecen como filas clínicas independientes, se omite SOLO esa
+        representación agregada. El contenido regional individual permanece.
+      */
+      const coincidencias = etiquetas.filter(e =>
+        e !== norm(p.etiqueta) &&
+        valorNorm.includes(e)
+      );
+
+      return coincidencias.length < 2;
+    });
+  }
+
+  function capturarObstetriciaClinica(){
+    return deduplicarPares(
+      capturarPanel('hc_obstetricia').filter(p=>{
+        const valor = texto(p?.valor);
+        if(esPlaceholderVisual(valor)) return false;
+
+        /*
+          Se conservan 0 y "No clasificado": pueden ser datos clínicamente
+          significativos. Solo se eliminan placeholders visuales reales.
+        */
+        return true;
+      })
+    );
+  }
+
+  function capturarDiagnosticosClinicos(){
+    const panel = document.getElementById('hc_diagnostico');
+    if(!panel) return [];
+
+    const items = [...panel.querySelectorAll('.auro-dx-item')];
+    const pares = [];
+
+    items.forEach(item=>{
+      const codigo = limpiarTextoClinico(
+        item.querySelector('.auro-dx-code')?.textContent || ''
+      );
+      const nombre = limpiarTextoClinico(
+        item.querySelector('.auro-dx-name')?.textContent || ''
+      );
+
+      const tags = [...item.querySelectorAll('.auro-dx-tag')]
+        .map(x=>limpiarTextoClinico(x.textContent))
+        .filter(Boolean)
+        .filter(x=>{
+          const n = norm(x);
+          return !(
+            n.includes('protocolo disponible') ||
+            n.includes('consultar protocolo')
+          );
+        });
+
+      if(!codigo && !nombre) return;
+
+      pares.push({
+        etiqueta:codigo ? ('CIE-10 ' + codigo) : 'Diagnóstico',
+        valor:[
+          nombre,
+          ...tags
+        ].filter(Boolean).join(' · '),
+        anchoCompleto:true
+      });
+    });
+
+    /*
+      Fallback seguro: si el módulo cambia de DOM, se conserva el lector
+      anterior sin comprometer datos ni guardados.
+    */
+    return pares.length
+      ? deduplicarPares(pares)
+      : capturarPanel('hc_diagnostico');
   }
 
   function paresHTML(pares){
@@ -4845,6 +4961,80 @@
         }
       }
     `;
+
+      /* ============================================================
+         VISTA INTEGRAL 1.9 - MAQUETACIÓN CLÍNICA DOCUMENTAL
+         Solo escritorio. No modifica responsive móvil ya aprobado.
+      ============================================================ */
+      @media(min-width:981px){
+        .avi-body > .avi-overview-block,
+        .avi-body > .avi-clinical-divider,
+        .avi-body > .avi-section,
+        .avi-body > .avi-line{
+          width:min(1160px,calc(100% - 32px));
+        }
+
+        .avi-overview-block{
+          padding-left:48px;
+          padding-right:48px;
+        }
+
+        .avi-clinical-divider{
+          padding-left:48px;
+          padding-right:48px;
+        }
+
+        .avi-section summary{
+          padding-left:48px;
+          padding-right:48px;
+        }
+
+        .avi-section-body{
+          padding:16px 48px 22px;
+        }
+
+        .avi-lines{
+          grid-template-columns:repeat(2,minmax(0,1fr));
+          grid-auto-flow:row dense;
+          gap:12px 28px;
+        }
+
+        .avi-line{
+          min-width:0;
+          padding:5px 0 10px;
+        }
+
+        .avi-line.avi-span-full{
+          grid-column:1/-1;
+        }
+
+        .avi-line p,
+        .avi-note p,
+        .avi-clean-list{
+          font-size:14px;
+          line-height:1.6;
+          max-width:100%;
+        }
+
+        .avi-line p{
+          margin-top:6px;
+        }
+
+        .avi-med-grid{
+          grid-template-columns:repeat(auto-fit,minmax(310px,1fr));
+          align-items:start;
+        }
+
+        .avi-med-card{
+          height:auto;
+          min-height:0;
+        }
+
+        .avi-data-grid{
+          grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+        }
+      }
+
     document.head.appendChild(s);
   }
 
@@ -4961,12 +5151,12 @@
 
     const obstetricia = seccion(
       'Obstetricia','bi-heart-pulse',
-      paresHTML(capturarPanel('hc_obstetricia')),false
+      paresHTML(capturarObstetriciaClinica()),false
     );
 
     const diagnosticos = seccion(
       'Diagnósticos','bi-journal-medical',
-      paresHTML(capturarPanel('hc_diagnostico')),true
+      paresHTML(capturarDiagnosticosClinicos()),true
     );
 
     const plan = seccion(
@@ -5180,7 +5370,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.8.0-antecedentes-clinicos',
+    version:'1.9.0-integral-clinica',
     abrir,
     cerrar,
     abrirReceta,
