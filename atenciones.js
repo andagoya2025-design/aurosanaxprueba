@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_5';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_4_A4_DESKTOP';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4375,123 +4375,204 @@
       }
 
       /* ============================================================
-         AUROSANAX VISTA INTEGRAL ÉLITE V1.4 - COMPACTACIÓN PREMIUM
-         Solo presentación. No altera datos, eventos ni guardados.
+         AUROSANAX VISTA INTEGRAL - EXPEDIENTE A4 DIGITAL
+         SOLO ESCRITORIO >= 981px.
+         El responsive móvil/tablet existente NO se modifica.
+         Presentación únicamente: sin cambios de datos ni lógica clínica.
       ============================================================ */
-      .avi-head{padding:14px 16px}
-      .avi-head-icon{width:44px;height:44px;border-radius:14px}
-      .avi-head h3{font-size:19px}
-      .avi-head-patient{font-size:14px;margin-top:3px}
-      .avi-head-subcontext{font-size:11px}
-      .avi-head-context{margin-top:7px;gap:5px}
-      .avi-chip{padding:3px 7px;font-size:9.8px}
-      .avi-toolbar{padding:8px 14px;gap:7px}
-      .avi-toolbar .avi-btn{min-height:36px}
-      .avi-body{padding:14px}
-      .avi-overview-block{padding:10px 11px;margin-bottom:9px;border-radius:16px}
-      .avi-group-title{margin-bottom:8px;font-size:10.5px}
-      .avi-data-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
-      .avi-data{min-height:48px;padding:7px 8px;border-radius:11px}
-      .avi-data span{font-size:8.4px}
-      .avi-data b{font-size:10.8px;margin-top:2px;line-height:1.28}
-      .avi-col-2{grid-column:span 2}
-      .avi-clinical-divider{margin:12px 2px 8px;font-size:9.8px}
-      .avi-section{margin-bottom:7px;border-radius:14px}
-      .avi-section summary{padding:9px 11px;font-size:12px}
-      .avi-section-label>i{width:25px;height:25px;border-radius:8px}
-      .avi-section-count{height:18px;min-width:20px;font-size:8.8px}
-      .avi-section-body{padding:9px 11px 11px}
-      .avi-lines{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-      .avi-line{padding:8px;border-radius:10px}
-      .avi-line b,.avi-note b{font-size:9px}
-      .avi-line p,.avi-note p,.avi-clean-list{font-size:11.2px;line-height:1.4}
-      .avi-subgroup+.avi-subgroup{margin-top:9px}
-      .avi-subgroup>h5{font-size:11.5px;margin-bottom:6px}
-      .avi-med-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
-      .avi-med-card{padding:9px;border-radius:12px}
-      .avi-med-card h5{font-size:12px;margin-bottom:6px}
-      .avi-med-details{gap:5px}
-      .avi-med-details div{padding:6px 7px;border-radius:9px}
-      .avi-med-details span{font-size:8px}
-      .avi-med-details b{font-size:10px}
-      .avi-rx-list{gap:8px}
-      .avi-rx-card{padding:11px;border-radius:15px}
-      .avi-rx-head{margin-bottom:7px;padding-bottom:8px}
-      .avi-rx-head h4{font-size:13px}
-      .avi-rx-meta{gap:6px;margin:7px 0 9px}
-      .avi-note{margin-top:8px;padding-top:8px}
-      @media(max-width:1179px) and (min-width:761px){
-        .avi-data-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
-        .avi-lines{grid-template-columns:repeat(3,minmax(0,1fr))}
-        .avi-med-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-      }
-      @media(max-width:760px){
-        .avi-head{padding-top:calc(10px + env(safe-area-inset-top))}
-        .avi-toolbar{position:sticky;top:0;z-index:3;background:#fff}
-        .avi-body{padding:8px calc(8px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left))}
-        .avi-overview-block{padding:8px;margin-bottom:7px}
-        .avi-data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-        .avi-lines,.avi-med-grid,.avi-med-details{grid-template-columns:1fr}
-        .avi-data{min-height:44px}
-        .avi-section summary{min-height:42px}
-        .avi-toolbar .avi-btn{min-height:42px}
-      }
+      @media(min-width:981px){
+        .avi-shell{
+          width:min(98vw,1680px);
+          height:min(97dvh,1080px);
+          max-height:97dvh;
+          background:#eef1f4;
+        }
 
-      /* ============================================================
-         AUROSANAX VISTA INTEGRAL ÉLITE V1.5 - ESCRITORIO LEGIBLE
-         SOLO >= 761px. El diseño móvil V1.4 queda sin modificaciones.
-      ============================================================ */
-      @media(min-width:761px){
-        .avi-head{padding:15px 18px}
-        .avi-head h3{font-size:21px;line-height:1.18}
-        .avi-head-patient{font-size:15.5px;line-height:1.22}
-        .avi-head-subcontext{font-size:12.2px;line-height:1.32}
-        .avi-technical-id{font-size:11px!important}
-        .avi-chip{font-size:10.7px;padding:4px 8px}
+        .avi-head{
+          padding:16px 22px;
+          background:linear-gradient(135deg,#ffffff 0%,#fff9fc 62%,#fbf5f9 100%);
+        }
+        .avi-head h3{font-size:22px}
+        .avi-head-patient{font-size:15.5px}
+        .avi-head-subcontext{font-size:12.5px}
+        .avi-head-context{margin-top:8px}
 
-        .avi-toolbar{padding:9px 15px}
-        .avi-toolbar .avi-btn{font-size:12.4px;min-height:38px;padding:8px 12px}
+        .avi-toolbar{
+          padding:9px 20px;
+          background:#ffffff;
+        }
+        .avi-toolbar .avi-btn{
+          font-size:12.2px;
+          min-height:37px;
+          padding:8px 12px;
+        }
 
-        .avi-body{padding:13px 15px 16px}
-        .avi-overview-block{padding:9px 10px;margin-bottom:8px;border-radius:15px}
-        .avi-group-title{font-size:11.2px;margin-bottom:7px}
-        .avi-data-grid{gap:5px}
-        .avi-data{min-height:41px;padding:6px 8px;border-radius:10px}
-        .avi-data span{font-size:9.2px;line-height:1.15}
-        .avi-data b{font-size:12.2px;line-height:1.25;margin-top:2px}
-        .avi-id-card b{font-size:11.2px}
+        /* Banda blanca central continua tipo documento A4 digital. */
+        .avi-body{
+          padding:28px 24px 36px;
+          background:
+            linear-gradient(
+              to right,
+              #e7ebef 0,
+              #e7ebef calc(50% - 520px),
+              #ffffff calc(50% - 520px),
+              #ffffff calc(50% + 520px),
+              #e7ebef calc(50% + 520px),
+              #e7ebef 100%
+            );
+        }
 
-        .avi-clinical-divider{margin:11px 2px 7px;font-size:10.5px}
-        .avi-section{margin-bottom:7px;border-radius:13px}
-        .avi-section summary{padding:9px 12px;font-size:13px}
-        .avi-section-label>i{width:26px;height:26px}
-        .avi-section-count{font-size:9.5px;height:19px}
-        .avi-section-body{padding:9px 11px 11px}
+        .avi-body > .avi-overview-block,
+        .avi-body > .avi-clinical-divider,
+        .avi-body > .avi-section,
+        .avi-body > .avi-line{
+          width:min(920px,calc(100% - 48px));
+          margin-left:auto;
+          margin-right:auto;
+        }
 
-        .avi-lines{gap:6px}
-        .avi-line{padding:8px 9px;border-radius:10px}
-        .avi-line b,.avi-note b{font-size:9.8px}
-        .avi-line p,.avi-note p,.avi-clean-list{font-size:12.8px;line-height:1.48}
-        .avi-line.avi-span-full p{max-width:118ch}
-        .avi-clean-list{max-width:118ch}
+        /* Datos de cabecera como ficha clínica, no como tarjetas gigantes. */
+        .avi-overview-block{
+          border:0;
+          border-radius:0;
+          box-shadow:none;
+          padding:18px 0 14px;
+          margin-bottom:0;
+          background:#fff;
+          border-bottom:1px solid #e5e7eb;
+        }
+        .avi-overview-block:first-child{padding-top:6px}
+        .avi-group-title{
+          margin:0 0 12px;
+          font-size:11.5px;
+          letter-spacing:.06em;
+        }
+        .avi-data-grid{
+          grid-template-columns:repeat(4,minmax(0,1fr));
+          gap:8px 16px;
+        }
+        .avi-data{
+          min-height:auto;
+          padding:4px 0;
+          border:0;
+          border-radius:0;
+          background:transparent;
+          justify-content:flex-start;
+        }
+        .avi-data span{
+          font-size:9.6px;
+          color:#7a174f;
+          margin-bottom:2px;
+        }
+        .avi-data b{
+          margin-top:0;
+          font-size:12.8px;
+          line-height:1.35;
+          color:#1f2937;
+        }
+        .avi-id-card{background:transparent;border:0}
+        .avi-id-card b{font-size:10.8px;color:#64748b}
 
-        .avi-subgroup>h5{font-size:12.4px}
-        .avi-med-card h5{font-size:12.8px}
-        .avi-med-card p{font-size:12.4px}
-        .avi-med-details span{font-size:8.8px}
-        .avi-med-details b{font-size:10.8px}
+        .avi-clinical-divider{
+          margin-top:18px;
+          margin-bottom:10px;
+          font-size:11px;
+          color:#7a174f;
+        }
 
-        .avi-rx-card{padding:11px 12px}
-        .avi-rx-head h4{font-size:13.8px}
-        .avi-rx-kicker{font-size:10px}
-        .avi-rx-head small{font-size:10.5px}
-      }
+        /* Secciones como capítulos de expediente clínico. */
+        .avi-section{
+          border:0;
+          border-radius:0;
+          box-shadow:none;
+          margin-bottom:0;
+          background:#fff;
+          border-bottom:1px solid #e8ebef;
+          overflow:visible;
+        }
+        .avi-section summary{
+          padding:13px 0 11px;
+          font-size:13.5px;
+          color:#3f1630;
+          background:#fff!important;
+        }
+        .avi-section[open] summary{
+          border-bottom:1px solid #f0e4eb;
+        }
+        .avi-section-label>i{
+          width:28px;
+          height:28px;
+          border-radius:8px;
+        }
+        .avi-section-body{
+          padding:12px 0 18px;
+        }
 
-      @media(min-width:1180px){
-        .avi-data-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
-        .avi-lines{grid-template-columns:repeat(3,minmax(0,1fr))}
-        .avi-med-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-        .avi-line.avi-span-full{grid-column:1/-1}
+        /* Lectura clínica: ancho controlado y tipografía cómoda. */
+        .avi-lines{
+          grid-template-columns:repeat(2,minmax(0,1fr));
+          gap:10px 24px;
+        }
+        .avi-line{
+          border:0;
+          border-radius:0;
+          padding:5px 0;
+          background:transparent;
+        }
+        .avi-line b,.avi-note b{
+          font-size:10px;
+          color:#7a174f;
+          letter-spacing:.05em;
+        }
+        .avi-line p,.avi-note p{
+          margin-top:5px;
+          font-size:13.4px;
+          line-height:1.58;
+          color:#222b38;
+          text-align:left;
+          max-width:78ch;
+        }
+        .avi-span-full p{max-width:82ch}
+        .avi-clean-list{
+          font-size:13.2px;
+          line-height:1.55;
+          max-width:82ch;
+        }
+
+        .avi-subgroup{padding-top:14px}
+        .avi-subgroup>h5{font-size:13px;margin-bottom:8px}
+
+        /* Plan y receta como bloques documentales limpios. */
+        .avi-med-grid{
+          grid-template-columns:repeat(2,minmax(0,1fr));
+          gap:10px;
+        }
+        .avi-med-card{
+          border:1px solid #ead7e2;
+          border-radius:12px;
+          padding:12px;
+          background:#fffdfd;
+          box-shadow:none;
+        }
+        .avi-med-card h5{font-size:13.2px}
+        .avi-med-card p{font-size:12.8px;line-height:1.5}
+        .avi-med-details b{font-size:11.2px}
+
+        .avi-rx-card{
+          border:1px solid #ead7e2;
+          border-radius:14px;
+          padding:14px;
+          box-shadow:none;
+          background:#fff;
+        }
+        .avi-rx-head h4{font-size:14.5px}
+        .avi-rx-meta{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+        .avi-loading{
+          width:min(920px,calc(100% - 48px));
+          margin:0 auto;
+          background:#fff;
+        }
       }
     `;
     document.head.appendChild(s);
@@ -4829,7 +4910,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.5.0',
+    version:'1.4.0-a4',
     abrir,
     cerrar,
     abrirReceta,
