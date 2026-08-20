@@ -10,7 +10,7 @@
 const MODULO='AUROSANAX_OBSTETRICIA_V1';
 const STORAGE_KEY='aurosanax_obstetricia_local_v1';
 const VERSION='20260723_obstetricia_v1_0_2_campos_redundantes';
-let registroActual=null,cargando=false,guardando=false,ultimoIdAtencion='',contextoSeleccionado=null;
+let registroActual=null,cargando=false,guardando=false,ultimoIdAtencion='',contextoSeleccionado=null,cargaAntecedentesSeq=0;
 const $=id=>document.getElementById(id), txt=v=>String(v??'').trim(), now=()=>new Date().toISOString();
 function fechaHoy(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function horaActual(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`}
@@ -98,6 +98,30 @@ function leerHistoriasAntecedentesLocales(){
 }
 
 async function resolverHistoriaAntecedentes(c){
+  c=c||contextoActual();
+  const idHistoria=txt(c?.id_historia);
+  const idPaciente=txt(c?.id_paciente);
+
+  /*
+   * FASE 1 QUIRÚRGICA:
+   * La tarjeta es SOLO LECTURA. No guarda ni modifica antecedentes.
+   *
+   * Antes, una copia global/local de la historia podía encontrarse primero
+   * aunque estuviera desactualizada y sin antecedentes obstétricos; al
+   * devolverla inmediatamente se impedía consultar la historia actualizada.
+   *
+   * Ahora se conserva un fallback, pero se sigue buscando hasta encontrar
+   * la misma historia/paciente con antecedentes reales.
+   */
+  let fallback=null;
+
+  const considerar=(lista)=>{
+    const candidata=buscarHistoriaAntecedentes(lista,c);
+    if(!candidata)return null;
+    if(!fallback)fallback=candidata;
+    return historiaTieneAntecedentesObstetricos(candidata)?candidata:null
+  };
+
   const globales=[
     window.historiaActiva,
     window.historiaActual,
@@ -105,8 +129,7 @@ async function resolverHistoriaAntecedentes(c){
     window.AURO_HISTORIA_ACTIVA
   ].filter(h=>h&&typeof h==='object');
 
-  let h=buscarHistoriaAntecedentes(globales,c);
-  if(h)return h;
+  let h=considerar(globales);
 
   const listas=[
     window.historiasClinicas,
@@ -121,25 +144,48 @@ async function resolverHistoriaAntecedentes(c){
     }
   }catch(_){}
 
-  for(const lista of listas){
-    h=buscarHistoriaAntecedentes(lista,c);
-    if(h)break
+  if(!h){
+    for(const lista of listas){
+      h=considerar(lista);
+      if(h)break
+    }
   }
 
-  if(!h)h=buscarHistoriaAntecedentes(leerHistoriasAntecedentesLocales(),c);
+  if(!h){
+    h=considerar(leerHistoriasAntecedentesLocales());
+  }
 
+  /*
+   * Si todavía no hay una historia con antecedentes reales, consultar
+   * la fuente remota actual. Esto evita que un caché vacío bloquee la tarjeta.
+   */
   if(!h&&typeof window.API_URL!=='undefined'&&txt(window.API_URL)){
     try{
       const r=await fetch(`${window.API_URL}?accion=listarHistoriasClinicas&_=${Date.now()}`);
       if(!r.ok)throw new Error(`HTTP ${r.status}`);
       const d=await r.json();
       const remotas=Array.isArray(d)?d:(Array.isArray(d?.data)?d.data:[]);
-      h=buscarHistoriaAntecedentes(remotas,c);
+      const remota=buscarHistoriaAntecedentes(remotas,c);
+
+      if(remota){
+        /*
+         * Seguridad cruzada: aceptar solo la historia/paciente solicitado.
+         */
+        const coincideHistoria=!idHistoria||txt(remota?.id_historia||remota?.id)===idHistoria;
+        const coincidePaciente=!idPaciente||txt(remota?.id_paciente)===idPaciente;
+        if(coincideHistoria&&coincidePaciente){
+          h=remota;
+          fallback=remota
+        }
+      }
+
       if(remotas.length)window.historiasClinicas=remotas
     }catch(e){
       console.warn(MODULO,'No se pudo consultar la historia para antecedentes obstétricos.',e)
     }
   }
+
+  h=h||fallback;
 
   if(h){
     window.historiaActiva=h;
@@ -245,8 +291,39 @@ function antecedentesObstetricosDesdeHistoria(h){
   }
 }
 
+function limpiarTarjetaAntecedentesObstetricos(){
+  [
+    'obsAntGestas','obsAntPartos','obsAntCesareas','obsAntAbortos',
+    'obsAntEctopicos','obsAntMortinatos','obsAntVivos','obsAntComplicaciones'
+  ].forEach(id=>setText(id,''))
+}
+
 async function cargarAntecedentes(c){
-  const h=await resolverHistoriaAntecedentes(c||contextoActual());
+  c=c||contextoActual();
+  const seq=++cargaAntecedentesSeq;
+  const idPaciente=txt(c?.id_paciente);
+  const idAtencion=txt(c?.id_atencion);
+
+  /*
+   * Siempre limpiar antes de leer: jamás heredar datos visuales
+   * de la paciente/atención anterior.
+   */
+  limpiarTarjetaAntecedentesObstetricos();
+
+  if(!idPaciente)return;
+
+  const h=await resolverHistoriaAntecedentes(c);
+
+  /*
+   * Protección anti-carrera: si durante el await cambió paciente,
+   * atención o comenzó una carga más reciente, descartar esta respuesta.
+   */
+  if(seq!==cargaAntecedentesSeq)return;
+
+  const actual=contextoActual();
+  if(txt(actual?.id_paciente)!==idPaciente)return;
+  if(idAtencion&&txt(actual?.id_atencion)!==idAtencion)return;
+
   const a=antecedentesObstetricosDesdeHistoria(h);
 
   setText('obsAntGestas',a.gestas);
@@ -270,7 +347,7 @@ function cargarRegistro(x){const r=normalizar(x);registroActual=r;setValue('obsT
 async function guardar(){if(guardando)return;const r=construir(),err=[];if(!r.id_atencion)err.push('No existe atención activa.');if(!r.id_paciente)err.push('No existe paciente seleccionada.');if(err.length)return notificar(err.join(' '),'error');guardando=true;const bs=[$('obsBtnGuardar'),$('obsBtnGuardarInferior')].filter(Boolean);bs.forEach(b=>{b.disabled=true;b.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Guardando...'});try{const editar=!!txt(registroActual?.id_obstetricia);actualizarLocal(r);await enviarRemoto(r,editar);registroActual=normalizar(r);actualizarEstado();notificar(editar?'Obstetricia actualizada correctamente.':'Obstetricia guardada correctamente.','success')}catch(e){console.error(MODULO,e);notificar(`Guardado local. Falló sincronización: ${e.message}`,'error')}finally{guardando=false;bs.forEach(b=>b.disabled=false);actualizarEstado()}}
 async function cargar(forzar=false){if(cargando)return;cargando=true;try{const c=contextoActual();pintarContexto(c);await cargarAntecedentes(c);if(!c.id_atencion||!c.id_paciente){limpiar();ultimoIdAtencion='';return}if(!forzar&&ultimoIdAtencion===c.id_atencion&&registroActual)return;ultimoIdAtencion=c.id_atencion;let lista=[];try{const rem=(await listarRemotos()).map(normalizar),m=new Map();leerLocales().forEach(r=>m.set(txt(r.id_obstetricia)||`ATN:${txt(r.id_atencion)}`,r));rem.forEach(r=>m.set(txt(r.id_obstetricia)||`ATN:${txt(r.id_atencion)}`,r));lista=Array.from(m.values());guardarLocales(lista)}catch(e){console.warn(MODULO,'Respaldo local',e);lista=leerLocales()}const e=lista.filter(r=>txt(r.id_atencion)===c.id_atencion).sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)));if(e[0]){cargarRegistro(e[0]);notificar('Registro obstétrico cargado.','info')}else{limpiar();setValue('obsTipoAtencion',c.tipo_atencion)}}finally{cargando=false}}
 function interceptar(){const o=window.showScreen;if(typeof o!=='function'||o.__obsInterceptado)return;function w(id){const r=o.apply(this,arguments);if(id==='obstetricia')setTimeout(()=>cargar(true),60);return r}w.__obsInterceptado=true;window.showScreen=w}
-function evento(ev){const d=normalizarDetalle(ev?.detail);if(d){contextoSeleccionado=d;try{sessionStorage.setItem('aurosanax_id_atencion_seleccionada',d.id_atencion)}catch(_){}}ultimoIdAtencion='';limpiar();setTimeout(()=>cargar(true),80)}
+function evento(ev){const d=normalizarDetalle(ev?.detail);if(d){contextoSeleccionado=d;try{sessionStorage.setItem('aurosanax_id_atencion_seleccionada',d.id_atencion)}catch(_){}}cargaAntecedentesSeq++;ultimoIdAtencion='';limpiarTarjetaAntecedentesObstetricos();limpiar();setTimeout(()=>cargar(true),80)}
 function inicializar(){if(!renderizar())return;interceptar();['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:paciente-seleccionado','aurosanax:historia-cargada'].forEach(n=>window.addEventListener(n,evento));setInterval(()=>{const a=resolverAtencion(),id=txt(a?.id_atencion||a?.id);if(id!==ultimoIdAtencion){contextoSeleccionado=a||contextoSeleccionado;cargar(true)}},1500);cargar(true);console.info(`${MODULO} cargado. ${VERSION}`)}
 window.AurosanaxObstetricia={version:VERSION,inicializar,cargar,guardar,limpiar,obtenerRegistroActual:()=>registroActual?{...registroActual}:null,obtenerContexto:contextoActual};window.inicializarObstetricia=inicializar;window.cargarObstetriciaPorAtencion=cargar;window.guardarObstetriciaERP=guardar;window.limpiarObstetriciaERP=limpiar;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inicializar);else inicializar();
 })();
