@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_9_EXAMEN_DX_QUIRURGICO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_10_PULIDO_ANTIRREGRESIVO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3929,10 +3929,36 @@
       const salida = [];
       const vistos = [];
 
+      const tieneSignosIndividuales = base.some(p=>{
+        const e = norm(p?.etiqueta || '');
+        return (
+          e.includes('presion arterial') ||
+          e.includes('frecuencia cardiaca') ||
+          e.includes('frecuencia respiratoria') ||
+          e.includes('temperatura') ||
+          e.includes('saturacion')
+        );
+      });
+
       base.forEach(p=>{
         const etiqueta = limpiarEtiqueta(p?.etiqueta || 'Dato clínico');
         let valor = limpiarTextoClinico(p?.valor || '');
         if(!valor) return;
+
+        const etiquetaNormSimple = norm(etiqueta);
+        const valorNormSimple = norm(valor);
+
+        /*
+          Si PA/FC/FR/T°/SatO2 ya están visibles por separado,
+          no repetir el renglón agregado "Signos vitales registrados...".
+        */
+        if(
+          tieneSignosIndividuales &&
+          etiquetaNormSimple === 'dato clinico' &&
+          valorNormSimple.includes('signos vitales registrados')
+        ){
+          return;
+        }
 
         const eNorm = normalizarClaveClinicaExamen(etiqueta);
         const vNormOriginal = normalizarClaveClinicaExamen(valor);
@@ -4282,6 +4308,104 @@
     );
 
     return paresHTML(pares);
+  }
+
+
+  function valorClinicoVisualHTML(valor){
+    /*
+      SOLO presentación:
+      protege rangos numéricos clínicos (3-4, 0-1, 11-12, etc.)
+      sin modificar el dato almacenado.
+    */
+    return esc(valor).replace(
+      /(^|[\s(:,;])(\d+)\s*[-–—]\s*(\d+)(?=$|[\s).,;:])/g,
+      function(_, prefijo, a, b){
+        return prefijo+'<span class="avi-nowrap">'+a+'-'+b+'</span>';
+      }
+    );
+  }
+
+  function paresHTMLClinico(pares, claseExtra){
+    if(!Array.isArray(pares) || !pares.length) return '';
+
+    return '<div class="avi-lines '+esc(claseExtra || '')+'">'+pares.map(p=>{
+      const lista = listaDesdeValor(p.valor);
+
+      if(lista){
+        return '<div class="avi-line avi-span-full">'+
+          '<b>'+esc(p.etiqueta)+'</b>'+
+          '<ul class="avi-clean-list">'+
+            lista.map(item=>'<li>'+valorClinicoVisualHTML(item)+'</li>').join('')+
+          '</ul>'+
+        '</div>';
+      }
+
+      return '<div class="avi-line'+(p.anchoCompleto?' avi-span-full':'')+'">'+
+        '<b>'+esc(p.etiqueta)+'</b>'+
+        '<p>'+valorClinicoVisualHTML(p.valor)+'</p>'+
+      '</div>';
+    }).join('')+'</div>';
+  }
+
+  function anamnesisVistaHTML(){
+    const pares = capturarPanel('hc_anamnesis').map(p=>{
+      const etiqueta = norm(p?.etiqueta || '');
+      const valor = texto(p?.valor || '');
+
+      const esNarrativo =
+        etiqueta.includes('enfermedad actual') ||
+        etiqueta.includes('motivo de consulta') ||
+        etiqueta.includes('resumen') ||
+        etiqueta.includes('observacion') ||
+        valor.length > 120;
+
+      return {
+        ...p,
+        anchoCompleto:Boolean(p?.anchoCompleto || esNarrativo)
+      };
+    });
+
+    return paresHTMLClinico(pares,'avi-anamnesis-grid');
+  }
+
+  function obstetriciaVistaHTML(){
+    const pares = capturarPanel('hc_obstetricia');
+
+    /*
+      La sección solo existe si hay al menos un dato clínico real.
+      Placeholders de un módulo no diligenciado NO crean una sección.
+    */
+    const vaciosObstetricia = new Set([
+      '', '0', '-', '—', 'no clasificado', 'no aplica', 'ninguno',
+      'ninguna', 'sin datos', 'sin dato', 'pendiente'
+    ]);
+
+    const utiles = pares.filter(p=>{
+      const etiqueta = norm(p?.etiqueta || '');
+      const valor = norm(p?.valor || '');
+
+      if(!valor || vaciosObstetricia.has(valor)) return false;
+
+      // textos de ayuda/estado del propio módulo
+      if(
+        valor.includes('no clasificado') ||
+        valor.includes('sin informacion') ||
+        valor.includes('no registrado') ||
+        valor.includes('seleccione')
+      ) return false;
+
+      // una etiqueta aislada o marcador técnico tampoco cuenta como dato
+      if(
+        etiqueta === 'riesgo obstetrico' &&
+        vaciosObstetricia.has(valor)
+      ) return false;
+
+      return true;
+    });
+
+    if(!utiles.length) return '';
+
+    return paresHTMLClinico(utiles,'avi-obstetricia-grid');
   }
 
   function paresHTML(pares){
@@ -4667,6 +4791,32 @@
         background:#fbfdff;min-width:0;
       }
       .avi-span-full{grid-column:1/-1}
+      .avi-nowrap{
+        white-space:nowrap;
+        display:inline-block;
+      }
+
+      /*
+        Anamnesis: dos columnas clínicas en escritorio.
+        Los textos narrativos ocupan todo el ancho.
+        No altera otros módulos.
+      */
+      .avi-anamnesis-grid{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        grid-auto-flow:row dense;
+        gap:10px 14px;
+      }
+
+      .avi-anamnesis-grid .avi-span-full{
+        grid-column:1/-1;
+      }
+
+      @media(max-width:760px){
+        .avi-anamnesis-grid{
+          grid-template-columns:1fr;
+        }
+      }
+
       .avi-line b,.avi-note b{
         display:block;color:#7a174f;font-size:10px;
         text-transform:uppercase;letter-spacing:.045em;font-weight:900;
@@ -5274,7 +5424,7 @@
 
     const anamnesis = seccion(
       'Anamnesis','bi-clipboard2-pulse',
-      paresHTML(capturarPanel('hc_anamnesis')),true
+      anamnesisVistaHTML(),true
     );
 
     const antecedentes = seccion(
@@ -5284,12 +5434,12 @@
 
     const examen = seccion(
       'Examen físico','bi-person-vcard',
-      paresHTML(examenFisicoParesProfesional()),true
+      paresHTMLClinico(examenFisicoParesProfesional(),'avi-examen-grid'),true
     );
 
     const obstetricia = seccion(
       'Obstetricia','bi-heart-pulse',
-      paresHTML(capturarPanel('hc_obstetricia')),false
+      obstetriciaVistaHTML(),false
     );
 
     const diagnosticos = seccion(
@@ -5508,7 +5658,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.9.0-examen-dx-quirurgico',
+    version:'1.10.0-pulido-antirregresivo',
     abrir,
     cerrar,
     abrirReceta,
