@@ -644,7 +644,7 @@ async function cargarPacientesDesdeSheets(){
       sexo: p.sexo || '',
       estado_civil: p.estado_civil || '',
       ocupacion: p.ocupacion || '',
-      telefono: p.whatsapp || p.telefono || p.celular || '',
+      telefono: p.telefono || p.whatsapp || p.celular || '',
       email: p.email || '',
       direccion: p.direccion || '',
       ciudad: p.ciudad || '',
@@ -1257,47 +1257,60 @@ function limpiarObjetoParaSheets(obj){
 
 /* AUROSANAX: módulo Antecedentes movido a antecedentes.js para evitar duplicados. */
 
-/* ==========================================================
- * AUROSANAX PACIENTES 06 - TELÉFONO INTERNACIONAL
- * Cambio quirúrgico y antirregresivo.
- *
- * - La ficha conserva el teléfono como TEXTO.
- * - Ecuador local 09XXXXXXXX sigue funcionando.
- * - Registros históricos 9XXXXXXXX siguen funcionando.
- * - +593, +1, +34, +57, etc. se respetan.
- * - La conversión ocurre SOLO al abrir WhatsApp.
- * - No modifica Agenda, Historia, Atención, estados ni IDs.
- * ========================================================== */
+/* ============================================================
+   AUROSANAX PACIENTES 06 - TELÉFONO / WHATSAPP INTERNACIONAL
+   Alcance EXCLUSIVO:
+   - Conversión del número SOLO al abrir WhatsApp.
+   - Conserva el valor real guardado en la ficha del paciente.
+   - Ecuador local 09XXXXXXXX -> 5939XXXXXXXX.
+   - Compatibilidad histórica 9XXXXXXXX -> 5939XXXXXXXX.
+   - +593, +1, +34, +57, etc. se respetan.
+   - NO modifica guardado, Agenda, Secretaría, Preatención,
+     Historia Clínica, Atenciones, estados, IDs ni vínculos.
+============================================================ */
 function normalizarTelefonoWhatsAppInternacional(numero){
-  let n = String(numero === null || numero === undefined ? '' : numero).trim();
-  if(!n) return '';
+  let raw = String(numero === null || numero === undefined ? '' : numero).trim();
+  if(!raw) return '';
 
-  // wa.me necesita únicamente dígitos.
-  n = n.replace(/[^\d+]/g, '');
+  /*
+   * wa.me requiere únicamente dígitos.
+   * Se toleran +, espacios, guiones y paréntesis en la ficha.
+   */
+  let n = raw.replace(/[^\d+]/g, '');
 
   if(n.startsWith('+')) n = n.slice(1);
   if(n.startsWith('00')) n = n.slice(2);
 
   if(!n) return '';
 
-  // Ecuador local: 0986535080 -> 593986535080.
+  /*
+   * Ecuador local:
+   * 0986535080 -> 593986535080
+   */
   if(/^0\d{9}$/.test(n)){
     return '593' + n.slice(1);
   }
 
-  // Compatibilidad con teléfonos históricos a los que Sheets quitó el cero.
+  /*
+   * Compatibilidad con registros históricos donde Sheets
+   * pudo haber perdido el cero inicial:
+   * 986535080 -> 593986535080
+   */
   if(/^9\d{8}$/.test(n)){
     return '593' + n;
   }
 
-  // Si ya trae código internacional (593, 1, 34, 57, etc.), se conserva.
+  /*
+   * Si ya tiene código internacional (593, 1, 34, 57, etc.)
+   * se conserva tal cual.
+   */
   return n;
 }
 
 /*
- * Alias de compatibilidad.
- * Si otra función del ERP todavía llama normalizarTelefonoEcuador(),
- * no se rompe el contrato existente.
+ * Alias de compatibilidad:
+ * cualquier llamada existente a normalizarTelefonoEcuador()
+ * sigue funcionando sin romper otros módulos.
  */
 function normalizarTelefonoEcuador(numero){
   return normalizarTelefonoWhatsAppInternacional(numero);
