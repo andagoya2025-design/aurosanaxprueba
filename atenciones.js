@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_CLINICA_ESTABLE';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_ANTECEDENTES_FUENTE_REAL';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3834,188 +3834,147 @@
   }
 
 
-  /* ============================================================
-     AUROSANAX VISTA INTEGRAL - LECTORES CLÍNICOS DE SOLO LECTURA
-     REGLA:
-     - No escriben ni habilitan controles.
-     - No llaman funciones Guardar / Actualizar / Limpiar.
-     - No modifican los módulos clínicos originales.
-     - Solo seleccionan la representación clínica más útil para el visor.
-  ============================================================ */
+  function historiaFuenteAntecedentes(atencion){
+    const idHistoria = texto(atencion?.id_historia);
+    const idPaciente = texto(atencion?.id_paciente);
 
-  function esPlaceholderVisual(v){
-    const t = texto(v);
-    if(!t) return true;
-    return /^(?:—|–|-|--|n\/a|na|null|undefined|sin dato|sin datos)$/i.test(t);
-  }
+    if(!idHistoria) return null;
 
-  function capturarAntecedentesClinicos(){
-    const panel = document.getElementById('hc_antecedentes');
-    if(!panel) return [];
+    const coincide = h =>
+      h &&
+      typeof h === 'object' &&
+      texto(h.id_historia || h.id) === idHistoria &&
+      (!idPaciente || !texto(h.id_paciente) || texto(h.id_paciente) === idPaciente);
 
-    const previo = document.getElementById('auroAntecedentesPreviosContent');
-
-    if(!previo || !texto(previo.textContent)){
-      return capturarPanel('hc_antecedentes');
+    for(const h of [window.historiaActual, window.currentHistoria]){
+      if(coincide(h)) return h;
     }
 
-    const pares = [];
-
-    /*
-      Prioridad: tarjetas/filas clínicas ya consolidadas por Antecedentes.
-      Evita volver a imprimir simultáneamente los inputs técnicos que las alimentan.
-    */
-    const filas = [
-      ...previo.querySelectorAll(
-        '.auro-previos-mini-row,.auro-previos-line,.auro-previos-item,.auro-previos-card'
-      )
-    ];
-
-    filas.forEach(row=>{
-      /*
-        Si esta fila es solo contenedor de otras filas clínicas, no se vuelve
-        a capturar el textContent completo del padre.
-      */
-      if(
-        row.querySelector(':scope > .auro-previos-mini-row,'+
-                          ':scope > .auro-previos-item,'+
-                          ':scope > .auro-previos-card')
-      ){
-        return;
-      }
-
-      const lab = row.querySelector(
-        'b,strong,.auro-previos-label,.label,.title,.auro-previos-title'
-      );
-
-      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
-
-      /*
-        Algunos resúmenes premium separan Fecha / Resultado / Marca / Dosis
-        en pills. Se unen con separadores clínicos legibles.
-      */
-      const pills = [...row.querySelectorAll('.auro-previos-detail-pill,.badge,.chip')]
-        .map(x=>limpiarTextoClinico(x.textContent))
-        .filter(Boolean);
-
-      let valor = '';
-
-      if(pills.length){
-        valor = pills.join(' · ');
-      }else{
-        const val = row.querySelector('em,p,.value,.auro-previos-value');
-        valor = limpiarTextoClinico(val ? val.textContent : row.textContent);
-
-        if(lab && valor){
-          const titulo = limpiarTextoClinico(lab.textContent);
-          if(titulo && valor.toLowerCase().startsWith(titulo.toLowerCase())){
-            valor = valor.slice(titulo.length).replace(/^[\s:·\-–—]+/,'').trim();
-          }
+    try{
+      if(typeof window.auroHistoriasPacienteOrdenadas === 'function' && idPaciente){
+        const lista = window.auroHistoriasPacienteOrdenadas(idPaciente);
+        if(Array.isArray(lista)){
+          const h = lista.find(coincide);
+          if(h) return h;
         }
       }
+    }catch(error){
+      console.warn(MODULO,'No se pudo resolver historia desde antecedentes.js.',error);
+    }
 
-      if(!valor || esEstadoInterno(valor) || esPlaceholderVisual(valor)) return;
+    try{
+      if(typeof window.auroHistoriaActualEdicion === 'function'){
+        const h = window.auroHistoriaActualEdicion();
+        if(coincide(h)) return h;
+      }
+    }catch(error){
+      console.warn(MODULO,'No se pudo resolver historia en edición.',error);
+    }
 
-      pares.push({
-        etiqueta:etiqueta || 'Antecedente',
-        valor,
-        anchoCompleto:valor.length > 150
-      });
-    });
-
-    const limpios = deduplicarPares(pares);
-    return limpios.length ? limpios : capturarPanel('hc_antecedentes');
+    return null;
   }
 
-  function depurarExamenFisicoPares(pares){
-    const lista = deduplicarPares(Array.isArray(pares) ? pares : []);
-    if(lista.length < 2) return lista;
-
-    const etiquetas = lista
-      .map(p=>norm(p.etiqueta))
-      .filter(e=>e && e !== 'dato clinico' && e.length >= 3);
-
-    return lista.filter(p=>{
-      const valorNorm = norm(p.valor);
-      if(!valorNorm) return false;
-
-      /*
-        Un resumen agregado que vuelve a contener varias regiones ya mostradas
-        individualmente se omite SOLO en Vista Integral.
-      */
-      const otras = etiquetas.filter(e =>
-        e !== norm(p.etiqueta) && valorNorm.includes(e)
-      );
-
-      return otras.length < 2;
-    });
-  }
-
-  function capturarExamenFisicoClinico(){
-    return depurarExamenFisicoPares(capturarPanel('hc_examen'));
-  }
-
-  function capturarObstetriciaClinica(){
-    return deduplicarPares(
-      capturarPanel('hc_obstetricia').filter(p=>{
-        const valor = texto(p?.valor);
-        if(esPlaceholderVisual(valor)) return false;
-        /*
-          "0" se conserva: puede ser un valor obstétrico clínicamente válido.
-          "No clasificado" también se conserva si el módulo lo registró así.
-        */
-        return true;
-      })
+  function extractoresAntecedentesDisponibles(){
+    return (
+      typeof window.auroExtraerItemsAntecedentePremium === 'function' &&
+      typeof window.auroExtraerFuentePatologicosPersonales === 'function' &&
+      typeof window.auroExtraerVacunasRegistradas === 'function' &&
+      typeof window.auroExtraerHabitosRegistrados === 'function' &&
+      typeof window.auroExtraerActividadRegistrada === 'function'
     );
   }
 
-  function capturarDiagnosticosClinicos(){
-    const panel = document.getElementById('hc_diagnostico');
-    if(!panel) return [];
+  function normalizarItemsAntecedente(items){
+    return (Array.isArray(items) ? items : [])
+      .map(item=>{
+        if(!item) return null;
 
-    const items = [...panel.querySelectorAll('.auro-dx-item')];
-    const pares = [];
+        if(typeof item === 'string'){
+          const titulo = limpiarTextoClinico(item);
+          return titulo ? {titulo, detalle:''} : null;
+        }
 
-    items.forEach(item=>{
-      const codigo = limpiarTextoClinico(
-        item.querySelector('.auro-dx-code,[data-cie10],.cie10-code')?.textContent || ''
-      );
+        const titulo = limpiarTextoClinico(
+          item.titulo ||
+          item.nombre ||
+          item.descripcion ||
+          item.biologico ||
+          item.vacuna ||
+          item.habito ||
+          item.actividad ||
+          ''
+        );
 
-      const nombre = limpiarTextoClinico(
-        item.querySelector('.auro-dx-name,.auro-dx-desc,[data-diagnostico],.diagnostico-nombre')?.textContent || ''
-      );
+        const detalle = limpiarTextoClinico(
+          item.detalle ||
+          item.observacion ||
+          item.observaciones ||
+          ''
+        );
 
-      const tags = [...item.querySelectorAll('.auro-dx-tag,.badge-auro,.badge')]
-        .map(x=>limpiarTextoClinico(x.textContent))
-        .filter(Boolean)
-        .filter(x=>{
-          const n = norm(x);
-          return !(
-            n.includes('protocolo') ||
-            n.includes('disponible para el analisis') ||
-            n.includes('consultar protocolo')
-          );
-        });
+        if(!titulo && !detalle) return null;
+        return {titulo:titulo || 'Registrado', detalle};
+      })
+      .filter(Boolean);
+  }
 
-      /*
-        Si no existen subclases reconocibles, no se fuerza una interpretación
-        inventada: se conserva el lector anterior como fallback.
-      */
-      if(!codigo && !nombre) return;
+  function antecedentesGrupoHTML(titulo, items){
+    const lista = normalizarItemsAntecedente(items);
+    if(!lista.length) return '';
 
-      const valor = [nombre, ...tags].filter(Boolean).join(' · ');
-      if(!valor) return;
+    return '<div class="avi-subgroup">'+
+      '<h5>'+esc(titulo)+'</h5>'+
+      '<div class="avi-lines">'+
+        lista.map(item=>
+          '<div class="avi-line'+(item.detalle.length > 150 ? ' avi-span-full' : '')+'">'+
+            '<b>'+esc(item.titulo)+'</b>'+
+            (item.detalle ? '<p>'+esc(item.detalle)+'</p>' : '')+
+          '</div>'
+        ).join('')+
+      '</div>'+
+    '</div>';
+  }
 
-      pares.push({
-        etiqueta:codigo ? ('CIE-10 ' + codigo) : 'Diagnóstico',
-        valor,
-        anchoCompleto:true
-      });
-    });
+  function antecedentesDesdeFuenteHTML(atencion){
+    const h = historiaFuenteAntecedentes(atencion);
 
-    return pares.length
-      ? deduplicarPares(pares)
-      : capturarPanel('hc_diagnostico');
+    if(!h || !extractoresAntecedentesDisponibles()){
+      return paresHTML(capturarPanel('hc_antecedentes'));
+    }
+
+    try{
+      const personales = texto(h.antecedentes_personales);
+      const patologicosFuente =
+        window.auroExtraerFuentePatologicosPersonales(personales);
+
+      const bloques = [
+        antecedentesGrupoHTML('Patológicos personales',
+          window.auroExtraerItemsAntecedentePremium(patologicosFuente,'patologia')),
+        antecedentesGrupoHTML('Quirúrgicos',
+          window.auroExtraerItemsAntecedentePremium(h.antecedentes_quirurgicos || '','quirurgico')),
+        antecedentesGrupoHTML('Alergias',
+          window.auroExtraerItemsAntecedentePremium(h.alergias || '','alergia')),
+        antecedentesGrupoHTML('Vacunas registradas',
+          window.auroExtraerVacunasRegistradas(personales)),
+        antecedentesGrupoHTML('Hábitos registrados',
+          window.auroExtraerHabitosRegistrados(personales)),
+        antecedentesGrupoHTML('Actividad física registrada',
+          window.auroExtraerActividadRegistrada(personales)),
+        antecedentesGrupoHTML('Gineco-obstétricos',
+          window.auroExtraerItemsAntecedentePremium(h.antecedentes_gineco_obstetricos || '','gineco')),
+        antecedentesGrupoHTML('Medicación actual',
+          window.auroExtraerItemsAntecedentePremium(h.medicacion_actual || '','medicacion')),
+        antecedentesGrupoHTML('Familiares',
+          window.auroExtraerItemsAntecedentePremium(h.antecedentes_familiares || '','familiares'))
+      ].filter(Boolean);
+
+      return bloques.length
+        ? bloques.join('')
+        : paresHTML(capturarPanel('hc_antecedentes'));
+    }catch(error){
+      console.warn(MODULO,'Falló lector estructurado de Antecedentes; se usa fallback estable.',error);
+      return paresHTML(capturarPanel('hc_antecedentes'));
+    }
   }
 
   function paresHTML(pares){
@@ -4559,70 +4518,6 @@
         .avi-close span{display:none}
       }
 
-
-      /* ============================================================
-         AUROSANAX VISTA INTEGRAL - AJUSTE DOCUMENTAL PROFESIONAL
-         SOLO ESCRITORIO >=981px.
-         El diseño móvil aprobado permanece sin modificación.
-      ============================================================ */
-      @media(min-width:981px){
-        .avi-body > .avi-overview-block,
-        .avi-body > .avi-clinical-divider,
-        .avi-body > .avi-section,
-        .avi-body > .avi-line{
-          width:min(1160px,calc(100% - 32px));
-        }
-
-        .avi-overview-block{
-          padding-left:48px;
-          padding-right:48px;
-        }
-
-        .avi-clinical-divider{
-          padding-left:48px;
-          padding-right:48px;
-        }
-
-        .avi-section summary{
-          padding-left:48px;
-          padding-right:48px;
-        }
-
-        .avi-section-body{
-          padding-left:48px;
-          padding-right:48px;
-        }
-
-        .avi-lines{
-          grid-auto-flow:row dense;
-          gap:12px 28px;
-        }
-
-        .avi-line{
-          min-width:0;
-        }
-
-        .avi-line p,
-        .avi-note p,
-        .avi-clean-list{
-          max-width:100%;
-        }
-
-        .avi-med-grid{
-          grid-template-columns:repeat(auto-fit,minmax(310px,1fr));
-          align-items:start;
-        }
-
-        .avi-med-card{
-          height:auto;
-          min-height:0;
-        }
-
-        .avi-data-grid{
-          grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
-        }
-      }
-
       /* ============================================================
          AUROSANAX VISTA INTEGRAL - VISOR DOCUMENTAL CLÍNICO V1.5
          SOLO ESCRITORIO >= 981px.
@@ -4968,22 +4863,22 @@
 
     const antecedentes = seccion(
       'Antecedentes de la historia clínica','bi-clock-history',
-      paresHTML(capturarAntecedentesClinicos()),false
+      antecedentesDesdeFuenteHTML(a),false
     );
 
     const examen = seccion(
       'Examen físico','bi-person-vcard',
-      paresHTML(capturarExamenFisicoClinico()),true
+      paresHTML(capturarPanel('hc_examen')),true
     );
 
     const obstetricia = seccion(
       'Obstetricia','bi-heart-pulse',
-      paresHTML(capturarObstetriciaClinica()),false
+      paresHTML(capturarPanel('hc_obstetricia')),false
     );
 
     const diagnosticos = seccion(
       'Diagnósticos','bi-journal-medical',
-      paresHTML(capturarDiagnosticosClinicos()),true
+      paresHTML(capturarPanel('hc_diagnostico')),true
     );
 
     const plan = seccion(
@@ -5197,7 +5092,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.7.0-clinica-estable',
+    version:'1.7.0-antecedentes-fuente-real',
     abrir,
     cerrar,
     abrirReceta,
