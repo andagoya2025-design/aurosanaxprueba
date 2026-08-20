@@ -3909,6 +3909,70 @@
       .filter(Boolean);
   }
 
+  /*
+    STABLE24 — saneamiento EXCLUSIVAMENTE VISUAL del Examen físico.
+    - No modifica campos, almacenamiento, IDs, eventos ni módulos clínicos.
+    - Conserva el contenido registrado; solo elimina prefijos repetidos y
+      duplicados visuales producidos al capturar controles + resumen leído.
+    - Si no puede normalizar con seguridad, devuelve el contenido stable.
+  */
+  function examenFisicoParesProfesional(){
+    const originales = capturarPanel('hc_examen');
+    if(!Array.isArray(originales) || !originales.length) return originales || [];
+
+    try{
+      const salida = [];
+      const vistos = new Set();
+
+      originales.forEach(p=>{
+        const etiqueta = limpiarEtiqueta(p?.etiqueta || 'Dato clínico');
+        let valor = limpiarTextoClinico(p?.valor || '');
+        if(!valor) return;
+
+        /* Quita encabezados que ya están representados por la etiqueta visual. */
+        const e = texto(etiqueta).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+        const prefijos = [
+          new RegExp('^\\s*Examen\\s+f[ií]sico\\s+(?:por\\s+sistemas|regional)\\s*'+e+'\\s*[:\\-]?\\s*','i'),
+          new RegExp('^\\s*'+e+'\\s+(?:Hallazgos\\s+regionales|Observaci[oó]n)\\s*[:\\-]?\\s*','i'),
+          new RegExp('^\\s*'+e+'\\s*[:\\-]\\s*','i')
+        ];
+        prefijos.forEach(rx=>{ valor = valor.replace(rx,'').trim(); });
+
+        /* Evita "Genitales Observación: Genitales: Observación: ..." sin tocar el hallazgo. */
+        valor = valor
+          .replace(/^(?:Genitales\s*)?(?:Observaci[oó]n\s*:\s*)?(?:Genitales\s*:\s*)?Observaci[oó]n\s*:\s*/i,'')
+          .replace(/^(?:Canal\s+vaginal\s*)?Observaci[oó]n\s*:\s*/i,'')
+          .trim();
+
+        if(!valor) return;
+
+        /* Dedupe visual tolerante a diferencias de encabezado, no de contenido clínico. */
+        const claveValor = norm(valor)
+          .replace(/^examen fisico (?:por sistemas|regional) /,'')
+          .replace(/^(torax respiratorio|abdomen|genitales|canal vaginal) /,'')
+          .replace(/^observacion /,'')
+          .trim();
+        const clave = norm(etiqueta)+'||'+claveValor;
+        const claveSoloValor = 'v||'+claveValor;
+        if(vistos.has(clave) || vistos.has(claveSoloValor)) return;
+
+        vistos.add(clave);
+        vistos.add(claveSoloValor);
+        salida.push({
+          ...p,
+          etiqueta,
+          valor,
+          anchoCompleto:Boolean(p?.anchoCompleto || valor.length > 150)
+        });
+      });
+
+      return salida.length ? salida : originales;
+    }catch(error){
+      console.warn(MODULO,'No se pudo normalizar visualmente Examen físico; se conserva stable.',error);
+      return originales;
+    }
+  }
+
   function antecedentesGrupoHTML(titulo, items){
     const lista = normalizarItemsAntecedente(items);
     if(!lista.length) return '';
@@ -5082,7 +5146,7 @@
 
     const examen = seccion(
       'Examen físico','bi-person-vcard',
-      paresHTML(capturarPanel('hc_examen')),true
+      paresHTML(examenFisicoParesProfesional()),true
     );
 
     const obstetricia = seccion(
