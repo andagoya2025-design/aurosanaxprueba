@@ -4349,22 +4349,63 @@
   }
 
   function anamnesisVistaHTML(){
-    const pares = capturarPanel('hc_anamnesis').map(p=>{
-      const etiqueta = norm(p?.etiqueta || '');
-      const valor = texto(p?.valor || '');
+    const capturados = capturarPanel('hc_anamnesis');
 
-      const esNarrativo =
-        etiqueta.includes('enfermedad actual') ||
-        etiqueta.includes('motivo de consulta') ||
-        etiqueta.includes('resumen') ||
-        etiqueta.includes('observacion') ||
-        valor.length > 120;
+    /*
+      VISTA INTEGRAL > ANAMNESIS
+      - "Plantilla sindrómica" es metadato de configuración/llenado y no
+        forma parte del resumen clínico final.
+      - Si "Enfermedad actual" ya contiene explícitamente un síntoma marcado
+        como "Sí", no se repite después como campo aislado.
+      - Si el síntoma NO está contenido en la narrativa, se conserva.
+      - Solo presentación: no modifica Anamnesis, guardado ni datos.
+    */
+    const enfermedadActual = capturados.find(p=>
+      norm(p?.etiqueta || '').includes('enfermedad actual')
+    );
 
-      return {
-        ...p,
-        anchoCompleto:Boolean(p?.anchoCompleto || esNarrativo)
-      };
-    });
+    const narrativaNorm = norm(enfermedadActual?.valor || '');
+
+    const pares = capturados
+      .filter(p=>{
+        const etiqueta = norm(p?.etiqueta || '');
+        const valor = norm(p?.valor || '');
+
+        // Metadato interno de la plantilla: no mostrar en Vista Integral.
+        if(etiqueta.includes('plantilla sindromica')) return false;
+
+        /*
+          Duplicado clínico:
+          ocultar únicamente pares tipo "Sí" cuyo concepto ya está escrito
+          dentro de Enfermedad actual. No se aplica a otros valores.
+        */
+        if(
+          narrativaNorm &&
+          valor === 'si' &&
+          etiqueta &&
+          narrativaNorm.includes(etiqueta)
+        ){
+          return false;
+        }
+
+        return true;
+      })
+      .map(p=>{
+        const etiqueta = norm(p?.etiqueta || '');
+        const valor = texto(p?.valor || '');
+
+        const esNarrativo =
+          etiqueta.includes('enfermedad actual') ||
+          etiqueta.includes('motivo de consulta') ||
+          etiqueta.includes('resumen') ||
+          etiqueta.includes('observacion') ||
+          valor.length > 120;
+
+        return {
+          ...p,
+          anchoCompleto:Boolean(p?.anchoCompleto || esNarrativo)
+        };
+      });
 
     return paresHTMLClinico(pares,'avi-anamnesis-grid');
   }
@@ -4514,6 +4555,20 @@
 
     pares.forEach(p=>{
       const n = norm(p.etiqueta);
+      const v = norm(p.valor);
+
+      /*
+        Campos de apoyo internos del formulario (p. ej.
+        "EXAMEN ... EN PLAN = Sí") no son una orden clínica adicional.
+        Se omiten SOLO en Vista Integral antes de clasificar, para impedir
+        que la palabra "examen" los haga aparecer como examen solicitado.
+      */
+      const esBanderaInternaPlan =
+        (n.includes(' en plan') || n.endsWith('en plan')) &&
+        (v === 'si' || v === 'no' || v === 'true' || v === 'false');
+
+      if(esBanderaInternaPlan) return;
+
       if(n.includes('medicamento')) grupos.medicamentos.push(p);
       else if(n.includes('examen')) grupos.examenes.push(p);
       else if(n.includes('interconsulta')) grupos.interconsultas.push(p);
@@ -4581,9 +4636,27 @@
     const recetas = recetasPorAtencion(idAtencion);
     if(!recetas.length) return '';
 
+    /*
+      Evita repetición visual Plan -> Receta:
+      si las indicaciones de una receta son exactamente las mismas que ya
+      aparecen como indicaciones generales del Plan, la Vista Integral no
+      las imprime por segunda vez dentro de la tarjeta de receta.
+      La receta y sus datos permanecen intactos.
+    */
+    const indicacionesPlan = new Set(
+      capturarPanel('hc_plan')
+        .filter(p=>norm(p.etiqueta).includes('indicacion'))
+        .map(p=>norm(limpiarTextoClinico(p.valor)))
+        .filter(Boolean)
+    );
+
     return '<div class="avi-rx-list">'+recetas.map(r=>{
       const meds = medicamentoCards(r.medicamento || r.medicamentos);
-      const indicaciones = indicacionesHTML(r.indicaciones);
+      const indicacionReceta = limpiarTextoClinico(r.indicaciones);
+      const indicaciones = (
+        indicacionReceta &&
+        !indicacionesPlan.has(norm(indicacionReceta))
+      ) ? indicacionesHTML(indicacionReceta) : '';
 
       return '<article class="avi-rx-card">'+
         '<div class="avi-rx-head">'+
