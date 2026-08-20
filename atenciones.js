@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_EXAMEN_SIN_DUPLICADOS';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_8_ANTECEDENTES_CLINICOS';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3952,6 +3952,117 @@
       campos clínicos, se vuelve al recolector anterior sin alterar nada.
     */
     return limpios.length ? limpios : capturarPanel('hc_examen');
+  }
+
+  /*
+    AUROSANAX VISTA INTEGRAL - FASE 2B
+    ANTECEDENTES CLÍNICOS SIN CAMPOS TÉCNICOS DUPLICADOS
+
+    Principio:
+    - Vista Integral es SOLO LECTURA.
+    - Si Antecedentes ya expone su resumen clínico consolidado
+      (#auroAntecedentesPreviosContent), se usa esa representación.
+    - No se vuelve a imprimir simultáneamente cada input técnico que alimenta
+      vacunas, hábitos, gineco-obstétricos, alergias, etc.
+    - No se modifica el módulo Antecedentes, sus toggles, guardado ni datos.
+    - Si el resumen clínico todavía no está disponible, se conserva el
+      recolector anterior como fallback seguro.
+  */
+  function capturarAntecedentesClinicos(){
+    const panel = document.getElementById('hc_antecedentes');
+    if(!panel) return [];
+
+    const previo = document.getElementById('auroAntecedentesPreviosContent');
+    const tienePrevioClinico = Boolean(
+      previo &&
+      texto(previo.textContent) &&
+      previo.querySelector(
+        '.auro-previos-line,.auro-previos-mini-row,.auro-previos-chip'
+      )
+    );
+
+    if(!tienePrevioClinico){
+      return capturarPanel('hc_antecedentes');
+    }
+
+    const pares = [];
+
+    /*
+      1. Líneas clínicas consolidadas.
+      Si contienen mini-filas/chips internos, no se captura también el padre.
+    */
+    previo.querySelectorAll('.auro-previos-line').forEach(line=>{
+      if(
+        line.querySelector('.auro-previos-mini-row') ||
+        line.querySelector('.auro-previos-chip')
+      ){
+        return;
+      }
+
+      const lab = line.querySelector(
+        ':scope > span,:scope > b,:scope > strong,'+
+        '.auro-previos-label,.label,.title'
+      );
+      const val = line.querySelector(':scope > p,:scope > em,.value');
+
+      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
+      const valor = limpiarTextoClinico(
+        val ? val.textContent : line.textContent
+      );
+
+      if(!valor || esEstadoInterno(valor)) return;
+
+      pares.push({
+        etiqueta:etiqueta || 'Antecedente',
+        valor,
+        anchoCompleto:valor.length > 150
+      });
+    });
+
+    /*
+      2. Mini-filas clínicas estructuradas:
+      vacunas, hábitos y otros grupos renderizados por Antecedentes.
+    */
+    previo.querySelectorAll('.auro-previos-mini-row').forEach(row=>{
+      const lab = row.querySelector('b,strong,.label,.title');
+      const val = row.querySelector('em,p,.value');
+
+      const etiqueta = limpiarEtiqueta(lab ? lab.textContent : '');
+      const valor = limpiarTextoClinico(
+        val ? val.textContent : row.textContent
+      );
+
+      if(!valor || esEstadoInterno(valor)) return;
+
+      pares.push({
+        etiqueta:etiqueta || 'Antecedente',
+        valor,
+        anchoCompleto:valor.length > 150
+      });
+    });
+
+    /*
+      3. Chips clínicos sueltos no contenidos dentro de una mini-fila.
+    */
+    previo.querySelectorAll('.auro-previos-chip').forEach(chip=>{
+      if(chip.closest('.auro-previos-mini-row')) return;
+
+      const raw = limpiarTextoClinico(chip.textContent);
+      if(!raw || esEstadoInterno(raw)) return;
+
+      const idx = raw.indexOf(':');
+      pares.push({
+        etiqueta:idx > 0 ? limpiarEtiqueta(raw.slice(0,idx)) : 'Antecedente',
+        valor:idx > 0 ? limpiarTextoClinico(raw.slice(idx+1)) : raw,
+        anchoCompleto:raw.length > 150
+      });
+    });
+
+    const limpios = deduplicarPares(pares);
+
+    return limpios.length
+      ? limpios
+      : capturarPanel('hc_antecedentes');
   }
 
   function paresHTML(pares){
@@ -4840,7 +4951,7 @@
 
     const antecedentes = seccion(
       'Antecedentes de la historia clínica','bi-clock-history',
-      paresHTML(capturarPanel('hc_antecedentes')),false
+      paresHTML(capturarAntecedentesClinicos()),false
     );
 
     const examen = seccion(
@@ -5069,7 +5180,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.7.0-examen-sin-duplicados',
+    version:'1.8.0-antecedentes-clinicos',
     abrir,
     cerrar,
     abrirReceta,
