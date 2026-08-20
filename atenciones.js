@@ -4372,38 +4372,174 @@
     const pares = capturarPanel('hc_obstetricia');
 
     /*
-      La sección solo existe si hay al menos un dato clínico real.
-      Placeholders de un módulo no diligenciado NO crean una sección.
+      VISTA INTEGRAL — OBSTETRICIA / FILTRO QUIRÚRGICO
+
+      REGLAS:
+      1. Esta sección representa SOLO el registro obstétrico de la atención.
+      2. Los antecedentes obstétricos de la tarjeta "solo lectura" pertenecen
+         a Antecedentes de la historia clínica y NO se duplican aquí.
+      3. Campos automáticos o placeholders no crean una sección.
+      4. Si existe registro real, se muestran únicamente datos diligenciados,
+         en orden clínico estable.
+      5. Es solo presentación: no modifica controles, datos ni almacenamiento.
     */
-    const vaciosObstetricia = new Set([
-      '', '0', '-', '—', 'no clasificado', 'no aplica', 'ninguno',
-      'ninguna', 'sin datos', 'sin dato', 'pendiente'
+
+    const etiquetasAntecedentes = new Set([
+      'gestas','gesta','gesta #',
+      'partos','partos #',
+      'cesareas','cesareas #',
+      'abortos','abortos #',
+      'ectopicos','ectopicos #',
+      'mortinatos','hijos muertos','hijos muertos #',
+      'hijos vivos','hijos vivos #',
+      'complicaciones'
     ]);
 
-    const utiles = pares.filter(p=>{
+    const placeholders = new Set([
+      '', '-', '—',
+      'no clasificado',
+      'no aplica',
+      'ninguno','ninguna',
+      'sin datos','sin dato',
+      'pendiente',
+      'seleccionar','seleccione',
+      'no registrado','no registrada',
+      'no evaluado','no evaluada'
+    ]);
+
+    const esPlaceholder = valor=>{
+      const v = norm(valor || '');
+      if(!v || placeholders.has(v)) return true;
+
+      return (
+        v.includes('sin informacion') ||
+        v.includes('sin información') ||
+        v.includes('no registrado') ||
+        v.includes('no registrada') ||
+        v.includes('seleccione')
+      );
+    };
+
+    /*
+      Primero se eliminan datos históricos reflejados por .obs-read.
+      Así Antecedentes y Obstetricia conservan responsabilidades separadas.
+    */
+    let candidatos = pares.filter(p=>{
       const etiqueta = norm(p?.etiqueta || '');
-      const valor = norm(p?.valor || '');
+      if(etiquetasAntecedentes.has(etiqueta)) return false;
+      return true;
+    });
 
-      if(!valor || vaciosObstetricia.has(valor)) return false;
+    /*
+      "Tipo atención" se precarga desde la atención general.
+      Por sí solo NO demuestra que exista un registro obstétrico diligenciado.
+    */
+    const datosClinicosReales = candidatos.filter(p=>{
+      const etiqueta = norm(p?.etiqueta || '');
+      const valor = texto(p?.valor || '');
 
-      // textos de ayuda/estado del propio módulo
-      if(
-        valor.includes('no clasificado') ||
-        valor.includes('sin informacion') ||
-        valor.includes('no registrado') ||
-        valor.includes('seleccione')
-      ) return false;
+      if(etiqueta === 'tipo atencion' || etiqueta === 'tipo de atencion'){
+        return false;
+      }
 
-      // una etiqueta aislada o marcador técnico tampoco cuenta como dato
-      if(
-        etiqueta === 'riesgo obstetrico' &&
-        vaciosObstetricia.has(valor)
-      ) return false;
+      if(esPlaceholder(valor)) return false;
+
+      /*
+        Cero puede ser clínicamente válido para EG días.
+        Para otros campos, un 0 aislado no debe crear contenido visual.
+      */
+      if(norm(valor) === '0'){
+        return (
+          etiqueta === 'eg dias' ||
+          etiqueta === 'edad gestacional dias' ||
+          etiqueta === 'edad gestacional días'
+        );
+      }
 
       return true;
     });
 
-    if(!utiles.length) return '';
+    if(!datosClinicosReales.length) return '';
+
+    /*
+      Ya comprobado que existe contenido obstétrico real, ahora construir
+      la lista visible. Se puede incluir Tipo atención como contexto,
+      pero nunca como disparador de la sección.
+    */
+    candidatos = candidatos.filter(p=>{
+      const etiqueta = norm(p?.etiqueta || '');
+      const valor = texto(p?.valor || '');
+
+      if(esPlaceholder(valor)) return false;
+
+      if(norm(valor) === '0'){
+        return (
+          etiqueta === 'eg dias' ||
+          etiqueta === 'edad gestacional dias' ||
+          etiqueta === 'edad gestacional días'
+        );
+      }
+
+      return true;
+    });
+
+    const orden = [
+      'fum',
+      'fpp',
+      'eg semanas',
+      'edad gestacional semanas',
+      'eg dias',
+      'edad gestacional dias',
+      'edad gestacional días',
+      'tipo atencion',
+      'tipo de atencion',
+      'altura uterina',
+      'altura uterina (cm)',
+      'fcf',
+      'fcf (lpm)',
+      'embarazo',
+      'numero de fetos',
+      'número de fetos',
+      'situacion fetal',
+      'situación fetal',
+      'presentacion',
+      'presentación',
+      'posicion fetal',
+      'posición fetal',
+      'movimientos fetales',
+      'actividad uterina',
+      'edema',
+      'membranas',
+      'riesgo obstetrico',
+      'riesgo obstétrico',
+      'proximo control',
+      'próximo control',
+      'hallazgos relevantes',
+      'observaciones'
+    ];
+
+    const posicion = etiqueta=>{
+      const e = norm(etiqueta || '');
+      const i = orden.indexOf(e);
+      return i === -1 ? 999 : i;
+    };
+
+    const utiles = candidatos
+      .map((p,indice)=>({
+        ...p,
+        __indice:indice,
+        anchoCompleto:Boolean(
+          p?.anchoCompleto ||
+          ['hallazgos relevantes','observaciones'].includes(norm(p?.etiqueta || '')) ||
+          texto(p?.valor || '').length > 120
+        )
+      }))
+      .sort((a,b)=>{
+        const oa = posicion(a.etiqueta);
+        const ob = posicion(b.etiqueta);
+        return oa === ob ? a.__indice-b.__indice : oa-ob;
+      })
+      .map(({__indice,...p})=>p);
 
     return paresHTMLClinico(utiles,'avi-obstetricia-grid');
   }
@@ -4811,8 +4947,26 @@
         grid-column:1/-1;
       }
 
+      /*
+        Obstetricia: lectura limpia y ordenada.
+        Dos columnas favorecen FUM/FPP, EG y controles sin dejar huecos
+        visuales irregulares. Los textos narrativos ocupan todo el ancho.
+      */
+      .avi-obstetricia-grid{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        grid-auto-flow:row dense;
+        gap:10px 18px;
+        align-items:start;
+      }
+      .avi-obstetricia-grid .avi-span-full{
+        grid-column:1/-1;
+      }
+
       @media(max-width:760px){
         .avi-anamnesis-grid{
+          grid-template-columns:1fr;
+        }
+        .avi-obstetricia-grid{
           grid-template-columns:1fr;
         }
       }
