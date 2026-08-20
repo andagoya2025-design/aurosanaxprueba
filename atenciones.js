@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_4_A4_DESKTOP';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_5_DOCUMENTAL_DESKTOP';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4375,123 +4375,138 @@
       }
 
       /* ============================================================
-         AUROSANAX VISTA INTEGRAL - EXPEDIENTE A4 DIGITAL
+         AUROSANAX VISTA INTEGRAL - VISOR DOCUMENTAL CLÍNICO V1.5
          SOLO ESCRITORIO >= 981px.
-         El responsive móvil/tablet existente NO se modifica.
-         Presentación únicamente: sin cambios de datos ni lógica clínica.
+         - Hoja clínica central amplia, inspirada en visor A4.
+         - Todo texto narrativo usa ancho documental completo.
+         - Campos breves conservan distribución compacta.
+         - Móvil/tablet existente NO se modifica.
+         - Sin cambios de datos, eventos, guardado ni contexto clínico.
       ============================================================ */
       @media(min-width:981px){
         .avi-shell{
-          width:min(98vw,1680px);
-          height:min(97dvh,1080px);
+          width:min(98vw,1720px);
+          height:min(97dvh,1100px);
           max-height:97dvh;
-          background:#eef1f4;
+          background:#e9edf1;
         }
 
         .avi-head{
-          padding:16px 22px;
-          background:linear-gradient(135deg,#ffffff 0%,#fff9fc 62%,#fbf5f9 100%);
+          padding:11px 18px;
+          min-height:auto;
+          background:linear-gradient(135deg,#fff 0%,#fff9fc 62%,#fbf5f9 100%);
         }
-        .avi-head h3{font-size:22px}
-        .avi-head-patient{font-size:15.5px}
-        .avi-head-subcontext{font-size:12.5px}
-        .avi-head-context{margin-top:8px}
+        .avi-head-main{gap:10px}
+        .avi-head-icon{width:40px;height:40px;border-radius:12px;font-size:17px}
+        .avi-head-kicker{font-size:9px;margin-bottom:1px}
+        .avi-head h3{font-size:18px;line-height:1.15}
+        .avi-head-patient{font-size:13.5px;margin-top:2px}
+        .avi-head-subcontext{font-size:11px}
+        .avi-technical-id{font-size:9.4px!important;margin-top:2px!important}
+        .avi-head-context{margin-top:5px;gap:5px}
+        .avi-chip{font-size:9.5px;padding:3px 7px}
+        .avi-close{padding:7px 10px}
 
         .avi-toolbar{
-          padding:9px 20px;
-          background:#ffffff;
+          padding:7px 18px;
+          background:#fff;
         }
         .avi-toolbar .avi-btn{
-          font-size:12.2px;
-          min-height:37px;
-          padding:8px 12px;
+          min-height:34px;
+          padding:7px 11px;
+          font-size:11.5px;
         }
 
-        /* Banda blanca central continua tipo documento A4 digital. */
         .avi-body{
-          padding:28px 24px 36px;
-          background:
-            linear-gradient(
-              to right,
-              #e7ebef 0,
-              #e7ebef calc(50% - 520px),
-              #ffffff calc(50% - 520px),
-              #ffffff calc(50% + 520px),
-              #e7ebef calc(50% + 520px),
-              #e7ebef 100%
-            );
+          padding:24px 20px 34px;
+          background:#dfe4e9;
         }
 
         .avi-body > .avi-overview-block,
         .avi-body > .avi-clinical-divider,
         .avi-body > .avi-section,
         .avi-body > .avi-line{
-          width:min(920px,calc(100% - 48px));
+          width:min(1120px,calc(100% - 36px));
           margin-left:auto;
           margin-right:auto;
+          box-sizing:border-box;
         }
 
-        /* Datos de cabecera como ficha clínica, no como tarjetas gigantes. */
+        .avi-body > .avi-overview-block:first-child{
+          border-radius:10px 10px 0 0;
+          padding-top:26px;
+        }
+        .avi-body > .avi-section:last-child{
+          border-radius:0 0 10px 10px;
+          padding-bottom:18px;
+        }
+
+        .avi-overview-block,
+        .avi-clinical-divider,
+        .avi-section{
+          background:#fff;
+          box-shadow:none;
+        }
+
         .avi-overview-block{
           border:0;
           border-radius:0;
-          box-shadow:none;
-          padding:18px 0 14px;
+          padding:12px 42px 10px;
           margin-bottom:0;
-          background:#fff;
-          border-bottom:1px solid #e5e7eb;
+          border-bottom:1px solid #e7e9ed;
         }
-        .avi-overview-block:first-child{padding-top:6px}
+
         .avi-group-title{
-          margin:0 0 12px;
-          font-size:11.5px;
-          letter-spacing:.06em;
+          margin:0 0 10px;
+          font-size:11px;
+          letter-spacing:.065em;
+          color:#7a174f;
         }
+
         .avi-data-grid{
           grid-template-columns:repeat(4,minmax(0,1fr));
-          gap:8px 16px;
+          gap:8px 22px;
         }
         .avi-data{
           min-height:auto;
-          padding:4px 0;
+          padding:3px 0 5px;
           border:0;
           border-radius:0;
           background:transparent;
           justify-content:flex-start;
         }
         .avi-data span{
-          font-size:9.6px;
+          font-size:9.2px;
+          line-height:1.15;
           color:#7a174f;
           margin-bottom:2px;
         }
         .avi-data b{
           margin-top:0;
-          font-size:12.8px;
-          line-height:1.35;
+          font-size:13.2px;
+          line-height:1.34;
           color:#1f2937;
         }
         .avi-id-card{background:transparent;border:0}
-        .avi-id-card b{font-size:10.8px;color:#64748b}
+        .avi-id-card b{font-size:10.5px;color:#64748b}
 
         .avi-clinical-divider{
-          margin-top:18px;
-          margin-bottom:10px;
-          font-size:11px;
+          padding:16px 42px 8px;
+          margin-top:0;
+          margin-bottom:0;
+          font-size:10.5px;
           color:#7a174f;
         }
 
-        /* Secciones como capítulos de expediente clínico. */
         .avi-section{
           border:0;
           border-radius:0;
-          box-shadow:none;
           margin-bottom:0;
-          background:#fff;
-          border-bottom:1px solid #e8ebef;
           overflow:visible;
+          border-bottom:1px solid #e8ebef;
         }
         .avi-section summary{
-          padding:13px 0 11px;
+          padding:12px 42px 10px;
           font-size:13.5px;
           color:#3f1630;
           background:#fff!important;
@@ -4500,78 +4515,101 @@
           border-bottom:1px solid #f0e4eb;
         }
         .avi-section-label>i{
-          width:28px;
-          height:28px;
-          border-radius:8px;
+          width:27px;height:27px;border-radius:8px;
         }
         .avi-section-body{
-          padding:12px 0 18px;
+          padding:14px 42px 22px;
         }
 
-        /* Lectura clínica: ancho controlado y tipografía cómoda. */
         .avi-lines{
           grid-template-columns:repeat(2,minmax(0,1fr));
-          gap:10px 24px;
+          gap:10px 26px;
+          align-items:start;
         }
         .avi-line{
           border:0;
           border-radius:0;
-          padding:5px 0;
+          padding:4px 0 8px;
           background:transparent;
         }
+        .avi-line.avi-span-full{
+          grid-column:1/-1;
+          width:100%;
+        }
         .avi-line b,.avi-note b{
-          font-size:10px;
+          font-size:10.2px;
+          line-height:1.2;
           color:#7a174f;
-          letter-spacing:.05em;
+          letter-spacing:.055em;
         }
         .avi-line p,.avi-note p{
-          margin-top:5px;
-          font-size:13.4px;
-          line-height:1.58;
+          margin:5px 0 0;
+          font-size:14px;
+          line-height:1.62;
           color:#222b38;
           text-align:left;
-          max-width:78ch;
+          max-width:none;
+          white-space:pre-wrap;
+          overflow-wrap:anywhere;
         }
-        .avi-span-full p{max-width:82ch}
+        .avi-line.avi-span-full p,
+        .avi-note p{
+          width:100%;
+          max-width:100%;
+        }
         .avi-clean-list{
-          font-size:13.2px;
-          line-height:1.55;
-          max-width:82ch;
+          width:100%;
+          max-width:100%;
+          font-size:13.8px;
+          line-height:1.58;
         }
 
-        .avi-subgroup{padding-top:14px}
-        .avi-subgroup>h5{font-size:13px;margin-bottom:8px}
+        .avi-lines > .avi-line:only-child{
+          grid-column:1/-1;
+        }
+        .avi-lines > .avi-line:only-child p{
+          width:100%;
+          max-width:100%;
+        }
 
-        /* Plan y receta como bloques documentales limpios. */
+        .avi-subgroup{padding-top:13px}
+        .avi-subgroup>h5{font-size:13.2px;margin-bottom:9px}
+
         .avi-med-grid{
           grid-template-columns:repeat(2,minmax(0,1fr));
           gap:10px;
         }
         .avi-med-card{
           border:1px solid #ead7e2;
-          border-radius:12px;
+          border-radius:11px;
           padding:12px;
           background:#fffdfd;
           box-shadow:none;
         }
-        .avi-med-card h5{font-size:13.2px}
-        .avi-med-card p{font-size:12.8px;line-height:1.5}
-        .avi-med-details b{font-size:11.2px}
+        .avi-med-card h5{font-size:13.4px}
+        .avi-med-card p{font-size:13px;line-height:1.52}
+        .avi-med-details b{font-size:11.4px}
 
         .avi-rx-card{
           border:1px solid #ead7e2;
-          border-radius:14px;
+          border-radius:12px;
           padding:14px;
           box-shadow:none;
           background:#fff;
         }
         .avi-rx-head h4{font-size:14.5px}
         .avi-rx-meta{grid-template-columns:repeat(3,minmax(0,1fr))}
+        .avi-rx-meta .avi-data{
+          border-bottom:1px solid #edf0f3;
+          padding-bottom:7px;
+        }
 
         .avi-loading{
-          width:min(920px,calc(100% - 48px));
+          width:min(1120px,calc(100% - 36px));
           margin:0 auto;
+          min-height:520px;
           background:#fff;
+          padding-top:80px;
         }
       }
     `;
@@ -4910,7 +4948,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.4.0-a4',
+    version:'1.5.0-documental',
     abrir,
     cerrar,
     abrirReceta,
