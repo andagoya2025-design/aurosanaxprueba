@@ -307,42 +307,213 @@
   }
 
   if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
-    window.auroSolicitarMotivoCorreccionClinica = function(opciones){
-      opciones = opciones || {};
-      const excepcional = !!opciones.excepcional;
-      const entrada = window.prompt(
-        (excepcional ? 'ENMIENDA EXCEPCIONAL' : 'CORRECCIÓN CLÍNICA') +
-        ' - JUSTIFICATIVO OBLIGATORIO\n\n' +
-        '1. Error de digitación\n' +
-        '2. Omisión\n' +
-        '3. Fallo del sistema\n' +
-        '4. Emergencia\n' +
-        '5. Corrección clínica\n' +
-        '6. Otro\n\n' +
-        'Escriba el número del motivo:'
-      );
-      if(entrada === null) return null;
-      const mapa = {
-        '1':'Error de digitación', '2':'Omisión', '3':'Fallo del sistema',
-        '4':'Emergencia', '5':'Corrección clínica', '6':'Otro'
+      window.auroSolicitarMotivoCorreccionClinica = function(opciones){
+        opciones = opciones || {};
+        const excepcional = !!opciones.excepcional;
+  
+        return new Promise(function(resolve){
+          const STYLE_ID = 'auroCorreccionClinicaPremiumStyles';
+          const MODAL_ID = 'auroCorreccionClinicaPremiumModal';
+  
+          if(!document.getElementById(STYLE_ID)){
+            const style = document.createElement('style');
+            style.id = STYLE_ID;
+            style.textContent = `
+              #${MODAL_ID}{
+                position:fixed;inset:0;z-index:2147483000;
+                display:flex;align-items:center;justify-content:center;
+                padding:16px max(12px,env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+                background:rgba(15,23,42,.48);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+                overflow:auto;
+              }
+              #${MODAL_ID} .auro-corr-card{
+                width:min(560px,100%);max-height:min(88vh,720px);overflow:auto;
+                border:1px solid #ead5e2;border-radius:22px;background:#fff;
+                box-shadow:0 28px 80px rgba(15,23,42,.28);
+                color:#111827;font-family:inherit;
+              }
+              #${MODAL_ID} .auro-corr-head{
+                display:flex;gap:12px;align-items:flex-start;padding:18px 20px 15px;
+                border-bottom:1px solid #f1e5ec;background:linear-gradient(135deg,#fff,#fff8fc);
+              }
+              #${MODAL_ID} .auro-corr-icon{
+                width:42px;height:42px;flex:0 0 42px;border-radius:13px;
+                display:grid;place-items:center;background:#fdf2f8;color:#8b1e5a;font-size:19px;
+                border:1px solid #f3d1e3;
+              }
+              #${MODAL_ID}[data-excepcional="si"] .auro-corr-icon{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+              #${MODAL_ID} .auro-corr-kicker{font-size:10.5px;font-weight:950;letter-spacing:.09em;text-transform:uppercase;color:#9d174d;margin-bottom:3px}
+              #${MODAL_ID}[data-excepcional="si"] .auro-corr-kicker{color:#9a3412}
+              #${MODAL_ID} .auro-corr-title{font-size:18px;font-weight:950;line-height:1.15;color:#111827}
+              #${MODAL_ID} .auro-corr-sub{margin-top:5px;color:#64748b;font-size:12px;line-height:1.42;font-weight:650}
+              #${MODAL_ID} .auro-corr-body{padding:18px 20px 8px}
+              #${MODAL_ID} .auro-corr-trace{
+                display:flex;gap:8px;align-items:flex-start;margin-bottom:15px;padding:10px 12px;
+                border:1px solid #dbeafe;border-radius:13px;background:#f8fbff;color:#334155;
+                font-size:11.5px;line-height:1.4;font-weight:700;
+              }
+              #${MODAL_ID} .auro-corr-label{display:block;margin:0 0 6px;color:#374151;font-size:12px;font-weight:900}
+              #${MODAL_ID} .auro-corr-select,#${MODAL_ID} .auro-corr-input{
+                width:100%;min-height:44px;border:1px solid #d8dee6;border-radius:12px;background:#fff;
+                color:#111827;font:inherit;font-size:14px;padding:9px 12px;outline:none;
+                box-shadow:none;transition:border-color .15s ease,box-shadow .15s ease;
+              }
+              #${MODAL_ID} .auro-corr-select:focus,#${MODAL_ID} .auro-corr-input:focus{
+                border-color:#c23b83;box-shadow:0 0 0 3px rgba(194,59,131,.12);
+              }
+              #${MODAL_ID} .auro-corr-field{margin-bottom:14px}
+              #${MODAL_ID} .auro-corr-help{margin-top:5px;color:#64748b;font-size:10.5px;line-height:1.35}
+              #${MODAL_ID} .auro-corr-error{display:none;margin-top:7px;color:#b42318;font-size:11px;font-weight:800}
+              #${MODAL_ID} .auro-corr-error.show{display:block}
+              #${MODAL_ID} .auro-corr-actions{
+                display:flex;justify-content:flex-end;gap:9px;padding:12px 20px 18px;
+              }
+              #${MODAL_ID} .auro-corr-btn{
+                min-height:42px;border-radius:12px;padding:9px 15px;border:1px solid #d8dee6;
+                font:inherit;font-size:12.5px;font-weight:900;cursor:pointer;
+              }
+              #${MODAL_ID} .auro-corr-btn.cancel{background:#fff;color:#475569}
+              #${MODAL_ID} .auro-corr-btn.ok{background:#8b1e5a;color:#fff;border-color:#8b1e5a;box-shadow:0 8px 18px rgba(139,30,90,.18)}
+              #${MODAL_ID}[data-excepcional="si"] .auro-corr-btn.ok{background:#9a3412;border-color:#9a3412;box-shadow:0 8px 18px rgba(154,52,18,.16)}
+              #${MODAL_ID} .auro-corr-btn:focus-visible{outline:3px solid rgba(59,130,246,.28);outline-offset:2px}
+              @media(max-width:600px){
+                #${MODAL_ID}{align-items:flex-end;padding:10px 8px calc(8px + env(safe-area-inset-bottom))}
+                #${MODAL_ID} .auro-corr-card{width:100%;max-height:92vh;border-radius:20px 20px 14px 14px}
+                #${MODAL_ID} .auro-corr-head{padding:15px 14px 13px}
+                #${MODAL_ID} .auro-corr-body{padding:14px 14px 6px}
+                #${MODAL_ID} .auro-corr-actions{display:grid;grid-template-columns:1fr 1fr;padding:10px 14px 14px}
+                #${MODAL_ID} .auro-corr-btn{width:100%;min-height:45px}
+                #${MODAL_ID} .auro-corr-select,#${MODAL_ID} .auro-corr-input{font-size:16px}
+              }
+              @media(max-width:390px){
+                #${MODAL_ID} .auro-corr-title{font-size:16px}
+                #${MODAL_ID} .auro-corr-actions{grid-template-columns:1fr}
+                #${MODAL_ID} .auro-corr-btn.ok{grid-row:1}
+              }
+            `;
+            document.head.appendChild(style);
+          }
+  
+          const anterior = document.getElementById(MODAL_ID);
+          if(anterior) anterior.remove();
+  
+          const overlay = document.createElement('div');
+          overlay.id = MODAL_ID;
+          overlay.setAttribute('role','dialog');
+          overlay.setAttribute('aria-modal','true');
+          overlay.setAttribute('aria-labelledby','auroCorrTitulo');
+          overlay.dataset.excepcional = excepcional ? 'si' : 'no';
+          overlay.innerHTML = `
+            <div class="auro-corr-card" role="document">
+              <div class="auro-corr-head">
+                <div class="auro-corr-icon"><i class="bi ${excepcional ? 'bi-exclamation-diamond' : 'bi-shield-check'}"></i></div>
+                <div>
+                  <div class="auro-corr-kicker">${excepcional ? 'Enmienda excepcional' : 'Corrección clínica'}</div>
+                  <div class="auro-corr-title" id="auroCorrTitulo">Justificativo de modificación</div>
+                  <div class="auro-corr-sub">Seleccione el motivo de la corrección. El registro original permanece protegido y la modificación conserva su trazabilidad clínica.</div>
+                </div>
+              </div>
+              <div class="auro-corr-body">
+                <div class="auro-corr-trace"><i class="bi bi-journal-check"></i><span>Esta acción no modifica permisos, vínculos de atención ni el flujo de guardado. El justificativo acompaña la operación clínica que ya realiza este módulo.</span></div>
+                <div class="auro-corr-field">
+                  <label class="auro-corr-label" for="auroCorrTipo">Tipo de justificativo *</label>
+                  <select id="auroCorrTipo" class="auro-corr-select">
+                    <option value="">Seleccione...</option>
+                    <option value="Error de digitación">Error de digitación</option>
+                    <option value="Omisión">Omisión</option>
+                    <option value="Dato incorrecto">Dato incorrecto</option>
+                    <option value="Actualización solicitada por el paciente">Actualización solicitada por el paciente</option>
+                    <option value="Verificación documental">Verificación documental</option>
+                    <option value="Fallo del sistema">Fallo del sistema</option>
+                    <option value="Emergencia">Emergencia</option>
+                    <option value="Corrección clínica">Corrección clínica</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                  <div class="auro-corr-error" id="auroCorrTipoError">Seleccione un motivo de corrección.</div>
+                </div>
+                <div class="auro-corr-field" id="auroCorrDetalleWrap">
+                  <label class="auro-corr-label" id="auroCorrDetalleLabel" for="auroCorrDetalle">Observación adicional <span style="font-weight:700;color:#94a3b8">(opcional)</span></label>
+                  <input id="auroCorrDetalle" class="auro-corr-input" maxlength="150" placeholder="Detalle adicional, si aplica (máx. 150 caracteres)">
+                  <div class="auro-corr-help" id="auroCorrDetalleHelp">Puede agregar una aclaración breve sin cambiar el tipo de justificativo seleccionado.</div>
+                  <div class="auro-corr-error" id="auroCorrDetalleError">Especifique el motivo cuando seleccione “Otro”.</div>
+                </div>
+              </div>
+              <div class="auro-corr-actions">
+                <button type="button" class="auro-corr-btn cancel" id="auroCorrCancelar">Cancelar</button>
+                <button type="button" class="auro-corr-btn ok" id="auroCorrAceptar"><i class="bi bi-check2-circle me-1"></i> Continuar</button>
+              </div>
+            </div>`;
+  
+          const bodyOverflow = document.body.style.overflow;
+          document.body.appendChild(overlay);
+          document.body.style.overflow = 'hidden';
+  
+          const tipoEl = overlay.querySelector('#auroCorrTipo');
+          const detalleEl = overlay.querySelector('#auroCorrDetalle');
+          const detalleLabel = overlay.querySelector('#auroCorrDetalleLabel');
+          const detalleHelp = overlay.querySelector('#auroCorrDetalleHelp');
+          const tipoError = overlay.querySelector('#auroCorrTipoError');
+          const detalleError = overlay.querySelector('#auroCorrDetalleError');
+          const btnCancelar = overlay.querySelector('#auroCorrCancelar');
+          const btnAceptar = overlay.querySelector('#auroCorrAceptar');
+  
+          function actualizarDetalle(){
+            const esOtro = String(tipoEl.value || '') === 'Otro';
+            detalleLabel.innerHTML = esOtro
+              ? 'Detalle del justificativo *'
+              : 'Observación adicional <span style="font-weight:700;color:#94a3b8">(opcional)</span>';
+            detalleEl.placeholder = esOtro
+              ? 'Especifique el motivo (máx. 150 caracteres)'
+              : 'Detalle adicional, si aplica (máx. 150 caracteres)';
+            detalleHelp.textContent = esOtro
+              ? 'Para “Otro” debe registrar un justificativo breve.'
+              : 'Puede agregar una aclaración breve sin cambiar el tipo de justificativo seleccionado.';
+            detalleError.classList.remove('show');
+          }
+  
+          function cerrar(valor){
+            document.removeEventListener('keydown', onKey, true);
+            document.body.style.overflow = bodyOverflow;
+            if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            resolve(valor);
+          }
+  
+          function aceptar(){
+            const tipo = String(tipoEl.value || '').trim();
+            const detalle = String(detalleEl.value || '').trim();
+            tipoError.classList.toggle('show', !tipo);
+            detalleError.classList.remove('show');
+            if(!tipo){ tipoEl.focus(); return; }
+            if(tipo === 'Otro' && detalle.length < 3){
+              detalleError.classList.add('show');
+              detalleEl.focus();
+              return;
+            }
+            cerrar({
+              motivo_correccion_tipo: tipo,
+              motivo_correccion_detalle: detalle,
+              motivo_correccion: detalle ? (tipo + ': ' + detalle) : tipo,
+              correccion_excepcional: excepcional ? 'SI' : 'NO'
+            });
+          }
+  
+          function onKey(ev){
+            if(ev.key === 'Escape'){
+              ev.preventDefault();
+              cerrar(null);
+            }
+          }
+  
+          tipoEl.addEventListener('change', actualizarDetalle);
+          btnCancelar.addEventListener('click', function(){ cerrar(null); });
+          btnAceptar.addEventListener('click', aceptar);
+          overlay.addEventListener('click', function(ev){ if(ev.target === overlay) cerrar(null); });
+          document.addEventListener('keydown', onKey, true);
+          actualizarDetalle();
+          setTimeout(function(){ tipoEl.focus(); }, 0);
+        });
       };
-      const tipo = mapa[String(entrada || '').trim()];
-      if(!tipo){ window.alert('Seleccione un motivo válido del 1 al 6.'); return null; }
-      let detalle = '';
-      if(tipo === 'Otro'){
-        const otro = window.prompt('Escriba un justificativo breve:');
-        if(otro === null) return null;
-        detalle = String(otro || '').trim();
-        if(detalle.length < 3){ window.alert('El justificativo es obligatorio.'); return null; }
-      }
-      return {
-        motivo_correccion_tipo:tipo,
-        motivo_correccion_detalle:detalle,
-        motivo_correccion:detalle ? (tipo + ': ' + detalle) : tipo,
-        correccion_excepcional:excepcional ? 'SI' : 'NO'
-      };
-    };
-  }
+    }
 
   async function auroDxPostJSON(accion, data){
     const API = apiUrl();
@@ -411,7 +582,7 @@
         return;
       }
 
-      const motivo = window.auroSolicitarMotivoCorreccionClinica({
+      const motivo = await window.auroSolicitarMotivoCorreccionClinica({
         excepcional: !!(evaluacion && evaluacion.requiere_excepcion)
       });
       if(!motivo) return;
