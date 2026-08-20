@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.0.2
+ Versión: 1.1.0
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.0.2';
+  const VERSION = '1.1.0';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -572,7 +572,7 @@
 
           <div class="auro-rec-actions">
             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
-            <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Vista previa / imprimir</button>
+            <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
           </div>
         </div>
@@ -922,56 +922,361 @@
     }
   }
 
-  function vistaPrevia(){
-    const ctx=state.contexto || contextoAtencion();
-    const a=ctx.atencion || {};
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES 1.1.0
+     IMPRESIÓN A4 BASADA EN EL DOCUMENTO MAESTRO DE CERTIFICADOS
+     ----------------------------------------------------------------
+     ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
+     - Sustituye ÚNICAMENTE la representación de vista/impresión.
+     - Conserva guardado, detalle_json, carga, diagnósticos, atención,
+       eventos, endpoints, Google Sheets, Plan y demás módulos.
+     - Mantiene una sola geometría documental A4.
+     - Escritorio, tablet, iPhone y Android solo escalan el visor.
+     - La impresión real no hereda el zoom visual del dispositivo.
+     ============================================================ */
+
+  function recConfigInstitucional(){
+    const candidatos=[
+      window.auroConfiguracionCentro,
+      window.configuracionCentro,
+      window.configCentro,
+      window.CONFIG_CENTRO,
+      window.configuracionInstitucional
+    ];
+    let c=candidatos.find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
+    if(c.datos&&typeof c.datos==='object') c=c.datos;
+
+    return {
+      nombre:primerTexto(c.nombre_clinica,c.nombre_centro,c.nombre_comercial,c.razon_social,'AurosanaxMedic'),
+      subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica,'Ginecología y Obstetricia'),
+      razon_social:txt(c.razon_social),
+      ruc:txt(c.ruc),
+      direccion:primerTexto(c.direccion_clinica,c.direccion),
+      ciudad:primerTexto(c.ciudad_clinica,c.ciudad,'Guayaquil'),
+      provincia:primerTexto(c.provincia_clinica,c.provincia),
+      pais:primerTexto(c.pais_clinica,c.pais,'Ecuador'),
+      telefono:primerTexto(c.telefono_clinica,c.whatsapp_clinica,c.telefono,c.whatsapp),
+      email:primerTexto(c.email_clinica,c.correo_clinica,c.email,c.correo),
+      web:primerTexto(c.sitio_web_clinica,c.web_clinica,c.web),
+      logo:primerTexto(c.logo_url,c.logo_drive_url,c.logo),
+      colorPrincipal:primerTexto(c.color_principal,'#8b1e5a')
+    };
+  }
+
+  function recNombreCompleto(obj){
+    obj=obj||{};
+    return primerTexto(
+      obj.nombre_completo,
+      obj.nombre,
+      [obj.nombres,obj.apellidos].filter(Boolean).join(' ')
+    ).replace(/\s+/g,' ').trim();
+  }
+
+  function recPacienteImpresion(ctx){
+    const a=ctx?.atencion||{};
+    const id=txt(ctx?.idPaciente||a.id_paciente);
+    let p=null;
+
+    try{
+      if(typeof window.getPacienteActivo==='function'){
+        const x=window.getPacienteActivo();
+        const xid=txt(x?.id_paciente||x?.id);
+        if(x && (!id || !xid || xid===id)) p=x;
+      }
+    }catch(e){}
+
+    if(!p){
+      const listas=[window.patients,window.pacientes,window.listaPacientes].filter(Array.isArray);
+      for(const lista of listas){
+        p=lista.find(x=>txt(x?.id_paciente||x?.id)===id)||null;
+        if(p) break;
+      }
+    }
+
+    p=p||{};
+    return {
+      nombre:recNombreCompleto(p)||nombrePacienteDesdeContexto(a)||'Paciente',
+      documento:primerTexto(p.numero_documento,p.cedula,p.documento,p.identificacion,a.numero_documento,a.cedula,a.identificacion),
+      telefono:primerTexto(p.telefono,p.whatsapp,a.telefono,a.whatsapp)
+    };
+  }
+
+  function recMedicoImpresion(ctx){
+    const a=ctx?.atencion||{};
+    const id=txt(a.id_medico);
+    const listas=[
+      window.medicos,
+      window.medicosActivos,
+      window.listaMedicos,
+      window.configuracionMedicos,
+      window.medicosConfiguracion
+    ].filter(Array.isArray);
+
+    let m=null;
+    for(const lista of listas){
+      m=lista.find(x=>txt(x?.id_medico||x?.id||x?.codigo)===id)||null;
+      if(m) break;
+    }
+
+    m=m||{};
+    return {
+      nombre:recNombreCompleto(m)||nombreMedicoDesdeContexto(a)||'Profesional tratante',
+      especialidad:primerTexto(
+        m.especialidad_principal,m.especialidad,m.especialidad_medica,
+        a.especialidad,a.medico_especialidad,'Ginecología y Obstetricia'
+      ),
+      registro_msp:primerTexto(m.registro_msp,m.msp,m.registro_profesional),
+      registro_senescyt:primerTexto(m.registro_senescyt,m.senescyt),
+      email:primerTexto(m.email,m.correo)
+    };
+  }
+
+  function recFechaDocumento(v){
+    const raw=txt(v);
+    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m?`${m[3]}/${m[2]}/${m[1]}`:(raw||'—');
+  }
+
+  function recListaHTML(items){
+    const arr=(items||[]).filter(Boolean);
+    return arr.length
+      ? `<ul class="ar-doc-list">${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
+      : '';
+  }
+
+  function recDocumentoHTML(){
+    const ctx=state.contexto||contextoAtencion();
+    const a=ctx.atencion||{};
     const d=detalleActual();
+    const cfg=recConfigInstitucional();
+    const paciente=recPacienteImpresion(ctx);
+    const medico=recMedicoImpresion(ctx);
 
-    const alertas=ALERTAS.filter(([k])=>(d.signos_alerta.seleccionados || []).includes(k)).map(([,l])=>l);
-    const infeccion=INFECCION.filter(([k])=>(d.signos_infeccion.seleccionados || []).includes(k)).map(([,l])=>l);
-    const dx=state.diagnosticos.map(x=>{
-      const c=txt(x.codigo_cie10 || x.codigo || x.cie10);
-      const n=txt(x.descripcion || x.nombre || x.diagnostico);
-      return [c,n].filter(Boolean).join(' - ');
-    });
+    const alertas=ALERTAS
+      .filter(([k])=>(d.signos_alerta?.seleccionados||[]).includes(k))
+      .map(([,l])=>l);
 
-    const w=window.open('','_blank','noopener,noreferrer,width=900,height=900');
-    if(!w){
-      setMsg('El navegador bloqueó la vista previa. Habilite ventanas emergentes para imprimir.','error');
+    const infeccion=INFECCION
+      .filter(([k])=>(d.signos_infeccion?.seleccionados||[]).includes(k))
+      .map(([,l])=>l);
+
+    const dx=state.diagnosticos.map(x=>({
+      codigo:txt(x.codigo_cie10||x.codigo||x.cie10),
+      nombre:txt(x.descripcion||x.nombre||x.diagnostico)
+    })).filter(x=>x.codigo||x.nombre);
+
+    const fecha=recFechaDocumento(
+      a.fecha_atencion||a.fecha_consulta||a.creado_en||new Date().toISOString().slice(0,10)
+    );
+
+    const ubicacion=[cfg.direccion,[cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(', ')]
+      .filter(Boolean).join(' · ');
+    const contacto=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
+    const registros=[
+      medico.registro_msp ? 'MSP: '+medico.registro_msp : '',
+      medico.registro_senescyt ? 'SENESCYT: '+medico.registro_senescyt : ''
+    ].filter(Boolean);
+
+    const logo=cfg.logo
+      ? `<div class="ar-logo-wrap"><img class="ar-logo" src="${esc(cfg.logo)}" alt=""></div>`
+      : '';
+
+    const seguimiento=[
+      d.seguimiento?.proxima_cita ? `<div class="ar-line"><b>PRÓXIMO CONTROL:</b> ${esc(recFechaDocumento(d.seguimiento.proxima_cita))}</div>` : '',
+      d.seguimiento?.motivo ? `<div class="ar-line"><b>MOTIVO DEL CONTROL:</b> ${esc(d.seguimiento.motivo)}</div>` : ''
+    ].filter(Boolean).join('');
+
+    const bloques=[
+      (alertas.length||txt(d.signos_alerta?.otros)) ? `
+        <section class="ar-section">
+          <h3>SIGNOS DE ALERTA</h3>
+          ${recListaHTML(alertas)}
+          ${d.signos_alerta?.otros?`<p>${esc(d.signos_alerta.otros)}</p>`:''}
+        </section>` : '',
+      (infeccion.length||txt(d.signos_infeccion?.otros)) ? `
+        <section class="ar-section">
+          <h3>SIGNOS DE INFECCIÓN</h3>
+          ${recListaHTML(infeccion)}
+          ${d.signos_infeccion?.otros?`<p>${esc(d.signos_infeccion.otros)}</p>`:''}
+        </section>` : '',
+      txt(d.dieta_cuidados) ? `
+        <section class="ar-section">
+          <h3>DIETA Y CUIDADOS</h3>
+          <p>${esc(d.dieta_cuidados)}</p>
+        </section>` : '',
+      txt(d.recomendaciones_generales) ? `
+        <section class="ar-section">
+          <h3>RECOMENDACIONES GENERALES</h3>
+          <p>${esc(d.recomendaciones_generales)}</p>
+        </section>` : ''
+    ].filter(Boolean).join('');
+
+    return `<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
+      <header class="ar-doc-head">
+        ${logo}
+        <div>
+          <div class="ar-brand">${esc(cfg.nombre)}</div>
+          ${cfg.subtitulo?`<div class="ar-brand-sub">${esc(cfg.subtitulo)}</div>`:''}
+        </div>
+        <div class="ar-doc-date">${esc(cfg.ciudad)}, ${esc(fecha)}</div>
+      </header>
+
+      <h1>RECOMENDACIONES MÉDICAS</h1>
+
+      <p class="ar-intro">
+        Se emiten las siguientes recomendaciones para
+        <b>${esc(paciente.nombre)}</b>${paciente.documento?`, con documento de identidad <b>${esc(paciente.documento)}</b>`:''},
+        correspondientes a la ${ctx.numeroConsulta?`consulta #${esc(ctx.numeroConsulta)}`:'atención clínica seleccionada'},
+        atendida por <b>${esc(medico.nombre)}</b>.
+      </p>
+
+      <div class="ar-lines">
+        ${medico.especialidad?`<div class="ar-line"><b>ESPECIALIDAD:</b> ${esc(medico.especialidad)}</div>`:''}
+        ${seguimiento}
+      </div>
+
+      ${dx.length?`
+        <section class="ar-dx">
+          <h3>DIAGNÓSTICO(S) CIE-10:</h3>
+          ${dx.map(x=>`<div class="ar-dx-row">${x.codigo?`<b>${esc(x.codigo)}</b>${x.nombre?' · ':''}`:''}${esc(x.nombre)}</div>`).join('')}
+        </section>`:''}
+
+      ${bloques||'<p>No se registraron recomendaciones clínicas para imprimir.</p>'}
+
+      <footer class="ar-firma-area">
+        <div class="ar-centro-contacto">
+          ${ubicacion?`<div>${esc(ubicacion)}</div>`:''}
+          ${contacto?`<div>${esc(contacto)}</div>`:''}
+          ${cfg.razon_social?`<div>${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
+        </div>
+        <div class="ar-sign">
+          <div class="ar-sign-line"></div>
+          <b>${esc(medico.nombre)}</b>
+          ${medico.especialidad?`<br><span>${esc(medico.especialidad)}</span>`:''}
+          ${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}
+          ${medico.email?`<br><span>${esc(medico.email)}</span>`:''}
+          <br><span>Firma y sello</span>
+        </div>
+      </footer>
+    </article>`;
+  }
+
+  function recEstilosImpresion(){
+    return `
+@page{size:A4 portrait;margin:12mm 15mm}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;max-width:100%;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
+body{overflow-x:hidden}
+.ar-paper{width:100%;max-width:100%;min-width:0;min-height:270mm;margin:0;padding:0 0 30mm;background:#fff;position:relative}
+.ar-paper,.ar-paper *{min-width:0}
+.ar-paper p,.ar-paper span,.ar-paper b,.ar-paper div{overflow-wrap:anywhere;word-break:normal}
+.ar-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ar-color,#8b1e5a);padding-bottom:9px}
+.ar-logo-wrap{width:55px;height:55px;display:grid;place-items:center;border-radius:10px;overflow:hidden}
+.ar-logo{max-width:100%;max-height:100%;object-fit:contain}
+.ar-brand{font-size:18.5px;font-weight:950;color:var(--ar-color,#8b1e5a);letter-spacing:.035em}
+.ar-brand-sub{font-size:10.5px;color:#667085;margin-top:2px}
+.ar-doc-date{text-align:right;font-size:11px;font-weight:700;white-space:nowrap}
+.ar-paper h1{text-align:center;font-size:18px;margin:21px 0 23px;letter-spacing:.05em}
+.ar-paper p{font-size:12.1px;line-height:1.58;text-align:justify;margin:0 0 10px;white-space:pre-wrap}
+.ar-intro{margin-bottom:14px!important}
+.ar-lines{display:grid;gap:5px;margin:12px 0}
+.ar-line{font-size:12px;line-height:1.42}
+.ar-line b{display:inline-block;min-width:145px}
+.ar-section,.ar-dx{margin:14px 0;break-inside:avoid;page-break-inside:avoid}
+.ar-section h3,.ar-dx h3{font-size:12px;margin:0 0 6px;font-weight:900}
+.ar-dx-row{font-size:12px;line-height:1.45;margin:2px 0}
+.ar-doc-list{margin:4px 0 7px 18px;padding:0}
+.ar-doc-list li{font-size:12px;line-height:1.48;margin:2px 0}
+.ar-firma-area{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}
+.ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
+.ar-sign-line{border-top:1px solid #111;margin-bottom:6px}
+.ar-sign b{font-size:12.4px}
+@media print{
+  html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0 0 30mm!important;overflow:visible!important;position:relative!important;transform:none!important}
+  .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
+  .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+}`;
+  }
+
+  function vistaPrevia(){
+    const ctx=state.contexto||contextoAtencion();
+    if(!ctx.id){
+      setMsg('Seleccione una atención antes de imprimir recomendaciones.','error');
       return;
     }
 
-    const lista = arr => arr.length ? '<ul>'+arr.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>' : '<p>—</p>';
-    const bloque = (titulo,contenido)=>`<section><h3>${esc(titulo)}</h3>${contenido}</section>`;
+    const d=detalleActual();
+    if(!tieneContenido(d)){
+      setMsg('No existen recomendaciones registradas para mostrar en el documento.','error');
+      return;
+    }
 
-    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Recomendaciones AUROSANAX</title>
-      <style>
-        body{font-family:Arial,sans-serif;color:#111827;margin:34px;line-height:1.45}
-        header{border-bottom:2px solid #8b1e5a;padding-bottom:14px;margin-bottom:18px}
-        h1{font-size:22px;margin:0;color:#8b1e5a} h3{font-size:14px;margin:18px 0 6px}
-        .meta{display:grid;grid-template-columns:1fr 1fr;gap:7px;font-size:12px;margin-top:10px}
-        section{break-inside:avoid} p{white-space:pre-wrap;margin:4px 0} ul{margin:5px 0 0 18px}
-        .foot{margin-top:35px;padding-top:12px;border-top:1px solid #d1d5db;font-size:11px;color:#6b7280}
-        @media print{button{display:none}body{margin:18mm}}
-      </style></head><body>
-      <header><h1>Recomendaciones clínicas</h1>
-      <div class="meta">
-        <div><b>Paciente:</b> ${esc(txt(a.nombre_paciente || '—'))}</div>
-        <div><b>Médico:</b> ${esc(txt(a.nombre_medico || '—'))}</div>
-        <div><b>Consulta:</b> ${esc(ctx.numeroConsulta || '—')}</div>
-        <div><b>Fecha:</b> ${esc(fechaVisual(a.fecha_atencion || a.creado_en))}</div>
-      </div></header>
-      ${bloque('Diagnósticos',lista(dx))}
-      ${bloque('Próxima cita',`<p>${esc(d.seguimiento.proxima_cita || '—')} ${d.seguimiento.motivo ? '· '+esc(d.seguimiento.motivo) : ''}</p>`)}
-      ${bloque('Signos de alerta',lista(alertas) + (d.signos_alerta.otros ? '<p>'+esc(d.signos_alerta.otros)+'</p>' : ''))}
-      ${bloque('Signos de infección',lista(infeccion) + (d.signos_infeccion.otros ? '<p>'+esc(d.signos_infeccion.otros)+'</p>' : ''))}
-      ${bloque('Dieta y cuidados',`<p>${esc(d.dieta_cuidados || '—')}</p>`)}
-      ${bloque('Recomendaciones generales',`<p>${esc(d.recomendaciones_generales || '—')}</p>`)}
-      <div class="foot">Documento generado desde AUROSANAX ERP. La información corresponde a la atención clínica seleccionada.</div>
-      <script>window.onload=function(){setTimeout(function(){window.print();},250)}<\/script>
-      </body></html>`);
+    const htmlDoc=recDocumentoHTML();
+    const w=window.open('','_blank');
+
+    if(!w){
+      setMsg('El navegador bloqueó la vista de impresión. Permita ventanas emergentes para este sitio.','error');
+      return;
+    }
+
+    w.document.open();
+    w.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recomendaciones médicas AUROSANAX</title>
+<style>
+${recEstilosImpresion()}
+html,body{background:#dfe3e8}
+.auro-rec-print-toolbar{position:sticky;top:0;z-index:9999;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;background:#fff;border-bottom:1px solid #d1d5db;box-shadow:0 3px 14px rgba(15,23,42,.14)}
+.auro-rec-print-toolbar strong{color:#7a174f;font-size:15px}
+.auro-rec-print-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.auro-rec-print-btn{border:0;border-radius:10px;padding:9px 14px;font-weight:850;cursor:pointer;background:#8b1e5a;color:#fff}
+.auro-rec-print-btn.secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+.auro-rec-print-stage{padding:20px;display:flex;justify-content:center;align-items:flex-start;min-height:calc(100vh - 58px);overflow-x:hidden}
+.auro-rec-print-sheet{width:210mm;min-width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 18px 45px rgba(15,23,42,.18);transform-origin:top center}
+@media(max-width:1000px){
+  .auro-rec-print-stage{padding:12px 0 20px}
+  .auro-rec-print-sheet{transform:scale(.78);margin-bottom:-64mm}
+}
+@media(max-width:700px){
+  .auro-rec-print-toolbar{padding:8px 10px}
+  .auro-rec-print-toolbar strong{display:none}
+  .auro-rec-print-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:8px}
+  .auro-rec-print-btn{width:100%;min-height:40px;padding:8px 10px}
+  .auro-rec-print-btn.secondary{width:auto;min-width:74px}
+  .auro-rec-print-stage{padding:10px 0 18px;overflow-x:hidden}
+  .auro-rec-print-sheet{width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;transform-origin:top center!important}
+}
+@media print{
+  html,body{background:#fff!important;margin:0!important;padding:0!important;overflow:visible!important}
+  .auro-rec-print-toolbar{display:none!important}
+  .auro-rec-print-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
+  .auro-rec-print-sheet{width:auto!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
+}
+</style>
+</head>
+<body>
+  <div class="auro-rec-print-toolbar">
+    <strong>Vista previa A4 · Recomendaciones médicas</strong>
+    <div class="auro-rec-print-actions">
+      <button type="button" class="auro-rec-print-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      <button type="button" class="auro-rec-print-btn secondary" onclick="window.close()">Cerrar</button>
+    </div>
+  </div>
+  <main class="auro-rec-print-stage">
+    <div class="auro-rec-print-sheet">${htmlDoc}</div>
+  </main>
+</body>
+</html>`);
     w.document.close();
+    w.focus();
   }
+
 
   function enlazar(){
     const guardarBtn=document.getElementById('auroRecBtnGuardar');
