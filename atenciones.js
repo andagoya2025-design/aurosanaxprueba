@@ -4549,10 +4549,13 @@
         paresHTML(grupos.interconsultas)+'</div>';
     }
 
-    if(grupos.otros.length){
-      html += '<div class="avi-subgroup"><h5>Otros datos del plan</h5>'+
-        paresHTML(grupos.otros)+'</div>';
-    }
+    /*
+      Vista Integral:
+      "grupos.otros" contiene banderas/campos estructurados internos del Plan
+      (por ejemplo "... EN PLAN = Sí"). Se conservan en el módulo y en los
+      datos, pero no se muestran en el visor clínico porque duplican o ensucian
+      la lectura de Medicamentos, Exámenes, Indicaciones, Órdenes e Interconsultas.
+    */
 
     return html;
   }
