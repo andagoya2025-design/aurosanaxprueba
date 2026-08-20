@@ -3771,7 +3771,7 @@
     return salida;
   }
 
-  function capturarPanel(panelId){
+  function capturarPanel(panelId, opciones={}){
     const panel = document.getElementById(panelId);
     if(!panel) return [];
 
@@ -3806,10 +3806,11 @@
       });
     });
 
-    panel.querySelectorAll(
-      '.auro-previos-line,.auro-previos-mini-row,.obs-read,'+
-      '.auro-dx-item'
-    ).forEach(n=>{
+    const selectorResumen = opciones.excluirObsRead
+      ? '.auro-previos-line,.auro-previos-mini-row,.auro-dx-item'
+      : '.auro-previos-line,.auro-previos-mini-row,.obs-read,.auro-dx-item';
+
+    panel.querySelectorAll(selectorResumen).forEach(n=>{
       if(n.closest('button')) return;
 
       const valor = limpiarTextoClinico(n.textContent);
@@ -4369,147 +4370,43 @@
   }
 
   function obstetriciaVistaHTML(){
-    const panel = document.getElementById('hc_obstetricia');
-    if(!panel) return '';
+    const pares = capturarPanel('hc_obstetricia',{excluirObsRead:true});
 
     /*
-      VISTA INTEGRAL -> OBSTETRICIA
-      Regla estricta:
-      - Solo mostrar datos PROPIOS del registro obstétrico actual.
-      - NO capturar la tarjeta ".obs-read" de antecedentes obstétricos
-        porque esos datos ya pertenecen a "Antecedentes de la historia clínica".
-      - No mostrar placeholders ni campos vacíos.
-      - No escribir ni modificar ningún dato.
+      La sección solo existe si hay al menos un dato clínico real.
+      Placeholders de un módulo no diligenciado NO crean una sección.
     */
+    const vaciosObstetricia = new Set([
+      '', '0', '-', '—', 'no clasificado', 'no aplica', 'ninguno',
+      'ninguna', 'sin datos', 'sin dato', 'pendiente'
+    ]);
 
-    const pares = [];
+    const utiles = pares.filter(p=>{
+      const etiqueta = norm(p?.etiqueta || '');
+      const valor = norm(p?.valor || '');
 
-    panel.querySelectorAll('input,textarea,select').forEach(el=>{
-      if(el.type === 'hidden') return;
+      if(!valor || vaciosObstetricia.has(valor)) return false;
 
-      /*
-        Exclusión por PROCEDENCIA, no por texto:
-        cualquier control contenido dentro de la tarjeta de solo lectura
-        de antecedentes obstétricos queda fuera de esta sección.
-      */
-      if(el.closest('.obs-read')) return;
-
-      const valor = valorCampo(el);
-      if(!valor) return;
-
-      let etiqueta =
-        (el.type === 'checkbox' || el.type === 'radio')
-          ? etiquetaCheckbox(el)
-          : etiquetaCampo(el);
-
-      const etiquetaNorm = norm(etiqueta);
-      const valorNorm = norm(valor);
-
-      /*
-        Placeholders y estados visuales del propio formulario.
-      */
+      // textos de ayuda/estado del propio módulo
       if(
-        !valorNorm ||
-        ['-','—','no clasificado','no aplica','ninguno','ninguna',
-         'sin datos','sin dato','pendiente','no registrado','no registrada',
-         'seleccione','seleccionar'].includes(valorNorm) ||
-        valorNorm.includes('sin informacion') ||
-        valorNorm.includes('no registrado') ||
-        valorNorm.includes('seleccione')
-      ){
-        return;
-      }
+        valor.includes('no clasificado') ||
+        valor.includes('sin informacion') ||
+        valor.includes('no registrado') ||
+        valor.includes('seleccione')
+      ) return false;
 
-      /*
-        Cero puede ser clínicamente válido en EG días.
-        En otros campos, un cero automático no debe generar contenido.
-      */
-      if(valorNorm === '0'){
-        const esEgDias =
-          etiquetaNorm === 'eg dias' ||
-          etiquetaNorm === 'edad gestacional dias' ||
-          etiquetaNorm === 'edad gestacional días';
+      // una etiqueta aislada o marcador técnico tampoco cuenta como dato
+      if(
+        etiqueta === 'riesgo obstetrico' &&
+        vaciosObstetricia.has(valor)
+      ) return false;
 
-        if(!esEgDias) return;
-      }
-
-      pares.push({
-        etiqueta:etiqueta || 'Dato clínico',
-        valor,
-        anchoCompleto:valor.length > 150 || el.tagName === 'TEXTAREA'
-      });
+      return true;
     });
 
-    /*
-      IMPORTANTE:
-      Aquí NO se capturan ".obs-read" ni otros nodos de resumen.
-      Esta sección se construye solo con los campos editables/registrables
-      del módulo Obstetricia de la atención actual.
-    */
-    const utiles = deduplicarPares(pares);
+    if(!utiles.length) return '';
 
-    /*
-      "Tipo atención" puede estar precargado por contexto general.
-      Por sí solo no debe hacer aparecer la sección Obstetricia.
-    */
-    const tieneDatoObstetricoReal = utiles.some(p=>{
-      const e = norm(p?.etiqueta || '');
-      return e !== 'tipo atencion' && e !== 'tipo de atencion';
-    });
-
-    if(!tieneDatoObstetricoReal) return '';
-
-    /*
-      Orden clínico visual estable.
-    */
-    const orden = [
-      'fum',
-      'fpp',
-      'eg semanas',
-      'edad gestacional semanas',
-      'eg dias',
-      'edad gestacional dias',
-      'edad gestacional días',
-      'tipo atencion',
-      'tipo de atencion',
-      'altura uterina',
-      'altura uterina (cm)',
-      'fcf',
-      'fcf (lpm)',
-      'embarazo',
-      'numero de fetos',
-      'número de fetos',
-      'situacion fetal',
-      'situación fetal',
-      'presentacion',
-      'presentación',
-      'posicion fetal',
-      'posición fetal',
-      'movimientos fetales',
-      'actividad uterina',
-      'edema',
-      'membranas',
-      'riesgo obstetrico',
-      'riesgo obstétrico',
-      'proximo control',
-      'próximo control',
-      'hallazgos relevantes',
-      'observaciones'
-    ];
-
-    const ordenados = utiles
-      .map((p,indice)=>({
-        ...p,
-        __indice:indice,
-        __orden:(()=>{
-          const i = orden.indexOf(norm(p?.etiqueta || ''));
-          return i === -1 ? 999 : i;
-        })()
-      }))
-      .sort((a,b)=>a.__orden === b.__orden ? a.__indice-b.__indice : a.__orden-b.__orden)
-      .map(({__indice,__orden,...p})=>p);
-
-    return paresHTMLClinico(ordenados,'avi-obstetricia-grid');
+    return paresHTMLClinico(utiles,'avi-obstetricia-grid');
   }
 
   function paresHTML(pares){
@@ -4915,22 +4812,8 @@
         grid-column:1/-1;
       }
 
-      /* Solo presentación de Obstetricia en Vista Integral */
-      .avi-obstetricia-grid{
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        grid-auto-flow:row dense;
-        gap:10px 18px;
-        align-items:start;
-      }
-      .avi-obstetricia-grid .avi-span-full{
-        grid-column:1/-1;
-      }
-
       @media(max-width:760px){
         .avi-anamnesis-grid{
-          grid-template-columns:1fr;
-        }
-        .avi-obstetricia-grid{
           grid-template-columns:1fr;
         }
       }
