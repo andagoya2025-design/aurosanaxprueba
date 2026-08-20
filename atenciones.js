@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_8_ANTECEDENTES_UI_PRO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_9_EXAMEN_DX_QUIRURGICO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3921,43 +3921,62 @@
     if(!Array.isArray(originales) || !originales.length) return originales || [];
 
     try{
-      const salida = [];
-      const vistos = new Set();
+      const base = deduplicarPares(originales);
+      const regiones = base
+        .map(p=>normalizarClaveClinicaExamen(p?.etiqueta || ''))
+        .filter(x=>x && x !== 'dato clinico');
 
-      originales.forEach(p=>{
+      const salida = [];
+      const vistos = [];
+
+      base.forEach(p=>{
         const etiqueta = limpiarEtiqueta(p?.etiqueta || 'Dato clínico');
         let valor = limpiarTextoClinico(p?.valor || '');
         if(!valor) return;
 
-        /* Quita encabezados que ya están representados por la etiqueta visual. */
-        const e = texto(etiqueta).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-        const prefijos = [
-          new RegExp('^\\s*Examen\\s+f[ií]sico\\s+(?:por\\s+sistemas|regional)\\s*'+e+'\\s*[:\\-]?\\s*','i'),
-          new RegExp('^\\s*'+e+'\\s+(?:Hallazgos\\s+regionales|Observaci[oó]n)\\s*[:\\-]?\\s*','i'),
-          new RegExp('^\\s*'+e+'\\s*[:\\-]\\s*','i')
-        ];
-        prefijos.forEach(rx=>{ valor = valor.replace(rx,'').trim(); });
+        const eNorm = normalizarClaveClinicaExamen(etiqueta);
+        const vNormOriginal = normalizarClaveClinicaExamen(valor);
 
-        /* Evita "Genitales Observación: Genitales: Observación: ..." sin tocar el hallazgo. */
-        valor = valor
-          .replace(/^(?:Genitales\s*)?(?:Observaci[oó]n\s*:\s*)?(?:Genitales\s*:\s*)?Observaci[oó]n\s*:\s*/i,'')
-          .replace(/^(?:Canal\s+vaginal\s*)?Observaci[oó]n\s*:\s*/i,'')
-          .trim();
+        // Omitir resúmenes agregados que ya contienen varias regiones individuales.
+        const otrasRegiones = regiones
+          .filter(r=>r && r !== eNorm && r.length >= 4)
+          .filter(r=>vNormOriginal.includes(r));
+
+        if(otrasRegiones.length >= 2) return;
+
+        const escRx = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+
+        [
+          new RegExp('^\\s*Examen\\s+f[ií]sico\\s+(?:por\\s+sistemas|regional)\\s*'+escRx(etiqueta)+'\\s*[:\\-]?\\s*','i'),
+          new RegExp('^\\s*'+escRx(etiqueta)+'\\s+(?:Hallazgos\\s+regionales|Observaci[oó]n)\\s*[:\\-]?\\s*','i'),
+          new RegExp('^\\s*'+escRx(etiqueta)+'\\s*[:\\-]\\s*','i')
+        ].forEach(rx=>{ valor = valor.replace(rx,'').trim(); });
+
+        // Quitar prefijos repetidos sin tocar el hallazgo clínico.
+        for(let i=0;i<3;i++){
+          const antes = valor;
+          valor = valor
+            .replace(/^Genitales\s*(?:Observaci[oó]n)?\s*[:\-]\s*/i,'')
+            .replace(/^Canal\s+vaginal\s*(?:Observaci[oó]n)?\s*[:\-]\s*/i,'')
+            .replace(/^Abdomen\s*(?:Hallazgos\s+regionales|Observaci[oó]n)?\s*[:\-]\s*/i,'')
+            .replace(/^T[oó]rax\/Respiratorio\s*[:\-]\s*/i,'')
+            .trim();
+          if(valor === antes) break;
+        }
 
         if(!valor) return;
 
-        /* Dedupe visual tolerante a diferencias de encabezado, no de contenido clínico. */
-        const claveValor = norm(valor)
-          .replace(/^examen fisico (?:por sistemas|regional) /,'')
-          .replace(/^(torax respiratorio|abdomen|genitales|canal vaginal) /,'')
-          .replace(/^observacion /,'')
-          .trim();
-        const clave = norm(etiqueta)+'||'+claveValor;
-        const claveSoloValor = 'v||'+claveValor;
-        if(vistos.has(clave) || vistos.has(claveSoloValor)) return;
+        const vNorm = normalizarClaveClinicaExamen(valor);
 
-        vistos.add(clave);
-        vistos.add(claveSoloValor);
+        const duplicado = vistos.some(x=>{
+          if(x.e === eNorm && (x.v === vNorm || x.v.includes(vNorm) || vNorm.includes(x.v))) return true;
+          if(x.v === vNorm && vNorm.length > 8) return true;
+          return false;
+        });
+        if(duplicado) return;
+
+        vistos.push({e:eNorm,v:vNorm});
+
         salida.push({
           ...p,
           etiqueta,
@@ -3971,6 +3990,16 @@
       console.warn(MODULO,'No se pudo normalizar visualmente Examen físico; se conserva stable.',error);
       return originales;
     }
+  }
+
+  function normalizarClaveClinicaExamen(s){
+    return norm(
+      limpiarTextoClinico(s)
+        .replace(/\bexamen\s+f[ií]sico\s+(?:regional|por\s+sistemas)\b/gi,'')
+        .replace(/\bhallazgos\s+regionales\b/gi,'')
+        .replace(/\bobservaci[oó]n\b/gi,'')
+        .replace(/[:|·\-–—]+/g,' ')
+    );
   }
 
   function antecedentesGrupoHTML(titulo, items){
@@ -4188,6 +4217,71 @@
       console.warn(MODULO,'Falló lector estructurado de Antecedentes; fallback stable.',error);
       return paresHTML(capturarPanel('hc_antecedentes'));
     }
+  }
+
+
+  function diagnosticosVistaHTML(){
+    const panel = document.getElementById('hc_diagnostico');
+    if(!panel) return '';
+
+    const items = [...panel.querySelectorAll('.auro-dx-item')];
+
+    if(items.length){
+      const tarjetas = [];
+
+      items.forEach(item=>{
+        const codigo = limpiarTextoClinico(
+          item.querySelector('.auro-dx-code,[data-cie10],.cie10-code')?.textContent || ''
+        );
+        const nombre = limpiarTextoClinico(
+          item.querySelector('.auro-dx-name,.auro-dx-desc,[data-diagnostico],.diagnostico-nombre')?.textContent || ''
+        );
+        const textoItem = limpiarTextoClinico(item.textContent || '');
+
+        let clase = '';
+        let tipo = '';
+
+        if(/\bprincipal\b/i.test(textoItem)) clase = 'Principal';
+        else if(/\basociad[oa]s?\b/i.test(textoItem)) clase = 'Asociado';
+
+        if(/\bdefinitiv[oa]\b/i.test(textoItem)) tipo = 'Definitivo';
+        else if(/\bpresuntiv[oa]\b/i.test(textoItem)) tipo = 'Presuntivo';
+
+        const titulo = [codigo, nombre].filter(Boolean).join(' — ');
+        if(!titulo) return;
+
+        const meta = [clase,tipo].filter(Boolean);
+
+        tarjetas.push(
+          '<div class="avi-dx-card">'+
+            '<div class="avi-dx-main">'+esc(titulo)+'</div>'+
+            (meta.length
+              ? '<div class="avi-dx-meta">'+meta.map(x=>'<span>'+esc(x)+'</span>').join('')+'</div>'
+              : '')+
+          '</div>'
+        );
+      });
+
+      if(tarjetas.length){
+        return '<div class="avi-dx-grid">'+tarjetas.join('')+'</div>';
+      }
+    }
+
+    const pares = deduplicarPares(
+      capturarPanel('hc_diagnostico').filter(p=>{
+        const e = norm(p?.etiqueta || '');
+        const v = norm(p?.valor || '');
+
+        if(!v) return false;
+        if(e === 'dx principal' && /^(si|sí|no)$/.test(v)) return false;
+        if(e === 'dato clinico' && /^(definitivo|presuntivo)$/.test(v)) return false;
+        if(v.includes('consultar protocolo')) return false;
+
+        return true;
+      })
+    );
+
+    return paresHTML(pares);
   }
 
   function paresHTML(pares){
@@ -4591,6 +4685,50 @@
         border-top:1px dashed #e7eaf0;padding-top:11px;
       }
     /* Antecedentes: presentación clínica compacta, sin alterar datos */
+
+    .avi-dx-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+    }
+    .avi-dx-card{
+      border:1px solid #ece8ef;
+      border-radius:12px;
+      padding:12px 14px;
+      background:#fff;
+      min-width:0;
+    }
+    .avi-dx-main{
+      font-size:13px;
+      line-height:1.45;
+      font-weight:800;
+      color:#2e2333;
+      overflow-wrap:break-word;
+      word-break:normal;
+    }
+    .avi-dx-meta{
+      margin-top:8px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+    .avi-dx-meta span{
+      display:inline-flex;
+      align-items:center;
+      min-height:24px;
+      padding:3px 8px;
+      border-radius:999px;
+      border:1px solid #e7dce8;
+      background:#faf7fb;
+      font-size:11px;
+      line-height:1.2;
+      color:#5d4c62;
+      white-space:nowrap;
+    }
+    @media(max-width:760px){
+      .avi-dx-grid{grid-template-columns:1fr;}
+    }
+
     .avi-ant-group{
       margin:0 0 18px;
       min-width:0;
@@ -5156,7 +5294,7 @@
 
     const diagnosticos = seccion(
       'Diagnósticos','bi-journal-medical',
-      paresHTML(capturarPanel('hc_diagnostico')),true
+      diagnosticosVistaHTML(),true
     );
 
     const plan = seccion(
@@ -5370,7 +5508,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.8.0-antecedentes-ui-pro',
+    version:'1.9.0-examen-dx-quirurgico',
     abrir,
     cerrar,
     abrirReceta,
