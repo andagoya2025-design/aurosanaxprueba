@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_4';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_5';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4436,6 +4436,63 @@
         .avi-section summary{min-height:42px}
         .avi-toolbar .avi-btn{min-height:42px}
       }
+
+      /* ============================================================
+         AUROSANAX VISTA INTEGRAL ÉLITE V1.5 - ESCRITORIO LEGIBLE
+         SOLO >= 761px. El diseño móvil V1.4 queda sin modificaciones.
+      ============================================================ */
+      @media(min-width:761px){
+        .avi-head{padding:15px 18px}
+        .avi-head h3{font-size:21px;line-height:1.18}
+        .avi-head-patient{font-size:15.5px;line-height:1.22}
+        .avi-head-subcontext{font-size:12.2px;line-height:1.32}
+        .avi-technical-id{font-size:11px!important}
+        .avi-chip{font-size:10.7px;padding:4px 8px}
+
+        .avi-toolbar{padding:9px 15px}
+        .avi-toolbar .avi-btn{font-size:12.4px;min-height:38px;padding:8px 12px}
+
+        .avi-body{padding:13px 15px 16px}
+        .avi-overview-block{padding:9px 10px;margin-bottom:8px;border-radius:15px}
+        .avi-group-title{font-size:11.2px;margin-bottom:7px}
+        .avi-data-grid{gap:5px}
+        .avi-data{min-height:41px;padding:6px 8px;border-radius:10px}
+        .avi-data span{font-size:9.2px;line-height:1.15}
+        .avi-data b{font-size:12.2px;line-height:1.25;margin-top:2px}
+        .avi-id-card b{font-size:11.2px}
+
+        .avi-clinical-divider{margin:11px 2px 7px;font-size:10.5px}
+        .avi-section{margin-bottom:7px;border-radius:13px}
+        .avi-section summary{padding:9px 12px;font-size:13px}
+        .avi-section-label>i{width:26px;height:26px}
+        .avi-section-count{font-size:9.5px;height:19px}
+        .avi-section-body{padding:9px 11px 11px}
+
+        .avi-lines{gap:6px}
+        .avi-line{padding:8px 9px;border-radius:10px}
+        .avi-line b,.avi-note b{font-size:9.8px}
+        .avi-line p,.avi-note p,.avi-clean-list{font-size:12.8px;line-height:1.48}
+        .avi-line.avi-span-full p{max-width:118ch}
+        .avi-clean-list{max-width:118ch}
+
+        .avi-subgroup>h5{font-size:12.4px}
+        .avi-med-card h5{font-size:12.8px}
+        .avi-med-card p{font-size:12.4px}
+        .avi-med-details span{font-size:8.8px}
+        .avi-med-details b{font-size:10.8px}
+
+        .avi-rx-card{padding:11px 12px}
+        .avi-rx-head h4{font-size:13.8px}
+        .avi-rx-kicker{font-size:10px}
+        .avi-rx-head small{font-size:10.5px}
+      }
+
+      @media(min-width:1180px){
+        .avi-data-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+        .avi-lines{grid-template-columns:repeat(3,minmax(0,1fr))}
+        .avi-med-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+        .avi-line.avi-span-full{grid-column:1/-1}
+      }
     `;
     document.head.appendChild(s);
   }
@@ -4772,7 +4829,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.4.0',
+    version:'1.5.0',
     abrir,
     cerrar,
     abrirReceta,
