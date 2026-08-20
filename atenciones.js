@@ -3362,7 +3362,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_ANTECEDENTES_FUENTE_REAL';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_7_ANTECEDENTES_JSON_REAL';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -3837,7 +3837,6 @@
   function historiaFuenteAntecedentes(atencion){
     const idHistoria = texto(atencion?.id_historia);
     const idPaciente = texto(atencion?.id_paciente);
-
     if(!idHistoria) return null;
 
     const coincide = h =>
@@ -3874,42 +3873,34 @@
     return null;
   }
 
-  function extractoresAntecedentesDisponibles(){
-    return (
-      typeof window.auroExtraerItemsAntecedentePremium === 'function' &&
-      typeof window.auroExtraerFuentePatologicosPersonales === 'function' &&
-      typeof window.auroExtraerVacunasRegistradas === 'function' &&
-      typeof window.auroExtraerHabitosRegistrados === 'function' &&
-      typeof window.auroExtraerActividadRegistrada === 'function'
-    );
+  function parsearAntecedenteEstructurado(valor, marker){
+    const raw = texto(valor);
+    if(!raw || !raw.startsWith(marker)) return null;
+    try{
+      const data = JSON.parse(raw.slice(marker.length));
+      return data && typeof data === 'object' ? data : null;
+    }catch(_){
+      return null;
+    }
   }
 
   function normalizarItemsAntecedente(items){
     return (Array.isArray(items) ? items : [])
       .map(item=>{
         if(!item) return null;
-
         if(typeof item === 'string'){
           const titulo = limpiarTextoClinico(item);
           return titulo ? {titulo, detalle:''} : null;
         }
 
         const titulo = limpiarTextoClinico(
-          item.titulo ||
-          item.nombre ||
-          item.descripcion ||
-          item.biologico ||
-          item.vacuna ||
-          item.habito ||
-          item.actividad ||
-          ''
+          item.titulo || item.nombre || item.descripcion ||
+          item.biologico || item.vacuna || item.habito ||
+          item.actividad || ''
         );
 
         const detalle = limpiarTextoClinico(
-          item.detalle ||
-          item.observacion ||
-          item.observaciones ||
-          ''
+          item.detalle || item.observacion || item.observaciones || ''
         );
 
         if(!titulo && !detalle) return null;
@@ -3937,42 +3928,191 @@
 
   function antecedentesDesdeFuenteHTML(atencion){
     const h = historiaFuenteAntecedentes(atencion);
-
-    if(!h || !extractoresAntecedentesDisponibles()){
+    if(!h){
       return paresHTML(capturarPanel('hc_antecedentes'));
     }
 
     try{
       const personales = texto(h.antecedentes_personales);
-      const patologicosFuente =
-        window.auroExtraerFuentePatologicosPersonales(personales);
+      const gineco = texto(h.antecedentes_gineco_obstetricos);
 
-      const bloques = [
-        antecedentesGrupoHTML('Patológicos personales',
-          window.auroExtraerItemsAntecedentePremium(patologicosFuente,'patologia')),
-        antecedentesGrupoHTML('Quirúrgicos',
-          window.auroExtraerItemsAntecedentePremium(h.antecedentes_quirurgicos || '','quirurgico')),
-        antecedentesGrupoHTML('Alergias',
-          window.auroExtraerItemsAntecedentePremium(h.alergias || '','alergia')),
-        antecedentesGrupoHTML('Vacunas registradas',
-          window.auroExtraerVacunasRegistradas(personales)),
-        antecedentesGrupoHTML('Hábitos registrados',
-          window.auroExtraerHabitosRegistrados(personales)),
-        antecedentesGrupoHTML('Actividad física registrada',
-          window.auroExtraerActividadRegistrada(personales)),
-        antecedentesGrupoHTML('Gineco-obstétricos',
-          window.auroExtraerItemsAntecedentePremium(h.antecedentes_gineco_obstetricos || '','gineco')),
-        antecedentesGrupoHTML('Medicación actual',
-          window.auroExtraerItemsAntecedentePremium(h.medicacion_actual || '','medicacion')),
-        antecedentesGrupoHTML('Familiares',
-          window.auroExtraerItemsAntecedentePremium(h.antecedentes_familiares || '','familiares'))
-      ].filter(Boolean);
+      const jsonPersonales = parsearAntecedenteEstructurado(
+        personales,
+        'AUROSANAX_ANT_PERSONALES_V1::'
+      );
 
-      return bloques.length
-        ? bloques.join('')
-        : paresHTML(capturarPanel('hc_antecedentes'));
+      const jsonGineco = parsearAntecedenteEstructurado(
+        gineco,
+        'AUROSANAX_ANT_GINECO_OBS_V1::'
+      );
+
+      const bloques = [];
+
+      if(typeof window.auroExtraerItemsAntecedentePremium !== 'function'){
+        return paresHTML(capturarPanel('hc_antecedentes'));
+      }
+
+      const patologicosFuente = jsonPersonales
+        ? (jsonPersonales.patologicos || '')
+        : (
+            typeof window.auroExtraerFuentePatologicosPersonales === 'function'
+              ? window.auroExtraerFuentePatologicosPersonales(personales)
+              : personales
+          );
+
+      bloques.push(
+        antecedentesGrupoHTML(
+          'Patológicos personales',
+          window.auroExtraerItemsAntecedentePremium(patologicosFuente,'patologia')
+        )
+      );
+
+      bloques.push(
+        antecedentesGrupoHTML(
+          'Quirúrgicos',
+          window.auroExtraerItemsAntecedentePremium(
+            h.antecedentes_quirurgicos || '',
+            'quirurgico'
+          )
+        )
+      );
+
+      bloques.push(
+        antecedentesGrupoHTML(
+          'Alergias',
+          window.auroExtraerItemsAntecedentePremium(
+            h.alergias || '',
+            'alergia'
+          )
+        )
+      );
+
+      if(jsonPersonales){
+        if(typeof window.auroResumenCovidItemsDesdeJson === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'COVID-19',
+              window.auroResumenCovidItemsDesdeJson(jsonPersonales)
+            )
+          );
+        }
+
+        if(typeof window.auroResumenVacunasItemsDesdeJson === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Vacunas registradas',
+              window.auroResumenVacunasItemsDesdeJson(jsonPersonales)
+            )
+          );
+        }
+
+        if(typeof window.auroResumenHabitosItemsDesdeJson === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Hábitos registrados',
+              window.auroResumenHabitosItemsDesdeJson(jsonPersonales)
+            )
+          );
+        }
+
+        if(typeof window.auroResumenEstiloVidaItemsDesdeJson === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Actividad física registrada',
+              window.auroResumenEstiloVidaItemsDesdeJson(jsonPersonales)
+            )
+          );
+        }
+
+        if(typeof window.auroResumenAlimentacionItemsDesdeJson === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Alimentación',
+              window.auroResumenAlimentacionItemsDesdeJson(jsonPersonales)
+            )
+          );
+        }
+      }else{
+        if(typeof window.auroExtraerVacunasRegistradas === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Vacunas registradas',
+              window.auroExtraerVacunasRegistradas(personales)
+            )
+          );
+        }
+
+        if(typeof window.auroExtraerHabitosRegistrados === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Hábitos registrados',
+              window.auroExtraerHabitosRegistrados(personales)
+            )
+          );
+        }
+
+        if(typeof window.auroExtraerActividadRegistrada === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Actividad física registrada',
+              window.auroExtraerActividadRegistrada(personales)
+            )
+          );
+        }
+      }
+
+      if(jsonGineco){
+        if(typeof window.auroResumenObstetricosItemsDesdeJson === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Obstétricos',
+              window.auroResumenObstetricosItemsDesdeJson(jsonGineco)
+            )
+          );
+        }
+
+        if(typeof window.auroResumenGinecologicosItemsDesdeJson === 'function'){
+          bloques.push(
+            antecedentesGrupoHTML(
+              'Ginecológicos',
+              window.auroResumenGinecologicosItemsDesdeJson(jsonGineco)
+            )
+          );
+        }
+      }else{
+        bloques.push(
+          antecedentesGrupoHTML(
+            'Gineco-obstétricos',
+            window.auroExtraerItemsAntecedentePremium(gineco,'gineco')
+          )
+        );
+      }
+
+      bloques.push(
+        antecedentesGrupoHTML(
+          'Medicación actual',
+          window.auroExtraerItemsAntecedentePremium(
+            h.medicacion_actual || '',
+            'medicacion'
+          )
+        )
+      );
+
+      bloques.push(
+        antecedentesGrupoHTML(
+          'Familiares',
+          window.auroExtraerItemsAntecedentePremium(
+            h.antecedentes_familiares || '',
+            'familiares'
+          )
+        )
+      );
+
+      const html = bloques.filter(Boolean).join('');
+      return html || paresHTML(capturarPanel('hc_antecedentes'));
+
     }catch(error){
-      console.warn(MODULO,'Falló lector estructurado de Antecedentes; se usa fallback estable.',error);
+      console.warn(MODULO,'Falló lector estructurado de Antecedentes; fallback stable.',error);
       return paresHTML(capturarPanel('hc_antecedentes'));
     }
   }
@@ -5092,7 +5232,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.7.0-antecedentes-fuente-real',
+    version:'1.7.0-antecedentes-json-real',
     abrir,
     cerrar,
     abrirReceta,
