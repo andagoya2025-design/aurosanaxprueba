@@ -269,6 +269,62 @@
     });
   }
 
+
+  /* ==========================================================
+     AUROSANAX 2026-08-21 · IDENTIDAD VISUAL DE CONFIGURACIÓN
+     QUIRÚRGICO / ANTIRREGRESIVO
+     - Sin crear botones ni navegación.
+     - Sin tocar seguridad, sesión, permisos ni backend.
+     - Solo sincroniza textos visibles con obtenerConfiguracion().
+     ========================================================== */
+  function aplicarIdentidadVisualConfiguracionCentro(){
+    const nombre = String(valorConfigCentro('nombre_clinica', 'AUROSANAX') || 'AUROSANAX').trim();
+    const modo = String(valorConfigCentro('modo_sistema', '') || '').trim();
+
+    try{
+      document.title = nombre + ' - Configuración';
+    }catch(e){}
+
+    const brandTitulo = document.querySelector('#sidebar .brand h1');
+    const brandSubtitulo = document.querySelector('#sidebar .brand small');
+
+    if(brandTitulo) brandTitulo.textContent = nombre;
+    if(brandSubtitulo) brandSubtitulo.textContent = 'Configuración';
+
+    const banner = document.querySelector('.demo-banner');
+    if(banner){
+      banner.innerHTML =
+        '<div><b>CONFIGURACIÓN INSTITUCIONAL</b> — Administración segura del centro médico.</div>' +
+        '<small>Centro: ' + textoSeguroCentro(nombre) +
+        (modo ? ' · Modo ' + textoSeguroCentro(modo) : '') +
+        '</small>';
+    }
+
+    const subtitulo = document.querySelector('.topbar > div:first-child p');
+    if(subtitulo){
+      subtitulo.textContent =
+        'Parámetros institucionales, agenda, seguridad y administración del centro.';
+    }
+
+    const tarjetas = Array.from(document.querySelectorAll('.stat'));
+    const tarjetaCentro = tarjetas.find(function(card){
+      const label = card.querySelector('small');
+      return label &&
+        String(label.textContent || '').trim().toLowerCase() === 'centro';
+    });
+
+    if(tarjetaCentro){
+      const valor = tarjetaCentro.querySelector('h3');
+      if(valor){
+        valor.textContent = nombre;
+        valor.title = nombre;
+        valor.style.fontSize = '20px';
+        valor.style.lineHeight = '1.15';
+        valor.style.wordBreak = 'break-word';
+      }
+    }
+  }
+
   async function cargarConfiguracionCentro(){
     const msg = document.getElementById('centroMsg');
     try{
@@ -287,6 +343,7 @@
       document.getElementById('cfgModoSistema').value = valorConfigCentro('modo_sistema', 'DEMO');
       actualizarPreviewLogoCentro();
       inicializarLogoUploaderCentro();
+      aplicarIdentidadVisualConfiguracionCentro();
 
       if(msg) msg.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Datos institucionales cargados desde la hoja <b>configuracion</b>. Colores y modo sistema están bloqueados por seguridad.';
     }catch(e){
