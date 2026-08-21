@@ -734,6 +734,30 @@
         throw new Error(resultado?.message || 'No se pudo guardar la corrección diagnóstica.');
       }
 
+      /*
+        AUROSANAX UX PREMIUM 2026-08-20
+        Confirmación visual posterior a respuesta exitosa del backend.
+        No modifica persistencia, auditoría, IDs, atención ni datos clínicos.
+      */
+      if(botonGuardar && document.body.contains(botonGuardar)){
+        botonGuardar.disabled = true;
+        botonGuardar.removeAttribute('aria-busy');
+        botonGuardar.innerHTML = '<i class="bi bi-check-circle-fill"></i> Guardado correctamente';
+        botonGuardar.style.background = '#198754';
+        botonGuardar.style.color = '#fff';
+        botonGuardar.style.borderColor = '#198754';
+        botonGuardar.style.boxShadow = '0 8px 18px rgba(25,135,84,.18)';
+      }
+
+      mensaje('ok','Corrección diagnóstica guardada correctamente.');
+      notificacionGuardadoDx('ok','Corrección diagnóstica guardada correctamente.');
+
+      /*
+        Mantiene el estado visual de éxito el tiempo suficiente para que el
+        usuario perciba la confirmación antes de volver al modo solo lectura.
+      */
+      await new Promise(resolve => window.setTimeout(resolve, 1800));
+
       state.correccionClinicaActiva = false;
       state.correccionClinicaMeta = null;
       auroDxRestaurarPuenteGuardadoCorreccion();
@@ -741,9 +765,6 @@
       await cargarAtencionActual(true);
       auroDxAplicarEstadoEditorHistorico();
       renderContextoSuperior();
-
-      mensaje('ok','Corrección diagnóstica guardada correctamente.');
-      notificacionGuardadoDx('ok','Corrección diagnóstica guardada correctamente.');
 
     }catch(error){
       console.error(MODULO + ': error guardando corrección histórica.', error);
