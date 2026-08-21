@@ -5800,6 +5800,8 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   setValueIfExists('hcPeso', h.peso_kg || '');
   setValueIfExists('hcTalla', h.talla_cm || '');
   setValueIfExists('hcIMC', h.imc || '');
+  setTextIfExists('hcImcResumen', h.imc || '—');
+  setTextIfExists('hcCardIMC', h.imc || '—');
   setValueIfExists('hcPA', h.presion_arterial || '');
   setValueIfExists('hcFC', h.frecuencia_cardiaca || '');
   setValueIfExists('hcTemperatura', h.temperatura || '');
