@@ -2039,6 +2039,28 @@ function auroActualizarAyudaIMC(){
     }
   }
 
+  /*
+    AUROSANAX FIX QUIRÚRGICO IMC 2026-08-21
+    Punto único de sincronización visual:
+    - hcIMC sigue siendo la fuente real del módulo.
+    - hcImcResumen y hcCardIMC solo reflejan ese mismo valor.
+    - Se ejecuta tanto al limpiar como al cargar una atención.
+    - No recalcula, no guarda, no consulta API y no usa temporizadores.
+  */
+  const imcVisual = (imc !== null && imc >= 5 && imc <= 100)
+    ? String(Number(imc.toFixed(1)))
+    : '—';
+
+  if(typeof setTextIfExists === 'function'){
+    setTextIfExists('hcImcResumen', imcVisual);
+    setTextIfExists('hcCardIMC', imcVisual);
+  }else{
+    const resumen = document.getElementById('hcImcResumen');
+    const tarjeta = document.getElementById('hcCardIMC');
+    if(resumen) resumen.textContent = imcVisual;
+    if(tarjeta) tarjeta.textContent = imcVisual;
+  }
+
   auroAplicarResultadoVital('hcIMC', resultado);
   return resultado;
 }
