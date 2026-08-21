@@ -611,7 +611,7 @@
         return;
       }
 
-      const motivo = window.auroSolicitarMotivoCorreccionClinica({
+      const motivo = await window.auroSolicitarMotivoCorreccionClinica({
         excepcional: !!(evaluacion && evaluacion.requiere_excepcion)
       });
       if(!motivo) return;
