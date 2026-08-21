@@ -1582,7 +1582,8 @@ function recopilarAntecedentesGinecologicosEstructurados(){
     // - Las nuevas capturas usan Fecha + Resultado / observación.
     pap: { fecha: auroGet('hcGinPapFecha'), estado: auroGet('hcGinPapEstado'), resultado: auroGet('hcGinPapResultado') },
     colposcopia: { fecha: auroGet('hcGinColposcopiaFecha'), estado: auroGet('hcGinColposcopiaEstado'), resultado: auroGet('hcGinColposcopiaResultado') },
-    biopsia: { fecha: auroGet('hcGinBiopsiaFecha'), resultado: auroGet('hcGinBiopsiaResultado') }
+    biopsia: { fecha: auroGet('hcGinBiopsiaFecha'), resultado: auroGet('hcGinBiopsiaResultado') },
+    otros: { fecha: auroGet('hcGinOtrosFecha'), resultado: auroGet('hcGinOtrosResultado') }
   });
 }
 
@@ -1620,6 +1621,8 @@ function cargarAntecedentesGinecologicosEstructurados(data){
   auroSet('hcGinColposcopiaResultado', d.colposcopia?.resultado);
   auroSet('hcGinBiopsiaFecha', d.biopsia?.fecha);
   auroSet('hcGinBiopsiaResultado', d.biopsia?.resultado);
+  auroSet('hcGinOtrosFecha', d.otros?.fecha);
+  auroSet('hcGinOtrosResultado', d.otros?.resultado);
 }
 
 function recopilarAntecedentesPersonalesCompletos(){
@@ -2980,7 +2983,7 @@ function auroResumenGinecologicosItemsDesdeJson(dataGineco){
     menarquia:'Menarquia', menacme:'Menacme', menopausia:'Menopausia', vida_sexual_activa:'Vida sexual activa',
     planificacion_familiar:'Planificación familiar', terapia_hormonal:'Terapia hormonal', infecciones_vulvovaginales:'Infecciones vulvovaginales',
     ets:'ETS', mamografia:'Mamografía', eco_mamario:'Eco mamario', densitometria_osea:'Densitometría ósea',
-    pap:'Citología / PAP', colposcopia:'Colposcopia', biopsia:'Biopsia'
+    pap:'Citología / PAP', colposcopia:'Colposcopia', biopsia:'Biopsia', otros:'Otros'
   };
   return Object.keys(g).map(k => {
     const v = g[k] || {};
