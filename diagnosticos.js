@@ -523,7 +523,7 @@
         cerrar({
           motivo_correccion_tipo:tipo,
           motivo_correccion_detalle:detalle,
-          motivo_correccion:detalle ? (tipo + ': ' + detalle) : tipo,
+          motivo_correccion:detalle,
           correccion_excepcional:excepcional ? 'SI' : 'NO'
         });
       });
@@ -671,7 +671,64 @@
       token:auroDxTokenControlClinico()
     }, state.correccionClinicaMeta);
 
+    const botonGuardar = document.querySelector(
+      '#auroDxContextoSuperior button[onclick="window.auroDxGuardarCorreccionHistorica()"]'
+    );
+    const htmlBotonGuardar = botonGuardar ? botonGuardar.innerHTML : '';
+
+    function notificacionGuardadoDx(tipo, textoMensaje){
+      let toast = document.getElementById('auroDxCorreccionToast');
+      if(toast) toast.remove();
+
+      toast = document.createElement('div');
+      toast.id = 'auroDxCorreccionToast';
+      toast.setAttribute('role','status');
+      toast.setAttribute('aria-live','polite');
+
+      const ok = tipo === 'ok';
+      toast.style.cssText = [
+        'position:fixed',
+        'left:50%',
+        'bottom:max(22px,calc(14px + env(safe-area-inset-bottom)))',
+        'transform:translateX(-50%)',
+        'z-index:2147483001',
+        'width:min(92vw,520px)',
+        'box-sizing:border-box',
+        'display:flex',
+        'align-items:center',
+        'gap:10px',
+        'padding:13px 15px',
+        'border-radius:14px',
+        'font-family:inherit',
+        'font-size:13px',
+        'font-weight:800',
+        'line-height:1.35',
+        'box-shadow:0 18px 45px rgba(15,23,42,.20)',
+        'border:1px solid ' + (ok ? '#b7e4c7' : '#fecaca'),
+        'background:' + (ok ? '#f0fdf4' : '#fff1f2'),
+        'color:' + (ok ? '#166534' : '#b42318')
+      ].join(';');
+
+      toast.innerHTML =
+        '<i class="bi ' + (ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill') +
+        '" style="font-size:18px;flex:0 0 auto"></i>' +
+        '<span>' + escapeHtml(textoMensaje || '') + '</span>';
+
+      document.body.appendChild(toast);
+      window.setTimeout(() => {
+        try{ toast.remove(); }catch(_e){}
+      }, ok ? 4200 : 5200);
+    }
+
     try{
+      if(botonGuardar){
+        botonGuardar.disabled = true;
+        botonGuardar.setAttribute('aria-busy','true');
+        botonGuardar.innerHTML = '<i class="bi bi-hourglass-split"></i> Guardando corrección…';
+      }
+
+      mensaje('aviso','Guardando corrección diagnóstica…');
+
       const resultado = await auroDxPostJSON('guardarDiagnosticos', payload);
       if(!resultado || resultado.success === false){
         throw new Error(resultado?.message || 'No se pudo guardar la corrección diagnóstica.');
@@ -680,13 +737,24 @@
       state.correccionClinicaActiva = false;
       state.correccionClinicaMeta = null;
       auroDxRestaurarPuenteGuardadoCorreccion();
+
       await cargarAtencionActual(true);
       auroDxAplicarEstadoEditorHistorico();
       renderContextoSuperior();
-      mensaje('ok','Corrección diagnóstica guardada con trazabilidad clínica.');
+
+      mensaje('ok','Corrección diagnóstica guardada correctamente.');
+      notificacionGuardadoDx('ok','Corrección diagnóstica guardada correctamente.');
+
     }catch(error){
       console.error(MODULO + ': error guardando corrección histórica.', error);
       mensaje('error', error.message || 'No se pudo guardar la corrección diagnóstica.');
+      notificacionGuardadoDx('error', error.message || 'No se pudo guardar la corrección diagnóstica.');
+
+      if(botonGuardar && document.body.contains(botonGuardar)){
+        botonGuardar.disabled = false;
+        botonGuardar.removeAttribute('aria-busy');
+        botonGuardar.innerHTML = htmlBotonGuardar || '<i class="bi bi-save"></i> Guardar corrección';
+      }
     }
   }
 
