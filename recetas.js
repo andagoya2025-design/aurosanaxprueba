@@ -2352,7 +2352,7 @@
         resultado && resultado.success === false &&
         ['AURO_MOTIVO_REQUERIDO','AURO_EXCEPCION_REQUERIDA'].includes(String(resultado.code || ''))
       ){
-        const motivo = window.auroSolicitarMotivoCorreccionClinica({
+        const motivo = await window.auroSolicitarMotivoCorreccionClinica({
           excepcional: resultado.code === 'AURO_EXCEPCION_REQUERIDA' || resultado.requiere_excepcion === true
         });
         if(!motivo) return resultado;
