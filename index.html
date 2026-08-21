@@ -3347,9 +3347,98 @@
 }
 </style>
 
+<style>
+/* AUROSANAX CONTEXTO PACIENTE COMPACTO START */
+#auroPatientContextCompact{
+  position:fixed;
+  top:14px;
+  left:50%;
+  transform:translate(-50%,-16px);
+  z-index:1045;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  max-width:min(720px,calc(100vw - 340px));
+  padding:9px 14px;
+  border:1px solid rgba(139,30,90,.14);
+  border-radius:999px;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 10px 28px rgba(15,23,42,.10);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  color:#1f2937;
+  font-size:13px;
+  font-weight:600;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .18s ease, transform .18s ease;
+}
+#auroPatientContextCompact.is-visible{
+  opacity:1;
+  transform:translate(-50%,0);
+}
+#auroPatientContextCompact .auro-pcc-name{
+  font-weight:800;
+  color:#7a174f;
+}
+#auroPatientContextCompact .auro-pcc-sep{color:#cbd5e1}
+#auroBackTopBtn{
+  position:fixed;
+  right:24px;
+  bottom:24px;
+  z-index:1044;
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  border:1px solid rgba(139,30,90,.16);
+  background:rgba(255,255,255,.96);
+  color:#8b1e5a;
+  box-shadow:0 10px 26px rgba(15,23,42,.12);
+  display:grid;
+  place-items:center;
+  opacity:0;
+  transform:translateY(10px);
+  pointer-events:none;
+  transition:opacity .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+#auroBackTopBtn.is-visible{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+#auroBackTopBtn:hover{box-shadow:0 12px 30px rgba(139,30,90,.16)}
+@media(max-width:980px){
+  #auroPatientContextCompact{
+    max-width:calc(100vw - 28px);
+    top:max(10px,env(safe-area-inset-top));
+    font-size:12px;
+    padding:8px 12px;
+  }
+  #auroPatientContextCompact .auro-pcc-ci{display:none}
+  #auroBackTopBtn{
+    right:max(14px,env(safe-area-inset-right));
+    bottom:max(78px,calc(env(safe-area-inset-bottom) + 14px));
+  }
+}
+/* AUROSANAX CONTEXTO PACIENTE COMPACTO END */
+</style>
 </head>
 
 <body>
+
+<!-- AUROSANAX CONTEXTO PACIENTE COMPACTO START -->
+<div id="auroPatientContextCompact" aria-hidden="true">
+  <span class="auro-pcc-name" id="auroPccNombre"></span>
+  <span class="auro-pcc-sep">•</span>
+  <span id="auroPccEdad"></span>
+  <span class="auro-pcc-sep auro-pcc-ci">•</span>
+  <span class="auro-pcc-ci" id="auroPccCedula"></span>
+</div>
+<button id="auroBackTopBtn" type="button" aria-label="Volver arriba" title="Volver arriba">
+  <i class="bi bi-arrow-up"></i>
+</button>
+<!-- AUROSANAX CONTEXTO PACIENTE COMPACTO END -->
+
 
 <script id="auro-seguridad-bloqueo-temprano">
 (function(){
@@ -8333,6 +8422,58 @@ function imprimirHistoriaClinica(){
       <div>${fecha} ${hora}</div>
     </footer>
   </div>
+<script>
+/* AUROSANAX CONTEXTO PACIENTE COMPACTO SCRIPT START */
+(function(){
+  'use strict';
+  const cap = document.getElementById('auroPatientContextCompact');
+  const btn = document.getElementById('auroBackTopBtn');
+  if(!cap || !btn) return;
+
+  function txt(id){
+    const el = document.getElementById(id);
+    return el ? String(el.textContent || el.value || '').trim() : '';
+  }
+
+  function patientCardVisible(){
+    const card =
+      document.getElementById('hcPatientProfileCard') ||
+      document.querySelector('.patient-profile-card') ||
+      document.querySelector('[data-patient-profile]');
+    if(!card) return window.scrollY < 260;
+    const r = card.getBoundingClientRect();
+    return r.bottom > 72 && r.top < window.innerHeight;
+  }
+
+  function sync(){
+    const name = txt('hcCardNombre');
+    const edad = txt('hcCardEdad');
+    const ced = txt('hcCardCedula');
+
+    document.getElementById('auroPccNombre').textContent = name || '';
+    document.getElementById('auroPccEdad').textContent = edad ? (edad.includes('años') ? edad : edad + ' años') : '';
+    document.getElementById('auroPccCedula').textContent = ced ? ('C.I. ' + ced) : '';
+
+    const hasPatient = !!name && !/seleccione/i.test(name);
+    const showContext = hasPatient && !patientCardVisible() && window.scrollY > 180;
+    cap.classList.toggle('is-visible', showContext);
+    cap.setAttribute('aria-hidden', showContext ? 'false' : 'true');
+
+    btn.classList.toggle('is-visible', window.scrollY > 420);
+  }
+
+  btn.addEventListener('click', function(){
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+
+  window.addEventListener('scroll', sync, {passive:true});
+  window.addEventListener('resize', sync);
+  document.addEventListener('DOMContentLoaded', sync);
+  setTimeout(sync, 500);
+  setInterval(sync, 1500);
+})();
+/* AUROSANAX CONTEXTO PACIENTE COMPACTO SCRIPT END */
+</script>
 </body>
 
 
