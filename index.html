@@ -3484,6 +3484,27 @@
       </div>
     </div>
 
+
+
+    <!-- AUROSANAX UX CONTEXTO PACIENTE V1: espejo visual del encabezado clínico -->
+    <div class="auro-patient-context" id="auroPatientContext" aria-live="polite" aria-hidden="true">
+      <div class="auro-patient-context-avatar" id="auroPatientContextAvatar">A</div>
+      <div class="auro-patient-context-main">
+        <span class="auro-patient-context-kicker">Paciente activo</span>
+        <strong class="auro-patient-context-name" id="auroPatientContextName">Paciente</strong>
+        <div class="auro-patient-context-meta">
+          <span id="auroPatientContextAge">Edad —</span>
+          <span class="auro-patient-context-dot" aria-hidden="true"></span>
+          <span class="auro-context-cedula" id="auroPatientContextCedula">C.I. —</span>
+        </div>
+      </div>
+      <span class="auro-patient-context-state" id="auroPatientContextState">Historia activa</span>
+    </div>
+
+    <button type="button" class="auro-back-top" id="auroBackTop" title="Volver al inicio" aria-label="Volver al inicio">
+      <i class="bi bi-arrow-up"></i>
+    </button>
+
     <section class="screen active" id="dashboard">
       <div class="hero">
         <div>
@@ -9381,7 +9402,173 @@ document.addEventListener('click',e=>{
 }
 
 </style>
-      </head>
+      
+
+  <!-- AUROSANAX UX CONTEXTO PACIENTE V1
+       Capa visual/navegación solamente. No modifica selección, guardado, atención,
+       seguridad, auditoría, Apps Script ni contratos clínicos. -->
+  <style id="auro-patient-context-style">
+    .auro-patient-context{
+      position:fixed;
+      top:12px;
+      left:calc(280px + (100vw - 280px)/2);
+      transform:translate(-50%,-14px) scale(.985);
+      width:min(760px,calc(100vw - 340px));
+      min-height:54px;
+      z-index:35;
+      display:flex;
+      align-items:center;
+      gap:11px;
+      padding:8px 12px 8px 9px;
+      border:1px solid rgba(226,232,240,.92);
+      border-radius:18px;
+      background:rgba(255,255,255,.94);
+      box-shadow:0 16px 42px rgba(15,23,42,.13),0 2px 8px rgba(139,30,90,.05);
+      backdrop-filter:blur(14px) saturate(1.15);
+      -webkit-backdrop-filter:blur(14px) saturate(1.15);
+      opacity:0;
+      visibility:hidden;
+      pointer-events:none;
+      transition:opacity .18s ease,transform .18s ease,visibility .18s ease;
+    }
+    .auro-patient-context.is-visible{
+      opacity:1;
+      visibility:visible;
+      pointer-events:auto;
+      transform:translate(-50%,0) scale(1);
+    }
+    .auro-patient-context-avatar{
+      flex:0 0 38px;
+      width:38px;height:38px;
+      border-radius:13px;
+      display:grid;place-items:center;
+      background:linear-gradient(135deg,var(--primary),var(--primary-2));
+      color:#fff;
+      font-size:13px;
+      font-weight:900;
+      box-shadow:0 7px 16px rgba(139,30,90,.16);
+    }
+    .auro-patient-context-main{min-width:0;flex:1}
+    .auro-patient-context-kicker{
+      display:block;
+      margin-bottom:1px;
+      color:#8b1e5a;
+      font-size:9px;
+      line-height:1.1;
+      font-weight:850;
+      text-transform:uppercase;
+      letter-spacing:.07em;
+    }
+    .auro-patient-context-name{
+      display:block;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      color:#172033;
+      font-size:14px;
+      line-height:1.25;
+      font-weight:850;
+    }
+    .auro-patient-context-meta{
+      display:flex;
+      align-items:center;
+      gap:7px;
+      min-width:0;
+      color:#667085;
+      font-size:11px;
+      font-weight:600;
+      white-space:nowrap;
+    }
+    .auro-patient-context-meta span{overflow:hidden;text-overflow:ellipsis}
+    .auro-patient-context-dot{width:3px;height:3px;border-radius:50%;background:#cbd5e1;flex:0 0 auto}
+    .auro-patient-context-state{
+      flex:0 0 auto;
+      display:inline-flex;
+      align-items:center;
+      gap:5px;
+      max-width:150px;
+      padding:5px 8px;
+      border-radius:999px;
+      background:#fdf2f8;
+      border:1px solid #fbcfe8;
+      color:#8b1e5a;
+      font-size:10px;
+      font-weight:800;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .auro-patient-context-state::before{
+      content:"";
+      width:6px;height:6px;border-radius:50%;
+      background:#c23b83;
+      box-shadow:0 0 0 3px rgba(194,59,131,.10);
+      flex:0 0 auto;
+    }
+    .auro-back-top{
+      position:fixed;
+      right:max(18px,env(safe-area-inset-right));
+      bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));
+      z-index:32;
+      width:46px;height:46px;
+      border:1px solid rgba(255,255,255,.78);
+      border-radius:16px;
+      display:grid;
+      place-items:center;
+      background:linear-gradient(135deg,#7a174f,#b72d79);
+      color:#fff;
+      box-shadow:0 14px 30px rgba(76,20,55,.24);
+      opacity:0;
+      visibility:hidden;
+      transform:translateY(9px) scale(.96);
+      pointer-events:none;
+      transition:opacity .18s ease,transform .18s ease,visibility .18s ease,box-shadow .18s ease;
+    }
+    .auro-back-top.is-visible{
+      opacity:1;
+      visibility:visible;
+      transform:translateY(0) scale(1);
+      pointer-events:auto;
+    }
+    .auro-back-top:hover{box-shadow:0 17px 36px rgba(76,20,55,.31);transform:translateY(-1px)}
+    .auro-back-top:focus-visible{outline:3px solid rgba(194,59,131,.24);outline-offset:3px}
+    .auro-back-top i{font-size:18px;line-height:1}
+
+    @media(max-width:1200px){
+      .auro-patient-context{width:min(680px,calc(100vw - 330px))}
+    }
+    @media(max-width:980px){
+      .auro-patient-context{
+        top:max(9px,env(safe-area-inset-top));
+        left:50%;
+        width:min(720px,calc(100vw - 28px));
+      }
+    }
+    @media(max-width:760px){
+      .auro-patient-context{
+        width:calc(100vw - 24px);
+        min-height:50px;
+        padding:6px 9px 6px 7px;
+        border-radius:16px;
+        gap:9px;
+      }
+      .auro-patient-context-avatar{width:36px;height:36px;flex-basis:36px;border-radius:12px}
+      .auro-patient-context-kicker{font-size:8px}
+      .auro-patient-context-name{font-size:13px}
+      .auro-patient-context-meta{font-size:10px;gap:5px}
+      .auro-patient-context-state{max-width:100px;padding:4px 7px;font-size:9px}
+      .auro-back-top{width:44px;height:44px;border-radius:15px}
+    }
+    @media(max-width:480px){
+      .auro-patient-context-meta .auro-context-cedula,
+      .auro-patient-context-meta .auro-patient-context-dot{display:none}
+      .auro-patient-context-state{display:none}
+    }
+    @media(prefers-reduced-motion:reduce){
+      .auro-patient-context,.auro-back-top{transition:none!important}
+    }
+  </style>
+</head>
       <body>${html}</body>
       </html>
     `);
@@ -10633,6 +10820,125 @@ document.addEventListener('click',e=>{
       if(btn) btn.disabled = false;
     }
   };
+})();
+</script>
+
+
+
+<script id="auro-patient-context-script">
+(function(){
+  'use strict';
+
+  const ID_BAR = 'auroPatientContext';
+  const ID_TOP = 'auroBackTop';
+  let patientCardVisible = true;
+  let observer = null;
+  let mutationObserver = null;
+  let rafPendiente = false;
+
+  function texto(id, fallback){
+    const el = document.getElementById(id);
+    const valor = el ? String(el.textContent || '').trim() : '';
+    return valor || fallback || '';
+  }
+
+  function historiaVisible(){
+    const historia = document.getElementById('historia');
+    return !!(historia && historia.classList.contains('active'));
+  }
+
+  function hayPacienteReal(){
+    const nombre = texto('hcCardNombre','');
+    return !!nombre && nombre.toLowerCase() !== 'seleccione un paciente';
+  }
+
+  function sincronizarContexto(){
+    const bar = document.getElementById(ID_BAR);
+    if(!bar) return;
+
+    const nombre = texto('hcCardNombre','Paciente');
+    const avatar = texto('hcAvatar','A');
+    const edad = texto('hcCardEdad','—');
+    const cedula = texto('hcCardCedula','—');
+    const estado = texto('hcCardEstado','Historia activa');
+
+    const set = (id, valor) => {
+      const el = document.getElementById(id);
+      if(el && el.textContent !== valor) el.textContent = valor;
+    };
+
+    set('auroPatientContextAvatar', avatar);
+    set('auroPatientContextName', nombre);
+    set('auroPatientContextAge', edad === '—' ? 'Edad —' : (String(edad).toLowerCase().includes('año') ? edad : edad + ' años'));
+    set('auroPatientContextCedula', cedula === '—' ? 'C.I. —' : 'C.I. ' + cedula);
+    set('auroPatientContextState', estado);
+  }
+
+  function actualizarVisibilidad(){
+    rafPendiente = false;
+    const bar = document.getElementById(ID_BAR);
+    const top = document.getElementById(ID_TOP);
+    if(!bar || !top) return;
+
+    sincronizarContexto();
+
+    const mostrarBar = historiaVisible() && hayPacienteReal() && !patientCardVisible;
+    bar.classList.toggle('is-visible', mostrarBar);
+    bar.setAttribute('aria-hidden', mostrarBar ? 'false' : 'true');
+
+    const mostrarTop = window.scrollY > 520;
+    top.classList.toggle('is-visible', mostrarTop);
+  }
+
+  function solicitarActualizacion(){
+    if(rafPendiente) return;
+    rafPendiente = true;
+    requestAnimationFrame(actualizarVisibilidad);
+  }
+
+  function observarFichaPaciente(){
+    const card = document.getElementById('hcPatientCard');
+    if(!card || !('IntersectionObserver' in window)) return;
+
+    observer = new IntersectionObserver(function(entries){
+      const entry = entries && entries[0];
+      patientCardVisible = !!(entry && entry.isIntersecting && entry.intersectionRatio > .08);
+      solicitarActualizacion();
+    },{threshold:[0,.08,.25]});
+    observer.observe(card);
+  }
+
+  function observarDatosPaciente(){
+    const ids=['hcCardNombre','hcAvatar','hcCardEdad','hcCardCedula','hcCardEstado'];
+    const nodos=ids.map(id=>document.getElementById(id)).filter(Boolean);
+    if(!nodos.length || !('MutationObserver' in window)) return;
+
+    mutationObserver = new MutationObserver(solicitarActualizacion);
+    nodos.forEach(n=>mutationObserver.observe(n,{childList:true,subtree:true,characterData:true}));
+  }
+
+  function iniciar(){
+    const top = document.getElementById(ID_TOP);
+    if(top && top.dataset.auroInit !== '1'){
+      top.dataset.auroInit='1';
+      top.addEventListener('click',function(){
+        window.scrollTo({top:0,behavior:'smooth'});
+      });
+    }
+
+    observarFichaPaciente();
+    observarDatosPaciente();
+    window.addEventListener('scroll',solicitarActualizacion,{passive:true});
+    window.addEventListener('resize',solicitarActualizacion,{passive:true});
+    document.addEventListener('click',function(){ setTimeout(solicitarActualizacion,0); },{passive:true});
+    solicitarActualizacion();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded',iniciar,{once:true});
+  }else{
+    iniciar();
+  }
 })();
 </script>
 
