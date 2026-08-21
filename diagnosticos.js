@@ -306,214 +306,243 @@
     auroDxPuenteGuardadoCorreccionInstalado = false;
   }
 
-  if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
-      window.auroSolicitarMotivoCorreccionClinica = function(opciones){
-        opciones = opciones || {};
-        const excepcional = !!opciones.excepcional;
-  
-        return new Promise(function(resolve){
-          const STYLE_ID = 'auroCorreccionClinicaPremiumStyles';
-          const MODAL_ID = 'auroCorreccionClinicaPremiumModal';
-  
-          if(!document.getElementById(STYLE_ID)){
-            const style = document.createElement('style');
-            style.id = STYLE_ID;
-            style.textContent = `
-              #${MODAL_ID}{
-                position:fixed;inset:0;z-index:2147483000;
-                display:flex;align-items:center;justify-content:center;
-                padding:16px max(12px,env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
-                background:rgba(15,23,42,.48);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
-                overflow:auto;
-              }
-              #${MODAL_ID} .auro-corr-card{
-                width:min(560px,100%);max-height:min(88vh,720px);overflow:auto;
-                border:1px solid #ead5e2;border-radius:22px;background:#fff;
-                box-shadow:0 28px 80px rgba(15,23,42,.28);
-                color:#111827;font-family:inherit;
-              }
-              #${MODAL_ID} .auro-corr-head{
-                display:flex;gap:12px;align-items:flex-start;padding:18px 20px 15px;
-                border-bottom:1px solid #f1e5ec;background:linear-gradient(135deg,#fff,#fff8fc);
-              }
-              #${MODAL_ID} .auro-corr-icon{
-                width:42px;height:42px;flex:0 0 42px;border-radius:13px;
-                display:grid;place-items:center;background:#fdf2f8;color:#8b1e5a;font-size:19px;
-                border:1px solid #f3d1e3;
-              }
-              #${MODAL_ID}[data-excepcional="si"] .auro-corr-icon{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
-              #${MODAL_ID} .auro-corr-kicker{font-size:10.5px;font-weight:950;letter-spacing:.09em;text-transform:uppercase;color:#9d174d;margin-bottom:3px}
-              #${MODAL_ID}[data-excepcional="si"] .auro-corr-kicker{color:#9a3412}
-              #${MODAL_ID} .auro-corr-title{font-size:18px;font-weight:950;line-height:1.15;color:#111827}
-              #${MODAL_ID} .auro-corr-sub{margin-top:5px;color:#64748b;font-size:12px;line-height:1.42;font-weight:650}
-              #${MODAL_ID} .auro-corr-body{padding:18px 20px 8px}
-              #${MODAL_ID} .auro-corr-trace{
-                display:flex;gap:8px;align-items:flex-start;margin-bottom:15px;padding:10px 12px;
-                border:1px solid #dbeafe;border-radius:13px;background:#f8fbff;color:#334155;
-                font-size:11.5px;line-height:1.4;font-weight:700;
-              }
-              #${MODAL_ID} .auro-corr-label{display:block;margin:0 0 6px;color:#374151;font-size:12px;font-weight:900}
-              #${MODAL_ID} .auro-corr-select,#${MODAL_ID} .auro-corr-input{
-                width:100%;min-height:44px;border:1px solid #d8dee6;border-radius:12px;background:#fff;
-                color:#111827;font:inherit;font-size:14px;padding:9px 12px;outline:none;
-                box-shadow:none;transition:border-color .15s ease,box-shadow .15s ease;
-              }
-              #${MODAL_ID} .auro-corr-select:focus,#${MODAL_ID} .auro-corr-input:focus{
-                border-color:#c23b83;box-shadow:0 0 0 3px rgba(194,59,131,.12);
-              }
-              #${MODAL_ID} .auro-corr-field{margin-bottom:14px}
-              #${MODAL_ID} .auro-corr-help{margin-top:5px;color:#64748b;font-size:10.5px;line-height:1.35}
-              #${MODAL_ID} .auro-corr-error{display:none;margin-top:7px;color:#b42318;font-size:11px;font-weight:800}
-              #${MODAL_ID} .auro-corr-error.show{display:block}
-              #${MODAL_ID} .auro-corr-actions{
-                display:flex;justify-content:flex-end;gap:9px;padding:12px 20px 18px;
-              }
-              #${MODAL_ID} .auro-corr-btn{
-                min-height:42px;border-radius:12px;padding:9px 15px;border:1px solid #d8dee6;
-                font:inherit;font-size:12.5px;font-weight:900;cursor:pointer;
-              }
-              #${MODAL_ID} .auro-corr-btn.cancel{background:#fff;color:#475569}
-              #${MODAL_ID} .auro-corr-btn.ok{background:#8b1e5a;color:#fff;border-color:#8b1e5a;box-shadow:0 8px 18px rgba(139,30,90,.18)}
-              #${MODAL_ID}[data-excepcional="si"] .auro-corr-btn.ok{background:#9a3412;border-color:#9a3412;box-shadow:0 8px 18px rgba(154,52,18,.16)}
-              #${MODAL_ID} .auro-corr-btn:focus-visible{outline:3px solid rgba(59,130,246,.28);outline-offset:2px}
-              @media(max-width:600px){
-                #${MODAL_ID}{align-items:flex-end;padding:10px 8px calc(8px + env(safe-area-inset-bottom))}
-                #${MODAL_ID} .auro-corr-card{width:100%;max-height:92vh;border-radius:20px 20px 14px 14px}
-                #${MODAL_ID} .auro-corr-head{padding:15px 14px 13px}
-                #${MODAL_ID} .auro-corr-body{padding:14px 14px 6px}
-                #${MODAL_ID} .auro-corr-actions{display:grid;grid-template-columns:1fr 1fr;padding:10px 14px 14px}
-                #${MODAL_ID} .auro-corr-btn{width:100%;min-height:45px}
-                #${MODAL_ID} .auro-corr-select,#${MODAL_ID} .auro-corr-input{font-size:16px}
-              }
-              @media(max-width:390px){
-                #${MODAL_ID} .auro-corr-title{font-size:16px}
-                #${MODAL_ID} .auro-corr-actions{grid-template-columns:1fr}
-                #${MODAL_ID} .auro-corr-btn.ok{grid-row:1}
-              }
-            `;
-            document.head.appendChild(style);
+  /*
+    AUROSANAX 2026-08 - JUSTIFICATIVO CLÍNICO PREMIUM
+    Intervención quirúrgica:
+    - Solo reemplaza la interfaz que solicita el motivo.
+    - Conserva exactamente el contrato de salida consumido por Diagnóstico.
+    - No modifica guardado, id_atencion, id_diagnostico, auditoría ni Aplicar al Plan.
+    - Se instala de forma explícita para evitar que una copia antigua de 6 motivos,
+      cargada previamente por otro módulo, prevalezca dentro de Diagnóstico.
+  */
+  window.auroSolicitarMotivoCorreccionClinica = function(opciones){
+    opciones = opciones || {};
+    const excepcional = !!opciones.excepcional;
+
+    const motivos = [
+      'Error de digitación',
+      'Omisión',
+      'Dato incorrecto',
+      'Actualización solicitada por el paciente',
+      'Verificación documental',
+      'Fallo del sistema',
+      'Emergencia',
+      'Corrección clínica',
+      'Otro'
+    ];
+
+    return new Promise(resolve => {
+      const ID = 'auroCorreccionClinicaPremium';
+
+      const previo = document.getElementById(ID);
+      if(previo) previo.remove();
+
+      if(!document.getElementById('auroCorreccionClinicaPremiumStyles')){
+        const style = document.createElement('style');
+        style.id = 'auroCorreccionClinicaPremiumStyles';
+        style.textContent = `
+          .auro-ccp-overlay{
+            position:fixed; inset:0; z-index:2147483000;
+            display:flex; align-items:center; justify-content:center;
+            padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right))
+                    max(18px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+            background:rgba(15,23,42,.48);
+            backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);
           }
-  
-          const anterior = document.getElementById(MODAL_ID);
-          if(anterior) anterior.remove();
-  
-          const overlay = document.createElement('div');
-          overlay.id = MODAL_ID;
-          overlay.setAttribute('role','dialog');
-          overlay.setAttribute('aria-modal','true');
-          overlay.setAttribute('aria-labelledby','auroCorrTitulo');
-          overlay.dataset.excepcional = excepcional ? 'si' : 'no';
-          overlay.innerHTML = `
-            <div class="auro-corr-card" role="document">
-              <div class="auro-corr-head">
-                <div class="auro-corr-icon"><i class="bi ${excepcional ? 'bi-exclamation-diamond' : 'bi-shield-check'}"></i></div>
-                <div>
-                  <div class="auro-corr-kicker">${excepcional ? 'Enmienda excepcional' : 'Corrección clínica'}</div>
-                  <div class="auro-corr-title" id="auroCorrTitulo">Justificativo de modificación</div>
-                  <div class="auro-corr-sub">Seleccione el motivo de la corrección. El registro original permanece protegido y la modificación conserva su trazabilidad clínica.</div>
-                </div>
-              </div>
-              <div class="auro-corr-body">
-                <div class="auro-corr-trace"><i class="bi bi-journal-check"></i><span>Esta acción no modifica permisos, vínculos de atención ni el flujo de guardado. El justificativo acompaña la operación clínica que ya realiza este módulo.</span></div>
-                <div class="auro-corr-field">
-                  <label class="auro-corr-label" for="auroCorrTipo">Tipo de justificativo *</label>
-                  <select id="auroCorrTipo" class="auro-corr-select">
-                    <option value="">Seleccione...</option>
-                    <option value="Error de digitación">Error de digitación</option>
-                    <option value="Omisión">Omisión</option>
-                    <option value="Dato incorrecto">Dato incorrecto</option>
-                    <option value="Actualización solicitada por el paciente">Actualización solicitada por el paciente</option>
-                    <option value="Verificación documental">Verificación documental</option>
-                    <option value="Fallo del sistema">Fallo del sistema</option>
-                    <option value="Emergencia">Emergencia</option>
-                    <option value="Corrección clínica">Corrección clínica</option>
-                    <option value="Otro">Otro</option>
-                  </select>
-                  <div class="auro-corr-error" id="auroCorrTipoError">Seleccione un motivo de corrección.</div>
-                </div>
-                <div class="auro-corr-field" id="auroCorrDetalleWrap">
-                  <label class="auro-corr-label" id="auroCorrDetalleLabel" for="auroCorrDetalle">Observación adicional <span style="font-weight:700;color:#94a3b8">(opcional)</span></label>
-                  <input id="auroCorrDetalle" class="auro-corr-input" maxlength="150" placeholder="Detalle adicional, si aplica (máx. 150 caracteres)">
-                  <div class="auro-corr-help" id="auroCorrDetalleHelp">Puede agregar una aclaración breve sin cambiar el tipo de justificativo seleccionado.</div>
-                  <div class="auro-corr-error" id="auroCorrDetalleError">Especifique el motivo cuando seleccione “Otro”.</div>
-                </div>
-              </div>
-              <div class="auro-corr-actions">
-                <button type="button" class="auro-corr-btn cancel" id="auroCorrCancelar">Cancelar</button>
-                <button type="button" class="auro-corr-btn ok" id="auroCorrAceptar"><i class="bi bi-check2-circle me-1"></i> Continuar</button>
-              </div>
-            </div>`;
-  
-          const bodyOverflow = document.body.style.overflow;
-          document.body.appendChild(overlay);
-          document.body.style.overflow = 'hidden';
-  
-          const tipoEl = overlay.querySelector('#auroCorrTipo');
-          const detalleEl = overlay.querySelector('#auroCorrDetalle');
-          const detalleLabel = overlay.querySelector('#auroCorrDetalleLabel');
-          const detalleHelp = overlay.querySelector('#auroCorrDetalleHelp');
-          const tipoError = overlay.querySelector('#auroCorrTipoError');
-          const detalleError = overlay.querySelector('#auroCorrDetalleError');
-          const btnCancelar = overlay.querySelector('#auroCorrCancelar');
-          const btnAceptar = overlay.querySelector('#auroCorrAceptar');
-  
-          function actualizarDetalle(){
-            const esOtro = String(tipoEl.value || '') === 'Otro';
-            detalleLabel.innerHTML = esOtro
-              ? 'Detalle del justificativo *'
-              : 'Observación adicional <span style="font-weight:700;color:#94a3b8">(opcional)</span>';
-            detalleEl.placeholder = esOtro
-              ? 'Especifique el motivo (máx. 150 caracteres)'
-              : 'Detalle adicional, si aplica (máx. 150 caracteres)';
-            detalleHelp.textContent = esOtro
-              ? 'Para “Otro” debe registrar un justificativo breve.'
-              : 'Puede agregar una aclaración breve sin cambiar el tipo de justificativo seleccionado.';
-            detalleError.classList.remove('show');
+          .auro-ccp-card{
+            width:min(620px,100%); max-height:min(88vh,760px); overflow:auto;
+            background:#fff; border:1px solid rgba(148,163,184,.28);
+            border-radius:24px; box-shadow:0 28px 80px rgba(15,23,42,.24);
+            color:#172033; font-family:inherit;
           }
-  
-          function cerrar(valor){
-            document.removeEventListener('keydown', onKey, true);
-            document.body.style.overflow = bodyOverflow;
-            if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
-            resolve(valor);
+          .auro-ccp-head{
+            padding:22px 24px 17px; display:flex; gap:14px; align-items:flex-start;
+            border-bottom:1px solid #edf0f5;
+            background:linear-gradient(135deg,#fff 0%,#fff7fb 100%);
+            border-radius:24px 24px 0 0;
           }
-  
-          function aceptar(){
-            const tipo = String(tipoEl.value || '').trim();
-            const detalle = String(detalleEl.value || '').trim();
-            tipoError.classList.toggle('show', !tipo);
-            detalleError.classList.remove('show');
-            if(!tipo){ tipoEl.focus(); return; }
-            if(tipo === 'Otro' && detalle.length < 3){
-              detalleError.classList.add('show');
-              detalleEl.focus();
-              return;
-            }
-            cerrar({
-              motivo_correccion_tipo: tipo,
-              motivo_correccion_detalle: detalle,
-              motivo_correccion: detalle ? (tipo + ': ' + detalle) : tipo,
-              correccion_excepcional: excepcional ? 'SI' : 'NO'
-            });
+          .auro-ccp-icon{
+            flex:0 0 42px; width:42px; height:42px; border-radius:14px;
+            display:grid; place-items:center; font-size:19px;
+            background:#fff0f6; color:#b42367; border:1px solid #f7d5e5;
           }
-  
-          function onKey(ev){
-            if(ev.key === 'Escape'){
-              ev.preventDefault();
-              cerrar(null);
-            }
+          .auro-ccp-title{font-size:18px;font-weight:800;line-height:1.2;margin:0 0 5px}
+          .auro-ccp-sub{font-size:13px;line-height:1.45;color:#667085;margin:0}
+          .auro-ccp-body{padding:20px 24px 8px}
+          .auro-ccp-label{display:block;font-size:13px;font-weight:750;color:#344054;margin:0 0 8px}
+          .auro-ccp-required{color:#b42367}
+          .auro-ccp-select,.auro-ccp-textarea{
+            width:100%; box-sizing:border-box; border:1px solid #d0d5dd; border-radius:13px;
+            background:#fff; color:#172033; font:inherit; font-size:14px;
+            outline:none; transition:border-color .15s ease,box-shadow .15s ease;
           }
-  
-          tipoEl.addEventListener('change', actualizarDetalle);
-          btnCancelar.addEventListener('click', function(){ cerrar(null); });
-          btnAceptar.addEventListener('click', aceptar);
-          overlay.addEventListener('click', function(ev){ if(ev.target === overlay) cerrar(null); });
-          document.addEventListener('keydown', onKey, true);
-          actualizarDetalle();
-          setTimeout(function(){ tipoEl.focus(); }, 0);
-        });
+          .auro-ccp-select{height:46px;padding:0 13px}
+          .auro-ccp-textarea{min-height:92px;resize:vertical;padding:12px 13px;line-height:1.45}
+          .auro-ccp-select:focus,.auro-ccp-textarea:focus{
+            border-color:#d14d87; box-shadow:0 0 0 4px rgba(209,77,135,.10);
+          }
+          .auro-ccp-field{margin-bottom:16px}
+          .auro-ccp-help{font-size:12px;color:#7a8495;margin-top:7px;line-height:1.4}
+          .auro-ccp-error{
+            display:none; margin-top:9px; padding:9px 11px; border-radius:10px;
+            background:#fff1f3; color:#b42318; font-size:12px; font-weight:650;
+          }
+          .auro-ccp-error.show{display:block}
+          .auro-ccp-trace{
+            display:flex; gap:9px; align-items:flex-start; margin:2px 24px 18px;
+            padding:11px 13px; border-radius:12px; background:#f8fafc;
+            color:#596579; font-size:12px; line-height:1.45;
+          }
+          .auro-ccp-actions{
+            display:flex; justify-content:flex-end; gap:10px; padding:16px 24px 22px;
+            border-top:1px solid #edf0f5;
+          }
+          .auro-ccp-btn{
+            min-height:42px; border-radius:12px; padding:0 17px; font:inherit;
+            font-size:14px; font-weight:750; cursor:pointer; border:1px solid transparent;
+          }
+          .auro-ccp-cancel{background:#fff;color:#475467;border-color:#d0d5dd}
+          .auro-ccp-confirm{background:#b42367;color:#fff;box-shadow:0 8px 20px rgba(180,35,103,.18)}
+          .auro-ccp-confirm:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
+          @media (max-width:575.98px){
+            .auro-ccp-overlay{align-items:flex-end;padding:10px max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+            .auro-ccp-card{max-height:92vh;border-radius:22px}
+            .auro-ccp-head{padding:18px 17px 15px;border-radius:22px 22px 0 0}
+            .auro-ccp-body{padding:17px 17px 6px}
+            .auro-ccp-trace{margin:2px 17px 15px}
+            .auro-ccp-actions{padding:14px 17px calc(16px + env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 1fr}
+            .auro-ccp-btn{width:100%}
+          }
+          @media (prefers-reduced-motion:reduce){
+            .auro-ccp-select,.auro-ccp-textarea{transition:none}
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      const overlay = document.createElement('div');
+      overlay.id = ID;
+      overlay.className = 'auro-ccp-overlay';
+      overlay.setAttribute('role','dialog');
+      overlay.setAttribute('aria-modal','true');
+      overlay.setAttribute('aria-labelledby','auroCcpTitle');
+
+      const opcionesHtml = motivos.map(m =>
+        '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>'
+      ).join('');
+
+      overlay.innerHTML = `
+        <section class="auro-ccp-card">
+          <header class="auro-ccp-head">
+            <div class="auro-ccp-icon"><i class="bi ${excepcional ? 'bi-shield-exclamation' : 'bi-shield-check'}"></i></div>
+            <div>
+              <h3 id="auroCcpTitle" class="auro-ccp-title">${excepcional ? 'Enmienda excepcional' : 'Corrección clínica'}</h3>
+              <p class="auro-ccp-sub">Seleccione el justificativo de la modificación. Esta información forma parte de la trazabilidad clínica.</p>
+            </div>
+          </header>
+          <div class="auro-ccp-body">
+            <div class="auro-ccp-field">
+              <label class="auro-ccp-label" for="auroCcpTipo">Motivo de corrección <span class="auro-ccp-required">*</span></label>
+              <select id="auroCcpTipo" class="auro-ccp-select">
+                <option value="">Seleccione un motivo</option>
+                ${opcionesHtml}
+              </select>
+            </div>
+            <div class="auro-ccp-field">
+              <label class="auro-ccp-label" for="auroCcpDetalle">Observación / detalle</label>
+              <textarea id="auroCcpDetalle" class="auro-ccp-textarea" maxlength="150" placeholder="Añada una observación breve si corresponde."></textarea>
+              <div id="auroCcpHelp" class="auro-ccp-help">Opcional. Si selecciona “Otro”, el detalle es obligatorio.</div>
+              <div id="auroCcpError" class="auro-ccp-error" role="alert"></div>
+            </div>
+          </div>
+          <div class="auro-ccp-trace">
+            <i class="bi bi-lock"></i>
+            <span>El registro original permanece protegido. Esta ventana no modifica por sí sola ningún dato clínico.</span>
+          </div>
+          <footer class="auro-ccp-actions">
+            <button type="button" id="auroCcpCancelar" class="auro-ccp-btn auro-ccp-cancel">Cancelar</button>
+            <button type="button" id="auroCcpConfirmar" class="auro-ccp-btn auro-ccp-confirm" disabled>Continuar</button>
+          </footer>
+        </section>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const tipoEl = overlay.querySelector('#auroCcpTipo');
+      const detalleEl = overlay.querySelector('#auroCcpDetalle');
+      const confirmarEl = overlay.querySelector('#auroCcpConfirmar');
+      const cancelarEl = overlay.querySelector('#auroCcpCancelar');
+      const errorEl = overlay.querySelector('#auroCcpError');
+      const helpEl = overlay.querySelector('#auroCcpHelp');
+
+      let terminado = false;
+      const cerrar = valor => {
+        if(terminado) return;
+        terminado = true;
+        document.removeEventListener('keydown', onKey);
+        overlay.remove();
+        resolve(valor);
       };
-    }
+
+      const validar = mostrarError => {
+        const tipo = String(tipoEl.value || '').trim();
+        const detalle = String(detalleEl.value || '').trim();
+        let error = '';
+        if(!tipo) error = 'Seleccione un motivo de corrección.';
+        else if(tipo === 'Otro' && detalle.length < 3) error = 'Especifique el motivo cuando selecciona “Otro”.';
+
+        confirmarEl.disabled = !!error;
+        if(mostrarError && error){
+          errorEl.textContent = error;
+          errorEl.classList.add('show');
+        }else{
+          errorEl.textContent = '';
+          errorEl.classList.remove('show');
+        }
+        return !error;
+      };
+
+      tipoEl.addEventListener('change', () => {
+        const esOtro = tipoEl.value === 'Otro';
+        detalleEl.placeholder = esOtro
+          ? 'Describa brevemente el motivo de la corrección.'
+          : 'Añada una observación breve si corresponde.';
+        helpEl.textContent = esOtro
+          ? 'Obligatorio para “Otro”. Máximo 150 caracteres.'
+          : 'Opcional. Máximo 150 caracteres.';
+        validar(false);
+        if(esOtro) detalleEl.focus();
+      });
+      detalleEl.addEventListener('input', () => validar(false));
+
+      cancelarEl.addEventListener('click', () => cerrar(null));
+      confirmarEl.addEventListener('click', () => {
+        if(!validar(true)) return;
+        const tipo = String(tipoEl.value || '').trim();
+        const detalle = String(detalleEl.value || '').trim();
+        cerrar({
+          motivo_correccion_tipo:tipo,
+          motivo_correccion_detalle:detalle,
+          motivo_correccion:detalle ? (tipo + ': ' + detalle) : tipo,
+          correccion_excepcional:excepcional ? 'SI' : 'NO'
+        });
+      });
+
+      overlay.addEventListener('click', e => {
+        if(e.target === overlay) cerrar(null);
+      });
+
+      const onKey = e => {
+        if(e.key === 'Escape'){
+          e.preventDefault();
+          cerrar(null);
+        }
+      };
+      document.addEventListener('keydown', onKey);
+
+      setTimeout(() => tipoEl.focus(), 0);
+    });
+  };
 
   async function auroDxPostJSON(accion, data){
     const API = apiUrl();
@@ -582,7 +611,7 @@
         return;
       }
 
-      const motivo = await window.auroSolicitarMotivoCorreccionClinica({
+      const motivo = window.auroSolicitarMotivoCorreccionClinica({
         excepcional: !!(evaluacion && evaluacion.requiere_excepcion)
       });
       if(!motivo) return;
