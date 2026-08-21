@@ -3409,6 +3409,7 @@
       <button onclick="showScreen('pacientes', this)"><i class="bi bi-people"></i> Pacientes</button>
       <button onclick="showScreen('agenda', this)"><i class="bi bi-calendar-check"></i> Agenda médica</button>
       <button onclick="showScreen('historia', this)"><i class="bi bi-file-medical"></i> Historia clínica</button>
+      <button id="auroMenuSecretaria" data-permiso="secretaria" style="display:none" onclick="abrirSecretaria()"><i class="bi bi-building"></i> Secretaría</button>
 
       <div class="menu-title">Atención activa</div>
       <div class="menu-attention">
@@ -10508,6 +10509,13 @@ document.addEventListener('click',e=>{
       }
 
       pintarUsuario(usuario);
+
+      /* AUROSANAX · acceso espejo Secretaría:
+         aplica exclusivamente la visibilidad del nuevo botón según el permiso
+         ya existente "secretaria". No altera sesión, token, roles ni navegación. */
+      if(typeof seguridad.aplicarPermisos === 'function'){
+        seguridad.aplicarPermisos(document);
+      }
 
       /*
         La sesión ya fue validada y el permiso Dashboard fue confirmado.
