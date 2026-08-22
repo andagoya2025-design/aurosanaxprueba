@@ -21,7 +21,7 @@
   >
 
   <!-- Estilos independientes del módulo -->
-  <link rel="stylesheet" href="asistente_comercial.css?v=1.0.0">
+  <link rel="stylesheet" href="asistente_comercial.css?v=1.1.0">
 </head>
 
 <body>
@@ -101,6 +101,15 @@
         </div>
       </section>
 
+      <nav class="ac-mobile-modebar" aria-label="Accesos rápidos">
+        <button type="button" class="ac-mode-btn active" id="acModoResponder">
+          <i class="bi bi-chat-square-text"></i> Responder
+        </button>
+        <button type="button" class="ac-mode-btn" id="acModoPlantillas">
+          <i class="bi bi-lightning-charge"></i> Plantillas
+        </button>
+      </nav>
+
       <!-- =====================================================
            ÁMBITO
            ===================================================== -->
@@ -137,7 +146,7 @@
         <section class="ac-column">
 
           <!-- MENSAJE RECIBIDO -->
-          <article class="ac-card" aria-labelledby="acMensajeTitulo">
+          <article class="ac-card" id="acMensajeCard" aria-labelledby="acMensajeTitulo">
             <div class="ac-card-head">
               <div>
                 <h2 class="ac-card-title" id="acMensajeTitulo">
@@ -148,6 +157,12 @@
                 </p>
               </div>
 
+              <div class="ac-head-actions">
+                <button type="button" class="ac-btn ac-btn-soft" id="acAnalizar" title="Forzar análisis del mensaje">
+                  <i class="bi bi-search-heart" aria-hidden="true"></i>
+                  Analizar
+                </button>
+
               <button
                 type="button"
                 class="ac-btn ac-btn-line"
@@ -157,6 +172,7 @@
                 <i class="bi bi-eraser" aria-hidden="true"></i>
                 Limpiar
               </button>
+              </div>
             </div>
 
             <div class="ac-card-body">
@@ -235,7 +251,7 @@
           </article>
 
           <!-- BIBLIOTECA -->
-          <article class="ac-card" aria-labelledby="acBibliotecaTitulo">
+          <article class="ac-card" id="acBibliotecaCard" aria-labelledby="acBibliotecaTitulo">
             <div class="ac-card-head">
               <div>
                 <h2 class="ac-card-title" id="acBibliotecaTitulo">
@@ -245,6 +261,9 @@
                   Busca, filtra o selecciona una respuesta manualmente.
                 </p>
               </div>
+              <button type="button" class="ac-btn ac-btn-soft" id="acNuevaPlantilla">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> Nueva plantilla
+              </button>
             </div>
 
             <div class="ac-card-body">
@@ -335,6 +354,16 @@
 
                 <button
                   type="button"
+                  class="ac-btn ac-btn-whatsapp"
+                  id="acWhatsApp"
+                  title="Abrir WhatsApp con la respuesta preparada"
+                >
+                  <i class="bi bi-whatsapp" aria-hidden="true"></i>
+                  WhatsApp
+                </button>
+
+                <button
+                  type="button"
                   class="ac-btn ac-btn-line"
                   id="acLimpiarRespuesta"
                   title="Borrar solo la respuesta"
@@ -371,9 +400,8 @@
               <div class="ac-safety-note">
                 <i class="bi bi-cloud-slash" aria-hidden="true"></i>
                 <span>
-                  Las plantillas de esta fase se cargan una vez y se buscan
-                  localmente. La persistencia en una sola hoja se conectará
-                  después de validar esta interfaz.
+                  Las plantillas se cargan una vez desde la base disponible y
+                  luego se buscan localmente para mantener respuesta rápida.
                 </span>
               </div>
 
@@ -390,6 +418,55 @@
         </section>
       </div>
 
+
+      <div class="ac-modal-backdrop" id="acTemplateModal" hidden>
+        <section class="ac-modal" role="dialog" aria-modal="true" aria-labelledby="acTplModalTitle">
+          <div class="ac-modal-head">
+            <div>
+              <h2 id="acTplModalTitle">Nueva plantilla</h2>
+              <p>Guárdala una vez y quedará disponible para futuras respuestas.</p>
+            </div>
+            <button type="button" class="ac-icon-btn" id="acTemplateModalClose" aria-label="Cerrar">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <form id="acTemplateForm" class="ac-modal-body">
+            <div class="ac-form-grid">
+              <label>
+                <span>Título</span>
+                <input class="ac-field" id="acTplTitulo" maxlength="120" required placeholder="Ej. Precio consulta">
+              </label>
+              <label>
+                <span>Categoría</span>
+                <select class="ac-select" id="acTplCategoria" required></select>
+              </label>
+              <label>
+                <span>Tipo de respuesta</span>
+                <select class="ac-select" id="acTplTipo">
+                  <option value="CORTA">Corta</option>
+                  <option value="MEDIA">Media</option>
+                  <option value="LARGA">Larga</option>
+                </select>
+              </label>
+              <label>
+                <span>Palabras clave</span>
+                <input class="ac-field" id="acTplKeywords" placeholder="precio, consulta, valor">
+              </label>
+            </div>
+            <label class="ac-form-full">
+              <span>Respuesta</span>
+              <textarea class="ac-textarea" id="acTplRespuesta" rows="7" required placeholder="Escribe la respuesta que quieres reutilizar..."></textarea>
+            </label>
+            <div class="ac-modal-actions">
+              <button type="button" class="ac-btn ac-btn-line" onclick="document.getElementById('acTemplateModalClose').click()">Cancelar</button>
+              <button type="submit" class="ac-btn ac-btn-primary" id="acTplGuardar">
+                <i class="bi bi-save"></i> Guardar plantilla
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+
       <footer class="ac-footer-meta">
         <span id="acVersion">Asistente Comercial</span>
       </footer>
@@ -403,6 +480,12 @@
     ></div>
   </main>
 
+  <!-- Endpoint del ERP actual. El motor también acepta window.API_URL o localStorage. -->
+  <script>
+    window.AC_API_URL = window.AC_API_URL ||
+      "https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec";
+  </script>
+
   <!-- =========================================================
        CONFIGURACIÓN
        Debe cargarse ANTES del motor.
@@ -412,7 +495,7 @@
   <!-- =========================================================
        MOTOR
        ========================================================= -->
-  <script src="asistente_comercial.js?v=1.0.0"></script>
+  <script src="asistente_comercial.js?v=1.1.0"></script>
 
   <!-- =========================================================
        ADAPTADOR VISUAL LOCAL
