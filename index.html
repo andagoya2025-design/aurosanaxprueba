@@ -7895,7 +7895,7 @@ function auroInformeEvaluacionesPlan(){
 }
 
 /* ============================================================
-   AUROSANAX HC PREMIUM V2 · 2026-08-22
+   AUROSANAX HC PREMIUM V2.1 · 2026-08-22
    Intervención quirúrgica SOLO documental:
    - Informe Clínico de Atención A4.
    - Identidad visual desde Configuración ya cargada.
@@ -8035,7 +8035,6 @@ function imprimirHistoriaClinica(){
 
   const datosPaciente = `
     <div class="auro-patient-band">
-      ${identidadVisualPDF}
       <div>
         <h2>${auroInformeEscape(nombrePaciente)}</h2>
         <p>Informe clínico de atención · ${auroInformeEscape(nombreCentroPDF)}</p>
@@ -8182,7 +8181,20 @@ function imprimirHistoriaClinica(){
 
   /* Plan: no se lee ningún DOM de Plan si su id_atencion no coincide. */
   const medicamentosPlanHTML = planCoincideAtencionPDF ? auroInformeTablaBody('hcMedicamentosTableBody', 8) : '';
-  const ordenesPlanHTML = planCoincideAtencionPDF ? auroInformeTablaBody('hcOrdenesTableBody', 3) : '';
+  const ordenesPlanHTML = planCoincideAtencionPDF ? (() => {
+    const body = document.getElementById('hcOrdenesTableBody');
+    if(!body) return '';
+    const items = Array.from(body.querySelectorAll('tr')).map(tr => {
+      const celdas = Array.from(tr.querySelectorAll('td'))
+        .slice(0,3)
+        .map(td => String(td.innerText || '').replace(/\s+/g,' ').trim())
+        .filter(Boolean)
+        .filter(x => !/^(eliminar|acción|accion|otros?)$/i.test(x));
+      if(!celdas.length) return '';
+      return `<div class="auro-list-item"><strong>${auroInformeEscape(celdas[0])}</strong>${celdas.length > 1 ? `<small>${auroInformeEscape(celdas.slice(1).join(' · '))}</small>` : ''}</div>`;
+    }).filter(Boolean);
+    return items.length ? `<div class="auro-list-premium">${items.join('')}</div>` : '';
+  })() : '';
   const planTratamientoHTML = planCoincideAtencionPDF ? auroInformeParrafo(auroInformeValue('hcPlanTratamiento')) : '';
   const interconsultaHTML = planCoincideAtencionPDF ? (() => {
     const partes = [
@@ -8318,7 +8330,7 @@ function imprimirHistoriaClinica(){
     return m ? `${m[3]}/${m[2]}/${m[1]}` : raw;
   };
 
-  const auroInformeRecetaListaPDF = valor => {
+  const auroInformeRecetaItemsPDF = valor => {
     const raw = String(valor || '').trim();
     if(!raw) return [];
 
@@ -8327,66 +8339,105 @@ function imprimirHistoriaClinica(){
         let data = JSON.parse(raw);
         if(!Array.isArray(data)) data = [data];
         return data.map(item => {
-          if(typeof item === 'string') return item.trim();
-          if(!item || typeof item !== 'object') return '';
+          if(typeof item === 'string'){
+            return { medicamento:String(item).replace(/^\s*\d+\.\s*/, '').trim(), presentacion:'', cantidad:'', indicacion:'' };
+          }
+          if(!item || typeof item !== 'object') return null;
 
-          if(item.texto) return String(item.texto).replace(/^\s*\d+\.\s*/, '').trim();
+          if(item.texto){
+            return { medicamento:String(item.texto).replace(/^\s*\d+\.\s*/, '').trim(), presentacion:'', cantidad:'', indicacion:'' };
+          }
 
-          const med = String(item.med || item.medicamento || item.nombre || '').trim();
-          const pres = String(item.pres || item.presentacion || '').trim();
+          const medicamento = String(item.med || item.medicamento || item.nombre || '').trim();
+          const presentacion = String(item.pres || item.presentacion || item.concentracion || '').trim();
           const via = String(item.via || '').trim();
           const cantidad = String(item.cantidad || '').trim();
-          const frec = String(item.frec || item.frecuencia || '').trim();
-          const dur = String(item.dur || item.duracion || '').trim();
-          const ind = String(item.ind || item.indicaciones || '').trim();
+          const frecuencia = String(item.frec || item.frecuencia || '').trim();
+          const duracion = String(item.dur || item.duracion || '').trim();
+          const indicaciones = String(item.ind || item.indicaciones || '').trim();
           const continuo = String(item.continuo || '').trim();
 
-          return [
-            [med, pres].filter(Boolean).join(' '),
+          const indicacion = [
             via ? 'Vía: ' + via : '',
-            cantidad ? 'Cantidad: ' + cantidad : '',
-            frec ? 'Frecuencia: ' + frec : '',
-            dur ? 'Duración: ' + dur : '',
-            ind ? 'Indicaciones: ' + ind : '',
+            frecuencia ? 'Frecuencia: ' + frecuencia : '',
+            duracion ? 'Duración: ' + duracion : '',
+            indicaciones,
             /^sí$/i.test(continuo) || /^si$/i.test(continuo) ? 'Tratamiento continuo' : ''
           ].filter(Boolean).join(' · ');
-        }).filter(Boolean);
+
+          return { medicamento, presentacion, cantidad, indicacion };
+        }).filter(x => x && (x.medicamento || x.presentacion || x.cantidad || x.indicacion));
       }catch(_e){}
     }
 
-    return raw
-      .split(/\r?\n+/)
-      .map(x => x.replace(/^\s*[•\-]\s*/, '').trim())
-      .filter(Boolean);
+    return raw.split(/\r?\n+/)
+      .map(x => x.replace(/^\s*[•\-]\s*/, '').replace(/^\s*\d+\.\s*/, '').trim())
+      .filter(Boolean)
+      .map(x => ({ medicamento:x, presentacion:'', cantidad:'', indicacion:'' }));
+  };
+
+  const auroInformeRecetaTextoListaPDF = valor => {
+    const raw = String(valor || '').trim();
+    if(!raw) return [];
+    if(raw.startsWith('[') || raw.startsWith('{')){
+      try{
+        let data = JSON.parse(raw);
+        if(!Array.isArray(data)) data = [data];
+        return data.map(item => {
+          if(typeof item === 'string') return item.trim();
+          if(!item || typeof item !== 'object') return '';
+          return String(item.texto || item.ind || item.indicaciones || item.recomendacion || item.observacion || '').trim();
+        }).filter(Boolean);
+      }catch(_e){}
+    }
+    return raw.split(/\r?\n+/).map(x => x.replace(/^\s*[•\-]\s*/, '').trim()).filter(Boolean);
   };
 
   const recetasHTML = recetasAtencionPDF.map((r, index) => {
-    const medicamentos = auroInformeRecetaListaPDF(r?.medicamento || r?.medicamentos || '');
-    const indicaciones = auroInformeRecetaListaPDF(r?.indicaciones || '');
-    const recomendaciones = auroInformeRecetaListaPDF(r?.recomendaciones || r?.observaciones || '');
+    const medicamentos = auroInformeRecetaItemsPDF(r?.medicamento || r?.medicamentos || '');
+    const indicaciones = auroInformeRecetaTextoListaPDF(r?.indicaciones || '');
+    const recomendaciones = auroInformeRecetaTextoListaPDF(r?.recomendaciones || r?.observaciones || '');
 
-    const meta = [
-      auroInformeRecetaFechaPDF(r?.fecha_receta || r?.fecha || '') ? 'Fecha: ' + auroInformeRecetaFechaPDF(r?.fecha_receta || r?.fecha || '') : '',
-      String(r?.diagnostico_cie10 || r?.cie10 || '').trim() ? 'CIE-10: ' + String(r?.diagnostico_cie10 || r?.cie10 || '').trim() : '',
-      String(r?.estado || '').trim() ? 'Estado: ' + String(r?.estado || '').trim() : ''
-    ].filter(Boolean);
-
+    const fechaReceta = auroInformeRecetaFechaPDF(r?.fecha_receta || r?.fecha || '');
+    const cie10Receta = String(r?.diagnostico_cie10 || r?.cie10 || '').trim();
+    const estadoReceta = String(r?.estado || '').trim();
+    const idReceta = String(r?.id_receta || r?.id || '').trim();
     const diagnosticoReceta = String(r?.diagnostico || '').trim();
 
+    const filasMedicamentos = medicamentos.map((m,i) => `
+      <tr>
+        <td class="auro-rx-num">${i + 1}</td>
+        <td><strong>${auroInformeEscape(m.medicamento || 'Medicamento')}</strong></td>
+        <td>${auroInformeEscape(m.presentacion || '—')}</td>
+        <td class="auro-rx-cant">${auroInformeEscape(m.cantidad || '—')}</td>
+        <td>${auroInformeEscape(m.indicacion || '—')}</td>
+      </tr>`).join('');
+
     return `
-      <div class="auro-report-card auro-rx-hc-card">
-        <div class="auro-report-card-head">
-          <div class="auro-report-icon">R${index + 1}</div>
-          <h3>Receta médica ${index + 1}</h3>
+      <section class="auro-rx-document">
+        <div class="auro-rx-document-head">
+          <div>
+            <span class="auro-rx-kicker">Receta asociada</span>
+            <h3>Receta médica ${index + 1}</h3>
+          </div>
+          <div class="auro-rx-document-meta">
+            ${fechaReceta ? `<span><b>Fecha</b>${auroInformeEscape(fechaReceta)}</span>` : ''}
+            ${cie10Receta ? `<span><b>CIE-10</b>${auroInformeEscape(cie10Receta)}</span>` : ''}
+            ${estadoReceta ? `<span><b>Estado</b>${auroInformeEscape(estadoReceta)}</span>` : ''}
+            ${idReceta ? `<span><b>ID</b>${auroInformeEscape(idReceta)}</span>` : ''}
+          </div>
         </div>
-        <div class="auro-report-card-body">
-          ${meta.length ? `<div class="auro-rx-hc-meta">${meta.map(x => `<span>${auroInformeEscape(x)}</span>`).join('')}</div>` : ''}
-          ${diagnosticoReceta ? `<div class="auro-rx-hc-dx"><strong>Diagnóstico</strong><div>${auroInformeEscape(diagnosticoReceta)}</div></div>` : ''}
-          ${medicamentos.length ? `<div class="auro-rx-hc-sub"><strong>Tratamiento prescrito</strong>${medicamentos.map((m,i)=>`<div class="auro-rx-hc-line"><b>${i + 1}.</b><span>${auroInformeEscape(m)}</span></div>`).join('')}</div>` : ''}
-          ${indicaciones.length ? `<div class="auro-rx-hc-sub"><strong>Indicaciones</strong>${indicaciones.map(x=>`<div class="auro-rx-hc-line"><span>${auroInformeEscape(x)}</span></div>`).join('')}</div>` : ''}
-          ${recomendaciones.length ? `<div class="auro-rx-hc-sub"><strong>Recomendaciones</strong>${recomendaciones.map(x=>`<div class="auro-rx-hc-line"><span>${auroInformeEscape(x)}</span></div>`).join('')}</div>` : ''}
-        </div>
-      </div>`;
+        ${diagnosticoReceta ? `<div class="auro-rx-diagnostico"><strong>Diagnóstico</strong><span>${auroInformeEscape(diagnosticoReceta)}</span></div>` : ''}
+        ${filasMedicamentos ? `
+          <div class="auro-rx-table-wrap">
+            <table class="auro-rx-table">
+              <thead><tr><th>N.º</th><th>Medicamento</th><th>Presentación / concentración</th><th>Cantidad</th><th>Indicaciones</th></tr></thead>
+              <tbody>${filasMedicamentos}</tbody>
+            </table>
+          </div>` : ''}
+        ${indicaciones.length ? `<div class="auro-rx-notes"><strong>Indicaciones generales</strong>${indicaciones.map(x=>`<p>${auroInformeEscape(x)}</p>`).join('')}</div>` : ''}
+        ${recomendaciones.length ? `<div class="auro-rx-notes"><strong>Recomendaciones</strong>${recomendaciones.map(x=>`<p>${auroInformeEscape(x)}</p>`).join('')}</div>` : ''}
+      </section>`;
   }).join('');
 
   const pieInstitucionalPDF = [
@@ -8576,16 +8627,60 @@ function imprimirHistoriaClinica(){
   .auro-report-detail{display:grid;gap:2px}
   .auro-report-detail small{display:block;color:#526071;font-size:9.5px;font-weight:700;line-height:1.2}
 
-  /* RECETAS */
-  .auro-rx-hc-meta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
-  .auro-rx-hc-meta span{border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:3px 6px;color:#475569;font-size:9px;font-weight:800}
-  .auro-rx-hc-dx{border-left:3px solid var(--auro-secondary);background:#fff8fb;border-radius:7px;padding:5px 7px;margin-bottom:6px}
-  .auro-rx-hc-dx strong,.auro-rx-hc-sub>strong{display:block;color:var(--auro-primary);font-size:9.3px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
-  .auro-rx-hc-sub{margin-top:6px}
-  .auro-rx-hc-line{display:flex;gap:5px;border-top:1px solid #edf0f3;padding:4px 0;color:#1f2937;font-size:9.8px}
-  .auro-rx-hc-line:first-of-type{border-top:0}
-  .auro-rx-hc-line b{color:var(--auro-primary);min-width:14px}
-  .auro-rx-hc-line span{min-width:0;overflow-wrap:anywhere}
+  /* VISOR PREVIO PROFESIONAL */
+  .auro-preview-toolbar{
+    position:sticky;top:0;z-index:50;
+    min-height:62px;padding:10px 18px;
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    background:rgba(255,255,255,.96);
+    border-bottom:1px solid #dde2e9;
+    box-shadow:0 6px 22px rgba(15,23,42,.08);
+    backdrop-filter:blur(10px);
+  }
+  .auro-preview-title strong{display:block;color:#172033;font-size:13px}
+  .auro-preview-title span{display:block;color:#667085;font-size:10px;margin-top:2px}
+  .auro-preview-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .auro-preview-btn{
+    border:1px solid #d8dde6;background:#fff;color:#344054;
+    border-radius:10px;padding:9px 13px;font-weight:800;font-size:11px;cursor:pointer
+  }
+  .auro-preview-btn.primary{background:var(--auro-primary);border-color:var(--auro-primary);color:#fff}
+
+  /* RECETA ASOCIADA · lenguaje visual de receta premium */
+  .auro-rx-document{
+    border:1px solid #e4ceda;border-radius:13px;background:#fff;
+    margin:0 0 9px;overflow:hidden;
+    break-inside:auto;page-break-inside:auto;
+  }
+  .auro-rx-document-head{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+    padding:9px 10px;background:linear-gradient(135deg,#fff7fb,#fff);
+    border-bottom:1px solid #eadbe4
+  }
+  .auro-rx-kicker{display:block;color:var(--auro-primary);font-size:8.8px;font-weight:900;text-transform:uppercase;letter-spacing:.07em}
+  .auro-rx-document h3{margin:2px 0 0;font-size:12.5px;color:#172033}
+  .auro-rx-document-meta{display:flex;justify-content:flex-end;gap:5px;flex-wrap:wrap}
+  .auro-rx-document-meta span{border:1px solid #e6e8ed;border-radius:8px;padding:4px 6px;color:#475569;font-size:8.8px;background:#fff}
+  .auro-rx-document-meta b{display:block;color:#667085;font-size:7.5px;text-transform:uppercase;margin-bottom:1px}
+  .auro-rx-diagnostico{display:flex;gap:8px;padding:7px 10px;border-bottom:1px solid #edf0f3;font-size:10px}
+  .auro-rx-diagnostico strong{color:var(--auro-primary);min-width:72px}
+  .auro-rx-table-wrap{width:100%;overflow-x:auto}
+  .auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed}
+  .auro-rx-table th{
+    background:#2f1f3a;color:#fff;padding:6px 6px;text-align:left;
+    font-size:8.5px;font-weight:850;line-height:1.15
+  }
+  .auro-rx-table th:nth-child(1){width:6%}
+  .auro-rx-table th:nth-child(2){width:22%}
+  .auro-rx-table th:nth-child(3){width:22%}
+  .auro-rx-table th:nth-child(4){width:11%}
+  .auro-rx-table th:nth-child(5){width:39%}
+  .auro-rx-table td{padding:7px 6px;border-bottom:1px solid #edf0f3;vertical-align:top;font-size:9.3px;line-height:1.3;overflow-wrap:anywhere}
+  .auro-rx-table tr:last-child td{border-bottom:0}
+  .auro-rx-num,.auro-rx-cant{text-align:center}
+  .auro-rx-notes{padding:7px 10px;border-top:1px solid #edf0f3}
+  .auro-rx-notes strong{display:block;color:var(--auro-primary);font-size:9px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+  .auro-rx-notes p{margin:2px 0;color:#344054;font-size:9.5px;line-height:1.35}
 
   .auro-footer{
     margin-top:14px;border-top:1px solid #e5e7eb;padding-top:7px;
@@ -8597,6 +8692,7 @@ function imprimirHistoriaClinica(){
 
   @page{size:A4;margin:0}
   @media print{
+    .auro-preview-toolbar{display:none!important}
     body{background:#fff;font-size:10px;line-height:1.25}
     .auro-report{
       width:210mm;min-height:297mm;margin:0;padding:10mm 11mm 11mm;
@@ -8634,6 +8730,10 @@ function imprimirHistoriaClinica(){
     .auro-summary-mini{grid-template-columns:1fr}
   }
   @media screen and (max-width:520px){
+    .auro-preview-toolbar{position:sticky;padding:9px 10px;align-items:flex-start}
+    .auro-preview-title span{display:none}
+    .auro-preview-actions{justify-content:flex-end}
+    .auro-preview-btn{padding:8px 9px;font-size:10px}
     .auro-report{padding:12px}
     .auro-header-row{display:block}
     .auro-doc-meta{text-align:left;margin-top:8px}
@@ -8643,6 +8743,16 @@ function imprimirHistoriaClinica(){
 </style>
 </head>
 <body>
+  <div class="auro-preview-toolbar">
+    <div class="auro-preview-title">
+      <strong>Vista previa A4 · Informe Clínico de Atención</strong>
+      <span>Revise el documento antes de imprimir o guardar como PDF.</span>
+    </div>
+    <div class="auro-preview-actions">
+      <button class="auro-preview-btn primary" type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
+      <button class="auro-preview-btn" type="button" onclick="window.close()">Cerrar</button>
+    </div>
+  </div>
   <div class="auro-report">
     <header class="auro-header">
       <div class="auro-header-row">
@@ -8731,56 +8841,8 @@ function imprimirHistoriaClinica(){
   ventana.document.write(html);
   ventana.document.close();
   ventana.focus();
+  // V2.1: vista previa deliberada; la impresión se inicia solo desde el botón del visor.
 
-  // Si hay logo institucional, espera su carga antes de abrir impresión.
-  // Tiempo máximo acotado: 1500 ms. Si falla o tarda, conserva la inicial
-  // del paciente como fallback y continúa sin bloquear el PDF.
-  const logoPDF = ventana.document.getElementById('auroPacienteLogoPDF');
-  const fallbackPDF = ventana.document.getElementById('auroPacienteLogoFallback');
-
-  if(!logoPDF || !logoUrlsPDF.length){
-    setTimeout(() => ventana.print(), 150);
-    return;
-  }
-
-  let logoIndicePDF = 0;
-  let impresionLanzadaPDF = false;
-
-  const imprimirPDFUnaVez = () => {
-    if(impresionLanzadaPDF) return;
-    impresionLanzadaPDF = true;
-    setTimeout(() => ventana.print(), 80);
-  };
-
-  const mostrarFallbackPDF = () => {
-    try{ logoPDF.style.display = 'none'; }catch(e){}
-    if(fallbackPDF) fallbackPDF.style.display = 'grid';
-  };
-
-  logoPDF.onload = () => imprimirPDFUnaVez();
-  logoPDF.onerror = () => {
-    logoIndicePDF++;
-    if(logoIndicePDF < logoUrlsPDF.length){
-      logoPDF.src = logoUrlsPDF[logoIndicePDF];
-      return;
-    }
-    mostrarFallbackPDF();
-    imprimirPDFUnaVez();
-  };
-
-  if(logoPDF.complete){
-    if(logoPDF.naturalWidth > 0){
-      imprimirPDFUnaVez();
-    }else{
-      logoPDF.onerror();
-    }
-  }
-
-  setTimeout(() => {
-    if(impresionLanzadaPDF) return;
-    mostrarFallbackPDF();
-    imprimirPDFUnaVez();
-  }, 1500);
 }
 
 async function guardarRecetaERP(){
