@@ -3671,7 +3671,7 @@
 
     <section class="screen" id="historia">
       <div class="cardx p-4">
-        <div class="section-head justify-content-end"><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button class="btn-soft" onclick="imprimirHistoriaClinica()"><i class="bi bi-filetype-pdf me-1"></i> Informe de atención</button></div></div>
+        <div class="section-head justify-content-end"><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button class="btn-soft" onclick="imprimirHistoriaClinica()" title="Generar informe clínico de la atención seleccionada"><i class="bi bi-file-earmark-medical me-1"></i> Informe de atención</button></div></div>
         <div class="patient-profile-card" id="hcPatientCard">
           <div class="patient-avatar" id="hcAvatar">A</div>
           <div>
@@ -7606,7 +7606,11 @@ function auroInformeText(id){
 
 function auroInformeSiDato(label, valor){
   const v = String(valor || '').trim();
-  if(!v || v === '—' || v.toLowerCase() === 'sin seleccionar') return '';
+  if(
+    !v ||
+    v === '—' ||
+    /^(sin seleccionar|no registrado|no registrada|no registrados|no registradas)$/i.test(v)
+  ) return '';
   return `<div class="auro-info-row"><span>${auroInformeEscape(label)}</span><b>${auroInformeEscape(v)}</b></div>`;
 }
 
@@ -7738,14 +7742,20 @@ function auroInformeAntecedentesDesdeCampos(){
   if(typeof auroExtraerItemsAntecedentePremium === 'function'){
     add('Antecedentes personales', 'AP', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(fuentePatologicos, 'patologia')));
     add('Antecedentes quirúrgicos', 'AQ', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAntecedentesQuirurgicos'), 'quirurgico')));
-    add('Alergias', '⚠', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'alergia')), 'danger');
+    add('Alergias', '⚠', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium((() => {
+      const alergiasPDF = String(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen') || '').trim();
+      return /^(no registrad|sin registr)/i.test(alergiasPDF) ? '' : alergiasPDF;
+    })(), 'alergia')), 'danger');
     add('Antecedentes ginecológicos', 'G', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAntecedentesGinecoObstetricos') || auroInformeValue('hcRevisionSistemas'), 'gineco')));
     add('Medicación actual', 'M', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcMedicacionActual'), 'medicacion')));
     add('Antecedentes familiares', 'AF', auroInformeRenderItemsCompactos(auroExtraerItemsAntecedentePremium(auroInformeValue('hcAntecedentesFamiliares'), 'familiares')));
   }else{
     add('Antecedentes personales', 'AP', auroInformeChipsDesdeTexto(fuentePatologicos));
     add('Antecedentes quirúrgicos', 'AQ', auroInformeChipsDesdeTexto(auroInformeValue('hcAntecedentesQuirurgicos')));
-    add('Alergias', '⚠', auroInformeChipsDesdeTexto(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen'), 'danger'), 'danger');
+    add('Alergias', '⚠', auroInformeChipsDesdeTexto((() => {
+      const alergiasPDF = String(auroInformeValue('hcAlergias') || auroInformeValue('hcAlergiasResumen') || '').trim();
+      return /^(no registrad|sin registr)/i.test(alergiasPDF) ? '' : alergiasPDF;
+    })(), 'danger'), 'danger');
     add('Antecedentes familiares', 'AF', auroInformeParrafo(auroInformeValue('hcAntecedentesFamiliares')));
   }
 
@@ -7842,7 +7852,7 @@ function auroInformePanelClinico(panelId){
       evidenciaReal = true;
     }else if(el.tagName === 'SELECT'){
       valor = String(el.options[el.selectedIndex]?.text || el.value || '').trim();
-      if(!valor || /^(seleccione|sin seleccionar|pendiente)$/i.test(valor)) return;
+      if(!valor || /^(seleccione|sin seleccionar|pendiente|no registrado|no registrada|no registrados|no registradas)$/i.test(valor)) return;
     }else{
       valor = String(el.value || '').trim();
       if(!valor) return;
@@ -7884,6 +7894,17 @@ function auroInformeEvaluacionesPlan(){
   return lista.length ? `<div class="auro-chip-grid">${lista.map(x=>`<span>${auroInformeEscape(x)}</span>`).join('')}</div>` : '';
 }
 
+/* ============================================================
+   AUROSANAX HC PREMIUM V2 · 2026-08-22
+   Intervención quirúrgica SOLO documental:
+   - Informe Clínico de Atención A4.
+   - Identidad visual desde Configuración ya cargada.
+   - Resumen clínico desde Integración/Visión Clínica de la MISMA id_atencion,
+     con fallback documental basado solo en datos visibles de esa atención.
+   - Omite módulos sin información útil y valores "No registrado".
+   - No modifica guardado, id_atencion, Última actualización, Plan, Recetas,
+     Certificados, Apps Script, Google Sheets ni navegación.
+============================================================ */
 function imprimirHistoriaClinica(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || '';
   if(!idPaciente){
@@ -7954,6 +7975,53 @@ function imprimirHistoriaClinica(){
   const cfgCentroPDF = (window.auroConfiguracionCentro && typeof window.auroConfiguracionCentro === 'object' && !Array.isArray(window.auroConfiguracionCentro))
     ? window.auroConfiguracionCentro
     : {};
+
+  // Identidad institucional: misma filosofía de Certificado, solo lectura.
+  const nombreCentroPDF = String(
+    cfgCentroPDF.nombre_clinica ||
+    cfgCentroPDF.nombre_centro ||
+    cfgCentroPDF.nombre_comercial ||
+    cfgCentroPDF.razon_social ||
+    'AUROSANAX'
+  ).trim() || 'AUROSANAX';
+  const subtituloCentroPDF = String(
+    cfgCentroPDF.subtitulo_clinica ||
+    cfgCentroPDF.descripcion_clinica ||
+    cfgCentroPDF.eslogan_clinica ||
+    'Clinical ERP'
+  ).trim();
+  const direccionCentroPDF = String(cfgCentroPDF.direccion_clinica || cfgCentroPDF.direccion || '').trim();
+  const ciudadCentroPDF = String(cfgCentroPDF.ciudad_clinica || cfgCentroPDF.ciudad || 'Guayaquil').trim();
+  const telefonoCentroPDF = String(
+    cfgCentroPDF.telefono_clinica ||
+    cfgCentroPDF.whatsapp_clinica ||
+    cfgCentroPDF.telefono ||
+    cfgCentroPDF.whatsapp ||
+    ''
+  ).trim();
+  const emailCentroPDF = String(
+    cfgCentroPDF.email_clinica ||
+    cfgCentroPDF.correo_clinica ||
+    cfgCentroPDF.email ||
+    cfgCentroPDF.correo ||
+    ''
+  ).trim();
+  const webCentroPDF = String(
+    cfgCentroPDF.sitio_web_clinica ||
+    cfgCentroPDF.web_clinica ||
+    cfgCentroPDF.web ||
+    ''
+  ).trim();
+  const auroColorPDF = (valor, fallback) => {
+    const v = String(valor || '').trim();
+    return /^#[0-9a-f]{3,8}$/i.test(v) ? v : fallback;
+  };
+  const colorPrincipalPDF = auroColorPDF(cfgCentroPDF.color_principal, '#7a174f');
+  const colorSecundarioPDF = auroColorPDF(
+    cfgCentroPDF.color_secundario || cfgCentroPDF.color_complementario,
+    '#c23b83'
+  );
+
   const logoUrlPDF = String(cfgCentroPDF.logo_url || cfgCentroPDF.logo_drive_url || '').trim();
   const logoFileIdPDF = String(cfgCentroPDF.logo_file_id || '').trim();
   const logoVersionPDF = String(cfgCentroPDF.logo_actualizado_en || cfgCentroPDF.logo_updated_at || logoFileIdPDF || '').trim();
@@ -7970,7 +8038,7 @@ function imprimirHistoriaClinica(){
       ${identidadVisualPDF}
       <div>
         <h2>${auroInformeEscape(nombrePaciente)}</h2>
-        <p>Informe clínico de atención · AUROSANAX</p>
+        <p>Informe clínico de atención · ${auroInformeEscape(nombreCentroPDF)}</p>
       </div>
     </div>
     <div class="auro-info-grid">
@@ -8022,34 +8090,95 @@ function imprimirHistoriaClinica(){
 
   const diagnosticos = auroInformeDiagnosticos();
 
+  /*
+    AUROSANAX HC PREMIUM V2 - RESUMEN CLÍNICO DE ATENCIÓN
+    ------------------------------------------------------
+    Prioridad de fuente:
+    1) Integración/Visión Clínica de Diagnóstico, solo si pertenece a la misma id_atencion.
+    2) Síntesis documental construida exclusivamente con campos ya cargados de esta atención.
+    No consulta backend, no diagnostica y no inventa información.
+  */
+  const textoDiagnosticosPDF = (() => {
+    const body = document.getElementById('hcDxSeleccionadosBody');
+    if(body){
+      const filas = Array.from(body.querySelectorAll('tr'))
+        .filter(tr => !/sin diagn/i.test(String(tr.innerText || '')));
+      const salida = filas.map(tr => Array.from(tr.querySelectorAll('td'))
+        .slice(0,4)
+        .map(td => String(td.innerText || '').replace(/\s+/g,' ').trim())
+        .filter(Boolean)
+        .filter(x => !/^(eliminar|acción|accion)$/i.test(x))
+        .join(' · '))
+        .filter(Boolean);
+      if(salida.length) return salida.join('; ');
+    }
+    return String(
+      auroInformeValue('hcDiagnosticoPrincipal') ||
+      auroInformeValue('hcCie10Principal') ||
+      auroInformeValue('recDiagnostico') ||
+      ''
+    ).trim();
+  })();
+
+  const resumenIntegradoPDF = diagnosticoCoincideAtencionPDF
+    ? String(window.auroDiagnosticosState?.resumenClinico || auroInformeValue('auroDxResumen') || '').trim()
+    : '';
+  const analisisIntegradoPDF = diagnosticoCoincideAtencionPDF
+    ? String(window.auroDiagnosticosState?.analisisClinico || auroInformeValue('auroDxAnalisis') || '').trim()
+    : '';
+  const conductaIntegradaPDF = diagnosticoCoincideAtencionPDF
+    ? String(window.auroDiagnosticosState?.conducta || auroInformeValue('auroDxConducta') || '').trim()
+    : '';
+
+  const resumenDocumentalPDF = (() => {
+    if(resumenIntegradoPDF) return resumenIntegradoPDF;
+
+    const partes = [];
+    const motivo = String(auroInformeValue('hcMotivoConsulta') || '').trim();
+    const enfermedad = String(auroInformeValue('hcEnfermedadActual') || '').trim();
+    const examen = String(auroInformeValue('hcExamenFisico') || '').trim();
+
+    if(motivo) partes.push(`Motivo de consulta: ${motivo}`);
+    if(enfermedad) partes.push(`Evolución clínica: ${enfermedad}`);
+    if(examen) partes.push(`Hallazgos registrados: ${examen}`);
+    if(textoDiagnosticosPDF) partes.push(`Diagnóstico(s) registrado(s): ${textoDiagnosticosPDF}`);
+
+    return partes.join('. ').replace(/\.\s*\./g,'.').trim();
+  })();
+
+  const resumenAtencionHTML = (() => {
+    const bloques = [];
+    if(resumenDocumentalPDF){
+      bloques.push(`
+        <div class="auro-summary-main">
+          <div class="auro-summary-label">Síntesis clínica</div>
+          <div class="auro-summary-text">${auroInformeEscape(resumenDocumentalPDF).replace(/\n/g,'<br>')}</div>
+        </div>`);
+    }
+    if(analisisIntegradoPDF){
+      bloques.push(`
+        <div class="auro-summary-mini">
+          <strong>Impresión / análisis clínico</strong>
+          <span>${auroInformeEscape(analisisIntegradoPDF).replace(/\n/g,'<br>')}</span>
+        </div>`);
+    }
+    if(conductaIntegradaPDF){
+      bloques.push(`
+        <div class="auro-summary-mini">
+          <strong>Conducta</strong>
+          <span>${auroInformeEscape(conductaIntegradaPDF).replace(/\n/g,'<br>')}</span>
+        </div>`);
+    }
+    return bloques.length ? `<section class="auro-summary-card">${bloques.join('')}</section>` : '';
+  })();
+
   /* Especialidades: se imprimen únicamente cuando el panel activo contiene datos reales. */
   const obstetriciaHTML = auroInformePanelClinico('hc_obstetricia');
   const esteticaHTML = auroInformePanelClinico('hc_estetica');
 
-  /*
-    Resumen clínico de la atención:
-    - Se toma exclusivamente del estado de Diagnóstico.
-    - Solo se imprime cuando ese estado pertenece exactamente a id_atencion activa.
-    - No usa fallback del DOM para evitar mezclar datos de otra atención.
-  */
-  const resumenClinicoAtencionPDF = diagnosticoCoincideAtencionPDF
-    ? String(window.auroDiagnosticosState?.resumenClinico || '').trim()
-    : '';
-  const resumenClinicoAtencionHTML = resumenClinicoAtencionPDF
-    ? auroInformeBloque('Resumen clínico de la atención', 'RC', auroInformeParrafo(resumenClinicoAtencionPDF))
-    : '';
-
-  /* Integración diagnóstica sin repetir el resumen clínico superior. */
-  const analisisClinicoPDF = diagnosticoCoincideAtencionPDF
-    ? auroInformeParrafo(window.auroDiagnosticosState?.analisisClinico || auroInformeValue('auroDxAnalisis'))
-    : '';
-  const conductaClinicaPDF = diagnosticoCoincideAtencionPDF
-    ? auroInformeParrafo(window.auroDiagnosticosState?.conducta || auroInformeValue('auroDxConducta'))
-    : '';
-  const integracionHTML = `
-    ${auroInformeBloque('Análisis / impresión clínica', 'AI', analisisClinicoPDF)}
-    ${auroInformeBloque('Conducta sugerida', 'CS', conductaClinicaPDF)}
-  `.trim();
+  // La Integración/Visión Clínica ya se presenta arriba dentro del Resumen Clínico.
+  // Se evita repetirla más adelante en el documento.
+  const integracionHTML = '';
 
   /* Plan: no se lee ningún DOM de Plan si su id_atencion no coincide. */
   const medicamentosPlanHTML = planCoincideAtencionPDF ? auroInformeTablaBody('hcMedicamentosTableBody', 8) : '';
@@ -8087,6 +8216,34 @@ function imprimirHistoriaClinica(){
     ${controlHTML}
     ${auroInformeBloque('Observaciones', 'OB', observaciones)}
   `;
+
+  const hayPlanIntegralPDF = !!(
+    medicamentosPlanHTML ||
+    planTratamientoHTML ||
+    ordenesPlanHTML ||
+    interconsultaHTML ||
+    evaluacionesHTML ||
+    indicacionesHTML ||
+    controlHTML ||
+    observaciones
+  );
+  const hayAnamnesisPDF = !!(
+    String(auroInformeValue('hcMotivoConsulta') || '').trim() ||
+    String(auroInformeValue('hcEnfermedadActual') || '').trim() ||
+    String(auroInformeValue('hcRevisionSistemas') || '').trim() ||
+    String(auroInformeValue('hcSintomasAlarma') || '').trim()
+  );
+  const hayExamenPDF = !!(
+    String(auroInformeValue('hcPeso') || '').trim() ||
+    String(auroInformeValue('hcTalla') || '').trim() ||
+    String(auroInformeValue('hcIMC') || '').trim() ||
+    String(auroInformeValue('hcPresionArterial') || auroInformeValue('hcPA') || '').trim() ||
+    String(auroInformeValue('hcFrecuenciaCardiaca') || auroInformeValue('hcFC') || '').trim() ||
+    String(auroInformeValue('hcTemperatura') || '').trim() ||
+    String(auroInformeValue('hcSaturacion') || '').trim() ||
+    String(auroInformeValue('hcExamenFisico') || '').trim() ||
+    !!document.querySelector('.sistemas-check-card input[type="checkbox"]:checked')
+  );
 
   /*
     AUROSANAX HC PDF - FASE 3 RECETAS POR ATENCIÓN
@@ -8232,121 +8389,337 @@ function imprimirHistoriaClinica(){
       </div>`;
   }).join('');
 
+  const pieInstitucionalPDF = [
+    direccionCentroPDF,
+    ciudadCentroPDF,
+    telefonoCentroPDF ? 'Tel. ' + telefonoCentroPDF : '',
+    emailCentroPDF,
+    webCentroPDF
+  ].filter(Boolean).map(auroInformeEscape).join(' · ');
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Informe Clínico de Atención · AUROSANAX</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Informe Clínico de Atención · ${auroInformeEscape(nombreCentroPDF)}</title>
 <style>
+  :root{
+    --auro-primary:${colorPrincipalPDF};
+    --auro-secondary:${colorSecundarioPDF};
+    --auro-ink:#172033;
+    --auro-muted:#667085;
+    --auro-line:#e8e8ee;
+    --auro-soft:#faf7fa;
+  }
   *{box-sizing:border-box}
-  body{margin:0;background:#f3f4f6;color:#111827;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.35}
-  .auro-report{max-width:920px;margin:0 auto;background:white;min-height:100vh;padding:24px 30px 30px}
-  .auro-header{border-radius:20px;background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff;padding:18px 22px;margin-bottom:14px;position:relative;overflow:hidden}
-  .auro-header:after{content:"";position:absolute;width:210px;height:210px;border-radius:50%;background:rgba(255,255,255,.12);right:-70px;top:-80px}
-  .auro-header small{display:block;opacity:.9;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
-  .auro-header h1{margin:0;font-size:24px;font-weight:900;letter-spacing:.02em}
-  .auro-header p{margin:5px 0 0;opacity:.95;font-size:13px}
-  .auro-section-title{margin:14px 0 8px;display:flex;align-items:center;gap:8px;color:#7a174f;font-size:15px;font-weight:900;border-bottom:1px solid #fbcfe8;padding-bottom:6px}
-  .auro-section-title span{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;border-radius:999px;padding:5px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
-  .auro-patient-band{display:flex;align-items:center;gap:12px;border:1px solid #fbcfe8;background:linear-gradient(135deg,#fff,#fff7fb);border-radius:18px;padding:10px 12px;margin-bottom:10px}
-  .auro-patient-avatar{width:46px;height:46px;border-radius:15px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;display:grid;place-items:center;font-size:20px;font-weight:900;flex:0 0 auto}
-  .auro-patient-logo-wrap{background:#fff;border:1px solid #fbcfe8;overflow:hidden;padding:3px}
-  .auro-patient-logo{width:100%;height:100%;object-fit:contain;border-radius:10px;display:block}
-  .auro-patient-logo-fallback{width:100%;height:100%;border-radius:10px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;display:grid;place-items:center}
-  .auro-patient-band h2{margin:0;font-size:21px;font-weight:900;color:#111827}
-  .auro-patient-band p{margin:3px 0 0;color:#6b7280;font-weight:700}
-  .auro-info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:8px}
-  .auro-info-grid.compact{grid-template-columns:repeat(4,1fr)}
-  .auro-info-row{border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:7px 9px;min-height:auto}
-  .auro-info-row span{display:block;color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:800;margin-bottom:3px}
-  .auro-info-row b{display:block;color:#111827;font-size:13px;word-break:break-word}
-  .auro-report-card{border:1px solid #e5e7eb;border-radius:15px;background:#fff;margin-bottom:8px;overflow:hidden;box-shadow:0 4px 12px rgba(15,23,42,.035);break-inside:avoid}
-  .auro-report-card-head{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#fff7fb,#ffffff);border-bottom:1px solid #f1f5f9;padding:8px 10px}
-  .auro-report-card-head h3{margin:0;color:#111827;font-size:14px;font-weight:900}
-  .auro-report-icon{width:32px;height:32px;border-radius:12px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;display:grid;place-items:center;font-size:12px;font-weight:900;flex:0 0 auto}
-  .auro-report-card.danger .auro-report-icon{background:#fee2e2;color:#991b1b;border-color:#fecaca}
-  .auro-report-card-body{padding:9px 10px}
-  .auro-clinical-text{white-space:normal;color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:8px 10px;min-height:auto}
-  .auro-chip-grid{display:flex;flex-wrap:wrap;gap:7px}
-  .auro-chip-grid span{border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:7px 10px;font-weight:750;color:#374151}
+  html,body{margin:0;padding:0}
+  body{
+    background:#e9edf3;
+    color:var(--auro-ink);
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:11.4px;
+    line-height:1.38;
+  }
+  .auro-report{
+    width:210mm;
+    min-height:297mm;
+    margin:16px auto;
+    background:#fff;
+    padding:12mm 13mm 13mm;
+    box-shadow:0 18px 55px rgba(15,23,42,.14);
+  }
+
+  /* CABECERA INSTITUCIONAL */
+  .auro-header{
+    border-radius:18px;
+    background:linear-gradient(135deg,var(--auro-primary),var(--auro-secondary));
+    color:#fff;
+    padding:16px 18px 15px;
+    margin-bottom:11px;
+    position:relative;
+    overflow:hidden;
+  }
+  .auro-header:after{
+    content:"";
+    position:absolute;
+    width:190px;height:190px;border-radius:50%;
+    background:rgba(255,255,255,.10);
+    right:-64px;top:-85px;
+  }
+  .auro-header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;position:relative;z-index:1}
+  .auro-header small{
+    display:block;
+    opacity:.92;
+    font-weight:800;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+    margin-bottom:4px;
+    font-size:9.5px;
+  }
+  .auro-header h1{margin:0;font-size:23px;font-weight:900;letter-spacing:.01em}
+  .auro-header p{margin:5px 0 0;opacity:.94;font-size:11.5px}
+  .auro-doc-meta{
+    min-width:132px;
+    text-align:right;
+    font-size:9.5px;
+    line-height:1.45;
+    opacity:.96;
+  }
+  .auro-doc-meta b{display:block;font-size:11px;color:#fff}
+
+  /* SECCIONES */
+  .auro-section-title{
+    margin:12px 0 6px;
+    display:flex;align-items:center;gap:8px;
+    color:var(--auro-primary);
+    font-size:13.5px;font-weight:900;
+    border-bottom:1px solid #eadbe4;
+    padding-bottom:5px;
+    break-after:avoid;
+  }
+  .auro-section-title span{
+    background:#fff7fb;color:var(--auro-primary);
+    border:1px solid #efd1e1;
+    border-radius:999px;padding:4px 8px;
+    font-size:9.5px;text-transform:uppercase;letter-spacing:.06em
+  }
+
+  /* PACIENTE */
+  .auro-patient-band{
+    display:flex;align-items:center;gap:11px;
+    border:1px solid #eadbe4;
+    background:linear-gradient(135deg,#fff,#fffafd);
+    border-radius:15px;padding:9px 10px;margin-bottom:7px;
+  }
+  .auro-patient-avatar{
+    width:43px;height:43px;border-radius:13px;
+    background:linear-gradient(135deg,var(--auro-primary),var(--auro-secondary));
+    color:#fff;display:grid;place-items:center;
+    font-size:18px;font-weight:900;flex:0 0 auto
+  }
+  .auro-patient-logo-wrap{background:#fff;border:1px solid #efd1e1;overflow:hidden;padding:3px}
+  .auro-patient-logo{width:100%;height:100%;object-fit:contain;border-radius:8px;display:block}
+  .auro-patient-logo-fallback{width:100%;height:100%;border-radius:8px;background:linear-gradient(135deg,var(--auro-primary),var(--auro-secondary));color:#fff;display:grid;place-items:center}
+  .auro-patient-band h2{margin:0;font-size:18px;font-weight:900;color:#101828}
+  .auro-patient-band p{margin:2px 0 0;color:#667085;font-weight:700;font-size:10.5px}
+
+  /* DATOS */
+  .auro-info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:6px}
+  .auro-info-grid.compact{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .auro-attention-grid{margin-top:5px;padding-top:5px;border-top:1px dashed #e7d7e1}
+  .auro-info-row{border:1px solid #eaecf0;background:#fff;border-radius:9px;padding:5px 7px;min-width:0}
+  .auro-info-row span{display:block;color:#667085;font-size:8.8px;text-transform:uppercase;letter-spacing:.045em;font-weight:800;margin-bottom:2px}
+  .auro-info-row b{display:block;color:#101828;font-size:10.8px;word-break:break-word;line-height:1.25}
+
+  /* RESUMEN CLÍNICO: núcleo premium */
+  .auro-summary-card{
+    border:1px solid #e4ceda;
+    border-left:4px solid var(--auro-primary);
+    background:linear-gradient(135deg,#fffafd 0%,#ffffff 72%);
+    border-radius:14px;
+    padding:10px 11px;
+    margin:2px 0 9px;
+    break-inside:avoid;
+  }
+  .auro-summary-main{margin-bottom:7px}
+  .auro-summary-label{
+    color:var(--auro-primary);
+    text-transform:uppercase;letter-spacing:.06em;
+    font-size:9px;font-weight:900;margin-bottom:4px
+  }
+  .auro-summary-text{font-size:11.1px;line-height:1.43;color:#253044}
+  .auro-summary-mini{
+    border-top:1px solid #efe5eb;
+    padding-top:6px;margin-top:6px;
+    display:grid;grid-template-columns:145px 1fr;gap:8px;
+  }
+  .auro-summary-mini strong{color:#344054;font-size:9.6px;text-transform:uppercase;letter-spacing:.03em}
+  .auro-summary-mini span{color:#344054;font-size:10.7px;line-height:1.38}
+
+  /* BLOQUES */
+  .auro-report-card{
+    border:1px solid #e7e9ee;border-radius:12px;background:#fff;
+    margin-bottom:6px;overflow:hidden;
+    box-shadow:0 2px 7px rgba(15,23,42,.025);
+    break-inside:avoid;
+  }
+  .auro-report-card-head{
+    display:flex;align-items:center;gap:7px;
+    background:#fcfafc;border-bottom:1px solid #eff0f3;
+    padding:6px 8px
+  }
+  .auro-report-card-head h3{margin:0;color:#172033;font-size:11.8px;font-weight:900}
+  .auro-report-icon{
+    width:27px;height:27px;border-radius:9px;
+    background:#fff1f7;color:var(--auro-primary);
+    border:1px solid #efd1e1;
+    display:grid;place-items:center;
+    font-size:9.5px;font-weight:900;flex:0 0 auto
+  }
+  .auro-report-card.danger .auro-report-icon{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+  .auro-report-card-body{padding:7px 8px}
+  .auro-clinical-text{
+    color:#273244;background:#fafbfc;border:1px solid #eef0f3;
+    border-radius:9px;padding:6px 8px;min-height:auto
+  }
+  .auro-chip-grid{display:flex;flex-wrap:wrap;gap:5px}
+  .auro-chip-grid span{border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:5px 7px;font-weight:750;color:#374151}
   .auro-chip-grid.danger span{border-color:#fecaca;background:#fef2f2;color:#991b1b}
-  .auro-list-premium{display:grid;gap:6px}
-  .auro-list-item{border:1px solid #edf2f7;background:#fbfdff;border-radius:11px;padding:6px 8px;display:block}
-  .auro-list-item strong{display:block;color:#111827;font-size:13px}
-  .auro-list-item small{display:block;color:#64748b;font-weight:700;margin-top:3px}
-  .auro-report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
-  .auro-report-item{border:1px solid #edf2f7;border-left:3px solid #c23b83;background:#fff;border-radius:12px;padding:7px 9px;min-width:0}
-  .auro-report-item strong{display:block;color:#111827;font-size:12.5px;font-weight:900;line-height:1.2;margin-bottom:3px}
-  .auro-report-detail{display:grid;gap:3px}
-  .auro-report-detail small{display:block;color:#475569;font-size:11px;font-weight:700;line-height:1.2}
-  .auro-rx-hc-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
-  .auro-rx-hc-meta span{border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:4px 7px;color:#475569;font-size:10.5px;font-weight:800}
-  .auro-rx-hc-dx{border-left:3px solid #c23b83;background:#fff7fb;border-radius:9px;padding:6px 8px;margin-bottom:7px}
-  .auro-rx-hc-dx strong,.auro-rx-hc-sub>strong{display:block;color:#7a174f;font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
-  .auro-rx-hc-sub{margin-top:7px}
-  .auro-rx-hc-line{display:flex;gap:6px;border-top:1px solid #edf2f7;padding:5px 0;color:#1f2937}
+  .auro-list-premium{display:grid;gap:4px}
+  .auro-list-item{border:1px solid #edf0f3;background:#fcfdff;border-radius:8px;padding:5px 7px}
+  .auro-list-item strong{display:block;color:#172033;font-size:10.8px}
+  .auro-list-item small{display:block;color:#667085;font-weight:700;margin-top:2px;font-size:9.7px}
+  .auro-report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+  .auro-report-item{border:1px solid #edf0f3;border-left:3px solid var(--auro-secondary);background:#fff;border-radius:9px;padding:5px 7px;min-width:0}
+  .auro-report-item strong{display:block;color:#172033;font-size:10.4px;font-weight:900;line-height:1.2;margin-bottom:2px}
+  .auro-report-detail{display:grid;gap:2px}
+  .auro-report-detail small{display:block;color:#526071;font-size:9.5px;font-weight:700;line-height:1.2}
+
+  /* RECETAS */
+  .auro-rx-hc-meta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+  .auro-rx-hc-meta span{border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:3px 6px;color:#475569;font-size:9px;font-weight:800}
+  .auro-rx-hc-dx{border-left:3px solid var(--auro-secondary);background:#fff8fb;border-radius:7px;padding:5px 7px;margin-bottom:6px}
+  .auro-rx-hc-dx strong,.auro-rx-hc-sub>strong{display:block;color:var(--auro-primary);font-size:9.3px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+  .auro-rx-hc-sub{margin-top:6px}
+  .auro-rx-hc-line{display:flex;gap:5px;border-top:1px solid #edf0f3;padding:4px 0;color:#1f2937;font-size:9.8px}
   .auro-rx-hc-line:first-of-type{border-top:0}
-  .auro-rx-hc-line b{color:#8b1e5a;min-width:16px}
+  .auro-rx-hc-line b{color:var(--auro-primary);min-width:14px}
   .auro-rx-hc-line span{min-width:0;overflow-wrap:anywhere}
-  .auro-footer{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:14px;color:#6b7280;font-size:11px;display:flex;justify-content:space-between;gap:12px}
-  @page{size:A4;margin:8mm} @media print{body{background:white;font-size:10.5px;line-height:1.25}.auro-report{max-width:none;padding:0;box-shadow:none;min-height:auto}.no-print{display:none!important}.auro-header{padding:12px 16px;margin-bottom:8px;border-radius:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.auro-header h1{font-size:20px}.auro-section-title{margin:7px 0 4px;font-size:13px;padding-bottom:3px}.auro-patient-band{padding:7px 9px;margin-bottom:6px}.auro-info-grid{gap:5px;margin-bottom:5px}.auro-info-row{padding:5px 7px;border-radius:9px}.auro-report-card{box-shadow:none;margin-bottom:5px;border-radius:10px}.auro-report-card-head{padding:4px 6px}.auro-report-card-body{padding:5px 6px}.auro-report-card,.auro-patient-band,.auro-report-item{break-inside:avoid;page-break-inside:avoid}.auro-section-title{break-after:avoid}.auro-footer{margin-top:10px;padding-top:6px}}
-  @media print{.auro-report-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.auro-report-item{padding:4px 6px;border-radius:8px}.auro-report-item strong{font-size:10.5px}.auro-report-detail small{font-size:9.5px}.auro-clinical-text{padding:4px 6px}.auro-chip-grid{gap:4px}.auro-chip-grid span{padding:4px 6px;font-size:10px}.auro-list-item{padding:4px 6px}}
-  @media(max-width:700px){.auro-report{padding:20px}.auro-info-grid,.auro-info-grid.compact{grid-template-columns:1fr}.auro-header h1{font-size:22px}}
+
+  .auro-footer{
+    margin-top:14px;border-top:1px solid #e5e7eb;padding-top:7px;
+    color:#667085;font-size:8.8px;
+    display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end
+  }
+  .auro-footer strong{display:block;color:#344054;font-size:9.5px;margin-bottom:2px}
+  .auro-footer-right{text-align:right;white-space:nowrap}
+
+  @page{size:A4;margin:0}
+  @media print{
+    body{background:#fff;font-size:10px;line-height:1.25}
+    .auro-report{
+      width:210mm;min-height:297mm;margin:0;padding:10mm 11mm 11mm;
+      box-shadow:none;
+    }
+    .auro-header{padding:11px 14px;margin-bottom:7px;border-radius:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .auro-header h1{font-size:18px}
+    .auro-section-title{margin:6px 0 3px;font-size:11.7px;padding-bottom:3px}
+    .auro-patient-band{padding:6px 8px;margin-bottom:4px}
+    .auro-info-grid{gap:4px;margin-bottom:4px}
+    .auro-info-row{padding:4px 6px;border-radius:7px}
+    .auro-summary-card{padding:7px 8px;margin-bottom:5px;border-radius:9px}
+    .auro-summary-text{font-size:9.8px;line-height:1.3}
+    .auro-summary-mini{grid-template-columns:120px 1fr;padding-top:4px;margin-top:4px}
+    .auro-summary-mini strong,.auro-summary-mini span{font-size:8.9px}
+    .auro-report-card{box-shadow:none;margin-bottom:4px;border-radius:8px}
+    .auro-report-card-head{padding:4px 6px}
+    .auro-report-card-body{padding:4px 6px}
+    .auro-report-card,.auro-patient-band,.auro-report-item,.auro-summary-card{break-inside:avoid;page-break-inside:avoid}
+    .auro-report-grid{gap:3px}
+    .auro-report-item{padding:4px 5px;border-radius:7px}
+    .auro-report-item strong{font-size:9.4px}
+    .auro-report-detail small{font-size:8.7px}
+    .auro-clinical-text{padding:4px 5px}
+    .auro-chip-grid{gap:3px}
+    .auro-chip-grid span{padding:3px 5px;font-size:8.8px}
+    .auro-list-item{padding:3px 5px}
+    .auro-footer{margin-top:7px;padding-top:5px}
+  }
+  @media screen and (max-width:900px){
+    body{background:#fff}
+    .auro-report{width:100%;min-height:auto;margin:0;padding:16px;box-shadow:none}
+    .auro-info-grid,.auro-info-grid.compact{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .auro-report-grid{grid-template-columns:1fr}
+    .auro-summary-mini{grid-template-columns:1fr}
+  }
+  @media screen and (max-width:520px){
+    .auro-report{padding:12px}
+    .auro-header-row{display:block}
+    .auro-doc-meta{text-align:left;margin-top:8px}
+    .auro-info-grid,.auro-info-grid.compact{grid-template-columns:1fr}
+    .auro-header h1{font-size:20px}
+  }
 </style>
 </head>
 <body>
   <div class="auro-report">
     <header class="auro-header">
-      <small>AUROSANAX Clinical ERP</small>
-      <h1>Informe Clínico de Atención</h1>
-      <p>Informe clínico profesional generado desde el ERP AUROSANAX</p>
+      <div class="auro-header-row">
+        <div>
+          <small>${auroInformeEscape(nombreCentroPDF)} · ${auroInformeEscape(subtituloCentroPDF || 'Clinical ERP')}</small>
+          <h1>Informe Clínico de Atención</h1>
+          <p>Registro clínico profesional correspondiente a una atención individual.</p>
+        </div>
+        <div class="auro-doc-meta">
+          <span>Documento clínico</span>
+          <b>${numeroConsultaPDF ? 'Consulta #' + auroInformeEscape(numeroConsultaPDF) : 'Atención seleccionada'}</b>
+          ${fechaAtencionPDF ? `<span>${auroInformeEscape(fechaAtencionPDF)}</span>` : ''}
+        </div>
+      </div>
     </header>
 
-    <div class="auro-section-title"><span>Paciente</span> Datos generales</div>
+    <div class="auro-section-title"><span>Paciente</span> Identificación y contexto de atención</div>
     ${datosPaciente}
 
-    ${resumenClinicoAtencionHTML ? `<div class="auro-section-title"><span>Resumen</span> Resumen clínico de la atención</div>${resumenClinicoAtencionHTML}` : ''}
+    ${resumenAtencionHTML ? `
+      <div class="auro-section-title"><span>Resumen</span> Visión clínica de la atención</div>
+      ${resumenAtencionHTML}
+    ` : ''}
 
-    <div class="auro-section-title"><span>Consulta</span> Anamnesis</div>
-    ${anamnesis || '<div class="auro-clinical-text">Sin datos registrados.</div>'}
+    ${hayAnamnesisPDF ? `
+      <div class="auro-section-title"><span>Consulta</span> Anamnesis</div>
+      ${anamnesis}
+    ` : ''}
 
-    <div class="auro-section-title"><span>Antecedentes</span> Informe estructurado premium</div>
-    ${antecedentesHTML || '<div class="auro-clinical-text">Sin antecedentes registrados.</div>'}
+    ${antecedentesHTML ? `
+      <div class="auro-section-title"><span>Antecedentes</span> Antecedentes clínicamente relevantes</div>
+      ${antecedentesHTML}
+    ` : ''}
 
-    <div class="auro-section-title"><span>Examen</span> Signos vitales y examen físico</div>
-    ${examenFisico || '<div class="auro-clinical-text">Sin datos registrados.</div>'}
+    ${hayExamenPDF ? `
+      <div class="auro-section-title"><span>Examen</span> Signos vitales y examen físico</div>
+      ${examenFisico}
+    ` : ''}
 
-    ${obstetriciaHTML ? `<div class="auro-section-title"><span>Obstetricia</span> Evaluación obstétrica</div>${auroInformeBloque('Datos obstétricos de la atención', 'OB', obstetriciaHTML)}` : ''}
+    ${obstetriciaHTML ? `
+      <div class="auro-section-title"><span>Obstetricia</span> Evaluación obstétrica</div>
+      ${auroInformeBloque('Datos obstétricos registrados', 'OB', obstetriciaHTML)}
+    ` : ''}
 
-    ${esteticaHTML ? `<div class="auro-section-title"><span>Estética</span> Evaluación estética funcional</div>${auroInformeBloque('Evaluación estética de la atención', 'ES', esteticaHTML)}` : ''}
+    ${esteticaHTML ? `
+      <div class="auro-section-title"><span>Estética</span> Evaluación estética funcional</div>
+      ${auroInformeBloque('Datos de evaluación registrados', 'ES', esteticaHTML)}
+    ` : ''}
 
-    <div class="auro-section-title"><span>CIE-10</span> Diagnósticos</div>
-    ${auroInformeBloque('Diagnósticos seleccionados', 'DX', diagnosticos) || '<div class="auro-clinical-text">Sin diagnóstico registrado.</div>'}
+    ${diagnosticos ? `
+      <div class="auro-section-title"><span>CIE-10</span> Diagnósticos de la atención</div>
+      ${auroInformeBloque('Diagnósticos seleccionados', 'DX', diagnosticos)}
+    ` : ''}
 
-    ${integracionHTML ? `<div class="auro-section-title"><span>Integración</span> Correlación clínica</div>${integracionHTML}` : ''}
+    ${hayPlanIntegralPDF ? `
+      <div class="auro-section-title"><span>Plan</span> Tratamiento, órdenes e indicaciones</div>
+      ${planIntegralHTML}
+    ` : ''}
 
-    <div class="auro-section-title"><span>Plan</span> Tratamiento e indicaciones</div>
-    ${planIntegralHTML || '<div class="auro-clinical-text">Sin plan registrado para esta atención.</div>'}
-
-    ${recetasHTML ? `<div class="auro-section-title"><span>Recetas</span> Recetas asociadas a esta atención</div>${recetasHTML}` : ''}
+    ${recetasHTML ? `
+      <div class="auro-section-title"><span>Recetas</span> Recetas asociadas a esta atención</div>
+      ${recetasHTML}
+    ` : ''}
 
     <footer class="auro-footer">
-      <div>AUROSANAX · Informe clínico generado en entorno ERP.</div>
-      <div>${fecha} ${hora}</div>
+      <div>
+        <strong>${auroInformeEscape(nombreCentroPDF)}</strong>
+        ${pieInstitucionalPDF || 'Documento clínico generado desde AUROSANAX Clinical ERP.'}
+      </div>
+      <div class="auro-footer-right">
+        ${medicoAtencionPDF ? `<strong>${auroInformeEscape(medicoAtencionPDF)}</strong>` : ''}
+        ${especialidadAtencionPDF ? `<div>${auroInformeEscape(especialidadAtencionPDF)}</div>` : ''}
+        <div>Emitido: ${auroInformeEscape(fecha)} · ${auroInformeEscape(hora)}</div>
+      </div>
     </footer>
   </div>
 </body>
-
-
-<!-- =========================================================
-     AUROSANAX INDEX - FIX QUIRÚRGICO RECETAS
-     - Neutraliza únicamente generarPDFReceta() legacy del index.
-     - recetas.js conserva la propiedad del renderizado e impresión.
-     - impresion.js puede seguir delegando a recetas.js.
-     - No modifica guardarRecetaERP, consentimiento, Plan, historial,
-       Google Sheets, Apps Script, IDs, eventos ni responsive.
-========================================================= -->
-
 </html>`;
 
   const ventana = window.open('', '_blank', 'width=1100,height=900');
