@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.1.0
+ * Versión: 1.2.0
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -71,7 +71,9 @@
     backendLoaded: false,
     backendAvailable: false,
     backendTemplateIds: new Set(),
-    libraryMode: "ALL"
+    libraryMode: "ALL",
+    editingTemplateId: null,
+    mobileMode: "RESPONDER"
   };
 
   const els = {};
@@ -563,6 +565,7 @@
     syncCategoryUI();
     setResponseValue(state.renderedResponse);
     renderTemplateList();
+    updateQuickSheet(template);
 
     return clone(template);
   }
@@ -573,6 +576,7 @@
     setResponseValue("");
     syncSelectedTemplateUI();
     renderTemplateList();
+    closeQuickSheet();
   }
 
   function setCategory(categoryId, options) {
@@ -883,6 +887,7 @@
       favoritesButton: "acFavoritos",
       mostUsedButton: "acMasUsadas",
       categoriesContainer: "acCategorias",
+      libraryCategoriesContainer: "acCategoriasBiblioteca",
       scopesContainer: "acAmbitos",
       analyzeButton: "acAnalizar",
       whatsappButton: "acWhatsApp",
@@ -896,6 +901,20 @@
       templateResponse: "acTplRespuesta",
       templateType: "acTplTipo",
       templateSave: "acTplGuardar",
+      templateSaveText: "acTplGuardarTexto",
+      templateCancel: "acTplCancelar",
+      templateModalTitle: "acTplModalTitle",
+      templateModalSubtitle: "acTplModalSubtitle",
+      templatePreview: "acTplPreview",
+      templatePreviewText: "acTplPreviewText",
+      templatePreviewMeta: "acTplPreviewMeta",
+      quickSheet: "acQuickSheet",
+      quickTitle: "acQuickTitle",
+      quickCategory: "acQuickCategory",
+      quickResponse: "acQuickResponse",
+      quickClose: "acQuickClose",
+      quickCopy: "acQuickCopy",
+      quickWhatsApp: "acQuickWhatsApp",
       modeResponder: "acModoResponder",
       modePlantillas: "acModoPlantillas",
       messageCard: "acMensajeCard",
@@ -1017,21 +1036,26 @@
       });
     }
 
-    if (els.categoriesContainer) {
-      els.categoriesContainer.innerHTML = "";
+    function fillCategoryContainer(container, compact) {
+      if (!container) return;
+      container.innerHTML = "";
 
       const allButton = document.createElement("button");
       allButton.type = "button";
-      allButton.className = "ac-category-chip" + (!state.selectedCategory ? " active" : "");
+      allButton.className =
+        (compact ? "ac-category-tile" : "ac-category-chip") +
+        (!state.selectedCategory ? " active" : "");
       allButton.dataset.category = "";
-      allButton.innerHTML = '<i class="bi bi-grid"></i><span>Todas</span>';
-      els.categoriesContainer.appendChild(allButton);
+      allButton.innerHTML =
+        '<i class="bi bi-grid"></i><span>Todas</span>' +
+        (compact ? '<small>Ver todo</small>' : '');
+      container.appendChild(allButton);
 
       categories.forEach(category => {
         const button = document.createElement("button");
         button.type = "button";
         button.className =
-          "ac-category-chip" +
+          (compact ? "ac-category-tile" : "ac-category-chip") +
           (category.id === state.selectedCategory ? " active" : "");
         button.dataset.category = category.id;
 
@@ -1042,9 +1066,23 @@
         label.textContent = category.label;
 
         button.append(icon, label);
-        els.categoriesContainer.appendChild(button);
+
+        if (compact) {
+          const count = document.createElement("small");
+          count.textContent =
+            state.activeTemplates.filter(t =>
+              t.category === category.id &&
+              (!state.selectedScope || t.scope === state.selectedScope)
+            ).length + " plant.";
+          button.appendChild(count);
+        }
+
+        container.appendChild(button);
       });
     }
+
+    fillCategoryContainer(els.categoriesContainer, false);
+    fillCategoryContainer(els.libraryCategoriesContainer, true);
   }
 
   function renderTemplateList(options) {
@@ -1090,6 +1128,9 @@
 
     titleWrap.append(title, meta);
 
+    const topActions = document.createElement("div");
+    topActions.className = "ac-template-top-actions";
+
     const favorite = document.createElement("button");
     favorite.type = "button";
     favorite.className =
@@ -1104,7 +1145,20 @@
       ? '<i class="bi bi-star-fill"></i>'
       : '<i class="bi bi-star"></i>';
 
-    top.append(titleWrap, favorite);
+    topActions.appendChild(favorite);
+
+    if (template.source === "DB") {
+      const menu = document.createElement("button");
+      menu.type = "button";
+      menu.className = "ac-template-menu-btn";
+      menu.dataset.action = "menu";
+      menu.dataset.templateId = template.id;
+      menu.setAttribute("aria-label", "Opciones de plantilla");
+      menu.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
+      topActions.appendChild(menu);
+    }
+
+    top.append(titleWrap, topActions);
 
     const preview = document.createElement("p");
     preview.className = "ac-template-preview";
@@ -1117,25 +1171,26 @@
     usage.className = "ac-template-usage";
     usage.textContent = `${getUsage(template.id)} usos`;
 
-    const useButton = document.createElement("button");
-    useButton.type = "button";
-    useButton.className = "ac-use-template-btn";
-    useButton.dataset.action = "select";
-    useButton.dataset.templateId = template.id;
-    useButton.textContent =
-      template.id === state.selectedTemplateId ? "Seleccionada" : "Usar";
-
-    bottom.append(usage);
-
     if (typeof suggestionScore === "number") {
       const score = document.createElement("span");
       score.className = "ac-template-score";
       score.textContent = `Coincidencia ${Math.round(suggestionScore)}`;
       bottom.append(score);
+    } else {
+      bottom.append(usage);
     }
 
-    bottom.append(useButton);
+    const useButton = document.createElement("button");
+    useButton.type = "button";
+    useButton.className = "ac-use-template-btn";
+    useButton.dataset.action = "select";
+    useButton.dataset.templateId = template.id;
+    useButton.innerHTML =
+      template.id === state.selectedTemplateId
+        ? '<i class="bi bi-check2"></i> Lista'
+        : '<i class="bi bi-lightning-charge"></i> Usar';
 
+    bottom.append(useButton);
     card.append(top, preview, bottom);
     return card;
   }
@@ -1192,6 +1247,51 @@
       `Plantilla: ${template.title || template.id}`;
   }
 
+  function updateQuickSheet(template) {
+    if (!els.quickSheet) return;
+
+    if (!template) {
+      els.quickSheet.hidden = true;
+      return;
+    }
+
+    const category = getCategory(template.category);
+    if (els.quickTitle) els.quickTitle.textContent = template.title || "Plantilla";
+    if (els.quickCategory) {
+      els.quickCategory.textContent = category?.label || template.category || "Plantilla";
+    }
+    if (els.quickResponse) {
+      els.quickResponse.textContent = renderPlaceholders(template.response);
+    }
+
+    if (global.matchMedia?.("(max-width: 760px)")?.matches) {
+      els.quickSheet.hidden = false;
+    }
+  }
+
+  function closeQuickSheet() {
+    if (els.quickSheet) els.quickSheet.hidden = true;
+  }
+
+  function setMobileMode(mode) {
+    const next = mode === "PLANTILLAS" ? "PLANTILLAS" : "RESPONDER";
+    state.mobileMode = next;
+
+    document.body.classList.toggle("ac-library-focus", next === "PLANTILLAS");
+    els.modeResponder?.classList.toggle("active", next === "RESPONDER");
+    els.modePlantillas?.classList.toggle("active", next === "PLANTILLAS");
+
+    if (next === "PLANTILLAS") {
+      renderCategoryControls();
+      renderTemplateList();
+      global.requestAnimationFrame(() => {
+        els.search?.focus({ preventScroll: true });
+      });
+    } else {
+      closeQuickSheet();
+    }
+  }
+
   /* ==========================================================
    * ACCIONES MÓVILES / ADMINISTRACIÓN DE PLANTILLAS
    * ========================================================== */
@@ -1209,37 +1309,91 @@
     return true;
   }
 
-  function openTemplateModal() {
-    if (!els.templateModal) return;
+  function populateTemplateCategorySelect() {
+    if (!els.templateCategory) return;
 
-    if (els.templateForm) els.templateForm.reset();
-    if (els.templateCategory) {
-      els.templateCategory.innerHTML = "";
-      sortByOrder((CONFIG.categories || []).filter(c => c.enabled !== false)).forEach(category => {
+    els.templateCategory.innerHTML = "";
+    sortByOrder((CONFIG.categories || []).filter(c => c.enabled !== false))
+      .forEach(category => {
         const option = document.createElement("option");
         option.value = category.id;
         option.textContent = category.label;
         els.templateCategory.appendChild(option);
       });
-      els.templateCategory.value = state.selectedCategory || els.templateCategory.value;
+  }
+
+  function updateTemplatePreview() {
+    if (!els.templatePreviewText || !els.templatePreviewMeta) return;
+
+    const response = asString(els.templateResponse?.value).trim();
+    const categoryId = asString(els.templateCategory?.value).trim();
+    const category = getCategory(categoryId);
+    const typeResponse = asString(els.templateType?.value || "CORTA").toUpperCase();
+
+    els.templatePreviewText.textContent =
+      response || "Tu respuesta aparecerá aquí mientras la escribes.";
+    els.templatePreviewMeta.textContent =
+      `${typeResponse.charAt(0) + typeResponse.slice(1).toLowerCase()} · ${category?.label || "Sin categoría"}`;
+  }
+
+  function openTemplateModal(templateId) {
+    if (!els.templateModal) return;
+
+    const template = templateId ? getTemplate(templateId) : null;
+    state.editingTemplateId = template?.source === "DB" ? template.id : null;
+
+    if (els.templateForm) els.templateForm.reset();
+    populateTemplateCategorySelect();
+
+    if (template && state.editingTemplateId) {
+      if (els.templateModalTitle) els.templateModalTitle.textContent = "Editar plantilla";
+      if (els.templateModalSubtitle) {
+        els.templateModalSubtitle.textContent = "Actualiza la respuesta sin cambiar su identificador.";
+      }
+      if (els.templateSaveText) els.templateSaveText.textContent = "Guardar cambios";
+      if (els.templateTitle) els.templateTitle.value = template.title || "";
+      if (els.templateCategory) els.templateCategory.value = template.category || "";
+      if (els.templateType) {
+        els.templateType.value = asString(template.meta?.tipo_respuesta || "CORTA").toUpperCase();
+      }
+      if (els.templateKeywords) {
+        els.templateKeywords.value = (template.meta?.keywords || []).join(", ");
+      }
+      if (els.templateResponse) els.templateResponse.value = template.response || "";
+    } else {
+      if (els.templateModalTitle) els.templateModalTitle.textContent = "Nueva plantilla";
+      if (els.templateModalSubtitle) {
+        els.templateModalSubtitle.textContent = "Crea una respuesta reutilizable en menos de un minuto.";
+      }
+      if (els.templateSaveText) els.templateSaveText.textContent = "Guardar plantilla";
+      if (els.templateType) els.templateType.value = "CORTA";
+
+      if (els.templateCategory) {
+        els.templateCategory.value = state.selectedCategory || els.templateCategory.value;
+      }
+
+      if (els.templateResponse && getResponseValue().trim()) {
+        els.templateResponse.value = getResponseValue().trim();
+      }
     }
 
-    if (els.templateResponse && getResponseValue().trim()) {
-      els.templateResponse.value = getResponseValue().trim();
-    }
-
+    updateTemplatePreview();
     els.templateModal.hidden = false;
     document.body.classList.add("ac-modal-open");
-    setTimeout(() => els.templateTitle?.focus(), 0);
+
+    global.requestAnimationFrame(() => {
+      els.templateTitle?.focus({ preventScroll: true });
+    });
   }
 
   function closeTemplateModal() {
     if (!els.templateModal) return;
     els.templateModal.hidden = true;
+    state.editingTemplateId = null;
     document.body.classList.remove("ac-modal-open");
   }
 
-  async function saveNewTemplate(event) {
+  async function saveTemplate(event) {
     event?.preventDefault?.();
 
     const title = asString(els.templateTitle?.value).trim();
@@ -1252,14 +1406,14 @@
     const typeResponse = asString(els.templateType?.value || "CORTA").trim().toUpperCase();
 
     if (!title || !category || !response) {
-      showToast("Completa título, categoría y respuesta.", "warning");
+      showToast("Completa nombre, categoría y respuesta.", "warning");
       return false;
     }
 
     if (els.templateSave) els.templateSave.disabled = true;
 
     try {
-      const result = await apiPost("AC_crearPlantilla", {
+      const payload = {
         AMBITO: state.selectedScope || "PROSPECTO",
         CATEGORIA: category,
         TITULO: title,
@@ -1274,15 +1428,30 @@
         },
         CONTEXTO_JSON: {},
         ESTADO: "ACTIVO"
-      });
+      };
+
+      const editingId = state.editingTemplateId;
+      const action = editingId ? "AC_actualizarPlantilla" : "AC_crearPlantilla";
+      if (editingId) payload.ID = editingId;
+
+      const result = await apiPost(action, payload);
 
       if (!result || result.success === false) {
         throw new Error(result?.message || "No se pudo guardar la plantilla");
       }
 
       await loadBackendTemplates();
+
+      const savedId = editingId || result.id || result.ID || result.registro?.ID;
+      if (savedId) {
+        selectTemplate(savedId);
+      }
+
       closeTemplateModal();
-      showToast("Plantilla guardada y disponible.", "success");
+      showToast(
+        editingId ? "Plantilla actualizada." : "Plantilla guardada y disponible.",
+        "success"
+      );
       return true;
     } catch (error) {
       console.error("[Asistente Comercial] Guardar plantilla:", error);
@@ -1291,6 +1460,75 @@
     } finally {
       if (els.templateSave) els.templateSave.disabled = false;
     }
+  }
+
+  async function duplicateTemplate(templateId) {
+    const template = getTemplate(templateId);
+    if (!template || template.source !== "DB") return false;
+
+    try {
+      const result = await apiPost("AC_duplicarPlantilla", {
+        ID: templateId,
+        cambios: {
+          TITULO: (template.title || "Plantilla") + " — copia"
+        }
+      });
+
+      if (!result || result.success === false) {
+        throw new Error(result?.message || "No se pudo duplicar");
+      }
+
+      await loadBackendTemplates();
+      showToast("Plantilla duplicada.", "success");
+      return true;
+    } catch (error) {
+      console.error("[Asistente Comercial] Duplicar plantilla:", error);
+      showToast("No se pudo duplicar la plantilla.", "danger");
+      return false;
+    }
+  }
+
+  async function deactivateTemplate(templateId) {
+    const template = getTemplate(templateId);
+    if (!template || template.source !== "DB") return false;
+
+    const accepted = global.confirm(
+      '¿Desactivar "' + (template.title || "esta plantilla") + '"? No se eliminará de la base.'
+    );
+    if (!accepted) return false;
+
+    try {
+      const result = await apiPost("AC_cambiarEstadoPlantilla", {
+        ID: templateId,
+        ESTADO: "INACTIVO"
+      });
+
+      if (!result || result.success === false) {
+        throw new Error(result?.message || "No se pudo desactivar");
+      }
+
+      if (state.selectedTemplateId === templateId) clearSelection();
+      await loadBackendTemplates();
+      showToast("Plantilla desactivada.", "success");
+      return true;
+    } catch (error) {
+      console.error("[Asistente Comercial] Desactivar plantilla:", error);
+      showToast("No se pudo desactivar la plantilla.", "danger");
+      return false;
+    }
+  }
+
+  function showTemplateMenu(templateId) {
+    const template = getTemplate(templateId);
+    if (!template || template.source !== "DB") return;
+
+    const option = global.prompt(
+      "Opciones de plantilla:\\n1 = Editar\\n2 = Duplicar\\n3 = Desactivar\\n\\nEscribe 1, 2 o 3:"
+    );
+
+    if (option === "1") openTemplateModal(templateId);
+    if (option === "2") duplicateTemplate(templateId);
+    if (option === "3") deactivateTemplate(templateId);
   }
 
   function scrollToElement(element) {
@@ -1347,11 +1585,33 @@
     }
 
     if (els.newTemplateButton) {
-      els.newTemplateButton.addEventListener("click", openTemplateModal);
+      els.newTemplateButton.addEventListener("click", () => openTemplateModal());
     }
 
     if (els.templateModalClose) {
       els.templateModalClose.addEventListener("click", closeTemplateModal);
+    }
+
+    if (els.templateCancel) {
+      els.templateCancel.addEventListener("click", closeTemplateModal);
+    }
+
+    [els.templateTitle, els.templateCategory, els.templateKeywords,
+     els.templateResponse, els.templateType].filter(Boolean).forEach(control => {
+      control.addEventListener("input", updateTemplatePreview);
+      control.addEventListener("change", updateTemplatePreview);
+    });
+
+    if (els.quickClose) {
+      els.quickClose.addEventListener("click", closeQuickSheet);
+    }
+
+    if (els.quickCopy) {
+      els.quickCopy.addEventListener("click", copyResponse);
+    }
+
+    if (els.quickWhatsApp) {
+      els.quickWhatsApp.addEventListener("click", openWhatsApp);
     }
 
     if (els.templateModal) {
@@ -1361,15 +1621,21 @@
     }
 
     if (els.templateForm) {
-      els.templateForm.addEventListener("submit", saveNewTemplate);
+      els.templateForm.addEventListener("submit", saveTemplate);
     }
 
     if (els.modeResponder) {
-      els.modeResponder.addEventListener("click", () => scrollToElement(els.messageCard));
+      els.modeResponder.addEventListener("click", () => {
+        setMobileMode("RESPONDER");
+        scrollToElement(els.messageCard);
+      });
     }
 
     if (els.modePlantillas) {
-      els.modePlantillas.addEventListener("click", () => scrollToElement(els.libraryCard));
+      els.modePlantillas.addEventListener("click", () => {
+        setMobileMode("PLANTILLAS");
+        scrollToElement(els.libraryCard);
+      });
     }
 
     if (els.clearButton) {
@@ -1401,6 +1667,18 @@
         const button = event.target.closest("[data-category]");
         if (!button) return;
         setCategory(button.dataset.category, { autoSuggest: true, autoDetected: false });
+      });
+    }
+
+    if (els.libraryCategoriesContainer) {
+      els.libraryCategoriesContainer.addEventListener("click", event => {
+        const button = event.target.closest("[data-category]");
+        if (!button) return;
+        setCategory(button.dataset.category, {
+          autoSuggest: false,
+          autoDetected: false
+        });
+        renderTemplateList();
       });
     }
 
@@ -1477,6 +1755,13 @@
       event.preventDefault();
       event.stopPropagation();
       toggleFavorite(templateId);
+      return;
+    }
+
+    if (actionButton?.dataset.action === "menu") {
+      event.preventDefault();
+      event.stopPropagation();
+      showTemplateMenu(templateId);
       return;
     }
 
