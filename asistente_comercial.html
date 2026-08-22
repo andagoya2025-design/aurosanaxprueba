@@ -21,7 +21,7 @@
   >
 
   <!-- Estilos independientes del módulo -->
-  <link rel="stylesheet" href="asistente_comercial.css?v=1.1.0">
+  <link rel="stylesheet" href="asistente_comercial.css?v=1.2.0">
 </head>
 
 <body>
@@ -267,6 +267,17 @@
             </div>
 
             <div class="ac-card-body">
+              <section class="ac-mobile-template-picker" aria-label="Categorías de plantillas">
+                <div class="ac-picker-heading">
+                  <div>
+                    <span class="ac-picker-eyebrow">Acceso rápido</span>
+                    <strong>Elige una categoría</strong>
+                  </div>
+                  <span class="ac-picker-hint">1 toque</span>
+                </div>
+                <div id="acCategoriasBiblioteca" class="ac-category-grid-mobile"></div>
+              </section>
+
               <div class="ac-filter-bar">
                 <div class="ac-search-wrap">
                   <i class="bi bi-search" aria-hidden="true"></i>
@@ -420,52 +431,108 @@
 
 
       <div class="ac-modal-backdrop" id="acTemplateModal" hidden>
-        <section class="ac-modal" role="dialog" aria-modal="true" aria-labelledby="acTplModalTitle">
-          <div class="ac-modal-head">
-            <div>
-              <h2 id="acTplModalTitle">Nueva plantilla</h2>
-              <p>Guárdala una vez y quedará disponible para futuras respuestas.</p>
+        <section class="ac-modal ac-template-editor" role="dialog" aria-modal="true" aria-labelledby="acTplModalTitle">
+          <div class="ac-modal-head ac-template-editor-head">
+            <div class="ac-template-editor-heading">
+              <span class="ac-editor-icon" aria-hidden="true">
+                <i class="bi bi-lightning-charge-fill"></i>
+              </span>
+              <div>
+                <span class="ac-editor-kicker">Biblioteca de respuestas</span>
+                <h2 id="acTplModalTitle">Nueva plantilla</h2>
+                <p id="acTplModalSubtitle">Crea una respuesta reutilizable en menos de un minuto.</p>
+              </div>
             </div>
             <button type="button" class="ac-icon-btn" id="acTemplateModalClose" aria-label="Cerrar">
               <i class="bi bi-x-lg"></i>
             </button>
           </div>
-          <form id="acTemplateForm" class="ac-modal-body">
-            <div class="ac-form-grid">
-              <label>
-                <span>Título</span>
-                <input class="ac-field" id="acTplTitulo" maxlength="120" required placeholder="Ej. Precio consulta">
+
+          <form id="acTemplateForm" class="ac-modal-body ac-template-editor-body">
+            <div class="ac-editor-tip">
+              <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+              <span>
+                <strong>Consejo:</strong> usa un título fácil de reconocer y agrega palabras que tus pacientes suelen escribir.
+              </span>
+            </div>
+
+            <div class="ac-form-grid ac-editor-grid">
+              <label class="ac-editor-field">
+                <span class="ac-editor-label">Nombre de la plantilla</span>
+                <small>Solo para identificarla dentro de la biblioteca.</small>
+                <input class="ac-field" id="acTplTitulo" maxlength="120" required placeholder="Ej. Precio consulta ginecológica">
               </label>
-              <label>
-                <span>Categoría</span>
+
+              <label class="ac-editor-field">
+                <span class="ac-editor-label">Categoría</span>
+                <small>Define dónde aparecerá para encontrarla rápido.</small>
                 <select class="ac-select" id="acTplCategoria" required></select>
               </label>
-              <label>
-                <span>Tipo de respuesta</span>
+
+              <label class="ac-editor-field">
+                <span class="ac-editor-label">Extensión de la respuesta</span>
+                <small>Corta es la opción recomendada para redes y WhatsApp.</small>
                 <select class="ac-select" id="acTplTipo">
-                  <option value="CORTA">Corta</option>
-                  <option value="MEDIA">Media</option>
-                  <option value="LARGA">Larga</option>
+                  <option value="CORTA" selected>Corta · rápida</option>
+                  <option value="MEDIA">Media · explicativa</option>
+                  <option value="LARGA">Larga · instrucciones</option>
                 </select>
               </label>
-              <label>
-                <span>Palabras clave</span>
-                <input class="ac-field" id="acTplKeywords" placeholder="precio, consulta, valor">
+
+              <label class="ac-editor-field">
+                <span class="ac-editor-label">Palabras que activan esta respuesta</span>
+                <small>Sepáralas con coma. Ej.: precio, costo, valor, cuánto cuesta.</small>
+                <input class="ac-field" id="acTplKeywords" placeholder="precio, costo, valor, consulta">
               </label>
             </div>
-            <label class="ac-form-full">
-              <span>Respuesta</span>
+
+            <label class="ac-form-full ac-editor-field ac-editor-response-field">
+              <span class="ac-editor-label">Respuesta lista para copiar</span>
+              <small>Este es el texto que aparecerá cuando selecciones la plantilla.</small>
               <textarea class="ac-textarea" id="acTplRespuesta" rows="7" required placeholder="Escribe la respuesta que quieres reutilizar..."></textarea>
             </label>
-            <div class="ac-modal-actions">
-              <button type="button" class="ac-btn ac-btn-line" onclick="document.getElementById('acTemplateModalClose').click()">Cancelar</button>
+
+            <div class="ac-editor-preview" id="acTplPreview" aria-live="polite">
+              <div class="ac-editor-preview-head">
+                <span><i class="bi bi-eye"></i> Vista previa</span>
+                <small id="acTplPreviewMeta">Corta · Sin categoría</small>
+              </div>
+              <p id="acTplPreviewText">Tu respuesta aparecerá aquí mientras la escribes.</p>
+            </div>
+
+            <div class="ac-modal-actions ac-editor-actions">
+              <button type="button" class="ac-btn ac-btn-line" id="acTplCancelar">Cancelar</button>
               <button type="submit" class="ac-btn ac-btn-primary" id="acTplGuardar">
-                <i class="bi bi-save"></i> Guardar plantilla
+                <i class="bi bi-check2-circle"></i>
+                <span id="acTplGuardarTexto">Guardar plantilla</span>
               </button>
             </div>
           </form>
         </section>
       </div>
+
+      <!-- Vista rápida móvil: aparece al tocar una plantilla sin obligar a recorrer la página -->
+      <aside class="ac-quick-sheet" id="acQuickSheet" hidden aria-live="polite">
+        <div class="ac-quick-sheet-grabber" aria-hidden="true"></div>
+        <div class="ac-quick-sheet-head">
+          <div>
+            <span class="ac-quick-category" id="acQuickCategory">Plantilla</span>
+            <strong id="acQuickTitle">Respuesta seleccionada</strong>
+          </div>
+          <button type="button" class="ac-icon-btn ac-quick-close" id="acQuickClose" aria-label="Cerrar vista rápida">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <div class="ac-quick-response" id="acQuickResponse"></div>
+        <div class="ac-quick-actions">
+          <button type="button" class="ac-btn ac-btn-primary" id="acQuickCopy">
+            <i class="bi bi-copy"></i> Copiar
+          </button>
+          <button type="button" class="ac-btn ac-btn-whatsapp" id="acQuickWhatsApp">
+            <i class="bi bi-whatsapp"></i> WhatsApp
+          </button>
+        </div>
+      </aside>
 
       <footer class="ac-footer-meta">
         <span id="acVersion">Asistente Comercial</span>
@@ -495,7 +562,7 @@
   <!-- =========================================================
        MOTOR
        ========================================================= -->
-  <script src="asistente_comercial.js?v=1.1.0"></script>
+  <script src="asistente_comercial.js?v=1.2.0"></script>
 
   <!-- =========================================================
        ADAPTADOR VISUAL LOCAL
