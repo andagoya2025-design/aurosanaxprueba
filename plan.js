@@ -148,6 +148,7 @@ window.auroPlanMedicamentoEditandoIndice =
     Number.isInteger(window.auroPlanMedicamentoEditandoIndice)
         ? window.auroPlanMedicamentoEditandoIndice
         : null;
+
 const AURO_PLAN_VIAS_COMPLETAS = {
     'VO': 'Vía oral',
     'ORAL': 'Vía oral',
@@ -296,6 +297,7 @@ function auroPlanInstalarAyudaIndicaciones(){
     selector.id = 'auroPlanIndicacionRapida';
     selector.className = 'form-select form-select-sm auro-plan-ayuda-select';
     selector.setAttribute('aria-label', 'Sugerencias rápidas de indicaciones');
+
     selector.innerHTML =
         '<option value="">Elegir indicación rápida...</option>' +
         AURO_PLAN_INDICACIONES_RAPIDAS
@@ -495,7 +497,8 @@ function auroPlanParseJSONSeguro(valor, fallback){
 
 function auroPlanClaveUnica(partes){
     return (partes || [])
-        .map(v => normalizarTextoPlan(v))        .join('|');
+        .map(v => normalizarTextoPlan(v))
+        .join('|');
 }
 
 function auroPlanOrdenesUnicas(lista){
@@ -526,18 +529,11 @@ function auroPlanOrdenesUnicas(lista){
     return Array.from(mapa.values());
 }
 
-/* ============================================================
-   AUROSANAX FIX QUIRÚRGICO INTERCONSULTA 2026-08-22
-   - Una misma interconsulta no se duplica al completar motivo/observaciones.
-   - Conserva datos clínicos existentes ante campos vacíos/default.
-   - Mantiene separadas interconsultas con profesionales explícitamente distintos.
-   - No cambia estructura JSON, id_atencion ni contratos de persistencia.
-============================================================ */
 function auroPlanInterconsultasUnicas(lista){
-    const resultado = [];
+    const mapa = new Map();
 
-    function normalizarItem(item){
-        return {
+    (Array.isArray(lista) ? lista : []).forEach(item => {
+        const normalizada = {
             tipo: String(item?.tipo || '').trim(),
             especialidad: String(item?.especialidad || '').trim(),
             prioridad: String(item?.prioridad || 'Normal').trim() || 'Normal',
@@ -546,113 +542,33 @@ function auroPlanInterconsultasUnicas(lista){
             motivo: String(item?.motivo || '').trim(),
             observaciones: String(item?.observaciones || item?.observacion || '').trim()
         };
-    }
 
-    function tieneContenido(item){
-        return !!(
-            item.tipo ||
-            item.especialidad ||
-            item.profesional ||
-            item.motivo ||
-            item.observaciones
-        );
-    }
-
-    function mismaInterconsulta(a, b){
-        const tipoA = normalizarTextoPlan(a?.tipo);
-        const tipoB = normalizarTextoPlan(b?.tipo);
-        const espA = normalizarTextoPlan(a?.especialidad);
-        const espB = normalizarTextoPlan(b?.especialidad);
-        const profA = normalizarTextoPlan(a?.profesional);
-        const profB = normalizarTextoPlan(b?.profesional);
-
-        if(tipoA !== tipoB) return false;
-        if(espA !== espB) return false;
-
-        /*
-          Profesional forma parte de la identidad solo cuando ambos
-          registros lo tienen explícitamente informado. Esto permite
-          completar después una interconsulta sin crear un duplicado.
-        */
-        if(profA && profB && profA !== profB) return false;
-
-        return true;
-    }
-
-    function fusionar(existing, incoming){
-        const salida = {...existing};
-
-        if(incoming.tipo) salida.tipo = incoming.tipo;
-        if(incoming.especialidad) salida.especialidad = incoming.especialidad;
-        if(incoming.profesional) salida.profesional = incoming.profesional;
-
-        /*
-          "Normal" es el valor inicial del formulario y no debe degradar
-          una prioridad clínica ya más específica.
-        */
-        const prioridadExistente = normalizarTextoPlan(salida.prioridad);
-        const prioridadNueva = normalizarTextoPlan(incoming.prioridad);
-
-        if(
-            incoming.prioridad &&
-            (
-                !salida.prioridad ||
-                prioridadNueva !== 'normal' ||
-                prioridadExistente === 'normal'
-            )
-        ){
-            salida.prioridad = incoming.prioridad;
-        }
-
-        /*
-          "Pendiente" es el estado inicial y no debe sobrescribir
-          un estado posterior ya registrado.
-        */
-        const estadoExistente = normalizarTextoPlan(salida.estado);
-        const estadoNuevo = normalizarTextoPlan(incoming.estado);
-
-        if(
-            incoming.estado &&
-            (
-                !salida.estado ||
-                estadoNuevo !== 'pendiente' ||
-                estadoExistente === 'pendiente'
-            )
-        ){
-            salida.estado = incoming.estado;
-        }
-
-        /*
-          Motivo y observaciones son datos clínicos editables:
-          un valor nuevo no vacío completa/actualiza; un campo vacío
-          nunca borra información ya registrada.
-        */
-        if(incoming.motivo) salida.motivo = incoming.motivo;
-        if(incoming.observaciones) salida.observaciones = incoming.observaciones;
-
-        salida.prioridad = String(salida.prioridad || 'Normal').trim() || 'Normal';
-        salida.estado = String(salida.estado || 'Pendiente').trim() || 'Pendiente';
-
-        return salida;
-    }
-
-    (Array.isArray(lista) ? lista : []).forEach(item => {
-        const normalizada = normalizarItem(item);
-        if(!tieneContenido(normalizada)) return;
-
-        const indice = resultado.findIndex(actual =>
-            mismaInterconsulta(actual, normalizada)
+        const tieneContenido = !!(
+            normalizada.tipo ||
+            normalizada.especialidad ||
+            normalizada.profesional ||
+            normalizada.motivo ||
+            normalizada.observaciones
         );
 
-        if(indice === -1){
-            resultado.push(normalizada);
-            return;
-        }
+        if(!tieneContenido) return;
 
-        resultado[indice] = fusionar(resultado[indice], normalizada);
+        const clave = auroPlanClaveUnica([
+            normalizada.tipo,
+            normalizada.especialidad,
+            normalizada.prioridad,
+            normalizada.profesional,
+            normalizada.estado,
+            normalizada.motivo,
+            normalizada.observaciones
+        ]);
+
+        if(!mapa.has(clave)){
+            mapa.set(clave, normalizada);
+        }
     });
 
-    return resultado;
+    return Array.from(mapa.values());
 }
 
 function auroPlanEvaluacionesSeleccionadasJSON(){
@@ -981,6 +897,7 @@ function guardarPlanTemporal(){
 
         interconsultaTexto:
             document.getElementById('hcInterconsultaResumen')?.value || '',
+
         evaluaciones:
             document.getElementById('hcEvaluacionesResumen')?.value || '',
 
@@ -1023,7 +940,6 @@ function cargarPlanTemporal(idAtencion){
     auroPlanSetValue('hcIndicacionesPaciente', auroPlanValorClinicoATexto(data.indicaciones || ''));
     auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
     auroPlanSetValue('hcInterconsultaResumen', data.interconsultaTexto || '');
-    auroPlanRestaurarFormularioInterconsultaDesdeLista();
     auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
     auroPlanRestaurarEvaluaciones(data.evaluacionesChecks || {});
     auroPlanSetValue('hcRecetaMedicamentos', auroPlanValorClinicoATexto(data.receta || ''));
@@ -1181,7 +1097,8 @@ function auroPlanOrdenYaEnPlan(textoOrden){
     const objetivo = normalizarTextoPlan(textoOrden);
     if(!objetivo) return false;
 
-    return (window.ordenesMedicasPlanSeleccionadas || []).some(function(o){        return normalizarTextoPlan(o?.orden || o?.nombre || '') === objetivo;
+    return (window.ordenesMedicasPlanSeleccionadas || []).some(function(o){
+        return normalizarTextoPlan(o?.orden || o?.nombre || '') === objetivo;
     });
 }
 
@@ -1380,7 +1297,8 @@ function auroPlanInstalarEstilosSugerenciasDiagnosticas(){
       #auroPlanSugerenciasDx .auro-plan-dx-name{color:#1f2937;font-size:11px;line-height:1.25;font-weight:850;overflow-wrap:anywhere}
       #auroPlanSugerenciasDx .auro-plan-dx-kind{flex:0 0 auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:8.5px;font-weight:900;white-space:nowrap}
       #auroPlanSugerenciasDx .auro-plan-dx-card.principal .auro-plan-dx-kind{background:#fdf2f8;color:#8b1e5a}
-      #auroPlanSugerenciasDx .auro-plan-dx-med-resumen{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}      #auroPlanSugerenciasDx .auro-plan-dx-med-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;color:#334155;font-size:9.5px;font-weight:800;line-height:1.15}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-resumen{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;color:#334155;font-size:9.5px;font-weight:800;line-height:1.15}
       #auroPlanSugerenciasDx .auro-plan-dx-med-chip.en-plan{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
       #auroPlanSugerenciasDx .auro-plan-dx-med-chip input{margin:0;accent-color:#8b1e5a}
       #auroPlanSugerenciasDx .auro-plan-dx-med-chip small{font-size:7.8px;font-weight:950}
@@ -1580,6 +1498,7 @@ function auroPlanRenderSugerenciasDiagnosticas(){
                   </div>
                   <span class="auro-plan-dx-kind">${g.principal ? 'Principal' : 'Asociado'}${g.tipo ? ' · ' + escapeHtmlPlan(g.tipo) : ''}</span>
                 </div>
+
                 ${!g.protocolos.length
                     ? '<div class="auro-plan-dx-empty">No hay protocolo clínico configurado para este CIE-10.</div>'
                     : auroPlanMedicamentosResumenCompactoDx(g, grupoIndex)}
@@ -1779,6 +1698,7 @@ function auroPlanAplicarSeleccionadosSugerenciasDx(grupoLimitado){
         setTimeout(() => status.classList.remove('show'), 4500);
     }
 }
+
 function auroPlanInstalarEventosSugerenciasDiagnosticas(){
     if(window.__auroPlanEventosSugerenciasDxInstalados) return;
     window.__auroPlanEventosSugerenciasDxInstalados = true;
@@ -1978,6 +1898,7 @@ function agregarMedicamentoDesdeFormulario(){
 
     if(editando){
         const anterior = window.medicamentosPlanSeleccionados[indice] || {};
+
         /*
           Conserva cualquier propiedad adicional proveniente de protocolos
           inteligentes, pero actualiza únicamente los campos visibles del Plan.
@@ -2377,6 +2298,7 @@ function recopilarOrdenesMedicasPlan(){
 }
 
 function limpiarOrdenesMedicasPlan(){
+
     window.ordenesMedicasPlanSeleccionadas = [];
 
     renderOrdenesMedicasTabla();
@@ -2384,75 +2306,6 @@ function limpiarOrdenesMedicasPlan(){
     guardarPlanTemporal();
 }
 
-
-/* ============================================================
-   AUROSANAX PLAN - FIX QUIRÚRGICO INTERCONSULTA v29
-   PERSISTENCIA + RECARGA VISIBLE
-   - Restaura los campos del formulario desde la interconsulta real
-     de la atención cargada.
-   - No crea registros, no guarda automáticamente y no toca id_atencion.
-   - Si existen varias interconsultas, prioriza la más completa y reciente
-     del arreglo ya cargado, sin eliminar las demás.
-============================================================ */
-
-function auroPlanRestaurarFormularioInterconsultaDesdeLista(){
-    const lista = Array.isArray(window.interconsultasPlanSeleccionadas)
-        ? window.interconsultasPlanSeleccionadas
-        : [];
-
-    if(!lista.length){
-        limpiarFormularioInterconsulta();
-        return null;
-    }
-
-    const puntuar = function(item){
-        let puntos = 0;
-        if(String(item?.tipo || '').trim()) puntos += 1;
-        if(String(item?.especialidad || '').trim()) puntos += 2;
-        if(String(item?.profesional || '').trim()) puntos += 2;
-        if(String(item?.motivo || '').trim()) puntos += 4;
-        if(String(item?.observaciones || item?.observacion || '').trim()) puntos += 4;
-
-        const prioridad = normalizarTextoPlan(item?.prioridad);
-        const estado = normalizarTextoPlan(item?.estado);
-
-        if(prioridad && prioridad !== 'normal') puntos += 1;
-        if(estado && estado !== 'pendiente') puntos += 1;
-
-        return puntos;
-    };
-
-    /*
-      En empate se prefiere el registro situado más adelante.
-      Esto es compatible con datos históricos donde una versión más
-      completa se agregó después de una versión incompleta.
-    */
-    let indiceElegido = 0;
-    let mejorPuntaje = -1;
-
-    lista.forEach(function(item, index){
-        const puntaje = puntuar(item);
-        if(puntaje >= mejorPuntaje){
-            mejorPuntaje = puntaje;
-            indiceElegido = index;
-        }
-    });
-
-    const item = lista[indiceElegido] || {};
-
-    auroPlanSetValue('hcInterconsultaTipo', item.tipo || '');
-    auroPlanSetValue('hcInterconsultaEspecialidad', item.especialidad || '');
-    auroPlanSetValue('hcInterconsultaPrioridad', item.prioridad || 'Normal');
-    auroPlanSetValue('hcInterconsultaProfesional', item.profesional || '');
-    auroPlanSetValue('hcInterconsultaEstado', item.estado || 'Pendiente');
-    auroPlanSetValue('hcInterconsultaMotivo', item.motivo || '');
-    auroPlanSetValue(
-        'hcInterconsultaObservaciones',
-        item.observaciones || item.observacion || ''
-    );
-
-    return item;
-}
 
 /* ============================================================
    INTERCONSULTAS DEL PLAN
@@ -2944,6 +2797,7 @@ function instalarResponsivePlanAndroid(){
         font-weight:800;
         white-space:nowrap;
       }
+
       #hc_plan .auro-plan-acciones-medicamento{
         display:flex;
         align-items:center;
@@ -3243,7 +3097,8 @@ if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
         }
 
         return {
-            motivo_correccion_tipo: tipo,            motivo_correccion_detalle: detalle,
+            motivo_correccion_tipo: tipo,
+            motivo_correccion_detalle: detalle,
             motivo_correccion: detalle ? (tipo + ': ' + detalle) : tipo,
             correccion_excepcional: excepcional ? 'SI' : 'NO'
         };
@@ -3437,37 +3292,6 @@ function auroPlanPrepararDatosSheets(){
 
     auroSincronizarPlanAntesGuardar();
 
-    /*
-      AUROSANAX v29 - refuerzo defensivo de persistencia.
-      Si existe información escrita en Interconsulta, se vuelve a fusionar
-      justo antes de construir el payload. No guarda por sí solo: únicamente
-      protege el contenido del botón Guardar plan clínico.
-    */
-    const interconsultaVisibleAntesDeGuardar = {
-        tipo: auroPlanGetValue('hcInterconsultaTipo'),
-        especialidad: auroPlanGetValue('hcInterconsultaEspecialidad'),
-        prioridad: auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal',
-        profesional: auroPlanGetValue('hcInterconsultaProfesional'),
-        estado: auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente',
-        motivo: auroPlanGetValue('hcInterconsultaMotivo'),
-        observaciones: auroPlanGetValue('hcInterconsultaObservaciones')
-    };
-
-    const hayInterconsultaVisible = !!(
-        String(interconsultaVisibleAntesDeGuardar.tipo || '').trim() ||
-        String(interconsultaVisibleAntesDeGuardar.especialidad || '').trim() ||
-        String(interconsultaVisibleAntesDeGuardar.profesional || '').trim() ||
-        String(interconsultaVisibleAntesDeGuardar.motivo || '').trim() ||
-        String(interconsultaVisibleAntesDeGuardar.observaciones || '').trim()
-    );
-
-    if(hayInterconsultaVisible){
-        window.interconsultasPlanSeleccionadas = auroPlanInterconsultasUnicas([
-            ...(window.interconsultasPlanSeleccionadas || []),
-            interconsultaVisibleAntesDeGuardar
-        ]);
-    }
-
     const contexto = auroPlanObtenerContextoAtencionSeguro();
     const paciente = auroPlanObtenerPacienteActivoSeguro();
 
@@ -3574,6 +3398,7 @@ async function guardarPlanClinicoDesdeSheets(){
             message: 'No existe id_atencion actual para guardar el Plan.'
         };
     }
+
     const existente = await buscarPlanClinicoPorAtencionDesdeSheets(
         data.id_atencion
     );
@@ -3862,8 +3687,6 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
             : auroPlanTextoAInterconsultas(interconsultaValor)
     );
 
-    auroPlanRestaurarFormularioInterconsultaDesdeLista();
-
     auroPlanSetValue('hcPlanTratamiento',
         valorPlan('plan_terapeutico','planTratamiento','plan_tratamiento')
     );
@@ -3875,6 +3698,7 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     );
 
     auroPlanSetValue('hcExamenesSolicitados', '');
+
     auroPlanSetValue('hcInterconsultaResumen', '');
 
     const evaluacionesValor = valorPlan(
@@ -3903,7 +3727,6 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     renderOrdenesMedicasTabla();
     renderInterconsultasTabla();
 
-    auroPlanRestaurarFormularioInterconsultaDesdeLista();
     recopilarOrdenesMedicasPlan();
     recopilarInterconsultaPlan();
     recopilarEvaluacionesPlan();
@@ -4174,7 +3997,8 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
    AUROSANAX PLAN - CORRECCIÓN NAVEGACIÓN MISMA ATENCIÓN
    - No limpia el Plan al volver a la misma consulta
    - No recarga Sheets sobre cambios temporales de la misma atención
-   - Verifica la atención activa antes de una carga diferida============================================================ */
+   - Verifica la atención activa antes de una carga diferida
+============================================================ */
 
 /* ============================================================
    AUROSANAX PLAN - FIX SINCRONIZACIÓN ID_ATENCION
@@ -4473,7 +4297,8 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
             data:clonarSeguro(anterior)
         };
 
-        limpiarSoloPantallaYCache(validacion.idAtencion);        actualizarEstadoBoton();
+        limpiarSoloPantallaYCache(validacion.idAtencion);
+        actualizarEstadoBoton();
     }
 
     function deshacerLimpieza(){
