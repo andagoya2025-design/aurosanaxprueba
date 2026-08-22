@@ -8205,7 +8205,12 @@ function imprimirHistoriaClinica(){
       ['Estado', auroInformeValue('hcInterconsultaEstado')],
       ['Motivo', auroInformeValue('hcInterconsultaMotivo')],
       ['Observaciones', auroInformeValue('hcInterconsultaObservaciones')]
-    ].filter(([,v]) => String(v || '').trim() && !/^(seleccione|pendiente)$/i.test(String(v).trim()));
+    ].filter(([,v]) => {
+      const valor = String(v || '').trim();
+      // AUROSANAX V2.1 FIX INTERCONSULTA:
+      // valores iniciales del formulario no constituyen un dato clínico registrado.
+      return valor && !/^(seleccione(?:\.\.\.)?|normal|pendiente)$/i.test(valor);
+    });
     if(!partes.length) return '';
     return `<div class="auro-report-grid">${partes.map(([l,v])=>`<div class="auro-report-item"><strong>${auroInformeEscape(l)}</strong><div class="auro-report-detail"><small>${auroInformeEscape(v)}</small></div></div>`).join('')}</div>`;
   })() : '';
