@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.0.0
+ * Versión: 1.1.0
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -15,13 +15,14 @@
  * - Permitir búsqueda, selección, edición y copia.
  * - Resolver placeholders.
  * - Mantener favoritos y contador de uso de forma LOCAL.
- * - No escribir en Google Sheets ni Apps Script en esta fase.
+ * - Cargar plantillas persistentes desde Apps Script cuando esté disponible.
+ * - Mantener las plantillas locales como fallback seguro.
  * - No guardar mensajes pegados.
  *
  * SEGURIDAD / ANTIRREGRESIÓN:
  * - No depende de módulos clínicos del ERP.
  * - No modifica pacientes, historia, atenciones, agenda, caja o seguridad.
- * - No hace fetch.
+ * - Solo hace una carga GET inicial y escrituras explícitas de plantillas.
  * - No usa polling.
  * - No usa setInterval.
  * - No crea listeners globales duplicados.
@@ -63,7 +64,14 @@
     renderedResponse: "",
     favorites: new Set(),
     usage: {},
-    listenersBound: false
+    listenersBound: false,
+    categoryMode: "AUTO",
+    inputTimer: null,
+    analysisSeq: 0,
+    backendLoaded: false,
+    backendAvailable: false,
+    backendTemplateIds: new Set(),
+    libraryMode: "ALL"
   };
 
   const els = {};
@@ -191,6 +199,108 @@
 
   function saveUsage() {
     safeLocalStorageSet(STORAGE_KEYS.usage, state.usage);
+  }
+
+  /* ==========================================================
+   * BACKEND AISLADO / PERSISTENCIA DE PLANTILLAS
+   * ========================================================== */
+
+  function resolveApiUrl() {
+    const direct = asString(global.AC_API_URL || global.API_URL || global.APP_SCRIPT_URL).trim();
+    if (direct) return direct;
+
+    try {
+      return asString(global.localStorage?.getItem("AUROSANAX_API_URL")).trim();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  async function apiGet(action, params) {
+    const base = resolveApiUrl();
+    if (!base) throw new Error("API del Asistente Comercial no configurada");
+
+    const query = new URLSearchParams({ accion: action, t: Date.now() });
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) query.append(key, value);
+    });
+
+    const response = await fetch(base + "?" + query.toString(), { cache: "no-store" });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    return await response.json();
+  }
+
+  async function apiPost(action, data) {
+    const base = resolveApiUrl();
+    if (!base) throw new Error("API del Asistente Comercial no configurada");
+
+    const response = await fetch(base, {
+      method: "POST",
+      body: JSON.stringify({ accion: action, data: data || {} })
+    });
+
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    return await response.json();
+  }
+
+  function backendRecordToTemplate(row) {
+    if (!row) return null;
+
+    const meta = row.META && typeof row.META === "object"
+      ? row.META
+      : safeJsonParse(row.META_JSON || "{}", {});
+
+    return {
+      id: asString(row.ID),
+      scope: asString(row.AMBITO || "PROSPECTO"),
+      category: asString(row.CATEGORIA || "GENERAL"),
+      title: asString(row.TITULO),
+      response: asString(row.RESPUESTA),
+      meta: meta && typeof meta === "object" ? meta : {},
+      status: asString(row.ESTADO || "ACTIVO").toUpperCase(),
+      createdAt: asString(row.FECHA_CREACION),
+      updatedAt: asString(row.FECHA_ACTUALIZACION),
+      source: "DB"
+    };
+  }
+
+  function mergeBackendTemplates(rows) {
+    const dbTemplates = (Array.isArray(rows) ? rows : [])
+      .map(backendRecordToTemplate)
+      .filter(Boolean)
+      .filter(t => t.id && t.status === "ACTIVO");
+
+    state.backendTemplateIds = new Set(dbTemplates.map(t => t.id));
+
+    const local = (CONFIG.templates || []).map(t => ({ ...clone(t), source: "LOCAL" }));
+    const byId = new Map();
+
+    local.forEach(t => byId.set(t.id, t));
+    dbTemplates.forEach(t => byId.set(t.id, t));
+
+    loadTemplates([...byId.values()]);
+    state.backendLoaded = true;
+    state.backendAvailable = true;
+    renderTemplateList();
+
+    if (state.pastedMessage.length >= 3) {
+      scheduleAnalysis(true);
+    }
+
+    return dbTemplates.length;
+  }
+
+  async function loadBackendTemplates() {
+    try {
+      const rows = await apiGet("AC_listarPlantillasActivas");
+      mergeBackendTemplates(rows);
+      return true;
+    } catch (error) {
+      state.backendLoaded = true;
+      state.backendAvailable = false;
+      console.warn("[Asistente Comercial] Backend no disponible; se conserva fallback local:", error);
+      return false;
+    }
   }
 
   /* ==========================================================
@@ -367,9 +477,15 @@
     });
 
     const positive = scored.filter(item => item.score > 0);
-    const result = positive.length ? positive : scored;
 
-    return result.slice(0, max);
+    // Con mensaje recibido nunca se devuelve una plantilla arbitraria.
+    // Esto evita que la primera plantilla (p. ej. Agendamiento) aparezca
+    // cuando todavía no existe una coincidencia real.
+    if (normalizeText(message)) {
+      return positive.slice(0, max);
+    }
+
+    return scored.slice(0, max);
   }
 
   /* ==========================================================
@@ -468,6 +584,7 @@
     if (!valid) return false;
 
     state.selectedCategory = categoryId || "";
+    state.categoryMode = opts.autoDetected ? "AUTO" : (categoryId ? "MANUAL" : "AUTO");
 
     if (!opts.keepTemplate) {
       state.selectedTemplateId = null;
@@ -496,6 +613,7 @@
     state.selectedScope = scopeId;
     state.selectedTemplateId = null;
     state.selectedCategory = "";
+    state.categoryMode = "AUTO";
 
     renderScopeControls();
     renderCategoryControls();
@@ -613,30 +731,48 @@
   function runSuggestionFlow(options) {
     const opts = options || {};
     const message = opts.message ?? getMessageValue();
+    const normalized = normalizeText(message);
 
     state.pastedMessage = asString(message);
 
-    if (!normalizeText(state.pastedMessage)) {
+    if (!normalized) {
       state.suggestions = [];
-      if (!state.selectedCategory) {
-        clearSelection();
-      }
+      clearSelection();
+      if (state.categoryMode === "AUTO") state.selectedCategory = "";
+      syncCategoryUI();
       renderSuggestions();
+      showStatus(CONFIG.ui?.emptyMessage || "", "neutral");
       return [];
     }
 
-    if (!opts.category && !state.selectedCategory) {
-      const detected = detectCategory(state.pastedMessage, state.selectedScope);
-
-      if (detected.category) {
-        state.selectedCategory = detected.category;
-        syncCategoryUI();
-      }
+    if (normalized.length < 3) {
+      state.suggestions = [];
+      clearSelection();
+      if (state.categoryMode === "AUTO") state.selectedCategory = "";
+      syncCategoryUI();
+      renderSuggestions();
+      showStatus("Escribe al menos 3 caracteres para analizar.", "neutral");
+      return [];
     }
+
+    // En modo automático SIEMPRE se recalcula desde cero.
+    // Nunca reutiliza la categoría de un mensaje anterior.
+    if (state.categoryMode === "AUTO") {
+      state.selectedCategory = "";
+      const detected = detectCategory(state.pastedMessage, state.selectedScope);
+      if (detected.category && detected.score > 0) {
+        state.selectedCategory = detected.category;
+      }
+      syncCategoryUI();
+    }
+
+    const effectiveCategory = state.categoryMode === "MANUAL"
+      ? state.selectedCategory
+      : state.selectedCategory;
 
     const suggestions = suggestTemplates(state.pastedMessage, {
       scope: state.selectedScope,
-      category: opts.category ?? state.selectedCategory,
+      category: effectiveCategory,
       max: CONFIG.behavior?.maxSuggestions || 5
     });
 
@@ -645,11 +781,19 @@
 
     if (suggestions.length) {
       selectTemplate(suggestions[0].template.id, opts.context);
+      showStatus(
+        "Respuesta encontrada" +
+        (state.selectedCategory ? " · " + (getCategory(state.selectedCategory)?.label || state.selectedCategory) : ""),
+        "success"
+      );
     } else {
       clearSelection();
+      if (state.categoryMode === "AUTO") {
+        state.selectedCategory = "";
+        syncCategoryUI();
+      }
       showStatus(
-        CONFIG.ui?.noMatchMessage ||
-        "No encontré una coincidencia clara.",
+        CONFIG.ui?.noMatchMessage || "No encontré una coincidencia clara.",
         "warning"
       );
     }
@@ -666,7 +810,13 @@
     state.suggestions = [];
     state.selectedTemplateId = null;
     state.selectedCategory = "";
+    state.categoryMode = "AUTO";
     state.renderedResponse = "";
+    if (state.inputTimer) {
+      clearTimeout(state.inputTimer);
+      state.inputTimer = null;
+    }
+    state.analysisSeq += 1;
 
     setMessageValue("");
     setSearchValue("");
@@ -733,7 +883,23 @@
       favoritesButton: "acFavoritos",
       mostUsedButton: "acMasUsadas",
       categoriesContainer: "acCategorias",
-      scopesContainer: "acAmbitos"
+      scopesContainer: "acAmbitos",
+      analyzeButton: "acAnalizar",
+      whatsappButton: "acWhatsApp",
+      newTemplateButton: "acNuevaPlantilla",
+      templateModal: "acTemplateModal",
+      templateModalClose: "acTemplateModalClose",
+      templateForm: "acTemplateForm",
+      templateTitle: "acTplTitulo",
+      templateCategory: "acTplCategoria",
+      templateKeywords: "acTplKeywords",
+      templateResponse: "acTplRespuesta",
+      templateType: "acTplTipo",
+      templateSave: "acTplGuardar",
+      modeResponder: "acModoResponder",
+      modePlantillas: "acModoPlantillas",
+      messageCard: "acMensajeCard",
+      libraryCard: "acBibliotecaCard"
     };
 
     Object.entries(ids).forEach(([key, id]) => {
@@ -853,6 +1019,13 @@
 
     if (els.categoriesContainer) {
       els.categoriesContainer.innerHTML = "";
+
+      const allButton = document.createElement("button");
+      allButton.type = "button";
+      allButton.className = "ac-category-chip" + (!state.selectedCategory ? " active" : "");
+      allButton.dataset.category = "";
+      allButton.innerHTML = '<i class="bi bi-grid"></i><span>Todas</span>';
+      els.categoriesContainer.appendChild(allButton);
 
       categories.forEach(category => {
         const button = document.createElement("button");
@@ -1020,6 +1193,112 @@
   }
 
   /* ==========================================================
+   * ACCIONES MÓVILES / ADMINISTRACIÓN DE PLANTILLAS
+   * ========================================================== */
+
+  function openWhatsApp() {
+    const text = getResponseValue().trim();
+    if (!text) {
+      showToast("No hay respuesta para enviar.", "warning");
+      return false;
+    }
+
+    const url = "https://wa.me/?text=" + encodeURIComponent(text);
+    global.open(url, "_blank", "noopener,noreferrer");
+    if (state.selectedTemplateId) registerUsage(state.selectedTemplateId);
+    return true;
+  }
+
+  function openTemplateModal() {
+    if (!els.templateModal) return;
+
+    if (els.templateForm) els.templateForm.reset();
+    if (els.templateCategory) {
+      els.templateCategory.innerHTML = "";
+      sortByOrder((CONFIG.categories || []).filter(c => c.enabled !== false)).forEach(category => {
+        const option = document.createElement("option");
+        option.value = category.id;
+        option.textContent = category.label;
+        els.templateCategory.appendChild(option);
+      });
+      els.templateCategory.value = state.selectedCategory || els.templateCategory.value;
+    }
+
+    if (els.templateResponse && getResponseValue().trim()) {
+      els.templateResponse.value = getResponseValue().trim();
+    }
+
+    els.templateModal.hidden = false;
+    document.body.classList.add("ac-modal-open");
+    setTimeout(() => els.templateTitle?.focus(), 0);
+  }
+
+  function closeTemplateModal() {
+    if (!els.templateModal) return;
+    els.templateModal.hidden = true;
+    document.body.classList.remove("ac-modal-open");
+  }
+
+  async function saveNewTemplate(event) {
+    event?.preventDefault?.();
+
+    const title = asString(els.templateTitle?.value).trim();
+    const category = asString(els.templateCategory?.value).trim();
+    const response = asString(els.templateResponse?.value).trim();
+    const keywords = asString(els.templateKeywords?.value)
+      .split(",")
+      .map(v => v.trim())
+      .filter(Boolean);
+    const typeResponse = asString(els.templateType?.value || "CORTA").trim().toUpperCase();
+
+    if (!title || !category || !response) {
+      showToast("Completa título, categoría y respuesta.", "warning");
+      return false;
+    }
+
+    if (els.templateSave) els.templateSave.disabled = true;
+
+    try {
+      const result = await apiPost("AC_crearPlantilla", {
+        AMBITO: state.selectedScope || "PROSPECTO",
+        CATEGORIA: category,
+        TITULO: title,
+        RESPUESTA: response,
+        META_JSON: {
+          keywords,
+          tags: [],
+          tipo_respuesta: typeResponse,
+          priority: 50,
+          channel: "GENERAL",
+          schema_version: 1
+        },
+        CONTEXTO_JSON: {},
+        ESTADO: "ACTIVO"
+      });
+
+      if (!result || result.success === false) {
+        throw new Error(result?.message || "No se pudo guardar la plantilla");
+      }
+
+      await loadBackendTemplates();
+      closeTemplateModal();
+      showToast("Plantilla guardada y disponible.", "success");
+      return true;
+    } catch (error) {
+      console.error("[Asistente Comercial] Guardar plantilla:", error);
+      showToast("No se pudo guardar la plantilla en la base.", "danger");
+      return false;
+    } finally {
+      if (els.templateSave) els.templateSave.disabled = false;
+    }
+  }
+
+  function scrollToElement(element) {
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ==========================================================
    * EVENTOS
    * ========================================================== */
 
@@ -1042,7 +1321,7 @@
 
     if (els.category) {
       els.category.addEventListener("change", event => {
-        setCategory(event.target.value, { autoSuggest: true });
+        setCategory(event.target.value, { autoSuggest: true, autoDetected: false });
       });
     }
 
@@ -1054,6 +1333,43 @@
 
     if (els.copyButton) {
       els.copyButton.addEventListener("click", copyResponse);
+    }
+
+    if (els.analyzeButton) {
+      els.analyzeButton.addEventListener("click", () => {
+        state.pastedMessage = getMessageValue();
+        scheduleAnalysis(true);
+      });
+    }
+
+    if (els.whatsappButton) {
+      els.whatsappButton.addEventListener("click", openWhatsApp);
+    }
+
+    if (els.newTemplateButton) {
+      els.newTemplateButton.addEventListener("click", openTemplateModal);
+    }
+
+    if (els.templateModalClose) {
+      els.templateModalClose.addEventListener("click", closeTemplateModal);
+    }
+
+    if (els.templateModal) {
+      els.templateModal.addEventListener("click", event => {
+        if (event.target === els.templateModal) closeTemplateModal();
+      });
+    }
+
+    if (els.templateForm) {
+      els.templateForm.addEventListener("submit", saveNewTemplate);
+    }
+
+    if (els.modeResponder) {
+      els.modeResponder.addEventListener("click", () => scrollToElement(els.messageCard));
+    }
+
+    if (els.modePlantillas) {
+      els.modePlantillas.addEventListener("click", () => scrollToElement(els.libraryCard));
     }
 
     if (els.clearButton) {
@@ -1084,7 +1400,7 @@
       els.categoriesContainer.addEventListener("click", event => {
         const button = event.target.closest("[data-category]");
         if (!button) return;
-        setCategory(button.dataset.category, { autoSuggest: true });
+        setCategory(button.dataset.category, { autoSuggest: true, autoDetected: false });
       });
     }
 
@@ -1099,17 +1415,48 @@
     state.listenersBound = true;
   }
 
-  function handleMessageInput(event) {
-    state.pastedMessage = asString(event.target.value);
+  function scheduleAnalysis(immediate) {
+    if (state.inputTimer) clearTimeout(state.inputTimer);
 
-    if (!normalizeText(state.pastedMessage)) {
-      state.suggestions = [];
-      renderSuggestions();
-      showStatus(CONFIG.ui?.emptyMessage || "", "neutral");
+    const seq = ++state.analysisSeq;
+    const normalized = normalizeText(state.pastedMessage);
+
+    if (!normalized) {
+      runSuggestionFlow({ message: "" });
       return;
     }
 
-    runSuggestionFlow({ message: state.pastedMessage });
+    if (normalized.length < 3) {
+      runSuggestionFlow({ message: state.pastedMessage });
+      return;
+    }
+
+    showStatus("Analizando…", "neutral");
+
+    state.inputTimer = setTimeout(() => {
+      if (seq !== state.analysisSeq) return;
+      state.inputTimer = null;
+      runSuggestionFlow({ message: state.pastedMessage });
+    }, immediate ? 0 : 280);
+  }
+
+  function handleMessageInput(event) {
+    state.pastedMessage = asString(event.target.value);
+
+    // Cada mensaje nuevo invalida selección/sugerencia anterior.
+    state.suggestions = [];
+    state.selectedTemplateId = null;
+    state.renderedResponse = "";
+    setResponseValue("");
+    syncSelectedTemplateUI();
+    renderSuggestions();
+
+    if (state.categoryMode === "AUTO") {
+      state.selectedCategory = "";
+      syncCategoryUI();
+    }
+
+    scheduleAnalysis(false);
   }
 
   function handleSearchInput(event) {
@@ -1244,6 +1591,9 @@
     registerUsage,
 
     copyResponse,
+    openWhatsApp,
+    loadBackendTemplates,
+    openTemplateModal,
 
     clear: clearAll,
 
