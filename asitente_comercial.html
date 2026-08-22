@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+  <meta name="theme-color" content="#8b1e5a">
+  <meta
+    name="description"
+    content="Asistente Comercial de respuestas rápidas mediante plantillas reutilizables."
+  >
+
+  <title>Asistente Comercial</title>
+
+  <!-- Iconos únicamente. No se carga Bootstrap CSS para evitar dependencias visuales. -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+  >
+
+  <!-- Estilos independientes del módulo -->
+  <link rel="stylesheet" href="asistente_comercial.css?v=1.0.0">
+</head>
+
+<body>
+  <main id="acApp" aria-label="Asistente Comercial">
+    <div class="ac-shell">
+
+      <!-- =====================================================
+           CABECERA
+           ===================================================== -->
+      <header class="ac-topbar">
+        <div class="ac-heading-group">
+          <h1 class="ac-title" id="acTitulo">Asistente Comercial</h1>
+          <p class="ac-subtitle" id="acSubtitulo">
+            Respuestas rápidas, claras y listas para copiar.
+          </p>
+        </div>
+
+        <div class="ac-brand-chip" id="acBrandChip" aria-label="Identidad del negocio">
+          <span
+            id="acBrandLogoFallback"
+            aria-hidden="true"
+            style="
+              width:26px;
+              height:26px;
+              border-radius:8px;
+              display:grid;
+              place-items:center;
+              background:#fdf2f8;
+              color:#8b1e5a;
+              font-weight:950;
+              flex:0 0 auto;
+            "
+          >
+            AC
+          </span>
+
+          <img
+            id="acBrandLogo"
+            src=""
+            alt=""
+            hidden
+          >
+
+          <span id="acBrandName">Modo independiente</span>
+        </div>
+      </header>
+
+      <!-- =====================================================
+           HERO
+           ===================================================== -->
+      <section class="ac-hero" aria-labelledby="acHeroTitulo">
+        <div class="ac-hero-row">
+          <div class="ac-hero-main">
+            <h2 class="ac-hero-title" id="acHeroTitulo">
+              Responder más rápido sin perder el control
+            </h2>
+            <p class="ac-hero-text">
+              Pega el mensaje recibido, revisa la plantilla sugerida,
+              edítala si hace falta y copia la respuesta.
+            </p>
+          </div>
+
+          <div class="ac-hero-badges" aria-label="Características del módulo">
+            <span class="ac-badge">
+              <i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>
+              Búsqueda local
+            </span>
+            <span class="ac-badge">
+              <i class="bi bi-stars" aria-hidden="true"></i>
+              Sin IA en esta fase
+            </span>
+            <span class="ac-badge is-safe">
+              <i class="bi bi-shield-check" aria-hidden="true"></i>
+              Mensaje temporal
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- =====================================================
+           ÁMBITO
+           ===================================================== -->
+      <section class="ac-card" aria-labelledby="acAmbitoTitulo">
+        <div class="ac-card-head">
+          <div>
+            <h2 class="ac-card-title" id="acAmbitoTitulo">Ámbito de trabajo</h2>
+            <p class="ac-card-help">
+              La primera versión trabaja con prospectos. La estructura queda
+              preparada para pacientes, marketing e interno.
+            </p>
+          </div>
+        </div>
+
+        <div class="ac-card-body">
+          <div id="acAmbitos" class="ac-scope-row" aria-label="Ámbitos disponibles"></div>
+
+          <!-- Select de respaldo/accesibilidad. El motor lo utiliza si existe. -->
+          <label class="ac-label" for="acAmbito" style="margin-top:12px">
+            Ámbito
+          </label>
+          <select id="acAmbito" class="ac-select" aria-label="Seleccionar ámbito"></select>
+        </div>
+      </section>
+
+      <!-- =====================================================
+           ESPACIO PRINCIPAL
+           ===================================================== -->
+      <div class="ac-workspace" style="margin-top:18px">
+
+        <!-- =========================
+             COLUMNA IZQUIERDA
+             ========================= -->
+        <section class="ac-column">
+
+          <!-- MENSAJE RECIBIDO -->
+          <article class="ac-card" aria-labelledby="acMensajeTitulo">
+            <div class="ac-card-head">
+              <div>
+                <h2 class="ac-card-title" id="acMensajeTitulo">
+                  1. Mensaje recibido
+                </h2>
+                <p class="ac-card-help">
+                  El contenido pegado se utiliza de forma temporal y no se guarda.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                class="ac-btn ac-btn-line"
+                id="acLimpiar"
+                title="Limpiar mensaje, selección y respuesta"
+              >
+                <i class="bi bi-eraser" aria-hidden="true"></i>
+                Limpiar
+              </button>
+            </div>
+
+            <div class="ac-card-body">
+              <label class="ac-label" for="acMensaje">
+                Mensaje
+                <small>— pega el texto del cliente</small>
+              </label>
+
+              <textarea
+                id="acMensaje"
+                class="ac-textarea ac-message"
+                rows="8"
+                autocomplete="off"
+                autocapitalize="sentences"
+                spellcheck="true"
+                placeholder="Pega aquí el mensaje recibido..."
+              ></textarea>
+
+              <div id="acEstado" data-type="neutral">
+                Pega un mensaje o selecciona una categoría para comenzar.
+              </div>
+
+              <div class="ac-safety-note">
+                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                <span>
+                  Por defecto, el asistente no almacena el mensaje pegado ni
+                  escribe información clínica.
+                </span>
+              </div>
+            </div>
+          </article>
+
+          <!-- CATEGORÍAS -->
+          <article class="ac-card" aria-labelledby="acCategoriaTitulo">
+            <div class="ac-card-head">
+              <div>
+                <h2 class="ac-card-title" id="acCategoriaTitulo">
+                  2. Categoría
+                </h2>
+                <p class="ac-card-help">
+                  El sistema puede sugerirla automáticamente y siempre puedes
+                  cambiarla manualmente.
+                </p>
+              </div>
+            </div>
+
+            <div class="ac-card-body">
+              <div
+                id="acCategorias"
+                class="ac-category-row"
+                aria-label="Categorías rápidas"
+              ></div>
+
+              <label class="ac-label" for="acCategoria" style="margin-top:14px">
+                Categoría seleccionada
+              </label>
+
+              <select
+                id="acCategoria"
+                class="ac-select"
+                aria-label="Seleccionar categoría"
+              ></select>
+
+              <section
+                class="ac-suggestions-section"
+                aria-labelledby="acSugerenciasTitulo"
+              >
+                <h3 class="ac-section-label" id="acSugerenciasTitulo">
+                  <i class="bi bi-magic" aria-hidden="true"></i>
+                  Sugerencias para este mensaje
+                </h3>
+
+                <div id="acSugerencias" hidden></div>
+              </section>
+            </div>
+          </article>
+
+          <!-- BIBLIOTECA -->
+          <article class="ac-card" aria-labelledby="acBibliotecaTitulo">
+            <div class="ac-card-head">
+              <div>
+                <h2 class="ac-card-title" id="acBibliotecaTitulo">
+                  3. Biblioteca de plantillas
+                </h2>
+                <p class="ac-card-help">
+                  Busca, filtra o selecciona una respuesta manualmente.
+                </p>
+              </div>
+            </div>
+
+            <div class="ac-card-body">
+              <div class="ac-filter-bar">
+                <div class="ac-search-wrap">
+                  <i class="bi bi-search" aria-hidden="true"></i>
+                  <input
+                    id="acBuscarPlantilla"
+                    class="ac-field"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Buscar plantilla..."
+                    aria-label="Buscar plantilla"
+                  >
+                </div>
+
+                <button
+                  type="button"
+                  class="ac-btn ac-btn-soft"
+                  id="acFavoritos"
+                >
+                  <i class="bi bi-star" aria-hidden="true"></i>
+                  Favoritos
+                </button>
+
+                <button
+                  type="button"
+                  class="ac-btn ac-btn-line"
+                  id="acMasUsadas"
+                >
+                  <i class="bi bi-bar-chart" aria-hidden="true"></i>
+                  Más usadas
+                </button>
+              </div>
+
+              <div id="acPlantillas" aria-live="polite"></div>
+            </div>
+          </article>
+        </section>
+
+        <!-- =========================
+             COLUMNA DERECHA
+             ========================= -->
+        <section class="ac-column">
+
+          <!-- RESPUESTA -->
+          <article class="ac-card" aria-labelledby="acRespuestaTitulo">
+            <div class="ac-card-head">
+              <div>
+                <h2 class="ac-card-title" id="acRespuestaTitulo">
+                  4. Respuesta
+                </h2>
+                <p class="ac-card-help">
+                  Revísala y modifícala antes de copiar si lo necesitas.
+                </p>
+              </div>
+            </div>
+
+            <div class="ac-card-body">
+              <div
+                id="acPlantillaSeleccionada"
+                hidden
+                aria-live="polite"
+              ></div>
+
+              <label class="ac-label" for="acRespuesta">
+                Respuesta sugerida
+                <small>— editable</small>
+              </label>
+
+              <textarea
+                id="acRespuesta"
+                class="ac-textarea ac-response"
+                rows="10"
+                spellcheck="true"
+                placeholder="La respuesta sugerida aparecerá aquí..."
+              ></textarea>
+
+              <div class="ac-response-actions">
+                <button
+                  type="button"
+                  class="ac-btn ac-btn-primary ac-copy-main"
+                  id="acCopiar"
+                >
+                  <i class="bi bi-copy" aria-hidden="true"></i>
+                  Copiar respuesta
+                </button>
+
+                <button
+                  type="button"
+                  class="ac-btn ac-btn-line"
+                  id="acLimpiarRespuesta"
+                  title="Borrar solo la respuesta"
+                >
+                  <i class="bi bi-x-circle" aria-hidden="true"></i>
+                  Borrar respuesta
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <!-- INFORMACIÓN DE OPERACIÓN -->
+          <article class="ac-card" aria-labelledby="acOperacionTitulo">
+            <div class="ac-card-head">
+              <div>
+                <h2 class="ac-card-title" id="acOperacionTitulo">
+                  Operación segura
+                </h2>
+                <p class="ac-card-help">
+                  Esta primera versión trabaja de forma independiente.
+                </p>
+              </div>
+            </div>
+
+            <div class="ac-card-body">
+              <div class="ac-safety-note" style="margin-top:0">
+                <i class="bi bi-database-lock" aria-hidden="true"></i>
+                <span>
+                  No escribe en pacientes, historia clínica, atenciones,
+                  diagnóstico, plan, recetas, agenda, caja ni seguridad.
+                </span>
+              </div>
+
+              <div class="ac-safety-note">
+                <i class="bi bi-cloud-slash" aria-hidden="true"></i>
+                <span>
+                  Las plantillas de esta fase se cargan una vez y se buscan
+                  localmente. La persistencia en una sola hoja se conectará
+                  después de validar esta interfaz.
+                </span>
+              </div>
+
+              <div class="ac-safety-note">
+                <i class="bi bi-diagram-3" aria-hidden="true"></i>
+                <span>
+                  El módulo está preparado para recibir configuración externa
+                  del negocio sin acoplar el motor al ERP.
+                </span>
+              </div>
+            </div>
+          </article>
+
+        </section>
+      </div>
+
+      <footer class="ac-footer-meta">
+        <span id="acVersion">Asistente Comercial</span>
+      </footer>
+    </div>
+
+    <div
+      id="acToast"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </main>
+
+  <!-- =========================================================
+       CONFIGURACIÓN
+       Debe cargarse ANTES del motor.
+       ========================================================= -->
+  <script src="asistente_comercial_config.js?v=1.0.0"></script>
+
+  <!-- =========================================================
+       MOTOR
+       ========================================================= -->
+  <script src="asistente_comercial.js?v=1.0.0"></script>
+
+  <!-- =========================================================
+       ADAPTADOR VISUAL LOCAL
+       Solo presenta datos ya disponibles en CONFIG.
+       No hace fetch, no escribe BD y no toca el ERP.
+       ========================================================= -->
+  <script>
+    (function () {
+      "use strict";
+
+      function text(value) {
+        return value == null ? "" : String(value).trim();
+      }
+
+      function setText(id, value) {
+        var el = document.getElementById(id);
+        if (el && text(value)) el.textContent = text(value);
+      }
+
+      function applyBusinessPresentation() {
+        var cfg = window.ASISTENTE_COMERCIAL_CONFIG;
+        if (!cfg) return;
+
+        setText("acTitulo", cfg.ui && cfg.ui.title);
+        setText("acSubtitulo", cfg.ui && cfg.ui.subtitle);
+
+        var business = cfg.business || {};
+        var brand =
+          text(business.publicBrandName) ||
+          text(business.displayName) ||
+          "Modo independiente";
+
+        setText("acBrandName", brand);
+
+        var version = [
+          cfg.app && cfg.app.name ? cfg.app.name : "Asistente Comercial",
+          cfg.appVersion ? "v" + cfg.appVersion : "",
+          cfg.schemaVersion ? "· esquema " + cfg.schemaVersion : ""
+        ].filter(Boolean).join(" ");
+
+        setText("acVersion", version);
+
+        var message = document.getElementById("acMensaje");
+        if (message && cfg.ui && cfg.ui.pastePlaceholder) {
+          message.placeholder = cfg.ui.pastePlaceholder;
+        }
+
+        var response = document.getElementById("acRespuesta");
+        if (response && cfg.ui && cfg.ui.responsePlaceholder) {
+          response.placeholder = cfg.ui.responsePlaceholder;
+        }
+
+        var search = document.getElementById("acBuscarPlantilla");
+        if (search && cfg.ui && cfg.ui.searchPlaceholder) {
+          search.placeholder = cfg.ui.searchPlaceholder;
+        }
+
+        var copy = document.getElementById("acCopiar");
+        if (copy && cfg.ui && cfg.ui.copyLabel) {
+          copy.innerHTML =
+            '<i class="bi bi-copy" aria-hidden="true"></i> ' +
+            cfg.ui.copyLabel;
+        }
+      }
+
+      function bindLocalExtras() {
+        var clearResponse = document.getElementById("acLimpiarRespuesta");
+        var response = document.getElementById("acRespuesta");
+
+        if (clearResponse && response && clearResponse.dataset.bound !== "1") {
+          clearResponse.dataset.bound = "1";
+          clearResponse.addEventListener("click", function () {
+            response.value = "";
+            response.focus();
+          });
+        }
+      }
+
+      function boot() {
+        applyBusinessPresentation();
+        bindLocalExtras();
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", boot, { once: true });
+      } else {
+        boot();
+      }
+    })();
+  </script>
+</body>
+</html>
