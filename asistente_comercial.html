@@ -460,6 +460,40 @@
               </span>
             </div>
 
+            <section class="ac-editor-field" id="acTextCreator">
+              <button type="button" class="ac-btn ac-btn-line" id="acTextCreatorToggle"
+                      aria-expanded="false" aria-controls="acTextCreatorBody">
+                <i class="bi bi-stars" aria-hidden="true"></i>
+                <span>Crear desde texto</span>
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+              </button>
+
+              <div id="acTextCreatorBody" hidden>
+                <label class="ac-form-full ac-editor-field">
+                  <span class="ac-editor-label">Texto bruto</span>
+                  <small>
+                    Pega una promoción, servicio, mensaje o información. El análisis es local y no guarda nada hasta que pulses “Guardar plantilla”.
+                  </small>
+                  <textarea class="ac-textarea" id="acTextCreatorInput" rows="5"
+                            placeholder="Ej. Promoción Gardasil 3 dosis por $345 pago de contado..."></textarea>
+                </label>
+
+                <div class="ac-modal-actions">
+                  <button type="button" class="ac-btn ac-btn-line" id="acTextCreatorClear">
+                    <i class="bi bi-eraser"></i>
+                    Limpiar
+                  </button>
+                  <button type="button" class="ac-btn ac-btn-primary" id="acTextCreatorAnalyze">
+                    <i class="bi bi-stars"></i>
+                    Analizar y completar
+                  </button>
+                </div>
+
+                <div class="ac-editor-message" id="acTextCreatorMessage"
+                     hidden role="status" aria-live="polite"></div>
+              </div>
+            </section>
+
             <div class="ac-form-grid ac-editor-grid">
               <label class="ac-editor-field">
                 <span class="ac-editor-label">Nombre de la plantilla</span>
@@ -633,7 +667,7 @@
   <!-- =========================================================
        MOTOR
        ========================================================= -->
-  <script src="asistente_comercial.js?v=1.5.2"></script>
+  <script src="asistente_comercial.js?v=1.6.0"></script>
 
   <!-- =========================================================
        ADAPTADOR VISUAL LOCAL
