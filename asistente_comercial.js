@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.2.3
+ * Versión: 1.3.0
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -73,6 +73,9 @@
     backendTemplateIds: new Set(),
     libraryMode: "ALL",
     editingTemplateId: null,
+    selectedTemplateType: "",
+    actionTemplateId: null,
+    pendingDeactivateTemplateId: null,
     mobileMode: "RESPONDER"
   };
 
@@ -158,10 +161,80 @@
       .join(" ");
   }
 
+
+  function getCategoryLabel(category) {
+    if (!category) return "";
+    if (category.id === "PRECIOS") return "Consulta de precio";
+    return category.label || humanizeCategoryLabel(category.id);
+  }
+
+  function humanizeMetaLabel(value) {
+    const raw = asString(value).trim();
+    if (!raw) return "";
+    return raw
+      .split(/[_\-\s]+/)
+      .filter(Boolean)
+      .map((part, index) => {
+        const lower = part.toLowerCase();
+        return index === 0
+          ? lower.charAt(0).toUpperCase() + lower.slice(1)
+          : lower;
+      })
+      .join(" ");
+  }
+
+  function normalizeMetaId(value) {
+    return normalizeText(value)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  function normalizeCategoryId(value) {
+    const typed = asString(value).trim();
+    if (!typed) return "";
+
+    const existing = getAvailableCategories().find(category => {
+      return normalizeText(category.id) === normalizeText(typed) ||
+        normalizeText(getCategoryLabel(category)) === normalizeText(typed);
+    });
+    if (existing) return existing.id;
+
+    return normalizeMetaId(typed);
+  }
+
+  function getTemplateType(template) {
+    return normalizeMetaId(template?.meta?.tipo_plantilla || "");
+  }
+
+  function getTemplateService(template) {
+    return asString(template?.meta?.servicio || "").trim();
+  }
+
+  function getAvailableTemplateTypes(categoryId) {
+    const category = categoryId ?? state.selectedCategory;
+    if (!category) return [];
+
+    const values = unique(
+      (state.activeTemplates || [])
+        .filter(template =>
+          isActiveTemplate(template) &&
+          template.category === category &&
+          (!state.selectedScope || template.scope === state.selectedScope)
+        )
+        .map(getTemplateType)
+        .filter(Boolean)
+    );
+
+    return values.sort((a, b) =>
+      humanizeMetaLabel(a).localeCompare(humanizeMetaLabel(b), "es", { sensitivity: "base" })
+    );
+  }
+
   function getAvailableCategories() {
     const configured = (CONFIG.categories || [])
       .filter(c => c && c.id && c.enabled !== false)
-      .map(c => ({ ...c, source: "CONFIG" }));
+      .map(c => ({ ...c, label: getCategoryLabel(c), source: "CONFIG" }));
 
     const byId = new Map(configured.map(c => [c.id, c]));
     const baseOrder = configured.reduce(
@@ -197,7 +270,7 @@
 
       byId.set(categoryId, {
         id: categoryId,
-        label: humanizeCategoryLabel(categoryId),
+        label: getCategoryLabel({ id: categoryId, label: humanizeCategoryLabel(categoryId) }),
         icon: "tag",
         order: baseOrder + 100 + index,
         enabled: true,
@@ -368,7 +441,9 @@
     // Las categorías se reconstruyen desde las plantillas activas cargadas.
     // Así cualquier categoría nueva de la BD aparece sin editar config.js.
     renderCategoryControls();
+    renderTemplateTypeControls();
     populateTemplateCategorySelect();
+    populateTemplateTypeDatalist();
     renderTemplateList();
 
     if (state.pastedMessage.length >= 3) {
@@ -590,6 +665,8 @@
       template.category,
       template.title,
       template.response,
+      template.meta?.tipo_plantilla,
+      template.meta?.servicio,
       ...(template.meta?.tags || []),
       ...getTemplateKeywords(template)
     ].join(" "));
@@ -603,12 +680,14 @@
     const scope = opts.scope ?? state.selectedScope;
     const category = opts.category ?? state.selectedCategory;
     const search = opts.search ?? state.searchText;
+    const templateType = opts.templateType ?? state.selectedTemplateType;
     const onlyFavorites = Boolean(opts.onlyFavorites);
     const mostUsed = Boolean(opts.mostUsed);
 
     let result = state.activeTemplates.filter(template => {
       if (scope && template.scope !== scope) return false;
       if (category && template.category !== category) return false;
+      if (templateType && getTemplateType(template) !== templateType) return false;
       if (onlyFavorites && !isFavorite(template.id)) return false;
       if (!templateMatchesSearch(template, search)) return false;
       return true;
@@ -673,14 +752,20 @@
 
     if (!valid) return false;
 
+    const categoryChanged = state.selectedCategory !== (categoryId || "");
     state.selectedCategory = categoryId || "";
     state.categoryMode = opts.autoDetected ? "AUTO" : (categoryId ? "MANUAL" : "AUTO");
+
+    if (categoryChanged) {
+      state.selectedTemplateType = "";
+    }
 
     if (!opts.keepTemplate) {
       state.selectedTemplateId = null;
     }
 
     syncCategoryUI();
+    renderTemplateTypeControls();
 
     if (!opts.skipRender) {
       renderTemplateList();
@@ -703,10 +788,14 @@
     state.selectedScope = scopeId;
     state.selectedTemplateId = null;
     state.selectedCategory = "";
+    state.selectedTemplateType = "";
     state.categoryMode = "AUTO";
 
     renderScopeControls();
     renderCategoryControls();
+    renderTemplateTypeControls();
+    populateTemplateCategorySelect();
+    populateTemplateTypeDatalist();
     renderTemplateList();
 
     if (state.pastedMessage) {
@@ -913,6 +1002,7 @@
     setResponseValue("");
 
     syncCategoryUI();
+    renderTemplateTypeControls();
     renderSuggestions();
     renderTemplateList();
     showStatus(CONFIG.ui?.emptyMessage || "", "neutral");
@@ -974,6 +1064,8 @@
       mostUsedButton: "acMasUsadas",
       categoriesContainer: "acCategorias",
       libraryCategoriesContainer: "acCategoriasBiblioteca",
+      templateTypePanel: "acTipoPlantillaPanel",
+      templateTypesContainer: "acTiposPlantilla",
       scopesContainer: "acAmbitos",
       analyzeButton: "acAnalizar",
       whatsappButton: "acWhatsApp",
@@ -983,9 +1075,14 @@
       templateForm: "acTemplateForm",
       templateTitle: "acTplTitulo",
       templateCategory: "acTplCategoria",
+      templateCategoryList: "acTplCategoriasList",
       templateKeywords: "acTplKeywords",
       templateResponse: "acTplRespuesta",
       templateType: "acTplTipo",
+      templateBusinessType: "acTplTipoPlantilla",
+      templateBusinessTypeList: "acTplTiposList",
+      templateService: "acTplServicio",
+      templateMessage: "acTplMensaje",
       templateSave: "acTplGuardar",
       templateSaveText: "acTplGuardarTexto",
       templateCancel: "acTplCancelar",
@@ -1001,6 +1098,19 @@
       quickClose: "acQuickClose",
       quickCopy: "acQuickCopy",
       quickWhatsApp: "acQuickWhatsApp",
+      actionModal: "acTemplateActionModal",
+      actionModalClose: "acActionModalClose",
+      actionModalTitle: "acActionModalTitle",
+      actionModalSubtitle: "acActionModalSubtitle",
+      actionEdit: "acActionEdit",
+      actionDuplicate: "acActionDuplicate",
+      actionDeactivate: "acActionDeactivate",
+      actionCancel: "acActionCancel",
+      confirmModal: "acConfirmModal",
+      confirmTitle: "acConfirmTitle",
+      confirmText: "acConfirmText",
+      confirmCancel: "acConfirmCancel",
+      confirmAccept: "acConfirmAccept",
       modeResponder: "acModoResponder",
       modePlantillas: "acModoPlantillas",
       messageCard: "acMensajeCard",
@@ -1169,6 +1279,65 @@
     fillCategoryContainer(els.libraryCategoriesContainer, true);
   }
 
+
+  function renderTemplateTypeControls() {
+    if (!els.templateTypePanel || !els.templateTypesContainer) return;
+
+    const types = getAvailableTemplateTypes(state.selectedCategory);
+
+    if (!state.selectedCategory || !types.length) {
+      state.selectedTemplateType = "";
+      els.templateTypePanel.hidden = true;
+      els.templateTypesContainer.innerHTML = "";
+      return;
+    }
+
+    if (state.selectedTemplateType && !types.includes(state.selectedTemplateType)) {
+      state.selectedTemplateType = "";
+    }
+
+    els.templateTypePanel.hidden = false;
+    els.templateTypesContainer.innerHTML = "";
+
+    const all = document.createElement("button");
+    all.type = "button";
+    all.className = "ac-type-chip" + (!state.selectedTemplateType ? " active" : "");
+    all.dataset.templateType = "";
+    all.innerHTML = '<i class="bi bi-grid"></i><span>Todos</span>';
+    els.templateTypesContainer.appendChild(all);
+
+    types.forEach(typeId => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className =
+        "ac-type-chip" + (state.selectedTemplateType === typeId ? " active" : "");
+      button.dataset.templateType = typeId;
+
+      const count = state.activeTemplates.filter(template =>
+        template.category === state.selectedCategory &&
+        getTemplateType(template) === typeId &&
+        (!state.selectedScope || template.scope === state.selectedScope)
+      ).length;
+
+      button.innerHTML =
+        '<i class="bi bi-tag"></i><span>' +
+        humanizeMetaLabel(typeId) +
+        '</span><small>' + count + '</small>';
+      els.templateTypesContainer.appendChild(button);
+    });
+  }
+
+  function setTemplateType(typeId) {
+    const normalized = normalizeMetaId(typeId || "");
+    const valid = !normalized || getAvailableTemplateTypes().includes(normalized);
+    if (!valid) return false;
+
+    state.selectedTemplateType = normalized;
+    renderTemplateTypeControls();
+    renderTemplateList();
+    return true;
+  }
+
   function renderTemplateList(options) {
     if (!els.templateList) return;
 
@@ -1208,7 +1377,14 @@
 
     const meta = document.createElement("small");
     const category = getCategory(template.category);
-    meta.textContent = category?.label || template.category || "";
+    const metaParts = [category?.label || template.category || ""];
+    const typeLabel = humanizeMetaLabel(getTemplateType(template));
+    const serviceLabel = humanizeMetaLabel(getTemplateService(template));
+    if (typeLabel) metaParts.push(typeLabel);
+    if (serviceLabel && normalizeText(serviceLabel) !== normalizeText(template.title)) {
+      metaParts.push(serviceLabel);
+    }
+    meta.textContent = metaParts.filter(Boolean).join(" · ");
 
     titleWrap.append(title, meta);
 
@@ -1367,6 +1543,7 @@
 
     if (next === "PLANTILLAS") {
       renderCategoryControls();
+      renderTemplateTypeControls();
       renderTemplateList();
       global.requestAnimationFrame(() => {
         els.search?.focus({ preventScroll: true });
@@ -1394,16 +1571,47 @@
   }
 
   function populateTemplateCategorySelect() {
-    if (!els.templateCategory) return;
+    if (!els.templateCategoryList) return;
 
-    els.templateCategory.innerHTML = "";
-    getAvailableCategories()
-      .forEach(category => {
-        const option = document.createElement("option");
-        option.value = category.id;
-        option.textContent = category.label;
-        els.templateCategory.appendChild(option);
-      });
+    els.templateCategoryList.innerHTML = "";
+    getAvailableCategories().forEach(category => {
+      const option = document.createElement("option");
+      option.value = getCategoryLabel(category);
+      option.dataset.categoryId = category.id;
+      els.templateCategoryList.appendChild(option);
+    });
+  }
+
+  function populateTemplateTypeDatalist() {
+    if (!els.templateBusinessTypeList) return;
+
+    const values = unique(
+      (state.activeTemplates || [])
+        .map(getTemplateType)
+        .filter(Boolean)
+    ).sort((a, b) =>
+      humanizeMetaLabel(a).localeCompare(humanizeMetaLabel(b), "es", { sensitivity: "base" })
+    );
+
+    els.templateBusinessTypeList.innerHTML = "";
+    values.forEach(typeId => {
+      const option = document.createElement("option");
+      option.value = humanizeMetaLabel(typeId);
+      els.templateBusinessTypeList.appendChild(option);
+    });
+  }
+
+  function showTemplateEditorMessage(message, type) {
+    if (!els.templateMessage) return;
+    if (!message) {
+      els.templateMessage.hidden = true;
+      els.templateMessage.textContent = "";
+      els.templateMessage.dataset.type = "";
+      return;
+    }
+    els.templateMessage.hidden = false;
+    els.templateMessage.textContent = message;
+    els.templateMessage.dataset.type = type || "neutral";
   }
 
   function updateTemplatePreview() {
@@ -1413,11 +1621,20 @@
     const categoryId = asString(els.templateCategory?.value).trim();
     const category = getCategory(categoryId);
     const typeResponse = asString(els.templateType?.value || "CORTA").toUpperCase();
+    const businessType = normalizeMetaId(els.templateBusinessType?.value || "");
+    const categoryLabel = category?.label ||
+      humanizeCategoryLabel(normalizeCategoryId(categoryId)) ||
+      "Sin categoría";
 
     els.templatePreviewText.textContent =
       response || "Tu respuesta aparecerá aquí mientras la escribes.";
-    els.templatePreviewMeta.textContent =
-      `${typeResponse.charAt(0) + typeResponse.slice(1).toLowerCase()} · ${category?.label || "Sin categoría"}`;
+
+    const previewParts = [
+      typeResponse.charAt(0) + typeResponse.slice(1).toLowerCase(),
+      categoryLabel
+    ];
+    if (businessType) previewParts.push(humanizeMetaLabel(businessType));
+    els.templatePreviewMeta.textContent = previewParts.join(" · ");
   }
 
   function openTemplateModal(templateId) {
@@ -1428,6 +1645,8 @@
 
     if (els.templateForm) els.templateForm.reset();
     populateTemplateCategorySelect();
+    populateTemplateTypeDatalist();
+    showTemplateEditorMessage("");
 
     if (template && state.editingTemplateId) {
       if (els.templateModalTitle) els.templateModalTitle.textContent = "Editar plantilla";
@@ -1436,9 +1655,15 @@
       }
       if (els.templateSaveText) els.templateSaveText.textContent = "Guardar cambios";
       if (els.templateTitle) els.templateTitle.value = template.title || "";
-      if (els.templateCategory) els.templateCategory.value = template.category || "";
+      if (els.templateCategory) els.templateCategory.value = getCategory(template.category)?.label || humanizeCategoryLabel(template.category);
       if (els.templateType) {
         els.templateType.value = asString(template.meta?.tipo_respuesta || "CORTA").toUpperCase();
+      }
+      if (els.templateBusinessType) {
+        els.templateBusinessType.value = humanizeMetaLabel(getTemplateType(template));
+      }
+      if (els.templateService) {
+        els.templateService.value = getTemplateService(template);
       }
       if (els.templateKeywords) {
         els.templateKeywords.value = (template.meta?.keywords || []).join(", ");
@@ -1453,8 +1678,13 @@
       if (els.templateType) els.templateType.value = "CORTA";
 
       if (els.templateCategory) {
-        els.templateCategory.value = state.selectedCategory || els.templateCategory.value;
+        const selected = getCategory(state.selectedCategory);
+        els.templateCategory.value = selected?.label || "";
       }
+      if (els.templateBusinessType) {
+        els.templateBusinessType.value = humanizeMetaLabel(state.selectedTemplateType);
+      }
+      if (els.templateService) els.templateService.value = "";
 
       if (els.templateResponse && getResponseValue().trim()) {
         els.templateResponse.value = getResponseValue().trim();
@@ -1481,40 +1711,57 @@
     event?.preventDefault?.();
 
     const title = asString(els.templateTitle?.value).trim();
-    const category = asString(els.templateCategory?.value).trim();
+    const category = normalizeCategoryId(els.templateCategory?.value);
     const response = asString(els.templateResponse?.value).trim();
     const keywords = asString(els.templateKeywords?.value)
       .split(",")
       .map(v => v.trim())
       .filter(Boolean);
     const typeResponse = asString(els.templateType?.value || "CORTA").trim().toUpperCase();
+    const businessType = normalizeMetaId(els.templateBusinessType?.value || "");
+    const service = asString(els.templateService?.value).trim();
 
     if (!title || !category || !response) {
-      showToast("Completa nombre, categoría y respuesta.", "warning");
+      showTemplateEditorMessage("Completa nombre, categoría y respuesta antes de guardar.", "warning");
       return false;
     }
+
+    showTemplateEditorMessage("");
 
     if (els.templateSave) els.templateSave.disabled = true;
 
     try {
+      const editingId = state.editingTemplateId;
+      const existingTemplate = editingId ? getTemplate(editingId) : null;
+      const existingMeta = existingTemplate?.meta && typeof existingTemplate.meta === "object"
+        ? clone(existingTemplate.meta)
+        : {};
+
+      const nextMeta = {
+        ...existingMeta,
+        keywords,
+        tags: Array.isArray(existingMeta.tags) ? existingMeta.tags : [],
+        tipo_respuesta: typeResponse,
+        priority: Number(existingMeta.priority ?? 50),
+        channel: existingMeta.channel || "GENERAL",
+        schema_version: Number(existingMeta.schema_version ?? 1)
+      };
+
+      if (businessType) nextMeta.tipo_plantilla = businessType;
+      else delete nextMeta.tipo_plantilla;
+
+      if (service) nextMeta.servicio = service;
+      else delete nextMeta.servicio;
+
       const payload = {
-        AMBITO: state.selectedScope || "PROSPECTO",
+        AMBITO: existingTemplate?.scope || state.selectedScope || "PROSPECTO",
         CATEGORIA: category,
         TITULO: title,
         RESPUESTA: response,
-        META_JSON: {
-          keywords,
-          tags: [],
-          tipo_respuesta: typeResponse,
-          priority: 50,
-          channel: "GENERAL",
-          schema_version: 1
-        },
+        META_JSON: nextMeta,
         CONTEXTO_JSON: {},
         ESTADO: "ACTIVO"
       };
-
-      const editingId = state.editingTemplateId;
       const action = editingId ? "AC_actualizarPlantilla" : "AC_crearPlantilla";
       if (editingId) payload.ID = editingId;
 
@@ -1539,7 +1786,7 @@
       return true;
     } catch (error) {
       console.error("[Asistente Comercial] Guardar plantilla:", error);
-      showToast("No se pudo guardar la plantilla en la base.", "danger");
+      showTemplateEditorMessage("No se pudo guardar la plantilla en la base. Revisa los datos e inténtalo nuevamente.", "danger");
       return false;
     } finally {
       if (els.templateSave) els.templateSave.disabled = false;
@@ -1576,11 +1823,6 @@
     const template = getTemplate(templateId);
     if (!template || template.source !== "DB") return false;
 
-    const accepted = global.confirm(
-      '¿Desactivar "' + (template.title || "esta plantilla") + '"? No se eliminará de la base.'
-    );
-    if (!accepted) return false;
-
     try {
       const result = await apiPost("AC_cambiarEstadoPlantilla", {
         ID: templateId,
@@ -1602,17 +1844,79 @@
     }
   }
 
-  function showTemplateMenu(templateId) {
+  function openTemplateActionModal(templateId) {
     const template = getTemplate(templateId);
-    if (!template || template.source !== "DB") return;
+    if (!template || template.source !== "DB" || !els.actionModal) return false;
 
-    const option = global.prompt(
-      "Opciones de plantilla:\\n1 = Editar\\n2 = Duplicar\\n3 = Desactivar\\n\\nEscribe 1, 2 o 3:"
-    );
+    state.actionTemplateId = templateId;
 
-    if (option === "1") openTemplateModal(templateId);
-    if (option === "2") duplicateTemplate(templateId);
-    if (option === "3") deactivateTemplate(templateId);
+    if (els.actionModalTitle) {
+      els.actionModalTitle.textContent = template.title || "Administrar plantilla";
+    }
+    if (els.actionModalSubtitle) {
+      const category = getCategory(template.category);
+      els.actionModalSubtitle.textContent =
+        (category?.label || template.category || "Plantilla") +
+        (getTemplateType(template) ? " · " + humanizeMetaLabel(getTemplateType(template)) : "");
+    }
+
+    els.actionModal.hidden = false;
+    document.body.classList.add("ac-modal-open");
+    return true;
+  }
+
+  function closeTemplateActionModal() {
+    if (!els.actionModal) return;
+    els.actionModal.hidden = true;
+    state.actionTemplateId = null;
+
+    if (els.confirmModal?.hidden !== false && els.templateModal?.hidden !== false) {
+      document.body.classList.remove("ac-modal-open");
+    }
+  }
+
+  function openDeactivateConfirm(templateId) {
+    const template = getTemplate(templateId);
+    if (!template || template.source !== "DB" || !els.confirmModal) return false;
+
+    state.pendingDeactivateTemplateId = templateId;
+    if (els.confirmTitle) els.confirmTitle.textContent = "Desactivar plantilla";
+    if (els.confirmText) {
+      els.confirmText.textContent =
+        '“' + (template.title || "Esta plantilla") +
+        '” dejará de mostrarse en la biblioteca, pero se conservará en la base.';
+    }
+
+    closeTemplateActionModal();
+    els.confirmModal.hidden = false;
+    document.body.classList.add("ac-modal-open");
+    return true;
+  }
+
+  function closeDeactivateConfirm() {
+    if (!els.confirmModal) return;
+    els.confirmModal.hidden = true;
+    state.pendingDeactivateTemplateId = null;
+
+    if (els.actionModal?.hidden !== false && els.templateModal?.hidden !== false) {
+      document.body.classList.remove("ac-modal-open");
+    }
+  }
+
+  async function confirmDeactivateTemplate() {
+    const templateId = state.pendingDeactivateTemplateId;
+    if (!templateId) return false;
+
+    if (els.confirmAccept) els.confirmAccept.disabled = true;
+    const ok = await deactivateTemplate(templateId);
+    if (els.confirmAccept) els.confirmAccept.disabled = false;
+
+    if (ok) closeDeactivateConfirm();
+    return ok;
+  }
+
+  function showTemplateMenu(templateId) {
+    return openTemplateActionModal(templateId);
   }
 
   function scrollToElement(element) {
@@ -1681,10 +1985,53 @@
     }
 
     [els.templateTitle, els.templateCategory, els.templateKeywords,
-     els.templateResponse, els.templateType].filter(Boolean).forEach(control => {
+     els.templateResponse, els.templateType, els.templateBusinessType,
+     els.templateService].filter(Boolean).forEach(control => {
       control.addEventListener("input", updateTemplatePreview);
       control.addEventListener("change", updateTemplatePreview);
     });
+
+    if (els.templateTypesContainer) {
+      els.templateTypesContainer.addEventListener("click", event => {
+        const button = event.target.closest("[data-template-type]");
+        if (!button) return;
+        setTemplateType(button.dataset.templateType || "");
+      });
+    }
+
+    if (els.actionModalClose) {
+      els.actionModalClose.addEventListener("click", closeTemplateActionModal);
+    }
+    if (els.actionCancel) {
+      els.actionCancel.addEventListener("click", closeTemplateActionModal);
+    }
+    if (els.actionEdit) {
+      els.actionEdit.addEventListener("click", () => {
+        const templateId = state.actionTemplateId;
+        closeTemplateActionModal();
+        if (templateId) openTemplateModal(templateId);
+      });
+    }
+    if (els.actionDuplicate) {
+      els.actionDuplicate.addEventListener("click", async () => {
+        const templateId = state.actionTemplateId;
+        closeTemplateActionModal();
+        if (templateId) await duplicateTemplate(templateId);
+      });
+    }
+    if (els.actionDeactivate) {
+      els.actionDeactivate.addEventListener("click", () => {
+        const templateId = state.actionTemplateId;
+        if (templateId) openDeactivateConfirm(templateId);
+      });
+    }
+
+    if (els.confirmCancel) {
+      els.confirmCancel.addEventListener("click", closeDeactivateConfirm);
+    }
+    if (els.confirmAccept) {
+      els.confirmAccept.addEventListener("click", confirmDeactivateTemplate);
+    }
 
     if (els.quickClose) {
       els.quickClose.addEventListener("click", closeQuickSheet);
@@ -1701,6 +2048,16 @@
     if (els.templateModal) {
       els.templateModal.addEventListener("click", event => {
         if (event.target === els.templateModal) closeTemplateModal();
+      });
+    }
+    if (els.actionModal) {
+      els.actionModal.addEventListener("click", event => {
+        if (event.target === els.actionModal) closeTemplateActionModal();
+      });
+    }
+    if (els.confirmModal) {
+      els.confirmModal.addEventListener("click", event => {
+        if (event.target === els.confirmModal) closeDeactivateConfirm();
       });
     }
 
@@ -1967,6 +2324,8 @@
     openWhatsApp,
     loadBackendTemplates,
     openTemplateModal,
+    renderTemplateTypeControls,
+    setTemplateType,
 
     clear: clearAll,
 
