@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.9';
+  const VERSION = '1.5.10';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260823_edicion_abierta_handoff_plan_v2';
+  const RELEASE = '20260823_guardado_dx_abierto_refresco_plan_v1';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1089,7 +1089,22 @@
             <button type="button" class="auro-dx-btn ghost" onclick="window.auroDxIniciarCorreccionHistorica()"><i class="bi bi-pencil-square"></i> Corregir diagnóstico</button>
           `}
         </div>
-      ` : ''}
+      ` : `
+        <div class="auro-dx-correccion-actions">
+          <span class="auro-dx-correccion-note">
+            <i class="bi bi-pencil-square"></i>
+            Puede agregar, eliminar o reclasificar CIE-10 mientras la atención permanezca abierta.
+          </span>
+          <button
+            type="button"
+            class="auro-dx-btn primary"
+            id="auroDxGuardarCambiosAbiertosBtn"
+            onclick="window.auroDxGuardarCambiosAtencionAbierta()"
+          >
+            <i class="bi bi-save"></i> Guardar cambios del diagnóstico
+          </button>
+        </div>
+      `}
       <div class="auro-dx-contexto-stats">
         <div class="auro-dx-contexto-stat">
           <span>Total</span><strong>${escapeHtml(totalTexto)}</strong>
@@ -1132,7 +1147,147 @@
   }
 
   /*
-    AUROSANAX 1.5.9 — HANDOFF GLOBAL CIE-10 → PLAN SIN APLICACIÓN AUTOMÁTICA
+    AUROSANAX 1.5.10 — EDICIÓN / GUARDADO DE DIAGNÓSTICO EN ATENCIÓN ABIERTA
+    ------------------------------------------------------------------------
+    Alcance estricto:
+    - Solo para la atención actualmente abierta y editable.
+    - Usa el guardador autónomo YA existente del ERP.
+    - Mantiene la misma id_atencion.
+    - No crea atención, examen ni corrección histórica.
+    - No toca Plan, Recetas, Apps Script ni seguridad.
+    - Después de confirmar el guardado vuelve a leer Diagnóstico y protocolos;
+      el flujo normal de cargarAtencion(..., true) emite el evento que reconstruye
+      las tarjetas de Plan con los diagnósticos efectivamente guardados.
+  */
+  let auroDxGuardandoCambiosAbiertos = false;
+
+  async function auroDxGuardarCambiosAtencionAbierta(){
+    if(auroDxGuardandoCambiosAbiertos) return;
+
+    const ctx = contextoAtencionSeleccionada();
+
+    if(!ctx.id || ctx.editable !== true || ctx.historica){
+      mensaje(
+        'error',
+        'El guardado directo del diagnóstico solo está disponible mientras la atención permanezca abierta.'
+      );
+      renderContextoSuperior();
+      return;
+    }
+
+    if(typeof window.auroGuardarDiagnosticosAtencionActual !== 'function'){
+      mensaje(
+        'error',
+        'No está disponible el guardador autónomo de Diagnóstico. No se realizó ningún cambio.'
+      );
+      return;
+    }
+
+    /*
+      Sincroniza únicamente la tabla visible CIE-10 con sus campos compatibles
+      antes de invocar el guardador existente. No persiste por sí mismo.
+    */
+    try{
+      if(typeof window.sincronizarDiagnosticosConCamposHistoria === 'function'){
+        window.sincronizarDiagnosticosConCamposHistoria();
+      }else if(typeof sincronizarDiagnosticosConCamposHistoria === 'function'){
+        sincronizarDiagnosticosConCamposHistoria();
+      }
+    }catch(error){
+      console.warn(
+        MODULO + ': no se pudieron sincronizar los campos CIE-10 antes del guardado.',
+        error
+      );
+    }
+
+    const btn = document.getElementById('auroDxGuardarCambiosAbiertosBtn');
+    const htmlOriginal = btn ? btn.innerHTML : '';
+
+    auroDxGuardandoCambiosAbiertos = true;
+
+    if(btn){
+      btn.disabled = true;
+      btn.setAttribute('aria-busy','true');
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Guardando...';
+    }
+
+    try{
+      const resultado = await Promise.resolve(
+        window.auroGuardarDiagnosticosAtencionActual()
+      );
+
+      if(!resultado || resultado.success !== true){
+        throw new Error(
+          resultado?.message ||
+          'No se pudo confirmar el guardado del diagnóstico.'
+        );
+      }
+
+      /*
+        La recarga forzada cumple dos objetivos sin duplicar lógica:
+        1. vuelve a leer de la fuente persistida la lista exacta de CIE-10;
+        2. vuelve a consultar protocolos y emite
+           aurosanax:protocolos-diagnostico-listos,
+           que Plan ya usa para reconstruir sus tarjetas.
+      */
+      await cargarAtencion(ctx.id, true);
+
+      mensaje(
+        'ok',
+        resultado.sin_cambios
+          ? 'Diagnóstico verificado. No había cambios nuevos para guardar.'
+          : 'Diagnóstico actualizado correctamente. Las sugerencias de Plan se sincronizaron con los diagnósticos guardados.'
+      );
+
+      renderContextoSuperior();
+
+      try{
+        document.dispatchEvent(new CustomEvent(
+          'aurosanax:diagnostico-abierto-guardado',
+          {
+            detail:{
+              id_atencion: ctx.id,
+              diagnosticos: clonar(state.diagnosticos, []),
+              protocolos: clonar(state.protocolos, []),
+              sin_cambios: !!resultado.sin_cambios
+            }
+          }
+        ));
+      }catch(_e){}
+
+      return resultado;
+
+    }catch(error){
+      console.error(
+        MODULO + ': no se pudo guardar la edición de diagnóstico abierto.',
+        error
+      );
+
+      mensaje(
+        'error',
+        'No se guardaron los cambios del diagnóstico: ' +
+        (error?.message || String(error))
+      );
+
+      return null;
+
+    }finally{
+      auroDxGuardandoCambiosAbiertos = false;
+
+      const botonActual = document.getElementById('auroDxGuardarCambiosAbiertosBtn');
+      if(botonActual){
+        botonActual.disabled = false;
+        botonActual.removeAttribute('aria-busy');
+        botonActual.innerHTML = htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+      }
+    }
+  }
+
+  window.auroDxGuardarCambiosAtencionAbierta =
+    auroDxGuardarCambiosAtencionAbierta;
+
+  /*
+    AUROSANAX 1.5.10 — HANDOFF GLOBAL CIE-10 → PLAN SIN APLICACIÓN AUTOMÁTICA
     ------------------------------------------------------------------------
     Problema corregido:
     El botón principal del visor CIE-10 conserva un flujo histórico que guarda
