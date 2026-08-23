@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.5.0 TAXONOMÍA ESTABLE
+ * Versión: 1.5.2 TAXONOMÍA DEFINITIVA
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -1310,85 +1310,46 @@
   function renderTemplateTypeControls() {
     if (!els.templateTypePanel || !els.templateTypesContainer) return;
 
-    const selectedCategory = normalizeCategoryId(state.selectedCategory);
-    if (!selectedCategory) {
-      els.templateTypePanel.hidden = true;
-      els.templateTypesContainer.innerHTML = "";
-      state.selectedTemplateType = "";
-      return;
-    }
+    const types = getAvailableTemplateTypes(state.selectedCategory);
 
-    const categoryTemplates = state.activeTemplates.filter(template =>
-      normalizeCategoryId(template.category) === selectedCategory
-    );
-
-    const typeMap = new Map();
-
-    categoryTemplates.forEach(template => {
-      const typeId = normalizeMetaId(template?.meta?.tipo_plantilla || "");
-      if (!typeId) return;
-
-      if (!typeMap.has(typeId)) {
-        typeMap.set(typeId, {
-          id: typeId,
-          label: humanizeCategoryLabel(typeId),
-          count: 0
-        });
-      }
-
-      typeMap.get(typeId).count += 1;
-    });
-
-    const types = Array.from(typeMap.values())
-      .sort((a, b) => a.label.localeCompare(b.label, "es"));
-
-    // Regla global de taxonomía:
-    // 0 tipos  -> no mostrar segundo nivel.
-    // 1 tipo   -> no mostrar segundo nivel; mostrar tarjetas directamente.
-    // 2+ tipos -> mostrar filtros dinámicos.
-    if (types.length <= 1) {
+    if (!state.selectedCategory || !types.length) {
       state.selectedTemplateType = "";
       els.templateTypePanel.hidden = true;
       els.templateTypesContainer.innerHTML = "";
       return;
     }
 
-    if (
-      state.selectedTemplateType &&
-      !types.some(type => type.id === state.selectedTemplateType)
-    ) {
+    if (state.selectedTemplateType && !types.includes(state.selectedTemplateType)) {
       state.selectedTemplateType = "";
     }
 
     els.templateTypePanel.hidden = false;
     els.templateTypesContainer.innerHTML = "";
 
-    const allButton = document.createElement("button");
-    allButton.type = "button";
-    allButton.className = "ac-type-chip";
-    allButton.dataset.templateType = "";
-    allButton.classList.toggle("active", !state.selectedTemplateType);
-    allButton.setAttribute("aria-pressed", !state.selectedTemplateType ? "true" : "false");
-    allButton.innerHTML = `
-      <span>Todos</span>
-      <small>${categoryTemplates.length}</small>
-    `;
-    els.templateTypesContainer.appendChild(allButton);
+    const all = document.createElement("button");
+    all.type = "button";
+    all.className = "ac-type-chip" + (!state.selectedTemplateType ? " active" : "");
+    all.dataset.templateType = "";
+    all.innerHTML = '<i class="bi bi-grid"></i><span>Todos</span>';
+    els.templateTypesContainer.appendChild(all);
 
-    types.forEach(type => {
+    types.forEach(typeId => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "ac-type-chip";
-      button.dataset.templateType = type.id;
-      button.classList.toggle("active", state.selectedTemplateType === type.id);
-      button.setAttribute(
-        "aria-pressed",
-        state.selectedTemplateType === type.id ? "true" : "false"
-      );
-      button.innerHTML = `
-        <span>${escapeHTML(type.label)}</span>
-        <small>${type.count}</small>
-      `;
+      button.className =
+        "ac-type-chip" + (state.selectedTemplateType === typeId ? " active" : "");
+      button.dataset.templateType = typeId;
+
+      const count = state.activeTemplates.filter(template =>
+        template.category === state.selectedCategory &&
+        getTemplateType(template) === typeId &&
+        (!state.selectedScope || template.scope === state.selectedScope)
+      ).length;
+
+      button.innerHTML =
+        '<i class="bi bi-tag"></i><span>' +
+        humanizeMetaLabel(typeId) +
+        '</span><small>' + count + '</small>';
       els.templateTypesContainer.appendChild(button);
     });
   }
