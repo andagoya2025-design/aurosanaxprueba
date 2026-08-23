@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.2.0
+ * Versión: 1.2.1
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
