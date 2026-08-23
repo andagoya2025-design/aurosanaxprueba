@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: auditoria_clinica.js
  Módulo: Auditoría clínica independiente
- Versión: 4.0.0
+ Versión: 4.0.1
  -----------------------------------------------------------------------
  OBJETIVO
  - Consultar la hoja auditoria_clinica y administrar el control de correcciones.
@@ -13,6 +13,7 @@
  - Mostrar la ventana configurable de corrección y las enmiendas excepcionales.
  - La atención en proceso continúa libre; el control inicia al finalizarla.
  - Acceso exclusivo para Administrador; el backend vuelve a validar token.
+ - Presentar los eventos más recientes primero sin alterar la fuente persistida.
 ************************************************************************/
 
 (function(){
@@ -106,6 +107,35 @@
       #securityAuditoriaClinica .auro-audit-control-head strong{display:block;color:#111827;font-size:15px;font-weight:900}
       #securityAuditoriaClinica .auro-audit-control-head small{display:block;color:#64748b;font-size:12px;font-weight:650;margin-top:3px}
       #securityAuditoriaClinica .auro-audit-control-note{margin-top:12px;padding:9px 11px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;font-size:12px;font-weight:700}
+
+      /* AUROSANAX 4.0.1 — mejora visual local, sin tocar CSS global */
+      #securityAuditoriaClinica #audClinRefrescar{
+        background:linear-gradient(135deg,#7a163f,#a52167);
+        border:1px solid #7a163f;
+        color:#fff;
+        font-weight:850;
+        box-shadow:0 7px 18px rgba(122,22,63,.16);
+        transition:transform .16s ease,box-shadow .16s ease,opacity .16s ease;
+      }
+      #securityAuditoriaClinica #audClinRefrescar:hover:not(:disabled){
+        transform:translateY(-1px);
+        box-shadow:0 10px 22px rgba(122,22,63,.22);
+      }
+      #securityAuditoriaClinica #audClinRefrescar:disabled{
+        opacity:.72;
+        cursor:wait;
+        transform:none;
+      }
+      #securityAuditoriaClinica #audClinBuscar{
+        transition:border-color .16s ease,box-shadow .16s ease,background .16s ease;
+      }
+      #securityAuditoriaClinica #audClinBuscar:focus{
+        border-color:#b72b73!important;
+        box-shadow:0 0 0 3px rgba(183,43,115,.12)!important;
+        background:#fff!important;
+        outline:none;
+      }
+
       @media(max-width:720px){.auro-audit-detail-grid{grid-template-columns:1fr}.auro-audit-control-head{display:grid!important;grid-template-columns:1fr!important}}
     `;
     document.head.appendChild(style);
@@ -148,6 +178,57 @@
       year:'numeric',month:'2-digit',day:'2-digit',
       hour:'2-digit',minute:'2-digit',hour12:false
     }).format(fecha);
+  }
+
+  /*
+    Convierte fecha_hora / creado_en a un valor comparable sin modificar
+    el registro original. Los valores locales YYYY-MM-DD HH:mm:ss se comparan
+    por sus componentes; otros formatos válidos usan Date.parse().
+  */
+  function marcaTiempoOrden(evento){
+    const raw = texto(evento && (evento.fecha_hora || evento.creado_en));
+    if(!raw) return 0;
+
+    const local = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if(local){
+      return Date.UTC(
+        Number(local[1]),
+        Number(local[2]) - 1,
+        Number(local[3]),
+        Number(local[4]),
+        Number(local[5]),
+        Number(local[6] || 0)
+      );
+    }
+
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function compararEventosRecientes(a, b){
+    const diferencia = marcaTiempoOrden(b) - marcaTiempoOrden(a);
+    if(diferencia) return diferencia;
+
+    /*
+      Desempate determinista. No cambia auditoría ni IDs.
+    */
+    return texto(b && b.id_auditoria).localeCompare(
+      texto(a && a.id_auditoria),
+      'es',
+      {numeric:true,sensitivity:'base'}
+    );
+  }
+
+  function horaActualEcuador(){
+    try{
+      return new Intl.DateTimeFormat('es-EC', {
+        timeZone:'America/Guayaquil',
+        day:'2-digit',month:'2-digit',year:'numeric',
+        hour:'2-digit',minute:'2-digit',hour12:false
+      }).format(new Date());
+    }catch(_e){
+      return '';
+    }
   }
 
   function nombreModulo(valor){
@@ -252,7 +333,16 @@
   }
 
   function render(){
-    state.filtrados = state.eventos.filter(coincideFiltros);
+    /*
+      AUROSANAX 4.0.1:
+      El orden es exclusivamente de presentación. state.eventos conserva los
+      datos recibidos y la base/backend no se modifica.
+    */
+    state.filtrados = state.eventos
+      .filter(coincideFiltros)
+      .slice()
+      .sort(compararEventosRecientes);
+
     actualizarResumen();
 
     const body = document.getElementById('audClinBody');
@@ -480,8 +570,18 @@
       return;
     }
 
+    const boton = document.getElementById('audClinRefrescar');
+    const originalBoton = boton ? boton.innerHTML : '';
+    let cargaExitosa = false;
+
     state.cargando = true;
-    setEstado('Cargando auditoría clínica…', false);
+    setEstado(forzar ? 'Actualizando auditoría clínica…' : 'Cargando auditoría clínica…', false);
+
+    if(boton){
+      boton.disabled = true;
+      boton.setAttribute('aria-busy','true');
+      boton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Actualizando…';
+    }
 
     try{
       const q = new URLSearchParams({
@@ -501,7 +601,13 @@
         ? resultado
         : (Array.isArray(resultado && resultado.data) ? resultado.data : []);
       state.cargado = true;
-      setEstado('Auditoría clínica cargada. Registro independiente de la bitácora de accesos.', false);
+      cargaExitosa = true;
+
+      const hora = horaActualEcuador();
+      setEstado(
+        'Auditoría actualizada' + (hora ? ' · '+hora : '') + '. Registro independiente de la bitácora de accesos.',
+        false
+      );
       render();
     }catch(error){
       console.error(MODULO + ':', error);
@@ -511,6 +617,23 @@
       render();
     }finally{
       state.cargando = false;
+
+      if(boton){
+        boton.disabled = false;
+        boton.removeAttribute('aria-busy');
+
+        if(cargaExitosa){
+          boton.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Auditoría actualizada';
+          setTimeout(function(){
+            const actual = document.getElementById('audClinRefrescar');
+            if(actual && !state.cargando){
+              actual.innerHTML = originalBoton || '<i class="bi bi-arrow-clockwise me-1"></i> Actualizar auditoría';
+            }
+          }, 1400);
+        }else{
+          boton.innerHTML = originalBoton || '<i class="bi bi-arrow-clockwise me-1"></i> Actualizar auditoría';
+        }
+      }
     }
   }
 
