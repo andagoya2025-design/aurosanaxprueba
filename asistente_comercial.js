@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.6.0 CREADOR ASISTIDO DESDE TEXTO
+ * Versión: 1.6.1 CREADOR DESDE TEXTO OPTIMIZADO
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -1924,12 +1924,105 @@
       .slice(0, 90);
   }
 
-  function cleanTextCreatorResponse(rawText) {
-    return asString(rawText)
+  function cleanTextCreatorResponse(rawText, responseType, templateTypeId) {
+    const raw = asString(rawText)
       .replace(/\r\n/g, "\n")
       .replace(/[ \t]+\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+
+    if (!raw) return "";
+
+    const requestedLength = ["CORTA", "MEDIA", "LARGA"].includes(asString(responseType).toUpperCase())
+      ? asString(responseType).toUpperCase()
+      : "CORTA";
+
+    const typeId = normalizeMetaId(templateTypeId || "");
+    const commercialTypes = new Set([
+      "PRECIO",
+      "PROMOCION",
+      "CIERRE",
+      "AGENDAR",
+      "CONFIRMAR",
+      "REPROGRAMAR",
+      "RECORDATORIO"
+    ]);
+
+    const informativeTypes = new Set([
+      "INFORMACION",
+      "ESQUEMA",
+      "PREPARACION",
+      "REVISION",
+      "SEGUIMIENTO",
+      "ENTREGA"
+    ]);
+
+    const normalizedRaw = raw.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
+
+    const sentences = normalizedRaw
+      .split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡0-9])/)
+      .map(v => v.trim())
+      .filter(Boolean);
+
+    const uniqueSentences = [];
+    const seen = new Set();
+    sentences.forEach(sentence => {
+      const key = normalizeText(sentence);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      uniqueSentences.push(sentence);
+    });
+
+    const maxSentences =
+      requestedLength === "LARGA" ? 8 :
+      requestedLength === "MEDIA" ? 5 :
+      4;
+
+    let selected = uniqueSentences.slice(0, maxSentences);
+
+    if (selected.length === 1) {
+      const maxChars =
+        requestedLength === "LARGA" ? 950 :
+        requestedLength === "MEDIA" ? 620 :
+        360;
+
+      if (selected[0].length > maxChars) {
+        selected[0] = selected[0].slice(0, maxChars).replace(/\s+\S*$/, "").trim();
+        if (!/[.!?]$/.test(selected[0])) selected[0] += ".";
+      }
+    }
+
+    const emojiForSentence = (sentence, index) => {
+      const text = normalizeText(sentence);
+
+      if (index === 0) {
+        if (/\b(vacuna|gardasil|inyeccion|inyección|escleroterapia|tratamiento|procedimiento)\b/.test(text)) return "🩺";
+        if (/\b(promocion|promoción|oferta|descuento|precio|valor|desde)\b/.test(text) || /\$\s*\d/.test(sentence)) return "✨";
+        return commercialTypes.has(typeId) ? "✨" : "ℹ️";
+      }
+
+      if (/\b(precio|valor|desde|costo|promocion|promoción|oferta|descuento)\b/.test(text) || /\$\s*\d/.test(sentence)) return "💰";
+      if (/\b(valoracion|valoración|profesional|medic|médic|evaluacion|evaluación)\b/.test(text)) return "👩‍⚕️";
+      if (/\b(agenda|agendar|reserva|reservar|cita|coordinar)\b/.test(text)) return "📅";
+      if (/\b(beneficio|mejorar|apariencia|firmeza|prevencion|prevención|proteccion|protección)\b/.test(text)) return "✨";
+      if (/\b(dosis|esquema|intervalo|sesion|sesión|sesiones)\b/.test(text)) return "🔹";
+      return informativeTypes.has(typeId) ? "ℹ️" : "✨";
+    };
+
+    const maxEmojiLines =
+      requestedLength === "LARGA" ? 5 :
+      requestedLength === "MEDIA" ? 4 :
+      4;
+
+    return selected
+      .map((sentence, index) => {
+        const clean = sentence.replace(/^[^\p{L}\p{N}¿¡$]+/u, "").trim();
+        if (!clean) return "";
+        const emoji = index < maxEmojiLines ? emojiForSentence(clean, index) : "";
+        return emoji ? `${emoji} ${clean}` : clean;
+      })
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   function analyzeRawTemplateText(rawText) {
@@ -1950,12 +2043,22 @@
     const category = scoreTextCreatorCategory(raw);
     const type = detectTextCreatorType(raw);
     const service = detectTextCreatorService(raw);
-    const response = cleanTextCreatorResponse(raw);
 
-    const responseType =
-      response.length > 700 ? "LARGA" :
-      response.length > 280 ? "MEDIA" :
+    const selectedLength = asString(els.templateType?.value || "").trim().toUpperCase();
+    const detectedLength =
+      raw.length > 700 ? "LARGA" :
+      raw.length > 280 ? "MEDIA" :
       "CORTA";
+
+    const responseType = ["CORTA", "MEDIA", "LARGA"].includes(selectedLength)
+      ? selectedLength
+      : detectedLength;
+
+    const response = cleanTextCreatorResponse(
+      raw,
+      responseType,
+      type?.id || ""
+    );
 
     const analysis = {
       category,
