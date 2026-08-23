@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.2.1
+ * Versión: 1.2.2
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -1789,6 +1789,10 @@
     showStatus(CONFIG.ui?.emptyMessage || "", "neutral");
 
     state.initialized = true;
+
+    // CARGA ÚNICA DE PLANTILLAS PERSISTENTES DESDE LA BASE.
+    // No bloquea la interfaz y conserva las plantillas locales como fallback.
+    loadBackendTemplates();
 
     document.dispatchEvent(
       new CustomEvent("asistentecomercial:ready", {
