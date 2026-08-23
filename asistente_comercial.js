@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.5.2 TAXONOMÍA DEFINITIVA
+ * Versión: 1.6.0 CREADOR ASISTIDO DESDE TEXTO
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -1118,6 +1118,13 @@
       templatePreview: "acTplPreview",
       templatePreviewText: "acTplPreviewText",
       templatePreviewMeta: "acTplPreviewMeta",
+      textCreator: "acTextCreator",
+      textCreatorToggle: "acTextCreatorToggle",
+      textCreatorBody: "acTextCreatorBody",
+      textCreatorInput: "acTextCreatorInput",
+      textCreatorAnalyze: "acTextCreatorAnalyze",
+      textCreatorClear: "acTextCreatorClear",
+      textCreatorMessage: "acTextCreatorMessage",
       quickSheet: "acQuickSheet",
       quickTitle: "acQuickTitle",
       quickCategory: "acQuickCategory",
@@ -1666,6 +1673,417 @@
     els.templatePreviewMeta.textContent = previewParts.join(" · ");
   }
 
+
+  /* ==========================================================
+   * CREADOR ASISTIDO DESDE TEXTO — LOCAL / SIN PERSISTENCIA
+   * ========================================================== */
+
+  function setTextCreatorMessage(message, type) {
+    if (!els.textCreatorMessage) return;
+    els.textCreatorMessage.textContent = asString(message);
+    els.textCreatorMessage.dataset.type = type || "neutral";
+    els.textCreatorMessage.hidden = !message;
+  }
+
+  function toggleTextCreator(forceOpen) {
+    if (!els.textCreatorBody || !els.textCreatorToggle) return false;
+
+    const shouldOpen =
+      typeof forceOpen === "boolean"
+        ? forceOpen
+        : Boolean(els.textCreatorBody.hidden);
+
+    els.textCreatorBody.hidden = !shouldOpen;
+    els.textCreatorToggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+
+    const chevron = els.textCreatorToggle.querySelector(".bi-chevron-down, .bi-chevron-up");
+    if (chevron) {
+      chevron.className = shouldOpen ? "bi bi-chevron-up" : "bi bi-chevron-down";
+    }
+
+    if (shouldOpen) {
+      global.requestAnimationFrame(() => {
+        els.textCreatorInput?.focus({ preventScroll: true });
+      });
+    }
+
+    return shouldOpen;
+  }
+
+  function resetTextCreator() {
+    if (els.textCreatorInput) els.textCreatorInput.value = "";
+    if (els.textCreatorBody) els.textCreatorBody.hidden = true;
+    if (els.textCreatorToggle) {
+      els.textCreatorToggle.setAttribute("aria-expanded", "false");
+      const chevron = els.textCreatorToggle.querySelector(".bi-chevron-down, .bi-chevron-up");
+      if (chevron) chevron.className = "bi bi-chevron-down";
+    }
+    setTextCreatorMessage("");
+  }
+
+  function getTextCreatorTypeRules() {
+    return [
+      { id: "PROMOCION", confidence: 0.98, words: ["promocion", "promoción", "oferta", "descuento", "paquete", "promo"] },
+      { id: "PRECIO", confidence: 0.96, words: ["precio", "costo", "valor", "cuesta", "$", "dolar", "dólar"] },
+      { id: "ESQUEMA", confidence: 0.97, words: ["esquema", "dosis", "intervalo", "primera dosis", "segunda dosis", "tercera dosis"] },
+      { id: "REPROGRAMAR", confidence: 0.98, words: ["reprogramar", "cambiar cita", "cambio de cita", "mover cita"] },
+      { id: "CONFIRMAR", confidence: 0.98, words: ["confirmar cita", "confirmacion de cita", "confirmación de cita"] },
+      { id: "RECORDATORIO", confidence: 0.98, words: ["recordatorio", "recordar cita"] },
+      { id: "AGENDAR", confidence: 0.92, words: ["agendar", "reservar cita", "separar cita", "coordinar cita"] },
+      { id: "DIRECCION", confidence: 0.96, words: ["direccion", "dirección", "ubicacion", "ubicación", "como llegar", "cómo llegar"] },
+      { id: "HORARIO_ATENCION", confidence: 0.96, words: ["horario", "horarios", "hora de atencion", "hora de atención"] },
+      { id: "REVISION", confidence: 0.90, words: ["revision", "revisión", "revisar resultado", "revisar resultados"] },
+      { id: "SEGUIMIENTO", confidence: 0.91, words: ["seguimiento", "control posterior", "control de seguimiento"] },
+      { id: "INFORMACION", confidence: 0.78, words: ["informacion", "información", "que es", "qué es", "consiste", "sirve para", "beneficios"] }
+    ];
+  }
+
+  function scoreTextCreatorCategory(rawText) {
+    const text = normalizeText(rawText);
+    const categories = getAvailableCategories();
+    let best = null;
+
+    categories.forEach(category => {
+      let score = 0;
+      const label = normalizeText(category.label || "");
+      const idText = normalizeText(asString(category.id).replace(/_/g, " "));
+
+      if (label && text.includes(label)) score += 8;
+      if (idText && text.includes(idText)) score += 8;
+
+      const keywords = unique([
+        ...(Array.isArray(category.keywords) ? category.keywords : []),
+        category.label,
+        asString(category.id).replace(/_/g, " ")
+      ]);
+
+      keywords.forEach(keyword => {
+        const normalizedKeyword = normalizeText(keyword);
+        if (normalizedKeyword && normalizedKeyword.length >= 3 && text.includes(normalizedKeyword)) {
+          score += normalizedKeyword.length >= 8 ? 3 : 2;
+        }
+      });
+
+      // Señales médicas/comerciales muy concretas para categorías ya existentes.
+      const id = asString(category.id).toUpperCase();
+      if (id === "VPH" && /\b(vph|gardasil|papiloma)\b/.test(text)) score += 12;
+      if (id === "ESTETICA_FACIAL" && /\b(hifu|bioestimul|toxina|botulin|peeling|hilos|labios|exosomas)\b/.test(text)) score += 12;
+      if (id === "AGENDAMIENTO" && /\b(agendar|reservar|cita|reprogramar|confirmar cita)\b/.test(text)) score += 8;
+      if (id === "UBICACION" && /\b(ubicacion|direccion|como llegar|agora|mall del sol)\b/.test(text)) score += 10;
+      if (id === "HORARIOS" && /\b(horario|horarios|disponibilidad)\b/.test(text)) score += 10;
+      if (id === "PAPANICOLAOU" && /\b(papanicolaou|pap smear|citologia|citología)\b/.test(text)) score += 12;
+      if (id === "COLPOSCOPIA" && /\b(colposcopia|colposcopía)\b/.test(text)) score += 12;
+      if (id === "MENOPAUSIA" && /\b(menopausia|climaterio)\b/.test(text)) score += 12;
+      if (id === "RESULTADOS" && /\b(resultado|resultados|informe|revisión de examen)\b/.test(text)) score += 7;
+
+      if (!best || score > best.score) {
+        best = { id: category.id, label: category.label, score };
+      }
+    });
+
+    if (!best || best.score < 5) {
+      return { id: "", label: "", confidence: 0 };
+    }
+
+    return {
+      id: best.id,
+      label: best.label,
+      confidence: best.score >= 12 ? 0.95 : best.score >= 8 ? 0.84 : 0.70
+    };
+  }
+
+  function detectTextCreatorType(rawText) {
+    const text = normalizeText(rawText);
+    let best = null;
+
+    getTextCreatorTypeRules().forEach(rule => {
+      let hits = 0;
+      rule.words.forEach(word => {
+        if (text.includes(normalizeText(word))) hits += 1;
+      });
+
+      if (hits && (!best || hits > best.hits || (hits === best.hits && rule.confidence > best.confidence))) {
+        best = { id: rule.id, hits, confidence: rule.confidence };
+      }
+    });
+
+    return best || { id: "", hits: 0, confidence: 0 };
+  }
+
+  function detectTextCreatorService(rawText) {
+    const text = normalizeText(rawText);
+    const candidates = new Map();
+
+    (state.activeTemplates || []).forEach(template => {
+      const service = asString(template?.meta?.servicio).trim();
+      if (!service) return;
+      const key = normalizeMetaId(service);
+      if (!candidates.has(key)) {
+        candidates.set(key, {
+          id: key,
+          label: humanizeMetaLabel(key),
+          variants: new Set()
+        });
+      }
+      candidates.get(key).variants.add(service);
+      candidates.get(key).variants.add(humanizeMetaLabel(key));
+      candidates.get(key).variants.add(key.replace(/_/g, " "));
+    });
+
+    const knownServices = [
+      ["GARDASIL", ["gardasil"]],
+      ["HIFU_FACIAL", ["hifu", "hifu facial"]],
+      ["BIOESTIMULADORES", ["bioestimulador", "bioestimuladores"]],
+      ["TOXINA_BOTULINICA", ["toxina botulinica", "toxina botulínica", "botox"]],
+      ["PEELING_FACIAL", ["peeling", "peeling facial"]],
+      ["HILOS_TENSORES", ["hilos tensores", "hilos"]],
+      ["ACIDO_HIALURONICO_LABIOS", ["acido hialuronico", "ácido hialurónico", "relleno labios", "labios"]],
+      ["PAPANICOLAOU", ["papanicolaou", "citologia", "citología"]],
+      ["COLPOSCOPIA", ["colposcopia", "colposcopía"]]
+    ];
+
+    knownServices.forEach(([id, variants]) => {
+      if (!candidates.has(id)) {
+        candidates.set(id, {
+          id,
+          label: humanizeMetaLabel(id),
+          variants: new Set()
+        });
+      }
+      variants.forEach(v => candidates.get(id).variants.add(v));
+    });
+
+    let best = null;
+    candidates.forEach(candidate => {
+      let longest = 0;
+      candidate.variants.forEach(variant => {
+        const normalized = normalizeText(variant);
+        if (normalized && text.includes(normalized)) {
+          longest = Math.max(longest, normalized.length);
+        }
+      });
+      if (longest && (!best || longest > best.longest)) {
+        best = { ...candidate, longest };
+      }
+    });
+
+    return best
+      ? { id: best.id, label: best.label, confidence: best.longest >= 8 ? 0.95 : 0.84 }
+      : { id: "", label: "", confidence: 0 };
+  }
+
+  function extractTextCreatorKeywords(rawText, analysis) {
+    const stopWords = new Set([
+      "para","como","con","sin","por","una","uno","unos","unas","del","las","los","que",
+      "esta","este","esto","desde","hasta","sobre","entre","más","mas","muy","puede","pueden",
+      "tiene","tienen","cada","segun","según","donde","cuando","porque","tambien","también",
+      "ayuda","quieres","quieras","deseas","podemos","puedo","te","tu","su","sus","al","el","la","de","y","o","en","es"
+    ]);
+
+    const words = normalizeText(rawText)
+      .replace(/[^a-z0-9áéíóúñü$ ]/gi, " ")
+      .split(/\s+/)
+      .map(v => v.trim())
+      .filter(v => v.length >= 4 && !stopWords.has(v));
+
+    const frequencies = new Map();
+    words.forEach(word => frequencies.set(word, (frequencies.get(word) || 0) + 1));
+
+    const ranked = [...frequencies.entries()]
+      .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+      .map(([word]) => word);
+
+    const forced = [
+      analysis?.category?.label,
+      analysis?.type?.id ? humanizeMetaLabel(analysis.type.id) : "",
+      analysis?.service?.label
+    ]
+      .filter(Boolean)
+      .map(normalizeText);
+
+    return unique([...forced, ...ranked]).filter(Boolean).slice(0, 10);
+  }
+
+  function suggestTextCreatorTitle(rawText, analysis) {
+    const service = analysis?.service?.label || "";
+    const typeLabel = analysis?.type?.id ? humanizeMetaLabel(analysis.type.id) : "";
+    const categoryLabel = analysis?.category?.label || "";
+
+    if (service && typeLabel) return `${service} — ${typeLabel}`;
+    if (service) return service;
+    if (categoryLabel && typeLabel) return `${categoryLabel} — ${typeLabel}`;
+
+    const firstLine = asString(rawText)
+      .split(/\n+/)
+      .map(v => v.trim())
+      .find(Boolean) || "";
+
+    return firstLine
+      .replace(/\s+/g, " ")
+      .replace(/[.!?]+$/, "")
+      .slice(0, 90);
+  }
+
+  function cleanTextCreatorResponse(rawText) {
+    return asString(rawText)
+      .replace(/\r\n/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function analyzeRawTemplateText(rawText) {
+    const raw = asString(rawText).trim();
+    if (!raw) {
+      return {
+        category: { id: "", label: "", confidence: 0 },
+        type: { id: "", confidence: 0 },
+        service: { id: "", label: "", confidence: 0 },
+        title: "",
+        responseType: "CORTA",
+        keywords: [],
+        response: "",
+        warnings: ["Pega un texto antes de analizar."]
+      };
+    }
+
+    const category = scoreTextCreatorCategory(raw);
+    const type = detectTextCreatorType(raw);
+    const service = detectTextCreatorService(raw);
+    const response = cleanTextCreatorResponse(raw);
+
+    const responseType =
+      response.length > 700 ? "LARGA" :
+      response.length > 280 ? "MEDIA" :
+      "CORTA";
+
+    const analysis = {
+      category,
+      type,
+      service,
+      responseType,
+      response,
+      title: "",
+      keywords: [],
+      warnings: []
+    };
+
+    analysis.title = suggestTextCreatorTitle(raw, analysis);
+    analysis.keywords = extractTextCreatorKeywords(raw, analysis);
+
+    if (!category.id || category.confidence < 0.75) {
+      analysis.warnings.push("No detecté una categoría con suficiente seguridad; revísala antes de guardar.");
+    }
+    if (!type.id || type.confidence < 0.80) {
+      analysis.warnings.push("Tipo / subcategoría no detectado con suficiente seguridad; puedes completarlo manualmente.");
+    }
+    if (!service.id) {
+      analysis.warnings.push("Servicio / tema no detectado; puede dejarse vacío si la respuesta es general.");
+    }
+
+    const normalized = normalizeText(raw);
+    const hasPrice = /\$\s*\d|\b\d+(?:[.,]\d{1,2})?\s*(?:dolares|dólares|usd)\b/i.test(raw);
+    if (hasPrice && type.id && !["PRECIO", "PROMOCION"].includes(type.id)) {
+      analysis.warnings.push("Se detectó un precio; revisa si el tipo correcto debería ser Precio o Promoción.");
+    }
+    if (/\b(promocion|promoción|oferta|descuento)\b/.test(normalized) && type.id !== "PROMOCION") {
+      analysis.warnings.push("Se detectó lenguaje promocional; revisa el tipo / subcategoría.");
+    }
+
+    return analysis;
+  }
+
+  function setFieldIfEmpty(element, value) {
+    if (!element || value === undefined || value === null || value === "") return false;
+    if (asString(element.value).trim()) return false;
+    element.value = asString(value);
+    return true;
+  }
+
+  function applyTextAnalysisToForm(analysis) {
+    if (!analysis) return 0;
+
+    let changed = 0;
+
+    if (analysis.category?.id && analysis.category.confidence >= 0.75) {
+      changed += setFieldIfEmpty(
+        els.templateCategory,
+        analysis.category.label || humanizeCategoryLabel(analysis.category.id)
+      ) ? 1 : 0;
+    }
+
+    if (analysis.type?.id && analysis.type.confidence >= 0.80) {
+      changed += setFieldIfEmpty(
+        els.templateBusinessType,
+        humanizeMetaLabel(analysis.type.id)
+      ) ? 1 : 0;
+    }
+
+    if (analysis.service?.id) {
+      changed += setFieldIfEmpty(
+        els.templateService,
+        analysis.service.label || humanizeMetaLabel(analysis.service.id)
+      ) ? 1 : 0;
+    }
+
+    changed += setFieldIfEmpty(els.templateTitle, analysis.title) ? 1 : 0;
+    changed += setFieldIfEmpty(els.templateType, analysis.responseType) ? 1 : 0;
+    changed += setFieldIfEmpty(els.templateKeywords, analysis.keywords.join(", ")) ? 1 : 0;
+    changed += setFieldIfEmpty(els.templateResponse, analysis.response) ? 1 : 0;
+
+    populateTemplateCategorySelect();
+    populateTemplateTypeDatalist();
+    updateTemplatePreview();
+
+    return changed;
+  }
+
+  function renderTextCreatorSuggestions(analysis, changedCount) {
+    if (!analysis) return;
+
+    const warnings = Array.isArray(analysis.warnings) ? analysis.warnings : [];
+    const suggestions = [];
+
+    if (analysis.category?.id) {
+      suggestions.push(`Categoría sugerida: ${analysis.category.label || humanizeCategoryLabel(analysis.category.id)}.`);
+    }
+    if (analysis.type?.id) {
+      suggestions.push(`Tipo sugerido: ${humanizeMetaLabel(analysis.type.id)}.`);
+    }
+    if (analysis.service?.id) {
+      suggestions.push(`Servicio / tema sugerido: ${analysis.service.label || humanizeMetaLabel(analysis.service.id)}.`);
+    }
+
+    const prefix = changedCount
+      ? `Se completaron ${changedCount} campo${changedCount === 1 ? "" : "s"} vacío${changedCount === 1 ? "" : "s"}.`
+      : "No reemplacé campos que ya tenían contenido.";
+
+    const message = [
+      prefix,
+      ...suggestions,
+      ...warnings
+    ].join(" ");
+
+    setTextCreatorMessage(
+      message,
+      warnings.length ? "warning" : "success"
+    );
+  }
+
+  function runTextCreatorAnalysis() {
+    const raw = asString(els.textCreatorInput?.value).trim();
+    if (!raw) {
+      setTextCreatorMessage("Pega un texto antes de analizar.", "warning");
+      els.textCreatorInput?.focus();
+      return false;
+    }
+
+    const analysis = analyzeRawTemplateText(raw);
+    const changedCount = applyTextAnalysisToForm(analysis);
+    renderTextCreatorSuggestions(analysis, changedCount);
+    return true;
+  }
+
   function openTemplateModal(templateId) {
     if (!els.templateModal) return;
 
@@ -1673,6 +2091,7 @@
     state.editingTemplateId = template?.source === "DB" ? template.id : null;
 
     if (els.templateForm) els.templateForm.reset();
+    resetTextCreator();
     populateTemplateCategorySelect();
     populateTemplateTypeDatalist();
     showTemplateEditorMessage("");
@@ -1731,6 +2150,7 @@
 
   function closeTemplateModal() {
     if (!els.templateModal) return;
+    resetTextCreator();
     els.templateModal.hidden = true;
     state.editingTemplateId = null;
     document.body.classList.remove("ac-modal-open");
@@ -2061,6 +2481,22 @@
 
     if (els.templateCancel) {
       els.templateCancel.addEventListener("click", closeTemplateModal);
+    }
+
+    if (els.textCreatorToggle) {
+      els.textCreatorToggle.addEventListener("click", () => toggleTextCreator());
+    }
+
+    if (els.textCreatorAnalyze) {
+      els.textCreatorAnalyze.addEventListener("click", runTextCreatorAnalysis);
+    }
+
+    if (els.textCreatorClear) {
+      els.textCreatorClear.addEventListener("click", () => {
+        if (els.textCreatorInput) els.textCreatorInput.value = "";
+        setTextCreatorMessage("");
+        els.textCreatorInput?.focus();
+      });
     }
 
     [els.templateTitle, els.templateCategory, els.templateKeywords,
