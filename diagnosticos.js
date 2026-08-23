@@ -2966,12 +2966,26 @@
     const obst = state.especialidades.obstetricia || {};
     const parrafos = [];
 
+    /*
+      AUROSANAX — CONTEXTO CLÍNICO DE GENERACIÓN
+      Reutiliza exclusivamente el contexto ya existente del módulo.
+      No crea estados nuevos ni modifica la seguridad de la atención.
+    */
+    const ctx = contextoAtencionSeleccionada();
+    const historica = ctx?.historica === true;
+    const correccionActiva =
+      historica && state.correccionClinicaActiva === true;
+    const historicaSoloLectura =
+      historica && !correccionActiva;
+
     const motivo = limpiarTextoClinico(
       at.motivo_consulta || h.motivo_consulta ||
       getValue('hcMotivoConsulta') || getValue('hcMotivo')
     );
     const enfermedad = contenidoAnamnesis();
-    const hallazgo = limpiarTextoClinico(ex.examen_fisico || ex.hallazgos || ex.observaciones);
+    const hallazgo = limpiarTextoClinico(
+      ex.examen_fisico || ex.hallazgos || ex.observaciones
+    );
 
     const gineCont = gine.sintomas_json || gine.sintomas ||
       gine.sintomas_ginecologicos_json || gine.sintomas_ginecologicos || gine;
@@ -2983,102 +2997,444 @@
     const positivos = [...sg.positivos, ...so.positivos];
     const negativos = [...sg.negativos, ...so.negativos];
 
+    /*
+      SIN DIAGNÓSTICO PRINCIPAL
+      - Atención abierta: razonamiento prospectivo original.
+      - Histórica: descripción documental, sin sugerir que la atención sigue activa.
+      - Corrección: revisión clínica temporal dentro del flujo auditado existente.
+    */
     if(!principal){
       const bases = [];
       if(motivo) bases.push('el motivo de consulta');
       if(enfermedad) bases.push('la anamnesis y evolución clínica referida');
       if(hallazgo) bases.push('los hallazgos del examen físico');
-      if(positivos.length) bases.push('la presencia de ' + auroListaNatural(positivos.slice(0,6)));
-
-      if(bases.length){
-        parrafos.push('Con la información disponible se establece un razonamiento clínico preliminar basado en ' +
-          auroListaNatural(bases) + '. Estos elementos permiten orientar la impresión diagnóstica, que permanece pendiente de confirmación y registro por el profesional.');
-      }else{
-        parrafos.push('La atención está activa, pero la información clínica disponible aún es insuficiente para formular un razonamiento clínico preliminar.');
-      }
-
-      if(negativos.length){
-        parrafos.push('Se documenta ausencia de ' + auroListaNatural(negativos.slice(0,5)) +
-          ', hallazgo que debe interpretarse dentro del contexto clínico y no excluye otros diagnósticos diferenciales.');
-      }
-    }
-
-    if(principal){
-      const dx = [principal.codigo_cie10, principal.descripcion].filter(Boolean).join(' - ');
-      let frase = 'La integración de la información clínica disponible es compatible con ' + dx;
       if(positivos.length){
-        frase += ', sustentado por la presencia de ' + auroListaNatural(positivos.slice(0,6));
+        bases.push('la presencia de ' + auroListaNatural(positivos.slice(0,6)));
+      }
+
+      if(historicaSoloLectura){
+        if(bases.length){
+          parrafos.push(
+            'En esta atención finalizada no consta un diagnóstico principal activo en la información diagnóstica disponible. ' +
+            'El análisis histórico se limita a la documentación registrada, que incluye ' +
+            auroListaNatural(bases) + '.'
+          );
+        }else{
+          parrafos.push(
+            'En esta atención finalizada no consta un diagnóstico principal activo ni información clínica suficiente para ampliar retrospectivamente la impresión diagnóstica.'
+          );
+        }
+      }else if(correccionActiva){
+        if(bases.length){
+          parrafos.push(
+            'Durante la revisión clínica del registro histórico se dispone de ' +
+            auroListaNatural(bases) +
+            '. Estos elementos permiten reevaluar la impresión diagnóstica dentro de la corrección clínica habilitada, sin modificar por sí solos el registro original.'
+          );
+        }else{
+          parrafos.push(
+            'La corrección clínica está habilitada, pero la información disponible aún es insuficiente para reformular una impresión diagnóstica.'
+          );
+        }
       }else{
-        const bases = [];
-        if(motivo) bases.push('el motivo de consulta');
-        if(enfermedad) bases.push('la evolución clínica referida');
-        if(hallazgo) bases.push('los hallazgos del examen físico');
-        if(bases.length) frase += ', en correlación con ' + auroListaNatural(bases);
+        if(bases.length){
+          parrafos.push(
+            'Con la información disponible se establece un razonamiento clínico preliminar basado en ' +
+            auroListaNatural(bases) +
+            '. Estos elementos permiten orientar la impresión diagnóstica, que permanece pendiente de confirmación y registro por el profesional.'
+          );
+        }else{
+          parrafos.push(
+            'La atención está activa, pero la información clínica disponible aún es insuficiente para formular un razonamiento clínico preliminar.'
+          );
+        }
       }
-      frase += '.';
+
       if(negativos.length){
-        frase += ' Se documenta ausencia de ' + auroListaNatural(negativos.slice(0,5)) +
-          ', lo cual debe interpretarse dentro del contexto clínico.';
+        parrafos.push(
+          'Se documenta ausencia de ' +
+          auroListaNatural(negativos.slice(0,5)) +
+          (historicaSoloLectura
+            ? ', dato consignado en el registro de esta atención.'
+            : ', hallazgo que debe interpretarse dentro del contexto clínico y no excluye otros diagnósticos diferenciales.')
+        );
       }
-      parrafos.push(frase);
     }
 
+    /*
+      DIAGNÓSTICO PRINCIPAL
+      Conserva explícitamente el grado de certeza registrado.
+    */
+    if(principal){
+      const dx = [principal.codigo_cie10, principal.descripcion]
+        .filter(Boolean)
+        .join(' - ');
+
+      const tipoRegistrado =
+        texto(principal.tipo_diagnostico || 'Presuntivo');
+      const tipoNormalizado = normalizar(tipoRegistrado);
+      const esDefinitivo =
+        tipoNormalizado.includes('definit');
+
+      if(historicaSoloLectura){
+        let frase =
+          'En esta atención finalizada quedó registrado como diagnóstico principal ' +
+          dx +
+          ', de carácter ' +
+          tipoRegistrado.toLowerCase();
+
+        if(positivos.length){
+          frase +=
+            '. Entre los datos clínicos documentados constan ' +
+            auroListaNatural(positivos.slice(0,6));
+        }else{
+          const bases = [];
+          if(motivo) bases.push('el motivo de consulta');
+          if(enfermedad) bases.push('la evolución clínica referida');
+          if(hallazgo) bases.push('los hallazgos del examen físico');
+
+          if(bases.length){
+            frase +=
+              '. El registro disponible conserva como elementos de contexto ' +
+              auroListaNatural(bases);
+          }
+        }
+
+        frase += '.';
+
+        if(negativos.length){
+          frase +=
+            ' También se documenta ausencia de ' +
+            auroListaNatural(negativos.slice(0,5)) +
+            '.';
+        }
+
+        parrafos.push(frase);
+
+      }else{
+        let frase = '';
+
+        if(esDefinitivo){
+          frase =
+            'Se encuentra registrado como diagnóstico principal definitivo ' +
+            dx;
+        }else{
+          frase =
+            'Se encuentra registrado como diagnóstico principal ' +
+            tipoRegistrado.toLowerCase() +
+            ' ' +
+            dx;
+        }
+
+        if(positivos.length){
+          frase +=
+            esDefinitivo
+              ? ', en correlación con la presencia documentada de ' +
+                auroListaNatural(positivos.slice(0,6))
+              : '. Los hallazgos disponibles son concordantes con esta impresión, incluyendo ' +
+                auroListaNatural(positivos.slice(0,6));
+        }else{
+          const bases = [];
+          if(motivo) bases.push('el motivo de consulta');
+          if(enfermedad) bases.push('la evolución clínica referida');
+          if(hallazgo) bases.push('los hallazgos del examen físico');
+
+          if(bases.length){
+            frase +=
+              esDefinitivo
+                ? ', en correlación con ' + auroListaNatural(bases)
+                : '. La correlación clínica disponible considera ' +
+                  auroListaNatural(bases);
+          }
+        }
+
+        frase += '.';
+
+        if(negativos.length){
+          frase +=
+            ' Se documenta ausencia de ' +
+            auroListaNatural(negativos.slice(0,5)) +
+            ', lo cual debe interpretarse dentro del contexto clínico.';
+        }
+
+        if(correccionActiva){
+          frase +=
+            ' Esta integración se realiza dentro de una corrección clínica habilitada del registro histórico y requiere validación profesional antes de guardar la enmienda.';
+        }
+
+        parrafos.push(frase);
+      }
+    }
+
+    /*
+      DIAGNÓSTICOS ASOCIADOS
+      En modo histórico se describen; no se convierten en una nueva conducta.
+    */
     if(secundarios.length){
-      parrafos.push('Los diagnósticos asociados —' +
-        secundarios.map(x => [x.codigo_cie10,x.descripcion].filter(Boolean).join(' - ')).join('; ') +
-        '— deben considerarse al individualizar el abordaje y el seguimiento.');
+      const listaSecundarios = secundarios.map(x =>
+        [
+          [x.codigo_cie10, x.descripcion].filter(Boolean).join(' - '),
+          x.tipo_diagnostico
+            ? '(' + texto(x.tipo_diagnostico).toLowerCase() + ')'
+            : ''
+        ].filter(Boolean).join(' ')
+      ).join('; ');
+
+      if(historicaSoloLectura){
+        parrafos.push(
+          'En el registro de esta atención constan además como diagnósticos asociados: ' +
+          listaSecundarios +
+          '.'
+        );
+      }else{
+        parrafos.push(
+          'Los diagnósticos asociados —' +
+          listaSecundarios +
+          '— deben considerarse al individualizar el abordaje y el seguimiento.'
+        );
+      }
     }
 
+    /*
+      INFORMACIÓN FALTANTE
+      Nunca exige completar retrospectivamente una consulta finalizada.
+    */
     const faltantes = [];
     if(!motivo) faltantes.push('motivo de consulta');
     if(!enfermedad) faltantes.push('enfermedad actual');
     if(!hallazgo) faltantes.push('hallazgos del examen físico');
+
     if(faltantes.length){
-      parrafos.push('La impresión clínica debe completarse o verificarse con ' +
-        auroListaNatural(faltantes) + ' antes de establecer el diagnóstico definitivo.');
+      if(historicaSoloLectura){
+        parrafos.push(
+          'En la documentación disponible de esta atención no constan ' +
+          auroListaNatural(faltantes) +
+          '; por tratarse de un registro finalizado, esta integración histórica se limita a la información efectivamente documentada.'
+        );
+      }else if(correccionActiva){
+        parrafos.push(
+          'Durante la revisión del registro no constan ' +
+          auroListaNatural(faltantes) +
+          '. Cualquier incorporación debe corresponder a una corrección clínica debidamente validada y trazable.'
+        );
+      }else{
+        parrafos.push(
+          'La correlación clínica debe completarse o verificarse con ' +
+          auroListaNatural(faltantes) +
+          ' antes de cerrar la impresión diagnóstica.'
+        );
+      }
     }
 
+    /*
+      PROTOCOLOS
+      La existencia ACTUAL de un protocolo no se presenta como evidencia
+      de que haya sido aplicado en una atención histórica.
+    */
     if(state.protocolos.length){
-      parrafos.push('Se dispone de ' + state.protocolos.length +
-        ' protocolo(s) de apoyo vinculado(s) al diagnóstico registrado. Su contenido es orientativo y requiere validación e individualización médica.');
+      if(historicaSoloLectura){
+        parrafos.push(
+          'Actualmente se dispone de ' +
+          state.protocolos.length +
+          ' protocolo(s) de apoyo vinculado(s) al diagnóstico registrado. Su disponibilidad se muestra únicamente como referencia clínica actual y no implica que hayan sido aplicados durante esta atención finalizada.'
+        );
+      }else{
+        parrafos.push(
+          'Se dispone de ' +
+          state.protocolos.length +
+          ' protocolo(s) de apoyo vinculado(s) al diagnóstico registrado. Su contenido es orientativo y requiere validación e individualización médica.'
+        );
+      }
     }else if(principal){
-      parrafos.push('No se encontró un protocolo clínico activo específico para el diagnóstico registrado; la conducta deberá individualizarse según los diagnósticos diferenciales y los resultados complementarios.');
-    }else{
-      parrafos.push('Al no existir todavía un diagnóstico registrado, no se realiza vinculación automática con protocolos. Esta etapa podrá completarse al actualizar la integración clínica.');
+      if(historicaSoloLectura){
+        parrafos.push(
+          'No se identifica actualmente un protocolo clínico activo específico para el diagnóstico registrado. Esto no modifica ni redefine la conducta documentada en la atención finalizada.'
+        );
+      }else{
+        parrafos.push(
+          'No se encontró un protocolo clínico activo específico para el diagnóstico registrado; la conducta deberá individualizarse según la valoración clínica y los resultados complementarios.'
+        );
+      }
+    }else if(!historicaSoloLectura){
+      parrafos.push(
+        'Al no existir todavía un diagnóstico registrado, no se realiza vinculación automática con protocolos. Esta etapa podrá completarse al actualizar la integración clínica.'
+      );
     }
 
-    parrafos.push('Antes de definir el plan deben verificarse gravedad, comorbilidades, alergias, embarazo o lactancia cuando corresponda, función renal y hepática, interacciones farmacológicas y signos de alarma.');
+    /*
+      SEGURIDAD CLÍNICA
+      La advertencia prospectiva solo corresponde cuando todavía existe
+      capacidad de decisión clínica o una corrección explícitamente habilitada.
+    */
+    if(!historicaSoloLectura){
+      parrafos.push(
+        correccionActiva
+          ? 'Antes de modificar el Plan o incorporar una corrección deben verificarse gravedad, comorbilidades, alergias, embarazo o lactancia cuando corresponda, función renal y hepática, interacciones farmacológicas y signos de alarma.'
+          : 'Antes de definir el Plan deben verificarse gravedad, comorbilidades, alergias, embarazo o lactancia cuando corresponda, función renal y hepática, interacciones farmacológicas y signos de alarma.'
+      );
+    }
 
     return parrafos.map(auroPunto).join('\n\n');
   }
 
   function construirConducta(){
-    const p = state.protocoloSeleccionado !== null ? state.protocolos[state.protocoloSeleccionado] : null;
-    if(!p){
-      return [
-        'Estudios: definir exámenes complementarios según hallazgos clínicos y diagnósticos diferenciales.',
-        'Tratamiento: individualizar de acuerdo con diagnóstico confirmado, antecedentes, alergias y contraindicaciones.',
-        'Educación: explicar evolución esperada, adherencia y medidas generales pertinentes.',
-        'Seguimiento: establecer control según respuesta clínica y resultados.',
-        'Signos de alarma: indicar consulta inmediata ante deterioro clínico o síntomas de alarma relacionados con el cuadro.'
-      ].join('\n');
+    const ctx = contextoAtencionSeleccionada();
+    const historica = ctx?.historica === true;
+    const correccionActiva =
+      historica && state.correccionClinicaActiva === true;
+    const historicaSoloLectura =
+      historica && !correccionActiva;
+
+    const p =
+      state.protocoloSeleccionado !== null
+        ? state.protocolos[state.protocoloSeleccionado]
+        : null;
+
+    /*
+      ATENCIÓN FINALIZADA / SOLO LECTURA
+      No genera retrospectivamente una conducta nueva.
+      Tampoco afirma que un protocolo actual fue aplicado en el pasado.
+    */
+    if(historicaSoloLectura){
+      const partes = [
+        'Atención finalizada: esta integración no genera una conducta clínica nueva ni modifica retrospectivamente el Plan.'
+      ];
+
+      partes.push(
+        'La conducta clínicamente válida corresponde a lo documentado en el Plan, órdenes, indicaciones, recetas, interconsultas y demás registros de esta atención.'
+      );
+
+      if(p){
+        partes.push(
+          'El protocolo actualmente vinculado al diagnóstico permanece disponible únicamente como referencia clínica; su presencia no implica que haya sido indicado o aplicado durante esta atención.'
+        );
+      }
+
+      return partes.join('\n');
     }
+
+    /*
+      ATENCIÓN ABIERTA O CORRECCIÓN CLÍNICA HABILITADA
+      Conserva el motor de sugerencias, pero diferencia de forma inequívoca
+      protocolo de apoyo versus conducta ya indicada.
+    */
+    if(!p){
+      const partes = [];
+
+      if(correccionActiva){
+        partes.push(
+          'Corrección clínica habilitada: las siguientes orientaciones son apoyo para revisión y no modifican por sí solas el registro histórico.'
+        );
+      }
+
+      partes.push(
+        'Estudios sugeridos para revisión: definir exámenes complementarios según hallazgos clínicos y diagnósticos diferenciales.'
+      );
+      partes.push(
+        'Tratamiento sugerido para revisión: individualizar de acuerdo con diagnóstico, grado de certeza, antecedentes, alergias y contraindicaciones.'
+      );
+      partes.push(
+        'Educación sugerida: explicar evolución esperada, adherencia y medidas generales pertinentes.'
+      );
+      partes.push(
+        'Seguimiento sugerido: establecer control según evolución clínica y resultados.'
+      );
+      partes.push(
+        'Signos de alarma: indicar consulta inmediata ante deterioro clínico o síntomas de alarma relacionados con el cuadro.'
+      );
+
+      partes.push(
+        correccionActiva
+          ? 'Cualquier modificación debe incorporarse expresamente dentro del flujo de corrección clínica habilitado.'
+          : 'Estas orientaciones no constituyen prescripción automática y requieren validación médica antes de incorporarse al Plan.'
+      );
+
+      return partes.join('\n');
+    }
+
     const partes = [];
-    const estudios = [...(p.ordenes || []), ...(p.imagenes || []), ...(p.procedimientos || [])].map(limpiarTextoClinico).filter(Boolean);
-    const tratamiento = (p.medicamentos || []).map(limpiarTextoClinico).filter(Boolean);
-    const indicaciones = (p.indicaciones || []).map(limpiarTextoClinico).filter(Boolean);
-    const controles = (p.controles || []).map(limpiarTextoClinico).filter(Boolean);
-    const alertas = (p.alertas || []).map(limpiarTextoClinico).filter(Boolean);
-    if(limpiarTextoClinico(p.conducta)) partes.push('Conducta general: ' + limpiarTextoClinico(p.conducta) + '.');
-    if(estudios.length) partes.push('Estudios/procedimientos sugeridos: ' + estudios.join('; ') + '.');
-    if(tratamiento.length) partes.push('Tratamiento propuesto para revisión: ' + tratamiento.join('; ') + '.');
-    if(indicaciones.length) partes.push('Educación e indicaciones: ' + indicaciones.join('; ') + '.');
-    if(controles.length) partes.push('Seguimiento: ' + controles.join('; ') + '.');
-    if(alertas.length) partes.push('Signos de alarma/precauciones: ' + alertas.join('; ') + '.');
-    partes.push('Validar toda la conducta con criterio médico antes de transferirla al Plan.');
+    const estudios = [
+      ...(p.ordenes || []),
+      ...(p.imagenes || []),
+      ...(p.procedimientos || [])
+    ].map(limpiarTextoClinico).filter(Boolean);
+
+    const tratamiento = (p.medicamentos || [])
+      .map(limpiarTextoClinico)
+      .filter(Boolean);
+    const indicaciones = (p.indicaciones || [])
+      .map(limpiarTextoClinico)
+      .filter(Boolean);
+    const controles = (p.controles || [])
+      .map(limpiarTextoClinico)
+      .filter(Boolean);
+    const alertas = (p.alertas || [])
+      .map(limpiarTextoClinico)
+      .filter(Boolean);
+
+    if(correccionActiva){
+      partes.push(
+        'Corrección clínica habilitada: el protocolo se presenta como apoyo para revisión del registro histórico y no modifica por sí solo la atención original.'
+      );
+    }
+
+    const conductaGeneral = limpiarTextoClinico(p.conducta);
+    if(conductaGeneral){
+      partes.push(
+        'Conducta protocolizada sugerida para revisión: ' +
+        conductaGeneral +
+        '.'
+      );
+    }
+
+    if(estudios.length){
+      partes.push(
+        'Estudios/procedimientos sugeridos para revisión: ' +
+        estudios.join('; ') +
+        '.'
+      );
+    }
+
+    if(tratamiento.length){
+      partes.push(
+        'Tratamiento protocolizado propuesto para revisión: ' +
+        tratamiento.join('; ') +
+        '.'
+      );
+    }
+
+    if(indicaciones.length){
+      partes.push(
+        'Educación e indicaciones sugeridas: ' +
+        indicaciones.join('; ') +
+        '.'
+      );
+    }
+
+    if(controles.length){
+      partes.push(
+        'Seguimiento sugerido: ' +
+        controles.join('; ') +
+        '.'
+      );
+    }
+
+    if(alertas.length){
+      partes.push(
+        'Signos de alarma/precauciones del protocolo: ' +
+        alertas.join('; ') +
+        '.'
+      );
+    }
+
+    partes.push(
+      correccionActiva
+        ? 'Estas sugerencias no modifican por sí solas el registro histórico. Cualquier cambio debe incorporarse expresamente dentro de la corrección clínica habilitada y conservar su trazabilidad.'
+        : 'Estas sugerencias no constituyen prescripción automática. Validar e individualizar con criterio médico antes de transferirlas al Plan.'
+    );
+
     return partes.join('\n');
   }
-
 
   function valorPrimero(objeto, claves){
     for(const clave of claves || []){
@@ -3509,8 +3865,8 @@
     const hayContenido = campos.some(campo => texto(campo.value));
     if(hayContenido){
       const continuar = window.confirm(
-        'Ya existe contenido en la integración clínica.\\n\\n' +
-        'Al generar nuevamente se reemplazarán los textos actuales.\\n\\n' +
+        'Ya existe contenido en la integración clínica.\n\n' +
+        'Al generar nuevamente se reemplazarán los textos actuales.\n\n' +
         '¿Desea continuar?'
       );
       if(!continuar) return;
@@ -3679,7 +4035,6 @@
       ultimaEdicionLocal: state.ultimaEdicionLocal
     };
   }
-
   function restaurarEstadoTemporal(id){
     const cache = state.cache[id];
     if(!cache) return;
@@ -4180,171 +4535,124 @@
 
   async function aplicarAlPlan(){
     const ctx = contextoAtencionSeleccionada();
+
     if(!puedeAplicarAlPlan()){
-      mensaje('error','El protocolo solo puede aplicarse desde una atención activa o desde una corrección clínica histórica habilitada.');
+      mensaje(
+        'error',
+        'El Plan solo puede prepararse desde una atención activa o desde una corrección clínica histórica habilitada.'
+      );
       configurarModoProtocoloMaestro();
+      return;
+    }
+
+    if(!state.protocolos.length){
+      mensaje(
+        'aviso',
+        'No hay sugerencias de protocolo disponibles para transferir al Plan.'
+      );
       return;
     }
 
     if(state.cambiosPendientes){
       const continuarPendiente = window.confirm(
-        'La integración tiene cambios pendientes de confirmación temporal.\n\n' +
-        'Puede aplicarlos al Plan, pero se recomienda guardarlos temporalmente primero.\n\n' +
+        'La integración clínica tiene cambios pendientes de confirmación temporal.\n\n' +
+        'Puede continuar al Plan para revisar las sugerencias; este paso no guardará ni aplicará automáticamente medicamentos u órdenes.\n\n' +
         '¿Desea continuar?'
       );
       if(!continuarPendiente) return;
     }
 
-    const p = state.protocoloSeleccionado !== null
-      ? state.protocolos[state.protocoloSeleccionado]
-      : null;
-
-    if(!p){
-      mensaje('error','Seleccione un protocolo antes de aplicarlo al Plan.');
-      return;
+    /*
+      AUROSANAX 2026-08-23 — HANDOFF QUIRÚRGICO DIAGNÓSTICO → PLAN
+      -------------------------------------------------------------
+      Diagnóstico ya consultó y normalizó los protocolos por CIE-10.
+      Plan dispone de sus propias tarjetas para seleccionar medicamentos,
+      órdenes, procedimientos e indicaciones. Por tanto, este botón deja de
+      duplicar esa aplicación y deja de esperar guardados/remapeos que Plan
+      puede resolver en su propio flujo.
+      NO guarda diagnóstico, NO aplica medicamentos, NO aplica órdenes,
+      NO modifica Plan, NO toca Recetas y NO altera la corrección histórica.
+    */
+    try{
+      document.dispatchEvent(new CustomEvent(
+        'aurosanax:protocolos-diagnostico-listos',
+        {
+          detail:{
+            id_atencion: state.atencionActual,
+            diagnosticos: clonar(state.diagnosticos, []),
+            protocolos: clonar(state.protocolos, [])
+          }
+        }
+      ));
+    }catch(error){
+      console.warn(
+        MODULO + ': no se pudo reenviar inmediatamente las sugerencias al Plan.',
+        error
+      );
     }
 
     /*
-      AUROSANAX FIX QUIRÚRGICO 2026-07-31:
-      La confirmación se muestra antes de las operaciones asíncronas.
-      Antes el usuario debía esperar la sincronización del Plan y el guardado
-      del diagnóstico para recién ver el cuadro de confirmación.
+      Sincronización no bloqueante:
+      mantiene el contexto por id_atencion, pero no obliga al usuario a esperar
+      su resolución antes de abrir Plan.
     */
-    const confirmar = window.confirm(
-      'Se transferirán las sugerencias seleccionadas al Plan clínico de la atención ' +
-      state.atencionActual +
-      '.\n\nRevise y edite el Plan antes de guardarlo.\n\n¿Desea continuar?'
-    );
-    if(!confirmar) return;
-
-    const boton = document.querySelector('#auroCie10InteligenteBox .auro-cie10-btn.primary') ||
-                  document.getElementById('auroDxAplicarPlan');
-    const htmlOriginal = boton ? boton.innerHTML : '';
-    const disabledOriginal = boton ? boton.disabled : false;
-
-    if(boton){
-      boton.disabled = true;
-      boton.setAttribute('aria-busy','true');
-      boton.innerHTML = '<i class="bi bi-hourglass-split"></i> Aplicando protocolo...';
+    try{
+      if(typeof window.cambiarPlanPorAtencion === 'function'){
+        Promise.resolve(
+          window.cambiarPlanPorAtencion(state.atencionActual)
+        ).catch(error => {
+          console.warn(
+            MODULO + ': la sincronización de Plan continuó en segundo plano.',
+            error
+          );
+        });
+      }
+    }catch(error){
+      console.warn(
+        MODULO + ': no se pudo iniciar la sincronización de Plan en segundo plano.',
+        error
+      );
     }
 
-    mensaje('aviso','Aplicando protocolo al Plan clínico...');
+    guardarEstadoTemporal();
 
+    mensaje(
+      'ok',
+      'Sugerencias preparadas para el Plan. Seleccione allí únicamente los medicamentos, órdenes e indicaciones que correspondan.'
+    );
+
+    /*
+      Navegación inmediata al Plan.
+      Usa primero la navegación oficial del ERP y conserva un fallback
+      limitado al mismo botón existente del menú.
+    */
     try{
-      /*
-        Sincroniza una sola vez el contexto del Plan con la atención activa.
-        No modifica ni refresca el estado visual de Recetas.
-      */
-      try{
-        if(typeof window.cambiarPlanPorAtencion === 'function'){
-          await Promise.resolve(window.cambiarPlanPorAtencion(state.atencionActual));
-        }
-      }catch(error){
-        console.warn(MODULO + ': no se pudo sincronizar Plan antes de aplicar.', error);
+      if(typeof window.navegarAtencionActiva === 'function'){
+        window.navegarAtencionActiva('hc_plan');
+        return;
       }
 
-      /*
-        Persistencia del diagnóstico estructurado:
-        - Atención abierta: conserva EXACTAMENTE el guardado normal previo.
-        - Corrección histórica activa: NO ejecuta el guardado normal sin token.
-          La persistencia única y auditada se realiza con “Guardar corrección”.
-      */
-      if(!(ctx.historica && state.correccionClinicaActiva)){
-        try{
-          if(typeof window.auroGuardarDiagnosticosAtencionActual === 'function'){
-            const resultadoDx = await Promise.resolve(
-              window.auroGuardarDiagnosticosAtencionActual()
-            );
-            if(resultadoDx && resultadoDx.success === false){
-              throw new Error(
-                resultadoDx.message ||
-                'No se pudo guardar el diagnóstico estructurado de esta atención.'
-              );
-            }
-          }
-        }catch(error){
-          console.error(MODULO + ': no se pudo persistir el diagnóstico estructurado.', error);
-          mensaje(
-            'error',
-            'No se pudo guardar el diagnóstico estructurado de esta atención antes de aplicar el protocolo.'
-          );
-          return;
-        }
-      }
-
-      const medicamentos = agregarMedicamentosAlPlan(p.medicamentos);
-      const ordenes = agregarOrdenesAlPlan([
-        ...(p.ordenes || []),
-        ...(p.imagenes || []),
-        ...(p.procedimientos || [])
-      ]);
-
-      const resumen = texto(document.getElementById('auroDxResumen')?.value);
-      const analisis = texto(document.getElementById('auroDxAnalisis')?.value);
-      const conducta = texto(document.getElementById('auroDxConducta')?.value) || construirConducta();
-
-      const planTexto = [
-        analisis ? 'ANÁLISIS CLÍNICO:\n' + analisis : '',
-        conducta ? 'CONDUCTA:\n' + conducta : ''
-      ].filter(Boolean).join('\n\n');
-
-      const indicaciones = (p.indicaciones || []).join('\n');
-      const controles = (p.controles || []).join('\n');
-
-      const aplicados = {
-        plan: setPrimerCampo(IDS_PLAN.planTratamiento, planTexto, true),
-        indicaciones: setPrimerCampo(IDS_PLAN.indicaciones, indicaciones, true),
-        control: setPrimerCampo(IDS_PLAN.control, controles, true),
-        observaciones: setPrimerCampo(
-          IDS_PLAN.observaciones,
-          resumen ? 'Resumen clínico integrado:\n' + resumen : '',
-          true
-        )
-      };
-
-      try{
-        if(typeof window.sincronizarPlanConReceta === 'function'){
-          window.sincronizarPlanConReceta();
-        }
-        if(typeof window.guardarPlanTemporal === 'function'){
-          window.guardarPlanTemporal();
-        }
-      }catch(e){}
-
-      try{
-        document.dispatchEvent(new CustomEvent('aurosanax:diagnostico-aplicado-plan', {
-          detail: {
-            id_atencion: state.atencionActual,
-            protocolo: clonar(p, {}),
-            medicamentos_agregados: medicamentos,
-            ordenes_agregadas: ordenes
-          }
-        }));
-      }catch(e){}
-
-      const algunaCaja = Object.values(aplicados).some(Boolean);
-      const pendienteCorreccion = ctx.historica && state.correccionClinicaActiva;
-      mensaje(
-        'ok',
-        'Protocolo transferido al Plan. Medicamentos agregados: ' + medicamentos +
-        '. Órdenes agregadas: ' + ordenes +
-        (algunaCaja
-          ? '.'
-          : '. El Plan no expuso campos de texto compatibles; revise las tablas del Plan.') +
-        (pendienteCorreccion
-          ? ' La corrección diagnóstica sigue pendiente: pulse “Guardar corrección” para registrarla con trazabilidad.'
-          : '')
+      const botonPlan = Array.from(
+        document.querySelectorAll('button')
+      ).find(btn =>
+        String(btn.getAttribute('onclick') || '')
+          .includes("navegarAtencionActiva('hc_plan'")
       );
 
-      sincronizarEditorCie10DesdeDiagnosticos();
-      guardarEstadoTemporal();
-
-    }finally{
-      if(boton){
-        boton.disabled = disabledOriginal;
-        boton.removeAttribute('aria-busy');
-        boton.innerHTML = htmlOriginal || '<i class="bi bi-check2-circle"></i> Aplicar al Plan';
+      if(botonPlan){
+        botonPlan.click();
+        return;
       }
+
+      const plan = document.getElementById('hc_plan');
+      if(plan){
+        plan.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    }catch(error){
+      console.warn(
+        MODULO + ': las sugerencias quedaron disponibles, pero no se pudo navegar automáticamente al Plan.',
+        error
+      );
     }
   }
 
