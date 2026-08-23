@@ -1274,7 +1274,107 @@
     break-inside: avoid;
   }
 }
-\n\n/* ============================================================\n   V1.1.0 — MOBILE FIRST / RESPUESTA RÁPIDA\n   ============================================================ */\n.ac-mobile-modebar {\n  display: none;\n  position: sticky;\n  top: 8px;\n  z-index: 30;\n  grid-template-columns: 1fr 1fr;\n  gap: 8px;\n  padding: 7px;\n  margin: 0 0 14px;\n  border: 1px solid #efd4e2;\n  border-radius: 16px;\n  background: rgba(255,255,255,.94);\n  box-shadow: var(--ac-shadow-sm);\n  backdrop-filter: blur(12px);\n}\n.ac-mode-btn {\n  min-height: 44px;\n  border: 0;\n  border-radius: 12px;\n  background: transparent;\n  color: var(--ac-muted);\n  font-weight: 850;\n}\n.ac-mode-btn.active { background: var(--ac-soft); color: var(--ac-primary-dark); }\n.ac-head-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }\n.ac-btn-whatsapp {\n  border: 1px solid #bbf7d0;\n  background: #f0fdf4;\n  color: #166534;\n}\n.ac-btn-whatsapp:hover { background:#dcfce7; }\nbody.ac-modal-open { overflow:hidden; }\n.ac-modal-backdrop {\n  position: fixed; inset:0; z-index:9999; padding:18px;\n  background:rgba(15,23,42,.48);\n  display:grid; place-items:center;\n}\n.ac-modal-backdrop[hidden] { display:none !important; }\n.ac-modal {\n  width:min(720px,100%); max-height:92vh; overflow:auto;\n  border:1px solid #efd4e2; border-radius:24px; background:#fff;\n  box-shadow:0 30px 90px rgba(15,23,42,.22);\n}\n.ac-modal-head {\n  display:flex; justify-content:space-between; gap:16px; align-items:flex-start;\n  padding:20px 20px 14px; border-bottom:1px solid var(--ac-line-soft);\n}\n.ac-modal-head h2 { margin:0; font-size:20px; color:var(--ac-title); }\n.ac-modal-head p { margin:5px 0 0; color:var(--ac-muted); font-size:13px; }\n.ac-icon-btn {\n  width:42px; height:42px; border:1px solid var(--ac-line); border-radius:12px;\n  background:#fff; cursor:pointer; color:var(--ac-muted);\n}\n.ac-modal-body { padding:20px; }\n.ac-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }\n.ac-form-grid label, .ac-form-full { display:block; }\n.ac-form-grid label > span, .ac-form-full > span {\n  display:block; margin-bottom:7px; font-size:13px; font-weight:850; color:#334155;\n}\n.ac-form-full { margin-top:14px; }\n.ac-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }\n#acEstado[data-type="success"] { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }\n\n@media (max-width: 760px) {\n  .ac-mobile-modebar { display:grid; }\n  .ac-shell { padding:12px; }\n  .ac-hero { padding:16px; border-radius:20px; }\n  .ac-hero-badges { display:none; }\n  .ac-card-head { align-items:center; padding:14px 14px 0; }\n  .ac-card-body { padding:14px; }\n  .ac-card-help { font-size:12px; }\n  .ac-textarea.ac-message { min-height:150px; }\n  .ac-textarea.ac-response { min-height:190px; }\n  .ac-category-row {\n    flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px;\n    scrollbar-width:none; -webkit-overflow-scrolling:touch;\n  }\n  .ac-category-row::-webkit-scrollbar { display:none; }\n  .ac-category-chip { flex:0 0 auto; min-height:42px; }\n  .ac-filter-bar { grid-template-columns:1fr 1fr; }\n  .ac-filter-bar .ac-search-wrap { grid-column:1 / -1; }\n  .ac-response-actions {\n    position:sticky; bottom:max(8px, env(safe-area-inset-bottom)); z-index:20;\n    padding:8px; margin:12px -6px -6px; border:1px solid #efd4e2;\n    border-radius:16px; background:rgba(255,255,255,.96);\n    box-shadow:0 12px 35px rgba(15,23,42,.12); backdrop-filter:blur(12px);\n  }\n  .ac-response-actions .ac-btn { flex:1 1 30%; min-height:48px; }\n  .ac-head-actions .ac-btn { min-height:42px; padding:8px 10px; }\n  .ac-form-grid { grid-template-columns:1fr; }\n  .ac-modal-backdrop { padding:10px; align-items:end; }\n  .ac-modal { width:100%; max-height:94vh; border-radius:22px 22px 10px 10px; }\n  .ac-modal-actions { position:sticky; bottom:0; background:#fff; padding-top:10px; }\n  .ac-modal-actions .ac-btn { flex:1; min-height:48px; }\n}\n
+
+
+/* ============================================================
+   V1.1.0 — MOBILE FIRST / RESPUESTA RÁPIDA
+   ============================================================ */
+.ac-mobile-modebar {
+  display: none;
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 7px;
+  margin: 0 0 14px;
+  border: 1px solid #efd4e2;
+  border-radius: 16px;
+  background: rgba(255,255,255,.94);
+  box-shadow: var(--ac-shadow-sm);
+  backdrop-filter: blur(12px);
+}
+.ac-mode-btn {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ac-muted);
+  font-weight: 850;
+}
+.ac-mode-btn.active { background: var(--ac-soft); color: var(--ac-primary-dark); }
+.ac-head-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.ac-btn-whatsapp {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+.ac-btn-whatsapp:hover { background:#dcfce7; }
+body.ac-modal-open { overflow:hidden; }
+.ac-modal-backdrop {
+  position: fixed; inset:0; z-index:9999; padding:18px;
+  background:rgba(15,23,42,.48);
+  display:grid; place-items:center;
+}
+.ac-modal-backdrop[hidden] { display:none !important; }
+.ac-modal {
+  width:min(720px,100%); max-height:92vh; overflow:auto;
+  border:1px solid #efd4e2; border-radius:24px; background:#fff;
+  box-shadow:0 30px 90px rgba(15,23,42,.22);
+}
+.ac-modal-head {
+  display:flex; justify-content:space-between; gap:16px; align-items:flex-start;
+  padding:20px 20px 14px; border-bottom:1px solid var(--ac-line-soft);
+}
+.ac-modal-head h2 { margin:0; font-size:20px; color:var(--ac-title); }
+.ac-modal-head p { margin:5px 0 0; color:var(--ac-muted); font-size:13px; }
+.ac-icon-btn {
+  width:42px; height:42px; border:1px solid var(--ac-line); border-radius:12px;
+  background:#fff; cursor:pointer; color:var(--ac-muted);
+}
+.ac-modal-body { padding:20px; }
+.ac-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.ac-form-grid label, .ac-form-full { display:block; }
+.ac-form-grid label > span, .ac-form-full > span {
+  display:block; margin-bottom:7px; font-size:13px; font-weight:850; color:#334155;
+}
+.ac-form-full { margin-top:14px; }
+.ac-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+#acEstado[data-type="success"] { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }
+
+@media (max-width: 760px) {
+  .ac-mobile-modebar { display:grid; }
+  .ac-shell { padding:12px; }
+  .ac-hero { padding:16px; border-radius:20px; }
+  .ac-hero-badges { display:none; }
+  .ac-card-head { align-items:center; padding:14px 14px 0; }
+  .ac-card-body { padding:14px; }
+  .ac-card-help { font-size:12px; }
+  .ac-textarea.ac-message { min-height:150px; }
+  .ac-textarea.ac-response { min-height:190px; }
+  .ac-category-row {
+    flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px;
+    scrollbar-width:none; -webkit-overflow-scrolling:touch;
+  }
+  .ac-category-row::-webkit-scrollbar { display:none; }
+  .ac-category-chip { flex:0 0 auto; min-height:42px; }
+  .ac-filter-bar { grid-template-columns:1fr 1fr; }
+  .ac-filter-bar .ac-search-wrap { grid-column:1 / -1; }
+  .ac-response-actions {
+    position:sticky; bottom:max(8px, env(safe-area-inset-bottom)); z-index:20;
+    padding:8px; margin:12px -6px -6px; border:1px solid #efd4e2;
+    border-radius:16px; background:rgba(255,255,255,.96);
+    box-shadow:0 12px 35px rgba(15,23,42,.12); backdrop-filter:blur(12px);
+  }
+  .ac-response-actions .ac-btn { flex:1 1 30%; min-height:48px; }
+  .ac-head-actions .ac-btn { min-height:42px; padding:8px 10px; }
+  .ac-form-grid { grid-template-columns:1fr; }
+  .ac-modal-backdrop { padding:10px; align-items:end; }
+  .ac-modal { width:100%; max-height:94vh; border-radius:22px 22px 10px 10px; }
+  .ac-modal-actions { position:sticky; bottom:0; background:#fff; padding-top:10px; }
+  .ac-modal-actions .ac-btn { flex:1; min-height:48px; }
+}
+
 
 /* ============================================================
    V1.2.0 — MOBILE PREMIUM / BIBLIOTECA TÁCTIL / EDITOR
