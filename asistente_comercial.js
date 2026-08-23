@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.3.0
+ * Versión: 1.3.3
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -744,6 +744,29 @@
     closeQuickSheet();
   }
 
+
+  function focusLibraryAfterCategorySelection() {
+    if (!isMobileView()) return;
+    if (state.mobileMode !== "PLANTILLAS") return;
+
+    const target =
+      (!els.templateTypePanel?.hidden && els.templateTypePanel) ||
+      els.searchInput ||
+      els.templateList;
+
+    if (!target || typeof target.scrollIntoView !== "function") return;
+
+    global.requestAnimationFrame(() => {
+      global.requestAnimationFrame(() => {
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+          inline: "nearest"
+        });
+      });
+    });
+  }
+
   function setCategory(categoryId, options) {
     const opts = options || {};
     const valid =
@@ -769,6 +792,10 @@
 
     if (!opts.skipRender) {
       renderTemplateList();
+    }
+
+    if (opts.focusResults) {
+      focusLibraryAfterCategorySelection();
     }
 
     if (
@@ -1947,7 +1974,7 @@
 
     if (els.category) {
       els.category.addEventListener("change", event => {
-        setCategory(event.target.value, { autoSuggest: true, autoDetected: false });
+        setCategory(event.target.value, { autoSuggest: true, autoDetected: false, focusResults: true });
       });
     }
 
@@ -2107,7 +2134,7 @@
       els.categoriesContainer.addEventListener("click", event => {
         const button = event.target.closest("[data-category]");
         if (!button) return;
-        setCategory(button.dataset.category, { autoSuggest: true, autoDetected: false });
+        setCategory(button.dataset.category, { autoSuggest: true, autoDetected: false, focusResults: true });
       });
     }
 
