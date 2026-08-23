@@ -2364,4 +2364,237 @@ body.ac-library-focus #acCategoriaCard {
   .ac-action-footer .ac-btn { width:100%; min-height:48px; }
   .ac-confirm-actions .ac-btn { flex:1; min-height:48px; }
 }
+/* ============================================================
+   V1.3.2 — REFINAMIENTO PREMIUM DEL SEGUNDO NIVEL + RESPONSIVE
+   ============================================================ */
 
+/* El segundo nivel deja de parecer una sección técnica independiente.
+   Ahora funciona como una barra compacta de filtros vinculada a la categoría. */
+.ac-template-type-panel {
+  margin: 8px 0 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ac-template-type-panel[hidden] {
+  display: none !important;
+}
+
+.ac-type-panel-head {
+  display: none !important;
+}
+
+.ac-type-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ac-type-chip {
+  min-height: 40px;
+  padding: 7px 12px;
+  gap: 7px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.ac-type-chip small {
+  min-width: 20px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.ac-type-chip.active {
+  box-shadow: 0 6px 16px rgba(153, 27, 90, .14);
+}
+
+/* Mejor relación visual entre categoría seleccionada, filtros y buscador. */
+.ac-library-main,
+.ac-library-content,
+.ac-template-library {
+  min-width: 0;
+}
+
+/* Tarjetas: un poco más compactas sin perder legibilidad. */
+.ac-template-card {
+  min-width: 0;
+}
+
+.ac-template-card .ac-card-title,
+.ac-template-card h3 {
+  overflow-wrap: anywhere;
+}
+
+.ac-template-card .ac-template-preview,
+.ac-template-card .ac-card-preview {
+  line-height: 1.48;
+}
+
+/* ============================================================
+   TELÉFONO
+   ============================================================ */
+@media (max-width: 760px) {
+  .ac-template-type-panel {
+    margin: 6px 0 10px;
+  }
+
+  .ac-type-chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 7px;
+    padding: 1px 1px 3px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  .ac-type-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ac-type-chip {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 8px 12px;
+    scroll-snap-align: start;
+  }
+
+  /* Reduce espacios verticales en biblioteca móvil. */
+  .ac-library-toolbar,
+  .ac-library-controls {
+    gap: 10px;
+  }
+
+  .ac-template-card {
+    border-radius: 18px;
+  }
+
+  .ac-template-card .ac-card-title,
+  .ac-template-card h3 {
+    font-size: 17px;
+    line-height: 1.18;
+  }
+
+  .ac-template-card small {
+    line-height: 1.3;
+  }
+
+  .ac-template-card .ac-template-preview,
+  .ac-template-card .ac-card-preview {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  /* Acciones cómodas con una mano. */
+  .ac-template-card button,
+  .ac-template-card .ac-btn {
+    min-height: 44px;
+  }
+
+  /* Editor: mantiene márgenes y botones siempre accesibles. */
+  .ac-template-editor {
+    width: calc(100% - 16px);
+    max-width: 100%;
+  }
+
+  .ac-template-editor-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .ac-editor-actions {
+    margin-left: -14px;
+    margin-right: -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+/* ============================================================
+   TELÉFONOS MUY ESTRECHOS
+   ============================================================ */
+@media (max-width: 390px) {
+  .ac-type-chip {
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .ac-type-chip i {
+    font-size: 14px;
+  }
+
+  .ac-template-card .ac-card-title,
+  .ac-template-card h3 {
+    font-size: 16px;
+  }
+}
+
+/* ============================================================
+   DESKTOP
+   ============================================================ */
+@media (min-width: 761px) {
+  .ac-template-type-panel {
+    margin: 8px 0 14px;
+  }
+
+  .ac-type-chip-row {
+    gap: 8px;
+  }
+
+  .ac-type-chip {
+    min-height: 38px;
+  }
+}
+/* ============================================================
+   V1.3.4 — ACCESO RÁPIDO ACTIVO + FEEDBACK TÁCTIL
+   ============================================================ */
+
+.ac-category-grid-mobile .ac-category-tile {
+  transition:
+    background .16s ease,
+    border-color .16s ease,
+    color .16s ease,
+    box-shadow .16s ease,
+    transform .12s ease;
+}
+
+.ac-category-grid-mobile .ac-category-tile.active {
+  border-color: var(--ac-primary);
+  background: linear-gradient(180deg, var(--ac-primary), var(--ac-primary-dark));
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(139, 30, 90, .20);
+}
+
+.ac-category-grid-mobile .ac-category-tile.active i,
+.ac-category-grid-mobile .ac-category-tile.active span,
+.ac-category-grid-mobile .ac-category-tile.active small {
+  color: #fff;
+}
+
+.ac-category-grid-mobile .ac-category-tile.active small {
+  opacity: .88;
+}
+
+.ac-category-grid-mobile .ac-category-tile:active {
+  transform: scale(.985);
+}
+
+@media (max-width: 760px) {
+  #acTipoPlantillaPanel,
+  #acBuscarPlantilla {
+    scroll-margin-top: 12px;
+  }
+}
+
+/* ============================================================
+   V1.4.0 ESTABLE — CONSOLIDACIÓN UX ASISTENTE COMERCIAL
+   Categorías dinámicas · filtros por tipo · edición premium
+   acceso rápido activo · navegación móvil rápida.
+   ============================================================ */
