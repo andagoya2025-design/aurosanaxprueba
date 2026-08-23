@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.10';
+  const VERSION = '1.5.11';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260823_guardado_dx_abierto_refresco_plan_v1';
+  const RELEASE = '20260823_editar_guardar_dx_abierto_v2';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -71,6 +71,13 @@
     protocoloVisualModoLectura: false,
     correccionClinicaActiva: false,
     correccionClinicaMeta: null,
+
+    /*
+      AUROSANAX 1.5.11:
+      Estado exclusivamente visual para edición del CIE-10 de una atención abierta.
+      No se persiste y no modifica la corrección histórica.
+    */
+    edicionDiagnosticoAbierto: false,
 
     /*
       AUROSANAX OPTIMIZACIÓN QUIRÚRGICA 2026-08-03:
@@ -1093,16 +1100,38 @@
         <div class="auro-dx-correccion-actions">
           <span class="auro-dx-correccion-note">
             <i class="bi bi-pencil-square"></i>
-            Puede agregar, eliminar o reclasificar CIE-10 mientras la atención permanezca abierta.
+            ${state.edicionDiagnosticoAbierto
+              ? 'Edición activa: modifique los CIE-10 y confirme los cambios.'
+              : 'Diagnóstico protegido contra cambios accidentales mientras no active la edición.'}
           </span>
-          <button
-            type="button"
-            class="auro-dx-btn primary"
-            id="auroDxGuardarCambiosAbiertosBtn"
-            onclick="window.auroDxGuardarCambiosAtencionAbierta()"
-          >
-            <i class="bi bi-save"></i> Guardar cambios del diagnóstico
-          </button>
+
+          ${state.edicionDiagnosticoAbierto ? `
+            <button
+              type="button"
+              class="auro-dx-btn primary"
+              id="auroDxGuardarCambiosAbiertosBtn"
+              onclick="window.auroDxGuardarCambiosAtencionAbierta()"
+            >
+              <i class="bi bi-save"></i> Guardar cambios del diagnóstico
+            </button>
+            <button
+              type="button"
+              class="auro-dx-btn ghost"
+              onclick="window.auroDxCancelarEdicionDiagnosticoAbierto()"
+            >
+              Cancelar
+            </button>
+          ` : `
+            <button
+              type="button"
+              class="auro-dx-btn primary"
+              id="auroDxEditarDiagnosticoAbiertoBtn"
+              onclick="window.auroDxIniciarEdicionDiagnosticoAbierto()"
+            >
+              <i class="bi bi-pencil-square"></i>
+              ${state.diagnosticos.length ? 'Editar diagnóstico' : 'Agregar diagnóstico'}
+            </button>
+          `}
         </div>
       `}
       <div class="auro-dx-contexto-stats">
@@ -1161,6 +1190,60 @@
   */
   let auroDxGuardandoCambiosAbiertos = false;
 
+  function auroDxIniciarEdicionDiagnosticoAbierto(){
+    const ctx = contextoAtencionSeleccionada();
+
+    if(!ctx.id || ctx.editable !== true || ctx.historica){
+      mensaje(
+        'error',
+        'Solo puede editar directamente el diagnóstico mientras la atención permanezca abierta.'
+      );
+      return false;
+    }
+
+    sincronizarEditorCie10DesdeDiagnosticos();
+    state.edicionDiagnosticoAbierto = true;
+    renderContextoSuperior();
+
+    mensaje(
+      'aviso',
+      state.diagnosticos.length
+        ? 'Edición de diagnóstico habilitada. Modifique los CIE-10 y luego presione “Guardar cambios del diagnóstico”.'
+        : 'Edición habilitada. Agregue los diagnósticos y luego presione “Guardar cambios del diagnóstico”.'
+    );
+
+    try{
+      const editor =
+        document.getElementById('hcDiagnosticoCieGrupo') ||
+        document.getElementById('hcDxSeleccionadosBody');
+
+      if(editor){
+        editor.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    }catch(_e){}
+
+    return true;
+  }
+
+  function auroDxCancelarEdicionDiagnosticoAbierto(){
+    sincronizarEditorCie10DesdeDiagnosticos();
+    state.edicionDiagnosticoAbierto = false;
+    renderContextoSuperior();
+
+    mensaje(
+      'aviso',
+      'Edición cancelada. Se restauró en pantalla el diagnóstico guardado.'
+    );
+
+    return true;
+  }
+
+  window.auroDxIniciarEdicionDiagnosticoAbierto =
+    auroDxIniciarEdicionDiagnosticoAbierto;
+
+  window.auroDxCancelarEdicionDiagnosticoAbierto =
+    auroDxCancelarEdicionDiagnosticoAbierto;
+
   async function auroDxGuardarCambiosAtencionAbierta(){
     if(auroDxGuardandoCambiosAbiertos) return;
 
@@ -1170,6 +1253,15 @@
       mensaje(
         'error',
         'El guardado directo del diagnóstico solo está disponible mientras la atención permanezca abierta.'
+      );
+      renderContextoSuperior();
+      return;
+    }
+
+    if(state.edicionDiagnosticoAbierto !== true){
+      mensaje(
+        'aviso',
+        'Primero presione “Editar diagnóstico” para habilitar una modificación controlada.'
       );
       renderContextoSuperior();
       return;
@@ -1231,6 +1323,9 @@
            que Plan ya usa para reconstruir sus tarjetas.
       */
       await cargarAtencion(ctx.id, true);
+
+      state.edicionDiagnosticoAbierto = false;
+      sincronizarEditorCie10DesdeDiagnosticos();
 
       mensaje(
         'ok',
@@ -4640,6 +4735,11 @@
     }
 
     idAtencion = texto(idAtencion || idAtencionActiva());
+
+    if(state.atencionActual && state.atencionActual !== idAtencion){
+      state.edicionDiagnosticoAbierto = false;
+    }
+
     if(!idAtencion){
       state.atencionActual = '';
       state.idCargaEnCurso = '';
