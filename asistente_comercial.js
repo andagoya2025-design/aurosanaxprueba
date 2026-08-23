@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.2.2
+ * Versión: 1.2.3
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -132,8 +132,89 @@
     });
   }
 
+  function humanizeCategoryLabel(categoryId) {
+    const raw = asString(categoryId).trim();
+    if (!raw) return "";
+
+    const accentMap = {
+      ESTETICA: "Estética",
+      GINECOLOGIA: "Ginecología",
+      UBICACION: "Ubicación",
+      INFORMACION: "Información",
+      PROMOCION: "Promoción"
+    };
+
+    return raw
+      .split(/[_\-\s]+/)
+      .filter(Boolean)
+      .map((part, index) => {
+        const upper = part.toUpperCase();
+        if (accentMap[upper]) return accentMap[upper];
+        const lower = part.toLowerCase();
+        return index === 0
+          ? lower.charAt(0).toUpperCase() + lower.slice(1)
+          : lower;
+      })
+      .join(" ");
+  }
+
+  function getAvailableCategories() {
+    const configured = (CONFIG.categories || [])
+      .filter(c => c && c.id && c.enabled !== false)
+      .map(c => ({ ...c, source: "CONFIG" }));
+
+    const byId = new Map(configured.map(c => [c.id, c]));
+    const baseOrder = configured.reduce(
+      (max, c) => Math.max(max, Number(c.order ?? 0)),
+      0
+    );
+
+    const discoveredIds = unique(
+      (state.activeTemplates || [])
+        .filter(isActiveTemplate)
+        .map(t => asString(t.category).trim())
+        .filter(Boolean)
+    ).sort((a, b) =>
+      humanizeCategoryLabel(a).localeCompare(
+        humanizeCategoryLabel(b),
+        "es",
+        { sensitivity: "base" }
+      )
+    );
+
+    discoveredIds.forEach((categoryId, index) => {
+      if (byId.has(categoryId)) return;
+
+      const categoryTemplates = (state.activeTemplates || []).filter(
+        t => t.category === categoryId && isActiveTemplate(t)
+      );
+
+      const dynamicKeywords = unique(
+        categoryTemplates.flatMap(t =>
+          Array.isArray(t?.meta?.keywords) ? t.meta.keywords : []
+        )
+      );
+
+      byId.set(categoryId, {
+        id: categoryId,
+        label: humanizeCategoryLabel(categoryId),
+        icon: "tag",
+        order: baseOrder + 100 + index,
+        enabled: true,
+        keywords: unique([
+          categoryId,
+          categoryId.replace(/_/g, " "),
+          ...dynamicKeywords
+        ]),
+        source: "DB"
+      });
+    });
+
+    return sortByOrder([...byId.values()]);
+  }
+
   function getCategory(categoryId) {
-    return (CONFIG.categories || []).find(c => c.id === categoryId) || null;
+    return getAvailableCategories().find(c => c.id === categoryId) || null;
   }
 
   function getScope(scopeId) {
@@ -283,6 +364,11 @@
     loadTemplates([...byId.values()]);
     state.backendLoaded = true;
     state.backendAvailable = true;
+
+    // Las categorías se reconstruyen desde las plantillas activas cargadas.
+    // Así cualquier categoría nueva de la BD aparece sin editar config.js.
+    renderCategoryControls();
+    populateTemplateCategorySelect();
     renderTemplateList();
 
     if (state.pastedMessage.length >= 3) {
@@ -414,7 +500,7 @@
       return { category: "", score: 0, matches: [] };
     }
 
-    const enabledCategories = (CONFIG.categories || []).filter(c => c.enabled !== false);
+    const enabledCategories = getAvailableCategories();
     const results = enabledCategories.map(category => {
       let score = 0;
 
@@ -583,7 +669,7 @@
     const opts = options || {};
     const valid =
       !categoryId ||
-      (CONFIG.categories || []).some(c => c.id === categoryId && c.enabled !== false);
+      getAvailableCategories().some(c => c.id === categoryId);
 
     if (!valid) return false;
 
@@ -1014,9 +1100,7 @@
   }
 
   function renderCategoryControls() {
-    const categories = sortByOrder(
-      (CONFIG.categories || []).filter(c => c.enabled !== false)
-    );
+    const categories = getAvailableCategories();
 
     if (els.category) {
       const current = state.selectedCategory;
@@ -1313,7 +1397,7 @@
     if (!els.templateCategory) return;
 
     els.templateCategory.innerHTML = "";
-    sortByOrder((CONFIG.categories || []).filter(c => c.enabled !== false))
+    getAvailableCategories()
       .forEach(category => {
         const option = document.createElement("option");
         option.value = category.id;
