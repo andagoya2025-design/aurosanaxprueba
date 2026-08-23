@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.3.3
+ * Versión: 1.4.0 ESTABLE
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -751,7 +751,7 @@
 
     const target =
       (!els.templateTypePanel?.hidden && els.templateTypePanel) ||
-      els.searchInput ||
+      els.search ||
       els.templateList;
 
     if (!target || typeof target.scrollIntoView !== "function") return;
@@ -1506,16 +1506,18 @@
       els.category.value = state.selectedCategory || "";
     }
 
-    if (els.categoriesContainer) {
-      els.categoriesContainer
+    [
+      els.categoriesContainer,
+      els.libraryCategoriesContainer
+    ].filter(Boolean).forEach(container => {
+      container
         .querySelectorAll("[data-category]")
         .forEach(button => {
-          button.classList.toggle(
-            "active",
-            button.dataset.category === state.selectedCategory
-          );
+          const isActive = button.dataset.category === state.selectedCategory;
+          button.classList.toggle("active", isActive);
+          button.setAttribute("aria-pressed", isActive ? "true" : "false");
         });
-    }
+    });
   }
 
   function syncSelectedTemplateUI() {
@@ -2144,9 +2146,9 @@
         if (!button) return;
         setCategory(button.dataset.category, {
           autoSuggest: false,
-          autoDetected: false
+          autoDetected: false,
+          focusResults: true
         });
-        renderTemplateList();
       });
     }
 
