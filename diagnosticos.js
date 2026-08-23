@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.7';
+  const VERSION = '1.5.9';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260730_sincronizacion_atencion_maestra_v1';
+  const RELEASE = '20260823_edicion_abierta_handoff_plan_v2';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -943,10 +943,50 @@
       return nb - na;
     });
 
-    const registro = lista.find(a => texto(a?.id_atencion) === id) || actual;
+    const registroLocal = lista.find(a => texto(a?.id_atencion) === id) || null;
+
+    /*
+      AUROSANAX FIX QUIRÚRGICO 2026-08-23 — ESTADO MAESTRO DE LA ATENCIÓN
+      -------------------------------------------------------------------
+      Si Atenciones informa explícitamente la atención seleccionada, su estado
+      tiene prioridad sobre una copia local que pueda haber quedado desfasada.
+      Esto evita bloquear Diagnóstico durante una consulta que continúa abierta.
+      Para consultas históricas sin atención maestra disponible se conserva el
+      registro local como respaldo, sin alterar persistencia ni auditoría.
+    */
+    const registro = (
+      idMaestro &&
+      idMaestro === id &&
+      actual &&
+      typeof actual === 'object'
+    )
+      ? Object.assign({}, registroLocal || {}, actual)
+      : (registroLocal || actual);
+
     const ultima = ordenadas[0] || registro || null;
     const idUltima = texto(ultima?.id_atencion);
-    const estado = normalizar(registro?.estado || registro?.estado_atencion || registro?.estado_consulta || '');
+
+    const estadoMaestro = normalizar(
+      actual?.estado_atencion ||
+      actual?.estado_consulta ||
+      actual?.estado ||
+      ''
+    );
+    const estadoLocal = normalizar(
+      registroLocal?.estado_atencion ||
+      registroLocal?.estado_consulta ||
+      registroLocal?.estado ||
+      ''
+    );
+    const estado = (idMaestro && idMaestro === id && estadoMaestro)
+      ? estadoMaestro
+      : (estadoLocal || normalizar(
+          registro?.estado_atencion ||
+          registro?.estado_consulta ||
+          registro?.estado ||
+          ''
+        ));
+
     const cerrada = /(cerrad|finaliz|complet|anulad|cancelad|archivad)/.test(estado);
 
     const idPlan = texto(window.planState?.atencionActual || window.planState?.id_atencion || '');
@@ -960,7 +1000,19 @@
       Esa demora no convierte la consulta activa en histórica. El bloqueo de
       edición depende solo de la atención maestra: existente, última y abierta.
     */
-    const editable = !!id && esUltima && !cerrada;
+    /*
+      AUROSANAX FIX QUIRÚRGICO 2026-08-23 — EDICIÓN DE ATENCIÓN ABIERTA
+      ------------------------------------------------------------------
+      La editabilidad no debe depender de que el registro resulte ser el primero
+      del arreglo local. Ese orden puede quedar desfasado mientras la consulta
+      actual sigue abierta y provocaba que Diagnóstico quedara bloqueado.
+
+      Fuente maestra: la atención actualmente seleccionada + su estado.
+      - Si está abierta: permite agregar, cambiar principal/tipo y eliminar CIE-10.
+      - Si está finalizada/cerrada: solo lectura, salvo corrección histórica.
+      - No cambia IDs, persistencia, auditoría, Plan ni Apps Script.
+    */
+    const editable = !!id && !cerrada && (!idMaestro || idMaestro === id);
 
     return {
       id,
@@ -1079,16 +1131,241 @@
     });
   }
 
+  /*
+    AUROSANAX 1.5.9 — HANDOFF GLOBAL CIE-10 → PLAN SIN APLICACIÓN AUTOMÁTICA
+    ------------------------------------------------------------------------
+    Problema corregido:
+    El botón principal del visor CIE-10 conserva un flujo histórico que guarda
+    Diagnóstico y aplica automáticamente medicamentos/órdenes/indicaciones,
+    mostrando un alert con conteos y generando una espera innecesaria.
+
+    Solución:
+    - Diagnóstico sustituye únicamente la acción pública del botón mientras
+      este módulo está cargado.
+    - Lee el protocolo YA consultado por CIE-10 mediante su API pública
+      auroCie10InteligenteEstado(); no accede a variables privadas.
+    - Envía las sugerencias a las tarjetas de Plan.
+    - Navega inmediatamente a Plan.
+    - NO guarda diagnóstico.
+    - NO agrega medicamentos u órdenes automáticamente.
+    - NO guarda Plan.
+    - NO toca Recetas, Apps Script, Google Sheets ni seguridad.
+    - Si CIE-10 no está disponible, Diagnóstico continúa funcionando.
+  */
+  let auroDxCieAplicarOriginal = null;
+
+  function auroDxProtocoloActualDesdeCie10(){
+    try{
+      if(typeof window.auroCie10InteligenteEstado !== 'function') return null;
+
+      const estadoCie = window.auroCie10InteligenteEstado() || {};
+      const resultado = estadoCie.ultimoResultado || {};
+      const raw = resultado.protocolo || null;
+      if(!raw) return null;
+
+      const diagnostico = {
+        codigo_cie10: texto(
+          estadoCie.ultimoCodigo ||
+          raw.codigo_cie10 ||
+          raw.cie10
+        ).replace(/\./g,'').toUpperCase(),
+        descripcion: texto(
+          estadoCie.ultimoNombre ||
+          raw.diagnostico ||
+          raw.descripcion_diagnostico
+        )
+      };
+
+      return normalizarProtocolo(raw, diagnostico);
+    }catch(error){
+      console.warn(
+        MODULO + ': no se pudo leer el protocolo actual del visor CIE-10.',
+        error
+      );
+      return null;
+    }
+  }
+
+  async function auroDxHandoffCie10AlPlan(){
+    if(!puedeAplicarAlPlan()){
+      mensaje(
+        'error',
+        'El Plan solo puede prepararse desde una atención activa o desde una corrección clínica histórica habilitada.'
+      );
+      configurarModoProtocoloMaestro();
+      return;
+    }
+
+    const protocoloCie = auroDxProtocoloActualDesdeCie10();
+    const protocolos = protocoloCie
+      ? [protocoloCie]
+      : clonar(state.protocolos, []);
+
+    if(!protocolos.length){
+      mensaje(
+        'aviso',
+        'No hay sugerencias de protocolo disponibles para revisar en el Plan.'
+      );
+      return;
+    }
+
+    let diagnosticos = clonar(state.diagnosticos, []);
+    if(
+      protocoloCie &&
+      protocoloCie.codigo_cie10 &&
+      !diagnosticos.some(d =>
+        texto(d.codigo_cie10).replace(/\./g,'').toUpperCase() ===
+        texto(protocoloCie.codigo_cie10).replace(/\./g,'').toUpperCase()
+      )
+    ){
+      diagnosticos.push({
+        codigo_cie10: protocoloCie.codigo_cie10,
+        descripcion: protocoloCie.diagnostico || '',
+        principal: diagnosticos.length === 0,
+        tipo_diagnostico: 'Presuntivo',
+        estado: 'Activo',
+        origen: 'CIE-10 inteligente'
+      });
+    }
+
+    try{
+      document.dispatchEvent(new CustomEvent(
+        'aurosanax:protocolos-diagnostico-listos',
+        {
+          detail:{
+            id_atencion: state.atencionActual,
+            diagnosticos,
+            protocolos: clonar(protocolos, [])
+          }
+        }
+      ));
+    }catch(error){
+      console.warn(
+        MODULO + ': no se pudieron publicar las sugerencias para Plan.',
+        error
+      );
+    }
+
+    /*
+      Mantiene el contexto de Plan en sincronización, pero nunca bloquea
+      la navegación esperando esta promesa.
+    */
+    try{
+      if(typeof window.cambiarPlanPorAtencion === 'function'){
+        Promise.resolve(
+          window.cambiarPlanPorAtencion(state.atencionActual)
+        ).catch(error => {
+          console.warn(
+            MODULO + ': Plan continuará sincronizando en segundo plano.',
+            error
+          );
+        });
+      }
+    }catch(error){
+      console.warn(
+        MODULO + ': no se pudo iniciar la sincronización no bloqueante de Plan.',
+        error
+      );
+    }
+
+    guardarEstadoTemporal();
+
+    mensaje(
+      'ok',
+      'Sugerencias listas en Plan. Seleccione allí únicamente lo que corresponda.'
+    );
+
+    try{
+      if(typeof window.navegarAtencionActiva === 'function'){
+        window.navegarAtencionActiva('hc_plan');
+        return;
+      }
+
+      const botonPlan = Array.from(
+        document.querySelectorAll('button')
+      ).find(btn =>
+        String(btn.getAttribute('onclick') || '')
+          .includes("navegarAtencionActiva('hc_plan'")
+      );
+
+      if(botonPlan){
+        botonPlan.click();
+        return;
+      }
+
+      const plan = document.getElementById('hc_plan');
+      if(plan){
+        plan.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    }catch(error){
+      console.warn(
+        MODULO + ': las sugerencias están listas, pero no fue posible navegar automáticamente a Plan.',
+        error
+      );
+    }
+  }
+
+  function auroDxInstalarHandoffCie10Global(){
+    const actual = window.auroCie10InteligenteAplicarAlPlan;
+    if(typeof actual !== 'function') return false;
+    if(actual.__auroDxHandoffPlan === true) return true;
+
+    if(!auroDxCieAplicarOriginal){
+      auroDxCieAplicarOriginal = actual;
+    }
+
+    const puente = async function(){
+      return await auroDxHandoffCie10AlPlan();
+    };
+
+    puente.__auroDxHandoffPlan = true;
+    puente.__auroDxOriginal = auroDxCieAplicarOriginal;
+
+    window.auroCie10InteligenteAplicarAlPlan = puente;
+    return true;
+  }
+
   function configurarModoProtocoloMaestro(){
     const box = document.getElementById('auroCie10InteligenteBox');
     if(!box) return;
     const lectura = !puedeAplicarAlPlan();
     state.protocoloVisualModoLectura = lectura;
 
-    const btnAplicar = box.querySelector('.auro-cie10-btn.primary');
+    let btnAplicar = box.querySelector('.auro-cie10-btn.primary');
     if(btnAplicar){
+      /*
+        AUROSANAX FIX QUIRÚRGICO 2026-08-23 — BOTÓN MAESTRO CIE-10 → PLAN
+        ------------------------------------------------------------------
+        El visor CIE-10 podía conservar un manejador antiguo que guardaba el
+        diagnóstico y aplicaba automáticamente todas las sugerencias al Plan,
+        generando el alert nativo con conteos de medicamentos/órdenes.
+
+        Cuando el visor se abre DESDE Diagnóstico, el botón debe ejecutar el
+        handoff actual de Diagnóstico: preparar sugerencias y abrir Plan, sin
+        aplicar ni guardar automáticamente medicamentos u órdenes.
+
+        Se clona únicamente este botón para retirar listeners heredados del
+        visor maestro. No modifica el motor CIE-10, Plan, Recetas ni backend.
+      */
+      if(btnAplicar.dataset.auroDxHandoff !== '1'){
+        const limpio = btnAplicar.cloneNode(true);
+        limpio.dataset.auroDxHandoff = '1';
+        limpio.removeAttribute('onclick');
+        limpio.onclick = null;
+        limpio.addEventListener('click', function(evento){
+          evento.preventDefault();
+          evento.stopImmediatePropagation();
+          aplicarAlPlan();
+        });
+        btnAplicar.replaceWith(limpio);
+        btnAplicar = limpio;
+      }
+
       btnAplicar.style.display = lectura ? 'none' : '';
       btnAplicar.disabled = lectura;
+      btnAplicar.title = lectura
+        ? 'Consulta histórica: disponible solo durante una corrección clínica habilitada'
+        : 'Preparar sugerencias y revisar en Plan';
     }
 
     let aviso = box.querySelector('.auro-dx-protocolo-readonly');
@@ -4764,6 +5041,13 @@
     const app = asegurarApp();
     instalarEventos();
 
+    /*
+      Instala el handoff rápido del botón CIE-10 si el visor ya está cargado.
+      Si el orden de scripts todavía no lo permite, los reintentos de load
+      completan la instalación sin bloquear el arranque.
+    */
+    auroDxInstalarHandoffCie10Global();
+
     if(!app){
       state.inicializado = false;
       setTimeout(inicializar, 250);
@@ -4856,10 +5140,19 @@
     arrancarDiagnosticos();
   }
 
+  /*
+    Reintentos acotados de compatibilidad por orden de carga.
+    No usan MutationObserver ni polling permanente.
+  */
+  [0, 250, 800].forEach(ms => {
+    setTimeout(auroDxInstalarHandoffCie10Global, ms);
+  });
+
   /* Segundo intento después de terminar de cargar todos los scripts externos. */
   window.addEventListener('load', () => {
     setTimeout(() => {
       try{
+        auroDxInstalarHandoffCie10Global();
         asegurarApp();
         inicializar();
       }catch(error){
