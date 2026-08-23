@@ -43,9 +43,9 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'AUROSANAX DIAGNÓSTICOS';
-  const VERSION = '1.5.11';
+  const VERSION = '1.5.12';
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260823_editar_guardar_dx_abierto_v2';
+  const RELEASE = '20260823_dx_cero_sugerencias_plan_v3';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -1322,16 +1322,53 @@
            aurosanax:protocolos-diagnostico-listos,
            que Plan ya usa para reconstruir sus tarjetas.
       */
-      await cargarAtencion(ctx.id, true);
+      const diagnosticosEditor = Array.isArray(window.hcDiagnosticosSeleccionados)
+        ? window.hcDiagnosticosSeleccionados
+        : [];
+
+      /*
+        AUROSANAX 1.5.12:
+        Si la atención abierta queda con 0 diagnósticos, se retiran únicamente
+        las sugerencias derivadas del diagnóstico. El Plan clínico ya guardado
+        permanece intacto: no se eliminan medicamentos, órdenes, indicaciones
+        ni controles.
+      */
+      if(diagnosticosEditor.length === 0){
+        state.diagnosticos = [];
+        state.protocolos = [];
+        state.protocoloSeleccionado = null;
+        state.resumenClinico = '';
+        state.analisisClinico = '';
+        state.conducta = '';
+
+        try{
+          document.dispatchEvent(new CustomEvent(
+            'aurosanax:protocolos-diagnostico-listos',
+            {
+              detail:{
+                id_atencion: ctx.id,
+                diagnosticos: [],
+                protocolos: []
+              }
+            }
+          ));
+        }catch(_e){}
+
+        guardarEstadoTemporal();
+      }else{
+        await cargarAtencion(ctx.id, true);
+      }
 
       state.edicionDiagnosticoAbierto = false;
       sincronizarEditorCie10DesdeDiagnosticos();
 
       mensaje(
         'ok',
-        resultado.sin_cambios
-          ? 'Diagnóstico verificado. No había cambios nuevos para guardar.'
-          : 'Diagnóstico actualizado correctamente. Las sugerencias de Plan se sincronizaron con los diagnósticos guardados.'
+        diagnosticosEditor.length === 0
+          ? 'Diagnósticos eliminados. Las sugerencias diagnósticas del Plan se retiraron; el Plan ya guardado permanece intacto.'
+          : (resultado.sin_cambios
+              ? 'Diagnóstico verificado. No había cambios nuevos para guardar.'
+              : 'Diagnóstico actualizado correctamente. Las sugerencias de Plan se sincronizaron con los diagnósticos guardados.')
       );
 
       renderContextoSuperior();
