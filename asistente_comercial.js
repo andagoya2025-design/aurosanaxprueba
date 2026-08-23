@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.4.0 ESTABLE
+ * Versión: 1.4.1 ESTABLE
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -1474,7 +1474,7 @@
     useButton.dataset.templateId = template.id;
     useButton.innerHTML =
       template.id === state.selectedTemplateId
-        ? '<i class="bi bi-check2"></i> Lista'
+        ? '<i class="bi bi-check2"></i> Seleccionada'
         : '<i class="bi bi-lightning-charge"></i> Usar';
 
     bottom.append(useButton);
@@ -1757,10 +1757,25 @@
 
     showTemplateEditorMessage("");
 
-    if (els.templateSave) els.templateSave.disabled = true;
+    const editingId = state.editingTemplateId;
+    const isEditing = Boolean(editingId);
+    const wasSelectedBeforeEdit = Boolean(
+      editingId && state.selectedTemplateId === editingId
+    );
+
+    if (els.templateSave) {
+      els.templateSave.disabled = true;
+      els.templateSave.classList.add("ac-is-saving");
+    }
+    if (els.templateSaveText) {
+      els.templateSaveText.textContent = "Guardando...";
+    }
+    const saveIcon = els.templateSave?.querySelector("i");
+    if (saveIcon) {
+      saveIcon.className = "bi bi-arrow-repeat ac-spin";
+    }
 
     try {
-      const editingId = state.editingTemplateId;
       const existingTemplate = editingId ? getTemplate(editingId) : null;
       const existingMeta = existingTemplate?.meta && typeof existingTemplate.meta === "object"
         ? clone(existingTemplate.meta)
@@ -1791,6 +1806,7 @@
         CONTEXTO_JSON: {},
         ESTADO: "ACTIVO"
       };
+
       const action = editingId ? "AC_actualizarPlantilla" : "AC_crearPlantilla";
       if (editingId) payload.ID = editingId;
 
@@ -1803,22 +1819,56 @@
       await loadBackendTemplates();
 
       const savedId = editingId || result.id || result.ID || result.registro?.ID;
-      if (savedId) {
+
+      // Editar no debe activar una plantilla que antes no estaba seleccionada.
+      // Si ya estaba activa, se vuelve a seleccionar para refrescar la respuesta.
+      // Una plantilla nueva sí queda seleccionada como antes.
+      if (savedId && (!isEditing || wasSelectedBeforeEdit)) {
         selectTemplate(savedId);
       }
 
+      if (els.templateSaveText) {
+        els.templateSaveText.textContent = isEditing ? "Cambios guardados" : "Plantilla guardada";
+      }
+      if (saveIcon) {
+        saveIcon.className = "bi bi-check2-circle";
+      }
+      if (els.templateSave) {
+        els.templateSave.classList.remove("ac-is-saving");
+        els.templateSave.classList.add("ac-is-saved");
+      }
+
+      showTemplateEditorMessage(
+        isEditing ? "Cambios guardados correctamente." : "Plantilla guardada correctamente.",
+        "success"
+      );
+
+      await new Promise(resolve => global.setTimeout(resolve, 520));
+
       closeTemplateModal();
       showToast(
-        editingId ? "Plantilla actualizada." : "Plantilla guardada y disponible.",
+        isEditing ? "Plantilla actualizada correctamente." : "Plantilla guardada y disponible.",
         "success"
       );
       return true;
     } catch (error) {
       console.error("[Asistente Comercial] Guardar plantilla:", error);
-      showTemplateEditorMessage("No se pudo guardar la plantilla en la base. Revisa los datos e inténtalo nuevamente.", "danger");
+      showTemplateEditorMessage(
+        "No se pudo guardar la plantilla en la base. Revisa los datos e inténtalo nuevamente.",
+        "danger"
+      );
       return false;
     } finally {
-      if (els.templateSave) els.templateSave.disabled = false;
+      if (els.templateSave) {
+        els.templateSave.disabled = false;
+        els.templateSave.classList.remove("ac-is-saving", "ac-is-saved");
+      }
+      if (saveIcon) {
+        saveIcon.className = "bi bi-check2-circle";
+      }
+      if (els.templateSaveText) {
+        els.templateSaveText.textContent = isEditing ? "Guardar cambios" : "Guardar plantilla";
+      }
     }
   }
 
