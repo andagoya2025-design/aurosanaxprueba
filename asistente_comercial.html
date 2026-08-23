@@ -21,7 +21,7 @@
   >
 
   <!-- Estilos independientes del módulo -->
-  <link rel="stylesheet" href="asistente_comercial.css?v=1.3.1">
+  <link rel="stylesheet" href="asistente_comercial.css?v=1.4.0">
 </head>
 
 <body>
@@ -278,12 +278,8 @@
                 <div id="acCategoriasBiblioteca" class="ac-category-grid-mobile"></div>
               </section>
 
-              <section class="ac-template-type-panel" id="acTipoPlantillaPanel" hidden aria-label="Tipo de plantilla">
-                <div class="ac-type-panel-head">
-                  <span class="ac-picker-eyebrow">Segundo nivel</span>
-                  <strong id="acTipoPlantillaTitulo">Elige el tipo de respuesta</strong>
-                </div>
-                <div class="ac-type-chip-row" id="acTiposPlantilla"></div>
+              <section class="ac-template-type-panel" id="acTipoPlantillaPanel" hidden aria-label="Filtrar plantillas">
+                <div class="ac-type-chip-row" id="acTiposPlantilla" aria-label="Filtros de plantilla"></div>
               </section>
 
               <div class="ac-filter-bar">
@@ -637,7 +633,7 @@
   <!-- =========================================================
        MOTOR
        ========================================================= -->
-  <script src="asistente_comercial.js?v=1.3.0"></script>
+  <script src="asistente_comercial.js?v=1.4.0"></script>
 
   <!-- =========================================================
        ADAPTADOR VISUAL LOCAL
