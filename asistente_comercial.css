@@ -2598,3 +2598,80 @@ body.ac-library-focus #acCategoriaCard {
    Categorías dinámicas · filtros por tipo · edición premium
    acceso rápido activo · navegación móvil rápida.
    ============================================================ */
+/* ============================================================
+   V1.4.1 — CIERRE UX ESCRITORIO + FEEDBACK DE GUARDADO
+   ============================================================ */
+
+@media (min-width: 1181px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 235px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    gap: 10px 16px;
+  }
+
+  #acBibliotecaCard .ac-mobile-template-picker {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+  }
+
+  #acBibliotecaCard #acTipoPlantillaPanel {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+    align-self: start;
+  }
+
+  #acBibliotecaCard .ac-filter-bar {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+  }
+
+  #acBibliotecaCard #acPlantillas {
+    grid-column: 2;
+    grid-row: 3;
+  }
+}
+
+@media (min-width: 1540px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 250px minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1181px) and (max-width: 1320px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 215px minmax(0, 1fr);
+  }
+}
+
+/* Guardar: estado visible mientras se procesa y confirmación final. */
+#acTplGuardar.ac-is-saving {
+  opacity: .86;
+  cursor: wait;
+}
+
+#acTplGuardar.ac-is-saved {
+  background: #166534;
+  border-color: #166534;
+  color: #fff;
+}
+
+#acTplGuardar .ac-spin {
+  animation: ac-spin .8s linear infinite;
+}
+
+@keyframes ac-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ac-editor-message[data-type="success"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+/* Estado seleccionado más claro */
+.ac-use-template-btn:has(.bi-check2) {
+  font-weight: 850;
+}
