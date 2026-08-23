@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: auditoria_clinica.js
  Módulo: Auditoría clínica independiente
- Versión: 4.0.1
+ Versión: 4.0.2
  -----------------------------------------------------------------------
  OBJETIVO
  - Consultar la hoja auditoria_clinica y administrar el control de correcciones.
@@ -110,11 +110,11 @@
 
       /* AUROSANAX 4.0.1 — mejora visual local, sin tocar CSS global */
       #securityAuditoriaClinica #audClinRefrescar{
-        background:linear-gradient(135deg,#7a163f,#a52167);
-        border:1px solid #7a163f;
-        color:#fff;
+        background:linear-gradient(135deg,#7a163f,#a52167)!important;
+        border:1px solid #7a163f!important;
+        color:#fff!important;
         font-weight:850;
-        box-shadow:0 7px 18px rgba(122,22,63,.16);
+        box-shadow:0 7px 18px rgba(122,22,63,.16)!important;
         transition:transform .16s ease,box-shadow .16s ease,opacity .16s ease;
       }
       #securityAuditoriaClinica #audClinRefrescar:hover:not(:disabled){
