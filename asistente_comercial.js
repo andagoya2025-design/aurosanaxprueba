@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.7.0 PRODUCTIVIDAD COMERCIAL ANTIRREGRESIVA
+ * Versión: 1.7.1 NÚCLEO SEMÁNTICO COMERCIAL ANTIRREGRESIVO
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -212,6 +212,343 @@
 
   function getTemplateService(template) {
     return asString(template?.meta?.servicio || "").trim();
+  }
+
+
+  /* ==========================================================
+   * NÚCLEO SEMÁNTICO COMERCIAL — V1.7.1
+   * Unifica servicio/tema, categoría e intención sin alterar UI,
+   * persistencia, listeners ni selección manual de plantillas.
+   * ========================================================== */
+
+  function getSemanticIntentRules() {
+    return [
+      { id: "PROMOCION", confidence: 0.98, words: ["promocion", "promoción", "oferta", "descuento", "paquete", "promo"] },
+      { id: "PRECIO", confidence: 0.96, words: ["precio", "costo", "valor", "cuesta", "$", "dolar", "dólar", "cuanto", "cuánto"] },
+      { id: "ESQUEMA", confidence: 0.97, words: ["esquema", "dosis", "intervalo", "primera dosis", "segunda dosis", "tercera dosis"] },
+      { id: "REPROGRAMAR", confidence: 0.98, words: ["reprogramar", "cambiar cita", "cambio de cita", "mover cita"] },
+      { id: "CONFIRMAR", confidence: 0.98, words: ["confirmar cita", "confirmacion de cita", "confirmación de cita"] },
+      { id: "RECORDATORIO", confidence: 0.98, words: ["recordatorio", "recordar cita"] },
+      { id: "AGENDAR", confidence: 0.92, words: ["agendar", "reservar cita", "separar cita", "coordinar cita", "quiero cita", "una cita"] },
+      { id: "DIRECCION", confidence: 0.96, words: ["direccion", "dirección", "ubicacion", "ubicación", "como llegar", "cómo llegar"] },
+      { id: "HORARIO_ATENCION", confidence: 0.96, words: ["horario", "horarios", "hora de atencion", "hora de atención", "disponibilidad"] },
+      { id: "REVISION", confidence: 0.90, words: ["revision", "revisión", "revisar resultado", "revisar resultados"] },
+      { id: "SEGUIMIENTO", confidence: 0.91, words: ["seguimiento", "control posterior", "control de seguimiento"] },
+      { id: "INFORMACION", confidence: 0.78, words: ["informacion", "información", "que es", "qué es", "consiste", "sirve para", "beneficios"] }
+    ];
+  }
+
+  function detectSemanticIntent(rawText) {
+    const text = normalizeText(rawText);
+    let best = null;
+
+    getSemanticIntentRules().forEach(rule => {
+      let hits = 0;
+      let longest = 0;
+
+      rule.words.forEach(word => {
+        const normalizedWord = normalizeText(word);
+        if (normalizedWord && text.includes(normalizedWord)) {
+          hits += 1;
+          longest = Math.max(longest, normalizedWord.length);
+        }
+      });
+
+      if (
+        hits &&
+        (!best ||
+          hits > best.hits ||
+          (hits === best.hits && longest > best.longest) ||
+          (hits === best.hits && longest === best.longest && rule.confidence > best.confidence))
+      ) {
+        best = {
+          id: rule.id,
+          hits,
+          longest,
+          confidence: rule.confidence
+        };
+      }
+    });
+
+    return best || { id: "", hits: 0, longest: 0, confidence: 0 };
+  }
+
+  function getSemanticServiceRules() {
+    return [
+      {
+        id: "HIDRATACION_VAGINAL",
+        label: "Hidratación vaginal",
+        categoryId: "GINECOESTETICA",
+        aliases: ["hidratacion vaginal", "hidratación vaginal", "hidratacion intima", "hidratación íntima"]
+      },
+      {
+        id: "TENSADO_VAGINAL_LASER_CO2",
+        label: "Tensado vaginal con Láser CO₂",
+        categoryId: "GINECOESTETICA",
+        aliases: ["tensado vaginal", "laser co2 vaginal", "láser co2 vaginal", "tensado con laser co2", "tensado con láser co2"]
+      },
+      {
+        id: "HIFU_INTIMO",
+        label: "HIFU íntimo",
+        categoryId: "GINECOESTETICA",
+        aliases: ["hifu intimo", "hifu íntimo", "hifu vaginal"]
+      },
+      {
+        id: "RELLENO_LABIOS_MAYORES",
+        label: "Relleno de labios mayores",
+        categoryId: "GINECOESTETICA",
+        aliases: ["relleno labios mayores", "relleno de labios mayores", "labios mayores"]
+      },
+      {
+        id: "ESCLEROTERAPIA_VARICES",
+        label: "Escleroterapia para várices y arañitas vasculares",
+        categoryId: "ESCLEROTERAPIA",
+        aliases: ["escleroterapia", "varices", "várices", "aranitas vasculares", "arañitas vasculares", "venitas"]
+      },
+      {
+        id: "GARDASIL",
+        label: "Vacuna Gardasil",
+        categoryId: "VPH",
+        aliases: ["gardasil", "vacuna vph", "vacuna contra vph", "papiloma humano"]
+      },
+      {
+        id: "HIFU_FACIAL",
+        label: "HIFU facial",
+        categoryId: "ESTETICA_FACIAL",
+        aliases: ["hifu facial", "hifu"]
+      },
+      {
+        id: "BIOESTIMULADORES",
+        label: "Bioestimuladores",
+        categoryId: "ESTETICA_FACIAL",
+        aliases: ["bioestimulador", "bioestimuladores"]
+      },
+      {
+        id: "TOXINA_BOTULINICA",
+        label: "Toxina botulínica",
+        categoryId: "ESTETICA_FACIAL",
+        aliases: ["toxina botulinica", "toxina botulínica", "botox"]
+      },
+      {
+        id: "PEELING_FACIAL",
+        label: "Peeling facial",
+        categoryId: "ESTETICA_FACIAL",
+        aliases: ["peeling facial", "peeling"]
+      },
+      {
+        id: "HILOS_TENSORES",
+        label: "Hilos tensores",
+        categoryId: "ESTETICA_FACIAL",
+        aliases: ["hilos tensores", "hilos"]
+      },
+      {
+        id: "ACIDO_HIALURONICO_LABIOS",
+        label: "Ácido hialurónico en labios",
+        categoryId: "ESTETICA_FACIAL",
+        aliases: ["acido hialuronico labios", "ácido hialurónico labios", "relleno de labios", "relleno labios"]
+      },
+      {
+        id: "PAPANICOLAOU",
+        label: "Papanicolaou",
+        categoryId: "PAPANICOLAOU",
+        aliases: ["papanicolaou", "pap smear", "citologia", "citología"]
+      },
+      {
+        id: "COLPOSCOPIA",
+        label: "Colposcopía",
+        categoryId: "COLPOSCOPIA",
+        aliases: ["colposcopia", "colposcopía"]
+      },
+      {
+        id: "MENOPAUSIA",
+        label: "Menopausia",
+        categoryId: "MENOPAUSIA",
+        aliases: ["menopausia", "climaterio"]
+      }
+    ];
+  }
+
+  function isGenericServiceValue(value) {
+    const id = normalizeMetaId(value || "");
+    return new Set([
+      "",
+      "GENERAL",
+      "ESTETICA",
+      "ESTETICA_GENERAL",
+      "GINECOLOGIA",
+      "GINECOLOGIA_GENERAL",
+      "GINECOESTETICA",
+      "INFORMACION",
+      "INFORMACION_GENERAL",
+      "AGENDAMIENTO",
+      "AGENDA",
+      "PRECIO",
+      "PRECIOS",
+      "PROMOCION",
+      "SEGUIMIENTO",
+      "CIERRE",
+      "RECONTACTO"
+    ]).has(id);
+  }
+
+  function isGenericCategoryValue(value) {
+    const id = normalizeMetaId(value || "");
+    return new Set([
+      "",
+      "GENERAL",
+      "INFORMACION",
+      "INFORMACION_GENERAL",
+      "AGENDAMIENTO",
+      "AGENDA",
+      "PRECIO",
+      "PRECIOS",
+      "PROMOCION",
+      "SEGUIMIENTO",
+      "CIERRE",
+      "RECONTACTO",
+      "ESTETICA_GENERAL"
+    ]).has(id);
+  }
+
+  function isGenericCommercialKeyword(value) {
+    const normalized = normalizeText(value);
+    return new Set([
+      "precio", "precios", "costo", "valor", "cuesta", "cuanto", "cuánto",
+      "cita", "agendar", "agenda", "reservar", "coordinar", "valoracion", "valoración",
+      "informacion", "información", "consulta", "consultar", "interesado", "interesada",
+      "promocion", "promoción", "seguimiento", "general"
+    ]).has(normalized);
+  }
+
+  function semanticKeywordWeight(value) {
+    const normalized = normalizeText(value);
+    if (!normalized) return 0;
+    if (isGenericCommercialKeyword(normalized)) return 0.18;
+
+    const words = normalized.split(" ").filter(Boolean).length;
+    if (words >= 3) return 1.8;
+    if (words === 2) return 1.45;
+    if (normalized.length >= 10) return 1.2;
+    return 0.9;
+  }
+
+  function getTemplateSpecificKeywords(template) {
+    return Array.isArray(template?.meta?.keywords)
+      ? unique(template.meta.keywords.filter(Boolean))
+      : [];
+  }
+
+  function getTemplateSemanticText(template) {
+    if (!template) return "";
+
+    const category = getCategory(template.category);
+    return [
+      getTemplateService(template),
+      category?.label || humanizeCategoryLabel(template.category),
+      template.title,
+      ...getTemplateSpecificKeywords(template)
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  function getDynamicSemanticServices() {
+    const byId = new Map();
+
+    (state.activeTemplates || []).forEach(template => {
+      const rawService = asString(getTemplateService(template)).trim();
+      if (!rawService || isGenericServiceValue(rawService)) return;
+
+      const id = normalizeMetaId(rawService);
+      if (!id) return;
+
+      const existing = byId.get(id) || {
+        id,
+        label: humanizeMetaLabel(rawService),
+        categoryId: isGenericCategoryValue(template.category) ? "" : template.category,
+        aliases: new Set()
+      };
+
+      [
+        rawService,
+        humanizeMetaLabel(rawService),
+        rawService.replace(/_/g, " ")
+      ].filter(Boolean).forEach(alias => existing.aliases.add(alias));
+
+      byId.set(id, existing);
+    });
+
+    return [...byId.values()].map(item => ({
+      ...item,
+      aliases: [...item.aliases]
+    }));
+  }
+
+  function detectSpecificService(rawText) {
+    const text = normalizeText(rawText);
+    if (!text) {
+      return { id: "", label: "", categoryId: "", confidence: 0, matched: "" };
+    }
+
+    const candidates = [
+      ...getSemanticServiceRules(),
+      ...getDynamicSemanticServices()
+    ];
+
+    let best = null;
+
+    candidates.forEach(candidate => {
+      unique(candidate.aliases || []).forEach(alias => {
+        const normalizedAlias = normalizeText(alias);
+        if (!normalizedAlias || normalizedAlias.length < 3) return;
+        if (!text.includes(normalizedAlias)) return;
+
+        const words = normalizedAlias.split(" ").filter(Boolean).length;
+        const specificity = normalizedAlias.length + (words * 12);
+
+        if (!best || specificity > best.specificity) {
+          best = {
+            id: candidate.id,
+            label: candidate.label || humanizeMetaLabel(candidate.id),
+            categoryId: candidate.categoryId || "",
+            matched: normalizedAlias,
+            specificity
+          };
+        }
+      });
+    });
+
+    if (!best) {
+      return { id: "", label: "", categoryId: "", confidence: 0, matched: "" };
+    }
+
+    return {
+      id: best.id,
+      label: best.label,
+      categoryId: best.categoryId,
+      confidence: best.specificity >= 34 ? 0.99 : best.specificity >= 22 ? 0.95 : 0.86,
+      matched: best.matched
+    };
+  }
+
+  function getTemplateCommercialTopic(template) {
+    if (!template) return "";
+
+    const directService = asString(getTemplateService(template)).trim();
+    if (directService && !isGenericServiceValue(directService)) {
+      return humanizeMetaLabel(directService);
+    }
+
+    const inferred = detectSpecificService(getTemplateSemanticText(template));
+    if (inferred.id) return inferred.label;
+
+    const category = getCategory(template.category);
+    const categoryLabel = category?.label || humanizeCategoryLabel(template.category);
+    if (categoryLabel && !isGenericCategoryValue(template.category)) {
+      return categoryLabel;
+    }
+
+    return asString(template.title).trim();
   }
 
   function getAvailableTemplateTypes(categoryId) {
@@ -611,24 +948,52 @@
     if (!normalizedMessage) return 0;
 
     let score = 0;
-
     const category = getCategory(template.category);
-    const keywords = getTemplateKeywords(template);
+    const messageService = detectSpecificService(normalizedMessage);
+    const templateService = detectSpecificService(getTemplateSemanticText(template));
+    const messageIntent = detectSemanticIntent(normalizedMessage);
+    const templateType = getTemplateType(template);
 
-    keywords.forEach(keyword => {
-      score += keywordScore(normalizedMessage, keyword);
+    // 1) Servicio/tema concreto: señal principal.
+    if (messageService.id && templateService.id) {
+      if (messageService.id === templateService.id) {
+        score += 260;
+      } else {
+        score -= 35;
+      }
+    }
+
+    const rawService = getTemplateService(template);
+    if (rawService && !isGenericServiceValue(rawService)) {
+      score += keywordScore(normalizedMessage, humanizeMetaLabel(rawService)) * 2.2;
+    }
+
+    // 2) Título de plantilla: conserva contexto específico incluso con metadatos antiguos.
+    if (template?.title) {
+      score += keywordScore(normalizedMessage, template.title) * 1.6;
+    }
+
+    // 3) Keywords propias de la plantilla; las genéricas pesan muy poco.
+    getTemplateSpecificKeywords(template).forEach(keyword => {
+      score += keywordScore(normalizedMessage, keyword) * semanticKeywordWeight(keyword);
     });
 
+    // 4) Categoría: útil, pero nunca por encima del servicio concreto.
     if (category?.label) {
-      score += keywordScore(normalizedMessage, category.label) * 0.5;
+      const categoryWeight = isGenericCategoryValue(template.category) ? 0.18 : 0.85;
+      score += keywordScore(normalizedMessage, category.label) * categoryWeight;
     }
 
-    if (template?.title) {
-      score += keywordScore(normalizedMessage, template.title) * 0.5;
+    // 5) Intención comercial (precio, cita, información) desempata dentro del mismo servicio.
+    if (messageIntent.id && templateType) {
+      if (messageIntent.id === templateType) score += 38;
+      else if (isGenericCategoryValue(template.category)) score -= 4;
     }
 
+    // El filtro manual conserva su prioridad histórica. En AUTO no contamina el análisis.
     if (
       CONFIG.behavior?.preferExactCategory &&
+      state.categoryMode === "MANUAL" &&
       state.selectedCategory &&
       template.category === state.selectedCategory
     ) {
@@ -636,12 +1001,9 @@
     }
 
     score += getTemplatePriority(template) * 0.05;
+    if (isFavorite(template.id)) score += 2;
 
-    if (isFavorite(template.id)) {
-      score += 2;
-    }
-
-    return Math.round(score * 100) / 100;
+    return Math.round(Math.max(score, 0) * 100) / 100;
   }
 
   function detectCategory(message, scope) {
@@ -651,23 +1013,54 @@
     }
 
     const enabledCategories = getAvailableCategories();
+    const detectedService = detectSpecificService(normalizedMessage);
+
     const results = enabledCategories.map(category => {
       let score = 0;
+      const categoryId = asString(category.id).toUpperCase();
 
+      if (
+        detectedService.categoryId &&
+        normalizeMetaId(detectedService.categoryId) === normalizeMetaId(category.id)
+      ) {
+        score += 280;
+      }
+
+      const label = category.label || humanizeCategoryLabel(category.id);
+      if (label) {
+        score += keywordScore(normalizedMessage, label) *
+          (isGenericCategoryValue(category.id) ? 0.18 : 1.15);
+      }
+
+      // No dejamos que keywords genéricas de otras plantillas contaminen la categoría.
       (category.keywords || []).forEach(keyword => {
-        score += keywordScore(normalizedMessage, keyword);
+        const weight = semanticKeywordWeight(keyword);
+        score += keywordScore(normalizedMessage, keyword) * Math.min(weight, 0.65);
       });
 
-      const matchingTemplates = state.activeTemplates.filter(template => {
-        return (
-          template.category === category.id &&
-          (!scope || template.scope === scope)
-        );
-      });
+      const matchingTemplates = state.activeTemplates.filter(template =>
+        template.category === category.id &&
+        (!scope || template.scope === scope)
+      );
 
-      matchingTemplates.forEach(template => {
-        score += scoreTemplate(template, normalizedMessage) * 0.35;
-      });
+      const topTemplateScores = matchingTemplates
+        .map(template => scoreTemplate(template, normalizedMessage))
+        .filter(value => value > 0)
+        .sort((a, b) => b - a)
+        .slice(0, 3);
+
+      if (topTemplateScores.length) {
+        score += topTemplateScores.reduce((sum, value) => sum + value, 0) * 0.22;
+      }
+
+      // Si hay servicio clínico/estético concreto, categorías logísticas no deben ganarle.
+      if (
+        detectedService.id &&
+        isGenericCategoryValue(categoryId) &&
+        normalizeMetaId(detectedService.categoryId) !== normalizeMetaId(category.id)
+      ) {
+        score *= 0.18;
+      }
 
       return {
         category: category.id,
@@ -677,7 +1070,6 @@
     });
 
     results.sort((a, b) => b.score - a.score);
-
     const best = results[0] || { category: "", score: 0 };
 
     return {
@@ -1037,8 +1429,9 @@
       return [];
     }
 
-    // En modo automático SIEMPRE se recalcula desde cero.
-    // Nunca reutiliza la categoría de un mensaje anterior.
+    // En AUTO detectamos categoría como contexto visual, pero NO la usamos
+    // para excluir plantillas antes de puntuar. Así una categoría mal guardada
+    // o una palabra genérica como "cita" no bloquea el servicio correcto.
     if (state.categoryMode === "AUTO") {
       state.selectedCategory = "";
       const detected = detectCategory(state.pastedMessage, state.selectedScope);
@@ -1050,7 +1443,7 @@
 
     const effectiveCategory = state.categoryMode === "MANUAL"
       ? state.selectedCategory
-      : state.selectedCategory;
+      : "";
 
     const suggestions = suggestTemplates(state.pastedMessage, {
       scope: state.selectedScope,
@@ -1062,6 +1455,8 @@
     renderSuggestions();
 
     if (suggestions.length) {
+      // Se conserva exactamente la selección automática histórica:
+      // la primera sugerencia carga su respuesta de inmediato.
       selectTemplate(suggestions[0].template.id, opts.context);
       showStatus(
         "Respuesta encontrada" +
@@ -1726,17 +2121,18 @@
 
   function getCommercialStageText(stageId, template) {
     const stage = asString(stageId).toUpperCase();
-    const service = asString(getTemplateService(template) || template?.title || "").trim();
-    const topic = service ? ` sobre ${service}` : "";
+    const subject = asString(getTemplateCommercialTopic(template)).trim();
+    const topicAbout = subject ? ` sobre ${subject}` : "";
+    const topicWith = subject ? ` con ${subject}` : "";
 
     if (stage === "SEGUIMIENTO") {
-      return `😊 Quería dar seguimiento a la información que te compartimos${topic}.\n\n📅 Si deseas, puedo ayudarte a coordinar una cita o continuar con la información. ¿Te gustaría avanzar?`;
+      return `😊 Quería dar seguimiento a la información que te compartimos${topicAbout}.\n\n📅 Si deseas, puedo ayudarte a coordinar una cita o continuar con la información. ¿Te gustaría avanzar?`;
     }
     if (stage === "CIERRE") {
-      return "📅 Si deseas avanzar, podemos ayudarte a coordinar tu cita. ¿Te gustaría agendar?";
+      return `📅 Si deseas avanzar${topicWith}, podemos ayudarte a coordinar tu cita. ¿Te gustaría agendar?`;
     }
     if (stage === "RECONTACTO") {
-      return `👋 Hola, retomamos tu consulta${topic} por si todavía deseas información o coordinar una cita.\n\nCon gusto te ayudamos. ¿Deseas continuar?`;
+      return `👋 Hola, retomamos tu consulta${topicAbout} por si todavía deseas información o coordinar una cita.\n\nCon gusto te ayudamos. ¿Deseas continuar?`;
     }
     return "";
   }
@@ -1886,34 +2282,45 @@
   }
 
   function getTextCreatorTypeRules() {
-    return [
-      { id: "PROMOCION", confidence: 0.98, words: ["promocion", "promoción", "oferta", "descuento", "paquete", "promo"] },
-      { id: "PRECIO", confidence: 0.96, words: ["precio", "costo", "valor", "cuesta", "$", "dolar", "dólar"] },
-      { id: "ESQUEMA", confidence: 0.97, words: ["esquema", "dosis", "intervalo", "primera dosis", "segunda dosis", "tercera dosis"] },
-      { id: "REPROGRAMAR", confidence: 0.98, words: ["reprogramar", "cambiar cita", "cambio de cita", "mover cita"] },
-      { id: "CONFIRMAR", confidence: 0.98, words: ["confirmar cita", "confirmacion de cita", "confirmación de cita"] },
-      { id: "RECORDATORIO", confidence: 0.98, words: ["recordatorio", "recordar cita"] },
-      { id: "AGENDAR", confidence: 0.92, words: ["agendar", "reservar cita", "separar cita", "coordinar cita"] },
-      { id: "DIRECCION", confidence: 0.96, words: ["direccion", "dirección", "ubicacion", "ubicación", "como llegar", "cómo llegar"] },
-      { id: "HORARIO_ATENCION", confidence: 0.96, words: ["horario", "horarios", "hora de atencion", "hora de atención"] },
-      { id: "REVISION", confidence: 0.90, words: ["revision", "revisión", "revisar resultado", "revisar resultados"] },
-      { id: "SEGUIMIENTO", confidence: 0.91, words: ["seguimiento", "control posterior", "control de seguimiento"] },
-      { id: "INFORMACION", confidence: 0.78, words: ["informacion", "información", "que es", "qué es", "consiste", "sirve para", "beneficios"] }
-    ];
+    return getSemanticIntentRules();
   }
 
   function scoreTextCreatorCategory(rawText) {
     const text = normalizeText(rawText);
     const categories = getAvailableCategories();
+    const specificService = detectSpecificService(rawText);
+
+    // Un servicio concreto manda sobre una intención logística como "cita".
+    if (specificService.id && specificService.categoryId) {
+      const mappedCategory = categories.find(category =>
+        normalizeMetaId(category.id) === normalizeMetaId(specificService.categoryId)
+      );
+
+      if (mappedCategory) {
+        return {
+          id: mappedCategory.id,
+          label: mappedCategory.label,
+          confidence: 0.99
+        };
+      }
+
+      return {
+        id: normalizeMetaId(specificService.categoryId),
+        label: humanizeCategoryLabel(specificService.categoryId),
+        confidence: 0.95
+      };
+    }
+
     let best = null;
 
     categories.forEach(category => {
       let score = 0;
       const label = normalizeText(category.label || "");
       const idText = normalizeText(asString(category.id).replace(/_/g, " "));
+      const genericCategory = isGenericCategoryValue(category.id);
 
-      if (label && text.includes(label)) score += 8;
-      if (idText && text.includes(idText)) score += 8;
+      if (label && text.includes(label)) score += genericCategory ? 3 : 10;
+      if (idText && text.includes(idText)) score += genericCategory ? 3 : 10;
 
       const keywords = unique([
         ...(Array.isArray(category.keywords) ? category.keywords : []),
@@ -1923,22 +2330,20 @@
 
       keywords.forEach(keyword => {
         const normalizedKeyword = normalizeText(keyword);
-        if (normalizedKeyword && normalizedKeyword.length >= 3 && text.includes(normalizedKeyword)) {
-          score += normalizedKeyword.length >= 8 ? 3 : 2;
-        }
+        if (!normalizedKeyword || normalizedKeyword.length < 3 || !text.includes(normalizedKeyword)) return;
+        score += (normalizedKeyword.length >= 8 ? 3 : 2) * Math.min(semanticKeywordWeight(keyword), 0.8);
       });
 
-      // Señales médicas/comerciales muy concretas para categorías ya existentes.
       const id = asString(category.id).toUpperCase();
-      if (id === "VPH" && /\b(vph|gardasil|papiloma)\b/.test(text)) score += 12;
-      if (id === "ESTETICA_FACIAL" && /\b(hifu|bioestimul|toxina|botulin|peeling|hilos|labios|exosomas)\b/.test(text)) score += 12;
-      if (id === "AGENDAMIENTO" && /\b(agendar|reservar|cita|reprogramar|confirmar cita)\b/.test(text)) score += 8;
+      if (id === "VPH" && /\b(vph|gardasil|papiloma)\b/.test(text)) score += 14;
+      if (id === "ESTETICA_FACIAL" && /\b(hifu|bioestimul|toxina|botulin|peeling|hilos|exosomas)\b/.test(text)) score += 14;
+      if (id === "AGENDAMIENTO" && /\b(agendar|reservar|cita|reprogramar|confirmar cita)\b/.test(text)) score += 5;
       if (id === "UBICACION" && /\b(ubicacion|direccion|como llegar|agora|mall del sol)\b/.test(text)) score += 10;
       if (id === "HORARIOS" && /\b(horario|horarios|disponibilidad)\b/.test(text)) score += 10;
-      if (id === "PAPANICOLAOU" && /\b(papanicolaou|pap smear|citologia|citología)\b/.test(text)) score += 12;
-      if (id === "COLPOSCOPIA" && /\b(colposcopia|colposcopía)\b/.test(text)) score += 12;
-      if (id === "MENOPAUSIA" && /\b(menopausia|climaterio)\b/.test(text)) score += 12;
-      if (id === "RESULTADOS" && /\b(resultado|resultados|informe|revisión de examen)\b/.test(text)) score += 7;
+      if (id === "PAPANICOLAOU" && /\b(papanicolaou|pap smear|citologia|citología)\b/.test(text)) score += 14;
+      if (id === "COLPOSCOPIA" && /\b(colposcopia|colposcopía)\b/.test(text)) score += 14;
+      if (id === "MENOPAUSIA" && /\b(menopausia|climaterio)\b/.test(text)) score += 14;
+      if (id === "RESULTADOS" && /\b(resultado|resultados|informe|revision de examen)\b/.test(text)) score += 7;
 
       if (!best || score > best.score) {
         best = { id: category.id, label: category.label, score };
@@ -1975,65 +2380,7 @@
   }
 
   function detectTextCreatorService(rawText) {
-    const text = normalizeText(rawText);
-    const candidates = new Map();
-
-    (state.activeTemplates || []).forEach(template => {
-      const service = asString(template?.meta?.servicio).trim();
-      if (!service) return;
-      const key = normalizeMetaId(service);
-      if (!candidates.has(key)) {
-        candidates.set(key, {
-          id: key,
-          label: humanizeMetaLabel(key),
-          variants: new Set()
-        });
-      }
-      candidates.get(key).variants.add(service);
-      candidates.get(key).variants.add(humanizeMetaLabel(key));
-      candidates.get(key).variants.add(key.replace(/_/g, " "));
-    });
-
-    const knownServices = [
-      ["GARDASIL", ["gardasil"]],
-      ["HIFU_FACIAL", ["hifu", "hifu facial"]],
-      ["BIOESTIMULADORES", ["bioestimulador", "bioestimuladores"]],
-      ["TOXINA_BOTULINICA", ["toxina botulinica", "toxina botulínica", "botox"]],
-      ["PEELING_FACIAL", ["peeling", "peeling facial"]],
-      ["HILOS_TENSORES", ["hilos tensores", "hilos"]],
-      ["ACIDO_HIALURONICO_LABIOS", ["acido hialuronico", "ácido hialurónico", "relleno labios", "labios"]],
-      ["PAPANICOLAOU", ["papanicolaou", "citologia", "citología"]],
-      ["COLPOSCOPIA", ["colposcopia", "colposcopía"]]
-    ];
-
-    knownServices.forEach(([id, variants]) => {
-      if (!candidates.has(id)) {
-        candidates.set(id, {
-          id,
-          label: humanizeMetaLabel(id),
-          variants: new Set()
-        });
-      }
-      variants.forEach(v => candidates.get(id).variants.add(v));
-    });
-
-    let best = null;
-    candidates.forEach(candidate => {
-      let longest = 0;
-      candidate.variants.forEach(variant => {
-        const normalized = normalizeText(variant);
-        if (normalized && text.includes(normalized)) {
-          longest = Math.max(longest, normalized.length);
-        }
-      });
-      if (longest && (!best || longest > best.longest)) {
-        best = { ...candidate, longest };
-      }
-    });
-
-    return best
-      ? { id: best.id, label: best.label, confidence: best.longest >= 8 ? 0.95 : 0.84 }
-      : { id: "", label: "", confidence: 0 };
+    return detectSpecificService(rawText);
   }
 
   function extractTextCreatorKeywords(rawText, analysis) {
