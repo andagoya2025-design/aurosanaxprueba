@@ -21,7 +21,7 @@
   >
 
   <!-- Estilos independientes del módulo -->
-  <link rel="stylesheet" href="asistente_comercial.css?v=1.5.2">
+  <link rel="stylesheet" href="asistente_comercial.css?v=1.7.0">
 </head>
 
 <body>
@@ -109,6 +109,15 @@
           <i class="bi bi-lightning-charge"></i> Plantillas
         </button>
       </nav>
+
+      <!-- V1.7.0 · Herramienta de productividad local. No modifica BD. -->
+      <div class="ac-view-tools" aria-label="Vista de trabajo">
+        <button type="button" class="ac-btn ac-btn-line ac-seller-mode-btn" id="acModoVendedor" aria-pressed="false">
+          <i class="bi bi-phone"></i>
+          <span id="acModoVendedorTexto">Modo vendedor</span>
+        </button>
+        <small>Oculta controles administrativos para responder más rápido. No cambia datos.</small>
+      </div>
 
       <!-- =====================================================
            ÁMBITO
@@ -268,53 +277,37 @@
 
             <div class="ac-card-body">
               <section class="ac-mobile-template-picker" aria-label="Categorías de plantillas">
-                <div class="ac-picker-heading">
-                  <div>
-                    <span class="ac-picker-eyebrow">Acceso rápido</span>
-                    <strong>Elige una categoría</strong>
-                  </div>
-                  <span class="ac-picker-hint">1 toque</span>
-                </div>
-                <div id="acCategoriasBiblioteca" class="ac-category-grid-mobile"></div>
+                <div id="acLibraryCategories" class="ac-template-category-grid"></div>
               </section>
 
-              <section class="ac-template-type-panel" id="acTipoPlantillaPanel" hidden aria-label="Filtrar plantillas">
-                <div class="ac-type-chip-row" id="acTiposPlantilla" aria-label="Filtros de plantilla"></div>
-              </section>
+              <div id="acLibraryTypeFilters" class="ac-template-type-filter" hidden aria-label="Tipos de plantilla"></div>
 
-              <div class="ac-filter-bar">
-                <div class="ac-search-wrap">
+              <div class="ac-library-toolbar">
+                <label class="ac-library-search" for="acBuscarPlantilla">
                   <i class="bi bi-search" aria-hidden="true"></i>
                   <input
                     id="acBuscarPlantilla"
-                    class="ac-field"
                     type="search"
                     autocomplete="off"
-                    placeholder="Buscar plantilla..."
-                    aria-label="Buscar plantilla"
+                    placeholder="Buscar por título, categoría, tipo, servicio, palabras clave o respuesta..."
                   >
+                </label>
+
+                <div class="ac-library-quickfilters" aria-label="Accesos de productividad">
+                  <button type="button" class="ac-chip-btn" id="acVerRecientes" aria-pressed="false">
+                    <i class="bi bi-clock-history"></i> Recientes
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  class="ac-btn ac-btn-soft"
-                  id="acFavoritos"
-                >
-                  <i class="bi bi-star" aria-hidden="true"></i>
-                  Favoritos
-                </button>
-
-                <button
-                  type="button"
-                  class="ac-btn ac-btn-line"
-                  id="acMasUsadas"
-                >
-                  <i class="bi bi-bar-chart" aria-hidden="true"></i>
-                  Más usadas
-                </button>
+                <label class="ac-library-filter" for="acFiltroCategoria">
+                  <span>Categoría</span>
+                  <select id="acFiltroCategoria">
+                    <option value="TODAS">Todas</option>
+                  </select>
+                </label>
               </div>
 
-              <div id="acPlantillas" aria-live="polite"></div>
+              <div id="acListaPlantillas" class="ac-template-list"></div>
             </div>
           </article>
         </section>
@@ -325,224 +318,260 @@
         <section class="ac-column">
 
           <!-- RESPUESTA -->
-          <article class="ac-card" aria-labelledby="acRespuestaTitulo">
+          <article class="ac-card ac-response-card" id="acRespuestaCard" aria-labelledby="acRespuestaTitulo">
             <div class="ac-card-head">
               <div>
                 <h2 class="ac-card-title" id="acRespuestaTitulo">
                   4. Respuesta
                 </h2>
                 <p class="ac-card-help">
-                  Revísala y modifícala antes de copiar si lo necesitas.
+                  Puedes editar el texto antes de copiarlo.
                 </p>
               </div>
+
+              <span class="ac-selected-chip" id="acPlantillaSeleccionada" hidden>
+                <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                Plantilla seleccionada
+              </span>
             </div>
 
             <div class="ac-card-body">
-              <div
-                id="acPlantillaSeleccionada"
-                hidden
-                aria-live="polite"
-              ></div>
+              <div class="ac-commercial-stage" aria-label="Etapa comercial">
+                <span class="ac-section-label"><i class="bi bi-signpost-split"></i> Etapa comercial</span>
+                <div class="ac-stage-buttons" id="acEtapasComerciales">
+                  <button type="button" class="ac-stage-btn active" data-stage="PRIMERA_RESPUESTA" aria-pressed="true">Primera respuesta</button>
+                  <button type="button" class="ac-stage-btn" data-stage="SEGUIMIENTO" aria-pressed="false">Seguimiento</button>
+                  <button type="button" class="ac-stage-btn" data-stage="CIERRE" aria-pressed="false">Cierre</button>
+                  <button type="button" class="ac-stage-btn" data-stage="RECONTACTO" aria-pressed="false">Recontacto</button>
+                </div>
+                <small id="acEtapaAyuda">Organiza el trabajo comercial sin modificar la plantilla guardada.</small>
+              </div>
 
               <label class="ac-label" for="acRespuesta">
-                Respuesta sugerida
-                <small>— editable</small>
+                Respuesta preparada
               </label>
 
               <textarea
                 id="acRespuesta"
                 class="ac-textarea ac-response"
-                rows="10"
+                rows="11"
+                autocomplete="off"
+                autocapitalize="sentences"
                 spellcheck="true"
-                placeholder="La respuesta sugerida aparecerá aquí..."
+                placeholder="Selecciona una plantilla para preparar la respuesta..."
               ></textarea>
 
               <div class="ac-response-actions">
-                <button
-                  type="button"
-                  class="ac-btn ac-btn-primary ac-copy-main"
-                  id="acCopiar"
-                >
+                <button type="button" class="ac-btn ac-btn-primary" id="acCopiar">
                   <i class="bi bi-copy" aria-hidden="true"></i>
                   Copiar respuesta
                 </button>
 
-                <button
-                  type="button"
-                  class="ac-btn ac-btn-whatsapp"
-                  id="acWhatsApp"
-                  title="Abrir WhatsApp con la respuesta preparada"
-                >
+                <button type="button" class="ac-btn ac-btn-whatsapp" id="acWhatsApp">
                   <i class="bi bi-whatsapp" aria-hidden="true"></i>
-                  WhatsApp
+                  Abrir WhatsApp
                 </button>
 
-                <button
-                  type="button"
-                  class="ac-btn ac-btn-line"
-                  id="acLimpiarRespuesta"
-                  title="Borrar solo la respuesta"
-                >
+                <button type="button" class="ac-btn ac-btn-social" id="acInstagram" title="Copia la respuesta y abre Instagram">
+                  <i class="bi bi-instagram" aria-hidden="true"></i>
+                  Instagram
+                </button>
+
+                <button type="button" class="ac-btn ac-btn-social" id="acTikTok" title="Copia la respuesta y abre TikTok">
+                  <i class="bi bi-tiktok" aria-hidden="true"></i>
+                  TikTok
+                </button>
+
+                <button type="button" class="ac-btn ac-btn-line" id="acLimpiarRespuesta">
                   <i class="bi bi-x-circle" aria-hidden="true"></i>
-                  Borrar respuesta
+                  Limpiar respuesta
                 </button>
               </div>
+
+              <p class="ac-channel-note">
+                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                WhatsApp prepara el mensaje. Instagram y TikTok copian la respuesta y abren la plataforma; tú decides a quién enviarla.
+              </p>
             </div>
           </article>
 
-          <!-- INFORMACIÓN DE OPERACIÓN -->
-          <article class="ac-card" aria-labelledby="acOperacionTitulo">
+          <!-- ATAJOS / RESUMEN -->
+          <article class="ac-card ac-summary-card" aria-labelledby="acResumenTitulo">
             <div class="ac-card-head">
               <div>
-                <h2 class="ac-card-title" id="acOperacionTitulo">
-                  Operación segura
+                <h2 class="ac-card-title" id="acResumenTitulo">
+                  Flujo recomendado
                 </h2>
                 <p class="ac-card-help">
-                  Esta primera versión trabaja de forma independiente.
+                  Plantillas primero. IA solo cuando realmente haga falta.
                 </p>
               </div>
             </div>
 
             <div class="ac-card-body">
-              <div class="ac-safety-note" style="margin-top:0">
-                <i class="bi bi-database-lock" aria-hidden="true"></i>
-                <span>
-                  No escribe en pacientes, historia clínica, atenciones,
-                  diagnóstico, plan, recetas, agenda, caja ni seguridad.
-                </span>
-              </div>
-
-              <div class="ac-safety-note">
-                <i class="bi bi-cloud-slash" aria-hidden="true"></i>
-                <span>
-                  Las plantillas se cargan una vez desde la base disponible y
-                  luego se buscan localmente para mantener respuesta rápida.
-                </span>
-              </div>
-
-              <div class="ac-safety-note">
-                <i class="bi bi-diagram-3" aria-hidden="true"></i>
-                <span>
-                  El módulo está preparado para recibir configuración externa
-                  del negocio sin acoplar el motor al ERP.
-                </span>
-              </div>
+              <ol class="ac-flow-list">
+                <li>
+                  <span>1</span>
+                  <div>
+                    <strong>Pega el mensaje</strong>
+                    <small>El texto permanece temporal en pantalla.</small>
+                  </div>
+                </li>
+                <li>
+                  <span>2</span>
+                  <div>
+                    <strong>Revisa la sugerencia</strong>
+                    <small>La detección es local y basada en palabras clave.</small>
+                  </div>
+                </li>
+                <li>
+                  <span>3</span>
+                  <div>
+                    <strong>Edita si hace falta</strong>
+                    <small>Tú mantienes el control final de la respuesta.</small>
+                  </div>
+                </li>
+                <li>
+                  <span>4</span>
+                  <div>
+                    <strong>Copia y envía</strong>
+                    <small>El envío permanece manual en esta primera versión.</small>
+                  </div>
+                </li>
+              </ol>
             </div>
           </article>
-
         </section>
       </div>
 
-
+      <!-- MODAL CREAR / EDITAR PLANTILLA -->
       <div class="ac-modal-backdrop" id="acTemplateModal" hidden>
-        <section class="ac-modal ac-template-editor" role="dialog" aria-modal="true" aria-labelledby="acTplModalTitle">
-          <div class="ac-modal-head ac-template-editor-head">
-            <div class="ac-template-editor-heading">
-              <span class="ac-editor-icon" aria-hidden="true">
-                <i class="bi bi-lightning-charge-fill"></i>
-              </span>
-              <div>
-                <span class="ac-editor-kicker">Biblioteca de respuestas</span>
-                <h2 id="acTplModalTitle">Nueva plantilla</h2>
-                <p id="acTplModalSubtitle">Crea una respuesta reutilizable en menos de un minuto.</p>
-              </div>
+        <section class="ac-modal ac-template-editor-modal" role="dialog" aria-modal="true" aria-labelledby="acTemplateModalTitle">
+          <div class="ac-modal-head">
+            <div>
+              <span class="ac-editor-kicker" id="acTemplateModalKicker">Biblioteca comercial</span>
+              <h2 id="acTemplateModalTitle">Nueva plantilla</h2>
+              <p id="acTemplateModalSubtitle">Crea una respuesta reusable sin tocar la base directamente.</p>
             </div>
-            <button type="button" class="ac-icon-btn" id="acTemplateModalClose" aria-label="Cerrar">
+            <button type="button" class="ac-icon-btn" id="acTemplateModalClose" aria-label="Cerrar editor">
               <i class="bi bi-x-lg"></i>
             </button>
           </div>
 
-          <form id="acTemplateForm" class="ac-modal-body ac-template-editor-body">
-            <div class="ac-editor-tip">
-              <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
-              <span>
-                <strong>Consejo:</strong> usa un título fácil de reconocer y agrega palabras que tus pacientes suelen escribir.
-              </span>
+          <form class="ac-template-form ac-editor-form" id="acTemplateForm">
+            <input type="hidden" id="acTplId">
+
+            <div class="ac-editor-tip" id="acEditorTip">
+              <i class="bi bi-lightbulb"></i>
+              <span><strong>Consejo:</strong> usa un título corto y una respuesta lista para enviar por WhatsApp.</span>
             </div>
 
-            <section class="ac-editor-field" id="acTextCreator">
-              <button type="button" class="ac-btn ac-btn-line" id="acTextCreatorToggle"
-                      aria-expanded="false" aria-controls="acTextCreatorBody">
-                <i class="bi bi-stars" aria-hidden="true"></i>
-                <span>Crear desde texto</span>
-                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+            <section class="ac-text-creator" id="acTextCreator">
+              <button type="button" class="ac-text-creator-toggle" id="acTextCreatorToggle" aria-expanded="false">
+                <span><i class="bi bi-stars"></i> Crear desde texto</span>
+                <i class="bi bi-chevron-down"></i>
               </button>
-
-              <div id="acTextCreatorBody" hidden>
-                <label class="ac-form-full ac-editor-field">
-                  <span class="ac-editor-label">Texto bruto</span>
-                  <small>
-                    Pega una promoción, servicio, mensaje o información. El análisis es local y no guarda nada hasta que pulses “Guardar plantilla”.
-                  </small>
-                  <textarea class="ac-textarea" id="acTextCreatorInput" rows="5"
-                            placeholder="Ej. Promoción Gardasil 3 dosis por $345 pago de contado..."></textarea>
+              <div class="ac-text-creator-body" id="acTextCreatorBody" hidden>
+                <label class="ac-field ac-field-wide">
+                  <span>Texto base</span>
+                  <small>Pega información, anuncio, promoción o explicación. El análisis es local y no guarda nada hasta que pulses Guardar plantilla.</small>
+                  <textarea id="acTextCreatorInput" rows="7" placeholder="Pega aquí el texto que quieres convertir en plantilla..."></textarea>
                 </label>
-
-                <div class="ac-modal-actions">
-                  <button type="button" class="ac-btn ac-btn-line" id="acTextCreatorClear">
-                    <i class="bi bi-eraser"></i>
-                    Limpiar
+                <div class="ac-text-creator-actions">
+                  <button type="button" class="ac-btn ac-btn-soft" id="acTextCreatorAnalyze">
+                    <i class="bi bi-magic"></i> Analizar texto
                   </button>
-                  <button type="button" class="ac-btn ac-btn-primary" id="acTextCreatorAnalyze">
-                    <i class="bi bi-stars"></i>
-                    Analizar y completar
+                  <button type="button" class="ac-btn ac-btn-line" id="acTextCreatorClear">
+                    <i class="bi bi-eraser"></i> Limpiar
                   </button>
                 </div>
-
-                <div class="ac-editor-message" id="acTextCreatorMessage"
-                     hidden role="status" aria-live="polite"></div>
+                <div class="ac-editor-message" id="acTextCreatorMessage" hidden role="status" aria-live="polite"></div>
               </div>
             </section>
 
-            <div class="ac-form-grid ac-editor-grid">
-              <label class="ac-editor-field">
-                <span class="ac-editor-label">Nombre de la plantilla</span>
-                <small>Solo para identificarla dentro de la biblioteca.</small>
-                <input class="ac-field" id="acTplTitulo" maxlength="120" required placeholder="Ej. Precio consulta ginecológica">
+            <div class="ac-editor-grid">
+              <label class="ac-field ac-field-wide">
+                <span>Título de la plantilla</span>
+                <small>Nombre interno para reconocerla rápido.</small>
+                <input id="acTplTitulo" maxlength="120" required placeholder="Ej. Precio consulta ginecológica">
               </label>
 
-              <label class="ac-editor-field">
-                <span class="ac-editor-label">Categoría</span>
-                <small>Selecciona una existente o escribe una nueva. La categoría aparecerá automáticamente en la app.</small>
-                <input class="ac-field" id="acTplCategoria" list="acTplCategoriasList" maxlength="80" required placeholder="Ej. Estética facial">
-                <datalist id="acTplCategoriasList"></datalist>
+              <label class="ac-field">
+                <span>Ámbito</span>
+                <small>Define dónde podrá utilizarse.</small>
+                <select id="acTplAmbito" required></select>
               </label>
 
-              <label class="ac-editor-field">
-                <span class="ac-editor-label">Extensión de la respuesta</span>
-                <small>Corta es la opción recomendada para redes y WhatsApp.</small>
-                <select class="ac-select" id="acTplTipo">
-                  <option value="CORTA" selected>Corta · rápida</option>
-                  <option value="MEDIA">Media · explicativa</option>
-                  <option value="LARGA">Larga · instrucciones</option>
+              <label class="ac-field">
+                <span>Categoría</span>
+                <small>Agrupa plantillas por servicio o intención.</small>
+                <select id="acTplCategoria" required></select>
+              </label>
+
+              <label class="ac-field">
+                <span>Tipo / subcategoría</span>
+                <small>Ej. Precio, Información, Promoción, Esquema. Es opcional y depende de la categoría.</small>
+                <input id="acTplTipoPlantilla" list="acTplTipoPlantillaOptions" maxlength="60" placeholder="Ej. PRECIO">
+                <datalist id="acTplTipoPlantillaOptions"></datalist>
+              </label>
+
+              <label class="ac-field">
+                <span>Servicio / tema</span>
+                <small>Tratamiento o tema concreto. Déjalo vacío si la plantilla es general.</small>
+                <input id="acTplServicio" list="acTplServicioOptions" maxlength="80" placeholder="Ej. HIFU_FACIAL">
+                <datalist id="acTplServicioOptions"></datalist>
+              </label>
+
+              <label class="ac-field">
+                <span>Extensión de la respuesta</span>
+                <small>Ayuda a mantener consistencia comercial.</small>
+                <select id="acTplTipo" required>
+                  <option value="CORTA">Corta</option>
+                  <option value="MEDIA">Media</option>
+                  <option value="LARGA">Larga</option>
                 </select>
               </label>
 
-              <label class="ac-editor-field">
-                <span class="ac-editor-label">Tipo / subcategoría</span>
-                <small>Clasifica la plantilla dentro de su categoría. Ej.: Precio, Información, Promoción, Agendar o Confirmar.</small>
-                <input class="ac-field" id="acTplTipoPlantilla" list="acTplTiposList" maxlength="60" placeholder="Ej. Precio">
-                <datalist id="acTplTiposList"></datalist>
+              <label class="ac-field">
+                <span>Prioridad</span>
+                <small>Las más altas aparecen primero.</small>
+                <input id="acTplPrioridad" type="number" min="1" max="999" value="50">
               </label>
 
-              <label class="ac-editor-field">
-                <span class="ac-editor-label">Servicio / tema</span>
-                <small>Opcional. Identifica el servicio o tema concreto de la respuesta.</small>
-                <input class="ac-field" id="acTplServicio" maxlength="100" placeholder="Ej. HIFU facial">
+              <label class="ac-field">
+                <span>Canal</span>
+                <small>Por ahora se mantiene GENERAL.</small>
+                <input id="acTplCanal" value="GENERAL" maxlength="40">
               </label>
 
-              <label class="ac-editor-field">
-                <span class="ac-editor-label">Palabras que activan esta respuesta</span>
-                <small>Sepáralas con coma. Ej.: precio, costo, valor, cuánto cuesta.</small>
-                <input class="ac-field" id="acTplKeywords" placeholder="precio, costo, valor, consulta">
+              <label class="ac-field ac-field-wide">
+                <span>Palabras clave</span>
+                <small>Sepáralas con comas. Sirven para sugerir la plantilla automáticamente.</small>
+                <input id="acTplKeywords" placeholder="precio, valor, costo, consulta">
+              </label>
+
+              <label class="ac-field ac-field-wide">
+                <span>Etiquetas internas</span>
+                <small>Opcionales; ayudan a organizar la biblioteca.</small>
+                <input id="acTplTags" placeholder="ej. prioridad, campaña, premium">
               </label>
             </div>
 
-            <label class="ac-form-full ac-editor-field ac-editor-response-field">
-              <span class="ac-editor-label">Respuesta lista para copiar</span>
-              <small>Este es el texto que aparecerá cuando selecciones la plantilla.</small>
-              <textarea class="ac-textarea" id="acTplRespuesta" rows="7" required placeholder="Escribe la respuesta que quieres reutilizar..."></textarea>
+            <label class="ac-field ac-field-wide ac-editor-response-field">
+              <span>Respuesta</span>
+              <small>Será el texto que el asistente prepare para copiar.</small>
+              <textarea id="acTplRespuesta" rows="8" required placeholder="Escribe la respuesta que quieres reutilizar..."></textarea>
             </label>
+
+            <section class="ac-template-quality" id="acTplCalidad" aria-live="polite">
+              <div class="ac-template-quality-head">
+                <span><i class="bi bi-shield-check"></i> Control de calidad local</span>
+                <strong id="acTplCalidadPuntaje">0%</strong>
+              </div>
+              <div class="ac-template-quality-items" id="acTplCalidadItems">
+                <span>Completa la respuesta para revisar su calidad.</span>
+              </div>
+            </section>
 
             <div class="ac-editor-preview" id="acTplPreview" aria-live="polite">
               <div class="ac-editor-preview-head">
@@ -636,6 +665,12 @@
           <button type="button" class="ac-btn ac-btn-whatsapp" id="acQuickWhatsApp">
             <i class="bi bi-whatsapp"></i> WhatsApp
           </button>
+          <button type="button" class="ac-btn ac-btn-social" id="acQuickInstagram" title="Copiar y abrir Instagram">
+            <i class="bi bi-instagram"></i> Instagram
+          </button>
+          <button type="button" class="ac-btn ac-btn-social" id="acQuickTikTok" title="Copiar y abrir TikTok">
+            <i class="bi bi-tiktok"></i> TikTok
+          </button>
         </div>
       </aside>
 
@@ -667,7 +702,7 @@
   <!-- =========================================================
        MOTOR
        ========================================================= -->
-  <script src="asistente_comercial.js?v=1.6.0"></script>
+  <script src="asistente_comercial.js?v=1.7.0"></script>
 
   <!-- =========================================================
        ADAPTADOR VISUAL LOCAL
