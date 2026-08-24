@@ -300,7 +300,154 @@ function auroCitaPertenecePaciente(c, p){
   return !!nombreCita && !!nombrePaciente && nombreCita === nombrePaciente;
 }
 
+/* ============================================================
+   AUROSANAX PACIENTES 07 - ÚLTIMA ATENCIÓN CLÍNICA ANTIRREGRESIVA
+   Alcance EXCLUSIVO: cálculo de la columna "Última atención".
+
+   Jerarquía permanente:
+   1) Atención clínica real por id_paciente (atenciones.fecha_atencion).
+   2) Si no existe atención real: última cita con estado Atendida.
+   3) Si tampoco existe: fecha histórica/importada del paciente.
+   4) Si no existe ninguna evidencia: sin atención.
+
+   Protecciones:
+   - actualizado_en NO se interpreta como atención clínica.
+   - Las atenciones reales se vinculan SOLO por id_paciente.
+   - No modifica Agenda, Historia Clínica, Atenciones, IDs ni Google Sheets.
+============================================================ */
+let auroAtencionesPacientesCache = [];
+let auroAtencionesPacientesCargadas = false;
+let auroAtencionesPacientesCargando = null;
+
+function auroFechaISOClinicaPaciente(valor){
+  if(!valor) return '';
+
+  const s = String(valor).trim();
+  if(!s) return '';
+
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+
+  const lat = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if(lat){
+    return lat[3] + '-' + String(lat[2]).padStart(2,'0') + '-' + String(lat[1]).padStart(2,'0');
+  }
+
+  const d = new Date(s);
+  if(isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0,10);
+}
+
+function auroTimestampAtencionPaciente(a){
+  const fecha = auroFechaISOClinicaPaciente(a?.fecha_atencion || a?.fecha || '');
+  if(!fecha) return 0;
+
+  const horaTxt = String(a?.hora_atencion || a?.hora || '').trim();
+  const horaMatch = horaTxt.match(/(\d{1,2}):(\d{2})/);
+  const hora = horaMatch ? String(horaMatch[1]).padStart(2,'0') + ':' + horaMatch[2] : '00:00';
+  const t = new Date(fecha + 'T' + hora + ':00').getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+function auroAtencionPertenecePaciente(a, p){
+  if(!a || !p) return false;
+
+  const idAtencionPaciente = String(a.id_paciente || a.paciente_id || '').trim();
+  const idPaciente = String(p.id_paciente || p.id || '').trim();
+
+  return !!idAtencionPaciente && !!idPaciente && idAtencionPaciente === idPaciente;
+}
+
+function auroLeerAtencionesLocalesPacientes(){
+  try{
+    const raw = localStorage.getItem('aurosanax_atenciones_local_v1') || '';
+    const data = raw ? JSON.parse(raw) : [];
+    return Array.isArray(data) ? data : [];
+  }catch(_e){
+    return [];
+  }
+}
+
+function auroAtencionesDisponiblesPacientes(){
+  const mapa = new Map();
+
+  auroLeerAtencionesLocalesPacientes().forEach(function(a, idx){
+    const key = String(a?.id_atencion || ('LOCAL-' + idx)).trim();
+    if(key) mapa.set(key, a);
+  });
+
+  (Array.isArray(auroAtencionesPacientesCache) ? auroAtencionesPacientesCache : []).forEach(function(a, idx){
+    const key = String(a?.id_atencion || ('SHEETS-' + idx)).trim();
+    if(key) mapa.set(key, a);
+  });
+
+  return Array.from(mapa.values());
+}
+
+async function auroCargarAtencionesParaUltimaAtencion(forzar){
+  if(auroAtencionesPacientesCargando) return auroAtencionesPacientesCargando;
+  if(auroAtencionesPacientesCargadas && !forzar) return auroAtencionesPacientesCache;
+
+  auroAtencionesPacientesCargando = (async function(){
+    try{
+      if(typeof API_URL === 'undefined' || !API_URL) return auroAtencionesPacientesCache;
+
+      const res = await fetch(API_URL + '?accion=listarAtenciones&_=' + Date.now());
+      const data = await res.json();
+      const lista = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+
+      auroAtencionesPacientesCache = lista;
+      auroAtencionesPacientesCargadas = true;
+      return auroAtencionesPacientesCache;
+    }catch(error){
+      console.warn('AUROSANAX PACIENTES: no se pudo refrescar Última atención desde Atenciones.', error);
+      return auroAtencionesPacientesCache;
+    }finally{
+      auroAtencionesPacientesCargando = null;
+    }
+  })();
+
+  return auroAtencionesPacientesCargando;
+}
+
+function auroPacienteEsHistoricoImportado(p){
+  const origen = normalizarTextoComparacion(p?.creado_por || p?.origen_registro || p?.origen || '');
+  if(!origen) return false;
+
+  return origen.includes('migracion') ||
+         origen.includes('manual') ||
+         origen.includes('import') ||
+         origen.includes('extern');
+}
+
+function auroFechaHistoricaPaciente(p){
+  if(!auroPacienteEsHistoricoImportado(p)) return '';
+
+  return auroFechaISOClinicaPaciente(
+    p?.fecha_historica ||
+    p?.ultima_atencion_historica ||
+    p?.fecha_ultima_atencion ||
+    p?.fecha_registro ||
+    p?.creado_en ||
+    ''
+  );
+}
+
 function auroUltimaAtencionPaciente(p){
+  const atencionesReales = auroAtencionesDisponiblesPacientes()
+    .filter(a => auroAtencionPertenecePaciente(a, p))
+    .map(a => ({ atencion: a, ts: auroTimestampAtencionPaciente(a) }))
+    .filter(x => x.ts > 0)
+    .sort((a, b) => b.ts - a.ts);
+
+  if(atencionesReales.length){
+    return {
+      fecha: auroFechaISOClinicaPaciente(atencionesReales[0].atencion.fecha_atencion || atencionesReales[0].atencion.fecha || ''),
+      ts: atencionesReales[0].ts,
+      fuente: 'atencion'
+    };
+  }
+
   const citasAtendidas = (Array.isArray(citasAgendaWeb) ? citasAgendaWeb : [])
     .filter(c => normalizarEstadoAgenda(c.estado) === 'atendida' && auroCitaPertenecePaciente(c, p))
     .map(c => ({ cita: c, ts: auroTimestampFechaAgendaPaciente(c) }))
@@ -309,18 +456,25 @@ function auroUltimaAtencionPaciente(p){
 
   if(citasAtendidas.length){
     return {
-      fecha: String(citasAtendidas[0].cita.fecha_deseada || '').substring(0,10),
+      fecha: auroFechaISOClinicaPaciente(
+        citasAtendidas[0].cita.fecha_deseada ||
+        citasAtendidas[0].cita.fecha_cita ||
+        citasAtendidas[0].cita.fecha ||
+        ''
+      ),
       ts: citasAtendidas[0].ts,
       fuente: 'cita'
     };
   }
 
-  // Si la agenda aún no terminó de cargar, se mantiene temporalmente el dato anterior para no dejar la tabla vacía.
-  // Cuando cargan las citas, se recalcula desde Agenda y se evita usar fecha_registro/actualizado_en como atención.
-  if(!citasAgendaWebCargadas && p.ultima){
-    const fechaFallback = normalizarFechaInput(p.ultima);
-    const tsFallback = fechaFallback ? new Date(fechaFallback + 'T00:00:00').getTime() : 0;
-    return {fecha: fechaFallback || p.ultima, ts: Number.isFinite(tsFallback) ? tsFallback : 0, fuente: 'temporal'};
+  const fechaHistorica = auroFechaHistoricaPaciente(p);
+  if(fechaHistorica){
+    const tsHistorico = new Date(fechaHistorica + 'T00:00:00').getTime();
+    return {
+      fecha: fechaHistorica,
+      ts: Number.isFinite(tsHistorico) ? tsHistorico : 0,
+      fuente: 'historica'
+    };
   }
 
   return {fecha: '', ts: 0, fuente: 'sin_atencion'};
@@ -656,10 +810,18 @@ async function cargarPacientesDesdeSheets(){
       tipo_sangre: p.tipo_sangre || p.grupo_sanguineo || '',
       antecedentes_importantes: p.antecedentes_importantes || '',
       servicio: p.servicio_principal || 'Ginecología',
+      /* Metadatos conservados solo para el respaldo histórico de Última atención. */
+      fecha_registro: p.fecha_registro || '',
+      creado_en: p.creado_en || '',
+      creado_por: p.creado_por || '',
+      origen_registro: p.origen_registro || p.origen || '',
+      fecha_historica: p.fecha_historica || p.ultima_atencion_historica || p.fecha_ultima_atencion || '',
+      /* Compatibilidad: se conserva ultima, pero ya NO participa en Última atención. */
       ultima: p.actualizado_en ? new Date(p.actualizado_en).toLocaleDateString('es-EC') : '',
       estado: p.estado || 'Activa'
     }));
 
+    await auroCargarAtencionesParaUltimaAtencion(false);
     renderPatients();
     actualizarSelectorPacientesHistoria();
     actualizarDashboard();
