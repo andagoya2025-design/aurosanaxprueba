@@ -2675,3 +2675,201 @@ body.ac-library-focus #acCategoriaCard {
 .ac-use-template-btn:has(.bi-check2) {
   font-weight: 850;
 }
+
+
+/* ============================================================
+   V1.7.0 · PRODUCTIVIDAD COMERCIAL (ADITIVO / ANTIRREGRESIVO)
+   No altera reglas previas: solo estilos de los nuevos controles.
+   ============================================================ */
+
+.ac-view-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: -2px 0 18px;
+}
+
+.ac-view-tools small {
+  color: var(--ac-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ac-seller-mode-btn.active {
+  border-color: rgba(139, 30, 90, .28);
+  background: var(--ac-soft);
+  color: var(--ac-primary-dark);
+}
+
+.ac-commercial-stage {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: var(--ac-radius-sm);
+  background: #fff;
+}
+
+.ac-commercial-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.ac-commercial-stage-head > span {
+  color: var(--ac-title);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ac-commercial-stage-head small {
+  color: var(--ac-muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.ac-commercial-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ac-stage-btn {
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid var(--ac-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ac-text);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--ac-transition);
+}
+
+.ac-stage-btn:hover {
+  border-color: #efb7d4;
+  background: var(--ac-soft);
+  color: var(--ac-primary-dark);
+}
+
+.ac-btn-social {
+  border: 1px solid var(--ac-line);
+  background: #fff;
+  color: var(--ac-title);
+}
+
+.ac-btn-social:hover {
+  border-color: #d1d5db;
+  background: #f8fafc;
+}
+
+.ac-template-quality {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: var(--ac-radius-sm);
+  background: linear-gradient(180deg, #ffffff, #fbfcfe);
+}
+
+.ac-template-quality-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 9px;
+  color: var(--ac-title);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ac-template-quality-head strong {
+  min-width: 48px;
+  text-align: right;
+  color: var(--ac-primary-dark);
+}
+
+.ac-template-quality-items {
+  display: grid;
+  gap: 6px;
+}
+
+.ac-quality-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--ac-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ac-quality-item.is-ok {
+  color: #166534;
+}
+
+.ac-quality-item.is-pending {
+  color: #92400e;
+}
+
+body.ac-seller-mode #acAmbitoCard,
+body.ac-seller-mode #acNuevaPlantilla,
+body.ac-seller-mode [aria-labelledby="acOperacionTitulo"] {
+  display: none !important;
+}
+
+body.ac-seller-mode .ac-view-tools small {
+  display: none;
+}
+
+body.ac-seller-mode .ac-layout {
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  .ac-view-tools {
+    align-items: stretch;
+    justify-content: stretch;
+    flex-direction: column;
+    margin-top: 8px;
+  }
+
+  .ac-view-tools .ac-btn {
+    width: 100%;
+  }
+
+  .ac-view-tools small {
+    text-align: center;
+  }
+
+  .ac-commercial-stage-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ac-commercial-stage-head small {
+    text-align: left;
+  }
+
+  .ac-commercial-stage-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ac-stage-btn {
+    width: 100%;
+  }
+
+  .ac-response-actions .ac-btn-social,
+  .ac-quick-actions .ac-btn-social {
+    flex: 1 1 calc(50% - 6px);
+  }
+}
+
+@media (max-width: 420px) {
+  .ac-commercial-stage-actions {
+    grid-template-columns: 1fr;
+  }
+}
