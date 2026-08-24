@@ -136,6 +136,43 @@
     }
     .ac-quick-sheet-backdrop{display:none}
 
+    /* FASE 2.5 · CONTACTO ACTIVO / FLUJO CRM */
+    .ac-active-contact{
+      display:none;
+      margin:0 16px 14px;
+      padding:12px 13px;
+      border:1px solid #ead1df;
+      border-radius:16px;
+      background:linear-gradient(135deg,#fff 0%,#fff7fb 100%);
+      box-shadow:0 8px 24px rgba(15,23,42,.05)
+    }
+    .ac-active-contact.is-active{display:block}
+    .ac-active-contact-main{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .ac-active-contact-kicker{display:block;color:var(--ac-primary-dark);font-size:9px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+    .ac-active-contact-name{display:block;margin-top:3px;color:var(--ac-title);font-size:15px;font-weight:950;line-height:1.15}
+    .ac-active-contact-meta{display:block;margin-top:4px;color:var(--ac-muted);font-size:11px;font-weight:750;line-height:1.35}
+    .ac-active-contact-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+    .ac-active-contact-actions .ac-btn{min-height:38px;padding:7px 10px;font-size:11px}
+    .ac-active-contact-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;background:#fdf2f8;color:var(--ac-primary-dark);font-size:10px;font-weight:900;white-space:nowrap}
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-grid,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-grid-secondary,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-form-note,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-actions,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-statusline,
+    .ac-crm-card[data-crm-mode="CONTACTS"] #acPendientesDetalle{display:none!important}
+    .ac-crm-card[data-crm-mode="CONTACTS"] #acContactosDetalle{display:block!important;border-top:0;margin-top:0;padding-top:0}
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-grid,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-grid-secondary,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-form-note,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-actions,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-statusline,
+    .ac-crm-card[data-crm-mode="PENDING"] #acContactosDetalle{display:none!important}
+    .ac-crm-card[data-crm-mode="PENDING"] #acPendientesDetalle{display:block!important;border-top:0;margin-top:0;padding-top:0}
+    .ac-crm-card[data-crm-mode="NEW"] #acContactosDetalle,
+    .ac-crm-card[data-crm-mode="NEW"] #acPendientesDetalle,
+    .ac-crm-card[data-crm-mode="FORM"] #acContactosDetalle,
+    .ac-crm-card[data-crm-mode="FORM"] #acPendientesDetalle{display:none!important}
+
     @media (max-width:1180px){
       .ac-crm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .ac-crm-grid-secondary{grid-template-columns:1fr 1fr}
@@ -173,6 +210,10 @@
         padding:0 12px 12px
       }
       .ac-crm-mobile-action{display:inline-flex}
+      .ac-active-contact{margin:0 12px 12px}
+      .ac-active-contact-main{align-items:center}
+      .ac-active-contact-actions{display:grid;grid-template-columns:1fr 1fr}
+      .ac-active-contact-actions .ac-btn{width:100%;min-height:42px}
       .ac-crm-card>.ac-card-body{display:none}
       .ac-crm-card.is-open:before{
         content:"";
@@ -424,6 +465,21 @@
           <button type="button" class="ac-crm-mobile-action" id="acCrmPendientesMovil"><i class="bi bi-bell"></i> Pendientes</button>
         </div>
 
+        <div class="ac-active-contact" id="acContactoActivo" aria-live="polite">
+          <div class="ac-active-contact-main">
+            <div>
+              <span class="ac-active-contact-kicker">Contacto activo</span>
+              <strong class="ac-active-contact-name" id="acContactoActivoNombre">Sin contacto seleccionado</strong>
+              <span class="ac-active-contact-meta" id="acContactoActivoMeta"></span>
+            </div>
+            <span class="ac-active-contact-badge" id="acContactoActivoEstado"><i class="bi bi-person-check"></i> Activo</span>
+          </div>
+          <div class="ac-active-contact-actions">
+            <button type="button" class="ac-btn ac-btn-primary" id="acContactoActivoResponder"><i class="bi bi-chat-square-text"></i> Responder</button>
+            <button type="button" class="ac-btn ac-btn-line" id="acContactoActivoFicha"><i class="bi bi-person-vcard"></i> Ver ficha</button>
+          </div>
+        </div>
+
         <div class="ac-card-body">
           <div class="ac-crm-sheet-head">
             <div class="ac-crm-sheet-title">
@@ -462,7 +518,7 @@
             </label>
           </div>
 
-          <label style="display:block;margin-top:12px">
+          <label class="ac-crm-form-note" style="display:block;margin-top:12px">
             <span class="ac-label">Observación breve <small>— solo comercial</small></span>
             <textarea id="acContactoObservacion" class="ac-textarea ac-crm-note" rows="3" maxlength="500" placeholder="Ej. Consultó precio; prefiere escribir en la tarde. No guardar información clínica sensible."></textarea>
           </label>
@@ -765,7 +821,9 @@
         contacts: {},
         remoteRecords: [],
         backendAvailable: false,
-        initialized: false
+        initialized: false,
+        activeContactKey: "",
+        crmMode: "FORM"
       };
 
       var COMMERCIAL_STATES = [
@@ -904,10 +962,13 @@
         try{
           var r=await apiPost("AC_crearRegistro",buildPayload("NOTA",snap,"Estado comercial: "+snap.estado_comercial+(snap.observacion?" · "+snap.observacion:"")));
           if(!r||r.success===false) throw new Error(r&&r.message||"No se pudo guardar");
-          state.backendAvailable=true; setSync(true); status("Contacto guardado correctamente en seguimiento comercial.","success");
-          await loadCommercialRecords(); return true;
+          state.backendAvailable=true; setSync(true);
+          setActiveContact(snap);
+          status("Contacto guardado y activo: "+(snap.nombre||snap.telefono||"Prospecto")+".","success");
+          await loadCommercialRecords(); renderActiveContact(); return true;
         }catch(err){
-          state.backendAvailable=false; setSync(false); status("El contacto quedó guardado solo en este dispositivo. Para sincronizar, instala el SCRIB Fase 2 entregado.","warning"); return false;
+          state.backendAvailable=false; setSync(false); setActiveContact(snap);
+          status("Contacto activo y guardado solo en este dispositivo; la sincronización remota no estuvo disponible.","warning"); return false;
         }
       }
       async function registerInteraction(){
@@ -919,14 +980,35 @@
         try{
           var r=await apiPost("AC_crearRegistro",buildPayload(type,snap,response));
           if(!r||r.success===false) throw new Error(r&&r.message||"No se pudo registrar");
-          state.backendAvailable=true;setSync(true);status("Interacción registrada. El mensaje recibido no fue guardado.","success");
-          await loadCommercialRecords(); return true;
+          state.backendAvailable=true;setSync(true);setActiveContact(snap);
+          status("Interacción registrada · "+(snap.nombre||snap.telefono||"Prospecto")+" · "+(state.stage||"ORIGINAL")+" · "+(snap.canal||"GENERAL")+". El mensaje recibido no fue guardado.","success");
+          await loadCommercialRecords(); renderActiveContact(); return true;
         }catch(err){ status("La interacción quedó registrada localmente, pero no pudo sincronizarse con la base.","warning"); return false; }
+      }
+      function renderActiveContact(){
+        var box=el("acContactoActivo"); if(!box) return;
+        var c=state.activeContactKey&&state.contacts[state.activeContactKey];
+        if(!c){
+          box.classList.remove("is-active");
+          return;
+        }
+        var name=el("acContactoActivoNombre"),meta=el("acContactoActivoMeta"),badge=el("acContactoActivoEstado");
+        if(name) name.textContent=c.nombre||c.telefono||"Prospecto";
+        if(meta) meta.textContent=[c.servicio,c.canal,c.telefono].filter(Boolean).join(" · ");
+        if(badge) badge.innerHTML='<i class="bi bi-person-check"></i> '+escapeHtml(c.estado_comercial||"ACTIVO");
+        box.classList.add("is-active");
+      }
+      function setActiveContact(c){
+        if(!c||!c.contact_key){ state.activeContactKey=""; renderActiveContact(); return; }
+        state.activeContactKey=c.contact_key;
+        renderActiveContact();
       }
       function clearContact(){
         ["acContactoNombre","acContactoTelefono","acContactoServicio","acContactoProximo","acContactoObservacion"].forEach(function(id){var n=el(id);if(n)n.value="";});
         if(el("acContactoEstado")) el("acContactoEstado").value="NUEVO";
         if(el("acContactoCanal")) el("acContactoCanal").value="WHATSAPP";
+        state.activeContactKey="";
+        renderActiveContact();
         status("Nuevo contacto listo. No se ha guardado nada.","neutral");
       }
 
@@ -942,10 +1024,13 @@
       function openCrmPanel(mode){
         var card=el("acContactoCard"); if(!card) return;
         mode=String(mode||"FORM").toUpperCase();
+        if(["NEW","CONTACTS","PENDING","FORM"].indexOf(mode)<0) mode="FORM";
+        state.crmMode=mode;
+        card.dataset.crmMode=mode;
 
         if(mode==="NEW") clearContact();
-        if(mode==="CONTACTS"&&el("acContactosDetalle")) el("acContactosDetalle").open=true;
-        if(mode==="PENDING"&&el("acPendientesDetalle")) el("acPendientesDetalle").open=true;
+        if(el("acContactosDetalle")) el("acContactosDetalle").open=(mode==="CONTACTS");
+        if(el("acPendientesDetalle")) el("acPendientesDetalle").open=(mode==="PENDING");
 
         setCrmSheetTitle(mode);
         if(!isCompactCrm()){
@@ -972,7 +1057,11 @@
         if(el("acContactoServicio")) el("acContactoServicio").value=c.servicio||"";
         if(el("acContactoProximo")) el("acContactoProximo").value=(c.proximo_seguimiento||"").slice(0,16);
         if(el("acContactoObservacion")) el("acContactoObservacion").value=c.observacion||"";
-        status("Contacto cargado para continuar el seguimiento.","success");
+        setActiveContact(c);
+        state.crmMode="FORM";
+        if(el("acContactoCard")) el("acContactoCard").dataset.crmMode="FORM";
+        setCrmSheetTitle("FORM");
+        status("Contacto activo: "+(c.nombre||c.telefono||"Prospecto")+". Ya puedes responder o registrar una interacción.","success");
       }
       function renderContacts(){
         var list=el("acContactosGuardados"),count=el("acContactosCantidad"); if(!list||!count) return;
@@ -1010,7 +1099,7 @@
           item.addEventListener("click",function(){
             fillContact(state.contacts[this.dataset.contactKey]);
             if(el("acContactosDetalle")) el("acContactosDetalle").open=false;
-            el("acContactoCard")&&el("acContactoCard").scrollIntoView({behavior:"smooth",block:"start"});
+            if(!isCompactCrm()) el("acContactoCard")&&el("acContactoCard").scrollIntoView({behavior:"smooth",block:"start"});
           });
           list.appendChild(item);
         });
@@ -1028,7 +1117,11 @@
           var d=new Date(c.proximo_seguimiento),over=d.getTime()<now;
           var item=document.createElement("button"); item.type="button"; item.className="ac-crm-item"; item.dataset.contactKey=c.contact_key;
           item.innerHTML='<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong><small>'+escapeHtml([c.servicio,c.estado_comercial].filter(Boolean).join(" · "))+'</small></span><span class="ac-crm-item-time">'+(over?"⚠ ":"")+escapeHtml(formatDate(d))+'</span>';
-          item.addEventListener("click",function(){fillContact(state.contacts[this.dataset.contactKey]); if(el("acPendientesDetalle")) el("acPendientesDetalle").open=false; el("acContactoCard")&&el("acContactoCard").scrollIntoView({behavior:"smooth",block:"start"});});
+          item.addEventListener("click",function(){
+            fillContact(state.contacts[this.dataset.contactKey]);
+            if(el("acPendientesDetalle")) el("acPendientesDetalle").open=false;
+            if(!isCompactCrm()) el("acContactoCard")&&el("acContactoCard").scrollIntoView({behavior:"smooth",block:"start"});
+          });
           list.appendChild(item);
         });
       }
@@ -1097,6 +1190,13 @@
         b=el("acCerrarContactoPanel");if(b)b.addEventListener("click",closeCrmPanel);
         b=el("acSeguimientoManana");if(b)b.addEventListener("click",function(){scheduleHours(24);});
         b=el("acSeguimiento48h");if(b)b.addEventListener("click",function(){scheduleHours(48);});
+        b=el("acContactoActivoFicha");if(b)b.addEventListener("click",function(){openCrmPanel("FORM");});
+        b=el("acContactoActivoResponder");if(b)b.addEventListener("click",function(){
+          closeCrmPanel();
+          var target=el("acRespuesta")||el("acMensajeCard");
+          if(target) target.scrollIntoView({behavior:"smooth",block:"center"});
+          if(el("acRespuesta")) el("acRespuesta").focus({preventScroll:true});
+        });
 
         var quickStages=el("acQuickEtapas");
         if(quickStages) quickStages.addEventListener("click",function(event){
@@ -1127,7 +1227,18 @@
         },false);
       }
       function boot(){
-        if(state.initialized)return; state.initialized=true; loadLocal(); populateSelects(); bind(); markStage("ORIGINAL"); syncQuickResponse(); renderContacts(); renderPending(); loadCommercialRecords();
+        if(state.initialized)return;
+        state.initialized=true;
+        loadLocal();
+        populateSelects();
+        if(el("acContactoCard")) el("acContactoCard").dataset.crmMode="FORM";
+        bind();
+        markStage("ORIGINAL");
+        syncQuickResponse();
+        renderActiveContact();
+        renderContacts();
+        renderPending();
+        loadCommercialRecords();
       }
       if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot,{once:true}); else boot();
 
