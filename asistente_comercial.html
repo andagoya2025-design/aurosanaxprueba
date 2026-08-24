@@ -173,6 +173,73 @@
     .ac-crm-card[data-crm-mode="FORM"] #acContactosDetalle,
     .ac-crm-card[data-crm-mode="FORM"] #acPendientesDetalle{display:none!important}
 
+
+    /* FASE 2.6 · CRM COMPACTO EN ESCRITORIO
+       Solo presentación. Replica en PC el flujo ya validado en móvil.
+       No modifica persistencia, payloads, interpretación ni plantillas. */
+    @media (min-width:761px){
+      body.ac-crm-panel-open{overflow:hidden}
+      .ac-crm-card .ac-card-head>#acNuevoContacto{display:none}
+      .ac-crm-launchbar{
+        display:grid;
+        grid-template-columns:1.15fr 1fr 1fr;
+        gap:10px;
+        padding:0 16px 14px
+      }
+      .ac-crm-mobile-action{display:inline-flex;min-height:46px}
+      .ac-active-contact{margin:0 16px 16px}
+      .ac-crm-card>.ac-card-body{display:none}
+      .ac-crm-card.is-open:before{
+        content:"";
+        position:fixed;
+        inset:0;
+        z-index:1190;
+        background:rgba(15,23,42,.42);
+        backdrop-filter:blur(6px);
+        -webkit-backdrop-filter:blur(6px)
+      }
+      .ac-crm-card.is-open>.ac-card-body{
+        display:block;
+        position:fixed;
+        z-index:1200;
+        top:50%;
+        left:50%;
+        width:min(980px,calc(100vw - 48px));
+        max-height:calc(100vh - 48px);
+        overflow-y:auto;
+        overscroll-behavior:contain;
+        transform:translate(-50%,-50%);
+        padding:0 24px 24px;
+        border:1px solid rgba(139,30,90,.14);
+        border-radius:24px;
+        background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%);
+        box-shadow:0 30px 90px rgba(15,23,42,.28);
+        animation:acCrmModalInDesktop .16s ease-out
+      }
+      .ac-crm-sheet-head{
+        position:sticky;
+        top:0;
+        z-index:4;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin:0 -24px 18px;
+        padding:16px 24px 14px;
+        border-bottom:1px solid #f1e5eb;
+        background:rgba(255,255,255,.98);
+        backdrop-filter:blur(16px);
+        -webkit-backdrop-filter:blur(16px)
+      }
+      .ac-crm-sheet-title strong{font-size:18px}
+      .ac-crm-sheet-title small{font-size:12px}
+      .ac-crm-sheet-close{width:42px;height:42px;flex-basis:42px}
+      @keyframes acCrmModalInDesktop{
+        from{opacity:0;transform:translate(-50%,-48%) scale(.985)}
+        to{opacity:1;transform:translate(-50%,-50%) scale(1)}
+      }
+    }
+
     @media (max-width:1180px){
       .ac-crm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .ac-crm-grid-secondary{grid-template-columns:1fr 1fr}
@@ -1033,10 +1100,8 @@
         if(el("acPendientesDetalle")) el("acPendientesDetalle").open=(mode==="PENDING");
 
         setCrmSheetTitle(mode);
-        if(!isCompactCrm()){
-          card.scrollIntoView({behavior:"smooth",block:"start"});
-          return;
-        }
+        /* FASE 2.6: el panel CRM se abre como modal tanto en móvil como en PC.
+           La lógica comercial permanece intacta; solo cambia la presentación. */
         card.classList.add("is-open");
         document.body.classList.add("ac-crm-panel-open");
       }
