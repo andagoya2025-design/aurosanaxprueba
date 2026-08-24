@@ -61,7 +61,7 @@
     return r.json();
   }
   const txt=v=>String(v===null||v===undefined?'':v).trim();
-  const esc=v=>String(v===null||v===undefined?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  const esc=v=>String(v===null||v===undefined?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
   const norm=v=>txt(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ');
   const val=id=>txt(document.getElementById(id)?.value);
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v??'';};
@@ -439,19 +439,22 @@
       return;
     }
 
-    try{
-      const respuestaCitas=await get('listarCitas');
-      citasCache=extraerLista(respuestaCitas);
-    }catch(error){
-      console.warn('AUROSANAX PREATENCIÓN: citas no disponibles; selector de pacientes continúa operativo.',error);
+    const [resultadoCitas,resultadoPre]=await Promise.allSettled([
+      get('listarCitas'),
+      get('listarPreatenciones')
+    ]);
+
+    if(resultadoCitas.status==='fulfilled'){
+      citasCache=extraerLista(resultadoCitas.value);
+    }else{
+      console.warn('AUROSANAX PREATENCIÓN: citas no disponibles; selector de pacientes continúa operativo.',resultadoCitas.reason);
       citasCache=[];
     }
 
-    try{
-      const respuestaPre=await get('listarPreatenciones');
-      preatencionesCache=extraerLista(respuestaPre);
-    }catch(error){
-      console.warn('AUROSANAX PREATENCIÓN: listado de preatenciones no disponible; guardado y búsqueda por paciente continúan operativos.',error);
+    if(resultadoPre.status==='fulfilled'){
+      preatencionesCache=extraerLista(resultadoPre.value);
+    }else{
+      console.warn('AUROSANAX PREATENCIÓN: listado de preatenciones no disponible; guardado y búsqueda por paciente continúan operativos.',resultadoPre.reason);
       preatencionesCache=[];
     }
 
@@ -582,11 +585,31 @@
     catch(e){console.warn('AUROSANAX PREATENCIÓN: pendiente',e);}
   }
 
+  async function refrescarPreatencionesDespuesDeGuardar_(){
+    /*
+      REFRESCO LIGERO POST-GUARDADO:
+      - Solo relee Preatenciones, que es la fuente que acaba de cambiar.
+      - Conserva pacientesCache y citasCache: no se modifican al guardar signos vitales.
+      - Mantiene la Sala y las acciones visuales sincronizadas.
+      - No toca permisos, auditoría, IDs ni backend.
+    */
+    try{
+      const respuestaPre=await get('listarPreatenciones');
+      preatencionesCache=extraerLista(respuestaPre);
+      renderSala();
+      actualizarAccionesPaciente();
+      return true;
+    }catch(error){
+      console.warn('AUROSANAX PREATENCIÓN: no se pudo refrescar Preatenciones después de guardar.',error);
+      return false;
+    }
+  }
+
   async function guardar(){
     const idPaciente=val('prePaciente'),idCita=val('preCita');if(!idPaciente){alert('Seleccione un paciente.');return;}if(!tienePreatencion()){alert('Su usuario no tiene permiso de Preatención.');return;}
     const pas=val('prePAS').replace(/\D/g,''),pad=val('prePAD').replace(/\D/g,'');if((pas&&!pad)||(!pas&&pad)){alert('Complete presión sistólica y diastólica.');return;}
     const u=usuario(),cita=citasCache.find(x=>txt(x.id_cita)===idCita)||{};const data={id_paciente:idPaciente,id_cita:idCita,id_medico:cita.id_medico||'',peso_kg:numero(val('prePeso')),talla_cm:numero(val('preTalla')),presion_arterial:pas&&pad?pas+'/'+pad:'',frecuencia_cardiaca:numero(val('preFC')),frecuencia_respiratoria:numero(val('preFR')),temperatura:numero(val('preTemp')),saturacion:numero(val('preSat')),perimetro_cadera:numero(val('preCadera')),porcentaje_grasa:numero(val('preGrasa')),masa_muscular:numero(val('preMasa')),perimetro_cefalico:numero(val('preCefalico')),perimetro_toracico:numero(val('preToracico')),perimetro_abdominal:numero(val('preAbdominal')),antecedentes_referidos:val('preAntecedentesTexto'),creado_por:u.usuario||u.nombre_completo||'Secretaría',token:token()};
-    const btn=document.getElementById('preGuardar');if(btn)btn.disabled=true;try{const r=await post('guardarPreatencion',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo guardar.');await cargarTodo();alert('Preatención guardada. Puede continuar con el siguiente paciente.');}catch(e){alert(e.message||'No se pudo guardar la preatención.');}finally{if(btn)btn.disabled=false;}
+    const btn=document.getElementById('preGuardar');if(btn)btn.disabled=true;try{const r=await post('guardarPreatencion',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo guardar.');await refrescarPreatencionesDespuesDeGuardar_();alert('Preatención guardada. Puede continuar con el siguiente paciente.');}catch(e){alert(e.message||'No se pudo guardar la preatención.');}finally{if(btn)btn.disabled=false;}
   }
 
 
