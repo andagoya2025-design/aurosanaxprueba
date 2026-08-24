@@ -169,6 +169,14 @@
             <span>Completa al menos nombre o teléfono. El guardado es siempre explícito.</span>
           </div>
 
+          <details class="ac-crm-pending" id="acContactosDetalle">
+            <summary>
+              <span><i class="bi bi-people"></i> Contactos guardados</span>
+              <span class="ac-crm-count" id="acContactosCantidad">0</span>
+            </summary>
+            <div class="ac-crm-list" id="acContactosGuardados" aria-live="polite"></div>
+          </details>
+
           <details class="ac-crm-pending" id="acPendientesDetalle">
             <summary>
               <span><i class="bi bi-bell"></i> Seguimientos pendientes</span>
@@ -538,12 +546,13 @@
           if(!Array.isArray(rows)) rows=rows&&Array.isArray(rows.registros)?rows.registros:[];
           state.remoteRecords=rows; rows.forEach(mergeRecord); state.backendAvailable=true; saveLocal(); setSync(true);
         }catch(err){ state.backendAvailable=false; setSync(false); }
+        renderContacts();
         renderPending();
       }
       function persistLocalSnapshot(snap){
         if(!snap.contact_key) return;
         state.contacts[snap.contact_key]=Object.assign({},state.contacts[snap.contact_key]||{},snap,{__stamp:isoLocal(new Date()),__source:state.backendAvailable?"REMOTE_PENDING":"LOCAL"});
-        saveLocal(); renderPending();
+        saveLocal(); renderContacts(); renderPending();
       }
       function buildPayload(kind,snap,response){
         var stage=state.stage||"ORIGINAL";
@@ -609,6 +618,48 @@
         if(el("acContactoObservacion")) el("acContactoObservacion").value=c.observacion||"";
         status("Contacto cargado para continuar el seguimiento.","success");
       }
+      function renderContacts(){
+        var list=el("acContactosGuardados"),count=el("acContactosCantidad"); if(!list||!count) return;
+        var arr=Object.values(state.contacts||{}).filter(function(c){
+          return !!(c&&c.contact_key);
+        }).sort(function(a,b){
+          var ad=String(a.ultima_interaccion||a.__stamp||"");
+          var bd=String(b.ultima_interaccion||b.__stamp||"");
+          return bd.localeCompare(ad);
+        });
+        count.textContent=String(arr.length); list.innerHTML="";
+        if(!arr.length){
+          list.innerHTML='<div class="ac-crm-empty">Todavía no hay contactos guardados.</div>';
+          return;
+        }
+        arr.slice(0,20).forEach(function(c){
+          var item=document.createElement("button");
+          item.type="button";
+          item.className="ac-crm-item";
+          item.dataset.contactKey=c.contact_key;
+
+          var meta=[c.servicio,c.estado_comercial,c.canal].filter(Boolean).join(" · ");
+          var last=c.ultima_interaccion||c.__stamp||"";
+          var lastText="";
+          if(last){
+            var d=new Date(last);
+            if(!isNaN(d.getTime())) lastText=formatDate(d);
+          }
+
+          item.innerHTML=
+            '<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong>'+
+            '<small>'+escapeHtml(meta||"Contacto comercial")+'</small></span>'+
+            '<span class="ac-crm-item-time">'+escapeHtml(lastText)+'</span>';
+
+          item.addEventListener("click",function(){
+            fillContact(state.contacts[this.dataset.contactKey]);
+            if(el("acContactosDetalle")) el("acContactosDetalle").open=false;
+            el("acContactoCard")&&el("acContactoCard").scrollIntoView({behavior:"smooth",block:"start"});
+          });
+          list.appendChild(item);
+        });
+      }
+
       function renderPending(){
         var list=el("acPendientes"),count=el("acPendientesCantidad"); if(!list||!count) return;
         var now=Date.now(); var arr=Object.values(state.contacts||{}).filter(function(c){
@@ -673,12 +724,12 @@
         },false);
       }
       function boot(){
-        if(state.initialized)return; state.initialized=true; loadLocal(); populateSelects(); bind(); markStage("ORIGINAL"); renderPending(); loadCommercialRecords();
+        if(state.initialized)return; state.initialized=true; loadLocal(); populateSelects(); bind(); markStage("ORIGINAL"); renderContacts(); renderPending(); loadCommercialRecords();
       }
       if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot,{once:true}); else boot();
 
       global.AsistenteComercialFase2={
-        version:"1.0.0",saveContact:saveContact,registerInteraction:registerInteraction,loadCommercialRecords:loadCommercialRecords,renderPending:renderPending,applyStage:applyStage,getState:function(){return JSON.parse(JSON.stringify(state));}
+        version:"1.0.1",saveContact:saveContact,registerInteraction:registerInteraction,loadCommercialRecords:loadCommercialRecords,renderContacts:renderContacts,renderPending:renderPending,applyStage:applyStage,getState:function(){return JSON.parse(JSON.stringify(state));}
       };
     })(window,document);
   </script>
