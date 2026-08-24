@@ -179,52 +179,51 @@
         position:fixed;
         inset:0;
         z-index:1190;
-        background:rgba(15,23,42,.42);
-        backdrop-filter:blur(3px);
-        -webkit-backdrop-filter:blur(3px)
+        background:rgba(15,23,42,.48);
+        backdrop-filter:blur(7px);
+        -webkit-backdrop-filter:blur(7px)
       }
       .ac-crm-card.is-open>.ac-card-body{
         display:block;
         position:fixed;
         z-index:1200;
-        left:0;
-        right:0;
-        bottom:0;
-        max-height:min(88dvh,760px);
+        top:max(8px,env(safe-area-inset-top));
+        right:8px;
+        bottom:max(8px,env(safe-area-inset-bottom));
+        left:8px;
+        width:auto;
+        max-height:none;
         overflow-y:auto;
         overscroll-behavior:contain;
         -webkit-overflow-scrolling:touch;
-        padding:0 16px calc(18px + env(safe-area-inset-bottom));
-        border-radius:24px 24px 0 0;
-        background:linear-gradient(180deg,#fff 0%,#fffafd 100%);
-        box-shadow:0 -22px 60px rgba(15,23,42,.2);
-        animation:acCrmSheetIn .22s ease-out
+        padding:0 16px 18px;
+        border:1px solid rgba(139,30,90,.14);
+        border-radius:26px;
+        background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%);
+        box-shadow:0 30px 90px rgba(15,23,42,.28);
+        animation:acCrmModalIn .18s ease-out
       }
       .ac-crm-sheet-head{
         position:sticky;
         top:0;
-        z-index:3;
+        z-index:4;
         display:flex;
         align-items:center;
         justify-content:space-between;
         gap:12px;
         margin:0 -16px 14px;
-        padding:12px 16px 10px;
+        padding:14px 16px 12px;
         border-bottom:1px solid #f1e5eb;
-        background:rgba(255,255,255,.96);
-        backdrop-filter:blur(14px);
-        -webkit-backdrop-filter:blur(14px)
+        background:rgba(255,255,255,.98);
+        backdrop-filter:blur(16px);
+        -webkit-backdrop-filter:blur(16px)
       }
-      .ac-crm-sheet-head:before{
-        content:"";
-        position:absolute;
-        width:42px;
-        height:4px;
-        border-radius:999px;
-        background:#d7c8d0;
-        top:5px;
-        left:50%;
-        transform:translateX(-50%)
+      .ac-crm-sheet-head:before{display:none}
+      .ac-crm-sheet-close{
+        width:38px;
+        height:38px;
+        flex-basis:38px;
+        border-radius:12px
       }
       .ac-crm-grid,.ac-crm-grid-secondary{grid-template-columns:1fr;gap:10px}
       .ac-crm-grid-secondary{margin-top:10px}
@@ -237,63 +236,117 @@
       .ac-crm-item{grid-template-columns:1fr}
       .ac-crm-item-time{white-space:normal}
 
-      /* Respuesta rápida: un solo centro de trabajo móvil. */
+      /* FASE 2.4 · MODAL MÓVIL FULLSCREEN PREMIUM
+         Una sola pantalla activa. El fondo queda inmóvil. */
+      body:has(#acQuickSheet:not([hidden])){
+        overflow:hidden
+      }
       .ac-quick-sheet{
-        left:8px!important;
+        top:max(8px,env(safe-area-inset-top))!important;
         right:8px!important;
         bottom:max(8px,env(safe-area-inset-bottom))!important;
+        left:8px!important;
+        width:auto!important;
+        height:auto!important;
+        max-height:none!important;
         z-index:10020!important;
-        max-height:min(78dvh,620px);
-        overflow-y:auto;
-        overscroll-behavior:contain;
-        padding:7px 12px calc(12px + env(safe-area-inset-bottom))!important;
-        border-radius:22px!important;
-        box-shadow:0 28px 80px rgba(15,23,42,.28)!important;
-        isolation:isolate
+        overflow:hidden!important;
+        padding:12px 14px 14px!important;
+        border:1px solid rgba(139,30,90,.14)!important;
+        border-radius:26px!important;
+        background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%)!important;
+        box-shadow:0 32px 95px rgba(15,23,42,.32)!important;
+        backdrop-filter:none!important;
+        -webkit-backdrop-filter:none!important;
+        display:grid!important;
+        grid-template-rows:auto auto minmax(0,1fr) auto;
+        gap:0;
+        isolation:isolate;
+        animation:acQuickModalIn .18s ease-out
       }
+      .ac-quick-sheet[hidden]{display:none!important}
       .ac-quick-sheet-backdrop{
         display:block;
         position:fixed;
-        inset:0;
+        inset:-20px;
         z-index:-1;
-        background:rgba(15,23,42,.34);
-        backdrop-filter:blur(2px);
-        -webkit-backdrop-filter:blur(2px);
+        background:rgba(15,23,42,.50);
+        backdrop-filter:blur(7px);
+        -webkit-backdrop-filter:blur(7px);
         pointer-events:none
+      }
+      .ac-quick-sheet-grabber{display:none!important}
+      .ac-quick-sheet-head{
+        position:sticky;
+        top:0;
+        z-index:4;
+        align-items:center!important;
+        padding:2px 0 12px;
+        border-bottom:1px solid #f1e5eb;
+        background:rgba(255,255,255,.98)
+      }
+      .ac-quick-sheet-head strong{
+        font-size:16px!important;
+        white-space:normal!important;
+        line-height:1.2!important
+      }
+      .ac-quick-category{font-size:10px!important}
+      .ac-quick-close{
+        width:38px!important;
+        height:38px!important;
+        flex-basis:38px!important;
+        border-radius:12px!important
       }
       .ac-quick-stage-wrap{
         display:block;
-        margin:9px 0 10px;
-        padding:9px;
+        margin:12px 0 10px;
+        padding:10px;
         border:1px solid #f0e1e8;
-        border-radius:15px;
+        border-radius:16px;
         background:#fffafd
       }
       .ac-quick-response{
-        max-height:128px!important;
-        margin:8px 0 9px!important;
-        padding:10px!important;
-        font-size:12px!important;
-        line-height:1.42!important
+        min-height:0!important;
+        max-height:none!important;
+        overflow-y:auto!important;
+        overscroll-behavior:contain;
+        -webkit-overflow-scrolling:touch;
+        margin:0 0 10px!important;
+        padding:14px!important;
+        border:1px solid #edf1f5;
+        border-radius:16px!important;
+        background:#f8fafc!important;
+        font-size:14px!important;
+        line-height:1.52!important
       }
       .ac-quick-actions{
-        grid-template-columns:1.15fr 1.15fr .85fr .85fr!important;
-        gap:6px!important
+        position:sticky;
+        bottom:0;
+        z-index:4;
+        grid-template-columns:1fr 1fr!important;
+        gap:8px!important;
+        padding-top:10px;
+        border-top:1px solid #f1e5eb;
+        background:rgba(255,255,255,.98)
       }
       .ac-quick-actions .ac-btn{
-        min-height:43px!important;
-        padding:8px 7px!important;
-        font-size:10px!important;
-        border-radius:12px!important
+        min-height:48px!important;
+        padding:9px 8px!important;
+        font-size:12px!important;
+        border-radius:13px!important
       }
-      .ac-quick-actions .ac-btn i{font-size:14px}
+      .ac-quick-actions .ac-btn i{font-size:16px}
       body.ac-library-focus .ac-response-actions{
-        position:static!important;
+        position:static!important
       }
 
-      @keyframes acCrmSheetIn{
-        from{transform:translateY(28px);opacity:.3}
-        to{transform:translateY(0);opacity:1}
+      @keyframes acQuickModalIn{
+        from{transform:scale(.985);opacity:.35}
+        to{transform:scale(1);opacity:1}
+      }
+      @keyframes acCrmModalIn{
+        from{transform:scale(.985);opacity:.35}
+        to{transform:scale(1);opacity:1}
       }
     }
     @media (max-width:420px){
@@ -303,9 +356,8 @@
       .ac-crm-actions .ac-btn-primary{grid-column:1/-1}
       .ac-crm-sync{grid-column:1/-1}
       .ac-quick-stage-actions{grid-template-columns:1fr 1fr}
-      .ac-quick-stage-btn{min-height:42px;font-size:10px}
-      .ac-quick-actions{grid-template-columns:1fr 1fr!important}
-      .ac-quick-actions .ac-btn{min-height:44px!important;font-size:11px!important}
+      .ac-quick-stage-btn{min-height:44px;font-size:10px}
+      .ac-quick-actions .ac-btn{min-height:46px!important;font-size:11px!important}
     }
   </style>
 </head>
