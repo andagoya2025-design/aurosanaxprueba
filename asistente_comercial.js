@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.6.1 CREADOR DESDE TEXTO OPTIMIZADO
+ * Versión: 1.7.0 PRODUCTIVIDAD COMERCIAL ANTIRREGRESIVA
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -47,7 +47,8 @@
   const STORAGE_KEYS = Object.freeze({
     favorites: "AC_FAVORITOS_V1",
     usage: "AC_USOS_V1",
-    ui: "AC_UI_V1"
+    ui: "AC_UI_V1",
+    recent: "AC_RECIENTES_V1"
   });
 
   const state = {
@@ -76,7 +77,9 @@
     selectedTemplateType: "",
     actionTemplateId: null,
     pendingDeactivateTemplateId: null,
-    mobileMode: "RESPONDER"
+    mobileMode: "RESPONDER",
+    recentTemplateIds: [],
+    sellerMode: false
   };
 
   const els = {};
@@ -355,6 +358,78 @@
 
   function saveUsage() {
     safeLocalStorageSet(STORAGE_KEYS.usage, state.usage);
+  }
+
+
+  function loadProductivityState() {
+    const recent = safeLocalStorageGet(STORAGE_KEYS.recent, []);
+    const ui = safeLocalStorageGet(STORAGE_KEYS.ui, {});
+
+    state.recentTemplateIds = Array.isArray(recent)
+      ? recent.filter(Boolean).slice(0, 8)
+      : [];
+    state.sellerMode = Boolean(ui && ui.sellerMode);
+  }
+
+  function saveProductivityUiState() {
+    const current = safeLocalStorageGet(STORAGE_KEYS.ui, {});
+    safeLocalStorageSet(STORAGE_KEYS.ui, {
+      ...(current && typeof current === "object" ? current : {}),
+      sellerMode: Boolean(state.sellerMode)
+    });
+  }
+
+  function registerRecentTemplate(templateId) {
+    const id = asString(templateId).trim();
+    if (!id) return;
+
+    state.recentTemplateIds = [
+      id,
+      ...state.recentTemplateIds.filter(item => item !== id)
+    ].slice(0, 8);
+
+    safeLocalStorageSet(STORAGE_KEYS.recent, state.recentTemplateIds);
+  }
+
+  function renderRecentTemplates() {
+    if (!els.templateList) return;
+
+    const byId = new Map(state.activeTemplates.map(template => [template.id, template]));
+    const templates = state.recentTemplateIds
+      .map(id => byId.get(id))
+      .filter(Boolean)
+      .filter(template => !state.selectedScope || template.scope === state.selectedScope);
+
+    els.templateList.innerHTML = "";
+
+    if (!templates.length) {
+      const empty = document.createElement("div");
+      empty.className = "ac-empty";
+      empty.textContent = "Todavía no hay plantillas recientes en este dispositivo.";
+      els.templateList.appendChild(empty);
+      return;
+    }
+
+    templates.forEach(template => {
+      els.templateList.appendChild(buildTemplateCard(template));
+    });
+  }
+
+  function setSellerMode(enabled, options) {
+    const opts = options || {};
+    state.sellerMode = Boolean(enabled);
+    document.body.classList.toggle("ac-seller-mode", state.sellerMode);
+
+    if (els.sellerModeButton) {
+      els.sellerModeButton.classList.toggle("active", state.sellerMode);
+      els.sellerModeButton.setAttribute("aria-pressed", state.sellerMode ? "true" : "false");
+    }
+    if (els.sellerModeText) {
+      els.sellerModeText.textContent = state.sellerMode ? "Salir de modo vendedor" : "Modo vendedor";
+    }
+
+    if (opts.persist !== false) saveProductivityUiState();
+    return state.sellerMode;
   }
 
   /* ==========================================================
@@ -856,6 +931,7 @@
 
     state.usage[templateId] = getUsage(templateId) + 1;
     saveUsage();
+    registerRecentTemplate(templateId);
   }
 
   /* ==========================================================
@@ -1096,6 +1172,12 @@
       scopesContainer: "acAmbitos",
       analyzeButton: "acAnalizar",
       whatsappButton: "acWhatsApp",
+      instagramButton: "acInstagram",
+      tiktokButton: "acTikTok",
+      recentButton: "acRecientes",
+      sellerModeButton: "acModoVendedor",
+      sellerModeText: "acModoVendedorTexto",
+      commercialStages: "acEtapasComerciales",
       newTemplateButton: "acNuevaPlantilla",
       templateModal: "acTemplateModal",
       templateModalClose: "acTemplateModalClose",
@@ -1118,6 +1200,9 @@
       templatePreview: "acTplPreview",
       templatePreviewText: "acTplPreviewText",
       templatePreviewMeta: "acTplPreviewMeta",
+      templateQuality: "acTplCalidad",
+      templateQualityScore: "acTplCalidadPuntaje",
+      templateQualityItems: "acTplCalidadItems",
       textCreator: "acTextCreator",
       textCreatorToggle: "acTextCreatorToggle",
       textCreatorBody: "acTextCreatorBody",
@@ -1132,6 +1217,8 @@
       quickClose: "acQuickClose",
       quickCopy: "acQuickCopy",
       quickWhatsApp: "acQuickWhatsApp",
+      quickInstagram: "acQuickInstagram",
+      quickTikTok: "acQuickTikTok",
       actionModal: "acTemplateActionModal",
       actionModalClose: "acActionModalClose",
       actionModalTitle: "acActionModalTitle",
@@ -1603,6 +1690,83 @@
     const url = "https://wa.me/?text=" + encodeURIComponent(text);
     global.open(url, "_blank", "noopener,noreferrer");
     if (state.selectedTemplateId) registerUsage(state.selectedTemplateId);
+    return true;
+  }
+
+
+  async function openSocialChannel(channel) {
+    const text = getResponseValue().trim();
+    if (!text) {
+      showToast("No hay respuesta para compartir.", "warning");
+      return false;
+    }
+
+    const copied = await copyResponse();
+    if (!copied) return false;
+
+    const destinations = {
+      INSTAGRAM: "https://www.instagram.com/direct/inbox/",
+      TIKTOK: "https://www.tiktok.com/messages"
+    };
+    const target = destinations[asString(channel).toUpperCase()];
+    if (!target) return false;
+
+    global.open(target, "_blank", "noopener,noreferrer");
+    showToast("Respuesta copiada. Pégala en la conversación.", "success");
+    return true;
+  }
+
+  function openInstagram() {
+    return openSocialChannel("INSTAGRAM");
+  }
+
+  function openTikTok() {
+    return openSocialChannel("TIKTOK");
+  }
+
+  function getCommercialStageText(stageId, template) {
+    const stage = asString(stageId).toUpperCase();
+    const service = asString(getTemplateService(template) || template?.title || "").trim();
+    const topic = service ? ` sobre ${service}` : "";
+
+    if (stage === "SEGUIMIENTO") {
+      return `😊 Quería dar seguimiento a la información que te compartimos${topic}.\n\n📅 Si deseas, puedo ayudarte a coordinar una cita o continuar con la información. ¿Te gustaría avanzar?`;
+    }
+    if (stage === "CIERRE") {
+      return "📅 Si deseas avanzar, podemos ayudarte a coordinar tu cita. ¿Te gustaría agendar?";
+    }
+    if (stage === "RECONTACTO") {
+      return `👋 Hola, retomamos tu consulta${topic} por si todavía deseas información o coordinar una cita.\n\nCon gusto te ayudamos. ¿Deseas continuar?`;
+    }
+    return "";
+  }
+
+  function applyCommercialStage(stageId) {
+    const stage = asString(stageId).toUpperCase();
+    const template = getTemplate(state.selectedTemplateId);
+
+    if (stage === "ORIGINAL") {
+      if (!template) {
+        showToast("Selecciona una plantilla para recuperar la primera respuesta.", "warning");
+        return false;
+      }
+      setResponseValue(renderPlaceholders(template.response));
+      showToast("Primera respuesta restaurada.", "success");
+      return true;
+    }
+
+    const stageText = getCommercialStageText(stage, template);
+    if (!stageText) return false;
+
+    const current = getResponseValue().trim();
+    if (current && normalizeText(current).includes(normalizeText(stageText))) {
+      showToast("Esta etapa ya está aplicada.", "neutral");
+      return true;
+    }
+
+    const next = current ? `${current}\n\n${stageText}` : stageText;
+    setResponseValue(next);
+    showToast("Etapa comercial aplicada solo a la respuesta visible.", "success");
     return true;
   }
 
@@ -2184,7 +2348,65 @@
     const analysis = analyzeRawTemplateText(raw);
     const changedCount = applyTextAnalysisToForm(analysis);
     renderTextCreatorSuggestions(analysis, changedCount);
+    updateTemplateQuality();
     return true;
+  }
+
+  function evaluateTemplateQuality() {
+    const response = asString(els.templateResponse?.value).trim();
+    const responseType = asString(els.templateType?.value || "CORTA").toUpperCase();
+    const businessType = normalizeMetaId(els.templateBusinessType?.value || "");
+
+    if (!response) {
+      return { score: 0, items: [{ ok: false, label: "Escribe la respuesta para iniciar la revisión." }] };
+    }
+
+    const items = [];
+    const normalized = normalizeText(response);
+    const hasCta = /\?/.test(response) || /\b(agenda|agendar|reserva|reservar|coordinar|escribenos|escríbenos|contactanos|contáctanos|deseas|gustaria|gustaría)\b/.test(normalized);
+    items.push({ ok: hasCta, label: hasCta ? "Tiene llamada a la acción." : "Falta un cierre o llamada a la acción." });
+
+    const limits = { CORTA: 430, MEDIA: 760, LARGA: 1300 };
+    const limit = limits[responseType] || limits.CORTA;
+    const lengthOk = response.length <= limit;
+    items.push({ ok: lengthOk, label: lengthOk ? `Extensión ${responseType.toLowerCase()} adecuada.` : `Supera la extensión recomendada para ${responseType.toLowerCase()}.` });
+
+    const emojiCount = (response.match(/\p{Extended_Pictographic}/gu) || []).length;
+    const emojiOk = emojiCount <= 6;
+    items.push({ ok: emojiOk, label: emojiOk ? `Emojis moderados (${emojiCount}).` : `Demasiados emojis (${emojiCount}); conviene reducirlos.` });
+
+    if (["PRECIO", "PROMOCION"].includes(businessType)) {
+      const hasPrice = /\$\s*\d|\b\d+(?:[.,]\d{1,2})?\s*(?:usd|dolares|dólares)\b/i.test(response);
+      items.push({ ok: hasPrice, label: hasPrice ? "Incluye valor/precio visible." : "Tipo Precio/Promoción sin valor visible." });
+
+      const prudent = /\b(depende|valoracion|valoración|evaluacion|evaluación|segun|según|desde|puede|requiere)\b/.test(normalized);
+      items.push({ ok: prudent, label: prudent ? "Incluye una condición prudente." : "Conviene añadir condición prudente cuando aplique." });
+    }
+
+    const passed = items.filter(item => item.ok).length;
+    const score = Math.round((passed / Math.max(items.length, 1)) * 100);
+    return { score, items };
+  }
+
+  function updateTemplateQuality() {
+    if (!els.templateQuality || !els.templateQualityScore || !els.templateQualityItems) return;
+
+    const quality = evaluateTemplateQuality();
+    els.templateQualityScore.textContent = `${quality.score}%`;
+    els.templateQuality.dataset.score = String(quality.score);
+    els.templateQualityItems.innerHTML = "";
+
+    quality.items.forEach(item => {
+      const row = document.createElement("span");
+      row.className = "ac-quality-item " + (item.ok ? "is-ok" : "is-pending");
+      row.innerHTML = item.ok
+        ? '<i class="bi bi-check-circle-fill" aria-hidden="true"></i>'
+        : '<i class="bi bi-circle" aria-hidden="true"></i>';
+      const text = document.createElement("span");
+      text.textContent = item.label;
+      row.appendChild(text);
+      els.templateQualityItems.appendChild(row);
+    });
   }
 
   function openTemplateModal(templateId) {
@@ -2243,6 +2465,7 @@
     }
 
     updateTemplatePreview();
+    updateTemplateQuality();
     els.templateModal.hidden = false;
     document.body.classList.add("ac-modal-open");
 
@@ -2574,6 +2797,26 @@
       els.whatsappButton.addEventListener("click", openWhatsApp);
     }
 
+    if (els.instagramButton) {
+      els.instagramButton.addEventListener("click", openInstagram);
+    }
+
+    if (els.tiktokButton) {
+      els.tiktokButton.addEventListener("click", openTikTok);
+    }
+
+    if (els.sellerModeButton) {
+      els.sellerModeButton.addEventListener("click", () => setSellerMode(!state.sellerMode));
+    }
+
+    if (els.commercialStages) {
+      els.commercialStages.addEventListener("click", event => {
+        const button = event.target.closest("[data-commercial-stage]");
+        if (!button) return;
+        applyCommercialStage(button.dataset.commercialStage || "");
+      });
+    }
+
     if (els.newTemplateButton) {
       els.newTemplateButton.addEventListener("click", () => openTemplateModal());
     }
@@ -2605,8 +2848,14 @@
     [els.templateTitle, els.templateCategory, els.templateKeywords,
      els.templateResponse, els.templateType, els.templateBusinessType,
      els.templateService].filter(Boolean).forEach(control => {
-      control.addEventListener("input", updateTemplatePreview);
-      control.addEventListener("change", updateTemplatePreview);
+      control.addEventListener("input", () => {
+        updateTemplatePreview();
+        updateTemplateQuality();
+      });
+      control.addEventListener("change", () => {
+        updateTemplatePreview();
+        updateTemplateQuality();
+      });
     });
 
     if (els.templateTypesContainer) {
@@ -2663,6 +2912,14 @@
       els.quickWhatsApp.addEventListener("click", openWhatsApp);
     }
 
+    if (els.quickInstagram) {
+      els.quickInstagram.addEventListener("click", openInstagram);
+    }
+
+    if (els.quickTikTok) {
+      els.quickTikTok.addEventListener("click", openTikTok);
+    }
+
     if (els.templateModal) {
       els.templateModal.addEventListener("click", event => {
         if (event.target === els.templateModal) closeTemplateModal();
@@ -2711,6 +2968,10 @@
       els.mostUsedButton.addEventListener("click", () => {
         renderTemplateList({ mostUsed: true });
       });
+    }
+
+    if (els.recentButton) {
+      els.recentButton.addEventListener("click", renderRecentTemplates);
     }
 
     if (els.templateList) {
@@ -2835,8 +3096,10 @@
     if (state.initialized) return true;
 
     loadLocalState();
+    loadProductivityState();
     loadTemplates(CONFIG.templates);
     cacheElements();
+    setSellerMode(state.sellerMode, { persist: false });
     bindEvents();
 
     renderScopeControls();
@@ -2940,6 +3203,11 @@
 
     copyResponse,
     openWhatsApp,
+    openInstagram,
+    openTikTok,
+    applyCommercialStage,
+    setSellerMode,
+    renderRecentTemplates,
     loadBackendTemplates,
     openTemplateModal,
     renderTemplateTypeControls,
