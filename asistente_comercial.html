@@ -43,24 +43,158 @@
     .ac-crm-sync.is-remote{color:#166534}
     .ac-crm-sync.is-local{color:#92400e}
 
+    /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
+    .ac-crm-launchbar{display:none}
+    .ac-crm-sheet-head{display:none}
+    .ac-crm-mobile-action{
+      min-height:44px;
+      border:1px solid #ecd5e1;
+      border-radius:14px;
+      background:#fff;
+      color:var(--ac-primary-dark);
+      font-size:12px;
+      font-weight:900;
+      padding:9px 11px;
+      cursor:pointer;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      box-shadow:0 7px 20px rgba(15,23,42,.04)
+    }
+    .ac-crm-mobile-action.is-primary{
+      color:#fff;
+      border-color:transparent;
+      background:linear-gradient(135deg,var(--ac-primary-dark),var(--ac-primary-2) 72%,var(--ac-primary-3));
+      box-shadow:0 11px 24px rgba(139,30,90,.18)
+    }
+    .ac-crm-sheet-title{min-width:0}
+    .ac-crm-sheet-title strong{display:block;color:var(--ac-title);font-size:16px;font-weight:950;letter-spacing:-.015em}
+    .ac-crm-sheet-title small{display:block;margin-top:2px;color:var(--ac-muted);font-size:11px;font-weight:700}
+    .ac-crm-sheet-close{
+      appearance:none;
+      width:40px;
+      height:40px;
+      flex:0 0 40px;
+      border:1px solid var(--ac-line);
+      border-radius:12px;
+      background:#fff;
+      color:#475569;
+      display:grid;
+      place-items:center;
+      cursor:pointer
+    }
+
     @media (max-width:1180px){
       .ac-crm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .ac-crm-grid-secondary{grid-template-columns:1fr 1fr}
     }
     @media (max-width:760px){
-      .ac-crm-card{margin-top:14px}
-      .ac-crm-card .ac-card-head{align-items:flex-start;flex-direction:column}
+      body.ac-crm-panel-open{overflow:hidden}
+      .ac-crm-card{
+        margin-top:14px;
+        overflow:visible;
+        border-radius:20px;
+        box-shadow:0 12px 34px rgba(15,23,42,.065)
+      }
+      .ac-crm-card .ac-card-head{
+        align-items:center;
+        flex-direction:row;
+        padding:14px 14px 10px
+      }
+      .ac-crm-card .ac-card-head>div{min-width:0}
+      .ac-crm-card .ac-card-head .ac-crm-kicker{display:none}
+      .ac-crm-card .ac-card-head .ac-card-title{font-size:16px}
+      .ac-crm-card .ac-card-head .ac-card-help{
+        margin-top:3px;
+        font-size:11px;
+        line-height:1.35;
+        display:-webkit-box;
+        -webkit-line-clamp:2;
+        -webkit-box-orient:vertical;
+        overflow:hidden
+      }
+      .ac-crm-card .ac-card-head>#acNuevoContacto{display:none}
+      .ac-crm-launchbar{
+        display:grid;
+        grid-template-columns:1.15fr 1fr 1fr;
+        gap:8px;
+        padding:0 12px 12px
+      }
+      .ac-crm-mobile-action{display:inline-flex}
+      .ac-crm-card>.ac-card-body{display:none}
+      .ac-crm-card.is-open:before{
+        content:"";
+        position:fixed;
+        inset:0;
+        z-index:1190;
+        background:rgba(15,23,42,.42);
+        backdrop-filter:blur(3px);
+        -webkit-backdrop-filter:blur(3px)
+      }
+      .ac-crm-card.is-open>.ac-card-body{
+        display:block;
+        position:fixed;
+        z-index:1200;
+        left:0;
+        right:0;
+        bottom:0;
+        max-height:min(88dvh,760px);
+        overflow-y:auto;
+        overscroll-behavior:contain;
+        -webkit-overflow-scrolling:touch;
+        padding:0 16px calc(18px + env(safe-area-inset-bottom));
+        border-radius:24px 24px 0 0;
+        background:linear-gradient(180deg,#fff 0%,#fffafd 100%);
+        box-shadow:0 -22px 60px rgba(15,23,42,.2);
+        animation:acCrmSheetIn .22s ease-out
+      }
+      .ac-crm-sheet-head{
+        position:sticky;
+        top:0;
+        z-index:3;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin:0 -16px 14px;
+        padding:12px 16px 10px;
+        border-bottom:1px solid #f1e5eb;
+        background:rgba(255,255,255,.96);
+        backdrop-filter:blur(14px);
+        -webkit-backdrop-filter:blur(14px)
+      }
+      .ac-crm-sheet-head:before{
+        content:"";
+        position:absolute;
+        width:42px;
+        height:4px;
+        border-radius:999px;
+        background:#d7c8d0;
+        top:5px;
+        left:50%;
+        transform:translateX(-50%)
+      }
       .ac-crm-grid,.ac-crm-grid-secondary{grid-template-columns:1fr;gap:10px}
-      .ac-crm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+      .ac-crm-grid-secondary{margin-top:10px}
+      .ac-crm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:8px}
       .ac-crm-actions .ac-btn{width:100%;min-height:48px}
       .ac-crm-actions .ac-btn-primary{grid-column:1/-1}
       .ac-crm-sync{grid-column:1/-1;margin:2px 0 0;justify-content:center}
+      .ac-crm-statusline{font-size:11px}
+      .ac-crm-pending{padding-top:11px}
       .ac-crm-item{grid-template-columns:1fr}
       .ac-crm-item-time{white-space:normal}
+      @keyframes acCrmSheetIn{
+        from{transform:translateY(28px);opacity:.3}
+        to{transform:translateY(0);opacity:1}
+      }
     }
     @media (max-width:420px){
-      .ac-crm-actions{grid-template-columns:1fr}
-      .ac-crm-actions .ac-btn-primary,.ac-crm-sync{grid-column:auto}
+      .ac-crm-launchbar{grid-template-columns:1fr 1fr}
+      .ac-crm-launchbar .is-primary{grid-column:1/-1}
+      .ac-crm-actions{grid-template-columns:1fr 1fr}
+      .ac-crm-actions .ac-btn-primary{grid-column:1/-1}
+      .ac-crm-sync{grid-column:1/-1}
     }
   </style>
 </head>
@@ -120,7 +254,21 @@
           </div>
           <button type="button" class="ac-btn ac-btn-line" id="acNuevoContacto"><i class="bi bi-person-plus"></i> Nuevo contacto</button>
         </div>
+
+        <div class="ac-crm-launchbar" aria-label="Acciones rápidas de seguimiento comercial">
+          <button type="button" class="ac-crm-mobile-action is-primary" id="acCrmNuevoMovil"><i class="bi bi-person-plus"></i> Nuevo contacto</button>
+          <button type="button" class="ac-crm-mobile-action" id="acCrmContactosMovil"><i class="bi bi-people"></i> Contactos</button>
+          <button type="button" class="ac-crm-mobile-action" id="acCrmPendientesMovil"><i class="bi bi-bell"></i> Pendientes</button>
+        </div>
+
         <div class="ac-card-body">
+          <div class="ac-crm-sheet-head">
+            <div class="ac-crm-sheet-title">
+              <strong id="acCrmSheetTitle">Contacto comercial</strong>
+              <small>Guarda solo información comercial necesaria.</small>
+            </div>
+            <button type="button" class="ac-crm-sheet-close" id="acCerrarContactoPanel" aria-label="Cerrar contacto"><i class="bi bi-x-lg"></i></button>
+          </div>
           <div class="ac-crm-grid">
             <label>
               <span class="ac-label">Nombre</span>
@@ -603,6 +751,36 @@
         if(el("acContactoCanal")) el("acContactoCanal").value="WHATSAPP";
         status("Nuevo contacto listo. No se ha guardado nada.","neutral");
       }
+
+      /* FASE 2.2 · CONTROL VISUAL CRM MÓVIL
+         No altera persistencia, payloads, etapas ni motor semántico. */
+      function isCompactCrm(){
+        return !!(global.matchMedia&&global.matchMedia("(max-width:760px)").matches);
+      }
+      function setCrmSheetTitle(mode){
+        var title=el("acCrmSheetTitle"); if(!title) return;
+        title.textContent=mode==="CONTACTS"?"Contactos guardados":mode==="PENDING"?"Seguimientos pendientes":"Nuevo contacto";
+      }
+      function openCrmPanel(mode){
+        var card=el("acContactoCard"); if(!card) return;
+        mode=String(mode||"FORM").toUpperCase();
+
+        if(mode==="NEW") clearContact();
+        if(mode==="CONTACTS"&&el("acContactosDetalle")) el("acContactosDetalle").open=true;
+        if(mode==="PENDING"&&el("acPendientesDetalle")) el("acPendientesDetalle").open=true;
+
+        setCrmSheetTitle(mode);
+        if(!isCompactCrm()){
+          card.scrollIntoView({behavior:"smooth",block:"start"});
+          return;
+        }
+        card.classList.add("is-open");
+        document.body.classList.add("ac-crm-panel-open");
+      }
+      function closeCrmPanel(){
+        var card=el("acContactoCard"); if(card) card.classList.remove("is-open");
+        document.body.classList.remove("ac-crm-panel-open");
+      }
       function scheduleHours(hours){
         var d=new Date(Date.now()+hours*3600000); if(el("acContactoProximo")) el("acContactoProximo").value=localInputValue(d);
         status("Próximo seguimiento preparado. Pulsa Guardar contacto para conservarlo.","neutral");
@@ -708,9 +886,17 @@
         var b;
         b=el("acGuardarContacto");if(b)b.addEventListener("click",saveContact);
         b=el("acRegistrarInteraccion");if(b)b.addEventListener("click",registerInteraction);
-        b=el("acNuevoContacto");if(b)b.addEventListener("click",clearContact);
+        b=el("acNuevoContacto");if(b)b.addEventListener("click",function(){openCrmPanel("NEW");});
+        b=el("acCrmNuevoMovil");if(b)b.addEventListener("click",function(){openCrmPanel("NEW");});
+        b=el("acCrmContactosMovil");if(b)b.addEventListener("click",function(){openCrmPanel("CONTACTS");});
+        b=el("acCrmPendientesMovil");if(b)b.addEventListener("click",function(){openCrmPanel("PENDING");});
+        b=el("acCerrarContactoPanel");if(b)b.addEventListener("click",closeCrmPanel);
         b=el("acSeguimientoManana");if(b)b.addEventListener("click",function(){scheduleHours(24);});
         b=el("acSeguimiento48h");if(b)b.addEventListener("click",function(){scheduleHours(48);});
+
+        document.addEventListener("keydown",function(event){
+          if(event.key==="Escape"&&el("acContactoCard")&&el("acContactoCard").classList.contains("is-open")) closeCrmPanel();
+        });
 
         /* Captura antes del listener V1.7.0 para impedir la concatenación antigua. */
         document.addEventListener("click",function(event){
