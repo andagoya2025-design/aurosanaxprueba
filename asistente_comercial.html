@@ -84,6 +84,58 @@
       cursor:pointer
     }
 
+    /* FASE 2.3 · RESPUESTA MÓVIL UNIFICADA
+       Solo presentación/puente UI. No altera el motor comercial. */
+    .ac-quick-stage-wrap{display:none}
+    .ac-quick-stage-label{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:8px
+    }
+    .ac-quick-stage-label strong{
+      color:var(--ac-title);
+      font-size:11px;
+      font-weight:950
+    }
+    .ac-quick-stage-label small{
+      color:var(--ac-muted);
+      font-size:9px;
+      font-weight:750
+    }
+    .ac-quick-stage-actions{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:6px
+    }
+    .ac-quick-stage-btn{
+      min-width:0;
+      min-height:39px;
+      padding:7px 5px;
+      border:1px solid var(--ac-line);
+      border-radius:12px;
+      background:#fff;
+      color:#475569;
+      font-size:9px;
+      font-weight:900;
+      line-height:1.1;
+      cursor:pointer;
+      display:grid;
+      place-items:center;
+      align-content:center;
+      gap:3px;
+      -webkit-tap-highlight-color:transparent
+    }
+    .ac-quick-stage-btn i{font-size:13px}
+    .ac-quick-stage-btn.active{
+      border-color:var(--ac-primary);
+      background:var(--ac-soft);
+      color:var(--ac-primary-dark);
+      box-shadow:inset 0 0 0 1px rgba(139,30,90,.06)
+    }
+    .ac-quick-sheet-backdrop{display:none}
+
     @media (max-width:1180px){
       .ac-crm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .ac-crm-grid-secondary{grid-template-columns:1fr 1fr}
@@ -184,6 +236,61 @@
       .ac-crm-pending{padding-top:11px}
       .ac-crm-item{grid-template-columns:1fr}
       .ac-crm-item-time{white-space:normal}
+
+      /* Respuesta rápida: un solo centro de trabajo móvil. */
+      .ac-quick-sheet{
+        left:8px!important;
+        right:8px!important;
+        bottom:max(8px,env(safe-area-inset-bottom))!important;
+        z-index:10020!important;
+        max-height:min(78dvh,620px);
+        overflow-y:auto;
+        overscroll-behavior:contain;
+        padding:7px 12px calc(12px + env(safe-area-inset-bottom))!important;
+        border-radius:22px!important;
+        box-shadow:0 28px 80px rgba(15,23,42,.28)!important;
+        isolation:isolate
+      }
+      .ac-quick-sheet-backdrop{
+        display:block;
+        position:fixed;
+        inset:0;
+        z-index:-1;
+        background:rgba(15,23,42,.34);
+        backdrop-filter:blur(2px);
+        -webkit-backdrop-filter:blur(2px);
+        pointer-events:none
+      }
+      .ac-quick-stage-wrap{
+        display:block;
+        margin:9px 0 10px;
+        padding:9px;
+        border:1px solid #f0e1e8;
+        border-radius:15px;
+        background:#fffafd
+      }
+      .ac-quick-response{
+        max-height:128px!important;
+        margin:8px 0 9px!important;
+        padding:10px!important;
+        font-size:12px!important;
+        line-height:1.42!important
+      }
+      .ac-quick-actions{
+        grid-template-columns:1.15fr 1.15fr .85fr .85fr!important;
+        gap:6px!important
+      }
+      .ac-quick-actions .ac-btn{
+        min-height:43px!important;
+        padding:8px 7px!important;
+        font-size:10px!important;
+        border-radius:12px!important
+      }
+      .ac-quick-actions .ac-btn i{font-size:14px}
+      body.ac-library-focus .ac-response-actions{
+        position:static!important;
+      }
+
       @keyframes acCrmSheetIn{
         from{transform:translateY(28px);opacity:.3}
         to{transform:translateY(0);opacity:1}
@@ -195,6 +302,10 @@
       .ac-crm-actions{grid-template-columns:1fr 1fr}
       .ac-crm-actions .ac-btn-primary{grid-column:1/-1}
       .ac-crm-sync{grid-column:1/-1}
+      .ac-quick-stage-actions{grid-template-columns:1fr 1fr}
+      .ac-quick-stage-btn{min-height:42px;font-size:10px}
+      .ac-quick-actions{grid-template-columns:1fr 1fr!important}
+      .ac-quick-actions .ac-btn{min-height:44px!important;font-size:11px!important}
     }
   </style>
 </head>
@@ -515,8 +626,23 @@
       </div>
 
       <aside class="ac-quick-sheet" id="acQuickSheet" hidden aria-live="polite">
+        <div class="ac-quick-sheet-backdrop" aria-hidden="true"></div>
         <div class="ac-quick-sheet-grabber" aria-hidden="true"></div>
         <div class="ac-quick-sheet-head"><div><span class="ac-quick-category" id="acQuickCategory">Plantilla</span><strong id="acQuickTitle">Respuesta seleccionada</strong></div><button type="button" class="ac-icon-btn ac-quick-close" id="acQuickClose" aria-label="Cerrar vista rápida"><i class="bi bi-x-lg"></i></button></div>
+
+        <div class="ac-quick-stage-wrap" aria-label="Etapa de respuesta">
+          <div class="ac-quick-stage-label">
+            <strong>Etapa de mensaje</strong>
+            <small>Cambia la respuesta, no la plantilla</small>
+          </div>
+          <div class="ac-quick-stage-actions" id="acQuickEtapas">
+            <button type="button" class="ac-quick-stage-btn active" data-quick-commercial-stage="ORIGINAL"><i class="bi bi-arrow-counterclockwise"></i><span>Primera</span></button>
+            <button type="button" class="ac-quick-stage-btn" data-quick-commercial-stage="SEGUIMIENTO"><i class="bi bi-chat-dots"></i><span>Seguimiento</span></button>
+            <button type="button" class="ac-quick-stage-btn" data-quick-commercial-stage="CIERRE"><i class="bi bi-calendar-check"></i><span>Cierre</span></button>
+            <button type="button" class="ac-quick-stage-btn" data-quick-commercial-stage="RECONTACTO"><i class="bi bi-arrow-repeat"></i><span>Recontacto</span></button>
+          </div>
+        </div>
+
         <div class="ac-quick-response" id="acQuickResponse"></div>
         <div class="ac-quick-actions">
           <button type="button" class="ac-btn ac-btn-primary" id="acQuickCopy"><i class="bi bi-copy"></i> Copiar</button>
@@ -866,7 +992,33 @@
         if(stage==="RECONTACTO") return "Hola "+name+"hace unos días conversamos"+topic+". Quería saber si todavía deseas información o si prefieres dejarlo pendiente por ahora.\n\nCon gusto te ayudamos cuando lo necesites.";
         return "";
       }
-      function markStage(stage){ state.stage=stage; document.querySelectorAll("#acEtapasComerciales [data-commercial-stage]").forEach(function(b){b.classList.toggle("active",b.dataset.commercialStage===stage);}); }
+      function markStage(stage){
+        state.stage=stage;
+        document.querySelectorAll("#acEtapasComerciales [data-commercial-stage]").forEach(function(b){
+          b.classList.toggle("active",b.dataset.commercialStage===stage);
+        });
+        document.querySelectorAll("#acQuickEtapas [data-quick-commercial-stage]").forEach(function(b){
+          b.classList.toggle("active",b.dataset.quickCommercialStage===stage);
+        });
+      }
+
+      /* FASE 2.3 · SINCRONIZACIÓN VISUAL DEL QUICK-SHEET
+         La fuente única sigue siendo #acRespuesta. */
+      function syncQuickResponse(){
+        var source=el("acRespuesta"),target=el("acQuickResponse");
+        if(!source||!target) return;
+        target.textContent=source.value||"";
+      }
+      function applyQuickStage(stage){
+        stage=String(stage||"ORIGINAL").toUpperCase();
+        var original=document.querySelector('#acEtapasComerciales [data-commercial-stage="'+stage+'"]');
+        if(original){
+          original.click();
+          syncQuickResponse();
+          return;
+        }
+      }
+
       function applyStage(stage){
         stage=String(stage||"").toUpperCase(); var response=el("acRespuesta"); if(!response) return;
         if(stage==="ORIGINAL"){
@@ -894,6 +1046,16 @@
         b=el("acSeguimientoManana");if(b)b.addEventListener("click",function(){scheduleHours(24);});
         b=el("acSeguimiento48h");if(b)b.addEventListener("click",function(){scheduleHours(48);});
 
+        var quickStages=el("acQuickEtapas");
+        if(quickStages) quickStages.addEventListener("click",function(event){
+          var btn=event.target.closest&&event.target.closest("[data-quick-commercial-stage]");
+          if(!btn) return;
+          applyQuickStage(btn.dataset.quickCommercialStage||"ORIGINAL");
+        });
+
+        var responseSource=el("acRespuesta");
+        if(responseSource) responseSource.addEventListener("input",syncQuickResponse);
+
         document.addEventListener("keydown",function(event){
           if(event.key==="Escape"&&el("acContactoCard")&&el("acContactoCard").classList.contains("is-open")) closeCrmPanel();
         });
@@ -906,11 +1068,14 @@
 
         /* Al seleccionar otra plantilla, la etapa vuelve conceptualmente a Primera respuesta. */
         document.addEventListener("click",function(event){
-          if(event.target.closest&&event.target.closest("#acPlantillas [data-template-id], #acSugerencias [data-template-id], .ac-use-template-btn")) markStage("ORIGINAL");
+          if(event.target.closest&&event.target.closest("#acPlantillas [data-template-id], #acSugerencias [data-template-id], .ac-use-template-btn")){
+            markStage("ORIGINAL");
+            if(global.queueMicrotask) global.queueMicrotask(syncQuickResponse);
+          }
         },false);
       }
       function boot(){
-        if(state.initialized)return; state.initialized=true; loadLocal(); populateSelects(); bind(); markStage("ORIGINAL"); renderContacts(); renderPending(); loadCommercialRecords();
+        if(state.initialized)return; state.initialized=true; loadLocal(); populateSelects(); bind(); markStage("ORIGINAL"); syncQuickResponse(); renderContacts(); renderPending(); loadCommercialRecords();
       }
       if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot,{once:true}); else boot();
 
