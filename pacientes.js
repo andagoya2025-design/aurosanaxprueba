@@ -612,18 +612,48 @@ function auroConfigurarCampoCedulaPaciente(){
 
 function auroValidarCedulaPacienteAntesDeGuardar(){
   const input = document.getElementById('pCedula');
-  if(!input) return {ok:true, valor:''};
+  if(!input) return {ok:false, valor:''};
 
   const original = String(input.value || '');
   const soloDigitos = auroCedulaPacienteSoloDigitos(original);
 
   /*
-   * No se hace obligatoria la cédula porque el comportamiento previo
-   * permitía pacientes sin documento. Pero si se registra, debe tener 10.
+   * AUROSANAX · IDENTIDAD DEL PACIENTE
+   * - En un ALTA NUEVA la cédula es obligatoria.
+   * - Debe contener exactamente 10 dígitos.
+   * - Se conserva como texto para no perder el cero inicial.
+   * - Compatibilidad antirregresiva: un registro histórico que YA exista
+   *   sin documento puede seguir abriéndose/editándose; esta validación
+   *   no crea nuevos pacientes sin cédula ni borra datos históricos.
    */
   if(!soloDigitos){
+    const idEdicion = String(
+      (typeof editingPatientId !== 'undefined' && editingPatientId) || ''
+    ).trim();
+
+    if(idEdicion){
+      const pacienteActual = Array.isArray(patients)
+        ? patients.find(p => String(p?.id_paciente || p?.id || '').trim() === idEdicion)
+        : null;
+
+      const cedulaActual = auroCedulaPacienteSoloDigitos(
+        pacienteActual?.cedula ||
+        pacienteActual?.numero_documento ||
+        pacienteActual?.documento ||
+        ''
+      );
+
+      /* Solo preserva edición de un registro histórico que YA estaba sin documento. */
+      if(!cedulaActual){
+        input.value = '';
+        return {ok:true, valor:''};
+      }
+    }
+
     input.value = '';
-    return {ok:true, valor:''};
+    alert('La cédula es obligatoria para registrar un paciente.');
+    input.focus();
+    return {ok:false, valor:''};
   }
 
   if(soloDigitos.length !== 10){
