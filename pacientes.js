@@ -930,11 +930,18 @@ function auroBuscarPacienteCreadoParaCita(contexto, datosGuardados){
   return null;
 }
 
-async function auroVincularPacienteGuardadoConCita(contexto, datosGuardados){
+async function auroVincularPacienteGuardadoConCita(contexto, datosGuardados, opciones){
   if(!contexto || !contexto.id_cita) return {ok:false, motivo:'sin_contexto'};
 
-  /* Relee la fuente real antes de decidir el vínculo. */
-  await cargarPacientesDesdeSheets();
+  const opts = opciones || {};
+
+  /*
+   * Si el llamador ya confirmó Pacientes contra la fuente real, reutiliza
+   * esa lectura. Las llamadas antiguas conservan la relectura defensiva.
+   */
+  if(!opts.pacientesYaConfirmados){
+    await cargarPacientesDesdeSheets();
+  }
 
   const paciente = auroBuscarPacienteCreadoParaCita(contexto, datosGuardados);
   if(!paciente || !paciente.id_paciente){
@@ -1154,16 +1161,21 @@ async function savePatient(){
     actualizarSelectorPacientesHistoria();
     actualizarDashboard();
     setTimeout(async () => {
+      /*
+       * Esta relectura ya actualiza patients, Última atención, tabla,
+       * selector de Historia y Dashboard. No se repiten esos renderizados.
+       */
       await cargarPacientesDesdeSheets();
-      renderPatients();
-      actualizarSelectorPacientesHistoria();
-      actualizarDashboard();
 
       /* Solo Agenda: intenta vincular ESTA cita después de confirmar el
          paciente en la fuente real. El resto de guardados no entra aquí. */
       if(contextoAgenda && contextoAgenda.id_cita){
         try{
-          const vinculo = await auroVincularPacienteGuardadoConCita(contextoAgenda, pacienteSheet);
+          const vinculo = await auroVincularPacienteGuardadoConCita(
+            contextoAgenda,
+            pacienteSheet,
+            {pacientesYaConfirmados:true}
+          );
           if(vinculo.ok){
             auroLimpiarContextoPacienteDesdeAgenda();
             alert('Paciente registrado y vinculado correctamente a la cita.');
@@ -1746,4 +1758,3 @@ function seleccionarPacienteHistoria(){
   guardarProtegido.__auroOriginal = guardarOriginal;
   window.guardarHistoriaClinicaERP = guardarProtegido;
 })();
-
