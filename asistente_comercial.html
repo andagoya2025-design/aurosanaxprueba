@@ -57,6 +57,29 @@
     .ac-crm-history-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--ac-primary-dark);font-size:10px;font-weight:900}
     .ac-crm-history-response{margin-top:6px;color:#334155;font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 
+    /* FASE 3.2 · FICHA DIRECTA / EDICIÓN CONTROLADA
+       Solo presentación y control de edición del Mini CRM. */
+    .ac-crm-editbar{display:none;align-items:center;justify-content:flex-end;gap:8px;margin:0 0 12px}
+    .ac-crm-card[data-crm-mode="FORM"] .ac-crm-editbar{display:flex}
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-actions{display:none!important}
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-form-note{pointer-events:none}
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-grid input,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-grid select,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-grid-secondary input,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-form-note textarea{
+      pointer-events:none;
+      background:#f8fafc!important;
+      color:#475569!important;
+      border-color:#e7ebf0!important;
+      box-shadow:none!important
+    }
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] input:focus,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] select:focus,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] textarea:focus{
+      outline:none!important;
+      box-shadow:none!important
+    }
+
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
     .ac-crm-sheet-head{display:none}
@@ -707,6 +730,11 @@
             </div>
             <button type="button" class="ac-crm-sheet-close" id="acCerrarContactoPanel" aria-label="Cerrar contacto"><i class="bi bi-x-lg"></i></button>
           </div>
+          <div class="ac-crm-editbar" id="acCrmEditbar">
+            <button type="button" class="ac-btn ac-btn-line" id="acEditarContacto"><i class="bi bi-pencil-square"></i> Editar</button>
+            <button type="button" class="ac-btn ac-btn-soft" id="acCancelarEdicion" hidden><i class="bi bi-x-circle"></i> Cancelar</button>
+          </div>
+
           <div class="ac-crm-grid">
             <label>
               <span class="ac-label">Nombre</span>
@@ -1053,7 +1081,9 @@
         crmMode: "FORM",
         interactionLock: false,
         lastInteractionSignature: "",
-        lastInteractionAt: 0
+        lastInteractionAt: 0,
+        editingContact: false,
+        editBackup: null
       };
 
       var COMMERCIAL_STATES = [
@@ -1194,8 +1224,10 @@
           if(!r||r.success===false) throw new Error(r&&r.message||"No se pudo guardar");
           state.backendAvailable=true; setSync(true);
           setActiveContact(snap);
+          state.editBackup=null;
+          setEditingMode(false);
           status("Contacto guardado y activo: "+(snap.nombre||snap.telefono||"Prospecto")+".","success");
-          await loadCommercialRecords(); renderActiveContact(); return true;
+          await loadCommercialRecords(); renderActiveContact(); renderHistory(state.contacts[snap.contact_key]||snap); return true;
         }catch(err){
           state.backendAvailable=false; setSync(false); setActiveContact(snap);
           status("Contacto activo y guardado solo en este dispositivo; la sincronización remota no estuvo disponible.","warning"); return false;
@@ -1341,6 +1373,45 @@
           mode==="FORM"?"Ficha del contacto":
           "Nuevo contacto";
       }
+
+      function setEditingMode(editing){
+        var card=el("acContactoCard");
+        state.editingContact=!!editing;
+        if(card) card.dataset.editing=editing?"true":"false";
+
+        var editBtn=el("acEditarContacto");
+        var cancelBtn=el("acCancelarEdicion");
+        if(editBtn) editBtn.hidden=!!editing;
+        if(cancelBtn) cancelBtn.hidden=!editing;
+
+        ["acContactoNombre","acContactoTelefono","acContactoCanal","acContactoEstado",
+         "acContactoServicio","acContactoProximo","acContactoObservacion"].forEach(function(id){
+          var n=el(id); if(n) n.tabIndex=editing?0:-1;
+        });
+      }
+
+      function captureEditBackup(){
+        return {
+          nombre:el("acContactoNombre")?el("acContactoNombre").value:"",
+          telefono:el("acContactoTelefono")?el("acContactoTelefono").value:"",
+          canal:el("acContactoCanal")?el("acContactoCanal").value:"",
+          estado:el("acContactoEstado")?el("acContactoEstado").value:"",
+          servicio:el("acContactoServicio")?el("acContactoServicio").value:"",
+          proximo:el("acContactoProximo")?el("acContactoProximo").value:"",
+          observacion:el("acContactoObservacion")?el("acContactoObservacion").value:""
+        };
+      }
+
+      function restoreEditBackup(){
+        var b=state.editBackup; if(!b) return;
+        if(el("acContactoNombre")) el("acContactoNombre").value=b.nombre||"";
+        if(el("acContactoTelefono")) el("acContactoTelefono").value=b.telefono||"";
+        if(el("acContactoCanal")) el("acContactoCanal").value=b.canal||"WHATSAPP";
+        if(el("acContactoEstado")) el("acContactoEstado").value=b.estado||"NUEVO";
+        if(el("acContactoServicio")) el("acContactoServicio").value=b.servicio||"";
+        if(el("acContactoProximo")) el("acContactoProximo").value=b.proximo||"";
+        if(el("acContactoObservacion")) el("acContactoObservacion").value=b.observacion||"";
+      }
       function openCrmPanel(mode){
         var card=el("acContactoCard"); if(!card) return;
         mode=String(mode||"FORM").toUpperCase();
@@ -1348,7 +1419,18 @@
         state.crmMode=mode;
         card.dataset.crmMode=mode;
 
-        if(mode==="NEW") clearContact();
+        if(mode==="NEW"){
+          clearContact();
+          state.editBackup=null;
+          setEditingMode(true);
+        }else if(mode==="FORM"){
+          state.editBackup=null;
+          setEditingMode(false);
+        }else{
+          state.editBackup=null;
+          setEditingMode(false);
+        }
+
         if(el("acContactosDetalle")) el("acContactosDetalle").open=(mode==="CONTACTS");
         if(el("acPendientesDetalle")) el("acPendientesDetalle").open=(mode==="PENDING");
 
@@ -1384,7 +1466,10 @@
         state.crmMode="FORM";
         if(el("acContactoCard")) el("acContactoCard").dataset.crmMode="FORM";
         setCrmSheetTitle("FORM");
-        status("Contacto activo: "+(c.nombre||c.telefono||"Prospecto")+". Ya puedes responder o registrar una interacción.","success");
+        state.editBackup=null;
+        setEditingMode(false);
+        renderHistory(c);
+        status("Contacto activo: "+(c.nombre||c.telefono||"Prospecto")+". Consulta su ficha o pulsa Editar para modificarla.","success");
       }
       function renderContacts(){
         var list=el("acContactosGuardados"),count=el("acContactosCantidad"); if(!list||!count) return;
@@ -1420,9 +1505,10 @@
             '<span class="ac-crm-item-time">'+escapeHtml(lastText)+'</span>';
 
           item.addEventListener("click",function(){
-            fillContact(state.contacts[this.dataset.contactKey]);
+            var c=state.contacts[this.dataset.contactKey];
+            fillContact(c);
             if(el("acContactosDetalle")) el("acContactosDetalle").open=false;
-            closeCrmPanel();
+            openCrmPanel("FORM");
           });
           list.appendChild(item);
         });
@@ -1441,9 +1527,10 @@
           var item=document.createElement("button"); item.type="button"; item.className="ac-crm-item"; item.dataset.contactKey=c.contact_key;
           item.innerHTML='<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong><small>'+escapeHtml([c.servicio,c.estado_comercial].filter(Boolean).join(" · "))+'</small></span><span class="ac-crm-item-time">'+(over?"⚠ ":"")+escapeHtml(formatDate(d))+'</span>';
           item.addEventListener("click",function(){
-            fillContact(state.contacts[this.dataset.contactKey]);
+            var c=state.contacts[this.dataset.contactKey];
+            fillContact(c);
             if(el("acPendientesDetalle")) el("acPendientesDetalle").open=false;
-            closeCrmPanel();
+            openCrmPanel("FORM");
           });
           list.appendChild(item);
         });
@@ -1514,6 +1601,24 @@
         b=el("acSeguimientoManana");if(b)b.addEventListener("click",function(){scheduleHours(24);});
         b=el("acSeguimiento48h");if(b)b.addEventListener("click",function(){scheduleHours(48);});
         b=el("acContactoActivoFicha");if(b)b.addEventListener("click",function(){openCrmPanel("FORM");});
+
+        b=el("acEditarContacto");if(b)b.addEventListener("click",function(){
+          if(!state.activeContactKey) return;
+          state.editBackup=captureEditBackup();
+          setEditingMode(true);
+          status("Edición habilitada. Guarda los cambios o pulsa Cancelar.","neutral");
+          if(el("acContactoNombre")) el("acContactoNombre").focus();
+        });
+
+        b=el("acCancelarEdicion");if(b)b.addEventListener("click",function(){
+          restoreEditBackup();
+          state.editBackup=null;
+          setEditingMode(false);
+          var c=state.activeContactKey&&state.contacts[state.activeContactKey];
+          if(c) renderHistory(c);
+          status("Edición cancelada. No se guardaron cambios.","neutral");
+        });
+
         b=el("acContactoActivoResponder");if(b)b.addEventListener("click",function(){
           closeCrmPanel();
           var target=el("acRespuesta")||el("acMensajeCard");
@@ -1554,8 +1659,12 @@
         state.initialized=true;
         loadLocal();
         populateSelects();
-        if(el("acContactoCard")) el("acContactoCard").dataset.crmMode="FORM";
+        if(el("acContactoCard")){
+          el("acContactoCard").dataset.crmMode="FORM";
+          el("acContactoCard").dataset.editing="false";
+        }
         bind();
+        setEditingMode(false);
         markStage("ORIGINAL");
         syncQuickResponse();
         renderActiveContact();
