@@ -61,7 +61,7 @@
     return r.json();
   }
   const txt=v=>String(v===null||v===undefined?'':v).trim();
-  const esc=v=>String(v===null||v===undefined?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
+  const esc=v=>String(v===null||v===undefined?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
   const norm=v=>txt(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ');
   const val=id=>txt(document.getElementById(id)?.value);
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v??'';};
@@ -177,13 +177,7 @@
     const original=window.showScreen;
     window.showScreen=function(nombre){
       const resultado=original.apply(this,arguments);
-      const esPreatencion=String(nombre||'')==='preatencion';
-      try{ gestionarTituloGlobalPreatencion(esPreatencion); }catch(_e){}
-      if(esPreatencion && document.getElementById('preatencion')){
-        refrescarFuentesAlEntrarPreatencion_().catch(error=>{
-          console.warn('AUROSANAX PREATENCIÓN: no se pudo sincronizar al entrar al módulo.',error);
-        });
-      }
+      try{ gestionarTituloGlobalPreatencion(String(nombre||'')==='preatencion'); }catch(_e){}
       return resultado;
     };
     window.__auroPreShowScreenEnvuelto=true;
@@ -323,10 +317,7 @@
       const d=ev?.detail||{};
       if(!d.id_cita||!d.id_paciente)return;
       try{
-        const sincronizado=await refrescarPacienteYCitasDespuesDeVincular_();
-        if(!sincronizado){
-          await cargarTodo();
-        }
+        await cargarTodo();
         await seleccionarDesdeSala(d.id_paciente,d.id_cita);
       }catch(error){
         console.warn('AUROSANAX PREATENCIÓN: no se pudo refrescar después de crear paciente.',error);
@@ -422,87 +413,6 @@
   function calcIMC(){ const p=parseFloat(numero(val('prePeso'))),t=parseFloat(numero(val('preTalla')));set('preIMC',p>0&&t>0?(p/((t/100)*(t/100))).toFixed(1):''); }
   function limpiarClinico(){ ['prePeso','preTalla','preIMC','prePAS','prePAD','preFC','preFR','preTemp','preSat','preCadera','preGrasa','preMasa','preCefalico','preToracico','preAbdominal','preAntecedentesTexto'].forEach(id=>set(id,'')); }
 
-  let sincronizacionEntradaPromise=null;
-
-  async function refrescarFuentesAlEntrarPreatencion_(){
-    /*
-      SINCRONIZACIÓN QUIRÚRGICA ENTRE SESIONES:
-      - Se ejecuta únicamente al entrar/reingresar a Preatención.
-      - Refresca pacientes, citas y preatenciones en paralelo.
-      - Si una fuente falla, conserva el último caché válido de esa fuente.
-      - No limpia signos vitales ni modifica selección, permisos, auditoría o IDs.
-    */
-    if(sincronizacionEntradaPromise) return sincronizacionEntradaPromise;
-
-    sincronizacionEntradaPromise=(async()=>{
-      const [rp,rc,rr]=await Promise.allSettled([
-        get('listarPacientes'),
-        get('listarCitas'),
-        get('listarPreatenciones')
-      ]);
-
-      if(rp.status==='fulfilled'){
-        pacientesCache=extraerLista(rp.value);
-      }else{
-        console.warn('AUROSANAX PREATENCIÓN: pacientes no disponibles durante sincronización de entrada.',rp.reason);
-      }
-
-      if(rc.status==='fulfilled'){
-        citasCache=extraerLista(rc.value);
-      }else{
-        console.warn('AUROSANAX PREATENCIÓN: citas no disponibles durante sincronización de entrada.',rc.reason);
-      }
-
-      if(rr.status==='fulfilled'){
-        preatencionesCache=extraerLista(rr.value);
-      }else{
-        console.warn('AUROSANAX PREATENCIÓN: preatenciones no disponibles durante sincronización de entrada.',rr.reason);
-      }
-
-      renderResultadosPacientes();
-      renderSala();
-      actualizarAccionesPaciente();
-
-      if(val('prePaciente')){
-        await cargarCitasPaciente(val('preCita'));
-      }else{
-        actualizarContexto();
-      }
-    })();
-
-    try{
-      await sincronizacionEntradaPromise;
-    }finally{
-      sincronizacionEntradaPromise=null;
-    }
-  }
-
-  async function refrescarPacienteYCitasDespuesDeVincular_(){
-    /*
-      REGRESO DESDE CREACIÓN/VINCULACIÓN:
-      - Pacientes y citas sí cambiaron; Preatenciones no.
-      - Lee ambas fuentes una sola vez y en paralelo.
-      - Devuelve false si alguna fuente falla para activar el respaldo cargarTodo().
-    */
-    const [rp,rc]=await Promise.allSettled([
-      get('listarPacientes'),
-      get('listarCitas')
-    ]);
-
-    if(rp.status!=='fulfilled' || rc.status!=='fulfilled'){
-      if(rp.status!=='fulfilled') console.warn('AUROSANAX PREATENCIÓN: no se pudieron refrescar pacientes después de vincular.',rp.reason);
-      if(rc.status!=='fulfilled') console.warn('AUROSANAX PREATENCIÓN: no se pudieron refrescar citas después de vincular.',rc.reason);
-      return false;
-    }
-
-    pacientesCache=extraerLista(rp.value);
-    citasCache=extraerLista(rc.value);
-    renderResultadosPacientes();
-    renderSala();
-    actualizarAccionesPaciente();
-    return true;
-  }
-
   async function cargarTodo(){
     /*
       CARGA ANTIRREGRESIVA:
@@ -529,22 +439,19 @@
       return;
     }
 
-    const [resultadoCitas,resultadoPre]=await Promise.allSettled([
-      get('listarCitas'),
-      get('listarPreatenciones')
-    ]);
-
-    if(resultadoCitas.status==='fulfilled'){
-      citasCache=extraerLista(resultadoCitas.value);
-    }else{
-      console.warn('AUROSANAX PREATENCIÓN: citas no disponibles; selector de pacientes continúa operativo.',resultadoCitas.reason);
+    try{
+      const respuestaCitas=await get('listarCitas');
+      citasCache=extraerLista(respuestaCitas);
+    }catch(error){
+      console.warn('AUROSANAX PREATENCIÓN: citas no disponibles; selector de pacientes continúa operativo.',error);
       citasCache=[];
     }
 
-    if(resultadoPre.status==='fulfilled'){
-      preatencionesCache=extraerLista(resultadoPre.value);
-    }else{
-      console.warn('AUROSANAX PREATENCIÓN: listado de preatenciones no disponible; guardado y búsqueda por paciente continúan operativos.',resultadoPre.reason);
+    try{
+      const respuestaPre=await get('listarPreatenciones');
+      preatencionesCache=extraerLista(respuestaPre);
+    }catch(error){
+      console.warn('AUROSANAX PREATENCIÓN: listado de preatenciones no disponible; guardado y búsqueda por paciente continúan operativos.',error);
       preatencionesCache=[];
     }
 
@@ -675,31 +582,11 @@
     catch(e){console.warn('AUROSANAX PREATENCIÓN: pendiente',e);}
   }
 
-  async function refrescarPreatencionesDespuesDeGuardar_(){
-    /*
-      REFRESCO LIGERO POST-GUARDADO:
-      - Solo relee Preatenciones, que es la fuente que acaba de cambiar.
-      - Conserva pacientesCache y citasCache: no se modifican al guardar signos vitales.
-      - Mantiene la Sala y las acciones visuales sincronizadas.
-      - No toca permisos, auditoría, IDs ni backend.
-    */
-    try{
-      const respuestaPre=await get('listarPreatenciones');
-      preatencionesCache=extraerLista(respuestaPre);
-      renderSala();
-      actualizarAccionesPaciente();
-      return true;
-    }catch(error){
-      console.warn('AUROSANAX PREATENCIÓN: no se pudo refrescar Preatenciones después de guardar.',error);
-      return false;
-    }
-  }
-
   async function guardar(){
     const idPaciente=val('prePaciente'),idCita=val('preCita');if(!idPaciente){alert('Seleccione un paciente.');return;}if(!tienePreatencion()){alert('Su usuario no tiene permiso de Preatención.');return;}
     const pas=val('prePAS').replace(/\D/g,''),pad=val('prePAD').replace(/\D/g,'');if((pas&&!pad)||(!pas&&pad)){alert('Complete presión sistólica y diastólica.');return;}
     const u=usuario(),cita=citasCache.find(x=>txt(x.id_cita)===idCita)||{};const data={id_paciente:idPaciente,id_cita:idCita,id_medico:cita.id_medico||'',peso_kg:numero(val('prePeso')),talla_cm:numero(val('preTalla')),presion_arterial:pas&&pad?pas+'/'+pad:'',frecuencia_cardiaca:numero(val('preFC')),frecuencia_respiratoria:numero(val('preFR')),temperatura:numero(val('preTemp')),saturacion:numero(val('preSat')),perimetro_cadera:numero(val('preCadera')),porcentaje_grasa:numero(val('preGrasa')),masa_muscular:numero(val('preMasa')),perimetro_cefalico:numero(val('preCefalico')),perimetro_toracico:numero(val('preToracico')),perimetro_abdominal:numero(val('preAbdominal')),antecedentes_referidos:val('preAntecedentesTexto'),creado_por:u.usuario||u.nombre_completo||'Secretaría',token:token()};
-    const btn=document.getElementById('preGuardar');if(btn)btn.disabled=true;try{const r=await post('guardarPreatencion',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo guardar.');await refrescarPreatencionesDespuesDeGuardar_();alert('Preatención guardada. Puede continuar con el siguiente paciente.');}catch(e){alert(e.message||'No se pudo guardar la preatención.');}finally{if(btn)btn.disabled=false;}
+    const btn=document.getElementById('preGuardar');if(btn)btn.disabled=true;try{const r=await post('guardarPreatencion',data);if(!r||r.success===false)throw new Error(r?.message||'No se pudo guardar.');await cargarTodo();alert('Preatención guardada. Puede continuar con el siguiente paciente.');}catch(e){alert(e.message||'No se pudo guardar la preatención.');}finally{if(btn)btn.disabled=false;}
   }
 
 
