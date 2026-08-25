@@ -1616,3 +1616,67 @@ function seleccionarPacienteHistoria(){
     setTimeout(window.renderAtencionesPaciente,800);
   }
 }
+
+/* ============================================================
+   AUROSANAX PACIENTES 08 - BARRERA ANTIRREGRESIVA HISTORIA NUEVA
+   Alcance EXCLUSIVO:
+   - Evita que un id_historia residual de otro paciente convierta una
+     historia realmente nueva en una actualización incorrecta.
+   - Solo actúa si el paciente seleccionado NO tiene historia registrada.
+   - Conserva intactas las historias existentes, su edición, Atenciones,
+     Diagnóstico, Plan, Recetas, Seguridad, Agenda y backend.
+============================================================ */
+(function auroInstalarBarreraHistoriaNuevaPaciente(){
+  const guardarOriginal = window.guardarHistoriaClinicaERP;
+
+  if(typeof guardarOriginal !== 'function') return;
+  if(guardarOriginal.__auroBarreraHistoriaNuevaPaciente === true) return;
+
+  const guardarProtegido = async function(){
+    const idPaciente = String(
+      document.getElementById('hcPacienteSelect')?.value ||
+      window.activePatientId ||
+      (typeof activePatientId !== 'undefined' ? activePatientId : '') ||
+      ''
+    ).trim();
+
+    if(idPaciente){
+      const historiaRealPaciente = Array.isArray(window.historiasClinicas)
+        ? window.historiasClinicas.find(function(h){
+            return String(h?.id_paciente || h?.paciente_id || '').trim() === idPaciente;
+          })
+        : (typeof historiasClinicas !== 'undefined' && Array.isArray(historiasClinicas)
+            ? historiasClinicas.find(function(h){
+                return String(h?.id_paciente || h?.paciente_id || '').trim() === idPaciente;
+              })
+            : null);
+
+      const esHistoriaNuevaDeclarada =
+        window.auroModoAperturaHistoria === 'nueva' &&
+        String(window.auroPacienteHistoriaNuevaId || '').trim() === idPaciente;
+
+      /*
+       * Solo si NO existe una historia real para este paciente se permite
+       * limpiar un contexto de edición residual. De esta forma una historia
+       * ya creada nunca pierde su modo de edición por esta barrera.
+       */
+      if(esHistoriaNuevaDeclarada && !historiaRealPaciente){
+        try{
+          if(typeof editingHistoryId !== 'undefined') editingHistoryId = null;
+        }catch(_e){}
+
+        window.editingHistoryId = null;
+        window.auroHistoriaSeleccionadaId = '';
+        window.historiaActual = null;
+        window.currentHistoria = null;
+      }
+    }
+
+    return guardarOriginal.apply(this, arguments);
+  };
+
+  guardarProtegido.__auroBarreraHistoriaNuevaPaciente = true;
+  guardarProtegido.__auroOriginal = guardarOriginal;
+  window.guardarHistoriaClinicaERP = guardarProtegido;
+})();
+
