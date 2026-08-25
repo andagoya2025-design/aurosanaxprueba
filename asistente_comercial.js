@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.7.1 NÚCLEO SEMÁNTICO COMERCIAL ANTIRREGRESIVO
+ * Versión: 1.7.4 NÚCLEO SEMÁNTICO COMERCIAL ANTIRREGRESIVO
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -216,7 +216,7 @@
 
 
   /* ==========================================================
-   * NÚCLEO SEMÁNTICO COMERCIAL — V1.7.1
+   * NÚCLEO SEMÁNTICO COMERCIAL — V1.7.4
    * Unifica servicio/tema, categoría e intención sin alterar UI,
    * persistencia, listeners ni selección manual de plantillas.
    * ========================================================== */
@@ -1093,6 +1093,69 @@
     return messageIntent.id !== "PRECIO";
   }
 
+  function getAssociationWords(value) {
+    const stopWords = new Set([
+      "de","del","la","las","el","los","en","con","para","por","una","uno","unos","unas",
+      "y","o","a","al","sobre","desde","hasta","que","como","es","un"
+    ]);
+
+    return normalizeText(value)
+      .replace(/[^a-z0-9áéíóúñü$ ]/gi, " ")
+      .split(/\s+/)
+      .map(word => word.trim())
+      .filter(word =>
+        word.length >= 3 &&
+        !stopWords.has(word) &&
+        !isGenericCommercialKeyword(word)
+      );
+  }
+
+  function hasStrongTemplateAssociation(template, message) {
+    // Barrera genérica: la intención comercial por sí sola NO basta.
+    // La relación debe surgir de datos reales de la plantilla:
+    // servicio, título, categoría o keywords propias.
+    if (state.categoryMode !== "AUTO") return true;
+
+    const normalizedMessage = normalizeText(message);
+    if (!normalizedMessage) return true;
+
+    const messageWords = new Set(
+      normalizedMessage
+        .replace(/[^a-z0-9áéíóúñü$ ]/gi, " ")
+        .split(/\s+/)
+        .map(word => word.trim())
+        .filter(Boolean)
+    );
+
+    const sources = [];
+
+    const rawService = getTemplateService(template);
+    if (rawService) {
+      sources.push(rawService, humanizeMetaLabel(rawService));
+    }
+
+    if (template?.title) sources.push(template.title);
+
+    const category = getCategory(template?.category);
+    if (category?.label) sources.push(category.label);
+
+    getTemplateSpecificKeywords(template).forEach(keyword => sources.push(keyword));
+
+    return sources.some(source => {
+      const normalizedSource = normalizeText(source);
+      if (!normalizedSource) return false;
+
+      // Coincidencia de frase completa: señal fuerte.
+      if (normalizedSource.length >= 4 && normalizedMessage.includes(normalizedSource)) {
+        return true;
+      }
+
+      // Coincidencia por palabra temática real, excluyendo palabras comerciales genéricas
+      // como precio, cita, información, promoción, etc.
+      return getAssociationWords(source).some(word => messageWords.has(word));
+    });
+  }
+
   function suggestTemplates(message, options) {
     const opts = options || {};
     const scope = opts.scope || state.selectedScope;
@@ -1103,6 +1166,7 @@
       if (scope && template.scope !== scope) return false;
       if (category && template.category !== category) return false;
       if (shouldExcludeAutomaticTemplateByIntent(template, message)) return false;
+      if (!hasStrongTemplateAssociation(template, message)) return false;
       return true;
     });
 
