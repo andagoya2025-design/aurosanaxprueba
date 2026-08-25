@@ -186,6 +186,7 @@
     .ac-crm-card[data-crm-mode="NEW"] #acPendientesDetalle,
     .ac-crm-card[data-crm-mode="FORM"] #acContactosDetalle,
     .ac-crm-card[data-crm-mode="FORM"] #acPendientesDetalle{display:none!important}
+    .ac-crm-card:not([data-crm-mode="FORM"]) #acHistorialComercial{display:none!important}
 
     @media (max-width:1180px){
       .ac-crm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1049,7 +1050,10 @@
         backendAvailable: false,
         initialized: false,
         activeContactKey: "",
-        crmMode: "FORM"
+        crmMode: "FORM",
+        interactionLock: false,
+        lastInteractionSignature: "",
+        lastInteractionAt: 0
       };
 
       var COMMERCIAL_STATES = [
@@ -1197,19 +1201,55 @@
           status("Contacto activo y guardado solo en este dispositivo; la sincronización remota no estuvo disponible.","warning"); return false;
         }
       }
+      function interactionSignature(snap,response){
+        return [
+          snap&&snap.contact_key||"",
+          state.stage||"ORIGINAL",
+          snap&&snap.canal||"GENERAL",
+          txt(response)
+        ].join("|");
+      }
+      function setInteractionButtonBusy(busy){
+        var b=el("acRegistrarInteraccion"); if(!b) return;
+        b.disabled=!!busy;
+        b.setAttribute("aria-busy",busy?"true":"false");
+      }
+
       async function registerInteraction(){
         var snap=contactSnapshot(); var response=txt(el("acRespuesta")&&el("acRespuesta").value);
         if(!snap.contact_key){ status("Identifica primero el contacto con nombre o teléfono.","warning"); return false; }
         if(!response){ status("No hay una respuesta visible para registrar como interacción.","warning"); return false; }
+
+        var signature=interactionSignature(snap,response);
+        var now=Date.now();
+        if(state.interactionLock){
+          status("La interacción se está registrando. Espera un momento.","neutral");
+          return false;
+        }
+        if(state.lastInteractionSignature===signature && (now-state.lastInteractionAt)<8000){
+          status("Esta misma interacción ya fue registrada hace unos segundos.","warning");
+          return false;
+        }
+
+        state.interactionLock=true;
+        setInteractionButtonBusy(true);
         persistLocalSnapshot(snap);
         var type=(state.stage==="SEGUIMIENTO"||state.stage==="RECONTACTO")?"SEGUIMIENTO":"MENSAJE";
         try{
           var r=await apiPost("AC_crearRegistro",buildPayload(type,snap,response));
           if(!r||r.success===false) throw new Error(r&&r.message||"No se pudo registrar");
           state.backendAvailable=true;setSync(true);setActiveContact(snap);
+          state.lastInteractionSignature=signature;
+          state.lastInteractionAt=Date.now();
           status("Interacción registrada · "+(snap.nombre||snap.telefono||"Prospecto")+" · "+(state.stage||"ORIGINAL")+" · "+(snap.canal||"GENERAL")+". El mensaje recibido no fue guardado.","success");
           await loadCommercialRecords(); renderActiveContact(); return true;
-        }catch(err){ status("La interacción quedó registrada localmente, pero no pudo sincronizarse con la base.","warning"); return false; }
+        }catch(err){
+          status("La interacción quedó registrada localmente, pero no pudo sincronizarse con la base.","warning");
+          return false;
+        }finally{
+          state.interactionLock=false;
+          setInteractionButtonBusy(false);
+        }
       }
       function renderHistory(c){
         var box=el("acHistorialComercial"),list=el("acHistorialLista");
@@ -1271,7 +1311,8 @@
         if(meta) meta.textContent=[c.servicio,c.canal,c.telefono].filter(Boolean).join(" · ");
         if(badge) badge.innerHTML='<i class="bi bi-person-check"></i> '+escapeHtml(c.estado_comercial||"ACTIVO");
         box.classList.add("is-active");
-        renderHistory(c);
+        if(state.crmMode==="FORM") renderHistory(c);
+        else renderHistory(null);
       }
       function setActiveContact(c){
         if(!c||!c.contact_key){ state.activeContactKey=""; renderActiveContact(); return; }
@@ -1312,6 +1353,11 @@
         if(el("acPendientesDetalle")) el("acPendientesDetalle").open=(mode==="PENDING");
 
         setCrmSheetTitle(mode);
+        if(mode==="FORM" && state.activeContactKey){
+          renderHistory(state.contacts[state.activeContactKey]);
+        }else{
+          renderHistory(null);
+        }
         /* PC y móvil usan el mismo estado de apertura.
            La diferencia entre dispositivos la resuelve únicamente el CSS responsive. */
         card.classList.add("is-open");
