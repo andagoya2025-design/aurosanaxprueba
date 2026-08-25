@@ -46,6 +46,17 @@
     .ac-crm-sync.is-remote{color:#166534}
     .ac-crm-sync.is-local{color:#92400e}
 
+    /* FASE 3.1 · HISTORIAL COMERCIAL ADITIVO
+       Solo lectura de state.remoteRecords. No modifica backend ni responsive existente. */
+    .ac-crm-history{margin-top:16px;padding-top:14px;border-top:1px solid var(--ac-line-soft)}
+    .ac-crm-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .ac-crm-history-head strong{color:var(--ac-title);font-size:13px;font-weight:950}
+    .ac-crm-history-head small{color:var(--ac-muted);font-size:10px;font-weight:750}
+    .ac-crm-history-list{display:grid;gap:8px}
+    .ac-crm-history-item{padding:11px 12px;border:1px solid var(--ac-line-soft);border-radius:14px;background:#fff}
+    .ac-crm-history-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--ac-primary-dark);font-size:10px;font-weight:900}
+    .ac-crm-history-response{margin-top:6px;color:#334155;font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
     .ac-crm-sheet-head{display:none}
@@ -743,6 +754,14 @@
             <span>Completa al menos nombre o teléfono. El guardado es siempre explícito.</span>
           </div>
 
+          <section class="ac-crm-history" id="acHistorialComercial" hidden aria-labelledby="acHistorialTitulo">
+            <div class="ac-crm-history-head">
+              <strong id="acHistorialTitulo"><i class="bi bi-clock-history"></i> Historial comercial</strong>
+              <small>Últimas 5 interacciones registradas</small>
+            </div>
+            <div class="ac-crm-history-list" id="acHistorialLista" aria-live="polite"></div>
+          </section>
+
           <details class="ac-crm-pending" id="acContactosDetalle">
             <summary>
               <span><i class="bi bi-people"></i> Contactos guardados</span>
@@ -1192,11 +1211,59 @@
           await loadCommercialRecords(); renderActiveContact(); return true;
         }catch(err){ status("La interacción quedó registrada localmente, pero no pudo sincronizarse con la base.","warning"); return false; }
       }
+      function renderHistory(c){
+        var box=el("acHistorialComercial"),list=el("acHistorialLista");
+        if(!box||!list) return;
+        list.innerHTML="";
+        if(!c||!c.contact_key){ box.hidden=true; return; }
+
+        var rows=(state.remoteRecords||[]).filter(function(row){
+          if(!row) return false;
+          var type=String(row.TIPO_REGISTRO||"").toUpperCase();
+          if(type!=="MENSAJE"&&type!=="SEGUIMIENTO") return false;
+          var ctx=row.CONTEXTO&&typeof row.CONTEXTO==="object"?row.CONTEXTO:safeJson(row.CONTEXTO_JSON||"{}",{});
+          return !!(ctx&&ctx.contact_key===c.contact_key);
+        }).sort(function(a,b){
+          var ad=String(a.FECHA_ACTUALIZACION||a.FECHA_CREACION||"");
+          var bd=String(b.FECHA_ACTUALIZACION||b.FECHA_CREACION||"");
+          return bd.localeCompare(ad);
+        }).slice(0,5);
+
+        box.hidden=false;
+        if(!rows.length){
+          list.innerHTML='<div class="ac-crm-empty">Todavía no hay interacciones registradas para este contacto.</div>';
+          return;
+        }
+
+        rows.forEach(function(row){
+          var meta=row.META&&typeof row.META==="object"?row.META:safeJson(row.META_JSON||"{}",{});
+          var stamp=String(row.FECHA_ACTUALIZACION||row.FECHA_CREACION||"");
+          var dateText="";
+          if(stamp){
+            var d=new Date(stamp);
+            if(!isNaN(d.getTime())) dateText=formatDate(d);
+          }
+          var stage=txt(meta.etapa_mensaje)||String(row.TIPO_REGISTRO||"");
+          var channel=txt(meta.canal);
+          var item=document.createElement("article");
+          item.className="ac-crm-history-item";
+          item.innerHTML=
+            '<div class="ac-crm-history-meta">'+
+              '<span>'+escapeHtml(dateText||"Sin fecha")+'</span>'+
+              '<span>·</span><span>'+escapeHtml(stage||"Interacción")+'</span>'+
+              (channel?'<span>·</span><span>'+escapeHtml(channel)+'</span>':"")+
+            '</div>'+
+            '<div class="ac-crm-history-response">'+escapeHtml(row.RESPUESTA||"")+'</div>';
+          list.appendChild(item);
+        });
+      }
+
       function renderActiveContact(){
         var box=el("acContactoActivo"); if(!box) return;
         var c=state.activeContactKey&&state.contacts[state.activeContactKey];
         if(!c){
           box.classList.remove("is-active");
+          renderHistory(null);
           return;
         }
         var name=el("acContactoActivoNombre"),meta=el("acContactoActivoMeta"),badge=el("acContactoActivoEstado");
@@ -1204,6 +1271,7 @@
         if(meta) meta.textContent=[c.servicio,c.canal,c.telefono].filter(Boolean).join(" · ");
         if(badge) badge.innerHTML='<i class="bi bi-person-check"></i> '+escapeHtml(c.estado_comercial||"ACTIVO");
         box.classList.add("is-active");
+        renderHistory(c);
       }
       function setActiveContact(c){
         if(!c||!c.contact_key){ state.activeContactKey=""; renderActiveContact(); return; }
