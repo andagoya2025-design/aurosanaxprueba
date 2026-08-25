@@ -137,6 +137,20 @@ function auroPlanTextoClinicoAJSON(valor){
     return lista.length ? JSON.stringify(lista) : '';
 }
 
+/* ============================================================
+   AUROSANAX PLAN 29 - FECHA CLÍNICA LOCAL SEGURA
+   - Usa fecha local del navegador, no UTC.
+   - Formato estable para fecha_plan: YYYY-MM-DD.
+   - No modifica creado_en ni actualizado_en.
+============================================================ */
+function auroPlanFechaClinicaLocal(){
+    const ahora = new Date();
+    const y = ahora.getFullYear();
+    const m = String(ahora.getMonth() + 1).padStart(2, '0');
+    const d = String(ahora.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
 
 /* ============================================================
    UX CLÍNICA SEGURA PARA MEDICAMENTOS
@@ -3493,10 +3507,12 @@ function auroPlanPrepararDatosSheets(){
             String(contexto?.id_cita || '').trim(),
 
         fecha_plan:
-            new Date().toISOString(),
+            auroPlanFechaClinicaLocal(),
 
         plan_terapeutico:
-            auroPlanGetValue('hcPlanTratamiento'),
+            auroPlanTextoClinicoAJSON(
+                auroPlanGetValue('hcPlanTratamiento')
+            ),
 
         medicamentos_plan:
             JSON.stringify(window.medicamentosPlanSeleccionados || []),
@@ -3865,7 +3881,9 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
     auroPlanRestaurarFormularioInterconsultaDesdeLista();
 
     auroPlanSetValue('hcPlanTratamiento',
-        valorPlan('plan_terapeutico','planTratamiento','plan_tratamiento')
+        auroPlanValorClinicoATexto(
+            valorPlan('plan_terapeutico','planTratamiento','plan_tratamiento')
+        )
     );
 
     auroPlanSetValue('hcRecetaMedicamentos',
