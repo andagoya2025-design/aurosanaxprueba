@@ -177,7 +177,13 @@
     const original=window.showScreen;
     window.showScreen=function(nombre){
       const resultado=original.apply(this,arguments);
-      try{ gestionarTituloGlobalPreatencion(String(nombre||'')==='preatencion'); }catch(_e){}
+      const esPreatencion=String(nombre||'')==='preatencion';
+      try{ gestionarTituloGlobalPreatencion(esPreatencion); }catch(_e){}
+      if(esPreatencion && document.getElementById('preatencion')){
+        refrescarFuentesAlEntrarPreatencion_().catch(error=>{
+          console.warn('AUROSANAX PREATENCIÓN: no se pudo sincronizar al entrar al módulo.',error);
+        });
+      }
       return resultado;
     };
     window.__auroPreShowScreenEnvuelto=true;
@@ -317,7 +323,10 @@
       const d=ev?.detail||{};
       if(!d.id_cita||!d.id_paciente)return;
       try{
-        await cargarTodo();
+        const sincronizado=await refrescarPacienteYCitasDespuesDeVincular_();
+        if(!sincronizado){
+          await cargarTodo();
+        }
         await seleccionarDesdeSala(d.id_paciente,d.id_cita);
       }catch(error){
         console.warn('AUROSANAX PREATENCIÓN: no se pudo refrescar después de crear paciente.',error);
@@ -412,6 +421,87 @@
 
   function calcIMC(){ const p=parseFloat(numero(val('prePeso'))),t=parseFloat(numero(val('preTalla')));set('preIMC',p>0&&t>0?(p/((t/100)*(t/100))).toFixed(1):''); }
   function limpiarClinico(){ ['prePeso','preTalla','preIMC','prePAS','prePAD','preFC','preFR','preTemp','preSat','preCadera','preGrasa','preMasa','preCefalico','preToracico','preAbdominal','preAntecedentesTexto'].forEach(id=>set(id,'')); }
+
+  let sincronizacionEntradaPromise=null;
+
+  async function refrescarFuentesAlEntrarPreatencion_(){
+    /*
+      SINCRONIZACIÓN QUIRÚRGICA ENTRE SESIONES:
+      - Se ejecuta únicamente al entrar/reingresar a Preatención.
+      - Refresca pacientes, citas y preatenciones en paralelo.
+      - Si una fuente falla, conserva el último caché válido de esa fuente.
+      - No limpia signos vitales ni modifica selección, permisos, auditoría o IDs.
+    */
+    if(sincronizacionEntradaPromise) return sincronizacionEntradaPromise;
+
+    sincronizacionEntradaPromise=(async()=>{
+      const [rp,rc,rr]=await Promise.allSettled([
+        get('listarPacientes'),
+        get('listarCitas'),
+        get('listarPreatenciones')
+      ]);
+
+      if(rp.status==='fulfilled'){
+        pacientesCache=extraerLista(rp.value);
+      }else{
+        console.warn('AUROSANAX PREATENCIÓN: pacientes no disponibles durante sincronización de entrada.',rp.reason);
+      }
+
+      if(rc.status==='fulfilled'){
+        citasCache=extraerLista(rc.value);
+      }else{
+        console.warn('AUROSANAX PREATENCIÓN: citas no disponibles durante sincronización de entrada.',rc.reason);
+      }
+
+      if(rr.status==='fulfilled'){
+        preatencionesCache=extraerLista(rr.value);
+      }else{
+        console.warn('AUROSANAX PREATENCIÓN: preatenciones no disponibles durante sincronización de entrada.',rr.reason);
+      }
+
+      renderResultadosPacientes();
+      renderSala();
+      actualizarAccionesPaciente();
+
+      if(val('prePaciente')){
+        await cargarCitasPaciente(val('preCita'));
+      }else{
+        actualizarContexto();
+      }
+    })();
+
+    try{
+      await sincronizacionEntradaPromise;
+    }finally{
+      sincronizacionEntradaPromise=null;
+    }
+  }
+
+  async function refrescarPacienteYCitasDespuesDeVincular_(){
+    /*
+      REGRESO DESDE CREACIÓN/VINCULACIÓN:
+      - Pacientes y citas sí cambiaron; Preatenciones no.
+      - Lee ambas fuentes una sola vez y en paralelo.
+      - Devuelve false si alguna fuente falla para activar el respaldo cargarTodo().
+    */
+    const [rp,rc]=await Promise.allSettled([
+      get('listarPacientes'),
+      get('listarCitas')
+    ]);
+
+    if(rp.status!=='fulfilled' || rc.status!=='fulfilled'){
+      if(rp.status!=='fulfilled') console.warn('AUROSANAX PREATENCIÓN: no se pudieron refrescar pacientes después de vincular.',rp.reason);
+      if(rc.status!=='fulfilled') console.warn('AUROSANAX PREATENCIÓN: no se pudieron refrescar citas después de vincular.',rc.reason);
+      return false;
+    }
+
+    pacientesCache=extraerLista(rp.value);
+    citasCache=extraerLista(rc.value);
+    renderResultadosPacientes();
+    renderSala();
+    actualizarAccionesPaciente();
+    return true;
+  }
 
   async function cargarTodo(){
     /*
