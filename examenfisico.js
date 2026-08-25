@@ -882,6 +882,41 @@ function buscarDiagnosticoCie10(){
 }
 function agregarDiagnosticoCie10DesdeResultado(index){const d=hcDxResultadosActuales[index];if(d)agregarDiagnosticoCie10(d.codigo,d.nombre);}
 function agregarDiagnosticoCie10Manual(){const codigo=getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');const nombre=getValueIfExists('hcDxNombreBuscar').trim();if(!codigo||!nombre){alert('Ingrese código CIE-10 y nombre de diagnóstico, o seleccione un resultado de la búsqueda.');return;}agregarDiagnosticoCie10(codigo,nombre);}
+
+/* ==========================================================
+   AUROSANAX DX - LIMPIEZA QUIRÚRGICA DEL BUSCADOR CIE-10
+   ----------------------------------------------------------
+   Alcance EXCLUSIVAMENTE visual:
+   - Vacía código y nombre de búsqueda.
+   - Vacía resultados temporales y muestra "Sin Registros".
+   - Opcionalmente devuelve el foco al nombre del diagnóstico.
+   - NO modifica hcDiagnosticosSeleccionados.
+   - NO guarda, elimina ni altera datos clínicos persistidos.
+   ========================================================== */
+function auroLimpiarBusquedaDiagnosticoCie10(enfocarNombre){
+  const codigo = document.getElementById('hcDxCodigoBuscar');
+  const nombre = document.getElementById('hcDxNombreBuscar');
+  const body = document.getElementById('hcDxResultadosBody');
+
+  if(codigo) codigo.value = '';
+  if(nombre) nombre.value = '';
+
+  window.hcDxResultadosActuales = [];
+  try{ hcDxResultadosActuales = window.hcDxResultadosActuales; }catch(_e){}
+
+  if(body){
+    body.innerHTML = '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
+  }
+
+  if(enfocarNombre !== false && nombre && !nombre.disabled){
+    try{ nombre.focus({preventScroll:true}); }
+    catch(_e){ try{ nombre.focus(); }catch(__e){} }
+  }
+
+  return true;
+}
+window.auroLimpiarBusquedaDiagnosticoCie10 = auroLimpiarBusquedaDiagnosticoCie10;
+
 function agregarDiagnosticoCie10(codigo,nombre){
   codigo = String(codigo || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   nombre = String(nombre || '').trim();
@@ -902,6 +937,12 @@ function agregarDiagnosticoCie10(codigo,nombre){
 
   renderDiagnosticosSeleccionados();
   sincronizarDiagnosticosConCamposHistoria();
+
+  /*
+    Limpieza visual posterior a una adición realmente exitosa.
+    El diagnóstico recién agregado permanece en hcDiagnosticosSeleccionados.
+  */
+  auroLimpiarBusquedaDiagnosticoCie10(true);
 
   /* ======================================================
      AUROSANAX - CONEXIÓN SEGURA CIE-10 INTELIGENTE
@@ -3387,13 +3428,25 @@ async function auroGuardarDiagnosticosAtencionActual(){
       if(window.recetaDiagnosticosPorAtencionCache) delete window.recetaDiagnosticosPorAtencionCache[idAtencion];
     }catch(e){}
 
+    let visorRefrescado = false;
     try{
-      if(window.auroDiagnosticos && typeof window.auroDiagnosticos.cargar === 'function') await Promise.resolve(window.auroDiagnosticos.cargar(idAtencion, true));
+      if(window.auroDiagnosticos && typeof window.auroDiagnosticos.cargar === 'function'){
+        await Promise.resolve(window.auroDiagnosticos.cargar(idAtencion, true));
+        visorRefrescado = true;
+      }
     }catch(e){
       console.warn('AUROSANAX DIAGNÓSTICOS: guardado confirmado, pero no se pudo refrescar el visor.', e);
     }
 
-    return {success:true,sin_cambios:false,id_atencion:idAtencion,id_examen:idExamen,diagnosticos:Number(resultado.total_guardados ?? diagnosticos.length),data:resultado};
+    return {
+      success:true,
+      sin_cambios:false,
+      visor_refrescado:visorRefrescado,
+      id_atencion:idAtencion,
+      id_examen:idExamen,
+      diagnosticos:Number(resultado.total_guardados ?? diagnosticos.length),
+      data:resultado
+    };
   }catch(error){
     console.error('AUROSANAX DIAGNÓSTICOS: error guardando directamente por atención.', error);
     return {success:false,message:error?.message || String(error)};
