@@ -3389,6 +3389,7 @@
     state.pastedMessage = asString(event.target.value);
 
     // Cada mensaje nuevo invalida selección/sugerencia anterior.
+    // La interpretación queda bajo control explícito del botón "Analizar".
     state.suggestions = [];
     state.selectedTemplateId = null;
     state.renderedResponse = "";
@@ -3401,7 +3402,20 @@
       syncCategoryUI();
     }
 
-    scheduleAnalysis(false);
+    // Cancela cualquier análisis pendiente anterior mientras el usuario
+    // escribe, pega o dicta. No cambia de pantalla ni selecciona plantillas.
+    if (state.inputTimer) {
+      clearTimeout(state.inputTimer);
+      state.inputTimer = null;
+    }
+    state.analysisSeq += 1;
+
+    showStatus(
+      state.pastedMessage.trim()
+        ? "Mensaje listo. Pulsa Analizar cuando termines de escribir o dictar."
+        : (CONFIG.ui?.emptyMessage || ""),
+      "neutral"
+    );
   }
 
   function handleSearchInput(event) {
