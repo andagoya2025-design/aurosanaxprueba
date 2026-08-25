@@ -174,6 +174,15 @@
     .ac-pending-wa.is-closed{color:#991b1b}
     .ac-pending-wa.is-empty{color:#64748b}
     .ac-pending-wa i{font-size:10px}
+    .ac-pending-priority{
+      display:inline-flex;align-items:center;justify-content:center;min-height:22px;
+      padding:3px 8px;border-radius:999px;background:#fff7ed;color:#9a3412;
+      border:1px solid #fed7aa;font-size:9px;font-weight:950;letter-spacing:.045em;
+      text-transform:uppercase;white-space:nowrap;margin-top:6px
+    }
+    .ac-crm-item.is-wa-priority{
+      border-color:#fed7aa;background:#fffaf5;box-shadow:0 0 0 1px rgba(234,88,12,.05)
+    }
 
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
@@ -1713,7 +1722,12 @@
         else if(info.className==="is-warning") label="WhatsApp: por vencer";
         else if(info.className==="is-closed") label="WhatsApp: vencida";
         else label="WhatsApp: sin dato";
-        return {label:label,className:info.className};
+        return {
+          label:label,
+          className:info.className,
+          priority:info.className==="is-warning"?0:1,
+          urgent:info.className==="is-warning"
+        };
       }
 
       function pendingTemporalInfo(date,nowMs){
@@ -1776,6 +1790,17 @@
         var arr=!q?all:all.filter(function(c){
           return normalizeCrmSearch([c.nombre,c.telefono,c.servicio,c.estado_comercial,c.canal].filter(Boolean).join(" ")).includes(q);
         });
+
+        /* FASE 11C · PRIORIDAD VISUAL WHATSAPP
+           Solo "por vencer" sube primero; el resto conserva su orden cronológico. */
+        arr=arr.map(function(c,index){
+          var wa=pendingWhatsappSummary(c,now);
+          return {contact:c,index:index,priority:wa?wa.priority:1};
+        }).sort(function(a,b){
+          if(a.priority!==b.priority) return a.priority-b.priority;
+          return a.index-b.index;
+        }).map(function(x){return x.contact;});
+
         count.textContent=q?(String(arr.length)+"/"+String(all.length)):String(all.length);
         list.innerHTML="";
         if(!all.length){list.innerHTML='<div class="ac-crm-empty">No hay seguimientos pendientes guardados.</div>';return;}
@@ -1784,10 +1809,11 @@
           var d=new Date(c.proximo_seguimiento);
           var temporal=pendingTemporalInfo(d,now);
           var wa=pendingWhatsappSummary(c,now);
-          var item=document.createElement("button"); item.type="button"; item.className="ac-crm-item"; item.dataset.contactKey=c.contact_key;
+          var item=document.createElement("button"); item.type="button"; item.className="ac-crm-item"+(wa&&wa.urgent?" is-wa-priority":""); item.dataset.contactKey=c.contact_key;
           item.innerHTML=
             '<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong>'+
               '<small>'+escapeHtml([c.servicio,c.estado_comercial].filter(Boolean).join(" · "))+'</small>'+
+              (wa&&wa.urgent?'<span class="ac-pending-priority"><i class="bi bi-exclamation-triangle"></i>&nbsp;Prioridad WhatsApp</span>':"")+
             '</span>'+
             '<span class="ac-pending-time">'+
               '<span class="ac-pending-badge '+escapeHtml(temporal.className)+'">'+escapeHtml(temporal.label)+'</span>'+
