@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.7.4 NÚCLEO SEMÁNTICO COMERCIAL ANTIRREGRESIVO
+ * Versión: 1.7.5 NÚCLEO SEMÁNTICO COMERCIAL ANTIRREGRESIVO
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -216,7 +216,7 @@
 
 
   /* ==========================================================
-   * NÚCLEO SEMÁNTICO COMERCIAL — V1.7.4
+   * NÚCLEO SEMÁNTICO COMERCIAL — V1.7.5
    * Unifica servicio/tema, categoría e intención sin alterar UI,
    * persistencia, listeners ni selección manual de plantillas.
    * ========================================================== */
@@ -1110,14 +1110,36 @@
       );
   }
 
-  function hasStrongTemplateAssociation(template, message) {
-    // Barrera genérica: la intención comercial por sí sola NO basta.
-    // La relación debe surgir de datos reales de la plantilla:
-    // servicio, título, categoría o keywords propias.
-    if (state.categoryMode !== "AUTO") return true;
+  function getTemplateAssociationSources(template) {
+    const sources = [];
 
+    const rawService = getTemplateService(template);
+    if (rawService && !isGenericServiceValue(rawService)) {
+      sources.push({ value: rawService, weight: 5.0 });
+      sources.push({ value: humanizeMetaLabel(rawService), weight: 5.0 });
+    }
+
+    if (template?.title) {
+      sources.push({ value: template.title, weight: 3.2 });
+    }
+
+    const category = getCategory(template?.category);
+    if (category?.label && !isGenericCategoryValue(template?.category)) {
+      sources.push({ value: category.label, weight: 2.0 });
+    }
+
+    getTemplateSpecificKeywords(template).forEach(keyword => {
+      if (!isGenericCommercialKeyword(keyword)) {
+        sources.push({ value: keyword, weight: 3.6 });
+      }
+    });
+
+    return sources;
+  }
+
+  function scoreTemplateTopicAssociation(template, message) {
     const normalizedMessage = normalizeText(message);
-    if (!normalizedMessage) return true;
+    if (!normalizedMessage) return 0;
 
     const messageWords = new Set(
       normalizedMessage
@@ -1127,33 +1149,114 @@
         .filter(Boolean)
     );
 
-    const sources = [];
+    let best = 0;
 
-    const rawService = getTemplateService(template);
-    if (rawService) {
-      sources.push(rawService, humanizeMetaLabel(rawService));
-    }
+    getTemplateAssociationSources(template).forEach(source => {
+      const normalizedSource = normalizeText(source.value);
+      if (!normalizedSource) return;
 
-    if (template?.title) sources.push(template.title);
+      let score = 0;
 
-    const category = getCategory(template?.category);
-    if (category?.label) sources.push(category.label);
-
-    getTemplateSpecificKeywords(template).forEach(keyword => sources.push(keyword));
-
-    return sources.some(source => {
-      const normalizedSource = normalizeText(source);
-      if (!normalizedSource) return false;
-
-      // Coincidencia de frase completa: señal fuerte.
+      // Frase completa: señal temática muy fuerte.
       if (normalizedSource.length >= 4 && normalizedMessage.includes(normalizedSource)) {
-        return true;
+        const words = getAssociationWords(source.value).length;
+        score = source.weight * (words >= 2 ? 12 : 9);
+      } else {
+        const sourceWords = getAssociationWords(source.value);
+        if (!sourceWords.length) return;
+
+        const matched = sourceWords.filter(word => messageWords.has(word));
+        if (!matched.length) return;
+
+        const ratio = matched.length / sourceWords.length;
+        const longest = Math.max(...matched.map(word => word.length));
+
+        score =
+          source.weight *
+          (matched.length * 4.5) *
+          Math.max(ratio, 0.5) *
+          (longest >= 8 ? 1.35 : longest >= 5 ? 1.15 : 1);
       }
 
-      // Coincidencia por palabra temática real, excluyendo palabras comerciales genéricas
-      // como precio, cita, información, promoción, etc.
-      return getAssociationWords(source).some(word => messageWords.has(word));
+      best = Math.max(best, score);
     });
+
+    return Math.round(best * 100) / 100;
+  }
+
+  function isGenericIntentOnlyMessage(message) {
+    const normalizedMessage = normalizeText(message);
+    if (!normalizedMessage) return false;
+
+    const intent = detectSemanticIntent(normalizedMessage);
+    if (!intent.id) return false;
+
+    const genericIntentIds = new Set([
+      "AGENDAR",
+      "DIRECCION",
+      "HORARIO_ATENCION",
+      "CONFIRMAR",
+      "REPROGRAMAR",
+      "RECORDATORIO"
+    ]);
+
+    if (!genericIntentIds.has(intent.id)) return false;
+
+    // Si el mensaje contiene palabras temáticas que pertenecen a cualquier plantilla,
+    // deja de ser una consulta genérica pura y debe resolverse por tema.
+    const thematicWords = new Set();
+
+    (state.activeTemplates || []).forEach(template => {
+      getTemplateAssociationSources(template).forEach(source => {
+        getAssociationWords(source.value).forEach(word => thematicWords.add(word));
+      });
+    });
+
+    const messageWords = normalizedMessage
+      .replace(/[^a-z0-9áéíóúñü$ ]/gi, " ")
+      .split(/\s+/)
+      .map(word => word.trim())
+      .filter(Boolean);
+
+    return !messageWords.some(word => thematicWords.has(word));
+  }
+
+  function getTopicFilteredCandidates(candidates, message) {
+    if (state.categoryMode !== "AUTO") return candidates;
+
+    const normalizedMessage = normalizeText(message);
+    if (!normalizedMessage) return candidates;
+
+    const scored = candidates.map(template => ({
+      template,
+      topicScore: scoreTemplateTopicAssociation(template, normalizedMessage)
+    }));
+
+    const bestTopicScore = scored.reduce(
+      (max, item) => Math.max(max, item.topicScore),
+      0
+    );
+
+    // Consulta genérica pura (p.ej. "quiero una cita"):
+    // se permite que la intención resuelva sin servicio concreto.
+    if (isGenericIntentOnlyMessage(normalizedMessage)) {
+      return candidates;
+    }
+
+    // Sin una relación temática suficiente: no sugerir automáticamente.
+    // 18 es deliberadamente conservador y exige una coincidencia temática real.
+    const MIN_TOPIC_SCORE = 18;
+    if (bestTopicScore < MIN_TOPIC_SCORE) {
+      return [];
+    }
+
+    // Una vez identificado el tema, solo compiten plantillas cercanas al mejor tema.
+    // Esto evita que "Precio" o "Información" arrastren plantillas de otro servicio.
+    const relativeFloor = Math.max(MIN_TOPIC_SCORE, bestTopicScore * 0.68);
+
+    return scored
+      .filter(item => item.topicScore >= relativeFloor)
+      .map(item => item.template);
   }
 
   function suggestTemplates(message, options) {
@@ -1165,10 +1268,17 @@
     let candidates = state.activeTemplates.filter(template => {
       if (scope && template.scope !== scope) return false;
       if (category && template.category !== category) return false;
-      if (shouldExcludeAutomaticTemplateByIntent(template, message)) return false;
-      if (!hasStrongTemplateAssociation(template, message)) return false;
       return true;
     });
+
+    // FASE 1.7.5: primero se resuelve el tema con datos reales de plantillas.
+    // Solo después se aplican intención y scoring histórico.
+    candidates = getTopicFilteredCandidates(candidates, message);
+
+    // Protección de intención Precio ya validada en V1.7.3.
+    candidates = candidates.filter(template =>
+      !shouldExcludeAutomaticTemplateByIntent(template, message)
+    );
 
     const scored = candidates.map(template => ({
       template,
