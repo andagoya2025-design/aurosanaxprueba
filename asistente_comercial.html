@@ -151,6 +151,18 @@
       white-space:nowrap
     }
 
+    /* FASE 3.5 · WHATSAPP 24H MANUAL */
+    .ac-wa-window{display:none;margin-top:12px;padding:11px 12px;border:1px solid var(--ac-line-soft);border-radius:14px;background:#f8fafc}
+    .ac-wa-window.is-visible{display:block}
+    .ac-wa-window-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .ac-wa-window-title{display:flex;align-items:center;gap:7px;color:var(--ac-title);font-size:12px;font-weight:950}
+    .ac-wa-window-badge{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:950;letter-spacing:.045em;text-transform:uppercase;white-space:nowrap}
+    .ac-wa-window-badge.is-open{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+    .ac-wa-window-badge.is-warning{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+    .ac-wa-window-badge.is-closed{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+    .ac-wa-window-badge.is-empty{background:#f8fafc;color:#64748b;border:1px solid #e2e8f0}
+    .ac-wa-window-detail{margin-top:6px;color:var(--ac-muted);font-size:10px;font-weight:750;line-height:1.35}
+
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
     .ac-crm-sheet-head{display:none}
@@ -843,6 +855,20 @@
             </label>
           </div>
 
+          <div class="ac-crm-grid-secondary">
+            <label>
+              <span class="ac-label">Último mensaje del cliente</span>
+              <input id="acContactoUltimoMensajeCliente" class="ac-field" type="datetime-local">
+            </label>
+            <div class="ac-wa-window" id="acWhatsappWindow" aria-live="polite">
+              <div class="ac-wa-window-head">
+                <span class="ac-wa-window-title"><i class="bi bi-whatsapp"></i> Ventana WhatsApp 24 h</span>
+                <span class="ac-wa-window-badge is-empty" id="acWhatsappWindowBadge">Sin dato</span>
+              </div>
+              <div class="ac-wa-window-detail" id="acWhatsappWindowDetail">Registra cuándo escribió el cliente para calcular la ventana.</div>
+            </div>
+          </div>
+
           <label class="ac-crm-form-note" style="display:block;margin-top:12px">
             <span class="ac-label">Observación breve <small>— solo comercial</small></span>
             <textarea id="acContactoObservacion" class="ac-textarea ac-crm-note" rows="3" maxlength="500" placeholder="Ej. Consultó precio; prefiere escribir en la tarde. No guardar información clínica sensible."></textarea>
@@ -1237,6 +1263,7 @@
           servicio: currentService(),
           categoria: currentCategory(),
           proximo_seguimiento: txt(el("acContactoProximo")&&el("acContactoProximo").value),
+          ultimo_mensaje_cliente: txt(el("acContactoUltimoMensajeCliente")&&el("acContactoUltimoMensajeCliente").value),
           observacion: txt(el("acContactoObservacion")&&el("acContactoObservacion").value),
           ultima_plantilla_id: (selectedTemplate()&&selectedTemplate().id)||"",
           ultima_interaccion: isoLocal(new Date()),
@@ -1457,11 +1484,12 @@
         renderActiveContact();
       }
       function clearContact(){
-        ["acContactoNombre","acContactoTelefono","acContactoServicio","acContactoProximo","acContactoObservacion"].forEach(function(id){var n=el(id);if(n)n.value="";});
+        ["acContactoNombre","acContactoTelefono","acContactoServicio","acContactoProximo","acContactoUltimoMensajeCliente","acContactoObservacion"].forEach(function(id){var n=el(id);if(n)n.value="";});
         if(el("acContactoEstado")) el("acContactoEstado").value="NUEVO";
         if(el("acContactoCanal")) el("acContactoCanal").value="WHATSAPP";
         state.activeContactKey="";
         renderActiveContact();
+        renderWhatsappWindow();
         status("Nuevo contacto listo. No se ha guardado nada.","neutral");
       }
 
@@ -1490,7 +1518,7 @@
         if(cancelBtn) cancelBtn.hidden=!editing;
 
         ["acContactoNombre","acContactoTelefono","acContactoCanal","acContactoEstado",
-         "acContactoServicio","acContactoProximo","acContactoObservacion"].forEach(function(id){
+         "acContactoServicio","acContactoProximo","acContactoUltimoMensajeCliente","acContactoObservacion"].forEach(function(id){
           var n=el(id); if(n) n.tabIndex=editing?0:-1;
         });
       }
@@ -1503,6 +1531,7 @@
           estado:el("acContactoEstado")?el("acContactoEstado").value:"",
           servicio:el("acContactoServicio")?el("acContactoServicio").value:"",
           proximo:el("acContactoProximo")?el("acContactoProximo").value:"",
+          ultimo_mensaje_cliente:el("acContactoUltimoMensajeCliente")?el("acContactoUltimoMensajeCliente").value:"",
           observacion:el("acContactoObservacion")?el("acContactoObservacion").value:""
         };
       }
@@ -1515,7 +1544,9 @@
         if(el("acContactoEstado")) el("acContactoEstado").value=b.estado||"NUEVO";
         if(el("acContactoServicio")) el("acContactoServicio").value=b.servicio||"";
         if(el("acContactoProximo")) el("acContactoProximo").value=b.proximo||"";
+        if(el("acContactoUltimoMensajeCliente")) el("acContactoUltimoMensajeCliente").value=b.ultimo_mensaje_cliente||"";
         if(el("acContactoObservacion")) el("acContactoObservacion").value=b.observacion||"";
+        renderWhatsappWindow();
       }
       function openCrmPanel(mode){
         var card=el("acContactoCard"); if(!card) return;
@@ -1569,7 +1600,9 @@
         if(el("acContactoEstado")) el("acContactoEstado").value=c.estado_comercial||"NUEVO";
         if(el("acContactoServicio")) el("acContactoServicio").value=c.servicio||"";
         if(el("acContactoProximo")) el("acContactoProximo").value=(c.proximo_seguimiento||"").slice(0,16);
+        if(el("acContactoUltimoMensajeCliente")) el("acContactoUltimoMensajeCliente").value=(c.ultimo_mensaje_cliente||"").slice(0,16);
         if(el("acContactoObservacion")) el("acContactoObservacion").value=c.observacion||"";
+        renderWhatsappWindow();
         setActiveContact(c);
         state.crmMode="FORM";
         if(el("acContactoCard")) el("acContactoCard").dataset.crmMode="FORM";
@@ -1629,6 +1662,33 @@
           });
           list.appendChild(item);
         });
+      }
+
+      function whatsappWindowInfo(value,nowMs){
+        var d=value instanceof Date?value:new Date(value);
+        var now=new Date(typeof nowMs==="number"?nowMs:Date.now());
+        if(isNaN(d.getTime())) return {label:"Sin dato",detail:"Registra cuándo escribió el cliente para calcular la ventana.",className:"is-empty"};
+        var end=new Date(d.getTime()+24*60*60*1000);
+        var remaining=end.getTime()-now.getTime();
+        if(remaining<=0) return {label:"Vencida",detail:"La ventana de 24 h terminó el "+formatDate(end)+".",className:"is-closed"};
+        var totalMinutes=Math.max(0,Math.floor(remaining/60000));
+        var h=Math.floor(totalMinutes/60),m=totalMinutes%60;
+        var detail="Quedan "+h+" h "+m+" min · vence "+formatDate(end)+".";
+        if(remaining<=3*60*60*1000) return {label:"Por vencer",detail:detail,className:"is-warning"};
+        return {label:"Abierta",detail:detail,className:"is-open"};
+      }
+      function renderWhatsappWindow(){
+        var box=el("acWhatsappWindow"),badge=el("acWhatsappWindowBadge"),detail=el("acWhatsappWindowDetail");
+        if(!box||!badge||!detail) return;
+        var channel=String(el("acContactoCanal")&&el("acContactoCanal").value||"GENERAL").toUpperCase();
+        var isWa=channel==="WHATSAPP";
+        box.classList.toggle("is-visible",isWa);
+        if(!isWa) return;
+        var value=el("acContactoUltimoMensajeCliente")?el("acContactoUltimoMensajeCliente").value:"";
+        var info=whatsappWindowInfo(value,Date.now());
+        badge.className="ac-wa-window-badge "+info.className;
+        badge.textContent=info.label;
+        detail.textContent=info.detail;
       }
 
       function pendingTemporalInfo(date,nowMs){
@@ -1786,6 +1846,8 @@
 
         b=el("acContactosBuscar");if(b)b.addEventListener("input",renderContacts);
         b=el("acPendientesBuscar");if(b)b.addEventListener("input",renderPending);
+        b=el("acContactoCanal");if(b)b.addEventListener("change",renderWhatsappWindow);
+        b=el("acContactoUltimoMensajeCliente");if(b)b.addEventListener("input",renderWhatsappWindow);
 
         b=el("acEditarContacto");if(b)b.addEventListener("click",function(){
           if(!state.activeContactKey) return;
