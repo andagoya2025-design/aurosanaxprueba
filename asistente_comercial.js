@@ -1079,6 +1079,20 @@
     };
   }
 
+  function shouldExcludeAutomaticTemplateByIntent(template, message) {
+    // Protección comercial: una plantilla de Precio no debe sugerirse
+    // automáticamente si el cliente no expresó intención de precio.
+    // Solo afecta AUTO; la biblioteca y selección manual permanecen intactas.
+    if (state.categoryMode !== "AUTO") return false;
+    if (!normalizeText(message)) return false;
+
+    const templateType = getTemplateType(template);
+    if (templateType !== "PRECIO") return false;
+
+    const messageIntent = detectSemanticIntent(message);
+    return messageIntent.id !== "PRECIO";
+  }
+
   function suggestTemplates(message, options) {
     const opts = options || {};
     const scope = opts.scope || state.selectedScope;
@@ -1088,6 +1102,7 @@
     let candidates = state.activeTemplates.filter(template => {
       if (scope && template.scope !== scope) return false;
       if (category && template.category !== category) return false;
+      if (shouldExcludeAutomaticTemplateByIntent(template, message)) return false;
       return true;
     });
 
