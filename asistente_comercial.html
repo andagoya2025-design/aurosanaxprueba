@@ -500,6 +500,100 @@
         to{transform:scale(1);opacity:1}
       }
     }
+    /* =========================================================
+       PREMIUM VISUAL MÓVIL · 2026-08-25
+       Solo presentación del Quick Sheet.
+       No altera contenido, eventos, motor semántico ni responsive de PC.
+       ========================================================= */
+    @media (max-width:760px){
+      /* Ritmo y simetría del modal completo */
+      .ac-quick-sheet{
+        gap:10px!important;
+        padding:12px!important
+      }
+
+      /* 1. Cabecera: deja de verse como rectángulo suelto */
+      .ac-quick-sheet-head{
+        position:relative!important;
+        top:auto!important;
+        margin:0!important;
+        padding:13px 14px!important;
+        border:1px solid rgba(196,65,132,.20)!important;
+        border-radius:20px!important;
+        background:linear-gradient(135deg,#ffffff 0%,#fff6fb 100%)!important;
+        box-shadow:0 9px 24px rgba(139,30,90,.075)!important
+      }
+      .ac-quick-sheet-head strong{
+        letter-spacing:-.012em!important;
+        line-height:1.22!important
+      }
+      .ac-quick-category{
+        margin-bottom:3px!important;
+        color:var(--ac-primary-dark)!important;
+        font-weight:950!important;
+        letter-spacing:.07em!important
+      }
+      .ac-quick-close{
+        border-color:#efd9e5!important;
+        border-radius:14px!important;
+        background:#fffafd!important;
+        box-shadow:0 5px 14px rgba(15,23,42,.055)!important
+      }
+
+      /* 2. Etapas: tarjeta premium, misma geometría que la cabecera */
+      .ac-quick-stage-wrap{
+        margin:0!important;
+        padding:12px!important;
+        border:1px solid rgba(196,65,132,.16)!important;
+        border-radius:20px!important;
+        background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%)!important;
+        box-shadow:0 8px 22px rgba(15,23,42,.055)!important
+      }
+      .ac-quick-stage-label{
+        margin-bottom:10px!important
+      }
+      .ac-quick-stage-btn{
+        border-radius:15px!important;
+        background:#fff!important;
+        box-shadow:0 4px 12px rgba(15,23,42,.045)!important
+      }
+      .ac-quick-stage-btn.active{
+        border-color:var(--ac-primary)!important;
+        background:linear-gradient(135deg,#fff4f9 0%,#fdf2f8 100%)!important;
+        box-shadow:0 7px 18px rgba(139,30,90,.10)!important
+      }
+
+      /* 3. Respuesta: bordes redondos, aire y jerarquía */
+      .ac-quick-response{
+        margin:0!important;
+        padding:16px!important;
+        border:1px solid rgba(196,65,132,.17)!important;
+        border-radius:22px!important;
+        background:linear-gradient(180deg,#ffffff 0%,#fffefe 100%)!important;
+        box-shadow:0 9px 24px rgba(15,23,42,.055)!important
+      }
+
+      /* 4. Acciones: bloque inferior redondeado, no barra cuadrada */
+      .ac-quick-actions{
+        position:relative!important;
+        bottom:auto!important;
+        margin:0!important;
+        padding:10px!important;
+        border:1px solid rgba(196,65,132,.14)!important;
+        border-radius:20px!important;
+        background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%)!important;
+        box-shadow:0 9px 24px rgba(15,23,42,.06)!important
+      }
+      .ac-quick-actions .ac-btn{
+        min-height:48px!important;
+        border-radius:15px!important;
+        box-shadow:0 5px 14px rgba(15,23,42,.045)!important
+      }
+      .ac-quick-actions .ac-btn-primary{
+        box-shadow:0 8px 18px rgba(139,30,90,.15)!important
+      }
+    }
+
     @media (max-width:420px){
       .ac-crm-launchbar{grid-template-columns:1fr 1fr}
       .ac-crm-launchbar .is-primary{grid-column:1/-1}
