@@ -80,6 +80,36 @@
       box-shadow:none!important
     }
 
+    /* FASE 3.3 · ESTABILIDAD MODAL / HISTORIAL / LISTAS LARGAS
+       Presentación y navegación únicamente. No modifica persistencia ni backend. */
+    html{scrollbar-gutter:stable}
+    .ac-crm-card.is-open>.ac-card-body{overflow-x:hidden!important;box-sizing:border-box}
+    .ac-crm-card.is-open>.ac-card-body *,
+    .ac-crm-card.is-open>.ac-card-body *::before,
+    .ac-crm-card.is-open>.ac-card-body *::after{box-sizing:border-box;min-width:0}
+    .ac-crm-grid input,.ac-crm-grid select,
+    .ac-crm-grid-secondary input,.ac-crm-form-note textarea{width:100%;max-width:100%}
+    .ac-crm-list-tools{
+      position:sticky;top:72px;z-index:3;display:flex;align-items:center;gap:8px;
+      margin:10px 0 8px;padding:8px;border:1px solid #edf1f5;border-radius:14px;
+      background:rgba(255,255,255,.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)
+    }
+    .ac-crm-list-search{
+      width:100%;min-height:40px;padding:8px 11px;border:1px solid var(--ac-line);
+      border-radius:11px;background:#fff;color:var(--ac-text);font:inherit;font-size:12px;outline:none
+    }
+    .ac-crm-list-search:focus{
+      border-color:rgba(139,30,90,.45);box-shadow:0 0 0 3px rgba(139,30,90,.08)
+    }
+    .ac-crm-list{
+      max-height:min(56vh,560px);overflow-y:auto;overflow-x:hidden;
+      overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-right:2px
+    }
+    .ac-crm-history-meta .ac-history-stage{
+      display:inline-flex;align-items:center;min-height:22px;padding:3px 7px;
+      border-radius:999px;background:#fdf2f8;color:var(--ac-primary-dark);font-weight:950
+    }
+
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
     .ac-crm-sheet-head{display:none}
@@ -796,6 +826,11 @@
               <span><i class="bi bi-people"></i> Contactos guardados</span>
               <span class="ac-crm-count" id="acContactosCantidad">0</span>
             </summary>
+            <div class="ac-crm-list-tools">
+              <input class="ac-crm-list-search" id="acContactosBuscar" type="search"
+                     placeholder="Buscar por nombre, teléfono o servicio..." autocomplete="off"
+                     aria-label="Buscar contactos guardados">
+            </div>
             <div class="ac-crm-list" id="acContactosGuardados" aria-live="polite"></div>
           </details>
 
@@ -804,6 +839,11 @@
               <span><i class="bi bi-bell"></i> Seguimientos pendientes</span>
               <span class="ac-crm-count" id="acPendientesCantidad">0</span>
             </summary>
+            <div class="ac-crm-list-tools">
+              <input class="ac-crm-list-search" id="acPendientesBuscar" type="search"
+                     placeholder="Buscar pendientes por nombre o servicio..." autocomplete="off"
+                     aria-label="Buscar seguimientos pendientes">
+            </div>
             <div class="ac-crm-list" id="acPendientes" aria-live="polite"></div>
           </details>
         </div>
@@ -1283,6 +1323,23 @@
           setInteractionButtonBusy(false);
         }
       }
+      function normalizeCrmSearch(v){
+        try{
+          return txt(v).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
+        }catch(_){
+          return txt(v).toLowerCase().replace(/\s+/g," ").trim();
+        }
+      }
+      function historyStageLabel(v){
+        var stage=String(v||"").toUpperCase();
+        if(stage==="ORIGINAL") return "Primera respuesta";
+        if(stage==="SEGUIMIENTO") return "Seguimiento";
+        if(stage==="CIERRE") return "Cierre";
+        if(stage==="RECONTACTO") return "Recontacto";
+        if(stage==="MENSAJE") return "Interacción";
+        return v||"Interacción";
+      }
+
       function renderHistory(c){
         var box=el("acHistorialComercial"),list=el("acHistorialLista");
         if(!box||!list) return;
@@ -1315,14 +1372,14 @@
             var d=new Date(stamp);
             if(!isNaN(d.getTime())) dateText=formatDate(d);
           }
-          var stage=txt(meta.etapa_mensaje)||String(row.TIPO_REGISTRO||"");
+          var stage=historyStageLabel(txt(meta.etapa_mensaje)||String(row.TIPO_REGISTRO||""));
           var channel=txt(meta.canal);
           var item=document.createElement("article");
           item.className="ac-crm-history-item";
           item.innerHTML=
             '<div class="ac-crm-history-meta">'+
               '<span>'+escapeHtml(dateText||"Sin fecha")+'</span>'+
-              '<span>·</span><span>'+escapeHtml(stage||"Interacción")+'</span>'+
+              '<span>·</span><span class="ac-history-stage">'+escapeHtml(stage||"Interacción")+'</span>'+
               (channel?'<span>·</span><span>'+escapeHtml(channel)+'</span>':"")+
             '</div>'+
             '<div class="ac-crm-history-response">'+escapeHtml(row.RESPUESTA||"")+'</div>';
@@ -1440,6 +1497,9 @@
         }else{
           renderHistory(null);
         }
+        if(mode==="CONTACTS") renderContacts();
+        if(mode==="PENDING") renderPending();
+
         /* PC y móvil usan el mismo estado de apertura.
            La diferencia entre dispositivos la resuelve únicamente el CSS responsive. */
         card.classList.add("is-open");
@@ -1473,19 +1533,28 @@
       }
       function renderContacts(){
         var list=el("acContactosGuardados"),count=el("acContactosCantidad"); if(!list||!count) return;
-        var arr=Object.values(state.contacts||{}).filter(function(c){
+        var all=Object.values(state.contacts||{}).filter(function(c){
           return !!(c&&c.contact_key);
         }).sort(function(a,b){
           var ad=String(a.ultima_interaccion||a.__stamp||"");
           var bd=String(b.ultima_interaccion||b.__stamp||"");
           return bd.localeCompare(ad);
         });
-        count.textContent=String(arr.length); list.innerHTML="";
-        if(!arr.length){
+        var q=normalizeCrmSearch(el("acContactosBuscar")&&el("acContactosBuscar").value);
+        var arr=!q?all:all.filter(function(c){
+          return normalizeCrmSearch([c.nombre,c.telefono,c.servicio,c.estado_comercial,c.canal].filter(Boolean).join(" ")).includes(q);
+        });
+        count.textContent=q?(String(arr.length)+"/"+String(all.length)):String(all.length);
+        list.innerHTML="";
+        if(!all.length){
           list.innerHTML='<div class="ac-crm-empty">Todavía no hay contactos guardados.</div>';
           return;
         }
-        arr.slice(0,20).forEach(function(c){
+        if(!arr.length){
+          list.innerHTML='<div class="ac-crm-empty">No encontré contactos con esa búsqueda.</div>';
+          return;
+        }
+        arr.slice(0,100).forEach(function(c){
           var item=document.createElement("button");
           item.type="button";
           item.className="ac-crm-item";
@@ -1516,13 +1585,19 @@
 
       function renderPending(){
         var list=el("acPendientes"),count=el("acPendientesCantidad"); if(!list||!count) return;
-        var now=Date.now(); var arr=Object.values(state.contacts||{}).filter(function(c){
+        var now=Date.now(); var all=Object.values(state.contacts||{}).filter(function(c){
           if(!c||!c.contact_key||!c.proximo_seguimiento||CLOSED_STATES[c.estado_comercial]) return false;
           return !isNaN(new Date(c.proximo_seguimiento).getTime());
         }).sort(function(a,b){return new Date(a.proximo_seguimiento)-new Date(b.proximo_seguimiento);});
-        count.textContent=String(arr.length); list.innerHTML="";
-        if(!arr.length){list.innerHTML='<div class="ac-crm-empty">No hay seguimientos pendientes guardados.</div>';return;}
-        arr.slice(0,12).forEach(function(c){
+        var q=normalizeCrmSearch(el("acPendientesBuscar")&&el("acPendientesBuscar").value);
+        var arr=!q?all:all.filter(function(c){
+          return normalizeCrmSearch([c.nombre,c.telefono,c.servicio,c.estado_comercial,c.canal].filter(Boolean).join(" ")).includes(q);
+        });
+        count.textContent=q?(String(arr.length)+"/"+String(all.length)):String(all.length);
+        list.innerHTML="";
+        if(!all.length){list.innerHTML='<div class="ac-crm-empty">No hay seguimientos pendientes guardados.</div>';return;}
+        if(!arr.length){list.innerHTML='<div class="ac-crm-empty">No encontré pendientes con esa búsqueda.</div>';return;}
+        arr.slice(0,100).forEach(function(c){
           var d=new Date(c.proximo_seguimiento),over=d.getTime()<now;
           var item=document.createElement("button"); item.type="button"; item.className="ac-crm-item"; item.dataset.contactKey=c.contact_key;
           item.innerHTML='<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong><small>'+escapeHtml([c.servicio,c.estado_comercial].filter(Boolean).join(" · "))+'</small></span><span class="ac-crm-item-time">'+(over?"⚠ ":"")+escapeHtml(formatDate(d))+'</span>';
@@ -1601,6 +1676,9 @@
         b=el("acSeguimientoManana");if(b)b.addEventListener("click",function(){scheduleHours(24);});
         b=el("acSeguimiento48h");if(b)b.addEventListener("click",function(){scheduleHours(48);});
         b=el("acContactoActivoFicha");if(b)b.addEventListener("click",function(){openCrmPanel("FORM");});
+
+        b=el("acContactosBuscar");if(b)b.addEventListener("input",renderContacts);
+        b=el("acPendientesBuscar");if(b)b.addEventListener("input",renderPending);
 
         b=el("acEditarContacto");if(b)b.addEventListener("click",function(){
           if(!state.activeContactKey) return;
