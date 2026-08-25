@@ -110,6 +110,47 @@
       border-radius:999px;background:#fdf2f8;color:var(--ac-primary-dark);font-weight:950
     }
 
+    /* FASE 3.4 · PENDIENTES INTELIGENTES
+       Solo clasificación visual de proximo_seguimiento. No modifica datos ni orden base. */
+    .ac-pending-time{
+      display:flex;
+      align-items:flex-end;
+      flex-direction:column;
+      gap:5px;
+      min-width:116px;
+      text-align:right
+    }
+    .ac-pending-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:23px;
+      padding:3px 8px;
+      border-radius:999px;
+      font-size:9px;
+      font-weight:950;
+      letter-spacing:.045em;
+      text-transform:uppercase;
+      white-space:nowrap
+    }
+    .ac-pending-badge.is-overdue{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+    .ac-pending-badge.is-today{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+    .ac-pending-badge.is-next{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+    .ac-pending-human{
+      color:var(--ac-primary-dark);
+      font-size:10px;
+      font-weight:900;
+      line-height:1.25;
+      white-space:nowrap
+    }
+    .ac-pending-exact{
+      color:var(--ac-muted);
+      font-size:9px;
+      font-weight:750;
+      line-height:1.2;
+      white-space:nowrap
+    }
+
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
     .ac-crm-sheet-head{display:none}
@@ -454,6 +495,13 @@
       .ac-crm-pending{padding-top:11px}
       .ac-crm-item{grid-template-columns:1fr}
       .ac-crm-item-time{white-space:normal}
+      .ac-pending-time{
+        width:100%;
+        min-width:0;
+        align-items:flex-start;
+        text-align:left
+      }
+      .ac-pending-human,.ac-pending-exact{white-space:normal}
 
       /* FASE 2.4 · MODAL MÓVIL FULLSCREEN PREMIUM
          Una sola pantalla activa. El fondo queda inmóvil. */
@@ -1583,6 +1631,56 @@
         });
       }
 
+      function pendingTemporalInfo(date,nowMs){
+        var d=date instanceof Date?date:new Date(date);
+        var now=new Date(typeof nowMs==="number"?nowMs:Date.now());
+
+        if(isNaN(d.getTime())) return {
+          key:"next",
+          label:"Próximo",
+          human:"Fecha pendiente",
+          className:"is-next"
+        };
+
+        var todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+        var tomorrowStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+        var dayAfterTomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+2);
+        var targetStart=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+        var diffDays=Math.round((targetStart-todayStart)/86400000);
+        var timeText="";
+        try{
+          timeText=new Intl.DateTimeFormat("es-EC",{hour:"2-digit",minute:"2-digit"}).format(d);
+        }catch(_){
+          timeText=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
+        }
+
+        if(d.getTime()<now.getTime()){
+          var overdueDays=Math.max(0,Math.floor((todayStart-targetStart)/86400000));
+          return {
+            key:"overdue",
+            label:"Atrasado",
+            human:overdueDays>=1?("Hace "+overdueDays+" "+(overdueDays===1?"día":"días")):("Hoy · "+timeText),
+            className:"is-overdue"
+          };
+        }
+
+        if(d>=todayStart && d<tomorrowStart){
+          return {
+            key:"today",
+            label:"Hoy",
+            human:"Hoy · "+timeText,
+            className:"is-today"
+          };
+        }
+
+        return {
+          key:"next",
+          label:"Próximo",
+          human:d>=tomorrowStart&&d<dayAfterTomorrow?("Mañana · "+timeText):formatDate(d),
+          className:"is-next"
+        };
+      }
+
       function renderPending(){
         var list=el("acPendientes"),count=el("acPendientesCantidad"); if(!list||!count) return;
         var now=Date.now(); var all=Object.values(state.contacts||{}).filter(function(c){
@@ -1598,9 +1696,18 @@
         if(!all.length){list.innerHTML='<div class="ac-crm-empty">No hay seguimientos pendientes guardados.</div>';return;}
         if(!arr.length){list.innerHTML='<div class="ac-crm-empty">No encontré pendientes con esa búsqueda.</div>';return;}
         arr.slice(0,100).forEach(function(c){
-          var d=new Date(c.proximo_seguimiento),over=d.getTime()<now;
+          var d=new Date(c.proximo_seguimiento);
+          var temporal=pendingTemporalInfo(d,now);
           var item=document.createElement("button"); item.type="button"; item.className="ac-crm-item"; item.dataset.contactKey=c.contact_key;
-          item.innerHTML='<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong><small>'+escapeHtml([c.servicio,c.estado_comercial].filter(Boolean).join(" · "))+'</small></span><span class="ac-crm-item-time">'+(over?"⚠ ":"")+escapeHtml(formatDate(d))+'</span>';
+          item.innerHTML=
+            '<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong>'+
+              '<small>'+escapeHtml([c.servicio,c.estado_comercial].filter(Boolean).join(" · "))+'</small>'+
+            '</span>'+
+            '<span class="ac-pending-time">'+
+              '<span class="ac-pending-badge '+escapeHtml(temporal.className)+'">'+escapeHtml(temporal.label)+'</span>'+
+              '<span class="ac-pending-human">'+escapeHtml(temporal.human)+'</span>'+
+              '<span class="ac-pending-exact">'+escapeHtml(formatDate(d))+'</span>'+
+            '</span>';
           item.addEventListener("click",function(){
             var c=state.contacts[this.dataset.contactKey];
             fillContact(c);
