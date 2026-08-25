@@ -163,6 +163,18 @@
     .ac-wa-window-badge.is-empty{background:#f8fafc;color:#64748b;border:1px solid #e2e8f0}
     .ac-wa-window-detail{margin-top:6px;color:var(--ac-muted);font-size:10px;font-weight:750;line-height:1.35}
 
+    /* FASE 3.6 · PENDIENTES + VENTANA WHATSAPP
+       Solo lectura de ultimo_mensaje_cliente ya persistido en 11A. */
+    .ac-pending-wa{
+      display:flex;align-items:center;justify-content:flex-end;gap:5px;
+      margin-top:2px;font-size:9px;font-weight:900;line-height:1.2
+    }
+    .ac-pending-wa.is-open{color:#166534}
+    .ac-pending-wa.is-warning{color:#92400e}
+    .ac-pending-wa.is-closed{color:#991b1b}
+    .ac-pending-wa.is-empty{color:#64748b}
+    .ac-pending-wa i{font-size:10px}
+
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
     .ac-crm-sheet-head{display:none}
@@ -514,6 +526,7 @@
         text-align:left
       }
       .ac-pending-human,.ac-pending-exact{white-space:normal}
+      .ac-pending-wa{justify-content:flex-start;text-align:left}
 
       /* FASE 2.4 · MODAL MÓVIL FULLSCREEN PREMIUM
          Una sola pantalla activa. El fondo queda inmóvil. */
@@ -1691,6 +1704,18 @@
         detail.textContent=info.detail;
       }
 
+      function pendingWhatsappSummary(c,nowMs){
+        var channel=String(c&&c.canal||"GENERAL").toUpperCase();
+        if(channel!=="WHATSAPP") return null;
+        var info=whatsappWindowInfo(c&&c.ultimo_mensaje_cliente,nowMs);
+        var label="";
+        if(info.className==="is-open") label="WhatsApp: abierta";
+        else if(info.className==="is-warning") label="WhatsApp: por vencer";
+        else if(info.className==="is-closed") label="WhatsApp: vencida";
+        else label="WhatsApp: sin dato";
+        return {label:label,className:info.className};
+      }
+
       function pendingTemporalInfo(date,nowMs){
         var d=date instanceof Date?date:new Date(date);
         var now=new Date(typeof nowMs==="number"?nowMs:Date.now());
@@ -1758,6 +1783,7 @@
         arr.slice(0,100).forEach(function(c){
           var d=new Date(c.proximo_seguimiento);
           var temporal=pendingTemporalInfo(d,now);
+          var wa=pendingWhatsappSummary(c,now);
           var item=document.createElement("button"); item.type="button"; item.className="ac-crm-item"; item.dataset.contactKey=c.contact_key;
           item.innerHTML=
             '<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong>'+
@@ -1767,6 +1793,7 @@
               '<span class="ac-pending-badge '+escapeHtml(temporal.className)+'">'+escapeHtml(temporal.label)+'</span>'+
               '<span class="ac-pending-human">'+escapeHtml(temporal.human)+'</span>'+
               '<span class="ac-pending-exact">'+escapeHtml(formatDate(d))+'</span>'+
+              (wa?'<span class="ac-pending-wa '+escapeHtml(wa.className)+'"><i class="bi bi-whatsapp"></i>'+escapeHtml(wa.label)+'</span>':"")+
             '</span>';
           item.addEventListener("click",function(){
             var c=state.contacts[this.dataset.contactKey];
