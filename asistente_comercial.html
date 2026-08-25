@@ -1164,7 +1164,9 @@
           item.addEventListener("click",function(){
             fillContact(state.contacts[this.dataset.contactKey]);
             if(el("acContactosDetalle")) el("acContactosDetalle").open=false;
-            if(!isCompactCrm()) el("acContactoCard")&&el("acContactoCard").scrollIntoView({behavior:"smooth",block:"start"});
+            /* FASE 2.7: al elegir un contacto, la lista termina aquí.
+               La tarjeta Contacto activo queda visible en la pantalla principal. */
+            closeCrmPanel();
           });
           list.appendChild(item);
         });
@@ -1185,7 +1187,9 @@
           item.addEventListener("click",function(){
             fillContact(state.contacts[this.dataset.contactKey]);
             if(el("acPendientesDetalle")) el("acPendientesDetalle").open=false;
-            if(!isCompactCrm()) el("acContactoCard")&&el("acContactoCard").scrollIntoView({behavior:"smooth",block:"start"});
+            /* FASE 2.7: un pendiente seleccionado pasa a ser Contacto activo
+               y se vuelve inmediatamente al flujo principal. */
+            closeCrmPanel();
           });
           list.appendChild(item);
         });
