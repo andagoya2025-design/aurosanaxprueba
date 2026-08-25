@@ -963,6 +963,45 @@ async function auroVincularPacienteGuardadoConCita(contexto, datosGuardados){
   return {ok:true, paciente:paciente};
 }
 
+
+/* ============================================================
+   AUROSANAX PACIENTES - BARRERA LOCAL ANTIDUPLICIDAD DE CÉDULA
+   Alcance EXCLUSIVO:
+   - Evita crear visualmente un paciente que el backend rechazará por
+     documento duplicado.
+   - No sustituye la protección del backend; la complementa.
+   - En edición excluye al propio id_paciente.
+   - Reconoce compatibilidad histórica cuando Sheets perdió un cero inicial.
+   - NO modifica Historia Clínica, Atenciones, Agenda, Preatención,
+     Seguridad, última atención ni persistencia.
+============================================================ */
+function auroBuscarPacienteDuplicadoPorCedulaLocal(cedula, idPacienteExcluir){
+  const doc = auroCedulaPacienteSoloDigitos(cedula);
+  const excluir = String(idPacienteExcluir || '').trim();
+  if(!doc) return null;
+
+  const lista = Array.isArray(patients) ? patients : [];
+
+  return lista.find(function(p){
+    const id = String(p?.id_paciente || p?.id || '').trim();
+    if(excluir && id && id === excluir) return false;
+
+    const docPaciente = auroCedulaPacienteSoloDigitos(
+      p?.cedula || p?.numero_documento || p?.documento || ''
+    );
+
+    if(!docPaciente) return false;
+    if(docPaciente === doc) return true;
+
+    /* Compatibilidad histórica: 0987654321 pudo quedar 987654321. */
+    if(doc.length === 10 && doc.startsWith('0') && docPaciente === doc.slice(1)){
+      return true;
+    }
+
+    return false;
+  }) || null;
+}
+
 async function savePatient(){
   const campoNombres = document.getElementById('pNombres');
   const campoApellidos = document.getElementById('pApellidos');
@@ -1005,6 +1044,34 @@ async function savePatient(){
   const validacionCedula = auroValidarCedulaPacienteAntesDeGuardar();
   if(!validacionCedula.ok) return;
   const cedulaPaciente = validacionCedula.valor;
+
+  /*
+   * BARRERA LOCAL ANTIDUPLICIDAD:
+   * el backend ya rechaza el documento duplicado, pero este frontend usa
+   * mode:'no-cors' y no puede leer esa respuesta. Sin esta barrera podía
+   * mostrar temporalmente un paciente que nunca fue guardado en Sheets.
+   */
+  const pacienteDuplicadoCedula = auroBuscarPacienteDuplicadoPorCedulaLocal(
+    cedulaPaciente,
+    editingPatientId
+  );
+
+  if(pacienteDuplicadoCedula){
+    const nombreExistente = String(
+      pacienteDuplicadoCedula.nombre ||
+      [pacienteDuplicadoCedula.nombres, pacienteDuplicadoCedula.apellidos].filter(Boolean).join(' ') ||
+      'otro paciente'
+    ).trim();
+
+    alert(
+      'La cédula ' + cedulaPaciente +
+      ' ya pertenece al paciente ' + nombreExistente +
+      '. No se creó un paciente duplicado.'
+    );
+
+    document.getElementById('pCedula')?.focus();
+    return;
+  }
 
   const pacienteSheet = {
     tipo_documento: 'Cédula',
