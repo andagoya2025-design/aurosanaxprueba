@@ -1202,6 +1202,11 @@
     }
 
     sincronizarEditorCie10DesdeDiagnosticos();
+    try{
+      if(typeof window.auroLimpiarBusquedaDiagnosticoCie10 === 'function'){
+        window.auroLimpiarBusquedaDiagnosticoCie10(false);
+      }
+    }catch(_e){}
     state.edicionDiagnosticoAbierto = true;
     renderContextoSuperior();
 
@@ -1227,6 +1232,11 @@
 
   function auroDxCancelarEdicionDiagnosticoAbierto(){
     sincronizarEditorCie10DesdeDiagnosticos();
+    try{
+      if(typeof window.auroLimpiarBusquedaDiagnosticoCie10 === 'function'){
+        window.auroLimpiarBusquedaDiagnosticoCie10(false);
+      }
+    }catch(_e){}
     state.edicionDiagnosticoAbierto = false;
     renderContextoSuperior();
 
@@ -1355,12 +1365,29 @@
         }catch(_e){}
 
         guardarEstadoTemporal();
-      }else{
+      }else if(resultado.visor_refrescado !== true){
+        /*
+          Fallback antirregresivo:
+          si examenfisico.js no confirmó que ya releyó Diagnóstico desde
+          la fuente persistida, diagnosticos.js conserva su recarga histórica.
+          Así se evita una segunda recarga solo cuando la primera terminó bien.
+        */
         await cargarAtencion(ctx.id, true);
       }
 
-      state.edicionDiagnosticoAbierto = false;
-      sincronizarEditorCie10DesdeDiagnosticos();
+      /*
+        Confirmación UX únicamente después de success:true del backend
+        y de la lectura persistida correspondiente.
+      */
+      if(btn && document.body.contains(btn)){
+        btn.disabled = true;
+        btn.removeAttribute('aria-busy');
+        btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Guardado ✓';
+        btn.style.background = '#198754';
+        btn.style.color = '#fff';
+        btn.style.borderColor = '#198754';
+        btn.style.boxShadow = '0 8px 18px rgba(25,135,84,.18)';
+      }
 
       mensaje(
         'ok',
@@ -1371,6 +1398,19 @@
               : 'Diagnóstico actualizado correctamente. Las sugerencias de Plan se sincronizaron con los diagnósticos guardados.')
       );
 
+      /*
+        Permite percibir la confirmación visual antes de volver al modo protegido.
+        No escribe ni realiza llamadas adicionales.
+      */
+      await new Promise(resolve => window.setTimeout(resolve, 950));
+
+      state.edicionDiagnosticoAbierto = false;
+      sincronizarEditorCie10DesdeDiagnosticos();
+      try{
+        if(typeof window.auroLimpiarBusquedaDiagnosticoCie10 === 'function'){
+          window.auroLimpiarBusquedaDiagnosticoCie10(false);
+        }
+      }catch(_e){}
       renderContextoSuperior();
 
       try{
@@ -1400,6 +1440,17 @@
         'No se guardaron los cambios del diagnóstico: ' +
         (error?.message || String(error))
       );
+
+      if(btn && document.body.contains(btn)){
+        btn.disabled = true;
+        btn.removeAttribute('aria-busy');
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Error al guardar';
+        btn.style.background = '#b42318';
+        btn.style.color = '#fff';
+        btn.style.borderColor = '#b42318';
+        btn.style.boxShadow = '0 8px 18px rgba(180,35,24,.16)';
+        await new Promise(resolve => window.setTimeout(resolve, 1100));
+      }
 
       return null;
 
