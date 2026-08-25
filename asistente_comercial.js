@@ -2,7 +2,7 @@
  * ============================================================
  * ASISTENTE COMERCIAL
  * Archivo: asistente_comercial.js
- * Versión: 1.7.5 NÚCLEO SEMÁNTICO COMERCIAL ANTIRREGRESIVO
+ * Versión: 1.7.6 NÚCLEO SEMÁNTICO COMERCIAL ANTIRREGRESIVO
  * Tipo: Motor independiente / reutilizable
  * ============================================================
  *
@@ -79,7 +79,11 @@
     pendingDeactivateTemplateId: null,
     mobileMode: "RESPONDER",
     recentTemplateIds: [],
-    sellerMode: false
+    sellerMode: false,
+
+    /* PRUEBA DICTADO NATIVO IOS / ANDROID — BLOQUE REVERSIBLE */
+    nativeDictationComposing: false
+    /* FIN PRUEBA DICTADO NATIVO */
   };
 
   const els = {};
@@ -216,7 +220,7 @@
 
 
   /* ==========================================================
-   * NÚCLEO SEMÁNTICO COMERCIAL — V1.7.5
+   * NÚCLEO SEMÁNTICO COMERCIAL — V1.7.6
    * Unifica servicio/tema, categoría e intención sin alterar UI,
    * persistencia, listeners ni selección manual de plantillas.
    * ========================================================== */
@@ -3293,7 +3297,21 @@
     if (state.listenersBound) return;
 
     if (els.message) {
+      /* ==========================================================
+       * PRUEBA DICTADO NATIVO IOS / ANDROID — BLOQUE REVERSIBLE
+       * Usa el micrófono del teclado del sistema; no añade API ni botón.
+       * ========================================================== */
+      els.message.addEventListener("compositionstart", () => {
+        state.nativeDictationComposing = true;
+      });
+
+      els.message.addEventListener("compositionend", event => {
+        state.nativeDictationComposing = false;
+        handleMessageInput({ target: event.target, isComposing: false });
+      });
+
       els.message.addEventListener("input", handleMessageInput);
+      /* FIN PRUEBA DICTADO NATIVO */
     }
 
     if (els.search) {
@@ -3576,6 +3594,21 @@
 
   function handleMessageInput(event) {
     state.pastedMessage = asString(event.target.value);
+
+    /* ==========================================================
+     * PRUEBA DICTADO NATIVO IOS / ANDROID — BLOQUE REVERSIBLE
+     * Durante composición/dictado, el Asistente no interfiere.
+     * ========================================================== */
+    if (state.nativeDictationComposing || event?.isComposing) {
+      showStatus(
+        state.pastedMessage.trim()
+          ? "Dictando… termina de hablar y luego pulsa Analizar."
+          : (CONFIG.ui?.emptyMessage || ""),
+        "neutral"
+      );
+      return;
+    }
+    /* FIN PRUEBA DICTADO NATIVO */
 
     // Cada mensaje nuevo invalida selección/sugerencia anterior.
     // La interpretación queda bajo control explícito del botón "Analizar".
