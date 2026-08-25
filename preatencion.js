@@ -189,7 +189,7 @@
     instalarControlTituloGlobal();
     const menu=document.querySelector('.sidebar .menu');
     if(menu){
-      const btn=document.createElement('button');btn.type='button';btn.dataset.screen='preatencion';btn.dataset.permisoCualquiera='preconsulta,preconsulta_datos_administrativos,preconsulta_signos_vitales,preconsulta_antecedentes_referidos';btn.innerHTML='<i class="bi bi-clipboard2-pulse"></i> Preatención';btn.onclick=()=>{ if(window.showScreen) window.showScreen('preatencion',btn); gestionarTituloGlobalPreatencion(true); };
+      const btn=document.createElement('button');btn.type='button';btn.dataset.screen='preatencion';btn.dataset.permisoCualquiera='preconsulta,preconsulta_datos_administrativos,preconsulta_signos_vitales,preconsulta_antecedentes_referidos';btn.innerHTML='<i class="bi bi-clipboard2-pulse"></i> Preatención';btn.onclick=async()=>{ if(window.showScreen) window.showScreen('preatencion',btn); gestionarTituloGlobalPreatencion(true); try{ await refrescarReferenciasPreatencion_(); }catch(error){ console.warn('AUROSANAX PREATENCIÓN: no se pudieron refrescar pacientes/citas al entrar.',error); } };
       const configBtn=menu.querySelector('[data-permiso-cualquiera*="configuracion"]');if(configBtn)menu.insertBefore(btn,configBtn);else menu.appendChild(btn);
     }
     const main=document.querySelector('.main');if(!main)return;
@@ -315,10 +315,18 @@
      */
     window.addEventListener('auro:paciente-vinculado-preatencion', async function(ev){
       const d=ev?.detail||{};
-      if(!d.id_cita||!d.id_paciente)return;
+      if(!d.id_paciente)return;
       try{
-        await cargarTodo();
-        await seleccionarDesdeSala(d.id_paciente,d.id_cita);
+        if(d.id_cita){
+          await cargarTodo();
+          await seleccionarDesdeSala(d.id_paciente,d.id_cita);
+        }else{
+          const respuestaPacientes=await get('listarPacientes');
+          pacientesCache=extraerLista(respuestaPacientes);
+          renderResultadosPacientes();
+          renderSala();
+          await seleccionarPacienteDirecto(d.id_paciente);
+        }
       }catch(error){
         console.warn('AUROSANAX PREATENCIÓN: no se pudo refrescar después de crear paciente.',error);
       }
@@ -402,9 +410,9 @@
       return;
     }
 
-    /* Flujo existente para "Nuevo paciente" sin cita seleccionada. */
+    /* Flujo espontáneo: conserva origen Preatención aunque id_cita sea opcional. */
     if(typeof window.abrirPacienteSecretaria === 'function'){
-      window.abrirPacienteSecretaria();
+      window.abrirPacienteSecretaria('', {origen:'preatencion'});
       return;
     }
     if(typeof window.showScreen === 'function') window.showScreen('pacientes');
@@ -412,6 +420,59 @@
 
   function calcIMC(){ const p=parseFloat(numero(val('prePeso'))),t=parseFloat(numero(val('preTalla')));set('preIMC',p>0&&t>0?(p/((t/100)*(t/100))).toFixed(1):''); }
   function limpiarClinico(){ ['prePeso','preTalla','preIMC','prePAS','prePAD','preFC','preFR','preTemp','preSat','preCadera','preGrasa','preMasa','preCefalico','preToracico','preAbdominal','preAntecedentesTexto'].forEach(id=>set(id,'')); }
+
+  let refrescoReferenciasPreatencionEnCurso_=null;
+
+  async function refrescarReferenciasPreatencion_(){
+    /*
+      AUROSANAX · SINCRONIZACIÓN QUIRÚRGICA
+      Alcance exclusivo: referencias de Pacientes y Citas al reingresar.
+      - No modifica signos vitales ni antecedentes escritos.
+      - No toca edición, permisos, justificativos ni auditoría.
+      - No crea ni modifica PRE / ATE / HC.
+      - Si una lectura falla, conserva el último caché válido.
+    */
+    if(refrescoReferenciasPreatencionEnCurso_) return refrescoReferenciasPreatencionEnCurso_;
+
+    refrescoReferenciasPreatencionEnCurso_=(async()=>{
+      const pacienteSeleccionado=val('prePaciente');
+      const citaSeleccionada=val('preCita');
+
+      const [rp,rc]=await Promise.allSettled([
+        get('listarPacientes'),
+        get('listarCitas')
+      ]);
+
+      if(rp.status==='fulfilled'){
+        pacientesCache=extraerLista(rp.value);
+      }else{
+        console.warn('AUROSANAX PREATENCIÓN: no se pudieron refrescar pacientes.',rp.reason);
+      }
+
+      if(rc.status==='fulfilled'){
+        citasCache=extraerLista(rc.value);
+      }else{
+        console.warn('AUROSANAX PREATENCIÓN: no se pudieron refrescar citas.',rc.reason);
+      }
+
+      renderResultadosPacientes();
+      renderSala();
+
+      if(pacienteSeleccionado){
+        set('prePaciente',pacienteSeleccionado);
+        await cargarCitasPaciente(citaSeleccionada);
+      }else{
+        actualizarContexto();
+      }
+      actualizarAccionesPaciente();
+    })();
+
+    try{
+      return await refrescoReferenciasPreatencionEnCurso_;
+    }finally{
+      refrescoReferenciasPreatencionEnCurso_=null;
+    }
+  }
 
   async function cargarTodo(){
     /*
