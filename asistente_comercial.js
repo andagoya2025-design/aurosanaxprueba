@@ -2558,14 +2558,46 @@
     const text = normalizeText(rawText);
     let best = null;
 
+    function matchesSignal(word) {
+      const signal = normalizeText(word);
+      if (!signal) return false;
+
+      // Símbolo monetario: coincidencia directa.
+      if (signal === "$") {
+        return text.includes("$");
+      }
+
+      // Coincidencia por palabra o frase completa.
+      // Evita falsos positivos como "valor" dentro de "valoracion".
+      const escaped = escapeRegExp(signal);
+      const pattern = new RegExp(
+        "(^|[^a-z0-9])" + escaped + "(?=$|[^a-z0-9])",
+        "i"
+      );
+
+      return pattern.test(text);
+    }
+
     getTextCreatorTypeRules().forEach(rule => {
       let hits = 0;
+
       rule.words.forEach(word => {
-        if (text.includes(normalizeText(word))) hits += 1;
+        if (matchesSignal(word)) hits += 1;
       });
 
-      if (hits && (!best || hits > best.hits || (hits === best.hits && rule.confidence > best.confidence))) {
-        best = { id: rule.id, hits, confidence: rule.confidence };
+      if (
+        hits &&
+        (
+          !best ||
+          hits > best.hits ||
+          (hits === best.hits && rule.confidence > best.confidence)
+        )
+      ) {
+        best = {
+          id: rule.id,
+          hits,
+          confidence: rule.confidence
+        };
       }
     });
 
