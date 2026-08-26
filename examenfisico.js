@@ -3382,7 +3382,9 @@ function auroDxConservarIdsPersistidos_(actuales, persistidos){
   });
 }
 
-async function auroGuardarDiagnosticosAtencionActual(){
+async function auroGuardarDiagnosticosAtencionActual(opciones){
+  opciones = opciones || {};
+  const omitirRefrescoVisor = opciones.omitir_refresco_visor === true;
   const API = typeof auroExamenFisicoApiUrl === 'function' ? auroExamenFisicoApiUrl() : '';
   const idAtencion = String((typeof auroExamenFisicoIdAtencionActual === 'function' ? auroExamenFisicoIdAtencionActual() : window.examenFisicoState?.atencionActual) || '').trim();
   let diagnosticos = typeof auroRecopilarDiagnosticosEstructurados === 'function' ? auroRecopilarDiagnosticosEstructurados() : [];
@@ -3429,19 +3431,31 @@ async function auroGuardarDiagnosticosAtencionActual(){
     }catch(e){}
 
     let visorRefrescado = false;
-    try{
-      if(window.auroDiagnosticos && typeof window.auroDiagnosticos.cargar === 'function'){
-        await Promise.resolve(window.auroDiagnosticos.cargar(idAtencion, true));
-        visorRefrescado = true;
+
+    /*
+      AUROSANAX DX - EDICIÓN ABIERTA AUTORITATIVA
+      -------------------------------------------
+      El comportamiento histórico se conserva para todos los demás flujos.
+      Solo el guardado explícito de edición de atención abierta puede pedir
+      omitir este refresco completo, porque diagnosticos.js verificará de
+      inmediato la tabla persistida de diagnósticos de la misma id_atencion.
+    */
+    if(!omitirRefrescoVisor){
+      try{
+        if(window.auroDiagnosticos && typeof window.auroDiagnosticos.cargar === 'function'){
+          await Promise.resolve(window.auroDiagnosticos.cargar(idAtencion, true));
+          visorRefrescado = true;
+        }
+      }catch(e){
+        console.warn('AUROSANAX DIAGNÓSTICOS: guardado confirmado, pero no se pudo refrescar el visor.', e);
       }
-    }catch(e){
-      console.warn('AUROSANAX DIAGNÓSTICOS: guardado confirmado, pero no se pudo refrescar el visor.', e);
     }
 
     return {
       success:true,
       sin_cambios:false,
       visor_refrescado:visorRefrescado,
+      refresco_omitido:omitirRefrescoVisor,
       id_atencion:idAtencion,
       id_examen:idExamen,
       diagnosticos:Number(resultado.total_guardados ?? diagnosticos.length),
