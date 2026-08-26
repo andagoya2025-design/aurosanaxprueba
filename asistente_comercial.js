@@ -2601,6 +2601,39 @@
       }
     });
 
+    // Fallback local exclusivo del creador desde texto:
+    // si ninguna intención explícita fue detectada, un texto claramente
+    // descriptivo se clasifica como INFORMACION. No altera el motor principal.
+    if (!best) {
+      const informationSignals = [
+        "es un tratamiento",
+        "es un procedimiento",
+        "es una opcion",
+        "consiste en",
+        "se utiliza para",
+        "sirve para",
+        "esta orientado a",
+        "esta orientada a",
+        "busca mejorar",
+        "busca reducir",
+        "puede realizarse",
+        "puede aplicarse"
+      ];
+
+      const informationHits = informationSignals.reduce(
+        (total, signal) => total + (matchesSignal(signal) ? 1 : 0),
+        0
+      );
+
+      if (informationHits) {
+        best = {
+          id: "INFORMACION",
+          hits: informationHits,
+          confidence: informationHits >= 2 ? 0.90 : 0.82
+        };
+      }
+    }
+
     return best || { id: "", hits: 0, confidence: 0 };
   }
 
