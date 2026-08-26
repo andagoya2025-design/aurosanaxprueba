@@ -3385,6 +3385,12 @@ function auroDxConservarIdsPersistidos_(actuales, persistidos){
 async function auroGuardarDiagnosticosAtencionActual(opciones){
   opciones = opciones || {};
   const omitirRefrescoVisor = opciones.omitir_refresco_visor === true;
+  const omitirLecturaPersistidos = opciones.omitir_lectura_persistidos === true;
+  const omitirBusquedaExamen = opciones.omitir_busqueda_examen === true;
+  const persistidosBase = Array.isArray(opciones.persistidos_base)
+    ? opciones.persistidos_base
+    : null;
+  const idExamenPreferido = String(opciones.id_examen_preferido || '').trim();
   const API = typeof auroExamenFisicoApiUrl === 'function' ? auroExamenFisicoApiUrl() : '';
   const idAtencion = String((typeof auroExamenFisicoIdAtencionActual === 'function' ? auroExamenFisicoIdAtencionActual() : window.examenFisicoState?.atencionActual) || '').trim();
   let diagnosticos = typeof auroRecopilarDiagnosticosEstructurados === 'function' ? auroRecopilarDiagnosticosEstructurados() : [];
@@ -3402,19 +3408,53 @@ async function auroGuardarDiagnosticosAtencionActual(opciones){
     window.examenFisicoState = window.examenFisicoState || {atencionActual:idAtencion,cache:{}};
     window.examenFisicoState.examenesSheets = window.examenFisicoState.examenesSheets || {};
 
-    const persistidos = await auroDxLeerPersistidosAtencion_(API, idAtencion);
-    diagnosticos = auroDxConservarIdsPersistidos_(Array.isArray(diagnosticos) ? diagnosticos : [], persistidos);
+    /*
+      EDICIÓN ABIERTA RÁPIDA:
+      Diagnóstico puede entregar el snapshot persistido que ya tiene cargado.
+      Así no se hace un GET redundante antes del POST.
+      Fuera de ese flujo se conserva exactamente la lectura remota histórica.
+    */
+    const persistidos = persistidosBase !== null
+      ? persistidosBase
+      : (omitirLecturaPersistidos
+          ? []
+          : await auroDxLeerPersistidosAtencion_(API, idAtencion));
+
+    diagnosticos = auroDxConservarIdsPersistidos_(
+      Array.isArray(diagnosticos) ? diagnosticos : [],
+      persistidos
+    );
 
     const firmaActual = auroDxFirmaLista_(diagnosticos);
     const firmaPersistida = auroDxFirmaLista_(persistidos);
 
     if(firmaActual === firmaPersistida){
-      return {success:true,sin_cambios:true,id_atencion:idAtencion,diagnosticos:diagnosticos.length,message:'Diagnóstico sin cambios. No se realizó ninguna escritura.'};
+      return {
+        success:true,
+        sin_cambios:true,
+        id_atencion:idAtencion,
+        diagnosticos:diagnosticos.length,
+        registros_enviados:diagnosticos,
+        message:'Diagnóstico sin cambios. No se realizó ninguna escritura.'
+      };
     }
 
-    let examen = window.examenFisicoState.examenesSheets[idAtencion] || null;
-    if(!examen || !String(examen.id_examen || '').trim()) examen = await auroBuscarExamenFisicoPorAtencion(idAtencion);
-    const idExamen = String(examen?.id_examen || '').trim();
+    let idExamen = idExamenPreferido;
+
+    if(!idExamen){
+      const examenCache = window.examenFisicoState.examenesSheets[idAtencion] || null;
+      idExamen = String(examenCache?.id_examen || '').trim();
+    }
+
+    /*
+      En la edición explícita de Diagnóstico por id_atencion no es obligatorio
+      crear ni buscar un examen físico. Si ya conocemos id_examen se conserva.
+      Los demás flujos mantienen la búsqueda histórica.
+    */
+    if(!idExamen && !omitirBusquedaExamen){
+      const examen = await auroBuscarExamenFisicoPorAtencion(idAtencion);
+      idExamen = String(examen?.id_examen || '').trim();
+    }
 
     const respuesta = await fetch(API, {
       method:'POST',
@@ -3459,6 +3499,7 @@ async function auroGuardarDiagnosticosAtencionActual(opciones){
       id_atencion:idAtencion,
       id_examen:idExamen,
       diagnosticos:Number(resultado.total_guardados ?? diagnosticos.length),
+      registros_enviados:diagnosticos,
       data:resultado
     };
   }catch(error){
