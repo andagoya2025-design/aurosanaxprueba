@@ -9267,7 +9267,31 @@ function limpiarFiltrosHistorias(){
 }
 
 async function inicializarERP(){
-  await auroCargarLogoSidebarInstitucional();
+  /*
+    AUROSANAX INDEX VELOCIDAD 1A
+    Carga institucional no bloqueante.
+
+    La identidad visual (configuración/logo) continúa cargándose
+    normalmente, pero deja de retrasar el inicio de Pacientes e Historias.
+
+    Protecciones antirregresivas:
+    - NO cambia Seguridad ni sesión.
+    - NO altera Pacientes, Historias, Agenda ni Atenciones.
+    - NO modifica IDs ni relaciones clínicas.
+    - Conserva estrictamente Pacientes + Historias -> Agenda.
+    - Un fallo visual del logo NO bloquea el ERP clínico.
+  */
+  Promise.resolve()
+    .then(function(){
+      return auroCargarLogoSidebarInstitucional();
+    })
+    .catch(function(error){
+      console.warn(
+        'AUROSANAX INDEX VELOCIDAD 1A: no se pudo completar la identidad visual institucional.',
+        error
+      );
+    });
+
   auroInicializarAyudasExamenFisicoV32();
 
   /*
