@@ -1279,6 +1279,87 @@
     return normalizarDiagnosticosServidor(respuesta);
   }
 
+  /*
+    AUROSANAX DX - ACTUALIZACIÓN SECUNDARIA DE PROTOCOLOS
+    -----------------------------------------------------
+    Uso exclusivo después de guardar una atención abierta.
+    El diagnóstico ya fue persistido y verificado antes de entrar aquí.
+    Esta función NO vuelve a cargar Historia, Anamnesis, Examen Físico ni
+    especialidades; únicamente actualiza protocolos e integración derivada.
+  */
+  async function auroDxActualizarProtocolosEnSegundoPlano(idAtencion){
+    const idEsperado = texto(idAtencion);
+    if(!idEsperado || state.atencionActual !== idEsperado) return false;
+
+    const firmaEsperada = (state.diagnosticos || [])
+      .map(d => auroDxClaveProtocolo(d.codigo_cie10))
+      .filter(Boolean)
+      .sort()
+      .join('|');
+
+    try{
+      const protocolos = await consultarProtocolos({forzar:false});
+
+      if(state.atencionActual !== idEsperado) return false;
+
+      const firmaActual = (state.diagnosticos || [])
+        .map(d => auroDxClaveProtocolo(d.codigo_cie10))
+        .filter(Boolean)
+        .sort()
+        .join('|');
+
+      /*
+        Si el usuario cambió diagnósticos mientras cargaban los protocolos,
+        esta respuesta queda obsoleta y no se aplica.
+      */
+      if(firmaActual !== firmaEsperada) return false;
+
+      state.protocolos = clonar(protocolos, []);
+
+      if(state.protocolos.length){
+        if(
+          state.protocoloSeleccionado === null ||
+          state.protocoloSeleccionado >= state.protocolos.length
+        ){
+          state.protocoloSeleccionado = 0;
+        }
+      }else{
+        state.protocoloSeleccionado = null;
+      }
+
+      renderProtocolos();
+      renderContextoSuperior();
+      configurarModoProtocoloMaestro();
+
+      try{
+        document.dispatchEvent(new CustomEvent(
+          'aurosanax:protocolos-diagnostico-listos',
+          {
+            detail:{
+              id_atencion:idEsperado,
+              diagnosticos:clonar(state.diagnosticos, []),
+              protocolos:clonar(state.protocolos, [])
+            }
+          }
+        ));
+      }catch(_e){}
+
+      guardarEstadoTemporal();
+      return true;
+
+    }catch(error){
+      /*
+        El diagnóstico ya está guardado. Un fallo de protocolos no revierte
+        ni falsea la confirmación del diagnóstico.
+      */
+      console.warn(
+        MODULO + ': diagnóstico guardado; no se pudieron actualizar los protocolos en segundo plano.',
+        error
+      );
+      return false;
+    }
+  }
+
   async function auroDxGuardarCambiosAtencionAbierta(){
     if(auroDxGuardandoCambiosAbiertos) return;
 
@@ -1335,8 +1416,10 @@
     if(btn){
       btn.disabled = true;
       btn.setAttribute('aria-busy','true');
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Guardando...';
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Guardando diagnóstico…';
     }
+
+    mensaje('aviso','Guardando diagnóstico. Espere la confirmación…');
 
     try{
       const resultado = await Promise.resolve(
@@ -1392,14 +1475,15 @@
         guardarEstadoTemporal();
       }else{
         /*
-          Para uno o más diagnósticos, la integración clínica pesada puede
-          continuar después. Como el editor ya fue sincronizado con la fuente
-          persistida, diagnosticosLocales() contiene exactamente ese resultado.
+          El diagnóstico ya está confirmado. Los protocolos continúan aparte
+          y NO bloquean el botón ni disparan una recarga clínica completa.
         */
         try{
-          Promise.resolve(cargarAtencion(ctx.id, true)).catch(error => {
+          Promise.resolve(
+            auroDxActualizarProtocolosEnSegundoPlano(ctx.id)
+          ).catch(error => {
             console.warn(
-              MODULO + ': diagnóstico confirmado; la integración clínica continuará después.',
+              MODULO + ': diagnóstico guardado; protocolos pendientes.',
               error
             );
           });
@@ -1422,7 +1506,7 @@
           ? 'Diagnósticos eliminados. Las sugerencias diagnósticas del Plan se retiraron; el Plan ya guardado permanece intacto.'
           : (resultado.sin_cambios
               ? 'Diagnóstico verificado. No había cambios nuevos para guardar.'
-              : 'Diagnóstico actualizado correctamente.')
+              : 'Diagnóstico guardado correctamente. Los protocolos se actualizan en segundo plano.')
       );
 
       /*
@@ -4619,35 +4703,135 @@
     }
   }
 
-  async function consultarProtocolos(){
-    const resultados = [];
-    for(const dx of state.diagnosticos){
-      if(!dx.codigo_cie10) continue;
+  /*
+    AUROSANAX DX - PROTOCOLOS NO BLOQUEANTES / CACHE TEMPORAL
+    --------------------------------------------------------
+    Objetivo:
+    - Mantener exactamente los mismos endpoints y datos clínicos.
+    - Evitar consultar repetidamente el mismo CIE-10 al cambiar de pestaña.
+    - Consultar máximo 2 códigos simultáneamente para no saturar Apps Script.
+    - Una sincronización forzada puede saltarse el cache.
+    - No guarda ni aplica protocolos automáticamente.
+  */
+  const AURO_DX_PROTOCOLO_CACHE_TTL_MS = 120000;
+  const auroDxProtocolosCache = new Map();
+
+  function auroDxClaveProtocolo(codigo){
+    return texto(codigo).replace(/\./g,'').toUpperCase();
+  }
+
+  function auroDxLeerCacheProtocolo(codigo){
+    const clave = auroDxClaveProtocolo(codigo);
+    const entrada = auroDxProtocolosCache.get(clave);
+    if(!entrada) return null;
+
+    if(Date.now() - Number(entrada.ts || 0) > AURO_DX_PROTOCOLO_CACHE_TTL_MS){
+      auroDxProtocolosCache.delete(clave);
+      return null;
+    }
+
+    return clonar(entrada.protocolos, []);
+  }
+
+  function auroDxGuardarCacheProtocolo(codigo, protocolos){
+    const clave = auroDxClaveProtocolo(codigo);
+    if(!clave) return;
+    auroDxProtocolosCache.set(clave, {
+      ts:Date.now(),
+      protocolos:clonar(protocolos, [])
+    });
+  }
+
+  async function auroDxConsultarProtocoloPorDiagnostico(dx, forzar){
+    const codigo = auroDxClaveProtocolo(dx?.codigo_cie10);
+    if(!codigo) return [];
+
+    if(!forzar){
+      const cache = auroDxLeerCacheProtocolo(codigo);
+      if(cache !== null) return cache;
+    }
+
+    let salida = [];
+    let consultaValida = false;
+
+    try{
+      const data = await getJSON('buscarProtocolosPorCie10', {
+        codigo_cie10: codigo
+      });
+      consultaValida = true;
+      salida = arraySeguro(data).map(p => normalizarProtocolo(p, dx));
+    }catch(e){
       try{
-        const data = await getJSON('buscarProtocolosPorCie10', {
-          codigo_cie10: dx.codigo_cie10
+        const unico = await getJSON('buscarProtocoloPorCie10', {
+          codigo_cie10: codigo
         });
-        const lista = arraySeguro(data);
-        lista.forEach(p => resultados.push(normalizarProtocolo(p, dx)));
-      }catch(e){
-        try{
-          const unico = await getJSON('buscarProtocoloPorCie10', {
-            codigo_cie10: dx.codigo_cie10
-          });
-          if(unico && unico.success !== false){
-            const lista = arraySeguro(unico);
-            if(lista.length) lista.forEach(p => resultados.push(normalizarProtocolo(p, dx)));
-            else if(unico.id_protocolo || unico.codigo_cie10 || unico.nombre_protocolo){
-              resultados.push(normalizarProtocolo(unico, dx));
-            }
+
+        consultaValida = true;
+
+        if(unico && unico.success !== false){
+          const lista = arraySeguro(unico);
+          if(lista.length){
+            salida = lista.map(p => normalizarProtocolo(p, dx));
+          }else if(unico.id_protocolo || unico.codigo_cie10 || unico.nombre_protocolo){
+            salida = [normalizarProtocolo(unico, dx)];
           }
-        }catch(error){}
+        }
+      }catch(error){
+        /*
+          No se cachea un fallo de red. Así una próxima carga puede reintentar.
+        */
       }
     }
 
+    if(consultaValida){
+      auroDxGuardarCacheProtocolo(codigo, salida);
+    }
+
+    return salida;
+  }
+
+  async function consultarProtocolos(opciones){
+    opciones = opciones || {};
+    const forzar = opciones.forzar === true;
+
+    const diagnosticos = (state.diagnosticos || [])
+      .filter(dx => texto(dx?.codigo_cie10));
+
+    if(!diagnosticos.length) return [];
+
+    /*
+      Pool controlado: máximo dos solicitudes CIE-10 simultáneas.
+      Conserva el orden lógico de los diagnósticos en el resultado.
+    */
+    const resultadosPorIndice = new Array(diagnosticos.length).fill(null);
+    let siguiente = 0;
+
+    async function trabajador(){
+      while(true){
+        const indice = siguiente++;
+        if(indice >= diagnosticos.length) return;
+
+        resultadosPorIndice[indice] =
+          await auroDxConsultarProtocoloPorDiagnostico(
+            diagnosticos[indice],
+            forzar
+          );
+      }
+    }
+
+    const totalTrabajadores = Math.min(2, diagnosticos.length);
+    await Promise.all(
+      Array.from({length:totalTrabajadores}, () => trabajador())
+    );
+
+    const resultados = resultadosPorIndice
+      .flatMap(lista => Array.isArray(lista) ? lista : []);
+
     const vistos = new Set();
     return resultados.filter(p => {
-      const clave = normalizar((p.id_protocolo || '') + '|' + p.codigo_cie10 + '|' + p.nombre);
+      const clave = normalizar(
+        (p.id_protocolo || '') + '|' + p.codigo_cie10 + '|' + p.nombre
+      );
       if(vistos.has(clave)) return false;
       vistos.add(clave);
       return true;
@@ -5012,7 +5196,7 @@
           Los protocolos se consultan después de mostrar el diagnóstico y
           completar las fuentes clínicas. Su demora ya no bloquea el CIE-10.
         */
-        state.protocolos = await consultarProtocolos();
+        state.protocolos = await consultarProtocolos({forzar: !!forzar});
         if(!cargaSigueVigente()) return null;
 
         /*
