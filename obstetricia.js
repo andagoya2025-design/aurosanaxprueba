@@ -24,8 +24,125 @@ function usuarioActual(){try{if(typeof window.obtenerUsuarioActual==='function')
 function leerAtenciones(){for(const k of ['aurosanax_atenciones_local_v1','aurosanax_atenciones','atenciones']){try{const a=JSON.parse(localStorage.getItem(k)||'[]');if(Array.isArray(a)&&a.length)return a}catch(_){}}return []}
 function normalizarDetalle(d){if(!d||typeof d!=='object')return null;const c=d.atencion||d.data||d.registro||d;const id=txt(c?.id_atencion||c?.id||d.id_atencion||d.id);return id?{...c,id_atencion:id}:null}
 function idAtencionDOM(){for(const s of ['[data-id-atencion].active','[data-id-atencion][aria-selected="true"]','[data-id-atencion].selected','#idAtencionActiva','#atencionActivaId','#hcIdAtencion','[name="id_atencion"]']){const e=document.querySelector(s);if(!e)continue;const id=txt(e.dataset?.idAtencion||e.value||e.getAttribute('data-id-atencion'));if(id)return id}return ''}
-function resolverAtencion(){if(contextoSeleccionado?.id_atencion)return contextoSeleccionado;for(const o of [window.atencionActiva,window.atencionActual,window.currentAtencion,window.AURO_ATENCION_ACTIVA])if(o&&typeof o==='object'&&txt(o.id_atencion||o.id))return o;try{if(typeof window.getAtencionActiva==='function'){const a=window.getAtencionActiva();if(a&&txt(a.id_atencion||a.id))return a}}catch(_){}const id=[window.atencionActivaId,window.idAtencionActiva,window.currentAtencionId,sessionStorage.getItem('aurosanax_id_atencion_activa'),sessionStorage.getItem('aurosanax_id_atencion_seleccionada'),localStorage.getItem('aurosanax_id_atencion_activa'),localStorage.getItem('aurosanax_id_atencion_seleccionada'),localStorage.getItem('id_atencion_activa'),idAtencionDOM()].map(txt).find(Boolean)||'';if(id)return leerAtenciones().find(a=>txt(a.id_atencion||a.id)===id)||{id_atencion:id};return leerAtenciones().find(a=>['abierta','en atención','en atencion','activa'].includes(txt(a.estado_atencion||a.estado).toLowerCase()))||null}
-function resolverPaciente(a){for(const o of [window.pacienteActivo,window.pacienteActual,window.currentPatient,window.selectedPatient,window.AURO_PACIENTE_ACTIVO])if(o&&typeof o==='object'&&txt(o.id_paciente||o.id))return o;try{if(typeof window.getPacienteActivo==='function'){const p=window.getPacienteActivo();if(p)return p}}catch(_){}const id=txt(a?.id_paciente||window.idPacienteActivo||window.activePatientId||sessionStorage.getItem('aurosanax_id_paciente_activo')||localStorage.getItem('aurosanax_id_paciente_activo')||localStorage.getItem('selectedPatientId'));for(const l of [window.pacientes,window.pacientesData,window.listaPacientes]){if(!Array.isArray(l))continue;const p=l.find(x=>txt(x.id_paciente||x.id)===id);if(p)return p}return id?{id_paciente:id}:null}
+
+/* ============================================================
+   AISLAMIENTO DE CONTEXTO OBSTÉTRICO V1
+   El selector maestro de Historia Clínica es la autoridad para
+   impedir que una atención/paciente anterior reaparezca en
+   Obstetricia cuando no existe paciente seleccionado o cambió.
+   NO modifica guardado, tarjeta de antecedentes ni base de datos.
+============================================================ */
+function estadoPacienteMaestro(){
+  const e=$('hcPacienteSelect');
+  return{disponible:!!e,id:txt(e?.value)}
+}
+function atencionCompatibleConPaciente(a){
+  if(!a||typeof a!=='object'||!txt(a.id_atencion||a.id))return null;
+  const m=estadoPacienteMaestro();
+  if(!m.disponible)return a;
+  if(!m.id)return null;
+  const idPacienteAtencion=txt(a.id_paciente);
+  if(idPacienteAtencion&&idPacienteAtencion!==m.id)return null;
+  return a
+}
+function resolverAtencion(){
+  const m=estadoPacienteMaestro();
+  if(m.disponible&&!m.id)return null;
+
+  let a=atencionCompatibleConPaciente(contextoSeleccionado);
+  if(a)return a;
+
+  for(const o of [window.atencionActiva,window.atencionActual,window.currentAtencion,window.AURO_ATENCION_ACTIVA]){
+    a=atencionCompatibleConPaciente(o);
+    if(a)return a
+  }
+
+  try{
+    if(typeof window.getAtencionActiva==='function'){
+      a=atencionCompatibleConPaciente(window.getAtencionActiva());
+      if(a)return a
+    }
+  }catch(_){}
+
+  const id=[
+    window.atencionActivaId,
+    window.idAtencionActiva,
+    window.currentAtencionId,
+    sessionStorage.getItem('aurosanax_id_atencion_activa'),
+    sessionStorage.getItem('aurosanax_id_atencion_seleccionada'),
+    localStorage.getItem('aurosanax_id_atencion_activa'),
+    localStorage.getItem('aurosanax_id_atencion_seleccionada'),
+    localStorage.getItem('id_atencion_activa'),
+    idAtencionDOM()
+  ].map(txt).find(Boolean)||'';
+
+  if(id){
+    const encontrada=leerAtenciones().find(x=>txt(x.id_atencion||x.id)===id);
+    a=atencionCompatibleConPaciente(encontrada);
+    if(a)return a;
+
+    /*
+     * Compatibilidad histórica:
+     * si no existe selector maestro, se conserva el fallback antiguo.
+     * Con selector maestro presente no se inventa una atención sin paciente.
+     */
+    if(!m.disponible)return{id_atencion:id}
+  }
+
+  return leerAtenciones().find(x=>{
+    if(!['abierta','en atención','en atencion','activa'].includes(txt(x.estado_atencion||x.estado).toLowerCase()))return false;
+    return !!atencionCompatibleConPaciente(x)
+  })||null
+}
+function resolverPaciente(a){
+  const m=estadoPacienteMaestro();
+
+  /*
+   * Si Historia Clínica tiene selector maestro, ese id manda.
+   * Así un objeto global del paciente anterior no puede contaminar
+   * el contexto visual de Obstetricia.
+   */
+  if(m.disponible){
+    if(!m.id)return null;
+
+    for(const o of [window.pacienteActivo,window.pacienteActual,window.currentPatient,window.selectedPatient,window.AURO_PACIENTE_ACTIVO]){
+      if(o&&typeof o==='object'&&txt(o.id_paciente||o.id)===m.id)return o
+    }
+
+    try{
+      if(typeof window.getPacienteActivo==='function'){
+        const p=window.getPacienteActivo();
+        if(p&&txt(p.id_paciente||p.id)===m.id)return p
+      }
+    }catch(_){}
+
+    for(const l of [window.pacientes,window.pacientesData,window.listaPacientes]){
+      if(!Array.isArray(l))continue;
+      const p=l.find(x=>txt(x.id_paciente||x.id)===m.id);
+      if(p)return p
+    }
+
+    return{id_paciente:m.id}
+  }
+
+  /* Fallback original cuando el selector maestro no existe. */
+  for(const o of [window.pacienteActivo,window.pacienteActual,window.currentPatient,window.selectedPatient,window.AURO_PACIENTE_ACTIVO]){
+    if(o&&typeof o==='object'&&txt(o.id_paciente||o.id))return o
+  }
+  try{
+    if(typeof window.getPacienteActivo==='function'){
+      const p=window.getPacienteActivo();
+      if(p)return p
+    }
+  }catch(_){}
+  const id=txt(a?.id_paciente||window.idPacienteActivo||window.activePatientId||sessionStorage.getItem('aurosanax_id_paciente_activo')||localStorage.getItem('aurosanax_id_paciente_activo')||localStorage.getItem('selectedPatientId'));
+  for(const l of [window.pacientes,window.pacientesData,window.listaPacientes]){
+    if(!Array.isArray(l))continue;
+    const p=l.find(x=>txt(x.id_paciente||x.id)===id);
+    if(p)return p
+  }
+  return id?{id_paciente:id}:null
+}
 function resolverMedico(a){const id=txt(a?.id_medico||window.idMedicoActual||window.medicoActual?.id_medico||window.usuarioActualERP?.id_medico);let nombre=txt(a?.nombre_medico||a?.medico_nombre||window.medicoActual?.nombre_completo||window.medicoActual?.nombre);for(const l of [window.medicos,window.medicosActivos,window.listaMedicos]){if(!Array.isArray(l))continue;const m=l.find(x=>txt(x.id_medico||x.id||x.codigo)===id);if(m){nombre=nombre||txt(m.nombre_completo||`${txt(m.nombres||m.nombre)} ${txt(m.apellidos)}`.trim());break}}return{id_medico:id,nombre_medico:nombre}}
 function contextoActual(){const a=resolverAtencion(),p=resolverPaciente(a),m=resolverMedico(a);return{atencion:a,paciente:p,id_atencion:txt(a?.id_atencion||a?.id),numero_consulta:a?.numero_consulta||a?.consulta||'',id_paciente:txt(a?.id_paciente||p?.id_paciente||p?.id),nombre_paciente:txt(p?.nombre_completo||`${txt(p?.nombres||p?.nombre)} ${txt(p?.apellidos)}`.trim()||a?.nombre_paciente||a?.paciente_nombre),id_historia:txt(a?.id_historia||window.idHistoriaActual||window.auroHistoriaSeleccionadaId||window.historiaActiva?.id_historia||window.historiaActual?.id_historia||window.currentHistoria?.id_historia||p?.id_historia||sessionStorage.getItem('aurosanax_id_historia_activa')||localStorage.getItem('aurosanax_id_historia_activa')),id_medico:m.id_medico,nombre_medico:m.nombre_medico,fecha_atencion:txt(a?.fecha_atencion||a?.fecha)||fechaHoy(),hora_atencion:txt(a?.hora_atencion||a?.hora)||horaActual(),tipo_atencion:txt(a?.tipo_atencion)}}
 function fechaInputObstetricia(v){
@@ -362,7 +479,31 @@ function cargarRegistro(x){const r=normalizar(x);registroActual=r;setValue('obsT
 async function guardar(){if(guardando)return;const r=construir(),err=[];if(!r.id_atencion)err.push('No existe atención activa.');if(!r.id_paciente)err.push('No existe paciente seleccionada.');if(err.length)return notificar(err.join(' '),'error');guardando=true;const bs=[$('obsBtnGuardar'),$('obsBtnGuardarInferior')].filter(Boolean);bs.forEach(b=>{b.disabled=true;b.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Guardando...'});try{const editar=!!txt(registroActual?.id_obstetricia);actualizarLocal(r);await enviarRemoto(r,editar);registroActual=normalizar(r);actualizarEstado();notificar(editar?'Obstetricia actualizada correctamente.':'Obstetricia guardada correctamente.','success')}catch(e){console.error(MODULO,e);notificar(`Guardado local. Falló sincronización: ${e.message}`,'error')}finally{guardando=false;bs.forEach(b=>b.disabled=false);actualizarEstado()}}
 async function cargar(forzar=false){if(cargando)return;cargando=true;try{const c=contextoActual();pintarContexto(c);await cargarAntecedentes(c);if(!c.id_atencion||!c.id_paciente){limpiar();ultimoIdAtencion='';return}if(!forzar&&ultimoIdAtencion===c.id_atencion&&registroActual)return;ultimoIdAtencion=c.id_atencion;let lista=[];try{const rem=(await listarRemotos()).map(normalizar),m=new Map();leerLocales().forEach(r=>m.set(txt(r.id_obstetricia)||`ATN:${txt(r.id_atencion)}`,r));rem.forEach(r=>m.set(txt(r.id_obstetricia)||`ATN:${txt(r.id_atencion)}`,r));lista=Array.from(m.values());guardarLocales(lista)}catch(e){console.warn(MODULO,'Respaldo local',e);lista=leerLocales()}const e=lista.filter(r=>txt(r.id_atencion)===c.id_atencion).sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)));if(e[0]){cargarRegistro(e[0]);notificar('Registro obstétrico cargado.','info')}else{limpiar();setValue('obsTipoAtencion',c.tipo_atencion)}}finally{cargando=false}}
 function interceptar(){const o=window.showScreen;if(typeof o!=='function'||o.__obsInterceptado)return;function w(id){const r=o.apply(this,arguments);if(id==='obstetricia')setTimeout(()=>cargar(true),60);return r}w.__obsInterceptado=true;window.showScreen=w}
-function evento(ev){const d=normalizarDetalle(ev?.detail);if(d){contextoSeleccionado=d;try{sessionStorage.setItem('aurosanax_id_atencion_seleccionada',d.id_atencion)}catch(_){}}cargaAntecedentesSeq++;ultimoIdAtencion='';limpiarTarjetaAntecedentesObstetricos();limpiar();setTimeout(()=>cargar(true),80)}
-function inicializar(){if(!renderizar())return;interceptar();['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:paciente-seleccionado','aurosanax:historia-cargada'].forEach(n=>window.addEventListener(n,evento));setInterval(()=>{const a=resolverAtencion(),id=txt(a?.id_atencion||a?.id);if(id!==ultimoIdAtencion){contextoSeleccionado=a||contextoSeleccionado;cargar(true)}},1500);cargar(true);console.info(`${MODULO} cargado. ${VERSION}`)}
+function evento(ev){
+  const d=normalizarDetalle(ev?.detail);
+  const eventoPaciente=ev?.type==='aurosanax:paciente-seleccionado'||ev?.type==='aurosanax:historia-cargada';
+
+  /*
+   * Si el evento no trae atención, o corresponde a un cambio de
+   * paciente/historia, invalidar primero el contexto obstétrico viejo.
+   * Una atención válida podrá resolverse nuevamente en cargar(true).
+   */
+  contextoSeleccionado=(!eventoPaciente&&d)?atencionCompatibleConPaciente(d):null;
+
+  try{
+    if(contextoSeleccionado?.id_atencion){
+      sessionStorage.setItem('aurosanax_id_atencion_seleccionada',contextoSeleccionado.id_atencion)
+    }else{
+      sessionStorage.removeItem('aurosanax_id_atencion_seleccionada')
+    }
+  }catch(_){}
+
+  cargaAntecedentesSeq++;
+  ultimoIdAtencion='';
+  limpiarTarjetaAntecedentesObstetricos();
+  limpiar();
+  setTimeout(()=>cargar(true),80)
+}
+function inicializar(){if(!renderizar())return;interceptar();['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:paciente-seleccionado','aurosanax:historia-cargada','aurosanax:atencion-limpiada','aurosanax:paciente-limpiado'].forEach(n=>window.addEventListener(n,evento));setInterval(()=>{const a=resolverAtencion(),id=txt(a?.id_atencion||a?.id);if(id!==ultimoIdAtencion){contextoSeleccionado=a||null;cargar(true)}},1500);cargar(true);console.info(`${MODULO} cargado. ${VERSION}`)}
 window.AurosanaxObstetricia={version:VERSION,inicializar,cargar,guardar,limpiar,obtenerRegistroActual:()=>registroActual?{...registroActual}:null,obtenerContexto:contextoActual};window.inicializarObstetricia=inicializar;window.cargarObstetriciaPorAtencion=cargar;window.guardarObstetriciaERP=guardar;window.limpiarObstetriciaERP=limpiar;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inicializar);else inicializar();
 })();
