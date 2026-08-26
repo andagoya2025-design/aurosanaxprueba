@@ -1254,6 +1254,31 @@
   window.auroDxCancelarEdicionDiagnosticoAbierto =
     auroDxCancelarEdicionDiagnosticoAbierto;
 
+  /*
+    AUROSANAX DX - VERIFICACIÓN AUTORITATIVA POST-GUARDADO
+    -----------------------------------------------------
+    Uso EXCLUSIVO: edición de una atención abierta.
+    - Consulta únicamente la fuente persistida de diagnósticos.
+    - NO fusiona con diagnosticosLocales().
+    - NO usa detalle del Examen Físico como fallback.
+    - Una respuesta válida con 0 diagnósticos significa 0.
+    - No modifica el flujo normal ni la corrección histórica.
+  */
+  async function auroDxVerificarDiagnosticosPersistidosAbiertos(idAtencion){
+    const respuesta = await getJSON('listarDiagnosticosPorAtencion', {
+      id_atencion: texto(idAtencion)
+    });
+
+    if(respuesta && respuesta.success === false){
+      throw new Error(
+        respuesta.message ||
+        'No se pudo verificar el diagnóstico persistido de la atención.'
+      );
+    }
+
+    return normalizarDiagnosticosServidor(respuesta);
+  }
+
   async function auroDxGuardarCambiosAtencionAbierta(){
     if(auroDxGuardandoCambiosAbiertos) return;
 
@@ -1315,7 +1340,10 @@
 
     try{
       const resultado = await Promise.resolve(
-        window.auroGuardarDiagnosticosAtencionActual()
+        window.auroGuardarDiagnosticosAtencionActual({
+          omitir_refresco_visor:true,
+          origen:'edicion_diagnostico_abierto'
+        })
       );
 
       if(!resultado || resultado.success !== true){
@@ -1326,25 +1354,22 @@
       }
 
       /*
-        La recarga forzada cumple dos objetivos sin duplicar lógica:
-        1. vuelve a leer de la fuente persistida la lista exacta de CIE-10;
-        2. vuelve a consultar protocolos y emite
-           aurosanax:protocolos-diagnostico-listos,
-           que Plan ya usa para reconstruir sus tarjetas.
+        EDICIÓN ABIERTA - FUENTE AUTORITATIVA
+        -------------------------------------
+        El backend ya confirmó el POST. Ahora se verifica solamente la tabla
+        persistida de diagnósticos para esta atención. Ese resultado manda.
       */
-      const diagnosticosEditor = Array.isArray(window.hcDiagnosticosSeleccionados)
-        ? window.hcDiagnosticosSeleccionados
-        : [];
+      const persistidos = await auroDxVerificarDiagnosticosPersistidosAbiertos(ctx.id);
+      state.diagnosticos = clonar(persistidos, []);
 
       /*
-        AUROSANAX 1.5.12:
-        Si la atención abierta queda con 0 diagnósticos, se retiran únicamente
-        las sugerencias derivadas del diagnóstico. El Plan clínico ya guardado
-        permanece intacto: no se eliminan medicamentos, órdenes, indicaciones
-        ni controles.
+        Sincronización inmediata del editor con lo realmente persistido.
+        Si persistidos = [], el editor queda en cero y no existe fallback
+        desde Examen Físico en este punto.
       */
-      if(diagnosticosEditor.length === 0){
-        state.diagnosticos = [];
+      sincronizarEditorCie10DesdeDiagnosticos();
+
+      if(state.diagnosticos.length === 0){
         state.protocolos = [];
         state.protocoloSeleccionado = null;
         state.resumenClinico = '';
@@ -1365,20 +1390,22 @@
         }catch(_e){}
 
         guardarEstadoTemporal();
-      }else if(resultado.visor_refrescado !== true){
+      }else{
         /*
-          Fallback antirregresivo:
-          si examenfisico.js no confirmó que ya releyó Diagnóstico desde
-          la fuente persistida, diagnosticos.js conserva su recarga histórica.
-          Así se evita una segunda recarga solo cuando la primera terminó bien.
+          Para uno o más diagnósticos, la integración clínica pesada puede
+          continuar después. Como el editor ya fue sincronizado con la fuente
+          persistida, diagnosticosLocales() contiene exactamente ese resultado.
         */
-        await cargarAtencion(ctx.id, true);
+        try{
+          Promise.resolve(cargarAtencion(ctx.id, true)).catch(error => {
+            console.warn(
+              MODULO + ': diagnóstico confirmado; la integración clínica continuará después.',
+              error
+            );
+          });
+        }catch(_e){}
       }
 
-      /*
-        Confirmación UX únicamente después de success:true del backend
-        y de la lectura persistida correspondiente.
-      */
       if(btn && document.body.contains(btn)){
         btn.disabled = true;
         btn.removeAttribute('aria-busy');
@@ -1391,21 +1418,18 @@
 
       mensaje(
         'ok',
-        diagnosticosEditor.length === 0
+        state.diagnosticos.length === 0
           ? 'Diagnósticos eliminados. Las sugerencias diagnósticas del Plan se retiraron; el Plan ya guardado permanece intacto.'
           : (resultado.sin_cambios
               ? 'Diagnóstico verificado. No había cambios nuevos para guardar.'
-              : 'Diagnóstico actualizado correctamente. Las sugerencias de Plan se sincronizaron con los diagnósticos guardados.')
+              : 'Diagnóstico actualizado correctamente.')
       );
 
       /*
-        Permite percibir la confirmación visual antes de volver al modo protegido.
-        No escribe ni realiza llamadas adicionales.
+        No existe espera artificial. La edición se cierra únicamente después
+        de confirmar el estado persistido.
       */
-      await new Promise(resolve => window.setTimeout(resolve, 950));
-
       state.edicionDiagnosticoAbierto = false;
-      sincronizarEditorCie10DesdeDiagnosticos();
       try{
         if(typeof window.auroLimpiarBusquedaDiagnosticoCie10 === 'function'){
           window.auroLimpiarBusquedaDiagnosticoCie10(false);
