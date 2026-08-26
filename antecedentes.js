@@ -4732,3 +4732,417 @@ function recopilarAntecedentesPersonalesCompletos(){
     'AUROSANAX antecedentes.js: familiares estructurados V1 conectados sin cambios de backend.'
   );
 })();
+/* ============================================================
+   AUROSANAX - GINECOLÓGICOS REPETIBLES V1
+   Alcance EXCLUSIVO:
+   - Permite múltiples Citologías / PAP, Colposcopias y Biopsias.
+   - Conserva íntegros los IDs y campos originales de la primera fila.
+   - NO modifica Index, Apps Script, Google Sheets ni columnas.
+   - NO cambia botones de guardado, fechas, temporalidades, ayudas rápidas,
+     limpieza general, seguridad, diagnóstico ni conexiones con otros módulos.
+   - Historias antiguas sin "registros" continúan funcionando exactamente igual.
+   - Los registros adicionales se guardan dentro del JSON ginecológico existente.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  const CONFIG = {
+    pap: {
+      label: 'Citología / PAP',
+      fechaId: 'hcGinPapFecha',
+      resultadoId: 'hcGinPapResultado',
+      estadoId: 'hcGinPapEstado'
+    },
+    colposcopia: {
+      label: 'Colposcopia',
+      fechaId: 'hcGinColposcopiaFecha',
+      resultadoId: 'hcGinColposcopiaResultado',
+      estadoId: 'hcGinColposcopiaEstado'
+    },
+    biopsia: {
+      label: 'Biopsia',
+      fechaId: 'hcGinBiopsiaFecha',
+      resultadoId: 'hcGinBiopsiaResultado',
+      estadoId: ''
+    }
+  };
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function selectorSeguro_(valor){
+    const raw = String(valor || '');
+    if(window.CSS && typeof window.CSS.escape === 'function'){
+      return window.CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, '\\$&');
+  }
+
+  function obtenerFilaBase_(tipo){
+    const cfg = CONFIG[tipo];
+    if(!cfg) return null;
+    const input = document.getElementById(cfg.fechaId);
+    return input?.closest('tr') || null;
+  }
+
+  function obtenerTbody_(){
+    return document.querySelector('#hc_antecedentes .ginecologicos-table tbody') || null;
+  }
+
+  function registrosAdicionalesDOM_(tipo){
+    return [...document.querySelectorAll(
+      '#hc_antecedentes .auro-gine-repetible-row[data-auro-gine-tipo="' +
+      selectorSeguro_(tipo) + '"]'
+    )];
+  }
+
+  function leerRegistrosAdicionales_(tipo){
+    return registrosAdicionalesDOM_(tipo)
+      .map(fila => ({
+        fecha: texto_(fila.querySelector('.auro-gine-repetible-fecha')?.value),
+        resultado: texto_(fila.querySelector('.auro-gine-repetible-resultado')?.value)
+      }))
+      .filter(item => item.fecha || item.resultado);
+  }
+
+  function actualizarNumeracion_(tipo){
+    const cfg = CONFIG[tipo];
+    registrosAdicionalesDOM_(tipo).forEach((fila, indice) => {
+      const n = indice + 2;
+      const titulo = fila.querySelector('.ginecologico-descripcion');
+      if(titulo) titulo.textContent = cfg.label + ' ' + n;
+      const btn = fila.querySelector('.auro-gine-repetible-eliminar');
+      if(btn) btn.setAttribute('aria-label', 'Eliminar ' + cfg.label + ' ' + n);
+    });
+  }
+
+  function dispararResumen_(){
+    if(typeof window.updateClinicalSummary === 'function'){
+      try{ window.updateClinicalSummary(); }catch(e){}
+    }
+  }
+
+  function crearFilaAdicional_(tipo, datos){
+    const cfg = CONFIG[tipo];
+    const base = obtenerFilaBase_(tipo);
+    const tbody = obtenerTbody_();
+    if(!cfg || !base || !tbody) return null;
+
+    const fila = document.createElement('tr');
+    fila.className = 'auro-gine-repetible-row';
+    fila.dataset.auroGineTipo = tipo;
+
+    const tdTitulo = document.createElement('td');
+    tdTitulo.className = 'ginecologico-descripcion';
+
+    const tdFecha = document.createElement('td');
+    const fecha = document.createElement('input');
+    fecha.type = 'date';
+    fecha.className = 'form-control auro-gine-repetible-fecha';
+    fecha.value = texto_(datos?.fecha);
+    tdFecha.appendChild(fecha);
+
+    const tdResultado = document.createElement('td');
+    const wrap = document.createElement('div');
+    wrap.className = 'auro-gine-repetible-resultado-wrap';
+
+    const resultado = document.createElement('input');
+    resultado.type = 'text';
+    resultado.className = 'form-control auro-gine-repetible-resultado';
+    resultado.placeholder = 'Resultado / observación';
+    resultado.value = texto_(datos?.resultado);
+
+    const eliminar = document.createElement('button');
+    eliminar.type = 'button';
+    eliminar.className = 'btn-soft auro-gine-repetible-eliminar';
+    eliminar.innerHTML = '<i class="bi bi-trash3"></i>';
+    eliminar.title = 'Eliminar este registro';
+    eliminar.addEventListener('click', () => {
+      fila.remove();
+      actualizarNumeracion_(tipo);
+      dispararResumen_();
+    });
+
+    [fecha, resultado].forEach(control => {
+      control.addEventListener('input', dispararResumen_);
+      control.addEventListener('change', dispararResumen_);
+    });
+
+    wrap.appendChild(resultado);
+    wrap.appendChild(eliminar);
+    tdResultado.appendChild(wrap);
+
+    fila.appendChild(tdTitulo);
+    fila.appendChild(tdFecha);
+    fila.appendChild(tdResultado);
+
+    const existentes = registrosAdicionalesDOM_(tipo);
+    const referencia = existentes.length ? existentes[existentes.length - 1] : base;
+    referencia.insertAdjacentElement('afterend', fila);
+
+    actualizarNumeracion_(tipo);
+    return fila;
+  }
+
+  function limpiarAdicionales_(tipo){
+    registrosAdicionalesDOM_(tipo).forEach(fila => fila.remove());
+  }
+
+  function limpiarTodosAdicionales_(){
+    Object.keys(CONFIG).forEach(limpiarAdicionales_);
+  }
+
+  function asegurarBotonAgregar_(tipo){
+    const cfg = CONFIG[tipo];
+    const base = obtenerFilaBase_(tipo);
+    if(!cfg || !base || base.dataset.auroGineRepetibleReady === '1') return;
+
+    base.dataset.auroGineRepetibleReady = '1';
+
+    const titulo = base.querySelector('.ginecologico-descripcion');
+    if(!titulo) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'auro-gine-repetible-titulo-wrap';
+
+    const texto = document.createElement('span');
+    texto.textContent = cfg.label;
+
+    const agregar = document.createElement('button');
+    agregar.type = 'button';
+    agregar.className = 'btn-soft auro-gine-repetible-agregar';
+    agregar.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Agregar';
+    agregar.title = 'Agregar otro registro de ' + cfg.label;
+    agregar.addEventListener('click', () => {
+      const fila = crearFilaAdicional_(tipo, {});
+      const input = fila?.querySelector('.auro-gine-repetible-fecha');
+      if(input) input.focus();
+    });
+
+    titulo.textContent = '';
+    wrap.appendChild(texto);
+    wrap.appendChild(agregar);
+    titulo.appendChild(wrap);
+  }
+
+  function inyectarEstilos_(){
+    if(document.getElementById('auroGineRepetiblesStyle')) return;
+
+    const style = document.createElement('style');
+    style.id = 'auroGineRepetiblesStyle';
+    style.textContent = `
+      #hc_antecedentes .auro-gine-repetible-titulo-wrap{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        width:100%;
+      }
+      #hc_antecedentes .auro-gine-repetible-agregar{
+        flex:0 0 auto;
+        padding:5px 9px;
+        border-radius:9px;
+        font-size:11px;
+        line-height:1.2;
+        white-space:nowrap;
+      }
+      #hc_antecedentes .auro-gine-repetible-row{
+        background:linear-gradient(180deg,#fff 0%,#fffafd 100%);
+      }
+      #hc_antecedentes .auro-gine-repetible-resultado-wrap{
+        display:grid;
+        grid-template-columns:minmax(0,1fr) auto;
+        gap:7px;
+        align-items:center;
+      }
+      #hc_antecedentes .auro-gine-repetible-eliminar{
+        width:38px;
+        min-width:38px;
+        height:38px;
+        padding:0;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:10px;
+        color:#9f1239;
+      }
+      @media(max-width:760px){
+        #hc_antecedentes .auro-gine-repetible-titulo-wrap{
+          align-items:flex-start;
+        }
+        #hc_antecedentes .auro-gine-repetible-agregar{
+          min-height:36px!important;
+          padding:6px 9px!important;
+        }
+        #hc_antecedentes .auro-gine-repetible-resultado-wrap{
+          grid-template-columns:minmax(0,1fr) 42px!important;
+        }
+        #hc_antecedentes .auro-gine-repetible-eliminar{
+          width:42px!important;
+          min-width:42px!important;
+          height:42px!important;
+        }
+      }
+      @media print{
+        #hc_antecedentes .auro-gine-repetible-agregar,
+        #hc_antecedentes .auro-gine-repetible-eliminar{
+          display:none!important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function inicializarUI_(){
+    const panel = document.getElementById('hc_antecedentes');
+    if(!panel) return false;
+
+    inyectarEstilos_();
+    Object.keys(CONFIG).forEach(asegurarBotonAgregar_);
+
+    const formulario = panel.closest('form');
+    if(formulario && formulario.dataset.auroGineRepetiblesReset !== '1'){
+      formulario.dataset.auroGineRepetiblesReset = '1';
+      formulario.addEventListener('reset', () => {
+        setTimeout(limpiarTodosAdicionales_, 0);
+      });
+    }
+
+    return true;
+  }
+
+  /*
+    GUARDADO:
+    conserva la función estable y solo añade "registros" a los tres
+    objetos autorizados. La primera fila sigue siendo fecha/estado/resultado.
+  */
+  if(typeof window.recopilarAntecedentesGinecologicosEstructurados === 'function'){
+    const recopilarOriginal = window.recopilarAntecedentesGinecologicosEstructurados;
+
+    window.recopilarAntecedentesGinecologicosEstructurados = function(){
+      const base = recopilarOriginal.apply(this, arguments) || {};
+
+      ['pap','colposcopia','biopsia'].forEach(tipo => {
+        const extras = leerRegistrosAdicionales_(tipo);
+        if(!extras.length) return;
+
+        const actual = (base[tipo] && typeof base[tipo] === 'object' && !Array.isArray(base[tipo]))
+          ? base[tipo]
+          : {};
+
+        base[tipo] = Object.assign({}, actual, { registros: extras });
+      });
+
+      return typeof window.auroCompactarObjeto === 'function'
+        ? window.auroCompactarObjeto(base)
+        : base;
+    };
+  }
+
+  /*
+    CARGA / EDICIÓN:
+    primero ejecuta íntegra la función estable y luego reconstruye solo
+    las filas adicionales. Si la historia es antigua y no tiene registros,
+    queda exactamente una fila como antes.
+  */
+  if(typeof window.cargarAntecedentesGinecologicosEstructurados === 'function'){
+    const cargarOriginal = window.cargarAntecedentesGinecologicosEstructurados;
+
+    window.cargarAntecedentesGinecologicosEstructurados = function(data){
+      const d = data || {};
+
+      limpiarTodosAdicionales_();
+      const resultado = cargarOriginal.apply(this, arguments);
+
+      ['pap','colposcopia','biopsia'].forEach(tipo => {
+        const lista = Array.isArray(d?.[tipo]?.registros) ? d[tipo].registros : [];
+        lista.forEach(item => {
+          if(texto_(item?.fecha) || texto_(item?.resultado)){
+            crearFilaAdicional_(tipo, item);
+          }
+        });
+      });
+
+      return resultado;
+    };
+  }
+
+  /*
+    RESUMEN / ANTECEDENTES PREVIOS:
+    conserva todas las secciones existentes y expande únicamente
+    PAP, Colposcopia y Biopsia cuando existen registros adicionales.
+  */
+  if(typeof window.auroResumenGinecologicosItemsDesdeJson === 'function'){
+    const resumenOriginal = window.auroResumenGinecologicosItemsDesdeJson;
+
+    window.auroResumenGinecologicosItemsDesdeJson = function(dataGineco){
+      const itemsOriginales = resumenOriginal.apply(this, arguments) || [];
+      const g = dataGineco?.ginecologicos || null;
+      if(!g || typeof g !== 'object') return itemsOriginales;
+
+      const etiquetas = {
+        pap:'Citología / PAP',
+        colposcopia:'Colposcopia',
+        biopsia:'Biopsia'
+      };
+
+      let items = itemsOriginales.filter(item => {
+        const titulo = texto_(item?.titulo);
+        return !Object.values(etiquetas).includes(titulo);
+      });
+
+      ['pap','colposcopia','biopsia'].forEach(tipo => {
+        const v = g[tipo];
+        if(!v || typeof v !== 'object' || Array.isArray(v)) return;
+
+        const lista = [];
+        if(texto_(v.fecha) || texto_(v.resultado)){
+          lista.push({ fecha:texto_(v.fecha), resultado:texto_(v.resultado) });
+        }
+
+        if(Array.isArray(v.registros)){
+          v.registros.forEach(r => {
+            if(texto_(r?.fecha) || texto_(r?.resultado)){
+              lista.push({ fecha:texto_(r?.fecha), resultado:texto_(r?.resultado) });
+            }
+          });
+        }
+
+        lista.forEach((registro, indice) => {
+          const detalle = [];
+          if(registro.fecha) detalle.push('Fecha: ' + registro.fecha);
+          if(registro.resultado) detalle.push('Resultado: ' + registro.resultado);
+
+          items.push({
+            titulo: etiquetas[tipo] + (indice > 0 ? ' ' + (indice + 1) : ''),
+            detalle: detalle.join(' · ')
+          });
+        });
+      });
+
+      return items;
+    };
+  }
+
+  /*
+    Inicialización visual diferida y segura.
+    No realiza guardados automáticos ni altera el contenido clínico.
+  */
+  function iniciar_(){
+    if(inicializarUI_()) return;
+    setTimeout(iniciar_, 300);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(iniciar_, 320);
+    });
+  }else{
+    setTimeout(iniciar_, 320);
+  }
+
+  console.log(
+    'AUROSANAX antecedentes.js: GINECOLÓGICOS REPETIBLES V1 cargado sin cambios de backend.'
+  );
+})();
