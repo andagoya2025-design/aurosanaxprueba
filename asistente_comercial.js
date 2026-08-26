@@ -2474,6 +2474,34 @@
     setTextCreatorMessage("");
   }
 
+  function clearTextCreatorForNewTemplate() {
+    if (state.editingTemplateId) {
+      if (els.textCreatorInput) els.textCreatorInput.value = "";
+      setTextCreatorMessage("");
+      els.textCreatorInput?.focus();
+      return false;
+    }
+
+    if (els.textCreatorInput) els.textCreatorInput.value = "";
+    if (els.templateTitle) els.templateTitle.value = "";
+    if (els.templateCategory) els.templateCategory.value = "";
+    if (els.templateBusinessType) els.templateBusinessType.value = "";
+    if (els.templateService) els.templateService.value = "";
+    if (els.templateKeywords) els.templateKeywords.value = "";
+    if (els.templateResponse) els.templateResponse.value = "";
+    if (els.templateType) els.templateType.value = "CORTA";
+
+    setTextCreatorMessage("");
+    showTemplateEditorMessage("");
+    populateTemplateCategorySelect();
+    populateTemplateTypeDatalist();
+    updateTemplatePreview();
+    updateTemplateQuality();
+
+    els.textCreatorInput?.focus();
+    return true;
+  }
+
   function getTextCreatorTypeRules() {
     return getSemanticIntentRules();
   }
@@ -2963,50 +2991,126 @@
     const businessType = normalizeMetaId(els.templateBusinessType?.value || "");
 
     if (!response) {
-      return { score: 0, items: [{ ok: false, label: "Escribe la respuesta para iniciar la revisión." }] };
+      return {
+        status: "EMPTY",
+        label: "Sin revisar",
+        tone: "neutral",
+        recommendations: 0,
+        blockingIssues: 0,
+        items: [
+          {
+            ok: false,
+            severity: "info",
+            label: "Escribe la respuesta para iniciar la revisión."
+          }
+        ]
+      };
     }
 
     const items = [];
     const normalized = normalizeText(response);
     const hasCta = /\?/.test(response) || /\b(agenda|agendar|reserva|reservar|coordinar|escribenos|escríbenos|contactanos|contáctanos|deseas|gustaria|gustaría)\b/.test(normalized);
-    items.push({ ok: hasCta, label: hasCta ? "Tiene llamada a la acción." : "Falta un cierre o llamada a la acción." });
+
+    items.push({
+      ok: hasCta,
+      severity: hasCta ? "ok" : "recommendation",
+      label: hasCta ? "Tiene llamada a la acción." : "Conviene añadir un cierre o llamada a la acción."
+    });
 
     const limits = { CORTA: 430, MEDIA: 760, LARGA: 1300 };
     const limit = limits[responseType] || limits.CORTA;
     const lengthOk = response.length <= limit;
-    items.push({ ok: lengthOk, label: lengthOk ? `Extensión ${responseType.toLowerCase()} adecuada.` : `Supera la extensión recomendada para ${responseType.toLowerCase()}.` });
+
+    items.push({
+      ok: lengthOk,
+      severity: lengthOk ? "ok" : "recommendation",
+      label: lengthOk
+        ? `Extensión ${responseType.toLowerCase()} adecuada.`
+        : `La respuesta es extensa para ${responseType.toLowerCase()}; considera cambiar la extensión o resumirla.`
+    });
 
     const emojiCount = (response.match(/\p{Extended_Pictographic}/gu) || []).length;
     const emojiOk = emojiCount <= 6;
-    items.push({ ok: emojiOk, label: emojiOk ? `Emojis moderados (${emojiCount}).` : `Demasiados emojis (${emojiCount}); conviene reducirlos.` });
+
+    items.push({
+      ok: emojiOk,
+      severity: emojiOk ? "ok" : "recommendation",
+      label: emojiOk ? `Emojis moderados (${emojiCount}).` : `Hay demasiados emojis (${emojiCount}); conviene reducirlos.`
+    });
 
     if (["PRECIO", "PROMOCION"].includes(businessType)) {
       const hasPrice = /\$\s*\d|\b\d+(?:[.,]\d{1,2})?\s*(?:usd|dolares|dólares)\b/i.test(response);
-      items.push({ ok: hasPrice, label: hasPrice ? "Incluye valor/precio visible." : "Tipo Precio/Promoción sin valor visible." });
+      items.push({
+        ok: hasPrice,
+        severity: hasPrice ? "ok" : "blocking",
+        label: hasPrice ? "Incluye valor/precio visible." : "Falta un valor/precio visible para una plantilla de Precio/Promoción."
+      });
 
       const prudent = /\b(depende|valoracion|valoración|evaluacion|evaluación|segun|según|desde|puede|requiere)\b/.test(normalized);
-      items.push({ ok: prudent, label: prudent ? "Incluye una condición prudente." : "Conviene añadir condición prudente cuando aplique." });
+      items.push({
+        ok: prudent,
+        severity: prudent ? "ok" : "recommendation",
+        label: prudent ? "Incluye una condición prudente." : "Conviene añadir una condición prudente cuando aplique."
+      });
     }
 
-    const passed = items.filter(item => item.ok).length;
-    const score = Math.round((passed / Math.max(items.length, 1)) * 100);
-    return { score, items };
+    const blockingIssues = items.filter(item => item.severity === "blocking").length;
+    const recommendations = items.filter(item => item.severity === "recommendation").length;
+
+    let status = "CORRECT";
+    let label = "Correcto";
+    let tone = "success";
+
+    if (blockingIssues > 0) {
+      status = "REVIEW";
+      label = "Revisar antes de guardar";
+      tone = "danger";
+    } else if (recommendations > 0) {
+      status = "IMPROVABLE";
+      label = "Puede mejorarse";
+      tone = "warning";
+    }
+
+    return { status, label, tone, recommendations, blockingIssues, items };
   }
 
   function updateTemplateQuality() {
     if (!els.templateQuality || !els.templateQualityScore || !els.templateQualityItems) return;
 
     const quality = evaluateTemplateQuality();
-    els.templateQualityScore.textContent = `${quality.score}%`;
-    els.templateQuality.dataset.score = String(quality.score);
+
+    if (quality.status === "EMPTY") {
+      els.templateQualityScore.textContent = "Sin revisar";
+    } else if (quality.blockingIssues > 0) {
+      els.templateQualityScore.textContent = quality.label;
+    } else if (quality.recommendations > 0) {
+      els.templateQualityScore.textContent =
+        `${quality.label} · ${quality.recommendations} recomendación${quality.recommendations === 1 ? "" : "es"}`;
+    } else {
+      els.templateQualityScore.textContent = quality.label;
+    }
+
+    els.templateQuality.dataset.score = quality.status;
+    els.templateQuality.dataset.tone = quality.tone;
     els.templateQualityItems.innerHTML = "";
 
     quality.items.forEach(item => {
       const row = document.createElement("span");
-      row.className = "ac-quality-item " + (item.ok ? "is-ok" : "is-pending");
-      row.innerHTML = item.ok
-        ? '<i class="bi bi-check-circle-fill" aria-hidden="true"></i>'
-        : '<i class="bi bi-circle" aria-hidden="true"></i>';
+      const rowState =
+        item.severity === "blocking"
+          ? "is-blocking"
+          : item.ok
+            ? "is-ok"
+            : "is-pending";
+
+      row.className = "ac-quality-item " + rowState;
+      row.innerHTML =
+        item.severity === "blocking"
+          ? '<i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>'
+          : item.ok
+            ? '<i class="bi bi-check-circle-fill" aria-hidden="true"></i>'
+            : '<i class="bi bi-lightbulb" aria-hidden="true"></i>';
+
       const text = document.createElement("span");
       text.textContent = item.label;
       row.appendChild(text);
@@ -3457,11 +3561,7 @@
     }
 
     if (els.textCreatorClear) {
-      els.textCreatorClear.addEventListener("click", () => {
-        if (els.textCreatorInput) els.textCreatorInput.value = "";
-        setTextCreatorMessage("");
-        els.textCreatorInput?.focus();
-      });
+      els.textCreatorClear.addEventListener("click", clearTextCreatorForNewTemplate);
     }
 
     [els.templateTitle, els.templateCategory, els.templateKeywords,
