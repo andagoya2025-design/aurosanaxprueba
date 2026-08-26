@@ -5146,3 +5146,253 @@ function recopilarAntecedentesPersonalesCompletos(){
     'AUROSANAX antecedentes.js: GINECOLÓGICOS REPETIBLES V1 cargado sin cambios de backend.'
   );
 })();
+/* ============================================================
+   AUROSANAX - AISLAMIENTO DE ANTECEDENTES ENTRE PACIENTES V1
+   Corrección quirúrgica antirregresiva.
+   ------------------------------------------------------------
+   PROBLEMA RESUELTO:
+   Los controles visuales de Antecedentes podían conservar datos
+   del paciente anterior al cambiar de paciente y esos valores
+   podían terminar guardándose en la nueva historia.
+
+   ALCANCE EXCLUSIVO:
+   - Limpia SOLO #hc_antecedentes cuando cambia realmente id_paciente.
+   - NO limpia al cambiar de atención del mismo paciente.
+   - NO modifica guardado, fechas, temporalidades ni Apps Script.
+   - NO modifica Anamnesis, Examen físico, Diagnóstico, Plan ni otros módulos.
+   - NO dispara eventos de input/change durante la limpieza para evitar autosaves.
+   - Incluye filas dinámicas de PAP / Colposcopia / Biopsia.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  const PANEL_ID = 'hc_antecedentes';
+  const SELECTOR_PACIENTE_ID = 'hcPacienteSelect';
+
+  let pacienteAnterior = '';
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function idPacienteActual_(){
+    const selector = document.getElementById(SELECTOR_PACIENTE_ID);
+    return texto_(selector?.value);
+  }
+
+  function limpiarControlSilencioso_(control){
+    if(!control) return;
+
+    const tag = String(control.tagName || '').toUpperCase();
+    const type = String(control.type || '').toLowerCase();
+
+    if(tag === 'INPUT'){
+      if(type === 'checkbox' || type === 'radio'){
+        control.checked = false;
+        control.indeterminate = false;
+        return;
+      }
+
+      if(type === 'button' || type === 'submit' || type === 'reset'){
+        return;
+      }
+
+      control.value = '';
+      return;
+    }
+
+    if(tag === 'SELECT'){
+      /*
+        Preferir opción vacía cuando exista.
+        Si no existe, dejar sin selección para no inventar valores.
+      */
+      const opcionVacia = [...control.options].find(opt => texto_(opt.value) === '');
+      if(opcionVacia){
+        control.value = '';
+      }else{
+        control.selectedIndex = -1;
+      }
+      return;
+    }
+
+    if(tag === 'TEXTAREA'){
+      control.value = '';
+    }
+  }
+
+  function limpiarFilasDinamicas_(){
+    document
+      .querySelectorAll(
+        '#' + PANEL_ID + ' .auro-gine-repetible-row'
+      )
+      .forEach(fila => fila.remove());
+  }
+
+  function limpiarEstadosVisualesAyudas_(panel){
+    if(!panel) return;
+
+    /*
+      Solo estados visuales conocidos de ayudas rápidas.
+      No elimina botones ni listeners.
+    */
+    panel.querySelectorAll(
+      '.active,.selected,.is-active,.auro-active,.auro-v21-active'
+    ).forEach(el => {
+      if(
+        el.matches('button,[role="button"],.auro-v21-helper-btn') ||
+        el.closest('.auro-v21-helper-btn')
+      ){
+        el.classList.remove(
+          'active','selected','is-active','auro-active','auro-v21-active'
+        );
+        el.removeAttribute('aria-pressed');
+      }
+    });
+  }
+
+  function limpiarCajaAntecedentesPrevios_(){
+    const caja = document.getElementById('hcAntecedentesPreviosBox');
+    if(!caja) return;
+
+    /*
+      Ocultamos el resumen del paciente anterior.
+      La lógica estable del módulo podrá volver a pintarlo cuando corresponda.
+    */
+    caja.style.display = 'none';
+    caja.setAttribute('aria-hidden','true');
+
+    const contenido = caja.querySelector(
+      '.hc-antecedentes-previos-content,' +
+      '.antecedentes-previos-content,' +
+      '[data-auro-antecedentes-previos-content]'
+    );
+
+    if(contenido){
+      contenido.innerHTML = '';
+    }
+  }
+
+  function limpiarAntecedentesVisualesPaciente_(){
+    const panel = document.getElementById(PANEL_ID);
+    if(!panel) return false;
+
+    /*
+      Primero retiramos las filas clonadas porque también contienen inputs.
+    */
+    limpiarFilasDinamicas_();
+
+    /*
+      Limpiar únicamente controles clínicos dentro de Antecedentes.
+      Se hace en silencio: no se disparan input/change.
+    */
+    panel
+      .querySelectorAll('input,select,textarea')
+      .forEach(limpiarControlSilencioso_);
+
+    limpiarEstadosVisualesAyudas_(panel);
+    limpiarCajaAntecedentesPrevios_();
+
+    /*
+      Sincronizar únicamente presentación de ayudas si la función estable existe.
+      No guarda ni consulta servidor.
+    */
+    if(typeof window.auroV21SincronizarEstadosAyudas === 'function'){
+      try{
+        window.auroV21SincronizarEstadosAyudas();
+      }catch(error){
+        console.warn(
+          'AUROSANAX Antecedentes: no se pudo sincronizar el estado visual de ayudas tras limpiar paciente.',
+          error
+        );
+      }
+    }
+
+    if(typeof window.updateClinicalSummary === 'function'){
+      try{ window.updateClinicalSummary(); }catch(_error){}
+    }
+
+    return true;
+  }
+
+  function manejarCambioPaciente_(nuevoId){
+    const nuevo = texto_(nuevoId);
+
+    /*
+      Primer reconocimiento de contexto:
+      no limpiar porque todavía no existe una transición conocida.
+    */
+    if(!pacienteAnterior){
+      pacienteAnterior = nuevo;
+      return;
+    }
+
+    /*
+      Mismo paciente = NO limpiar.
+      Esto protege cambios de atención y navegación interna.
+    */
+    if(nuevo === pacienteAnterior){
+      return;
+    }
+
+    const anterior = pacienteAnterior;
+    pacienteAnterior = nuevo;
+
+    /*
+      Cambio real de paciente: limpieza visual inmediata.
+      Si el nuevo paciente tiene antecedentes, la lógica estable existente
+      podrá cargarlos después de esta transición.
+    */
+    limpiarAntecedentesVisualesPaciente_();
+
+    console.log(
+      'AUROSANAX Antecedentes: contexto visual limpiado por cambio de paciente.',
+      { anterior, nuevo }
+    );
+  }
+
+  function instalarProteccion_(){
+    const selector = document.getElementById(SELECTOR_PACIENTE_ID);
+    if(!selector) return false;
+
+    if(selector.dataset.auroAislamientoAntecedentesPaciente === '1'){
+      return true;
+    }
+
+    selector.dataset.auroAislamientoAntecedentesPaciente = '1';
+    pacienteAnterior = idPacienteActual_();
+
+    /*
+      Captura temprana: limpiamos antes de que otros listeners carguen
+      el contexto del nuevo paciente.
+    */
+    selector.addEventListener('change', function(){
+      manejarCambioPaciente_(selector.value);
+    }, true);
+
+    return true;
+  }
+
+  function iniciar_(){
+    if(instalarProteccion_()) return;
+    setTimeout(iniciar_, 250);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      setTimeout(iniciar_, 250);
+    }, { once:true });
+  }else{
+    setTimeout(iniciar_, 250);
+  }
+
+  /*
+    API pública mínima solo para diagnóstico manual.
+    No se usa en guardados.
+  */
+  window.auroLimpiarAntecedentesVisualesPaciente =
+    limpiarAntecedentesVisualesPaciente_;
+
+  console.log(
+    'AUROSANAX antecedentes.js: AISLAMIENTO DE ANTECEDENTES ENTRE PACIENTES V1 cargado.'
+  );
+})();
