@@ -184,6 +184,42 @@
       border-color:#fed7aa;background:#fffaf5;box-shadow:0 0 0 1px rgba(234,88,12,.05)
     }
 
+    /* =========================================================
+       FASE 12 · USABILIDAD VISUAL CONSOLIDADA
+       Solo presentación. No toca lógica, persistencia ni backend.
+       ========================================================= */
+    .ac-crm-item{min-height:76px;padding:13px 14px;gap:12px}
+    .ac-crm-item strong{font-size:14px;line-height:1.25}
+    .ac-crm-item small{margin-top:4px;font-size:12px;line-height:1.4;color:#64748b}
+    .ac-pending-time{gap:6px;min-width:132px}
+    .ac-pending-badge{min-height:25px;padding:4px 9px;font-size:10px}
+    .ac-pending-human{font-size:11px;line-height:1.3}
+    .ac-pending-exact{font-size:10px;line-height:1.25;color:#64748b}
+    .ac-pending-wa{margin-top:3px;font-size:10px;line-height:1.25}
+    .ac-pending-wa i{font-size:11px}
+    .ac-pending-priority{min-height:24px;padding:4px 9px;margin-top:7px;font-size:10px}
+    .ac-wa-window-title{font-size:13px}
+    .ac-wa-window-badge{min-height:26px;padding:4px 9px;font-size:10px}
+    .ac-wa-window-detail{font-size:11px;line-height:1.4}
+    .ac-crm-history-meta{font-size:11px}
+    .ac-crm-history-response{font-size:13px;line-height:1.5}
+    .ac-crm-list-search{min-height:42px;font-size:13px}
+
+    @media (max-width:760px){
+      .ac-crm-item{min-height:0;padding:12px 12px;gap:9px}
+      .ac-crm-item strong{font-size:14px}
+      .ac-crm-item small{font-size:11px}
+      .ac-pending-time{width:100%;min-width:0;gap:5px}
+      .ac-pending-badge,.ac-pending-priority{font-size:10px}
+      .ac-pending-human{font-size:11px}
+      .ac-pending-exact,.ac-pending-wa{font-size:10px}
+      .ac-wa-window{padding:11px}
+      .ac-wa-window-title{font-size:12px}
+      .ac-wa-window-detail{font-size:11px}
+      .ac-crm-history-response{font-size:12px}
+      .ac-crm-list-tools{top:66px;padding:7px}
+    }
+
     /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
     .ac-crm-launchbar{display:none}
     .ac-crm-sheet-head{display:none}
