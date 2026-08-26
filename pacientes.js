@@ -851,10 +851,29 @@ async function cargarPacientesDesdeSheets(){
       estado: p.estado || 'Activa'
     }));
 
-    await auroCargarAtencionesParaUltimaAtencion(false);
+    /*
+     * AUROSANAX FASE 1 VELOCIDAD:
+     * Pacientes ya fue confirmado contra la fuente real.
+     * La interfaz no espera la consulta secundaria de Atenciones.
+     */
     renderPatients();
     actualizarSelectorPacientesHistoria();
     actualizarDashboard();
+
+    /*
+     * "Última atención" conserva exactamente la jerarquía actual.
+     * Solo se completa después, sin bloquear el primer render de Pacientes.
+     */
+    auroCargarAtencionesParaUltimaAtencion(false)
+      .then(function(){
+        renderPatients();
+      })
+      .catch(function(error){
+        console.warn(
+          'AUROSANAX PACIENTES: no se pudo completar Última atención en segundo plano.',
+          error
+        );
+      });
   }catch(error){
     console.warn('No se pudo cargar desde Google Sheets. Se mantiene demo local.', error);
     renderPatients();
