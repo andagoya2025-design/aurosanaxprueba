@@ -1118,17 +1118,19 @@
         </div>
       ` : `
         <div class="auro-dx-correccion-actions">
-          <span class="auro-dx-correccion-note">
-            <i class="bi bi-pencil-square"></i>
+          <span class="auro-dx-correccion-note ${state.edicionDiagnosticoAbierto ? 'auro-dx-note-edicion' : 'auro-dx-note-protegido'}">
+            <i class="bi ${state.edicionDiagnosticoAbierto ? 'bi-pencil-square' : 'bi-shield-lock'}"></i>
             ${state.edicionDiagnosticoAbierto
-              ? 'Edición activa: modifique los CIE-10 y confirme los cambios.'
-              : 'Diagnóstico protegido contra cambios accidentales mientras no active la edición.'}
+              ? 'Edición activa. Modifique los CIE-10 y luego presione “Guardar cambios del diagnóstico”.'
+              : (state.diagnosticos.length
+                  ? 'Diagnóstico protegido. Presione “Editar diagnóstico” para habilitar los campos CIE-10.'
+                  : 'Diagnóstico protegido. Presione “Agregar diagnóstico” para habilitar los campos CIE-10.')}
           </span>
 
           ${state.edicionDiagnosticoAbierto ? `
             <button
               type="button"
-              class="auro-dx-btn primary"
+              class="auro-dx-btn auro-dx-save-ready"
               id="auroDxGuardarCambiosAbiertosBtn"
               onclick="window.auroDxGuardarCambiosAtencionAbierta()"
             >
@@ -1144,7 +1146,7 @@
           ` : `
             <button
               type="button"
-              class="auro-dx-btn primary"
+              class="auro-dx-btn auro-dx-edit"
               id="auroDxEditarDiagnosticoAbiertoBtn"
               onclick="window.auroDxIniciarEdicionDiagnosticoAbierto()"
             >
@@ -1517,10 +1519,12 @@
     if(btn){
       btn.disabled = true;
       btn.setAttribute('aria-busy','true');
+      btn.classList.remove('auro-dx-save-ready','auro-dx-saved','auro-dx-error');
+      btn.classList.add('auro-dx-saving');
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Guardando diagnóstico…';
     }
 
-    mensaje('aviso','Guardando diagnóstico. Espere la confirmación…');
+    mensaje('aviso','Guardando diagnóstico. Espere la confirmación antes de continuar.');
 
     try{
       const snapshotPersistido = clonar(state.diagnosticos, []);
@@ -1611,11 +1615,9 @@
       if(btn && document.body.contains(btn)){
         btn.disabled = true;
         btn.removeAttribute('aria-busy');
-        btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Guardado ✓';
-        btn.style.background = '#198754';
-        btn.style.color = '#fff';
-        btn.style.borderColor = '#198754';
-        btn.style.boxShadow = '0 8px 18px rgba(25,135,84,.18)';
+        btn.classList.remove('auro-dx-saving','auro-dx-save-ready','auro-dx-error');
+        btn.classList.add('auro-dx-saved');
+        btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Diagnóstico guardado ✓';
       }
 
       mensaje(
@@ -1638,9 +1640,26 @@
         }
       }catch(_e){}
 
-      renderContextoSuperior();
+      /*
+        La edición clínica ya terminó y el editor se bloquea de inmediato.
+        La cabecera se redibuja 700 ms después para que el médico alcance a
+        percibir “Diagnóstico guardado ✓”. Esta espera NO bloquea persistencia,
+        protocolos ni navegación interna.
+      */
       auroDxAplicarEstadoEditorHistorico();
       configurarModoProtocoloMaestro();
+
+      window.setTimeout(() => {
+        try{
+          if(
+            state.edicionDiagnosticoAbierto === false &&
+            contextoAtencionSeleccionada().id === ctx.id
+          ){
+            renderContextoSuperior();
+            auroDxAplicarEstadoEditorHistorico();
+          }
+        }catch(_e){}
+      }, 700);
 
       auroDxNotificarGuardadoAbierto(
         'ok',
@@ -1680,7 +1699,20 @@
       if(btn && document.body.contains(btn)){
         btn.disabled = false;
         btn.removeAttribute('aria-busy');
-        btn.innerHTML = htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+        btn.classList.remove('auro-dx-saving','auro-dx-saved');
+        btn.classList.add('auro-dx-error');
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Error al guardar · Reintentar';
+
+        window.setTimeout(() => {
+          try{
+            if(document.body.contains(btn) && state.edicionDiagnosticoAbierto === true){
+              btn.classList.remove('auro-dx-error');
+              btn.classList.add('auro-dx-save-ready');
+              btn.innerHTML =
+                htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+            }
+          }catch(_e){}
+        }, 1600);
       }
 
       auroDxNotificarGuardadoAbierto(
@@ -1694,15 +1726,21 @@
       auroDxGuardandoCambiosAbiertos = false;
 
       const botonActual = document.getElementById('auroDxGuardarCambiosAbiertosBtn');
-      if(botonActual){
+
+      /*
+        En éxito, state.edicionDiagnosticoAbierto ya es false y el botón se
+        mantiene verde hasta el redraw programado. En error permanece activo.
+      */
+      if(botonActual && state.edicionDiagnosticoAbierto === true){
         botonActual.disabled = false;
         botonActual.removeAttribute('aria-busy');
-        botonActual.style.background = '';
-        botonActual.style.color = '';
-        botonActual.style.borderColor = '';
-        botonActual.style.boxShadow = '';
-        botonActual.innerHTML =
-          htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+
+        if(!botonActual.classList.contains('auro-dx-error')){
+          botonActual.classList.remove('auro-dx-saving','auro-dx-saved');
+          botonActual.classList.add('auro-dx-save-ready');
+          botonActual.innerHTML =
+            htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+        }
       }
     }
   }
@@ -2213,10 +2251,46 @@
       .auro-dx-contexto-stat span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#8b7280;font-weight:900}
       .auro-dx-contexto-stat strong{display:block;margin-top:3px;font-size:12px;color:#374151;overflow-wrap:anywhere}
       .auro-dx-toolbar{display:flex;flex-wrap:wrap;gap:8px}
-      .auro-dx-btn{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer;background:#eef4f5;color:#29474b}
+      .auro-dx-btn{
+        border:0;border-radius:10px;padding:9px 13px;font-weight:800;cursor:pointer;
+        background:#eef4f5;color:#29474b;
+        transition:background .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease,opacity .18s ease;
+      }
+      .auro-dx-btn:hover:not(:disabled){transform:translateY(-1px)}
       .auro-dx-btn.primary{background:#1d6670;color:#fff}
-      .auro-dx-btn.success{background:#287c57;color:#fff}
-      .auro-dx-btn:disabled{opacity:.55;cursor:not-allowed}
+      .auro-dx-btn.success{background:var(--success,#16a34a);color:#fff}
+      .auro-dx-btn.auro-dx-edit{
+        background:var(--blue,#2563eb);color:#fff;
+        box-shadow:0 7px 16px rgba(37,99,235,.16);
+      }
+      .auro-dx-btn.auro-dx-save-ready{
+        background:linear-gradient(135deg,var(--primary,#8b1e5a),var(--primary-2,#c23b83));
+        color:#fff;box-shadow:0 7px 16px rgba(139,30,90,.18);
+      }
+      .auro-dx-btn.auro-dx-saving{
+        background:var(--warning,#f59e0b)!important;color:#fff!important;
+        box-shadow:0 7px 18px rgba(245,158,11,.22)!important;
+        cursor:wait!important;opacity:1!important;
+      }
+      .auro-dx-btn.auro-dx-saved{
+        background:var(--success,#16a34a)!important;color:#fff!important;
+        box-shadow:0 7px 18px rgba(22,163,74,.20)!important;
+        opacity:1!important;
+      }
+      .auro-dx-btn.auro-dx-error{
+        background:var(--danger,#dc2626)!important;color:#fff!important;
+        box-shadow:0 7px 18px rgba(220,38,38,.18)!important;
+        opacity:1!important;
+      }
+      .auro-dx-btn:disabled{opacity:.62;cursor:not-allowed}
+      .auro-dx-correccion-note.auro-dx-note-protegido{
+        display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;
+        background:#f8fafc;border:1px solid #e2e8f0;color:#475569;
+      }
+      .auro-dx-correccion-note.auro-dx-note-edicion{
+        display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;
+        background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;
+      }
       .auro-dx-grid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(360px,1.4fr);gap:14px}
       .auro-dx-card{border:1px solid #dce7e9;border-radius:16px;background:#fff;overflow:hidden}
       .auro-dx-card-head{padding:12px 14px;border-bottom:1px solid #e4edef;background:#f8fbfb;font-weight:800}
