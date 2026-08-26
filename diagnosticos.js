@@ -580,11 +580,31 @@
 
   function auroDxAplicarEstadoEditorHistorico(){
     const ctx = contextoAtencionSeleccionada();
-    const bloquear = ctx.historica && !state.correccionClinicaActiva;
+
+    /*
+      MÁQUINA DE ESTADOS DEL EDITOR CIE-10
+      ------------------------------------
+      - Atención abierta + no está editando: BLOQUEADO.
+      - Atención abierta + edición explícita: HABILITADO.
+      - Atención histórica: BLOQUEADO salvo corrección clínica activa.
+      Esto evita modificar CIE-10 mientras arriba todavía dice
+      “Editar diagnóstico” y elimina estados temporales contradictorios.
+    */
+    const bloquearHistorico =
+      ctx.historica && !state.correccionClinicaActiva;
+
+    const bloquearAbiertoProtegido =
+      ctx.editable === true &&
+      ctx.historica !== true &&
+      state.edicionDiagnosticoAbierto !== true;
+
+    const bloquear = bloquearHistorico || bloquearAbiertoProtegido;
+
     auroDxElementosEditorCie().forEach(el => {
       if(el.dataset.auroDxDisabledOriginal === undefined){
         el.dataset.auroDxDisabledOriginal = el.disabled ? '1' : '0';
       }
+
       if(bloquear){
         el.disabled = true;
       }else{
@@ -1189,6 +1209,7 @@
       las tarjetas de Plan con los diagnósticos efectivamente guardados.
   */
   let auroDxGuardandoCambiosAbiertos = false;
+  let auroDxGuardadoAbiertoToken = 0;
 
   function auroDxIniciarEdicionDiagnosticoAbierto(){
     const ctx = contextoAtencionSeleccionada();
@@ -1209,6 +1230,8 @@
     }catch(_e){}
     state.edicionDiagnosticoAbierto = true;
     renderContextoSuperior();
+    auroDxAplicarEstadoEditorHistorico();
+    configurarModoProtocoloMaestro();
 
     mensaje(
       'aviso',
@@ -1239,6 +1262,8 @@
     }catch(_e){}
     state.edicionDiagnosticoAbierto = false;
     renderContextoSuperior();
+    auroDxAplicarEstadoEditorHistorico();
+    configurarModoProtocoloMaestro();
 
     mensaje(
       'aviso',
@@ -1253,6 +1278,50 @@
 
   window.auroDxCancelarEdicionDiagnosticoAbierto =
     auroDxCancelarEdicionDiagnosticoAbierto;
+
+  function auroDxNotificarGuardadoAbierto(tipo, textoMensaje){
+    let toast = document.getElementById('auroDxGuardadoAbiertoToast');
+    if(toast) toast.remove();
+
+    toast = document.createElement('div');
+    toast.id = 'auroDxGuardadoAbiertoToast';
+    toast.setAttribute('role','status');
+    toast.setAttribute('aria-live','polite');
+
+    const ok = tipo === 'ok';
+    toast.style.cssText = [
+      'position:fixed',
+      'left:50%',
+      'bottom:max(22px,calc(14px + env(safe-area-inset-bottom)))',
+      'transform:translateX(-50%)',
+      'z-index:2147483001',
+      'width:min(92vw,520px)',
+      'box-sizing:border-box',
+      'display:flex',
+      'align-items:center',
+      'gap:10px',
+      'padding:13px 15px',
+      'border-radius:14px',
+      'font-family:inherit',
+      'font-size:13px',
+      'font-weight:800',
+      'line-height:1.35',
+      'box-shadow:0 18px 45px rgba(15,23,42,.20)',
+      'border:1px solid ' + (ok ? '#b7e4c7' : '#fecaca'),
+      'background:' + (ok ? '#f0fdf4' : '#fff1f2'),
+      'color:' + (ok ? '#166534' : '#b42318')
+    ].join(';');
+
+    toast.innerHTML =
+      '<i class="bi ' + (ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill') +
+      '" style="font-size:18px;flex:0 0 auto"></i>' +
+      '<span>' + escapeHtml(textoMensaje || '') + '</span>';
+
+    document.body.appendChild(toast);
+    window.setTimeout(() => {
+      try{ toast.remove(); }catch(_e){}
+    }, ok ? 2600 : 4200);
+  }
 
   /*
     AUROSANAX DX - VERIFICACIÓN AUTORITATIVA POST-GUARDADO
@@ -1277,6 +1346,38 @@
     }
 
     return normalizarDiagnosticosServidor(respuesta);
+  }
+
+  async function auroDxVerificarGuardadoAbiertoEnSegundoPlano(idAtencion, tokenGuardado){
+    const idEsperado = texto(idAtencion);
+    if(!idEsperado) return false;
+
+    try{
+      const persistidos = await auroDxVerificarDiagnosticosPersistidosAbiertos(idEsperado);
+
+      if(tokenGuardado !== auroDxGuardadoAbiertoToken) return false;
+      if(state.atencionActual !== idEsperado) return false;
+
+      /*
+        Si el médico ya inició otra edición, no se pisa su editor.
+        El siguiente guardado/verificación resolverá el nuevo estado.
+      */
+      if(state.edicionDiagnosticoAbierto === true) return false;
+
+      state.diagnosticos = clonar(persistidos, []);
+      sincronizarEditorCie10DesdeDiagnosticos();
+      renderDiagnosticos();
+      renderContextoSuperior();
+      auroDxAplicarEstadoEditorHistorico();
+
+      return true;
+    }catch(error){
+      console.warn(
+        MODULO + ': el POST fue confirmado, pero no se pudo completar la verificación secundaria.',
+        error
+      );
+      return false;
+    }
   }
 
   /*
@@ -1422,9 +1523,22 @@
     mensaje('aviso','Guardando diagnóstico. Espere la confirmación…');
 
     try{
+      const snapshotPersistido = clonar(state.diagnosticos, []);
+      const snapshotEditor = diagnosticosLocales();
+
+      const idExamenConocido = texto(
+        state.detalleExamen?.id_examen ||
+        snapshotPersistido.find(d => texto(d.id_examen))?.id_examen ||
+        ''
+      );
+
       const resultado = await Promise.resolve(
         window.auroGuardarDiagnosticosAtencionActual({
           omitir_refresco_visor:true,
+          omitir_lectura_persistidos:true,
+          persistidos_base:snapshotPersistido,
+          omitir_busqueda_examen:true,
+          id_examen_preferido:idExamenConocido,
           origen:'edicion_diagnostico_abierto'
         })
       );
@@ -1437,20 +1551,24 @@
       }
 
       /*
-        EDICIÓN ABIERTA - FUENTE AUTORITATIVA
-        -------------------------------------
-        El backend ya confirmó el POST. Ahora se verifica solamente la tabla
-        persistida de diagnósticos para esta atención. Ese resultado manda.
+        El backend ya confirmó success:true.
+        La UI adopta inmediatamente EXACTAMENTE el snapshot que se envió.
+        No hay GET bloqueante posterior ni posibilidad de “resucitar” un
+        diagnóstico antiguo durante la experiencia de guardado.
       */
-      const persistidos = await auroDxVerificarDiagnosticosPersistidosAbiertos(ctx.id);
-      state.diagnosticos = clonar(persistidos, []);
+      state.diagnosticos = clonar(snapshotEditor, []);
+      sincronizarEditorCie10DesdeDiagnosticos();
+
+      const tokenGuardado = ++auroDxGuardadoAbiertoToken;
 
       /*
-        Sincronización inmediata del editor con lo realmente persistido.
-        Si persistidos = [], el editor queda en cero y no existe fallback
-        desde Examen Físico en este punto.
+        Verificación remota posterior: no bloquea el botón.
       */
-      sincronizarEditorCie10DesdeDiagnosticos();
+      try{
+        Promise.resolve(
+          auroDxVerificarGuardadoAbiertoEnSegundoPlano(ctx.id, tokenGuardado)
+        );
+      }catch(_e){}
 
       if(state.diagnosticos.length === 0){
         state.protocolos = [];
@@ -1519,7 +1637,17 @@
           window.auroLimpiarBusquedaDiagnosticoCie10(false);
         }
       }catch(_e){}
+
       renderContextoSuperior();
+      auroDxAplicarEstadoEditorHistorico();
+      configurarModoProtocoloMaestro();
+
+      auroDxNotificarGuardadoAbierto(
+        'ok',
+        state.diagnosticos.length === 0
+          ? 'Diagnóstico guardado: la atención quedó sin diagnósticos.'
+          : 'Diagnóstico guardado correctamente.'
+      );
 
       try{
         document.dispatchEvent(new CustomEvent(
@@ -1550,15 +1678,15 @@
       );
 
       if(btn && document.body.contains(btn)){
-        btn.disabled = true;
+        btn.disabled = false;
         btn.removeAttribute('aria-busy');
-        btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Error al guardar';
-        btn.style.background = '#b42318';
-        btn.style.color = '#fff';
-        btn.style.borderColor = '#b42318';
-        btn.style.boxShadow = '0 8px 18px rgba(180,35,24,.16)';
-        await new Promise(resolve => window.setTimeout(resolve, 1100));
+        btn.innerHTML = htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
       }
+
+      auroDxNotificarGuardadoAbierto(
+        'error',
+        'No se pudo guardar el diagnóstico. Revise la conexión e intente nuevamente.'
+      );
 
       return null;
 
@@ -1569,7 +1697,12 @@
       if(botonActual){
         botonActual.disabled = false;
         botonActual.removeAttribute('aria-busy');
-        botonActual.innerHTML = htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+        botonActual.style.background = '';
+        botonActual.style.color = '';
+        botonActual.style.borderColor = '';
+        botonActual.style.boxShadow = '';
+        botonActual.innerHTML =
+          htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
       }
     }
   }
@@ -1774,7 +1907,15 @@
   function configurarModoProtocoloMaestro(){
     const box = document.getElementById('auroCie10InteligenteBox');
     if(!box) return;
-    const lectura = !puedeAplicarAlPlan();
+
+    const ctx = contextoAtencionSeleccionada();
+    const lecturaHistorica = !puedeAplicarAlPlan();
+    const edicionAbiertaPendiente =
+      ctx.editable === true &&
+      ctx.historica !== true &&
+      state.edicionDiagnosticoAbierto === true;
+
+    const lectura = lecturaHistorica || edicionAbiertaPendiente;
     state.protocoloVisualModoLectura = lectura;
 
     let btnAplicar = box.querySelector('.auro-cie10-btn.primary');
@@ -1807,22 +1948,47 @@
         btnAplicar = limpio;
       }
 
-      btnAplicar.style.display = lectura ? 'none' : '';
-      btnAplicar.disabled = lectura;
-      btnAplicar.title = lectura
-        ? 'Consulta histórica: disponible solo durante una corrección clínica habilitada'
-        : 'Preparar sugerencias y revisar en Plan';
+      if(lecturaHistorica){
+        btnAplicar.style.display = 'none';
+        btnAplicar.disabled = true;
+        btnAplicar.title =
+          'Consulta histórica: disponible solo durante una corrección clínica habilitada';
+      }else{
+        btnAplicar.style.display = '';
+        btnAplicar.disabled = edicionAbiertaPendiente;
+        btnAplicar.title = edicionAbiertaPendiente
+          ? 'Guarde primero los cambios del diagnóstico'
+          : 'Revisar las sugerencias disponibles en Plan';
+
+        /*
+          El botón ya no “aplica” tratamientos: el flujo moderno solo publica
+          sugerencias y abre Plan. El texto refleja su función real.
+        */
+        if(!edicionAbiertaPendiente){
+          btnAplicar.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i> Revisar en Plan';
+        }else{
+          btnAplicar.innerHTML = '<i class="bi bi-lock me-1"></i> Guarde diagnóstico primero';
+        }
+      }
     }
 
     let aviso = box.querySelector('.auro-dx-protocolo-readonly');
-    if(lectura){
+    if(lecturaHistorica || edicionAbiertaPendiente){
+      const textoAviso = edicionAbiertaPendiente
+        ? 'Hay cambios de diagnóstico sin guardar. Guarde primero el diagnóstico antes de continuar al Plan.'
+        : 'Consulta histórica: protocolo disponible únicamente para lectura.';
+
       if(!aviso){
         aviso = document.createElement('div');
         aviso.className = 'auro-dx-protocolo-readonly';
-        aviso.innerHTML = '<i class="bi bi-lock"></i><span>Consulta histórica: protocolo disponible únicamente para lectura.</span>';
         const body = box.querySelector('.auro-cie10-body');
         if(body) body.insertBefore(aviso, body.firstChild);
       }
+
+      aviso.innerHTML =
+        '<i class="bi bi-lock"></i><span>' +
+        escapeHtml(textoAviso) +
+        '</span>';
     }else if(aviso){
       aviso.remove();
     }
