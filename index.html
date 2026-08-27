@@ -639,6 +639,34 @@
       }
     }
 
+
+    /* AUROSANAX UX ELITE — estados de guardado clínico */
+    #historia .clinical-actions button.auro-hc-btn-guardando{
+      background:linear-gradient(135deg,#fff7ed,#fffbeb)!important;
+      border:1px solid #fed7aa!important;
+      color:#9a3412!important;
+      box-shadow:0 8px 20px rgba(234,88,12,.10)!important;
+      cursor:wait!important;
+      opacity:1!important;
+    }
+    #historia .clinical-actions .auro-hc-spin{
+      display:inline-block;
+      animation:auroHcSpin .8s linear infinite;
+    }
+    #historia #hcSaveStatus.auro-save-status.saving{
+      border-color:#fed7aa;
+      background:linear-gradient(135deg,#fff7ed 0%,#ffffff 100%);
+      color:#9a3412;
+      box-shadow:0 9px 24px rgba(234,88,12,.07);
+    }
+    #historia #hcSaveStatus.auro-save-status.error{
+      border-color:#fecaca;
+      background:linear-gradient(135deg,#fef2f2 0%,#ffffff 100%);
+      color:#991b1b;
+      box-shadow:0 9px 24px rgba(220,38,38,.07);
+    }
+    @keyframes auroHcSpin{to{transform:rotate(360deg)}}
+
     @media(prefers-reduced-motion:reduce){
       .auro-mobile-menu-fab{transition:none}
     }
@@ -6763,15 +6791,16 @@ function auroHistoriaMostrarEstado(mensaje, tipo){
 
   status.className = 'auro-save-status';
   if(tipo === 'ok') status.classList.add('ok');
-  if(tipo === 'error'){
-    status.style.borderColor = '#fecaca';
-    status.style.background = '#fef2f2';
-    status.style.color = '#991b1b';
-  }else{
-    status.style.borderColor = '';
-    status.style.background = '';
-    status.style.color = '';
-  }
+  if(tipo === 'saving') status.classList.add('saving');
+  if(tipo === 'error') status.classList.add('error');
+
+  /*
+    Se eliminan estilos inline legacy para que los estados visuales
+    queden gobernados por clases CSS sin alterar la lógica del mensaje.
+  */
+  status.style.borderColor = '';
+  status.style.background = '';
+  status.style.color = '';
 
   status.textContent = mensaje || '';
 }
@@ -7163,6 +7192,83 @@ function auroHistoriaEstadoObstetricia(idAtencion){
   return null;
 }
 
+
+function auroHistoriaRegistrosRespuesta(respuesta){
+  if(Array.isArray(respuesta)) return respuesta;
+  if(Array.isArray(respuesta?.registros)) return respuesta.registros;
+  if(Array.isArray(respuesta?.data)) return respuesta.data;
+  if(respuesta?.data && typeof respuesta.data === 'object') return [respuesta.data];
+  if(respuesta && typeof respuesta === 'object' && !respuesta.success && !respuesta.message){
+    return [respuesta];
+  }
+  return [];
+}
+
+function auroHistoriaUltimoRegistroPorFecha(lista){
+  const registros = (Array.isArray(lista) ? lista : []).filter(Boolean);
+  if(!registros.length) return null;
+
+  return registros.slice().sort((a,b) => {
+    const fa = String(auroHistoriaFechaRegistro(a) || '');
+    const fb = String(auroHistoriaFechaRegistro(b) || '');
+    return fb.localeCompare(fa);
+  })[0] || null;
+}
+
+async function auroHistoriaEstadoRecomendaciones(idAtencion){
+  const respuesta = await auroHistoriaGETSoloLectura(
+    'buscarRecomendacionPorAtencion',
+    {id_atencion:idAtencion}
+  );
+
+  const candidatos = auroHistoriaRegistrosRespuesta(respuesta);
+  const registro = candidatos.find(r =>
+    String(r?.id_atencion || '').trim() === idAtencion &&
+    String(r?.id_recomendacion || '').trim()
+  ) || null;
+
+  return registro
+    ? {existe:true, fecha:auroHistoriaFechaRegistro(registro), fuente:'recomendaciones'}
+    : {existe:false, fecha:'', fuente:'recomendaciones'};
+}
+
+async function auroHistoriaEstadoCertificados(idAtencion){
+  const respuesta = await auroHistoriaGETSoloLectura(
+    'listarCertificadosPorAtencion',
+    {id_atencion:idAtencion}
+  );
+
+  const registro = auroHistoriaUltimoRegistroPorFecha(
+    auroHistoriaRegistrosRespuesta(respuesta).filter(r =>
+      String(r?.id_atencion || '').trim() === idAtencion &&
+      String(r?.id_certificado || '').trim()
+    )
+  );
+
+  return registro
+    ? {existe:true, fecha:auroHistoriaFechaRegistro(registro), fuente:'certificados'}
+    : {existe:false, fecha:'', fuente:'certificados'};
+}
+
+async function auroHistoriaEstadoDocumentos(idAtencion){
+  const respuesta = await auroHistoriaGETSoloLectura(
+    'listarDocumentosPorAtencion',
+    {id_atencion:idAtencion}
+  );
+
+  const registro = auroHistoriaUltimoRegistroPorFecha(
+    auroHistoriaRegistrosRespuesta(respuesta).filter(r =>
+      String(r?.id_atencion || '').trim() === idAtencion &&
+      String(r?.id_documento || '').trim() &&
+      String(r?.estado || 'Activo').trim().toLowerCase() !== 'anulado'
+    )
+  );
+
+  return registro
+    ? {existe:true, fecha:auroHistoriaFechaRegistro(registro), fuente:'documentos'}
+    : {existe:false, fecha:'', fuente:'documentos'};
+}
+
 async function auroHistoriaResolverEstadoRealModulo(idAtencion, modulo){
   const id = String(idAtencion || '').trim();
   const m = String(modulo || '').trim();
@@ -7196,10 +7302,22 @@ async function auroHistoriaResolverEstadoRealModulo(idAtencion, modulo){
     if(obstetricia) return obstetricia;
   }
 
+  if(m === 'hc_recomendaciones'){
+    return await auroHistoriaEstadoRecomendaciones(id);
+  }
+
+  if(m === 'hc_certificados'){
+    return await auroHistoriaEstadoCertificados(id);
+  }
+
+  if(m === 'hc_docs'){
+    return await auroHistoriaEstadoDocumentos(id);
+  }
+
   /*
-    Para Estética/Documentos u otros módulos que todavía no exponen
-    una fuente persistida pública propia, se conserva el comportamiento
-    anterior como respaldo, sin inventar fechas.
+    Estética todavía no tiene una persistencia clínica por atención
+    homologada con esta pestaña. Se conserva el respaldo visual legacy
+    exclusivamente para Estética y futuros módulos no integrados.
   */
   const local = auroHistoriaLeerActualizacionConsulta(id, m);
   if(local && local.fechaHora){
@@ -7326,31 +7444,42 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
   });
 })();
 
-function auroHistoriaSetBotonesGuardando(guardando){
-  document.querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]').forEach(btn => {
-    if(guardando){
-      if(!btn.dataset.auroTextoOriginal){
-        btn.dataset.auroTextoOriginal = btn.innerHTML;
-      }
-      btn.disabled = true;
-      btn.style.opacity = '0.65';
-      btn.style.cursor = 'not-allowed';
+function auroHistoriaBotonGuardarPrincipal(){
+  /*
+    AUROSANAX FIX QUIRÚRGICO 2026-08-27
+    Devuelve SOLO el botón global de Historia clínica.
+    No captura botones propios de Plan ni de módulos independientes.
+  */
+  return (
+    document.getElementById('hcGuardarHistoriaBtn') ||
+    document.querySelector(
+      '#historia .clinical-actions > button[onclick*="guardarHistoriaClinicaERP"]:not([data-auro-plan-btn="1"])'
+    ) ||
+    document.querySelector(
+      '#historia button[onclick*="guardarHistoriaClinicaERP"]:not([data-auro-plan-btn="1"])'
+    )
+  );
+}
 
-      if(btn.dataset.auroPlanBtn === '1'){
-        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando plan...';
-      }else{
-        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
-      }
-    }else{
-      btn.disabled = false;
-      btn.style.opacity = '';
-      btn.style.cursor = '';
-      if(btn.dataset.auroTextoOriginal){
-        btn.innerHTML = btn.dataset.auroTextoOriginal;
-        delete btn.dataset.auroTextoOriginal;
-      }
+function auroHistoriaSetBotonesGuardando(guardando){
+  const btn = auroHistoriaBotonGuardarPrincipal();
+  if(!btn) return;
+
+  if(guardando){
+    if(!btn.dataset.auroTextoOriginal){
+      btn.dataset.auroTextoOriginal = btn.innerHTML;
     }
-  });
+    btn.disabled = true;
+    btn.classList.add('auro-hc-btn-guardando');
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1 auro-hc-spin"></i> Guardando...';
+  }else{
+    btn.disabled = false;
+    btn.classList.remove('auro-hc-btn-guardando');
+    if(btn.dataset.auroTextoOriginal){
+      btn.innerHTML = btn.dataset.auroTextoOriginal;
+      delete btn.dataset.auroTextoOriginal;
+    }
+  }
 }
 
 function auroHistoriaRegistrarActualizacionVisual(fechaHora, idModulo){
@@ -7432,6 +7561,109 @@ function auroHistoriaObtenerIdMedicoSeguro(){
 }
 
 
+/* ==========================================================
+   AUROSANAX - CONTROL "SIN CAMBIOS" HISTORIA GLOBAL
+   Alcance:
+   - Datos generales: lectura; no reescribe una historia existente.
+   - Antecedentes: compara únicamente campos propios de Antecedentes.
+   - No interviene en Anamnesis, Examen físico, Obstetricia,
+     Diagnóstico, Plan, Recomendaciones, Certificados ni Documentos.
+   ========================================================== */
+function auroHistoriaCanonicoComparacion(valor){
+  if(valor === null || valor === undefined) return '';
+
+  if(typeof valor === 'number' || typeof valor === 'boolean'){
+    return String(valor);
+  }
+
+  if(typeof valor === 'object'){
+    if(Array.isArray(valor)){
+      return JSON.stringify(valor.map(auroHistoriaCanonicoComparacion));
+    }
+    const obj = {};
+    Object.keys(valor).sort().forEach(k => {
+      obj[k] = auroHistoriaCanonicoComparacion(valor[k]);
+    });
+    return JSON.stringify(obj);
+  }
+
+  const texto = String(valor)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+
+  if(!texto) return '';
+
+  if(
+    (texto.startsWith('{') && texto.endsWith('}')) ||
+    (texto.startsWith('[') && texto.endsWith(']'))
+  ){
+    try{
+      return auroHistoriaCanonicoComparacion(JSON.parse(texto));
+    }catch(e){}
+  }
+
+  return texto.replace(/[ \t]+\n/g, '\n');
+}
+
+function auroHistoriaRegistroActualParaComparar(){
+  const id = String(editingHistoryId || window.auroHistoriaSeleccionadaId || '').trim();
+  if(!id || !Array.isArray(window.historiasClinicas)) return null;
+
+  return window.historiasClinicas.find(h =>
+    String(h?.id_historia || '').trim() === id
+  ) || null;
+}
+
+function auroHistoriaAntecedentesSinCambios(data){
+  const actual = auroHistoriaRegistroActualParaComparar();
+  if(!actual) return false;
+
+  const campos = [
+    'antecedentes_personales',
+    'antecedentes_quirurgicos',
+    'antecedentes_gineco_obstetricos',
+    'antecedentes_familiares',
+    'medicacion_actual',
+    'alergias'
+  ];
+
+  return campos.every(campo =>
+    auroHistoriaCanonicoComparacion(actual?.[campo]) ===
+    auroHistoriaCanonicoComparacion(data?.[campo])
+  );
+}
+
+function auroHistoriaDebeOmitirEscrituraSinCambios(data, modulo){
+  if(!editingHistoryId) return false;
+
+  const m = String(modulo || '').trim();
+
+  /*
+    Datos generales son campos de paciente en modo lectura.
+    La actualización de identidad se realiza desde Pacientes,
+    no reescribiendo historias_clinicas.
+  */
+  if(m === 'hc_datos'){
+    return true;
+  }
+
+  if(m === 'hc_antecedentes'){
+    return auroHistoriaAntecedentesSinCambios(data);
+  }
+
+  return false;
+}
+
+function auroHistoriaMostrarSinCambios(modulo){
+  const nombre = auroHistoriaNombreModulo(modulo);
+  auroHistoriaMostrarEstado(
+    nombre + ' · Sin cambios pendientes. No se modificó la fecha de actualización.',
+    'ok'
+  );
+}
+
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -7471,13 +7703,7 @@ async function guardarHistoriaClinicaERP(){
   }
 
   const atencionUX = auroHistoriaAtencionResumen();
-  auroHistoriaSetBotonesGuardando(true);
-  auroHistoriaMostrarEstado(
-    atencionUX.id
-      ? 'Guardando historia clínica y módulos de la consulta ' + atencionUX.consulta + ', espere...'
-      : 'Guardando historia clínica, espere...',
-    'saving'
-  );
+  const moduloGuardadoUXInicial = auroHistoriaModuloActivo();
 
   const unirLinea = arr => arr.filter(Boolean).join(' | ');
 
@@ -7545,6 +7771,29 @@ async function guardarHistoriaClinicaERP(){
   if(esEdicion){
     data.id_historia = editingHistoryId;
   }
+
+  /*
+    Control antirregresivo:
+    si Datos generales o Antecedentes no tienen cambios reales,
+    no se realiza POST y no se mueve actualizado_en.
+  */
+  if(
+    esEdicion &&
+    auroHistoriaDebeOmitirEscrituraSinCambios(data, moduloGuardadoUXInicial)
+  ){
+    auroHistoriaMostrarSinCambios(moduloGuardadoUXInicial);
+    await auroHistoriaRefrescarEstadoConsultaActiva(moduloGuardadoUXInicial);
+    return;
+  }
+
+  auroHistoriaSetBotonesGuardando(true);
+  auroHistoriaMostrarEstado(
+    atencionUX.id
+      ? 'Guardando ' + auroHistoriaNombreModulo(moduloGuardadoUXInicial) +
+        ' · Consulta ' + atencionUX.consulta + '…'
+      : 'Guardando ' + auroHistoriaNombreModulo(moduloGuardadoUXInicial) + '…',
+    'saving'
+  );
 
   try{
     await fetch(API_URL, {
@@ -7672,12 +7921,11 @@ async function guardarHistoriaClinicaERP(){
         - vuelve a pintar resumen e historial de atenciones;
         - no recarga la página ni pierde la atención activa.
       */
-      document
-        .querySelectorAll('button[onclick*="guardarHistoriaClinicaERP"]')
-        .forEach(boton => {
-          boton.innerHTML =
-            '<i class="bi bi-save me-1"></i> Actualizar historia';
-        });
+      const botonHistoriaPrincipal = auroHistoriaBotonGuardarPrincipal();
+      if(botonHistoriaPrincipal){
+        botonHistoriaPrincipal.innerHTML =
+          '<i class="bi bi-check2-circle me-1"></i> Actualizar historia';
+      }
 
       if(typeof updateClinicalSummary === 'function'){
         updateClinicalSummary();
