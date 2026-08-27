@@ -4897,82 +4897,6 @@ async function auroRecetaAbrirOficialDesdeIndex(){
   return null;
 }
 
-
-/* ============================================================
-   AUROSANAX — ACCIÓN GLOBAL CONTEXTUAL DE HISTORIA
-   FASE 3 · SEPARACIÓN DEFINITIVA DE RESPONSABILIDADES
-   ------------------------------------------------------------
-   El botón global guardarHistoriaClinicaERP() SOLO pertenece
-   a la historia base / Antecedentes.
-   Los módulos con persistencia propia conservan SUS botones.
-============================================================ */
-function auroHistoriaConfigurarAccionGlobalPorModulo(modulo){
-  const btn = (typeof auroHistoriaBotonGuardarPrincipal === 'function')
-    ? auroHistoriaBotonGuardarPrincipal()
-    : document.querySelector(
-        '#historia .clinical-actions > button[onclick*="guardarHistoriaClinicaERP"]'
-      );
-
-  if(!btn) return;
-
-  const m = String(modulo || '').trim();
-  const esEdicion = !!editingHistoryId;
-
-  const independientes = new Set([
-    'hc_anamnesis',
-    'hc_examen',
-    'hc_obstetricia',
-    'hc_estetica',
-    'hc_diagnostico',
-    'hc_plan',
-    'hc_recomendaciones',
-    'hc_certificados',
-    'hc_docs'
-  ]);
-
-  btn.hidden = false;
-  btn.style.display = '';
-  btn.removeAttribute('aria-hidden');
-
-  if(m === 'hc_antecedentes'){
-    btn.setAttribute(
-      'title',
-      'Guarda únicamente los Antecedentes de la historia clínica seleccionada.'
-    );
-    btn.innerHTML = esEdicion
-      ? '<i class="bi bi-save me-1"></i> Actualizar antecedentes'
-      : '<i class="bi bi-save me-1"></i> Guardar antecedentes';
-    return;
-  }
-
-  if(m === 'hc_datos'){
-    if(!esEdicion){
-      btn.setAttribute(
-        'title',
-        'Crea la historia clínica inicial del paciente seleccionado.'
-      );
-      btn.innerHTML =
-        '<i class="bi bi-file-earmark-plus me-1"></i> Crear historia clínica';
-    }else{
-      btn.hidden = true;
-      btn.style.display = 'none';
-      btn.setAttribute('aria-hidden','true');
-    }
-    return;
-  }
-
-  if(independientes.has(m)){
-    btn.hidden = true;
-    btn.style.display = 'none';
-    btn.setAttribute('aria-hidden','true');
-    return;
-  }
-
-  btn.innerHTML = esEdicion
-    ? '<i class="bi bi-save me-1"></i> Actualizar historia'
-    : '<i class="bi bi-save me-1"></i> Guardar historia';
-}
-
 function showClinicalTab(id,btn){
   /*
     Higiene visual del piloto:
@@ -5019,14 +4943,6 @@ function showClinicalTab(id,btn){
     const action=String(sideButton.getAttribute('onclick')||'');
     sideButton.classList.toggle('active', action.includes("'"+id+"'") || action.includes('"'+id+'"'));
   });
-
-  /*
-    AUROSANAX FASE 3:
-    el botón global se muestra únicamente donde realmente corresponde.
-  */
-  if(typeof auroHistoriaConfigurarAccionGlobalPorModulo === 'function'){
-    auroHistoriaConfigurarAccionGlobalPorModulo(id);
-  }
 
   /* AUROSANAX: cada pestaña conserva y muestra únicamente su propia fecha visual. */
   if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
@@ -7664,7 +7580,6 @@ function auroHistoriaCanonicoComparacion(valor){
     if(Array.isArray(valor)){
       return JSON.stringify(valor.map(auroHistoriaCanonicoComparacion));
     }
-
     const obj = {};
     Object.keys(valor).sort().forEach(k => {
       obj[k] = auroHistoriaCanonicoComparacion(valor[k]);
@@ -7678,39 +7593,6 @@ function auroHistoriaCanonicoComparacion(valor){
     .trim();
 
   if(!texto) return '';
-
-  /*
-    AUROSANAX FIX QUIRÚRGICO 2026-08-27
-    Antecedentes guarda estructuras con prefijo de versión, por ejemplo:
-      AUROSANAX_ANT_PERSONALES_V1::{...}
-      AUROSANAX_ANT_GINECO_OBS_V1::{...}
-
-    El prefijo forma parte del contrato y se conserva.
-    El contenido JSON se compara de forma canónica para evitar que
-    un simple cambio de orden de propiedades se interprete como
-    modificación clínica real.
-  */
-  const separador = texto.indexOf('::');
-  if(separador > 0){
-    const prefijo = texto.slice(0, separador).trim();
-    const contenido = texto.slice(separador + 2).trim();
-
-    if(
-      (contenido.startsWith('{') && contenido.endsWith('}')) ||
-      (contenido.startsWith('[') && contenido.endsWith(']'))
-    ){
-      try{
-        return prefijo + '::' +
-          auroHistoriaCanonicoComparacion(JSON.parse(contenido));
-      }catch(e){
-        /*
-          Compatibilidad antirregresiva:
-          si una cadena legacy lleva "::" pero su contenido no es JSON
-          válido, no se altera ni se bloquea su guardado por error.
-        */
-      }
-    }
-  }
 
   if(
     (texto.startsWith('{') && texto.endsWith('}')) ||
@@ -9758,11 +9640,6 @@ async function editarHistoriaClinicaModal(idHistoria){
       b.innerHTML = '<i class="bi bi-save me-1"></i> Actualizar historia';
     });
 
-    const panelClinicoActivo = document.querySelector('#historia .clinical-panel.active');
-    if(panelClinicoActivo && typeof auroHistoriaConfigurarAccionGlobalPorModulo === 'function'){
-      auroHistoriaConfigurarAccionGlobalPorModulo(panelClinicoActivo.id);
-    }
-
     alert(
       'Historia cargada en modo edición. ' +
       'Ahora modifique los campos y presione Actualizar historia.'
@@ -10670,11 +10547,8 @@ document.addEventListener('click',e=>{
       if(btn.dataset.auroPlanBtn === '1'){
         btn.innerHTML = '<i class="bi bi-list-check me-1"></i> ' + (esEdicion ? 'Actualizar plan clínico' : 'Guardar plan clínico');
       }else{
-        /*
-          El botón global no pertenece a Plan.
-          Plan conserva íntegramente su botón data-auro-plan-btn="1".
-        */
         btn.id = btn.id || 'hcGuardarHistoriaBtn';
+        btn.innerHTML = '<i class="bi bi-save me-1"></i> ' + (esEdicion ? 'Actualizar historia' : 'Guardar historia');
       }
     });
 
@@ -10695,14 +10569,6 @@ document.addEventListener('click',e=>{
 
     if(typeof window.auroPlanActualizarMiniStatus === 'function'){
       window.auroPlanActualizarMiniStatus();
-    }
-
-    /*
-      Reaplica la regla contextual sin tocar el guardado de Plan.
-    */
-    const panelActivo = document.querySelector('#historia .clinical-panel.active');
-    if(panelActivo && typeof auroHistoriaConfigurarAccionGlobalPorModulo === 'function'){
-      auroHistoriaConfigurarAccionGlobalPorModulo(panelActivo.id);
     }
   };
 
