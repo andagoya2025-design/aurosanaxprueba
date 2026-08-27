@@ -2506,12 +2506,67 @@
     return getSemanticIntentRules();
   }
 
+  function hasStrongResultsContext(text) {
+    const normalized = normalizeText(text);
+    if (!normalized) return false;
+
+    const strongPatterns = [
+      /\b(revisar|revision|revisión|interpretar|ver|leer)\s+(mis\s+|los\s+|el\s+)?(resultado|resultados|examen|examenes|exámenes|informe|informes)\b/,
+      /\b(resultado|resultados)\s+(de|del)\s+(laboratorio|examen|examenes|exámenes|papanicolaou|pap|biopsia|colposcopia|colposcopía|ecografia|ecografía|ultrasonido)\b/,
+      /\b(informe|informes)\s+(medico|médico|clinico|clínico|laboratorio)\b/,
+      /\b(examen|examenes|exámenes)\s+(de|del|con)\s+(resultado|resultados|informe|informes)\b/,
+      /\b(que|qué)\s+(dijo|dice|indico|indicó)\s+(la\s+)?doctora\b/,
+      /\b(indicaciones|diagnostico|diagnóstico)\s+(de|del)\s+(resultado|resultados|examen|examenes|exámenes)\b/
+    ];
+
+    return strongPatterns.some(pattern => pattern.test(normalized));
+  }
+
+  function getContextualCategoryBoost(categoryId, rawText) {
+    const id = normalizeMetaId(categoryId || "");
+    const text = normalizeText(rawText);
+    if (!id || !text) return 0;
+
+    if (id === "RESULTADOS") {
+      return hasStrongResultsContext(text) ? 12 : 0;
+    }
+
+    const aestheticCore =
+      /\b(estetica|estética|tratamiento estetico|tratamiento estético|procedimiento estetico|procedimiento estético|rejuvenecimiento|apariencia|flacidez|firmeza|pigmentacion|pigmentación)\b/.test(text);
+
+    const bodyContext =
+      /\b(cuerpo|corporal|abdomen|abdominal|barriga|cintura|talla|grasa localizada|celulitis|axila|axilas|brazos|piernas|muslos|gluteos|glúteos|manos|espalda|criolipolisis|criolipólisis)\b/.test(text);
+
+    const facialContext =
+      /\b(facial|rostro|cara|mejillas|pomulos|pómulos|frente|ojeras|menton|mentón|papada|piel facial|hifu facial|laser facial|láser facial)\b/.test(text);
+
+    if (id === "ESTETICA_CORPORAL") {
+      if (aestheticCore && bodyContext) return 13;
+      if (bodyContext && /\b(tratamiento|procedimiento|mejorar|reducir|rejuvenecer)\b/.test(text)) return 9;
+      return 0;
+    }
+
+    if (id === "ESTETICA_FACIAL") {
+      if (aestheticCore && facialContext) return 13;
+      if (facialContext && /\b(tratamiento|procedimiento|mejorar|reducir|rejuvenecer)\b/.test(text)) return 9;
+      return 0;
+    }
+
+    if (id === "GINECOESTETICA") {
+      const intimateContext =
+        /\b(ginecoestetica|ginecoestética|zona intima|zona íntima|vaginal|vagina|vulvar|vulva|labios mayores|labios menores|intimo|íntimo|depilacion intima|depilación íntima)\b/.test(text);
+      if (intimateContext && (aestheticCore || /\b(laser|láser|hifu|relleno|depilacion|depilación|rejuvenecimiento)\b/.test(text))) return 14;
+      return 0;
+    }
+
+    return 0;
+  }
+
   function scoreTextCreatorCategory(rawText) {
     const text = normalizeText(rawText);
     const categories = getAvailableCategories();
     const specificService = detectSpecificService(rawText);
 
-    // Un servicio concreto manda sobre una intención logística como "cita".
     if (specificService.id && specificService.categoryId) {
       const mappedCategory = categories.find(category =>
         normalizeMetaId(category.id) === normalizeMetaId(specificService.categoryId)
@@ -2539,6 +2594,7 @@
       const label = normalizeText(category.label || "");
       const idText = normalizeText(asString(category.id).replace(/_/g, " "));
       const genericCategory = isGenericCategoryValue(category.id);
+      const categoryId = normalizeMetaId(category.id);
 
       if (label && text.includes(label)) score += genericCategory ? 3 : 10;
       if (idText && text.includes(idText)) score += genericCategory ? 3 : 10;
@@ -2552,6 +2608,12 @@
       keywords.forEach(keyword => {
         const normalizedKeyword = normalizeText(keyword);
         if (!normalizedKeyword || normalizedKeyword.length < 3 || !text.includes(normalizedKeyword)) return;
+
+        if (categoryId === "RESULTADOS" && normalizedKeyword === "resultado" && !hasStrongResultsContext(text)) {
+          score += 0.25;
+          return;
+        }
+
         score += (normalizedKeyword.length >= 8 ? 3 : 2) * Math.min(semanticKeywordWeight(keyword), 0.8);
       });
 
@@ -2564,7 +2626,8 @@
       if (id === "PAPANICOLAOU" && /\b(papanicolaou|pap smear|citologia|citología)\b/.test(text)) score += 14;
       if (id === "COLPOSCOPIA" && /\b(colposcopia|colposcopía)\b/.test(text)) score += 14;
       if (id === "MENOPAUSIA" && /\b(menopausia|climaterio)\b/.test(text)) score += 14;
-      if (id === "RESULTADOS" && /\b(resultado|resultados|informe|revision de examen)\b/.test(text)) score += 7;
+
+      score += getContextualCategoryBoost(category.id, rawText);
 
       if (!best || score > best.score) {
         best = { id: category.id, label: category.label, score };
