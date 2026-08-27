@@ -7580,6 +7580,7 @@ function auroHistoriaCanonicoComparacion(valor){
     if(Array.isArray(valor)){
       return JSON.stringify(valor.map(auroHistoriaCanonicoComparacion));
     }
+
     const obj = {};
     Object.keys(valor).sort().forEach(k => {
       obj[k] = auroHistoriaCanonicoComparacion(valor[k]);
@@ -7593,6 +7594,39 @@ function auroHistoriaCanonicoComparacion(valor){
     .trim();
 
   if(!texto) return '';
+
+  /*
+    AUROSANAX FIX QUIRÚRGICO 2026-08-27
+    Antecedentes guarda estructuras con prefijo de versión, por ejemplo:
+      AUROSANAX_ANT_PERSONALES_V1::{...}
+      AUROSANAX_ANT_GINECO_OBS_V1::{...}
+
+    El prefijo forma parte del contrato y se conserva.
+    El contenido JSON se compara de forma canónica para evitar que
+    un simple cambio de orden de propiedades se interprete como
+    modificación clínica real.
+  */
+  const separador = texto.indexOf('::');
+  if(separador > 0){
+    const prefijo = texto.slice(0, separador).trim();
+    const contenido = texto.slice(separador + 2).trim();
+
+    if(
+      (contenido.startsWith('{') && contenido.endsWith('}')) ||
+      (contenido.startsWith('[') && contenido.endsWith(']'))
+    ){
+      try{
+        return prefijo + '::' +
+          auroHistoriaCanonicoComparacion(JSON.parse(contenido));
+      }catch(e){
+        /*
+          Compatibilidad antirregresiva:
+          si una cadena legacy lleva "::" pero su contenido no es JSON
+          válido, no se altera ni se bloquea su guardado por error.
+        */
+      }
+    }
+  }
 
   if(
     (texto.startsWith('{') && texto.endsWith('}')) ||
