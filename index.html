@@ -7594,6 +7594,54 @@ function auroHistoriaCanonicoComparacion(valor){
 
   if(!texto) return '';
 
+  /*
+    AUROSANAX FIX QUIRÚRGICO 2026-08-27
+    Antecedentes guarda estructuras con prefijo de versión, por ejemplo:
+      AUROSANAX_ANT_PERSONALES_V1::{...}
+      AUROSANAX_ANT_GINECO_OBS_V1::{...}
+      AUROSANAX_ANT_FAMILIARES_V1::{...}
+
+    El prefijo forma parte del contrato y se conserva.
+    El contenido JSON se compara de forma canónica para evitar que
+    un simple cambio de orden de propiedades se interprete como
+    modificación clínica real.
+
+    Alcance exclusivo:
+    - comparación de "sin cambios" en Historia;
+    - no modifica Antecedentes, botones rápidos, estados visuales,
+      aislamiento por paciente, familiares ni ginecológicos repetibles;
+    - no modifica Apps Script ni módulos clínicos independientes.
+  */
+  const prefijosAntecedentes = [
+    'AUROSANAX_ANT_PERSONALES_V1::',
+    'AUROSANAX_ANT_GINECO_OBS_V1::',
+    'AUROSANAX_ANT_FAMILIARES_V1::'
+  ];
+
+  const prefijoAntecedentes = prefijosAntecedentes.find(prefijo =>
+    texto.startsWith(prefijo)
+  );
+
+  if(prefijoAntecedentes){
+    const contenido = texto.slice(prefijoAntecedentes.length).trim();
+
+    if(
+      (contenido.startsWith('{') && contenido.endsWith('}')) ||
+      (contenido.startsWith('[') && contenido.endsWith(']'))
+    ){
+      try{
+        return prefijoAntecedentes +
+          auroHistoriaCanonicoComparacion(JSON.parse(contenido));
+      }catch(e){
+        /*
+          Compatibilidad antirregresiva:
+          si el contenido prefijado no fuera JSON válido, se conserva
+          la comparación textual original para no ocultar cambios reales.
+        */
+      }
+    }
+  }
+
   if(
     (texto.startsWith('{') && texto.endsWith('}')) ||
     (texto.startsWith('[') && texto.endsWith(']'))
