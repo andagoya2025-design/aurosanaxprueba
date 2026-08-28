@@ -4732,3 +4732,1432 @@ function recopilarAntecedentesPersonalesCompletos(){
     'AUROSANAX antecedentes.js: familiares estructurados V1 conectados sin cambios de backend.'
   );
 })();
+/* ============================================================
+   AUROSANAX - GINECOLÓGICOS REPETIBLES V1
+   Alcance EXCLUSIVO:
+   - Permite múltiples Citologías / PAP, Colposcopias y Biopsias.
+   - Conserva íntegros los IDs y campos originales de la primera fila.
+   - NO modifica Index, Apps Script, Google Sheets ni columnas.
+   - NO cambia botones de guardado, fechas, temporalidades, ayudas rápidas,
+     limpieza general, seguridad, diagnóstico ni conexiones con otros módulos.
+   - Historias antiguas sin "registros" continúan funcionando exactamente igual.
+   - Los registros adicionales se guardan dentro del JSON ginecológico existente.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  const CONFIG = {
+    pap: {
+      label: 'Citología / PAP',
+      fechaId: 'hcGinPapFecha',
+      resultadoId: 'hcGinPapResultado',
+      estadoId: 'hcGinPapEstado'
+    },
+    colposcopia: {
+      label: 'Colposcopia',
+      fechaId: 'hcGinColposcopiaFecha',
+      resultadoId: 'hcGinColposcopiaResultado',
+      estadoId: 'hcGinColposcopiaEstado'
+    },
+    biopsia: {
+      label: 'Biopsia',
+      fechaId: 'hcGinBiopsiaFecha',
+      resultadoId: 'hcGinBiopsiaResultado',
+      estadoId: ''
+    }
+  };
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function selectorSeguro_(valor){
+    const raw = String(valor || '');
+    if(window.CSS && typeof window.CSS.escape === 'function'){
+      return window.CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, '\\$&');
+  }
+
+  function obtenerFilaBase_(tipo){
+    const cfg = CONFIG[tipo];
+    if(!cfg) return null;
+    const input = document.getElementById(cfg.fechaId);
+    return input?.closest('tr') || null;
+  }
+
+  function obtenerTbody_(){
+    return document.querySelector('#hc_antecedentes .ginecologicos-table tbody') || null;
+  }
+
+  function registrosAdicionalesDOM_(tipo){
+    return [...document.querySelectorAll(
+      '#hc_antecedentes .auro-gine-repetible-row[data-auro-gine-tipo="' +
+      selectorSeguro_(tipo) + '"]'
+    )];
+  }
+
+  function leerRegistrosAdicionales_(tipo){
+    return registrosAdicionalesDOM_(tipo)
+      .map(fila => ({
+        fecha: texto_(fila.querySelector('.auro-gine-repetible-fecha')?.value),
+        resultado: texto_(fila.querySelector('.auro-gine-repetible-resultado')?.value)
+      }))
+      .filter(item => item.fecha || item.resultado);
+  }
+
+  function actualizarNumeracion_(tipo){
+    const cfg = CONFIG[tipo];
+    registrosAdicionalesDOM_(tipo).forEach((fila, indice) => {
+      const n = indice + 2;
+      const titulo = fila.querySelector('.ginecologico-descripcion');
+      if(titulo) titulo.textContent = cfg.label + ' ' + n;
+      const btn = fila.querySelector('.auro-gine-repetible-eliminar');
+      if(btn) btn.setAttribute('aria-label', 'Eliminar ' + cfg.label + ' ' + n);
+    });
+  }
+
+  function dispararResumen_(){
+    if(typeof window.updateClinicalSummary === 'function'){
+      try{ window.updateClinicalSummary(); }catch(e){}
+    }
+  }
+
+  function crearFilaAdicional_(tipo, datos){
+    const cfg = CONFIG[tipo];
+    const base = obtenerFilaBase_(tipo);
+    const tbody = obtenerTbody_();
+    if(!cfg || !base || !tbody) return null;
+
+    const fila = document.createElement('tr');
+    fila.className = 'auro-gine-repetible-row';
+    fila.dataset.auroGineTipo = tipo;
+
+    const tdTitulo = document.createElement('td');
+    tdTitulo.className = 'ginecologico-descripcion';
+
+    const tdFecha = document.createElement('td');
+    const fecha = document.createElement('input');
+    fecha.type = 'date';
+    fecha.className = 'form-control auro-gine-repetible-fecha';
+    fecha.value = texto_(datos?.fecha);
+    tdFecha.appendChild(fecha);
+
+    const tdResultado = document.createElement('td');
+    const wrap = document.createElement('div');
+    wrap.className = 'auro-gine-repetible-resultado-wrap';
+
+    const resultado = document.createElement('input');
+    resultado.type = 'text';
+    resultado.className = 'form-control auro-gine-repetible-resultado';
+    resultado.placeholder = 'Resultado / observación';
+    resultado.value = texto_(datos?.resultado);
+
+    const eliminar = document.createElement('button');
+    eliminar.type = 'button';
+    eliminar.className = 'btn-soft auro-gine-repetible-eliminar';
+    eliminar.innerHTML = '<i class="bi bi-trash3"></i>';
+    eliminar.title = 'Eliminar este registro';
+    eliminar.addEventListener('click', () => {
+      fila.remove();
+      actualizarNumeracion_(tipo);
+      dispararResumen_();
+    });
+
+    [fecha, resultado].forEach(control => {
+      control.addEventListener('input', dispararResumen_);
+      control.addEventListener('change', dispararResumen_);
+    });
+
+    wrap.appendChild(resultado);
+    wrap.appendChild(eliminar);
+    tdResultado.appendChild(wrap);
+
+    fila.appendChild(tdTitulo);
+    fila.appendChild(tdFecha);
+    fila.appendChild(tdResultado);
+
+    const existentes = registrosAdicionalesDOM_(tipo);
+    const referencia = existentes.length ? existentes[existentes.length - 1] : base;
+    referencia.insertAdjacentElement('afterend', fila);
+
+    actualizarNumeracion_(tipo);
+    return fila;
+  }
+
+  function limpiarAdicionales_(tipo){
+    registrosAdicionalesDOM_(tipo).forEach(fila => fila.remove());
+  }
+
+  function limpiarTodosAdicionales_(){
+    Object.keys(CONFIG).forEach(limpiarAdicionales_);
+  }
+
+  function asegurarBotonAgregar_(tipo){
+    const cfg = CONFIG[tipo];
+    const base = obtenerFilaBase_(tipo);
+    if(!cfg || !base || base.dataset.auroGineRepetibleReady === '1') return;
+
+    base.dataset.auroGineRepetibleReady = '1';
+
+    const titulo = base.querySelector('.ginecologico-descripcion');
+    if(!titulo) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'auro-gine-repetible-titulo-wrap';
+
+    const texto = document.createElement('span');
+    texto.textContent = cfg.label;
+
+    const agregar = document.createElement('button');
+    agregar.type = 'button';
+    agregar.className = 'btn-soft auro-gine-repetible-agregar';
+    agregar.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Agregar';
+    agregar.title = 'Agregar otro registro de ' + cfg.label;
+    agregar.addEventListener('click', () => {
+      const fila = crearFilaAdicional_(tipo, {});
+      const input = fila?.querySelector('.auro-gine-repetible-fecha');
+      if(input) input.focus();
+    });
+
+    titulo.textContent = '';
+    wrap.appendChild(texto);
+    wrap.appendChild(agregar);
+    titulo.appendChild(wrap);
+  }
+
+  function inyectarEstilos_(){
+    if(document.getElementById('auroGineRepetiblesStyle')) return;
+
+    const style = document.createElement('style');
+    style.id = 'auroGineRepetiblesStyle';
+    style.textContent = `
+      #hc_antecedentes .auro-gine-repetible-titulo-wrap{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        width:100%;
+      }
+      #hc_antecedentes .auro-gine-repetible-agregar{
+        flex:0 0 auto;
+        padding:5px 9px;
+        border-radius:9px;
+        font-size:11px;
+        line-height:1.2;
+        white-space:nowrap;
+      }
+      #hc_antecedentes .auro-gine-repetible-row{
+        background:linear-gradient(180deg,#fff 0%,#fffafd 100%);
+      }
+      #hc_antecedentes .auro-gine-repetible-resultado-wrap{
+        display:grid;
+        grid-template-columns:minmax(0,1fr) auto;
+        gap:7px;
+        align-items:center;
+      }
+      #hc_antecedentes .auro-gine-repetible-eliminar{
+        width:38px;
+        min-width:38px;
+        height:38px;
+        padding:0;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:10px;
+        color:#9f1239;
+      }
+      @media(max-width:760px){
+        #hc_antecedentes .auro-gine-repetible-titulo-wrap{
+          align-items:flex-start;
+        }
+        #hc_antecedentes .auro-gine-repetible-agregar{
+          min-height:36px!important;
+          padding:6px 9px!important;
+        }
+        #hc_antecedentes .auro-gine-repetible-resultado-wrap{
+          grid-template-columns:minmax(0,1fr) 42px!important;
+        }
+        #hc_antecedentes .auro-gine-repetible-eliminar{
+          width:42px!important;
+          min-width:42px!important;
+          height:42px!important;
+        }
+      }
+      @media print{
+        #hc_antecedentes .auro-gine-repetible-agregar,
+        #hc_antecedentes .auro-gine-repetible-eliminar{
+          display:none!important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function inicializarUI_(){
+    const panel = document.getElementById('hc_antecedentes');
+    if(!panel) return false;
+
+    inyectarEstilos_();
+    Object.keys(CONFIG).forEach(asegurarBotonAgregar_);
+
+    const formulario = panel.closest('form');
+    if(formulario && formulario.dataset.auroGineRepetiblesReset !== '1'){
+      formulario.dataset.auroGineRepetiblesReset = '1';
+      formulario.addEventListener('reset', () => {
+        setTimeout(limpiarTodosAdicionales_, 0);
+      });
+    }
+
+    return true;
+  }
+
+  /*
+    GUARDADO:
+    conserva la función estable y solo añade "registros" a los tres
+    objetos autorizados. La primera fila sigue siendo fecha/estado/resultado.
+  */
+  if(typeof window.recopilarAntecedentesGinecologicosEstructurados === 'function'){
+    const recopilarOriginal = window.recopilarAntecedentesGinecologicosEstructurados;
+
+    window.recopilarAntecedentesGinecologicosEstructurados = function(){
+      const base = recopilarOriginal.apply(this, arguments) || {};
+
+      ['pap','colposcopia','biopsia'].forEach(tipo => {
+        const extras = leerRegistrosAdicionales_(tipo);
+        if(!extras.length) return;
+
+        const actual = (base[tipo] && typeof base[tipo] === 'object' && !Array.isArray(base[tipo]))
+          ? base[tipo]
+          : {};
+
+        base[tipo] = Object.assign({}, actual, { registros: extras });
+      });
+
+      return typeof window.auroCompactarObjeto === 'function'
+        ? window.auroCompactarObjeto(base)
+        : base;
+    };
+  }
+
+  /*
+    CARGA / EDICIÓN:
+    primero ejecuta íntegra la función estable y luego reconstruye solo
+    las filas adicionales. Si la historia es antigua y no tiene registros,
+    queda exactamente una fila como antes.
+  */
+  if(typeof window.cargarAntecedentesGinecologicosEstructurados === 'function'){
+    const cargarOriginal = window.cargarAntecedentesGinecologicosEstructurados;
+
+    window.cargarAntecedentesGinecologicosEstructurados = function(data){
+      const d = data || {};
+
+      limpiarTodosAdicionales_();
+      const resultado = cargarOriginal.apply(this, arguments);
+
+      ['pap','colposcopia','biopsia'].forEach(tipo => {
+        const lista = Array.isArray(d?.[tipo]?.registros) ? d[tipo].registros : [];
+        lista.forEach(item => {
+          if(texto_(item?.fecha) || texto_(item?.resultado)){
+            crearFilaAdicional_(tipo, item);
+          }
+        });
+      });
+
+      return resultado;
+    };
+  }
+
+  /*
+    RESUMEN / ANTECEDENTES PREVIOS:
+    conserva todas las secciones existentes y expande únicamente
+    PAP, Colposcopia y Biopsia cuando existen registros adicionales.
+  */
+  if(typeof window.auroResumenGinecologicosItemsDesdeJson === 'function'){
+    const resumenOriginal = window.auroResumenGinecologicosItemsDesdeJson;
+
+    window.auroResumenGinecologicosItemsDesdeJson = function(dataGineco){
+      const itemsOriginales = resumenOriginal.apply(this, arguments) || [];
+      const g = dataGineco?.ginecologicos || null;
+      if(!g || typeof g !== 'object') return itemsOriginales;
+
+      const etiquetas = {
+        pap:'Citología / PAP',
+        colposcopia:'Colposcopia',
+        biopsia:'Biopsia'
+      };
+
+      let items = itemsOriginales.filter(item => {
+        const titulo = texto_(item?.titulo);
+        return !Object.values(etiquetas).includes(titulo);
+      });
+
+      ['pap','colposcopia','biopsia'].forEach(tipo => {
+        const v = g[tipo];
+        if(!v || typeof v !== 'object' || Array.isArray(v)) return;
+
+        const lista = [];
+        if(texto_(v.fecha) || texto_(v.resultado)){
+          lista.push({ fecha:texto_(v.fecha), resultado:texto_(v.resultado) });
+        }
+
+        if(Array.isArray(v.registros)){
+          v.registros.forEach(r => {
+            if(texto_(r?.fecha) || texto_(r?.resultado)){
+              lista.push({ fecha:texto_(r?.fecha), resultado:texto_(r?.resultado) });
+            }
+          });
+        }
+
+        lista.forEach((registro, indice) => {
+          const detalle = [];
+          if(registro.fecha) detalle.push('Fecha: ' + registro.fecha);
+          if(registro.resultado) detalle.push('Resultado: ' + registro.resultado);
+
+          items.push({
+            titulo: etiquetas[tipo] + (indice > 0 ? ' ' + (indice + 1) : ''),
+            detalle: detalle.join(' · ')
+          });
+        });
+      });
+
+      return items;
+    };
+  }
+
+  /*
+    Inicialización visual diferida y segura.
+    No realiza guardados automáticos ni altera el contenido clínico.
+  */
+  function iniciar_(){
+    if(inicializarUI_()) return;
+    setTimeout(iniciar_, 300);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(iniciar_, 320);
+    });
+  }else{
+    setTimeout(iniciar_, 320);
+  }
+
+  console.log(
+    'AUROSANAX antecedentes.js: GINECOLÓGICOS REPETIBLES V1 cargado sin cambios de backend.'
+  );
+})();
+/* ============================================================
+   AUROSANAX - AISLAMIENTO DE ANTECEDENTES ENTRE PACIENTES V1
+   Corrección quirúrgica antirregresiva.
+   ------------------------------------------------------------
+   PROBLEMA RESUELTO:
+   Los controles visuales de Antecedentes podían conservar datos
+   del paciente anterior al cambiar de paciente y esos valores
+   podían terminar guardándose en la nueva historia.
+
+   ALCANCE EXCLUSIVO:
+   - Limpia SOLO #hc_antecedentes cuando cambia realmente id_paciente.
+   - NO limpia al cambiar de atención del mismo paciente.
+   - NO modifica guardado, fechas, temporalidades ni Apps Script.
+   - NO modifica Anamnesis, Examen físico, Diagnóstico, Plan ni otros módulos.
+   - NO dispara eventos de input/change durante la limpieza para evitar autosaves.
+   - Incluye filas dinámicas de PAP / Colposcopia / Biopsia.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  const PANEL_ID = 'hc_antecedentes';
+  const SELECTOR_PACIENTE_ID = 'hcPacienteSelect';
+
+  let pacienteAnterior = '';
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function idPacienteActual_(){
+    const selector = document.getElementById(SELECTOR_PACIENTE_ID);
+    return texto_(selector?.value);
+  }
+
+  function limpiarControlSilencioso_(control){
+    if(!control) return;
+
+    const tag = String(control.tagName || '').toUpperCase();
+    const type = String(control.type || '').toLowerCase();
+
+    if(tag === 'INPUT'){
+      if(type === 'checkbox' || type === 'radio'){
+        control.checked = false;
+        control.indeterminate = false;
+        return;
+      }
+
+      if(type === 'button' || type === 'submit' || type === 'reset'){
+        return;
+      }
+
+      control.value = '';
+      return;
+    }
+
+    if(tag === 'SELECT'){
+      /*
+        Preferir opción vacía cuando exista.
+        Si no existe, dejar sin selección para no inventar valores.
+      */
+      const opcionVacia = [...control.options].find(opt => texto_(opt.value) === '');
+      if(opcionVacia){
+        control.value = '';
+      }else{
+        control.selectedIndex = -1;
+      }
+      return;
+    }
+
+    if(tag === 'TEXTAREA'){
+      control.value = '';
+    }
+  }
+
+  function limpiarFilasDinamicas_(){
+    document
+      .querySelectorAll(
+        '#' + PANEL_ID + ' .auro-gine-repetible-row'
+      )
+      .forEach(fila => fila.remove());
+  }
+
+  function limpiarEstadosVisualesAyudas_(panel){
+    if(!panel) return;
+
+    /*
+      Solo estados visuales conocidos de ayudas rápidas.
+      No elimina botones ni listeners.
+    */
+    panel.querySelectorAll(
+      '.active,.selected,.is-active,.auro-active,.auro-v21-active'
+    ).forEach(el => {
+      if(
+        el.matches('button,[role="button"],.auro-v21-helper-btn') ||
+        el.closest('.auro-v21-helper-btn')
+      ){
+        el.classList.remove(
+          'active','selected','is-active','auro-active','auro-v21-active'
+        );
+        el.removeAttribute('aria-pressed');
+      }
+    });
+  }
+
+  function limpiarCajaAntecedentesPrevios_(){
+    const caja = document.getElementById('hcAntecedentesPreviosBox');
+    if(!caja) return;
+
+    /*
+      Ocultamos el resumen del paciente anterior.
+      La lógica estable del módulo podrá volver a pintarlo cuando corresponda.
+    */
+    caja.style.display = 'none';
+    caja.setAttribute('aria-hidden','true');
+
+    const contenido = caja.querySelector(
+      '.hc-antecedentes-previos-content,' +
+      '.antecedentes-previos-content,' +
+      '[data-auro-antecedentes-previos-content]'
+    );
+
+    if(contenido){
+      contenido.innerHTML = '';
+    }
+  }
+
+  function limpiarAntecedentesVisualesPaciente_(){
+    const panel = document.getElementById(PANEL_ID);
+    if(!panel) return false;
+
+    /*
+      Primero retiramos las filas clonadas porque también contienen inputs.
+    */
+    limpiarFilasDinamicas_();
+
+    /*
+      Limpiar únicamente controles clínicos dentro de Antecedentes.
+      Se hace en silencio: no se disparan input/change.
+    */
+    panel
+      .querySelectorAll('input,select,textarea')
+      .forEach(limpiarControlSilencioso_);
+
+    limpiarEstadosVisualesAyudas_(panel);
+    limpiarCajaAntecedentesPrevios_();
+
+    /*
+      Sincronizar únicamente presentación de ayudas si la función estable existe.
+      No guarda ni consulta servidor.
+    */
+    if(typeof window.auroV21SincronizarEstadosAyudas === 'function'){
+      try{
+        window.auroV21SincronizarEstadosAyudas();
+      }catch(error){
+        console.warn(
+          'AUROSANAX Antecedentes: no se pudo sincronizar el estado visual de ayudas tras limpiar paciente.',
+          error
+        );
+      }
+    }
+
+    if(typeof window.updateClinicalSummary === 'function'){
+      try{ window.updateClinicalSummary(); }catch(_error){}
+    }
+
+    return true;
+  }
+
+  function manejarCambioPaciente_(nuevoId){
+    const nuevo = texto_(nuevoId);
+
+    /*
+      Primer reconocimiento de contexto:
+      no limpiar porque todavía no existe una transición conocida.
+    */
+    if(!pacienteAnterior){
+      pacienteAnterior = nuevo;
+      return;
+    }
+
+    /*
+      Mismo paciente = NO limpiar.
+      Esto protege cambios de atención y navegación interna.
+    */
+    if(nuevo === pacienteAnterior){
+      return;
+    }
+
+    const anterior = pacienteAnterior;
+    pacienteAnterior = nuevo;
+
+    /*
+      Cambio real de paciente: limpieza visual inmediata.
+      Si el nuevo paciente tiene antecedentes, la lógica estable existente
+      podrá cargarlos después de esta transición.
+    */
+    limpiarAntecedentesVisualesPaciente_();
+
+    console.log(
+      'AUROSANAX Antecedentes: contexto visual limpiado por cambio de paciente.',
+      { anterior, nuevo }
+    );
+  }
+
+  function instalarProteccion_(){
+    const selector = document.getElementById(SELECTOR_PACIENTE_ID);
+    if(!selector) return false;
+
+    if(selector.dataset.auroAislamientoAntecedentesPaciente === '1'){
+      return true;
+    }
+
+    selector.dataset.auroAislamientoAntecedentesPaciente = '1';
+    pacienteAnterior = idPacienteActual_();
+
+    /*
+      Captura temprana: limpiamos antes de que otros listeners carguen
+      el contexto del nuevo paciente.
+    */
+    selector.addEventListener('change', function(){
+      manejarCambioPaciente_(selector.value);
+    }, true);
+
+    return true;
+  }
+
+  function iniciar_(){
+    if(instalarProteccion_()) return;
+    setTimeout(iniciar_, 250);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      setTimeout(iniciar_, 250);
+    }, { once:true });
+  }else{
+    setTimeout(iniciar_, 250);
+  }
+
+  /*
+    API pública mínima solo para diagnóstico manual.
+    No se usa en guardados.
+  */
+  window.auroLimpiarAntecedentesVisualesPaciente =
+    limpiarAntecedentesVisualesPaciente_;
+
+  console.log(
+    'AUROSANAX antecedentes.js: AISLAMIENTO DE ANTECEDENTES ENTRE PACIENTES V1 cargado.'
+  );
+})();
+/* ============================================================
+   AUROSANAX - ANTECEDENTES: BARRERA SIN CAMBIOS REALES V2
+   Base: antecedentes estable entregado por el usuario.
+   ------------------------------------------------------------
+   OBJETIVO EXCLUSIVO:
+   Evitar escrituras de antecedentes cuando el usuario abre una
+   historia y pulsa Guardar/Actualizar sin modificar datos clínicos.
+
+   CAMPOS PROTEGIDOS:
+   - antecedentes_personales
+   - antecedentes_quirurgicos
+   - antecedentes_gineco_obstetricos
+   - antecedentes_familiares
+   - medicacion_actual
+   - alergias
+
+   PRINCIPIO:
+   1. Después de cargar la historia se conserva:
+      a) el valor RAW exacto leído de historias_clinicas;
+      b) el valor que este mismo módulo reconstruye tras la carga.
+   2. Al guardar:
+      - si el valor enviado sigue siendo equivalente al reconstruido
+        tras la carga, NO hubo cambio del usuario y se restaura el RAW;
+      - si existe una modificación real, se conserva el valor nuevo.
+   3. El Index puede entonces reconocer que los seis campos siguen
+      iguales y omitir el POST, evitando mover actualizado_en.
+
+   NO MODIFICA:
+   - botones rápidos / estados morados / snapshots;
+   - familiares;
+   - PAP / Colposcopia / Biopsia repetibles;
+   - aislamiento entre pacientes;
+   - diseño desktop/móvil;
+   - Index;
+   - Apps Script;
+   - otros módulos.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  const CAMPOS = [
+    'antecedentes_personales',
+    'antecedentes_quirurgicos',
+    'antecedentes_gineco_obstetricos',
+    'antecedentes_familiares',
+    'medicacion_actual',
+    'alergias'
+  ];
+
+  const BASELINE = {
+    id_historia:'',
+    id_paciente:'',
+    raw:null,
+    reconstruido:null
+  };
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor);
+  }
+
+  function canonico_(valor){
+    if(valor === null || valor === undefined) return '';
+
+    if(typeof valor === 'number' || typeof valor === 'boolean'){
+      return String(valor);
+    }
+
+    if(Array.isArray(valor)){
+      return '[' + valor.map(canonico_).join(',') + ']';
+    }
+
+    if(valor && typeof valor === 'object'){
+      return '{' + Object.keys(valor)
+        .sort()
+        .map(function(k){
+          return JSON.stringify(k) + ':' + canonico_(valor[k]);
+        })
+        .join(',') + '}';
+    }
+
+    const raw = texto_(valor)
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .trim();
+
+    if(!raw) return '';
+
+    /*
+      Los antecedentes estructurados usan marcadores del tipo:
+      AUROSANAX_..._V1::{...}
+      Se conserva el prefijo y solo se canoniza el JSON interno.
+    */
+    const separador = raw.indexOf('::');
+    if(separador > 0){
+      const prefijo = raw.slice(0, separador + 2);
+      const contenido = raw.slice(separador + 2).trim();
+
+      if(
+        (contenido.startsWith('{') && contenido.endsWith('}')) ||
+        (contenido.startsWith('[') && contenido.endsWith(']'))
+      ){
+        try{
+          return prefijo + canonico_(JSON.parse(contenido));
+        }catch(_error){}
+      }
+    }
+
+    if(
+      (raw.startsWith('{') && raw.endsWith('}')) ||
+      (raw.startsWith('[') && raw.endsWith(']'))
+    ){
+      try{
+        return canonico_(JSON.parse(raw));
+      }catch(_error){}
+    }
+
+    return raw;
+  }
+
+  function idHistoriaEdicion_(){
+    try{
+      if(typeof editingHistoryId !== 'undefined'){
+        return texto_(editingHistoryId).trim();
+      }
+    }catch(_error){}
+    return texto_(window.editingHistoryId).trim();
+  }
+
+  function idPacienteActivo_(){
+    const select = document.getElementById('hcPacienteSelect');
+    const idSelect = texto_(select?.value).trim();
+    if(idSelect) return idSelect;
+
+    try{
+      if(typeof activePatientId !== 'undefined'){
+        return texto_(activePatientId).trim();
+      }
+    }catch(_error){}
+
+    return texto_(window.activePatientId).trim();
+  }
+
+  function recolectarEstadoActual_(){
+    const estado = {
+      antecedentes_personales:'',
+      antecedentes_quirurgicos:'',
+      antecedentes_gineco_obstetricos:'',
+      antecedentes_familiares:'',
+      medicacion_actual:'',
+      alergias:''
+    };
+
+    try{
+      estado.antecedentes_personales =
+        typeof recopilarAntecedentesPersonalesCompletos === 'function'
+          ? recopilarAntecedentesPersonalesCompletos()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAntecedentesPersonales')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar personales.', error);
+    }
+
+    try{
+      estado.antecedentes_quirurgicos =
+        typeof recopilarAntecedentesQuirurgicosEstructurados === 'function'
+          ? recopilarAntecedentesQuirurgicosEstructurados()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAntecedentesQuirurgicos')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar quirúrgicos.', error);
+    }
+
+    try{
+      estado.antecedentes_gineco_obstetricos =
+        typeof recopilarAntecedentesGinecoObstetricosCompletos === 'function'
+          ? recopilarAntecedentesGinecoObstetricosCompletos()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcRevisionSistemas')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar gineco-obstétricos.', error);
+    }
+
+    try{
+      estado.antecedentes_familiares =
+        typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'
+          ? window.recopilarAntecedentesFamiliaresEstructurados()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAntecedentesFamiliares')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar familiares.', error);
+    }
+
+    try{
+      estado.medicacion_actual =
+        typeof getValueIfExists === 'function'
+          ? getValueIfExists('hcMedicacionActual')
+          : texto_(document.getElementById('hcMedicacionActual')?.value);
+    }catch(_error){}
+
+    try{
+      estado.alergias =
+        typeof recopilarAlergiasEstructuradas === 'function'
+          ? recopilarAlergiasEstructuradas()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAlergias')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar alergias.', error);
+    }
+
+    return estado;
+  }
+
+  function limpiarBaseline_(){
+    BASELINE.id_historia = '';
+    BASELINE.id_paciente = '';
+    BASELINE.raw = null;
+    BASELINE.reconstruido = null;
+  }
+
+  function capturarBaseline_(h){
+    if(!h) return false;
+
+    const idHistoria = texto_(h.id_historia || h.id).trim();
+    const idEdicion = idHistoriaEdicion_();
+
+    /*
+      Solo se arma línea base cuando realmente estamos editando
+      la misma historia que acaba de cargarse.
+    */
+    if(!idHistoria || !idEdicion || idHistoria !== idEdicion){
+      return false;
+    }
+
+    BASELINE.id_historia = idHistoria;
+    BASELINE.id_paciente = texto_(h.id_paciente).trim();
+
+    BASELINE.raw = {};
+    CAMPOS.forEach(function(campo){
+      BASELINE.raw[campo] = texto_(h[campo]);
+    });
+
+    /*
+      Importante: se toma DESPUÉS de que el archivo estable terminó
+      de cargar todos los controles. Así las normalizaciones propias
+      del módulo forman parte de la referencia y no cuentan como
+      cambios hechos por el usuario.
+    */
+    BASELINE.reconstruido = recolectarEstadoActual_();
+
+    return true;
+  }
+
+  function baselineValido_(h){
+    if(!h || !BASELINE.raw || !BASELINE.reconstruido) return false;
+
+    const idHistoria = texto_(h.id_historia || h.id).trim();
+    const idPacienteHistoria = texto_(h.id_paciente).trim();
+    const idPacienteActivo = idPacienteActivo_();
+
+    if(!idHistoria || idHistoria !== BASELINE.id_historia) return false;
+
+    if(
+      BASELINE.id_paciente &&
+      idPacienteHistoria &&
+      BASELINE.id_paciente !== idPacienteHistoria
+    ){
+      return false;
+    }
+
+    if(
+      BASELINE.id_paciente &&
+      idPacienteActivo &&
+      BASELINE.id_paciente !== idPacienteActivo
+    ){
+      return false;
+    }
+
+    return true;
+  }
+
+  /*
+    Conservamos la protección estable que ya existía y añadimos
+    únicamente la barrera de igualdad contra la línea base.
+  */
+  const proteccionAnterior =
+    typeof window.auroAplicarProteccionAntecedentesEdicion === 'function'
+      ? window.auroAplicarProteccionAntecedentesEdicion
+      : null;
+
+  window.auroAplicarProteccionAntecedentesEdicion = function(data){
+    let salida = data || {};
+
+    if(proteccionAnterior){
+      salida = proteccionAnterior.call(this, salida) || salida;
+    }
+
+    let h = null;
+    try{
+      h = typeof auroHistoriaActualEdicion === 'function'
+        ? auroHistoriaActualEdicion()
+        : null;
+    }catch(_error){}
+
+    if(!h || !baselineValido_(h)){
+      return salida;
+    }
+
+    CAMPOS.forEach(function(campo){
+      /*
+        Comparamos contra lo que el propio módulo reconstruyó al cargar.
+        Si sigue igual, el usuario no modificó ese campo.
+        Se devuelve el RAW exacto para que el comparador del Index vea
+        igualdad real con historias_clinicas y corte el POST.
+      */
+      if(
+        canonico_(salida[campo]) ===
+        canonico_(BASELINE.reconstruido[campo])
+      ){
+        salida[campo] = BASELINE.raw[campo];
+      }
+    });
+
+    return salida;
+  };
+
+  /*
+    Captura FINAL: este wrapper se instala al final del archivo estable,
+    después de familiares, repetibles y aislamiento. Por ello observa
+    el estado ya reconstruido por toda la cadena estable.
+  */
+  if(
+    typeof window.auroCargarAntecedentesDesdeHistoria === 'function' &&
+    window.auroCargarAntecedentesDesdeHistoria.__auroSinCambiosRealesV2 !== true
+  ){
+    const cargarAnterior = window.auroCargarAntecedentesDesdeHistoria;
+
+    const cargarConBaseline = function(h, modo){
+      const resultado = cargarAnterior.apply(this, arguments);
+
+      try{
+        capturarBaseline_(h);
+      }catch(error){
+        console.warn(
+          'AUROSANAX Antecedentes: no se pudo capturar línea base de edición.',
+          error
+        );
+      }
+
+      return resultado;
+    };
+
+    cargarConBaseline.__auroSinCambiosRealesV2 = true;
+    window.auroCargarAntecedentesDesdeHistoria = cargarConBaseline;
+  }
+
+  /*
+    Al cambiar realmente de paciente invalidamos la línea base anterior.
+    No limpiamos controles aquí; eso sigue siendo responsabilidad del
+    aislamiento estable ya existente.
+  */
+  const selectorPaciente = document.getElementById('hcPacienteSelect');
+  if(
+    selectorPaciente &&
+    selectorPaciente.dataset.auroBaselineAntecedentesV2 !== '1'
+  ){
+    selectorPaciente.dataset.auroBaselineAntecedentesV2 = '1';
+    selectorPaciente.addEventListener('change', limpiarBaseline_, true);
+  }
+
+  window.auroAntecedentesDebugSinCambiosV2 = function(){
+    return {
+      id_historia:BASELINE.id_historia,
+      id_paciente:BASELINE.id_paciente,
+      baseline_disponible:!!(BASELINE.raw && BASELINE.reconstruido),
+      raw:BASELINE.raw,
+      reconstruido:BASELINE.reconstruido
+    };
+  };
+
+  console.log(
+    'AUROSANAX antecedentes.js: BARRERA SIN CAMBIOS REALES V2 instalada.'
+  );
+})();
+
+/* ============================================================
+   AUROSANAX - ANTECEDENTES: BARRERA DE MODIFICACIÓN REAL V3
+   Corrección quirúrgica anti-escritura sin interacción del usuario.
+   ------------------------------------------------------------
+   OBJETIVO EXCLUSIVO:
+   - Si una historia existente termina de cargar Antecedentes y el
+     usuario NO modifica ningún dato clínico del panel, al pulsar
+     Guardar / Actualizar historia desde Antecedentes se corta el
+     flujo ANTES de entrar a guardarHistoriaClinicaERP().
+   - Resultado: 0 POST, 0 escritura y 0 cambio de actualizado_en.
+
+   SEGURIDAD / COMPATIBILIDAD:
+   - NO bloquea la creación de una historia nueva.
+   - NO actúa fuera de la pestaña #hc_antecedentes.
+   - NO considera como cambios los acordeones, Mostrar/Ocultar ni
+     desplegar vacunas en móvil.
+   - Sí considera modificación real escribir, seleccionar, marcar,
+     usar ayudas rápidas y agregar/eliminar PAP/Colposcopia/Biopsia.
+   - Conserva íntegra la Barrera V2 como segunda protección para
+     casos donde hubo interacción pero el estado final quedó igual.
+   - NO modifica Index, Apps Script, backend, columnas ni otros módulos.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  if(window.__auroAntecedentesModificacionRealV3 === true) return;
+  window.__auroAntecedentesModificacionRealV3 = true;
+
+  const ESTADO = {
+    modificado:false,
+    cargado:false,
+    id_historia:'',
+    id_paciente:'',
+    motivo:''
+  };
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function idHistoriaEdicion_(){
+    try{
+      if(typeof editingHistoryId !== 'undefined'){
+        return texto_(editingHistoryId);
+      }
+    }catch(_error){}
+    return texto_(window.editingHistoryId);
+  }
+
+  function idPacienteActivo_(){
+    const select = document.getElementById('hcPacienteSelect');
+    if(texto_(select?.value)) return texto_(select.value);
+
+    try{
+      if(typeof activePatientId !== 'undefined'){
+        return texto_(activePatientId);
+      }
+    }catch(_error){}
+
+    return texto_(window.activePatientId);
+  }
+
+  function panelAntecedentes_(){
+    return document.getElementById('hc_antecedentes');
+  }
+
+  function antecedentesActivo_(){
+    const panel = panelAntecedentes_();
+    if(!panel) return false;
+
+    if(panel.classList.contains('active')) return true;
+
+    const activo = document.querySelector('.clinical-panel.active');
+    if(activo) return activo === panel;
+
+    /* Fallback visual para versiones antiguas sin clase active. */
+    try{
+      const estilo = window.getComputedStyle(panel);
+      return estilo.display !== 'none' && estilo.visibility !== 'hidden';
+    }catch(_error){
+      return false;
+    }
+  }
+
+  function marcarModificado_(motivo){
+    /*
+      Solo una interacción humana posterior a la carga puede activar
+      esta bandera. Las cargas programáticas no disparan eventos trusted.
+    */
+    if(!ESTADO.cargado || !ESTADO.id_historia) return;
+
+    ESTADO.modificado = true;
+    ESTADO.motivo = texto_(motivo) || 'interacción clínica';
+  }
+
+  function marcarLimpioDesdeHistoria_(h){
+    const idHistoria = texto_(h?.id_historia || h?.id);
+    const idEdicion = idHistoriaEdicion_();
+
+    /*
+      La barrera directa solo protege EDICIÓN de una historia existente.
+      Historia nueva debe conservar su flujo normal de creación.
+    */
+    if(!idHistoria || !idEdicion || idHistoria !== idEdicion){
+      ESTADO.modificado = false;
+      ESTADO.cargado = false;
+      ESTADO.id_historia = '';
+      ESTADO.id_paciente = '';
+      ESTADO.motivo = '';
+      return false;
+    }
+
+    ESTADO.modificado = false;
+    ESTADO.cargado = true;
+    ESTADO.id_historia = idHistoria;
+    ESTADO.id_paciente = texto_(h?.id_paciente) || idPacienteActivo_();
+    ESTADO.motivo = 'historia cargada sin modificaciones';
+    return true;
+  }
+
+  function invalidarContexto_(){
+    ESTADO.modificado = false;
+    ESTADO.cargado = false;
+    ESTADO.id_historia = '';
+    ESTADO.id_paciente = '';
+    ESTADO.motivo = '';
+  }
+
+  function contextoEdicionValido_(){
+    if(!ESTADO.cargado || !ESTADO.id_historia) return false;
+
+    const idEdicion = idHistoriaEdicion_();
+    if(!idEdicion || idEdicion !== ESTADO.id_historia) return false;
+
+    const paciente = idPacienteActivo_();
+    if(
+      ESTADO.id_paciente &&
+      paciente &&
+      paciente !== ESTADO.id_paciente
+    ){
+      return false;
+    }
+
+    return true;
+  }
+
+  function esClickVisualSinCambio_(target){
+    if(!(target instanceof Element)) return false;
+
+    return !!target.closest(
+      '.auro-ant-mobile-toggle,' +
+      '.auro-vacuna-mobile-toggle,' +
+      '.auro-previos-hide,' +
+      '[data-bs-toggle="collapse"],' +
+      '[data-bs-toggle="tab"]'
+    );
+  }
+
+  function esClickClinicoQueModifica_(target){
+    if(!(target instanceof Element)) return false;
+
+    return !!target.closest(
+      '.auro-v21-helper-btn,' +
+      '.auro-gine-repetible-agregar,' +
+      '.auro-gine-repetible-eliminar'
+    );
+  }
+
+  function instalarDetectorInteraccion_(){
+    const panel = panelAntecedentes_();
+    if(!panel) return false;
+    if(panel.dataset.auroModificacionRealV3 === '1') return true;
+
+    panel.dataset.auroModificacionRealV3 = '1';
+
+    /*
+      input/change solo cuentan si fueron provocados por el usuario.
+      Esto evita que la carga y reconstrucción interna marquen el módulo.
+    */
+    ['input','change'].forEach(tipo => {
+      panel.addEventListener(tipo, function(event){
+        if(event.isTrusted !== true) return;
+        const target = event.target;
+        if(!(target instanceof Element)) return;
+        if(!target.matches('input,select,textarea')) return;
+        marcarModificado_(tipo + ': ' + (target.id || target.name || target.className || 'control'));
+      }, true);
+    });
+
+    /*
+      Las ayudas rápidas y los botones de repetibles modifican el DOM
+      por código y por eso requieren registrar el clic humano explícito.
+    */
+    panel.addEventListener('click', function(event){
+      if(event.isTrusted !== true) return;
+      const target = event.target;
+      if(esClickVisualSinCambio_(target)) return;
+      if(esClickClinicoQueModifica_(target)){
+        marcarModificado_('clic clínico');
+      }
+    }, true);
+
+    return true;
+  }
+
+  function instalarResetDespuesCarga_(){
+    const actual = window.auroCargarAntecedentesDesdeHistoria;
+    if(typeof actual !== 'function') return false;
+    if(actual.__auroModificacionRealV3 === true) return true;
+
+    const cargarAnterior = actual;
+
+    const cargarConEstadoV3 = function(h, modo){
+      const resultado = cargarAnterior.apply(this, arguments);
+
+      /*
+        Se ejecuta al final de toda la cadena estable de carga.
+        No depende de la serialización ni compara JSON.
+      */
+      marcarLimpioDesdeHistoria_(h);
+      return resultado;
+    };
+
+    cargarConEstadoV3.__auroModificacionRealV3 = true;
+    cargarConEstadoV3.__auroOriginal = cargarAnterior;
+    window.auroCargarAntecedentesDesdeHistoria = cargarConEstadoV3;
+    return true;
+  }
+
+  function mostrarSinCambios_(){
+    try{
+      if(typeof window.auroHistoriaMostrarSinCambios === 'function'){
+        window.auroHistoriaMostrarSinCambios('hc_antecedentes');
+        return;
+      }
+    }catch(_error){}
+
+    const status = document.getElementById('auroHistoriaMiniStatus');
+    if(status){
+      status.textContent = 'Antecedentes · Sin cambios pendientes. No se realizó ninguna escritura.';
+    }
+
+    console.info(
+      'AUROSANAX Antecedentes: guardado omitido por ausencia de modificaciones reales.'
+    );
+  }
+
+  function instalarBarreraAntesGuardar_(){
+    const actual = window.guardarHistoriaClinicaERP;
+    if(typeof actual !== 'function') return false;
+    if(actual.__auroAntecedentesModificacionRealV3 === true) return true;
+
+    const guardarAnterior = actual;
+
+    const guardarConBarreraV3 = function(){
+      const esEdicion = !!idHistoriaEdicion_();
+
+      if(
+        esEdicion &&
+        antecedentesActivo_() &&
+        contextoEdicionValido_() &&
+        ESTADO.modificado !== true
+      ){
+        mostrarSinCambios_();
+        return Promise.resolve({
+          success:true,
+          sin_cambios:true,
+          modulo:'hc_antecedentes',
+          message:'No existen cambios en Antecedentes para guardar.'
+        });
+      }
+
+      const habiaCambioAntecedentes =
+        esEdicion &&
+        antecedentesActivo_() &&
+        contextoEdicionValido_() &&
+        ESTADO.modificado === true;
+
+      let resultado;
+      try{
+        resultado = guardarAnterior.apply(this, arguments);
+      }catch(error){
+        throw error;
+      }
+
+      /*
+        Si el guardado terminó sin lanzar error, el siguiente clic sin nuevas
+        interacciones debe volver a quedar protegido por la barrera directa.
+        Si el flujo devuelve una Promise rechazada, conservamos modificado=true.
+      */
+      if(habiaCambioAntecedentes && resultado && typeof resultado.then === 'function'){
+        return resultado.then(function(valor){
+          ESTADO.modificado = false;
+          ESTADO.motivo = 'guardado finalizado; sin nuevas modificaciones';
+          return valor;
+        }, function(error){
+          throw error;
+        });
+      }
+
+      if(habiaCambioAntecedentes){
+        ESTADO.modificado = false;
+        ESTADO.motivo = 'guardado finalizado; sin nuevas modificaciones';
+      }
+
+      return resultado;
+    };
+
+    guardarConBarreraV3.__auroAntecedentesModificacionRealV3 = true;
+    guardarConBarreraV3.__auroOriginal = guardarAnterior;
+    window.guardarHistoriaClinicaERP = guardarConBarreraV3;
+    return true;
+  }
+
+  function instalarCambioPaciente_(){
+    const selector = document.getElementById('hcPacienteSelect');
+    if(!selector) return false;
+    if(selector.dataset.auroModificacionRealPacienteV3 === '1') return true;
+
+    selector.dataset.auroModificacionRealPacienteV3 = '1';
+    selector.addEventListener('change', function(){
+      invalidarContexto_();
+    }, true);
+    return true;
+  }
+
+  function instalarTodo_(){
+    instalarDetectorInteraccion_();
+    instalarResetDespuesCarga_();
+    instalarBarreraAntesGuardar_();
+    instalarCambioPaciente_();
+  }
+
+  /*
+    Se reintenta porque antecedentes.js puede ejecutarse antes de que Index
+    termine de declarar guardarHistoriaClinicaERP(). No se reemplaza Index:
+    solo se envuelve la función final cuando ya está disponible.
+  */
+  let intentos = 0;
+  const timer = window.setInterval(function(){
+    instalarTodo_();
+    intentos += 1;
+
+    const listo =
+      document.getElementById('hc_antecedentes') &&
+      typeof window.auroCargarAntecedentesDesdeHistoria === 'function' &&
+      typeof window.guardarHistoriaClinicaERP === 'function' &&
+      window.guardarHistoriaClinicaERP.__auroAntecedentesModificacionRealV3 === true;
+
+    if(listo || intentos >= 120){
+      window.clearInterval(timer);
+    }
+  }, 100);
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', instalarTodo_, {once:true});
+  }else{
+    instalarTodo_();
+  }
+
+  window.auroAntecedentesDebugModificacionRealV3 = function(){
+    return {
+      modificado:ESTADO.modificado,
+      cargado:ESTADO.cargado,
+      id_historia:ESTADO.id_historia,
+      id_paciente:ESTADO.id_paciente,
+      motivo:ESTADO.motivo,
+      contexto_valido:contextoEdicionValido_(),
+      antecedentes_activo:antecedentesActivo_()
+    };
+  };
+
+  console.log(
+    'AUROSANAX antecedentes.js: BARRERA DE MODIFICACIÓN REAL V3 instalada.'
+  );
+})();
