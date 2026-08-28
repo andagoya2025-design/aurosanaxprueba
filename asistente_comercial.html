@@ -1083,6 +1083,122 @@
       }
     }
 
+
+    /* =========================================================
+       ANDROID · COMPATIBILIDAD LIMPIA ANTIRREGRESIVA
+       2026-08-28
+       Recupera la mecánica táctil estable del archivo base.
+       No cambia iPhone, escritorio, motor ni datos.
+       ========================================================= */
+    @media(max-width:760px){
+      html.ac-android,
+      html.ac-android body{
+        position:static!important;
+        width:100%!important;
+        height:auto!important;
+        min-height:100%!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        touch-action:auto!important;
+        overscroll-behavior-y:auto!important;
+        -webkit-overflow-scrolling:touch!important
+      }
+
+      /* Un panel cerrado jamás debe interceptar el gesto vertical. */
+      html.ac-android #acBibliotecaCard{
+        pointer-events:none!important
+      }
+      html.ac-android body.ac-library-open #acBibliotecaCard{
+        pointer-events:auto!important
+      }
+      html.ac-android .ac-mobile-library-backdrop{
+        pointer-events:none!important
+      }
+      html.ac-android body.ac-library-open .ac-mobile-library-backdrop{
+        pointer-events:auto!important
+      }
+      html.ac-android .ac-crm-card:not(.is-open)>.ac-card-body{
+        pointer-events:none!important
+      }
+      html.ac-android .ac-crm-card.is-open>.ac-card-body{
+        pointer-events:auto!important
+      }
+
+      /* CRM Android: mecanismo probado del archivo base.
+         Conserva contenido, botones, modo de trabajo y diseño interno. */
+      html.ac-android body.ac-crm-panel-open{
+        overflow-y:hidden!important;
+        position:static!important;
+        height:auto!important
+      }
+      html.ac-android .ac-crm-card.is-open>.ac-card-body{
+        display:block!important;
+        position:fixed!important;
+        z-index:1200!important;
+        top:8px!important;
+        right:8px!important;
+        bottom:8px!important;
+        left:8px!important;
+        width:auto!important;
+        height:auto!important;
+        max-height:none!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important;
+        touch-action:pan-y!important;
+        padding:0 14px 18px!important;
+        border-radius:24px!important
+      }
+
+      /* Plantillas Android: drawer lateral del mecanismo base,
+         más estable que el bottom-sheet con WebView/Chrome Android. */
+      html.ac-android body.ac-library-open{
+        overflow-y:hidden!important;
+        position:static!important;
+        height:auto!important
+      }
+      html.ac-android #acBibliotecaCard{
+        top:8px!important;
+        right:0!important;
+        bottom:0!important;
+        left:auto!important;
+        width:min(92vw,430px)!important;
+        max-width:430px!important;
+        height:calc(100vh - 8px)!important;
+        max-height:none!important;
+        border-radius:24px 0 0 0!important;
+        transform:translateX(105%)!important;
+        transition:transform .22s cubic-bezier(.2,.8,.2,1)!important
+      }
+      html.ac-android body.ac-library-open #acBibliotecaCard{
+        transform:translateX(0)!important
+      }
+      html.ac-android #acBibliotecaCard>.ac-card-body{
+        height:calc(100% - 72px)!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important;
+        touch-action:pan-y!important
+      }
+
+      /* Vista rápida: scroll interno explícito y sin bloqueo fantasma. */
+      html.ac-android #acQuickSheet[hidden]{
+        display:none!important;
+        pointer-events:none!important
+      }
+      html.ac-android #acQuickSheet:not([hidden]){
+        pointer-events:auto!important;
+        touch-action:pan-y!important
+      }
+      html.ac-android #acQuickSheet:not([hidden]) .ac-quick-response{
+        overflow-y:auto!important;
+        -webkit-overflow-scrolling:touch!important;
+        touch-action:pan-y!important
+      }
+    }
+
   </style>
 </head>
 
@@ -1160,7 +1276,7 @@
 
   <!-- Adaptador visual vigente, conservado -->
   <script>
-    (function(){"use strict";function text(value){return value==null?"":String(value).trim();}function setText(id,value){var el=document.getElementById(id);if(el&&text(value))el.textContent=text(value);}function applyBusinessPresentation(){var cfg=window.ASISTENTE_COMERCIAL_CONFIG;if(!cfg)return;setText("acTitulo",cfg.ui&&cfg.ui.title);setText("acSubtitulo",cfg.ui&&cfg.ui.subtitle);var business=cfg.business||{};var brand=text(business.publicBrandName)||text(business.displayName)||"Modo independiente";setText("acBrandName",brand);var version=[cfg.app&&cfg.app.name?cfg.app.name:"Asistente Comercial",cfg.appVersion?"v"+cfg.appVersion:"",cfg.schemaVersion?"· esquema "+cfg.schemaVersion:""].filter(Boolean).join(" ");setText("acVersion",version);var message=document.getElementById("acMensaje");if(message&&cfg.ui&&cfg.ui.pastePlaceholder)message.placeholder=cfg.ui.pastePlaceholder;var response=document.getElementById("acRespuesta");if(response&&cfg.ui&&cfg.ui.responsePlaceholder)response.placeholder=cfg.ui.responsePlaceholder;var search=document.getElementById("acBuscarPlantilla");if(search&&cfg.ui&&cfg.ui.searchPlaceholder)search.placeholder=cfg.ui.searchPlaceholder;var copy=document.getElementById("acCopiar");if(copy&&cfg.ui&&cfg.ui.copyLabel)copy.innerHTML='<i class="bi bi-copy" aria-hidden="true"></i> '+cfg.ui.copyLabel;}function bindLocalExtras(){var clearResponse=document.getElementById("acLimpiarRespuesta");var response=document.getElementById("acRespuesta");if(clearResponse&&response&&clearResponse.dataset.bound!=="1"){clearResponse.dataset.bound="1";clearResponse.addEventListener("click",function(){response.value="";response.focus();});}}function boot(){applyBusinessPresentation();bindLocalExtras();}global.addEventListener("pageshow",function(event){if(event.persisted)resetTransientUiLocks();});if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();})();
+    (function(){"use strict";function text(value){return value==null?"":String(value).trim();}function setText(id,value){var el=document.getElementById(id);if(el&&text(value))el.textContent=text(value);}function applyBusinessPresentation(){var cfg=window.ASISTENTE_COMERCIAL_CONFIG;if(!cfg)return;setText("acTitulo",cfg.ui&&cfg.ui.title);setText("acSubtitulo",cfg.ui&&cfg.ui.subtitle);var business=cfg.business||{};var brand=text(business.publicBrandName)||text(business.displayName)||"Modo independiente";setText("acBrandName",brand);var version=[cfg.app&&cfg.app.name?cfg.app.name:"Asistente Comercial",cfg.appVersion?"v"+cfg.appVersion:"",cfg.schemaVersion?"· esquema "+cfg.schemaVersion:""].filter(Boolean).join(" ");setText("acVersion",version);var message=document.getElementById("acMensaje");if(message&&cfg.ui&&cfg.ui.pastePlaceholder)message.placeholder=cfg.ui.pastePlaceholder;var response=document.getElementById("acRespuesta");if(response&&cfg.ui&&cfg.ui.responsePlaceholder)response.placeholder=cfg.ui.responsePlaceholder;var search=document.getElementById("acBuscarPlantilla");if(search&&cfg.ui&&cfg.ui.searchPlaceholder)search.placeholder=cfg.ui.searchPlaceholder;var copy=document.getElementById("acCopiar");if(copy&&cfg.ui&&cfg.ui.copyLabel)copy.innerHTML='<i class="bi bi-copy" aria-hidden="true"></i> '+cfg.ui.copyLabel;}function bindLocalExtras(){var clearResponse=document.getElementById("acLimpiarRespuesta");var response=document.getElementById("acRespuesta");if(clearResponse&&response&&clearResponse.dataset.bound!=="1"){clearResponse.dataset.bound="1";clearResponse.addEventListener("click",function(){response.value="";response.focus();});}}function boot(){applyBusinessPresentation();bindLocalExtras();}global.addEventListener("pageshow",function(event){markAndroidRuntime();if(event.persisted)resetTransientUiLocks();if(document.documentElement.classList.contains("ac-android")){var crm=el("acContactoCard"),quick=el("acQuickSheet");if(!(crm&&crm.classList.contains("is-open")))document.body.classList.remove("ac-crm-panel-open");if(!document.body.classList.contains("ac-library-open"))document.body.classList.remove("ac-library-focus");if(quick&&quick.hidden)quick.style.pointerEvents="none";}});if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();})();
   </script>
 
   <!-- =========================================================
@@ -1342,7 +1458,8 @@
         },true);
       }
       function bind(){bindMobileLibraryUX();var b;b=el("acModoTrabajoAccion");if(b)b.addEventListener("click",function(){if(state.activeContactKey){clearActiveContactContext();}else{openCrmPanel("CONTACTS");}});b=el("acRespuestaContactoRegistrarDirecto");if(b)b.addEventListener("click",registerInteraction);b=el("acRegistrarInteraccionRespuesta");if(b)b.addEventListener("click",registerInteraction);b=el("acContactoActivoRegistrar");if(b)b.addEventListener("click",registerInteraction);b=el("acRespuestaContactoFicha");if(b)b.addEventListener("click",function(){if(state.activeContactKey)openCrmPanel("FORM");});b=el("acRespuestaContactoEditarDirecto");if(b)b.addEventListener("click",function(){if(!state.activeContactKey)return;openCrmPanel("FORM");state.editBackup=captureEditBackup();setEditingMode(true);status("Edición habilitada. Guarda los cambios o pulsa Cancelar.","neutral");});b=el("acRespuestaContactoQuitar");if(b)b.addEventListener("click",clearActiveContactContext);b=el("acWhatsApp");if(b)b.addEventListener("click",openActiveContactWhatsapp,true);b=el("acGuardarContacto");if(b)b.addEventListener("click",saveContact);b=el("acRegistrarInteraccion");if(b)b.addEventListener("click",registerInteraction);b=el("acNuevoContacto");if(b)b.addEventListener("click",function(){openCrmPanel("NEW");});b=el("acCrmNuevoMovil");if(b)b.addEventListener("click",function(){openCrmPanel("NEW");});b=el("acCrmContactosMovil");if(b)b.addEventListener("click",function(){openCrmPanel("CONTACTS");});b=el("acCrmPendientesMovil");if(b)b.addEventListener("click",function(){openCrmPanel("PENDING");});b=el("acCerrarContactoPanel");if(b)b.addEventListener("click",closeCrmPanel);b=el("acSeguimientoManana");if(b)b.addEventListener("click",function(){scheduleHours(24);});b=el("acSeguimiento48h");if(b)b.addEventListener("click",function(){scheduleHours(48);});b=el("acContactoActivoFicha");if(b)b.addEventListener("click",function(){openCrmPanel("FORM");});b=el("acContactosBuscar");if(b)b.addEventListener("input",renderContacts);b=el("acPendientesBuscar");if(b)b.addEventListener("input",renderPending);b=el("acContactoCanal");if(b)b.addEventListener("change",renderWhatsappWindow);b=el("acContactoProximo");if(b)b.addEventListener("input",function(){this.classList.add("ac-followup-unsaved");});b=el("acContactoUltimoMensajeCliente");if(b)b.addEventListener("input",renderWhatsappWindow);b=el("acEditarContacto");if(b)b.addEventListener("click",function(){if(!state.activeContactKey)return;state.editBackup=captureEditBackup();setEditingMode(true);status("Edición habilitada. Guarda los cambios o pulsa Cancelar.","neutral");if(el("acContactoNombre"))el("acContactoNombre").focus();});b=el("acCancelarEdicion");if(b)b.addEventListener("click",function(){restoreEditBackup();var follow=el("acContactoProximo");if(follow)follow.classList.remove("ac-followup-unsaved");state.editBackup=null;setEditingMode(false);var c=state.activeContactKey&&state.contacts[state.activeContactKey];if(c)renderHistory(c);status("Edición cancelada. No se guardaron cambios.","neutral");});b=el("acContactoActivoResponder");if(b)b.addEventListener("click",function(){closeCrmPanel();var target=el("acRespuesta")||el("acMensajeCard");if(target)target.scrollIntoView({behavior:"smooth",block:"center"});if(el("acRespuesta"))el("acRespuesta").focus({preventScroll:true});});var quickStages=el("acQuickEtapas");if(quickStages)quickStages.addEventListener("click",function(event){var btn=event.target.closest&&event.target.closest("[data-quick-commercial-stage]");if(!btn)return;applyQuickStage(btn.dataset.quickCommercialStage||"ORIGINAL");});var responseSource=el("acRespuesta");if(responseSource)responseSource.addEventListener("input",syncQuickResponse);document.addEventListener("keydown",function(event){if(event.key==="Escape"&&el("acContactoCard")&&el("acContactoCard").classList.contains("is-open"))closeCrmPanel();});document.addEventListener("click",function(event){var btn=event.target.closest&&event.target.closest("#acEtapasComerciales [data-commercial-stage]");if(!btn)return;event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();applyStage(btn.dataset.commercialStage||"ORIGINAL");},true);document.addEventListener("click",function(event){if(event.target.closest&&event.target.closest("#acPlantillas [data-template-id], #acSugerencias [data-template-id], .ac-use-template-btn")){markStage("ORIGINAL");if(global.queueMicrotask)global.queueMicrotask(syncQuickResponse);}},false);}
-      function resetTransientUiLocks(){document.body.classList.remove("ac-crm-panel-open","ac-library-open","ac-library-focus");var card=el("acContactoCard");if(card)card.classList.remove("is-open");var quick=el("acQuickSheet");if(quick)quick.hidden=true;}function boot(){if(state.initialized)return;state.initialized=true;resetTransientUiLocks();loadLocal();populateSelects();if(el("acContactoCard")){el("acContactoCard").dataset.crmMode="FORM";el("acContactoCard").dataset.editing="false";}bind();setEditingMode(false);markStage("ORIGINAL");syncQuickResponse();renderActiveContact();renderContacts();renderPending();loadCommercialRecords();}
+      function markAndroidRuntime(){try{var ua=String(navigator.userAgent||"");document.documentElement.classList.toggle("ac-android",/Android/i.test(ua));}catch(_){}}
+      function resetTransientUiLocks(){document.body.classList.remove("ac-crm-panel-open","ac-library-open","ac-library-focus");var card=el("acContactoCard");if(card)card.classList.remove("is-open");var quick=el("acQuickSheet");if(quick)quick.hidden=true;}function boot(){if(state.initialized)return;state.initialized=true;markAndroidRuntime();resetTransientUiLocks();loadLocal();populateSelects();if(el("acContactoCard")){el("acContactoCard").dataset.crmMode="FORM";el("acContactoCard").dataset.editing="false";}bind();setEditingMode(false);markStage("ORIGINAL");syncQuickResponse();renderActiveContact();renderContacts();renderPending();loadCommercialRecords();}
       if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
       global.AsistenteComercialFase2={version:"1.0.7",saveContact:saveContact,registerInteraction:registerInteraction,loadCommercialRecords:loadCommercialRecords,renderContacts:renderContacts,renderPending:renderPending,applyStage:applyStage,getState:function(){return JSON.parse(JSON.stringify(state));}};
     })(window,document);
