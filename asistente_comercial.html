@@ -1363,7 +1363,38 @@
       .ac-response-actions>.ac-btn{min-height:54px!important;font-size:11px!important}
     }
 
-  </style>
+  
+/* === MICROFASE VISUAL QUIRÚRGICA 2026-08-28 ===
+   Solo presentación. No modifica motores, IDs, eventos, guardados ni datos. */
+.ac-visual-intro-hidden{display:none!important}
+
+@media (max-width:760px){
+  /* Fondo de overlays más limpio y menos pesado. */
+  .ac-template-modal,
+  .ac-modal,
+  .ac-overlay{
+    --ac-modal-backdrop:rgba(20,24,38,.28);
+  }
+
+  /* Nueva plantilla: aire superior seguro sin alterar estructura ni controles. */
+  #acTemplateModal{
+    padding-top:max(18px,env(safe-area-inset-top))!important;
+  }
+  #acTemplateModal .ac-modal-card,
+  #acTemplateModal .ac-template-modal-card,
+  #acTemplateModal [role="dialog"]{
+    margin-top:0!important;
+  }
+}
+
+/* iPhone / pantallas estrechas: evita sensación de cabecera pegada al borde. */
+@media (max-width:430px){
+  #acTemplateModal{
+    padding-top:max(24px,env(safe-area-inset-top))!important;
+  }
+}
+
+</style>
 </head>
 
 <body>
@@ -1374,7 +1405,7 @@
         <div class="ac-brand-chip" id="acBrandChip" aria-label="Identidad del negocio" hidden><span id="acBrandLogoFallback" aria-hidden="true" style="width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:#fdf2f8;color:#8b1e5a;font-weight:950;flex:0 0 auto;">AC</span><img id="acBrandLogo" src="" alt="" hidden><span id="acBrandName">Modo independiente</span></div>
       </header>
 
-      <section class="ac-hero" aria-labelledby="acHeroTitulo"><div class="ac-hero-row"><div class="ac-hero-main"><h2 class="ac-hero-title" id="acHeroTitulo">Responder más rápido sin perder el control</h2><p class="ac-hero-text">Pega el mensaje recibido, revisa la plantilla sugerida, edítala si hace falta y copia la respuesta.</p></div><div class="ac-hero-badges" aria-label="Características del módulo"><span class="ac-badge"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>Búsqueda local</span><span class="ac-badge"><i class="bi bi-stars" aria-hidden="true"></i>Sin IA en esta fase</span><span class="ac-badge is-safe"><i class="bi bi-shield-check" aria-hidden="true"></i>Mensaje temporal</span></div></div></section>
+      <section class="ac-hero" aria-labelledby="acHeroTitulo"><div class="ac-hero-row"><div class="ac-hero-main ac-visual-intro-hidden"><h2 class="ac-hero-title" id="acHeroTitulo">Responder más rápido sin perder el control</h2><p class="ac-hero-text">Pega el mensaje recibido, revisa la plantilla sugerida, edítala si hace falta y copia la respuesta.</p></div><div class="ac-hero-badges" aria-label="Características del módulo"><span class="ac-badge"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>Búsqueda local</span><span class="ac-badge"><i class="bi bi-stars" aria-hidden="true"></i>Sin IA en esta fase</span><span class="ac-badge is-safe"><i class="bi bi-shield-check" aria-hidden="true"></i>Mensaje temporal</span></div></div></section>
 
       <div class="ac-mobile-library-backdrop" id="acMobileLibraryBackdrop" aria-hidden="true"></div><nav class="ac-mobile-modebar" aria-label="Accesos rápidos"><button type="button" class="ac-mode-btn active" id="acModoResponder"><i class="bi bi-chat-square-text"></i> Responder</button><button type="button" class="ac-mode-btn" id="acModoPlantillas"><i class="bi bi-lightning-charge"></i> Plantillas</button></nav>
       <div class="ac-view-tools ac-work-mode" id="acModoTrabajo" aria-label="Modo de trabajo"><div class="ac-work-mode-copy"><span class="ac-work-mode-kicker">Modo de trabajo</span><strong class="ac-work-mode-title" id="acModoTrabajoTitulo">Sin contacto · Respuesta general</strong><small id="acModoTrabajoDetalle">Puedes analizar, usar plantillas, copiar y abrir WhatsApp sin asociar la respuesta al CRM.</small></div><button type="button" class="ac-btn ac-btn-line ac-work-mode-action" id="acModoTrabajoAccion"><i class="bi bi-people"></i><span id="acModoTrabajoAccionTexto">Elegir contacto</span></button></div><div class="ac-legacy-seller-control" aria-hidden="true"><button type="button" id="acModoVendedor" aria-pressed="false" tabindex="-1"><span id="acModoVendedorTexto">Modo vendedor</span></button></div>
