@@ -3753,3 +3753,412 @@ if(document.readyState === 'loading'){
 window.auroExamenFisicoModuloCargado = true;
 console.log('AUROSANAX examenfisico.js cargado correctamente');
 /* AUROSANAX FIX APLICADO: limpieza completa sistemas/regionales por nueva consulta */
+
+/* ==========================================================
+   AUROSANAX - EXAMEN FÍSICO
+   BARRERA SIN CAMBIOS REALES V1
+   ----------------------------------------------------------
+   OBJETIVO QUIRÚRGICO:
+   - Si una atención YA tiene examen físico persistido y el
+     contenido clínico cargado no cambió, NO ejecutar POST.
+   - La barrera se aplica ANTES de auroGuardarExamenFisicoSheets().
+   - Protege tanto el registro principal como el detalle estructurado:
+       * examenes_fisicos
+       * examenes_sistemas
+       * examenes_regionales
+       * diagnosticos incluidos por el flujo histórico del módulo
+   - Si existe cualquier cambio real, se conserva EXACTAMENTE
+     el guardado original del archivo.
+   - Después de un guardado confirmado se redefine el baseline.
+   - Nueva atención / examen aún inexistente NO queda bloqueado.
+
+   NO TOCA:
+   - Apps Script / backend
+   - Index
+   - Plan
+   - Recetas
+   - Anamnesis
+   - Antecedentes
+   - Diagnóstico independiente
+   - carga por id_atencion
+   - limpieza entre consultas
+   - signos vitales / IMC / PA
+   - estructura de Google Sheets
+   ========================================================== */
+(function(){
+  if(window.__auroExamenFisicoSinCambiosRealesV1) return;
+  window.__auroExamenFisicoSinCambiosRealesV1 = true;
+
+  const ESTADO = {
+    id_atencion: '',
+    id_examen: '',
+    firma: '',
+    cargado: false,
+    motivo: ''
+  };
+
+  function texto_(valor){
+    return String(valor === null || valor === undefined ? '' : valor)
+      .replace(/\r\n|\r/g, '\n')
+      .trim();
+  }
+
+  function normalizarObjeto_(valor){
+    if(Array.isArray(valor)){
+      return valor.map(normalizarObjeto_);
+    }
+
+    if(valor && typeof valor === 'object'){
+      const salida = {};
+      Object.keys(valor).sort().forEach(function(clave){
+        /*
+          Campos técnicos que no representan una modificación clínica.
+          Se excluyen de la firma para que timestamps/IDs generados no
+          produzcan falsos cambios.
+        */
+        if([
+          'fecha_examen',
+          'creado_en',
+          'actualizado_en',
+          'fecha_creacion',
+          'fecha_actualizacion'
+        ].includes(clave)) return;
+
+        salida[clave] = normalizarObjeto_(valor[clave]);
+      });
+      return salida;
+    }
+
+    if(typeof valor === 'string'){
+      return valor.replace(/\r\n|\r/g, '\n').trim();
+    }
+
+    return valor;
+  }
+
+  function ordenarListaClinica_(lista){
+    const limpia = (Array.isArray(lista) ? lista : []).map(function(item){
+      return normalizarObjeto_(item || {});
+    });
+
+    /*
+      Las colecciones estructuradas son clínicamente conjuntos.
+      Ordenarlas evita que un cambio incidental de orden DOM simule
+      una modificación cuando el contenido real es el mismo.
+    */
+    return limpia.sort(function(a,b){
+      const sa = JSON.stringify(a);
+      const sb = JSON.stringify(b);
+      return sa < sb ? -1 : (sa > sb ? 1 : 0);
+    });
+  }
+
+  function obtenerEstadoClinicoActual_(){
+    if(typeof window.auroExamenFisicoPayload !== 'function'){
+      return null;
+    }
+
+    const principalOriginal = window.auroExamenFisicoPayload();
+    if(!principalOriginal || !principalOriginal.id_atencion){
+      return null;
+    }
+
+    const principal = {
+      id_atencion: texto_(principalOriginal.id_atencion),
+      id_cita: texto_(principalOriginal.id_cita),
+      id_paciente: texto_(principalOriginal.id_paciente),
+      id_historia: texto_(principalOriginal.id_historia),
+      id_medico: texto_(principalOriginal.id_medico),
+
+      peso_kg: texto_(principalOriginal.peso_kg),
+      talla_cm: texto_(principalOriginal.talla_cm),
+      imc: texto_(principalOriginal.imc),
+      presion_arterial: texto_(principalOriginal.presion_arterial),
+      frecuencia_cardiaca: texto_(principalOriginal.frecuencia_cardiaca),
+      temperatura: texto_(principalOriginal.temperatura),
+      saturacion: texto_(principalOriginal.saturacion),
+
+      examen_fisico: texto_(principalOriginal.examen_fisico),
+
+      diagnosticos_cie10: texto_(principalOriginal.diagnosticos_cie10),
+      diagnostico_cie10: texto_(principalOriginal.diagnostico_cie10),
+      diagnostico_principal: texto_(principalOriginal.diagnostico_principal),
+      cie10_secundario: texto_(principalOriginal.cie10_secundario),
+      diagnostico_secundario: texto_(principalOriginal.diagnostico_secundario),
+
+      estado_examen: texto_(principalOriginal.estado_examen || 'Activo')
+    };
+
+    let sistemas = [];
+    let regionales = [];
+    let diagnosticos = [];
+
+    try{
+      if(typeof window.auroRecopilarSistemasEstructurados === 'function'){
+        sistemas = window.auroRecopilarSistemasEstructurados();
+      }
+    }catch(error){
+      console.warn('AUROSANAX EXAMEN V1: no se pudo firmar sistemas.', error);
+    }
+
+    try{
+      if(typeof window.auroRecopilarRegionalesEstructurados === 'function'){
+        regionales = window.auroRecopilarRegionalesEstructurados();
+      }
+    }catch(error){
+      console.warn('AUROSANAX EXAMEN V1: no se pudo firmar regionales.', error);
+    }
+
+    try{
+      if(typeof window.auroRecopilarDiagnosticosEstructurados === 'function'){
+        diagnosticos = window.auroRecopilarDiagnosticosEstructurados();
+      }
+    }catch(error){
+      console.warn('AUROSANAX EXAMEN V1: no se pudo firmar diagnósticos.', error);
+    }
+
+    return {
+      id_atencion: principal.id_atencion,
+      principal: normalizarObjeto_(principal),
+      sistemas: ordenarListaClinica_(sistemas),
+      regionales: ordenarListaClinica_(regionales),
+      diagnosticos: ordenarListaClinica_(diagnosticos)
+    };
+  }
+
+  function firmaActual_(){
+    const estado = obtenerEstadoClinicoActual_();
+    if(!estado) return '';
+    return JSON.stringify(normalizarObjeto_(estado));
+  }
+
+  function examenPersistidoActual_(){
+    const idAtencion = (typeof window.auroExamenFisicoIdAtencionActual === 'function')
+      ? texto_(window.auroExamenFisicoIdAtencionActual())
+      : texto_(window.examenFisicoState && window.examenFisicoState.atencionActual);
+
+    if(!idAtencion) return null;
+
+    const registro = window.examenFisicoState &&
+      window.examenFisicoState.examenesSheets &&
+      window.examenFisicoState.examenesSheets[idAtencion];
+
+    return registro && registro.id_examen ? registro : null;
+  }
+
+  function invalidar_(motivo){
+    ESTADO.id_atencion = '';
+    ESTADO.id_examen = '';
+    ESTADO.firma = '';
+    ESTADO.cargado = false;
+    ESTADO.motivo = motivo || 'invalidado';
+  }
+
+  function capturarBaseline_(motivo){
+    const registro = examenPersistidoActual_();
+    if(!registro || !registro.id_examen){
+      invalidar_(motivo || 'sin_examen_persistido');
+      return false;
+    }
+
+    const idAtencion = texto_(registro.id_atencion ||
+      (typeof window.auroExamenFisicoIdAtencionActual === 'function'
+        ? window.auroExamenFisicoIdAtencionActual()
+        : window.examenFisicoState && window.examenFisicoState.atencionActual));
+
+    const firma = firmaActual_();
+
+    if(!idAtencion || !firma){
+      invalidar_(motivo || 'baseline_incompleto');
+      return false;
+    }
+
+    ESTADO.id_atencion = idAtencion;
+    ESTADO.id_examen = texto_(registro.id_examen);
+    ESTADO.firma = firma;
+    ESTADO.cargado = true;
+    ESTADO.motivo = motivo || 'baseline_capturado';
+
+    return true;
+  }
+
+  function contextoCoincide_(){
+    if(!ESTADO.cargado || !ESTADO.id_atencion || !ESTADO.id_examen){
+      return false;
+    }
+
+    const registro = examenPersistidoActual_();
+    if(!registro) return false;
+
+    const idAtencion = texto_(registro.id_atencion ||
+      (typeof window.auroExamenFisicoIdAtencionActual === 'function'
+        ? window.auroExamenFisicoIdAtencionActual()
+        : window.examenFisicoState && window.examenFisicoState.atencionActual));
+
+    return (
+      idAtencion === ESTADO.id_atencion &&
+      texto_(registro.id_examen) === ESTADO.id_examen
+    );
+  }
+
+  function sinCambiosReales_(){
+    if(!contextoCoincide_()) return false;
+    const actual = firmaActual_();
+    return !!actual && actual === ESTADO.firma;
+  }
+
+  /*
+    1) Captura baseline DESPUÉS de que el examen persistido fue
+       aplicado al formulario. Esto evita comparar contra controles
+       todavía incompletos durante la carga.
+  */
+  const cargarDesdeSheetOriginal =
+    typeof window.auroCargarExamenFisicoDesdeSheet === 'function'
+      ? window.auroCargarExamenFisicoDesdeSheet
+      : null;
+
+  if(cargarDesdeSheetOriginal){
+    window.auroCargarExamenFisicoDesdeSheet = function(registro){
+      const resultado = cargarDesdeSheetOriginal.apply(this, arguments);
+
+      try{
+        if(registro && registro.id_examen){
+          capturarBaseline_('carga_examen_persistido');
+        }else{
+          invalidar_('carga_sin_examen');
+        }
+      }catch(error){
+        invalidar_('error_capturando_baseline');
+        console.warn('AUROSANAX EXAMEN V1: no se pudo capturar baseline tras cargar.', error);
+      }
+
+      return resultado;
+    };
+  }
+
+  /*
+    2) Al cambiar de atención invalida inmediatamente el baseline.
+       La nueva carga persistida volverá a capturarlo cuando corresponda.
+  */
+  const cambiarAtencionOriginal =
+    typeof window.cambiarExamenFisicoPorAtencion === 'function'
+      ? window.cambiarExamenFisicoPorAtencion
+      : null;
+
+  if(cambiarAtencionOriginal){
+    window.cambiarExamenFisicoPorAtencion = function(idAtencion){
+      const nueva = texto_(idAtencion);
+      if(nueva !== ESTADO.id_atencion){
+        invalidar_('cambio_atencion');
+      }
+      return cambiarAtencionOriginal.apply(this, arguments);
+    };
+  }
+
+  /*
+    3) BARRERA PRINCIPAL.
+       Si el registro ya existe y la firma clínica actual es igual
+       al baseline cargado, se devuelve success/sin_cambios sin
+       invocar el guardador original. Por tanto NO existe POST.
+  */
+  const guardarOriginal =
+    typeof window.auroGuardarExamenFisicoSheets === 'function'
+      ? window.auroGuardarExamenFisicoSheets
+      : null;
+
+  if(guardarOriginal){
+    window.auroGuardarExamenFisicoSheets = async function(){
+      try{
+        if(sinCambiosReales_()){
+          const resultadoSinCambios = {
+            success: true,
+            sin_cambios: true,
+            id_atencion: ESTADO.id_atencion,
+            id_examen: ESTADO.id_examen,
+            message: 'Examen físico sin cambios. No se realizó ninguna escritura.'
+          };
+
+          console.log(
+            'AUROSANAX EXAMEN: sin cambios reales; guardado omitido antes del POST.',
+            resultadoSinCambios
+          );
+
+          return resultadoSinCambios;
+        }
+      }catch(error){
+        /*
+          Fail-open seguro:
+          si la comparación falla, NO se bloquea un cambio clínico;
+          se utiliza el guardador histórico exactamente como estaba.
+        */
+        console.warn(
+          'AUROSANAX EXAMEN V1: no se pudo comprobar no-op; se conserva guardado original.',
+          error
+        );
+      }
+
+      const resultado = await guardarOriginal.apply(this, arguments);
+
+      if(resultado && resultado.success === true){
+        try{
+          /*
+            Después de que principal + detalle terminaron correctamente,
+            el formulario actual pasa a ser el nuevo baseline.
+          */
+          capturarBaseline_(
+            resultado.sin_cambios === true
+              ? 'guardado_original_sin_cambios'
+              : 'guardado_confirmado'
+          );
+        }catch(error){
+          console.warn(
+            'AUROSANAX EXAMEN V1: guardado confirmado, pero no se pudo renovar baseline.',
+            error
+          );
+        }
+      }
+
+      return resultado;
+    };
+  }
+
+  /*
+    4) Re-exportación explícita para mantener las referencias públicas
+       del módulo apuntando a las funciones envueltas.
+  */
+  if(typeof window.auroCargarExamenFisicoDesdeSheet === 'function'){
+    try{ auroCargarExamenFisicoDesdeSheet = window.auroCargarExamenFisicoDesdeSheet; }catch(_e){}
+  }
+
+  if(typeof window.cambiarExamenFisicoPorAtencion === 'function'){
+    try{ cambiarExamenFisicoPorAtencion = window.cambiarExamenFisicoPorAtencion; }catch(_e){}
+  }
+
+  if(typeof window.auroGuardarExamenFisicoSheets === 'function'){
+    try{ auroGuardarExamenFisicoSheets = window.auroGuardarExamenFisicoSheets; }catch(_e){}
+  }
+
+  /*
+    Herramienta diagnóstica de solo lectura para pruebas.
+  */
+  window.auroExamenFisicoDebugSinCambiosV1 = function(){
+    let actual = '';
+    try{ actual = firmaActual_(); }catch(_e){}
+
+    return {
+      instalado: true,
+      id_atencion_baseline: ESTADO.id_atencion,
+      id_examen_baseline: ESTADO.id_examen,
+      baseline_cargado: ESTADO.cargado,
+      motivo: ESTADO.motivo,
+      contexto_coincide: contextoCoincide_(),
+      sin_cambios_reales: !!actual && contextoCoincide_() && actual === ESTADO.firma,
+      firma_baseline_longitud: ESTADO.firma.length,
+      firma_actual_longitud: actual.length
+    };
+  };
+
+  console.log(
+    'AUROSANAX examenfisico.js: BARRERA SIN CAMBIOS REALES V1 instalada.'
+  );
+})();
