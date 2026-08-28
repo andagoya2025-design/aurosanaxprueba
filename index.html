@@ -7080,11 +7080,24 @@ async function auroHistoriaEstadoExamen(idAtencion){
       String(registroMemoria.id_atencion || idAtencion).trim() === idAtencion &&
       String(registroMemoria.id_examen || '').trim()
     ){
-      return {
-        existe:true,
-        fecha:auroHistoriaFechaRegistro(registroMemoria),
-        fuente:'examenes_fisicos'
-      };
+      const fechaMemoria = auroHistoriaFechaRegistro(registroMemoria);
+
+      /*
+        AUROSANAX - FIX VISUAL QUIRÚRGICO EXAMEN FÍSICO
+        El registro en memoria recién guardado puede no incluir actualizado_en.
+        Si existe fecha real, se usa sin ninguna lectura adicional.
+        Si no existe fecha, NO se devuelve todavía: se continúa hacia
+        auroBuscarExamenFisicoPorAtencion(), que realiza una lectura GET
+        de examenes_fisicos y devuelve el timestamp persistido real.
+        Solo visual / solo lectura. No modifica ningún guardado.
+      */
+      if(fechaMemoria){
+        return {
+          existe:true,
+          fecha:fechaMemoria,
+          fuente:'examenes_fisicos'
+        };
+      }
     }
   }catch(e){}
 
