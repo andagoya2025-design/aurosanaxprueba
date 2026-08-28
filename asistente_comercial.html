@@ -1199,6 +1199,46 @@
       }
     }
 
+
+    /* =========================================================
+       RESTAURACIÓN MÓVIL · NUEVA PLANTILLA
+       ANTIRREGRESIVO · 2026-08-28
+       ÚNICO objetivo: mantener visible y usable el botón ORIGINAL
+       #acNuevaPlantilla en iPhone y Android.
+       No modifica motor, eventos, plantillas, CRM ni persistencia.
+       ========================================================= */
+    @media(max-width:760px){
+      #acBibliotecaCard>.ac-card-head{
+        display:grid!important;
+        grid-template-columns:minmax(0,1fr) auto!important;
+        grid-template-areas:"title close" "new new"!important;
+        align-items:start!important;
+        gap:8px 10px!important
+      }
+      #acBibliotecaCard>.ac-card-head>div{
+        grid-area:title!important;
+        min-width:0!important
+      }
+      #acBibliotecaCard #acMobileLibraryClose{
+        grid-area:close!important
+      }
+      #acBibliotecaCard #acNuevaPlantilla{
+        grid-area:new!important;
+        display:inline-flex!important;
+        visibility:visible!important;
+        opacity:1!important;
+        pointer-events:auto!important;
+        position:relative!important;
+        width:100%!important;
+        max-width:100%!important;
+        min-height:40px!important;
+        align-items:center!important;
+        justify-content:center!important;
+        margin:0!important;
+        transform:none!important
+      }
+    }
+
   </style>
 </head>
 
