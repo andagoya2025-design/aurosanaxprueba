@@ -8355,6 +8355,59 @@ async function guardarHistoriaClinicaERP(){
     return;
   }
 
+  /*
+    AUROSANAX - BARRERA QUIRÚRGICA DE MÓDULOS INDEPENDIENTES V1
+    ----------------------------------------------------------------
+    Diagnóstico, Plan, Recomendaciones, Certificados y Documentos
+    poseen guardado propio. El botón global "Actualizar historia"
+    NO debe reescribir historias_clinicas cuando uno de ellos está activo.
+
+    Esta barrera NO ejecuta el botón propio del módulo.
+    Solo bloquea la escritura global residual que movía
+    actualizado_en de la historia y, por efecto visual, Antecedentes.
+  */
+  if(
+    editingHistoryId &&
+    [
+      'hc_diagnostico',
+      'hc_plan',
+      'hc_recomendaciones',
+      'hc_certificados',
+      'hc_docs'
+    ].includes(moduloGuardadoUXInicial)
+  ){
+    const nombreModuloIndependiente =
+      typeof auroHistoriaNombreModulo === 'function'
+        ? auroHistoriaNombreModulo(moduloGuardadoUXInicial)
+        : 'Módulo clínico';
+
+    if(typeof auroHistoriaMostrarEstado === 'function'){
+      auroHistoriaMostrarEstado(
+        nombreModuloIndependiente +
+        ' · Módulo independiente. Use su botón propio para guardar cambios.',
+        'ok'
+      );
+    }
+
+    if(typeof auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+      await auroHistoriaRefrescarEstadoConsultaActiva(
+        moduloGuardadoUXInicial
+      );
+    }
+
+    console.log(
+      'AUROSANAX INDEX: omitida escritura global de historias_clinicas desde ' +
+      moduloGuardadoUXInicial + '.'
+    );
+
+    return {
+      success:true,
+      sin_cambios:true,
+      modulo:moduloGuardadoUXInicial,
+      message:'Módulo independiente: la historia general no fue modificada.'
+    };
+  }
+
   const unirLinea = arr => arr.filter(Boolean).join(' | ');
 
   const examenFisico = auroConstruirExamenFisicoCompleto();
