@@ -1394,6 +1394,117 @@
   }
 }
 
+
+
+/* ============================================================
+   CIERRE RESPONSIVE UNIVERSAL · 2026-08-28
+   SOLO PRESENTACIÓN — ANTIRREGRESIVO
+   No modifica JS, IDs, listeners, motores, CRM, JSON ni guardados.
+   ============================================================ */
+
+/* Ninguna palabra de las acciones puede romperse internamente. */
+.ac-response-actions>.ac-btn{
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+  hyphens:none!important;
+  white-space:normal!important;
+}
+
+/* PC/Laptop estándar: tres columnas seguras.
+   Evita comprimir seis botones dentro de una columna estrecha del workspace. */
+@media (min-width:981px) and (max-width:1679px){
+  .ac-response-actions{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  }
+  .ac-response-actions>.ac-btn{
+    min-height:54px!important;
+    padding:9px 10px!important;
+    font-size:12px!important;
+  }
+}
+
+/* Solo escritorios realmente anchos usan seis columnas. */
+@media (min-width:1680px){
+  .ac-response-actions{
+    grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  }
+}
+
+/* Teléfono/tablet estrecho: 2 x 3 estable.
+   Misma lógica visual que ya funciona correctamente en Android. */
+@media (max-width:760px){
+  .ac-response-actions{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:9px!important;
+  }
+  .ac-response-actions>.ac-btn{
+    min-height:58px!important;
+    padding:9px 9px!important;
+    font-size:11px!important;
+  }
+
+  /* Nombre activo: máximo dos líneas, jamás rompe nombres/apellidos internamente. */
+  .ac-response-action-context>span{
+    white-space:normal!important;
+    overflow-wrap:normal!important;
+    word-break:normal!important;
+    display:-webkit-box!important;
+    -webkit-box-orient:vertical!important;
+    -webkit-line-clamp:2!important;
+    overflow:hidden!important;
+  }
+}
+
+/* Operación segura queda como información compacta.
+   El contenido histórico permanece intacto en el HTML. */
+article[aria-labelledby="acOperacionTitulo"] .ac-card-body{
+  display:none!important;
+}
+article[aria-labelledby="acOperacionTitulo"] .ac-card-head{
+  padding-bottom:16px!important;
+}
+article[aria-labelledby="acOperacionTitulo"] .ac-card-help{
+  margin-bottom:0!important;
+}
+
+/* iOS / navegadores no Android:
+   Plantillas ocupa casi toda la altura útil en pantallas pequeñas.
+   Android queda expresamente sin alterar. */
+@media (max-width:760px){
+  html:not(.ac-android) body.ac-library-open .ac-mobile-library-backdrop{
+    background:rgba(15,23,42,.18)!important;
+    backdrop-filter:blur(2px)!important;
+    -webkit-backdrop-filter:blur(2px)!important;
+  }
+
+  html:not(.ac-android) #acBibliotecaCard{
+    height:min(96dvh,900px)!important;
+    max-height:96dvh!important;
+    border-radius:22px 22px 0 0!important;
+    box-shadow:0 -12px 38px rgba(15,23,42,.16)!important;
+  }
+
+  /* Editor Nueva plantilla: casi pantalla completa, fondo posterior discreto. */
+  html:not(.ac-android) #acTemplateModal{
+    padding:
+      max(8px,env(safe-area-inset-top))
+      4px
+      max(4px,env(safe-area-inset-bottom))!important;
+    background:rgba(15,23,42,.16)!important;
+    backdrop-filter:blur(2px)!important;
+    -webkit-backdrop-filter:blur(2px)!important;
+    align-items:flex-start!important;
+    justify-content:center!important;
+  }
+  html:not(.ac-android) #acTemplateModal>.ac-modal{
+    width:calc(100vw - 8px)!important;
+    max-width:none!important;
+    max-height:calc(100dvh - max(12px,env(safe-area-inset-top)))!important;
+    margin:0!important;
+    border-radius:22px 22px 0 0!important;
+  }
+}
+
 </style>
 </head>
 
