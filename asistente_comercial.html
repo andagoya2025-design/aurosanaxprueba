@@ -1256,6 +1256,113 @@
       }
     }
 
+  
+
+    /* =========================================================
+       PULIDO FINAL · CONTACTO + ACCIONES RESPONSIVE
+       ANTIRREGRESIVO · 2026-08-28
+       Solo presentación y una etiqueta visual de contexto.
+       No altera motor semántico, plantillas, CRM, JSON ni backend.
+       ========================================================= */
+    #acBrandChip{display:none!important}
+
+    .ac-work-mode-title{
+      font-size:clamp(12px,1.45vw,14px)!important;
+      line-height:1.25!important;
+    }
+    .ac-active-contact-name{
+      font-size:clamp(15px,2vw,19px)!important;
+      line-height:1.16!important;
+      overflow-wrap:break-word!important;
+      word-break:normal!important;
+    }
+
+    .ac-response-action-context{
+      width:100%;
+      margin:12px 0 8px;
+      padding:9px 11px;
+      display:grid;
+      grid-template-columns:auto minmax(0,1fr) auto;
+      align-items:center;
+      gap:8px;
+      border:1px solid #d9eee0;
+      border-radius:14px;
+      background:linear-gradient(180deg,#fbfffc,#f4fbf6);
+      color:#166534;
+    }
+    .ac-response-action-context[hidden]{display:none!important}
+    .ac-response-action-context>i{font-size:16px;flex:0 0 auto}
+    .ac-response-action-context>span{
+      min-width:0;
+      color:var(--ac-title);
+      font-size:13px;
+      font-weight:900;
+      line-height:1.2;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .ac-response-action-context>small{
+      color:#166534;
+      font-size:10px;
+      font-weight:850;
+      white-space:nowrap;
+    }
+
+    .ac-response-actions{
+      display:grid!important;
+      grid-template-columns:repeat(6,minmax(0,1fr))!important;
+      gap:8px!important;
+      align-items:stretch!important;
+      width:100%!important;
+    }
+    .ac-response-actions>.ac-btn{
+      min-width:0!important;
+      min-height:54px!important;
+      padding:9px 7px!important;
+      gap:6px!important;
+      font-size:12px!important;
+      line-height:1.15!important;
+      white-space:normal!important;
+      overflow-wrap:anywhere!important;
+    }
+    .ac-response-actions>.ac-btn i{font-size:17px!important}
+    .ac-response-actions>#acWhatsApp{
+      color:#166534!important;
+      border:1px solid #bbf7d0!important;
+      background:#f0fdf4!important;
+      box-shadow:none!important;
+    }
+    .ac-response-actions>#acInstagram{
+      color:#9d174d!important;
+      border:1px solid #f5c2d7!important;
+      background:#fff7fb!important;
+    }
+    .ac-response-actions>#acTikTok{
+      color:#111827!important;
+      border:1px solid #e5e7eb!important;
+      background:#fff!important;
+    }
+
+    @media(max-width:980px){
+      .ac-response-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+    }
+    @media(max-width:760px){
+      .ac-work-mode-title{font-size:13px!important}
+      .ac-active-contact-name{font-size:16px!important}
+      .ac-response-action-context{margin-top:10px;padding:8px 10px;grid-template-columns:auto minmax(0,1fr)}
+      .ac-response-action-context>small{grid-column:2;white-space:normal;margin-top:-4px}
+      .ac-response-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}
+      .ac-response-actions>.ac-btn{min-height:58px!important;padding:8px 5px!important;font-size:11px!important}
+      .ac-response-actions>.ac-btn i{font-size:18px!important}
+    }
+    @media(max-width:380px){
+      .ac-active-contact-name{font-size:15px!important}
+      .ac-response-action-context>span{font-size:12px}
+      .ac-response-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      .ac-response-actions>.ac-btn{min-height:54px!important;font-size:11px!important}
+    }
+
   </style>
 </head>
 
@@ -1307,7 +1414,7 @@
         </section>
 
         <section class="ac-column">
-          <article class="ac-card" aria-labelledby="acRespuestaTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acRespuestaTitulo">4. Respuesta</h2><p class="ac-card-help">Revísala y modifícala antes de copiar si lo necesitas.</p></div></div><div class="ac-card-body"><div id="acPlantillaSeleccionada" hidden aria-live="polite"></div><div class="ac-response-contact" id="acRespuestaContactoActivo" aria-live="polite"><div class="ac-response-contact-main"><span class="ac-response-contact-icon"><i class="bi bi-person-check"></i></span><div class="ac-response-contact-copy"><span class="ac-response-contact-kicker">Trabajando con contacto</span><strong class="ac-response-contact-name" id="acRespuestaContactoNombre"></strong><span class="ac-response-contact-meta" id="acRespuestaContactoMeta"></span></div></div><div class="ac-response-contact-actions"><button type="button" class="ac-btn ac-btn-soft ac-register-direct" id="acRespuestaContactoRegistrarDirecto" data-ac-register-button="1"><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoFicha"><i class="bi bi-person-vcard"></i> Ficha</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoEditarDirecto"><i class="bi bi-pencil-square"></i> Editar</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoQuitar"><i class="bi bi-x-circle"></i> Quitar</button></div></div><div class="ac-register-feedback" id="acRegistroFeedback" aria-live="polite"></div><label class="ac-label" for="acRespuesta">Respuesta sugerida <small>— editable</small></label><textarea id="acRespuesta" class="ac-textarea ac-response" rows="10" spellcheck="true" placeholder="La respuesta sugerida aparecerá aquí..."></textarea><section class="ac-commercial-stage" aria-label="Etapa comercial"><div class="ac-commercial-stage-head"><span><i class="bi bi-signpost-split"></i> Etapa de mensaje</span><small>Cada etapa reemplaza la variante visible; nunca se acumula ni modifica la plantilla guardada.</small></div><div class="ac-commercial-stage-actions" id="acEtapasComerciales"><button type="button" class="ac-stage-btn active" data-commercial-stage="ORIGINAL"><i class="bi bi-arrow-counterclockwise"></i> Primera respuesta</button><button type="button" class="ac-stage-btn" data-commercial-stage="SEGUIMIENTO"><i class="bi bi-chat-dots"></i> Seguimiento</button><button type="button" class="ac-stage-btn" data-commercial-stage="CIERRE"><i class="bi bi-calendar-check"></i> Cierre</button><button type="button" class="ac-stage-btn" data-commercial-stage="RECONTACTO"><i class="bi bi-arrow-repeat"></i> Recontacto</button></div></section><div class="ac-response-actions"><button type="button" class="ac-btn ac-btn-primary ac-copy-main" id="acCopiar"><i class="bi bi-copy" aria-hidden="true"></i> Copiar respuesta</button><button type="button" class="ac-btn ac-btn-soft" id="acRegistrarInteraccionRespuesta" data-ac-register-button="1" hidden><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-whatsapp" id="acWhatsApp" title="Abrir WhatsApp con la respuesta preparada"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp</button><button type="button" class="ac-btn ac-btn-social" id="acInstagram" title="Copiar respuesta y abrir los mensajes de Instagram"><i class="bi bi-instagram" aria-hidden="true"></i> Instagram</button><button type="button" class="ac-btn ac-btn-social" id="acTikTok" title="Copiar respuesta y abrir TikTok"><i class="bi bi-tiktok" aria-hidden="true"></i> TikTok</button><button type="button" class="ac-btn ac-btn-line" id="acLimpiarRespuesta" title="Borrar solo la respuesta"><i class="bi bi-x-circle" aria-hidden="true"></i> Borrar respuesta</button></div></div></article>
+          <article class="ac-card" aria-labelledby="acRespuestaTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acRespuestaTitulo">4. Respuesta</h2><p class="ac-card-help">Revísala y modifícala antes de copiar si lo necesitas.</p></div></div><div class="ac-card-body"><div id="acPlantillaSeleccionada" hidden aria-live="polite"></div><div class="ac-response-contact" id="acRespuestaContactoActivo" aria-live="polite"><div class="ac-response-contact-main"><span class="ac-response-contact-icon"><i class="bi bi-person-check"></i></span><div class="ac-response-contact-copy"><span class="ac-response-contact-kicker">Trabajando con contacto</span><strong class="ac-response-contact-name" id="acRespuestaContactoNombre"></strong><span class="ac-response-contact-meta" id="acRespuestaContactoMeta"></span></div></div><div class="ac-response-contact-actions"><button type="button" class="ac-btn ac-btn-soft ac-register-direct" id="acRespuestaContactoRegistrarDirecto" data-ac-register-button="1"><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoFicha"><i class="bi bi-person-vcard"></i> Ficha</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoEditarDirecto"><i class="bi bi-pencil-square"></i> Editar</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoQuitar"><i class="bi bi-x-circle"></i> Quitar</button></div></div><div class="ac-register-feedback" id="acRegistroFeedback" aria-live="polite"></div><label class="ac-label" for="acRespuesta">Respuesta sugerida <small>— editable</small></label><textarea id="acRespuesta" class="ac-textarea ac-response" rows="10" spellcheck="true" placeholder="La respuesta sugerida aparecerá aquí..."></textarea><section class="ac-commercial-stage" aria-label="Etapa comercial"><div class="ac-commercial-stage-head"><span><i class="bi bi-signpost-split"></i> Etapa de mensaje</span><small>Cada etapa reemplaza la variante visible; nunca se acumula ni modifica la plantilla guardada.</small></div><div class="ac-commercial-stage-actions" id="acEtapasComerciales"><button type="button" class="ac-stage-btn active" data-commercial-stage="ORIGINAL"><i class="bi bi-arrow-counterclockwise"></i> Primera respuesta</button><button type="button" class="ac-stage-btn" data-commercial-stage="SEGUIMIENTO"><i class="bi bi-chat-dots"></i> Seguimiento</button><button type="button" class="ac-stage-btn" data-commercial-stage="CIERRE"><i class="bi bi-calendar-check"></i> Cierre</button><button type="button" class="ac-stage-btn" data-commercial-stage="RECONTACTO"><i class="bi bi-arrow-repeat"></i> Recontacto</button></div></section><div class="ac-response-action-context" id="acAccionesContactoContexto" hidden><i class="bi bi-person-check" aria-hidden="true"></i><span id="acAccionesContactoNombre"></span><small>Contacto activo</small></div><div class="ac-response-actions"><button type="button" class="ac-btn ac-btn-primary ac-copy-main" id="acCopiar"><i class="bi bi-copy" aria-hidden="true"></i> Copiar respuesta</button><button type="button" class="ac-btn ac-btn-soft" id="acRegistrarInteraccionRespuesta" data-ac-register-button="1" hidden><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-whatsapp" id="acWhatsApp" title="Abrir WhatsApp con la respuesta preparada"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp</button><button type="button" class="ac-btn ac-btn-social" id="acInstagram" title="Copiar respuesta y abrir los mensajes de Instagram"><i class="bi bi-instagram" aria-hidden="true"></i> Instagram</button><button type="button" class="ac-btn ac-btn-social" id="acTikTok" title="Copiar respuesta y abrir TikTok"><i class="bi bi-tiktok" aria-hidden="true"></i> TikTok</button><button type="button" class="ac-btn ac-btn-line" id="acLimpiarRespuesta" title="Borrar solo la respuesta"><i class="bi bi-x-circle" aria-hidden="true"></i> Borrar respuesta</button></div></div></article>
           <article class="ac-card" aria-labelledby="acOperacionTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acOperacionTitulo">Operación segura</h2><p class="ac-card-help">El seguimiento comercial permanece separado de los módulos clínicos.</p></div></div><div class="ac-card-body"><div class="ac-safety-note" style="margin-top:0"><i class="bi bi-database-lock" aria-hidden="true"></i><span>No escribe en pacientes, historia clínica, atenciones, diagnóstico, plan, recetas, agenda, caja ni seguridad.</span></div><div class="ac-safety-note"><i class="bi bi-cloud-slash" aria-hidden="true"></i><span>Las plantillas se cargan una vez desde la base disponible y luego se buscan localmente para mantener respuesta rápida.</span></div><div class="ac-safety-note"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Los datos de seguimiento usan únicamente el ámbito comercial y requieren una acción explícita para guardarse.</span></div></div></article>
         </section>
       </div>
@@ -1456,7 +1563,7 @@
       function renderHistory(c){var box=el("acHistorialComercial"),list=el("acHistorialLista");if(!box||!list)return;list.innerHTML="";if(!c||!c.contact_key){box.hidden=true;return;}var rows=(state.remoteRecords||[]).filter(function(row){if(!row)return false;var type=String(row.TIPO_REGISTRO||"").toUpperCase();if(type!=="MENSAJE"&&type!=="SEGUIMIENTO")return false;var ctx=row.CONTEXTO&&typeof row.CONTEXTO==="object"?row.CONTEXTO:safeJson(row.CONTEXTO_JSON||"{}",{});var rowId=txt(ctx&&ctx.id_contacto||row.ID_CONTACTO),contactId=txt(c&&c.id_contacto);if(contactId)return!!rowId&&rowId===contactId;return!!(ctx&&ctx.contact_key===c.contact_key);}).sort(function(a,b){var ad=String(a.FECHA_ACTUALIZACION||a.FECHA_CREACION||"");var bd=String(b.FECHA_ACTUALIZACION||b.FECHA_CREACION||"");return bd.localeCompare(ad);}).slice(0,5);box.hidden=false;if(!rows.length){list.innerHTML='<div class="ac-crm-empty">Todavía no hay interacciones registradas para este contacto.</div>';return;}rows.forEach(function(row){var meta=row.META&&typeof row.META==="object"?row.META:safeJson(row.META_JSON||"{}",{});var stamp=String(row.FECHA_ACTUALIZACION||row.FECHA_CREACION||"");var dateText="";if(stamp){var d=new Date(stamp);if(!isNaN(d.getTime()))dateText=formatDate(d);}var stage=historyStageLabel(txt(meta.etapa_mensaje)||String(row.TIPO_REGISTRO||""));var channel=txt(meta.canal);var item=document.createElement("article");item.className="ac-crm-history-item";item.innerHTML='<div class="ac-crm-history-meta"><span>'+escapeHtml(dateText||"Sin fecha")+'</span><span>·</span><span class="ac-history-stage">'+escapeHtml(stage||"Interacción")+'</span>'+(channel?'<span>·</span><span>'+escapeHtml(channel)+'</span>':"")+'</div><div class="ac-crm-history-response">'+escapeHtml(row.RESPUESTA||"")+'</div>';list.appendChild(item);});}
       function normalizeWhatsappDirectPhone(value){var raw=txt(value).trim();if(!raw)return"";var digits=raw.replace(/\D+/g,"");if(!digits)return"";if(raw.charAt(0)==="+")return digits;if(/^0\d{9}$/.test(digits))return"593"+digits.slice(1);return digits;}
       function renderWorkMode(c){var wrap=el("acModoTrabajo"),title=el("acModoTrabajoTitulo"),detail=el("acModoTrabajoDetalle"),action=el("acModoTrabajoAccion"),actionText=el("acModoTrabajoAccionTexto"),active=!!(c&&c.contact_key);if(wrap)wrap.classList.toggle("is-contact",active);if(title)title.textContent=active?((c.nombre||c.telefono||"Prospecto")+" · Contacto activo"):"Sin contacto · Respuesta general";if(detail)detail.textContent=active?"Las respuestas, seguimientos e interacciones pueden quedar vinculados a este contacto.":"Puedes analizar, usar plantillas, copiar y abrir WhatsApp sin asociar la respuesta al CRM.";if(action){action.setAttribute("aria-label",active?"Trabajar sin contacto":"Elegir contacto");var icon=action.querySelector("i");if(icon)icon.className=active?"bi bi-person-x":"bi bi-people";}if(actionText)actionText.textContent=active?"Trabajar sin contacto":"Elegir contacto";}
-      function renderResponseContactContext(c){var box=el("acRespuestaContactoActivo"),name=el("acRespuestaContactoNombre"),meta=el("acRespuestaContactoMeta"),reg=el("acRegistrarInteraccionRespuesta"),wa=el("acWhatsApp");var active=!!(c&&c.contact_key);if(box)box.classList.toggle("is-active",active);if(reg)reg.hidden=!active;if(name)name.textContent=active?(c.nombre||c.telefono||"Prospecto"):"";if(meta)meta.textContent=active?[c.canal,c.telefono,commercialStateLabel(c.estado_comercial)].filter(Boolean).join(" · "):"";if(wa){wa.innerHTML='<i class="bi bi-whatsapp" aria-hidden="true"></i> '+(active&&String(c.canal||"").toUpperCase()==="WHATSAPP"?(("WhatsApp · "+(c.nombre||c.telefono||"Contacto"))):"WhatsApp");wa.title=active&&String(c.canal||"").toUpperCase()==="WHATSAPP"?"Abrir WhatsApp directamente con el contacto activo":"Abrir WhatsApp con la respuesta preparada";}}
+      function renderResponseContactContext(c){var box=el("acRespuestaContactoActivo"),name=el("acRespuestaContactoNombre"),meta=el("acRespuestaContactoMeta"),reg=el("acRegistrarInteraccionRespuesta"),wa=el("acWhatsApp"),actionCtx=el("acAccionesContactoContexto"),actionName=el("acAccionesContactoNombre");var active=!!(c&&c.contact_key);if(box)box.classList.toggle("is-active",active);if(reg)reg.hidden=!active;if(name)name.textContent=active?(c.nombre||c.telefono||"Prospecto"):"";if(meta)meta.textContent=active?[c.canal,c.telefono,commercialStateLabel(c.estado_comercial)].filter(Boolean).join(" · "):"";if(actionCtx)actionCtx.hidden=!active;if(actionName)actionName.textContent=active?(c.nombre||c.telefono||"Prospecto"):"";if(wa){wa.innerHTML='<i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp';wa.title=active&&String(c.canal||"").toUpperCase()==="WHATSAPP"?"Abrir WhatsApp directamente con el contacto activo":"Abrir WhatsApp con la respuesta preparada";}}
       function clearActiveContactContext(){state.activeContactKey="";state.editBackup=null;setEditingMode(false);["acContactoNombre","acContactoTelefono","acContactoServicio","acContactoProximo","acContactoUltimoMensajeCliente","acContactoObservacion"].forEach(function(id){var n=el(id);if(n)n.value="";});if(el("acContactoEstado"))el("acContactoEstado").value="NUEVO";if(el("acContactoCanal"))el("acContactoCanal").value="WHATSAPP";var follow=el("acContactoProximo");if(follow)follow.classList.remove("ac-followup-unsaved");renderActiveContact();renderWhatsappWindow();status("Modo general activado. No hay contacto asociado a esta respuesta.","neutral");}
       function openActiveContactWhatsapp(event){var c=state.activeContactKey&&state.contacts[state.activeContactKey];if(!c||String(c.canal||"").toUpperCase()!=="WHATSAPP")return;var phone=normalizeWhatsappDirectPhone(c.telefono||c.identificador_canal);if(!phone)return;var response=txt(el("acRespuesta")&&el("acRespuesta").value);if(!response){status("No hay una respuesta visible para abrir en WhatsApp.","warning");event.preventDefault();event.stopImmediatePropagation();return;}event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();global.open("https://wa.me/"+phone+"?text="+encodeURIComponent(response),"_blank","noopener,noreferrer");}
       function renderActiveContact(){var box=el("acContactoActivo");if(!box)return;var c=state.activeContactKey&&state.contacts[state.activeContactKey];renderResponseContactContext(c||null);renderWorkMode(c||null);if(!c){box.classList.remove("is-active");renderHistory(null);return;}var name=el("acContactoActivoNombre"),meta=el("acContactoActivoMeta"),badge=el("acContactoActivoEstado");if(name)name.textContent=c.nombre||c.telefono||"Prospecto";if(meta)meta.textContent=[c.servicio,c.canal,c.telefono].filter(Boolean).join(" · ");if(badge)badge.innerHTML='<i class="bi bi-person-check"></i> '+escapeHtml(commercialStateLabel(c.estado_comercial));box.classList.add("is-active");if(state.crmMode==="FORM")renderHistory(c);else renderHistory(null);}function setActiveContact(c){if(!c||!c.contact_key){state.activeContactKey="";renderActiveContact();return;}state.activeContactKey=c.contact_key;renderActiveContact();}
