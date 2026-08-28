@@ -221,65 +221,6 @@
       .ac-pending-state{font-size:9px}
     }
 
-    /* FASE 18 · VISUAL PREMIUM / CLARIDAD DE ESTADOS / MÓVIL
-       Capa aditiva: no altera backend, contratos JSON, IDs estables ni motor semántico. */
-    .ac-mode-status-card{
-      display:flex;align-items:center;justify-content:space-between;gap:12px;
-      padding:12px 14px;border:1px solid #ead1df;border-radius:17px;
-      background:linear-gradient(135deg,rgba(255,255,255,.98),rgba(255,247,251,.96));
-      box-shadow:0 8px 24px rgba(139,30,90,.055);transition:border-color .2s ease,box-shadow .2s ease,background .2s ease
-    }
-    .ac-mode-status-copy{display:grid;gap:3px;min-width:0}
-    .ac-mode-status-kicker{display:inline-flex;align-items:center;gap:7px;color:#475569;font-size:11px;font-weight:950;letter-spacing:.025em}
-    .ac-mode-status-dot{width:9px;height:9px;border-radius:50%;background:#94a3b8;box-shadow:0 0 0 4px rgba(148,163,184,.12);transition:background .2s ease,box-shadow .2s ease}
-    .ac-mode-status-card small{color:var(--ac-muted);font-size:10px;font-weight:760;line-height:1.35}
-    body.ac-seller-mode .ac-mode-status-card{border-color:#bbf7d0;background:linear-gradient(135deg,#fff,#f0fdf4);box-shadow:0 10px 28px rgba(22,101,52,.07)}
-    body.ac-seller-mode .ac-mode-status-dot{background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.12),0 0 16px rgba(22,163,74,.25)}
-    body:not(.ac-seller-mode) .ac-mode-status-dot{background:#8b1e5a;box-shadow:0 0 0 4px rgba(139,30,90,.10)}
-    .ac-seller-mode-btn{flex:0 0 auto;white-space:nowrap}
-
-    .ac-mobile-modebar{position:relative;overflow:hidden;isolation:isolate}
-    .ac-mobile-modebar::before{content:"";position:absolute;z-index:-1;top:8px;bottom:8px;left:8px;width:calc(50% - 12px);border-radius:15px;background:linear-gradient(135deg,#fff0f7,#fdf2f8);box-shadow:0 7px 20px rgba(139,30,90,.08);transform:translateX(0);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
-    body.ac-library-open .ac-mobile-modebar::before{transform:translateX(calc(100% + 8px))}
-    .ac-mode-btn{transition:color .18s ease,transform .15s ease}
-    .ac-mode-btn:active,.ac-btn:active,.ac-crm-mobile-action:active{transform:translateY(1px) scale(.985)!important}
-    .ac-btn,.ac-mode-btn,.ac-crm-mobile-action{touch-action:manipulation}
-
-    .ac-active-contact-badge{transition:background .18s ease,color .18s ease,box-shadow .18s ease}
-    .ac-active-contact.is-active .ac-active-contact-badge{background:#ecfdf3;color:#166534;box-shadow:0 0 0 3px rgba(22,163,74,.08)}
-    .ac-active-contact.is-active .ac-active-contact-kicker::before{content:"";display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.10)}
-
-    #acCrmPendientesMovil[data-pending-count]:not([data-pending-count="0"]){border-color:#fed7aa;background:linear-gradient(180deg,#fff,#fff7ed);box-shadow:0 8px 20px rgba(249,115,22,.07)}
-    #acCrmPendientesMovil[data-pending-count="0"]{background:#fff}
-
-    .ac-followup-unsaved{position:relative}
-    .ac-followup-unsaved:focus{border-color:#f59e0b!important;box-shadow:0 0 0 4px rgba(245,158,11,.12)!important}
-
-    #acToast.ac-f18-toast{max-width:min(92vw,430px);padding:11px 14px;border-radius:14px;font-weight:850;box-shadow:0 18px 42px rgba(15,23,42,.20);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-    #acToast.ac-f18-toast[data-type="info"]{background:#334155}
-
-    @keyframes acF18Enter{from{opacity:.72;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-    @media(max-width:760px){
-      .ac-mode-status-card{align-items:stretch;flex-direction:column;padding:11px 12px;border-radius:16px}
-      .ac-mode-status-copy{padding:1px 2px}
-      .ac-mode-status-kicker{font-size:11px}
-      .ac-mode-status-card small{font-size:10px}
-      .ac-seller-mode-btn{width:100%;min-height:45px!important}
-      #acContactoCard,#acMensajeCard{animation:acF18Enter .24s ease both}
-      body.ac-library-open #acBibliotecaCard{
-        display:flex!important;flex-direction:column!important;position:fixed!important;
-        top:max(8px,env(safe-area-inset-top))!important;right:0!important;bottom:0!important;left:auto!important;
-        width:min(94vw,430px)!important;max-width:430px!important;height:auto!important;max-height:none!important;
-        visibility:visible!important;opacity:1!important;transform:translate3d(0,0,0)!important;
-        overflow:hidden!important;pointer-events:auto!important
-      }
-      body.ac-library-open #acBibliotecaCard>.ac-card-body{display:block!important;flex:1 1 auto!important;height:auto!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}
-      body.ac-library-open #acBibliotecaCard .ac-filter-bar{position:sticky;top:0;z-index:4;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:8px 0 10px;margin-bottom:8px}
-      body.ac-library-open #acPlantillas{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}
-      body.ac-library-open .ac-mobile-library-backdrop{display:block!important;opacity:1!important;pointer-events:auto!important}
-    }
-    @media(prefers-reduced-motion:reduce){.ac-mobile-modebar::before,.ac-mode-status-card,.ac-mode-status-dot,.ac-btn,.ac-mode-btn,.ac-crm-mobile-action{transition:none!important}#acContactoCard,#acMensajeCard{animation:none!important}}
-
     /* FASE 3.2 · FICHA DIRECTA / EDICIÓN CONTROLADA
        Solo presentación y control de edición del Mini CRM. */
     .ac-crm-editbar{display:none;align-items:center;justify-content:flex-end;gap:8px;margin:0 0 12px}
@@ -478,6 +419,512 @@
     }
 
     @media (max-width:420px){.ac-crm-launchbar{grid-template-columns:1fr 1fr}.ac-crm-launchbar .is-primary{grid-column:1/-1}.ac-crm-actions{grid-template-columns:1fr 1fr}.ac-crm-actions .ac-btn-primary{grid-column:1/-1}.ac-crm-sync{grid-column:1/-1}.ac-quick-stage-actions{grid-template-columns:1fr 1fr}.ac-quick-stage-btn{min-height:44px;font-size:10px}.ac-quick-actions .ac-btn{min-height:46px!important;font-size:11px!important}}
+
+    /* =========================================================
+       RESPONSIVE PRO · ANDROID + IPHONE + PC · ANTIRREGRESIVO
+       2026-08-27
+       Objetivo:
+       - Corregir jerarquía, densidad, modales y safe-area en móvil.
+       - Mantener escritorio estable.
+       - No modifica backend, IDs, JSON, CRM ni motor semántico.
+       ========================================================= */
+
+    /* Base defensiva: evita desbordes por controles o textos largos. */
+    #acApp,
+    #acApp *{min-width:0}
+    #acApp img,
+    #acApp svg{max-width:100%}
+    .ac-card,
+    .ac-card-body,
+    .ac-card-head,
+    .ac-crm-card,
+    .ac-crm-card>.ac-card-body{max-width:100%}
+
+    /* Escritorio: conserva el esquema actual y mejora legibilidad modal. */
+    @media (min-width:761px){
+      .ac-crm-card.is-open>.ac-card-body{
+        width:min(1040px,calc(100vw - 48px))!important;
+        max-height:calc(100dvh - 48px)!important;
+        border-radius:24px!important;
+        box-shadow:0 28px 90px rgba(15,23,42,.26)!important
+      }
+      .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-list,
+      .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-list{
+        grid-template-columns:repeat(2,minmax(0,1fr))!important
+      }
+      .ac-crm-list-tools{top:70px!important}
+    }
+
+    /* MÓVIL REAL: una sola jerarquía, menos altura y overlays tipo app. */
+    @media (max-width:760px){
+      html,body{max-width:100%;overflow-x:hidden}
+      body{overscroll-behavior-y:none}
+      #acApp{min-height:100dvh}
+      #acApp .ac-shell{
+        width:100%;
+        padding:
+          calc(10px + env(safe-area-inset-top))
+          12px
+          calc(18px + env(safe-area-inset-bottom))!important
+      }
+
+      /* Cabecera compacta. */
+      .ac-topbar{
+        gap:10px!important;
+        margin-bottom:10px!important;
+        align-items:center!important
+      }
+      .ac-title{font-size:25px!important;line-height:1.05!important}
+      .ac-subtitle{font-size:12px!important;line-height:1.35!important;margin-top:4px!important}
+      .ac-brand-chip{min-height:36px!important;padding:6px 10px!important;font-size:11px!important}
+      .ac-brand-chip img,
+      #acBrandLogoFallback{width:22px!important;height:22px!important}
+
+      /* Hero menos invasivo: información útil sin consumir media pantalla. */
+      .ac-hero{
+        margin-bottom:10px!important;
+        padding:14px!important;
+        border-radius:20px!important
+      }
+      .ac-hero-title{font-size:18px!important;line-height:1.15!important}
+      .ac-hero-text{font-size:12px!important;line-height:1.4!important}
+      .ac-hero-badges{gap:6px!important;margin-top:2px!important}
+      .ac-badge{min-height:28px!important;padding:5px 8px!important;font-size:10px!important}
+
+      /* Navegación principal: táctil y estable. */
+      .ac-mobile-modebar{
+        position:sticky!important;
+        top:max(6px,env(safe-area-inset-top))!important;
+        z-index:80!important;
+        margin:0 0 10px!important;
+        padding:4px!important;
+        border-radius:18px!important;
+        background:rgba(255,255,255,.94)!important;
+        backdrop-filter:blur(16px)!important;
+        -webkit-backdrop-filter:blur(16px)!important;
+        box-shadow:0 8px 24px rgba(15,23,42,.08)!important
+      }
+      .ac-mode-btn{
+        min-height:44px!important;
+        border-radius:14px!important;
+        font-size:13px!important
+      }
+
+      /* Modo vendedor/administración: secundario y compacto. */
+      .ac-view-tools{
+        display:flex!important;
+        align-items:center!important;
+        justify-content:space-between!important;
+        gap:8px!important;
+        margin:0 0 10px!important;
+        padding:8px 10px!important;
+        border:1px solid #f0d8e5!important;
+        border-radius:15px!important;
+        background:#fff!important;
+        box-shadow:none!important
+      }
+      .ac-view-tools .ac-btn{
+        min-height:38px!important;
+        padding:7px 10px!important;
+        font-size:11px!important;
+        flex:0 0 auto!important
+      }
+      .ac-view-tools small{
+        margin:0!important;
+        font-size:10px!important;
+        line-height:1.25!important;
+        text-align:right!important
+      }
+
+      /* Tarjetas principales más densas. */
+      .ac-card{border-radius:20px!important}
+      .ac-card+.ac-card{margin-top:12px!important}
+      .ac-card-head{padding:14px 14px 0!important;gap:10px!important}
+      .ac-card-body{padding:14px!important}
+      .ac-card-title{font-size:17px!important}
+      .ac-card-help{font-size:11px!important;line-height:1.35!important}
+
+      /* CRM compacto: la pantalla principal no debe parecer un formulario gigante. */
+      .ac-crm-card{
+        margin-top:10px!important;
+        overflow:visible!important;
+        border-radius:20px!important;
+        box-shadow:0 10px 28px rgba(15,23,42,.055)!important
+      }
+      .ac-crm-card>.ac-card-head{
+        padding:13px 13px 9px!important
+      }
+      .ac-crm-launchbar{
+        grid-template-columns:1fr 1fr!important;
+        gap:8px!important;
+        padding:0 12px 12px!important
+      }
+      .ac-crm-launchbar .is-primary{
+        grid-column:1/-1!important
+      }
+      .ac-crm-mobile-action{
+        min-height:44px!important;
+        border-radius:13px!important;
+        font-size:11px!important;
+        padding:8px 9px!important
+      }
+      .ac-active-contact{
+        margin:0 12px 12px!important;
+        padding:11px 12px!important;
+        border-radius:14px!important
+      }
+
+      /* MENSAJE: prioriza la tarea y reduce el espacio vacío. */
+      #acMensajeCard>.ac-card-head{
+        flex-direction:column!important;
+        align-items:stretch!important
+      }
+      #acMensajeCard .ac-head-actions{
+        display:grid!important;
+        grid-template-columns:1fr 1fr!important;
+        gap:8px!important;
+        width:100%!important
+      }
+      #acMensajeCard .ac-head-actions .ac-btn{
+        width:100%!important;
+        min-height:42px!important
+      }
+      .ac-textarea.ac-message{
+        min-height:150px!important;
+        height:150px
+      }
+      .ac-textarea.ac-response{
+        min-height:180px!important
+      }
+      #acEstado{font-size:11px!important;padding:9px 10px!important}
+      .ac-safety-note{font-size:10px!important;line-height:1.35!important}
+
+      /* =====================================================
+         CRM SHEET MÓVIL
+         Una sola superficie blanca desde abajo.
+         Elimina la apariencia de "tarjeta dentro de tarjeta".
+         ===================================================== */
+      body.ac-crm-panel-open{overflow:hidden!important}
+      .ac-crm-card.is-open:before{
+        content:""!important;
+        position:fixed!important;
+        inset:0!important;
+        z-index:1190!important;
+        background:rgba(15,23,42,.38)!important;
+        backdrop-filter:blur(3px)!important;
+        -webkit-backdrop-filter:blur(3px)!important
+      }
+      .ac-crm-card.is-open>.ac-card-body{
+        display:block!important;
+        position:fixed!important;
+        z-index:1200!important;
+        top:auto!important;
+        right:0!important;
+        bottom:0!important;
+        left:0!important;
+        width:100%!important;
+        height:min(88dvh,760px)!important;
+        max-height:88dvh!important;
+        margin:0!important;
+        padding:0 14px calc(16px + env(safe-area-inset-bottom))!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important;
+        transform:none!important;
+        border:0!important;
+        border-radius:24px 24px 0 0!important;
+        background:#fff!important;
+        box-shadow:0 -18px 60px rgba(15,23,42,.24)!important;
+        animation:acCrmSheetUp .20s ease-out!important
+      }
+      @keyframes acCrmSheetUp{
+        from{transform:translateY(18px);opacity:.6}
+        to{transform:translateY(0);opacity:1}
+      }
+      .ac-crm-sheet-head{
+        position:sticky!important;
+        top:0!important;
+        z-index:10!important;
+        display:flex!important;
+        align-items:center!important;
+        justify-content:space-between!important;
+        gap:10px!important;
+        margin:0 -14px 10px!important;
+        padding:14px 14px 11px!important;
+        border-bottom:1px solid #f1e5eb!important;
+        background:rgba(255,255,255,.98)!important;
+        backdrop-filter:blur(14px)!important;
+        -webkit-backdrop-filter:blur(14px)!important
+      }
+      .ac-crm-sheet-title strong{
+        font-size:17px!important;
+        line-height:1.2!important
+      }
+      .ac-crm-sheet-title small{
+        font-size:10px!important;
+        line-height:1.25!important
+      }
+      .ac-crm-sheet-close{
+        width:40px!important;
+        height:40px!important;
+        flex:0 0 40px!important;
+        border-radius:13px!important
+      }
+
+      /* En listas el título ya está en el encabezado; evita duplicación. */
+      .ac-crm-card[data-crm-mode="CONTACTS"] #acContactosDetalle>summary,
+      .ac-crm-card[data-crm-mode="PENDING"] #acPendientesDetalle>summary{
+        display:none!important
+      }
+      .ac-crm-card[data-crm-mode="CONTACTS"] #acContactosDetalle,
+      .ac-crm-card[data-crm-mode="PENDING"] #acPendientesDetalle{
+        margin:0!important;
+        padding:0!important;
+        border:0!important
+      }
+
+      /* Buscador sólido, ancho completo y sin recortes. */
+      .ac-crm-list-tools{
+        position:sticky!important;
+        top:64px!important;
+        z-index:8!important;
+        display:block!important;
+        width:100%!important;
+        margin:0 0 10px!important;
+        padding:8px!important;
+        border:1px solid #edf1f5!important;
+        border-radius:14px!important;
+        background:rgba(255,255,255,.98)!important;
+        box-shadow:0 6px 18px rgba(15,23,42,.045)!important
+      }
+      .ac-crm-list-search{
+        display:block!important;
+        width:100%!important;
+        max-width:100%!important;
+        min-height:44px!important;
+        margin:0!important;
+        padding:10px 12px!important;
+        border-radius:11px!important;
+        font-size:13px!important;
+        box-sizing:border-box!important
+      }
+      .ac-crm-list{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:8px!important;
+        width:100%!important;
+        max-height:none!important;
+        overflow:visible!important;
+        padding:0 0 8px!important
+      }
+      .ac-crm-item{
+        appearance:none!important;
+        -webkit-appearance:none!important;
+        display:grid!important;
+        grid-template-columns:minmax(0,1fr)!important;
+        gap:6px!important;
+        width:100%!important;
+        min-height:0!important;
+        margin:0!important;
+        padding:12px!important;
+        text-align:left!important;
+        border:1px solid #e8edf2!important;
+        border-radius:14px!important;
+        background:#fff!important;
+        color:inherit!important;
+        box-shadow:none!important
+      }
+      .ac-crm-item:active{
+        transform:scale(.995);
+        background:#fffafd!important
+      }
+      .ac-crm-item-time{
+        white-space:normal!important;
+        font-size:10px!important
+      }
+      .ac-pending-time{
+        align-items:flex-start!important;
+        text-align:left!important
+      }
+
+      /* Formularios CRM: una columna, campos cómodos pero compactos. */
+      .ac-crm-grid,
+      .ac-crm-grid-secondary{
+        grid-template-columns:1fr!important;
+        gap:9px!important
+      }
+      .ac-crm-grid-secondary{margin-top:9px!important}
+      .ac-crm-grid .ac-field,
+      .ac-crm-grid .ac-select,
+      .ac-crm-grid-secondary .ac-field,
+      .ac-crm-grid-secondary .ac-select{
+        min-height:44px!important
+      }
+      .ac-crm-actions{
+        grid-template-columns:1fr 1fr!important;
+        gap:8px!important
+      }
+      .ac-crm-actions .ac-btn{
+        min-height:46px!important;
+        font-size:11px!important
+      }
+      .ac-crm-actions .ac-btn-primary{
+        grid-column:1/-1!important
+      }
+
+      /* =====================================================
+         PLANTILLAS MÓVIL
+         Bottom sheet estable en Android/iPhone.
+         ===================================================== */
+      body.ac-library-open{overflow:hidden!important}
+      .ac-mobile-library-backdrop{
+        position:fixed!important;
+        inset:0!important;
+        z-index:1290!important;
+        background:rgba(15,23,42,.36)!important;
+        backdrop-filter:blur(3px)!important;
+        -webkit-backdrop-filter:blur(3px)!important;
+        opacity:0!important;
+        pointer-events:none!important;
+        transition:opacity .18s ease!important
+      }
+      body.ac-library-open .ac-mobile-library-backdrop{
+        display:block!important;
+        opacity:1!important;
+        pointer-events:auto!important
+      }
+      #acBibliotecaCard{
+        position:fixed!important;
+        z-index:1300!important;
+        top:auto!important;
+        right:0!important;
+        bottom:0!important;
+        left:0!important;
+        width:100%!important;
+        max-width:none!important;
+        height:min(90dvh,800px)!important;
+        max-height:90dvh!important;
+        margin:0!important;
+        overflow:hidden!important;
+        border-radius:24px 24px 0 0!important;
+        background:#fff!important;
+        box-shadow:0 -18px 60px rgba(15,23,42,.24)!important;
+        transform:translateY(105%)!important;
+        transition:transform .22s cubic-bezier(.2,.8,.2,1)!important
+      }
+      body.ac-library-open #acBibliotecaCard{
+        transform:translateY(0)!important;
+        visibility:visible!important;
+        opacity:1!important
+      }
+      #acBibliotecaCard>.ac-card-head{
+        position:sticky!important;
+        top:0!important;
+        z-index:6!important;
+        padding:14px 54px 11px 14px!important;
+        border-bottom:1px solid #f1e5eb!important;
+        background:#fff!important
+      }
+      #acBibliotecaCard>.ac-card-body{
+        display:block!important;
+        height:calc(100% - 72px)!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        padding:12px 14px calc(20px + env(safe-area-inset-bottom))!important
+      }
+      .ac-library-mobile-close{
+        display:grid!important;
+        position:absolute!important;
+        top:12px!important;
+        right:12px!important;
+        z-index:8!important;
+        width:40px!important;
+        height:40px!important;
+        border-radius:13px!important
+      }
+      #acBibliotecaCard .ac-mobile-template-picker{
+        position:static!important;
+        margin:0 0 10px!important;
+        padding:10px!important
+      }
+      #acBibliotecaCard .ac-filter-bar{
+        position:sticky!important;
+        top:0!important;
+        z-index:5!important;
+        display:grid!important;
+        grid-template-columns:1fr 1fr!important;
+        gap:7px!important;
+        margin:0 0 10px!important;
+        padding:8px 0!important;
+        background:#fff!important
+      }
+      #acBibliotecaCard .ac-filter-bar .ac-search-wrap{
+        grid-column:1/-1!important
+      }
+      #acBibliotecaCard .ac-filter-bar .ac-btn{
+        width:100%!important;
+        min-height:40px!important;
+        padding:7px 8px!important;
+        font-size:10px!important
+      }
+      #acPlantillas{
+        grid-template-columns:1fr!important;
+        gap:9px!important
+      }
+
+      /* Quick response: una sola superficie, no mosaico de tarjetas. */
+      .ac-quick-sheet{
+        top:auto!important;
+        right:0!important;
+        bottom:0!important;
+        left:0!important;
+        width:100%!important;
+        height:min(88dvh,760px)!important;
+        max-height:88dvh!important;
+        padding:12px 14px calc(14px + env(safe-area-inset-bottom))!important;
+        border:0!important;
+        border-radius:24px 24px 0 0!important;
+        background:#fff!important;
+        box-shadow:0 -18px 60px rgba(15,23,42,.26)!important
+      }
+      .ac-quick-sheet-backdrop{
+        inset:-100vh 0 0!important;
+        background:rgba(15,23,42,.38)!important;
+        backdrop-filter:blur(3px)!important;
+        -webkit-backdrop-filter:blur(3px)!important
+      }
+      .ac-quick-sheet-head,
+      .ac-quick-stage-wrap,
+      .ac-quick-response,
+      .ac-quick-actions{
+        box-shadow:none!important
+      }
+
+      /* Evita animaciones molestas o mareo. */
+      @media (prefers-reduced-motion:reduce){
+        *,*::before,*::after{
+          scroll-behavior:auto!important;
+          animation-duration:.01ms!important;
+          animation-iteration-count:1!important;
+          transition-duration:.01ms!important
+        }
+      }
+    }
+
+    /* Teléfonos muy estrechos: evita botones comprimidos. */
+    @media (max-width:380px){
+      #acApp .ac-shell{padding-left:9px!important;padding-right:9px!important}
+      .ac-title{font-size:23px!important}
+      .ac-view-tools{align-items:stretch!important;flex-direction:column!important}
+      .ac-view-tools small{text-align:left!important}
+      .ac-crm-launchbar{grid-template-columns:1fr!important}
+      .ac-crm-launchbar .is-primary{grid-column:auto!important}
+      #acMensajeCard .ac-head-actions{grid-template-columns:1fr!important}
+      .ac-response-actions{grid-template-columns:1fr!important}
+      .ac-response-actions>.ac-btn{min-height:50px!important}
+    }
+
   </style>
 </head>
 
@@ -492,10 +939,7 @@
       <section class="ac-hero" aria-labelledby="acHeroTitulo"><div class="ac-hero-row"><div class="ac-hero-main"><h2 class="ac-hero-title" id="acHeroTitulo">Responder más rápido sin perder el control</h2><p class="ac-hero-text">Pega el mensaje recibido, revisa la plantilla sugerida, edítala si hace falta y copia la respuesta.</p></div><div class="ac-hero-badges" aria-label="Características del módulo"><span class="ac-badge"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>Búsqueda local</span><span class="ac-badge"><i class="bi bi-stars" aria-hidden="true"></i>Sin IA en esta fase</span><span class="ac-badge is-safe"><i class="bi bi-shield-check" aria-hidden="true"></i>Mensaje temporal</span></div></div></section>
 
       <div class="ac-mobile-library-backdrop" id="acMobileLibraryBackdrop" aria-hidden="true"></div><nav class="ac-mobile-modebar" aria-label="Accesos rápidos"><button type="button" class="ac-mode-btn active" id="acModoResponder"><i class="bi bi-chat-square-text"></i> Responder</button><button type="button" class="ac-mode-btn" id="acModoPlantillas"><i class="bi bi-lightning-charge"></i> Plantillas</button></nav>
-      <div class="ac-view-tools ac-mode-status-card" id="acModoComercialCard" aria-label="Modo de trabajo">
-        <div class="ac-mode-status-copy"><span class="ac-mode-status-kicker"><span class="ac-mode-status-dot" id="acModoVendedorDot" aria-hidden="true"></span><span id="acModoVendedorEstado">Modo administración · ACTIVO</span></span><small id="acModoVendedorAyuda">Creación y edición de plantillas disponibles.</small></div>
-        <button type="button" class="ac-btn ac-btn-line ac-seller-mode-btn" id="acModoVendedor" aria-pressed="false"><i class="bi bi-briefcase"></i><span id="acModoVendedorTexto">Activar modo comercial</span></button>
-      </div>
+      <div class="ac-view-tools" aria-label="Vista de trabajo"><button type="button" class="ac-btn ac-btn-line ac-seller-mode-btn" id="acModoVendedor" aria-pressed="false"><i class="bi bi-phone"></i><span id="acModoVendedorTexto">Modo vendedor</span></button><small>Oculta controles administrativos para responder más rápido. No cambia datos.</small></div>
 
       <!-- FASE 2 · CONTACTO / PROSPECTO COMPACTO -->
       <section class="ac-card ac-crm-card" id="acContactoCard" aria-labelledby="acContactoTitulo">
@@ -741,50 +1185,6 @@
       function boot(){if(state.initialized)return;state.initialized=true;loadLocal();populateSelects();if(el("acContactoCard")){el("acContactoCard").dataset.crmMode="FORM";el("acContactoCard").dataset.editing="false";}bind();setEditingMode(false);markStage("ORIGINAL");syncQuickResponse();renderActiveContact();renderContacts();renderPending();loadCommercialRecords();}
       if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
       global.AsistenteComercialFase2={version:"1.0.7",saveContact:saveContact,registerInteraction:registerInteraction,loadCommercialRecords:loadCommercialRecords,renderContacts:renderContacts,renderPending:renderPending,applyStage:applyStage,getState:function(){return JSON.parse(JSON.stringify(state));}};
-    })(window,document);
-  </script>
-
-  <!-- FASE 18 · ADAPTADOR VISUAL PREMIUM ANTIRREGRESIVO -->
-  <script>
-    (function(global,document){
-      "use strict";
-      var toastTimer=0;
-      function el(id){return document.getElementById(id);}
-      function isCommercial(){return document.body.classList.contains("ac-seller-mode");}
-      function syncCommercialModeUi(){
-        var active=isCommercial(),state=el("acModoVendedorEstado"),help=el("acModoVendedorAyuda"),text=el("acModoVendedorTexto"),btn=el("acModoVendedor");
-        if(state)state.textContent=active?"Modo comercial · ACTIVO":"Modo administración · ACTIVO";
-        if(help)help.textContent=active?"Vista rápida para responder; la administración de plantillas queda oculta.":"Creación y edición de plantillas disponibles.";
-        if(text)text.textContent=active?"Cambiar a administración":"Activar modo comercial";
-        if(btn){var icon=btn.querySelector("i");if(icon)icon.className=active?"bi bi-briefcase-fill":"bi bi-briefcase";}
-      }
-      function showToast(message,type){
-        var box=el("acToast");if(!box||!message)return;
-        clearTimeout(toastTimer);box.textContent=message;box.dataset.type=type||"info";box.classList.add("ac-f18-toast","show");
-        toastTimer=setTimeout(function(){box.classList.remove("show","ac-f18-toast");},1900);
-      }
-      function ensureMobileLibrary(event){
-        var target=event.target&&event.target.closest?event.target.closest("#acModoPlantillas"):null;if(!target)return;
-        if(!(global.matchMedia&&global.matchMedia("(max-width:760px)").matches))return;
-        document.body.classList.remove("ac-library-focus");document.body.classList.add("ac-library-open");
-        var card=el("acBibliotecaCard");if(card){card.removeAttribute("hidden");card.setAttribute("aria-hidden","false");}
-      }
-      function closeVisualLibrary(){document.body.classList.remove("ac-library-open","ac-library-focus");}
-      function bind(){
-        syncCommercialModeUi();
-        var mode=el("acModoVendedor");if(mode){mode.addEventListener("click",function(){setTimeout(function(){syncCommercialModeUi();showToast(isCommercial()?"Modo comercial activo":"Modo administración activo",isCommercial()?"success":"info");},0);});}
-        if(global.MutationObserver){
-          new MutationObserver(syncCommercialModeUi).observe(document.body,{attributes:true,attributeFilter:["class"]});
-          var summary=el("acContactoResumen");if(summary)new MutationObserver(function(){var t=(summary.textContent||"").trim(),kind=summary.dataset.type||"info";if(t&&(kind==="success"||kind==="warning"||kind==="danger"))showToast(t,kind);}).observe(summary,{childList:true,subtree:true,attributes:true,attributeFilter:["data-type"]});
-        }
-        document.addEventListener("click",ensureMobileLibrary,true);
-        document.addEventListener("click",function(event){
-          var close=event.target&&event.target.closest?event.target.closest("#acMobileLibraryClose,#acMobileLibraryBackdrop,#acModoResponder"):null;if(close)closeVisualLibrary();
-          var tomorrow=event.target&&event.target.closest?event.target.closest("#acSeguimientoManana,#acSeguimiento48h"):null;if(tomorrow)setTimeout(function(){showToast("Seguimiento preparado · falta Guardar contacto","warning");},20);
-        },false);
-      }
-      if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bind,{once:true});else bind();
-      global.AsistenteComercialFase18={version:"1.0.0",syncCommercialModeUi:syncCommercialModeUi};
     })(window,document);
   </script>
 </body>
