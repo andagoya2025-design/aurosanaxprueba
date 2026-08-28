@@ -4231,7 +4231,7 @@
         <div class="clinical-panel" id="hc_obstetricia">
           <div id="obstetricia"></div>
         </div>
-        <div class="clinical-panel" id="hc_estetica"><div class="clinical-subtitle"><i class="bi bi-stars"></i> Evaluación estética funcional</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Área</label><select class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Procedimiento sugerido</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Sesión</label><input class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Consentimiento</label><select class="form-select"><option>Pendiente</option><option>Firmado</option><option>No aplica</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación facial</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación corporal</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación íntima</label><textarea class="form-control" rows="3"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Evolución fotográfica / observaciones</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+        <div class="clinical-panel" id="hc_estetica"><div class="clinical-subtitle"><i class="bi bi-stars"></i> Evaluación estética funcional</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Área</label><select id="hcEsteticaArea" class="form-select"><option>Facial</option><option>Corporal</option><option>Íntima</option><option>Capilar</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Procedimiento sugerido</label><input id="hcEsteticaProcedimiento" class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Sesión</label><input id="hcEsteticaSesion" class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Consentimiento</label><select id="hcEsteticaConsentimiento" class="form-select"><option>Pendiente</option><option>Firmado</option><option>No aplica</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación facial</label><textarea id="hcEsteticaEvalFacial" class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación corporal</label><textarea id="hcEsteticaEvalCorporal" class="form-control" rows="3"></textarea></div><div class="col-md-4"><label class="form-label fw-bold">Evaluación íntima</label><textarea id="hcEsteticaEvalIntima" class="form-control" rows="3"></textarea></div><div class="col-md-12"><label class="form-label fw-bold">Evolución fotográfica / observaciones</label><textarea id="hcEsteticaEvolucion" class="form-control" rows="3"></textarea></div></div></div>
         <!-- AUROSANAX: Diagnósticos integrado como módulo externo por atención -->
         <div class="clinical-panel" id="hc_diagnostico" data-auro-module="diagnosticos">
           <div class="clinical-subtitle mt-4"><i class="bi bi-clipboard2-check"></i> Registro Clinico</div>
@@ -4945,7 +4945,14 @@ function showClinicalTab(id,btn){
   });
 
   /* AUROSANAX: cada pestaña conserva y muestra únicamente su propia fecha visual. */
-  if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+  if(id === 'hc_estetica' && typeof window.auroEsteticaCargarContextoActual === 'function'){
+    Promise.resolve(window.auroEsteticaCargarContextoActual())
+      .finally(()=>{
+        if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+          window.auroHistoriaRefrescarEstadoConsultaActiva(id);
+        }
+      });
+  }else if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
     window.auroHistoriaRefrescarEstadoConsultaActiva(id);
   }
 
@@ -7315,6 +7322,17 @@ async function auroHistoriaResolverEstadoRealModulo(idAtencion, modulo){
     if(obstetricia) return obstetricia;
   }
 
+  if(m === 'hc_estetica'){
+    if(typeof window.auroEsteticaEstadoRealActual === 'function'){
+      return await window.auroEsteticaEstadoRealActual(id);
+    }
+    return {
+      existe:false,
+      fecha:'',
+      fuente:'estetica_funcional_no_disponible'
+    };
+  }
+
   if(m === 'hc_recomendaciones'){
     return await auroHistoriaEstadoRecomendaciones(id);
   }
@@ -7328,9 +7346,8 @@ async function auroHistoriaResolverEstadoRealModulo(idAtencion, modulo){
   }
 
   /*
-    Estética todavía no tiene una persistencia clínica por atención
-    homologada con esta pestaña. Se conserva el respaldo visual legacy
-    exclusivamente para Estética y futuros módulos no integrados.
+    Respaldo visual legacy únicamente para futuros módulos no integrados.
+    Estética ya se resuelve arriba desde estetica_funcional.
   */
   const local = auroHistoriaLeerActualizacionConsulta(id, m);
   if(local && local.fechaHora){
@@ -7725,6 +7742,538 @@ function auroHistoriaMostrarSinCambios(modulo){
 }
 
 
+
+/* ============================================================
+   AUROSANAX - ESTÉTICA FUNCIONAL INDEPENDIENTE V1
+   ------------------------------------------------------------
+   ALCANCE EXCLUSIVO:
+   - Conecta hc_estetica con la tabla existente estetica_funcional.
+   - Usa endpoints existentes: listarEstetica / guardarEstetica /
+     editarEstetica.
+   - No crea columnas ni modifica backend.
+   - No toca Antecedentes, Examen físico ni otros módulos.
+   - No escribe si el usuario no realizó una modificación real.
+   ============================================================ */
+(function(){
+  'use strict';
+
+  if(window.__auroEsteticaIndependienteV1) return;
+  window.__auroEsteticaIndependienteV1 = true;
+
+  const PREFIJO = 'AUROSANAX_ESTETICA_V1::';
+  const CAMPOS = {
+    area:'hcEsteticaArea',
+    procedimiento:'hcEsteticaProcedimiento',
+    sesion:'hcEsteticaSesion',
+    consentimiento:'hcEsteticaConsentimiento',
+    facial:'hcEsteticaEvalFacial',
+    corporal:'hcEsteticaEvalCorporal',
+    intima:'hcEsteticaEvalIntima',
+    evolucion:'hcEsteticaEvolucion'
+  };
+
+  const estado = {
+    id_estetica:'',
+    id_historia:'',
+    id_paciente:'',
+    id_atencion:'',
+    fecha_atencion:'',
+    registro:null,
+    firma_baseline:'',
+    dirty:false,
+    cargado:false,
+    loading:false
+  };
+
+  window.auroEsteticaState = estado;
+
+  function texto_(v){
+    return String(v == null ? '' : v).trim();
+  }
+
+  function valor_(id){
+    return texto_(document.getElementById(id)?.value || '');
+  }
+
+  function setValor_(id, valor){
+    const el = document.getElementById(id);
+    if(el) el.value = valor == null ? '' : String(valor);
+  }
+
+  function contexto_(){
+    let atencion = null;
+    try{
+      if(typeof window.getAtencionActiva === 'function'){
+        atencion = window.getAtencionActiva() || null;
+      }
+    }catch(e){}
+
+    const idAtencion = texto_(
+      atencion?.id_atencion ||
+      (typeof window.getIdAtencionActiva === 'function' ? window.getIdAtencionActiva() : '') ||
+      ''
+    );
+
+    const idPaciente = texto_(
+      document.getElementById('hcPacienteSelect')?.value ||
+      atencion?.id_paciente ||
+      ''
+    );
+
+    const idHistoria = texto_(
+      window.auroHistoriaSeleccionadaId ||
+      (typeof editingHistoryId !== 'undefined' ? editingHistoryId : '') ||
+      atencion?.id_historia ||
+      ''
+    );
+
+    const idMedico = texto_(atencion?.id_medico || '');
+
+    const fechaAtencion = texto_(
+      atencion?.fecha_atencion ||
+      atencion?.fecha ||
+      ''
+    );
+
+    return {
+      atencion,
+      id_atencion:idAtencion,
+      id_paciente:idPaciente,
+      id_historia:idHistoria,
+      id_medico:idMedico,
+      fecha_atencion:fechaAtencion
+    };
+  }
+
+  function fechaClave_(valor){
+    const raw = texto_(valor);
+    if(!raw) return '';
+
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+
+    const lat = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if(lat){
+      return lat[3] + '-' +
+        String(lat[2]).padStart(2,'0') + '-' +
+        String(lat[1]).padStart(2,'0');
+    }
+
+    const d = new Date(raw);
+    if(!isNaN(d.getTime())){
+      return [
+        d.getFullYear(),
+        String(d.getMonth()+1).padStart(2,'0'),
+        String(d.getDate()).padStart(2,'0')
+      ].join('-');
+    }
+
+    return '';
+  }
+
+  function ahoraFecha_(){
+    const d = new Date();
+    return [
+      d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'),
+      String(d.getDate()).padStart(2,'0')
+    ].join('-');
+  }
+
+  function estadoPanel_(){
+    return {
+      area:valor_(CAMPOS.area),
+      procedimiento:valor_(CAMPOS.procedimiento),
+      sesion:valor_(CAMPOS.sesion),
+      consentimiento:valor_(CAMPOS.consentimiento),
+      facial:valor_(CAMPOS.facial),
+      corporal:valor_(CAMPOS.corporal),
+      intima:valor_(CAMPOS.intima),
+      evolucion:valor_(CAMPOS.evolucion)
+    };
+  }
+
+  function firma_(obj){
+    const o = obj || {};
+    return JSON.stringify({
+      area:texto_(o.area),
+      procedimiento:texto_(o.procedimiento),
+      sesion:texto_(o.sesion),
+      consentimiento:texto_(o.consentimiento),
+      facial:texto_(o.facial),
+      corporal:texto_(o.corporal),
+      intima:texto_(o.intima),
+      evolucion:texto_(o.evolucion)
+    });
+  }
+
+  function parseEvaluacion_(valor){
+    const raw = texto_(valor);
+    if(!raw) return {};
+
+    let json = raw;
+    if(raw.startsWith(PREFIJO)){
+      json = raw.slice(PREFIJO.length);
+    }else{
+      const ini = raw.indexOf('{');
+      const fin = raw.lastIndexOf('}');
+      if(ini >= 0 && fin > ini) json = raw.slice(ini, fin + 1);
+      else return {evolucion:raw};
+    }
+
+    try{
+      const obj = JSON.parse(json);
+      return obj && typeof obj === 'object' ? obj : {};
+    }catch(e){
+      return {evolucion:raw};
+    }
+  }
+
+  function limpiarPanel_(){
+    setValor_(CAMPOS.area, 'Facial');
+    setValor_(CAMPOS.procedimiento, '');
+    setValor_(CAMPOS.sesion, '');
+    setValor_(CAMPOS.consentimiento, 'Pendiente');
+    setValor_(CAMPOS.facial, '');
+    setValor_(CAMPOS.corporal, '');
+    setValor_(CAMPOS.intima, '');
+    setValor_(CAMPOS.evolucion, '');
+  }
+
+  function aplicarRegistro_(r){
+    limpiarPanel_();
+
+    if(!r) return;
+
+    const evaluacion = parseEvaluacion_(r.evaluacion_clinica);
+
+    setValor_(CAMPOS.area, texto_(r.zona_tratamiento) || 'Facial');
+    setValor_(CAMPOS.procedimiento, r.procedimiento_sugerido || '');
+    setValor_(CAMPOS.sesion, r.plan_sesiones || '');
+    setValor_(CAMPOS.consentimiento, evaluacion.consentimiento || 'Pendiente');
+    setValor_(CAMPOS.facial, evaluacion.facial || '');
+    setValor_(CAMPOS.corporal, evaluacion.corporal || '');
+    setValor_(CAMPOS.intima, evaluacion.intima || '');
+    setValor_(CAMPOS.evolucion, evaluacion.evolucion || '');
+  }
+
+  function listaRespuesta_(json){
+    if(Array.isArray(json)) return json;
+    if(Array.isArray(json?.data)) return json.data;
+    if(Array.isArray(json?.resultado)) return json.resultado;
+    return [];
+  }
+
+  async function listar_(){
+    const url = API_URL +
+      '?accion=listarEstetica&_=' + Date.now();
+
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) throw new Error('No se pudo consultar Estética.');
+
+    const json = await r.json();
+    return listaRespuesta_(json);
+  }
+
+  function tiempoRegistro_(r){
+    const raw =
+      r?.actualizado_en ||
+      r?.creado_en ||
+      r?.fecha_atencion ||
+      '';
+    const t = raw ? new Date(raw).getTime() : 0;
+    return isNaN(t) ? 0 : t;
+  }
+
+  function resolverRegistro_(lista, ctx){
+    let candidatos = (lista || []).filter(r =>
+      texto_(r.id_historia) === texto_(ctx.id_historia) &&
+      texto_(r.id_paciente) === texto_(ctx.id_paciente)
+    );
+
+    if(!candidatos.length) return null;
+
+    /*
+      La tabla actual no posee id_atencion.
+      Para NO mezclar consultas distintas, cuando existe fecha de atención
+      solo se admite un registro de esa misma fecha. Nunca se reutiliza
+      silenciosamente un registro de otra fecha.
+    */
+    const fechaCtx = fechaClave_(ctx.fecha_atencion);
+    if(fechaCtx){
+      candidatos = candidatos.filter(r =>
+        fechaClave_(r.fecha_atencion) === fechaCtx
+      );
+      if(!candidatos.length) return null;
+    }
+
+    candidatos.sort((a,b) => tiempoRegistro_(b) - tiempoRegistro_(a));
+    return candidatos[0] || null;
+  }
+
+  function capturarBaseline_(r, ctx){
+    estado.id_estetica = texto_(r?.id_estetica || '');
+    estado.id_historia = texto_(ctx?.id_historia || '');
+    estado.id_paciente = texto_(ctx?.id_paciente || '');
+    estado.id_atencion = texto_(ctx?.id_atencion || '');
+    estado.fecha_atencion = texto_(ctx?.fecha_atencion || '');
+    estado.registro = r || null;
+    estado.firma_baseline = firma_(estadoPanel_());
+    estado.dirty = false;
+    estado.cargado = true;
+  }
+
+  function contextoCoincide_(ctx){
+    return (
+      estado.cargado === true &&
+      texto_(estado.id_historia) === texto_(ctx.id_historia) &&
+      texto_(estado.id_paciente) === texto_(ctx.id_paciente) &&
+      texto_(estado.id_atencion) === texto_(ctx.id_atencion)
+    );
+  }
+
+  async function cargarContextoActual_(){
+    if(estado.loading) return estado.registro;
+
+    const ctx = contexto_();
+
+    if(!ctx.id_historia || !ctx.id_paciente){
+      limpiarPanel_();
+      capturarBaseline_(null, ctx);
+      return null;
+    }
+
+    estado.loading = true;
+
+    try{
+      const lista = await listar_();
+      const registro = resolverRegistro_(lista, ctx);
+      aplicarRegistro_(registro);
+      capturarBaseline_(registro, ctx);
+      return registro;
+    }catch(error){
+      console.warn(
+        'AUROSANAX ESTÉTICA: no se pudo cargar estetica_funcional.',
+        error
+      );
+      return estado.registro;
+    }finally{
+      estado.loading = false;
+    }
+  }
+
+  function payload_(ctx){
+    const p = estadoPanel_();
+
+    const evaluacion = PREFIJO + JSON.stringify({
+      consentimiento:p.consentimiento,
+      facial:p.facial,
+      corporal:p.corporal,
+      intima:p.intima,
+      evolucion:p.evolucion
+    });
+
+    return {
+      id_estetica:estado.id_estetica || undefined,
+      id_historia:ctx.id_historia,
+      id_paciente:ctx.id_paciente,
+      id_medico:ctx.id_medico,
+      fecha_atencion:fechaClave_(ctx.fecha_atencion) || ahoraFecha_(),
+      zona_tratamiento:p.area,
+      evaluacion_clinica:evaluacion,
+      procedimiento_sugerido:p.procedimiento,
+      plan_sesiones:p.sesion,
+      estado:'Activo'
+    };
+  }
+
+  function cambioReal_(ctx){
+    if(!contextoCoincide_(ctx)) return true;
+    return firma_(estadoPanel_()) !== estado.firma_baseline;
+  }
+
+  function mostrarSinCambios_(ctx){
+    const atn = typeof auroHistoriaAtencionResumen === 'function'
+      ? auroHistoriaAtencionResumen()
+      : {consulta:'activa'};
+
+    if(typeof auroHistoriaMostrarEstado === 'function'){
+      auroHistoriaMostrarEstado(
+        'Estética · Consulta ' + (atn?.consulta || 'activa') +
+        ' · Sin cambios reales. No se realizó ninguna escritura.',
+        'ok'
+      );
+    }
+
+    console.log(
+      'AUROSANAX ESTÉTICA: guardado omitido por ausencia de cambios reales.'
+    );
+  }
+
+  async function guardar_(){
+    const ctx = contexto_();
+
+    if(!ctx.id_historia || !ctx.id_paciente){
+      alert('Seleccione una historia clínica válida antes de guardar Estética.');
+      return {success:false, message:'Contexto de historia inválido.'};
+    }
+
+    if(!ctx.id_atencion){
+      alert('Seleccione una consulta activa antes de guardar Estética.');
+      return {success:false, message:'Sin consulta activa.'};
+    }
+
+    if(!contextoCoincide_(ctx)){
+      await cargarContextoActual_();
+    }
+
+    /*
+      Barrera principal:
+      - no hubo interacción real, o
+      - el usuario cambió y luego volvió exactamente al baseline.
+      En ambos casos NO existe POST.
+    */
+    if(!estado.dirty || !cambioReal_(ctx)){
+      estado.dirty = false;
+      mostrarSinCambios_(ctx);
+
+      if(typeof auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+        await auroHistoriaRefrescarEstadoConsultaActiva('hc_estetica');
+      }
+
+      return {
+        success:true,
+        sin_cambios:true,
+        id_estetica:estado.id_estetica || '',
+        message:'Estética sin cambios. No se realizó ninguna escritura.'
+      };
+    }
+
+    const payload = payload_(ctx);
+    const esEdicion = !!texto_(estado.id_estetica);
+    const accion = esEdicion ? 'editarEstetica' : 'guardarEstetica';
+
+    if(typeof auroHistoriaMostrarEstado === 'function'){
+      const atn = auroHistoriaAtencionResumen();
+      auroHistoriaMostrarEstado(
+        'Guardando Estética · Consulta ' +
+        (atn?.consulta || 'activa') + '…',
+        'saving'
+      );
+    }
+
+    const r = await fetch(API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({
+        accion:accion,
+        data:payload
+      })
+    });
+
+    if(!r.ok){
+      throw new Error('No se pudo guardar Estética.');
+    }
+
+    const json = await r.json();
+    if(json && json.success === false){
+      throw new Error(json.message || 'No se pudo guardar Estética.');
+    }
+
+    /*
+      Se vuelve a leer la fuente real para obtener id_estetica y
+      actualizado_en persistidos. No se inventa una hora visual.
+    */
+    await cargarContextoActual_();
+
+    if(typeof auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+      await auroHistoriaRefrescarEstadoConsultaActiva('hc_estetica');
+    }
+
+    return json;
+  }
+
+  async function estadoReal_(idAtencion){
+    const ctx = contexto_();
+
+    if(texto_(idAtencion) !== texto_(ctx.id_atencion)){
+      return {existe:false, fecha:'', fuente:'estetica_contexto_distinto'};
+    }
+
+    if(!contextoCoincide_(ctx)){
+      await cargarContextoActual_();
+    }
+
+    const r = estado.registro;
+    if(!r || !texto_(r.id_estetica)){
+      return {
+        existe:false,
+        fecha:'',
+        fuente:'estetica_funcional'
+      };
+    }
+
+    return {
+      existe:true,
+      fecha:texto_(r.actualizado_en || r.creado_en || r.fecha_atencion || ''),
+      fuente:'estetica_funcional'
+    };
+  }
+
+  function instalarDirty_(){
+    const panel = document.getElementById('hc_estetica');
+    if(!panel || panel.dataset.auroEsteticaDirtyV1 === '1') return;
+
+    panel.dataset.auroEsteticaDirtyV1 = '1';
+
+    const marcar = function(ev){
+      if(!ev || ev.isTrusted !== true) return;
+      estado.dirty = true;
+    };
+
+    panel.addEventListener('input', marcar, true);
+    panel.addEventListener('change', marcar, true);
+  }
+
+  window.auroEsteticaCargarContextoActual = cargarContextoActual_;
+  window.auroGuardarEsteticaFuncionalERP = guardar_;
+  window.auroEsteticaEstadoRealActual = estadoReal_;
+  window.auroEsteticaDebugV1 = function(){
+    const ctx = contexto_();
+    return {
+      instalado:true,
+      id_estetica:estado.id_estetica,
+      id_historia:estado.id_historia,
+      id_paciente:estado.id_paciente,
+      id_atencion:estado.id_atencion,
+      cargado:estado.cargado,
+      dirty:estado.dirty,
+      contexto_coincide:contextoCoincide_(ctx),
+      cambio_real:cambioReal_(ctx),
+      tiene_registro:!!estado.registro,
+      actualizado_en:estado.registro?.actualizado_en || ''
+    };
+  };
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', instalarDirty_, {once:true});
+  }else{
+    instalarDirty_();
+  }
+
+  document.getElementById('hcPacienteSelect')?.addEventListener('change', function(){
+    estado.id_estetica = '';
+    estado.registro = null;
+    estado.cargado = false;
+    estado.dirty = false;
+    estado.firma_baseline = '';
+  });
+
+  console.log(
+    'AUROSANAX INDEX: ESTÉTICA FUNCIONAL INDEPENDIENTE V1 instalada.'
+  );
+})();
+
 async function guardarHistoriaClinicaERP(){
   const select = document.getElementById('hcPacienteSelect');
   const idPaciente = select?.value || '';
@@ -7782,6 +8331,26 @@ async function guardarHistoriaClinicaERP(){
   ){
     console.log(
       'AUROSANAX INDEX: omitida escritura global de historias_clinicas desde Examen físico.'
+    );
+    return;
+  }
+
+  /*
+    AUROSANAX - BARRERA QUIRÚRGICA ESTÉTICA
+    Estética usa su propia tabla estetica_funcional.
+    Nunca reescribe historias_clinicas cuando la historia ya existe.
+  */
+  if(
+    editingHistoryId &&
+    moduloGuardadoUXInicial === 'hc_estetica'
+  ){
+    if(typeof window.auroGuardarEsteticaFuncionalERP === 'function'){
+      return await window.auroGuardarEsteticaFuncionalERP();
+    }
+
+    console.warn(
+      'AUROSANAX ESTÉTICA: módulo independiente no disponible; ' +
+      'se bloqueó la escritura global para proteger historias_clinicas.'
     );
     return;
   }
