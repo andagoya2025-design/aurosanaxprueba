@@ -4116,6 +4116,58 @@ console.log('AUROSANAX examenfisico.js cargado correctamente');
             error
           );
         }
+
+        /*
+          AUROSANAX - REFRESCO VISUAL QUIRÚRGICO V2
+          ------------------------------------------------------------
+          Solo después de un guardado REAL confirmado:
+          1) relee el mismo examen por id_atencion para hidratar en memoria
+             el actualizado_en persistido por Apps Script;
+          2) refresca exclusivamente la etiqueta visual inferior de hc_examen.
+
+          No realiza POST adicional, no modifica datos clínicos y no toca
+          Antecedentes, Estética ni historias_clinicas.
+        */
+        if(resultado.sin_cambios !== true){
+          try{
+            const idAtencionRefresco = texto_(ESTADO.id_atencion);
+
+            if(
+              idAtencionRefresco &&
+              typeof window.auroBuscarExamenFisicoPorAtencion === 'function'
+            ){
+              await window.auroBuscarExamenFisicoPorAtencion(idAtencionRefresco);
+            }
+
+            const panelExamen = document.getElementById('hc_examen');
+            const examenActivo = !!panelExamen?.classList?.contains('active');
+
+            let atencionActual = '';
+            try{
+              if(typeof window.getIdAtencionActiva === 'function'){
+                atencionActual = texto_(window.getIdAtencionActiva());
+              }
+            }catch(e){}
+
+            if(
+              examenActivo &&
+              (!atencionActual || atencionActual === idAtencionRefresco) &&
+              typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'
+            ){
+              await window.auroHistoriaRefrescarEstadoConsultaActiva('hc_examen');
+            }
+          }catch(error){
+            /*
+              Fallo exclusivamente visual:
+              el guardado clínico ya fue confirmado, por lo tanto nunca
+              se altera su resultado ni se reintenta la escritura.
+            */
+            console.warn(
+              'AUROSANAX EXAMEN V2: guardado correcto; no se pudo refrescar la hora visual.',
+              error
+            );
+          }
+        }
       }
 
       return resultado;
