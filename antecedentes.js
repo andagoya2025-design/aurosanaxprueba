@@ -5251,7 +5251,7 @@ function recopilarAntecedentesPersonalesCompletos(){
   }
 
   function limpiarCajaAntecedentesPrevios_(){
-    const caja = document.getElementById('auroAntecedentesPreviosBox');
+    const caja = document.getElementById('hcAntecedentesPreviosBox');
     if(!caja) return;
 
     /*
@@ -5396,57 +5396,126 @@ function recopilarAntecedentesPersonalesCompletos(){
     'AUROSANAX antecedentes.js: AISLAMIENTO DE ANTECEDENTES ENTRE PACIENTES V1 cargado.'
   );
 })();
-
 /* ============================================================
-   AUROSANAX - ANTECEDENTES SIN CAMBIOS REALES V1
-   Corrección quirúrgica localizada en antecedentes.js
+   AUROSANAX - ANTECEDENTES: BARRERA SIN CAMBIOS REALES V2
+   Base: antecedentes estable entregado por el usuario.
    ------------------------------------------------------------
-   OBJETIVO:
-   Evitar que la simple normalización/reconstrucción de los JSON
-   de Antecedentes se interprete como una modificación clínica.
+   OBJETIVO EXCLUSIVO:
+   Evitar escrituras de antecedentes cuando el usuario abre una
+   historia y pulsa Guardar/Actualizar sin modificar datos clínicos.
 
-   PRINCIPIO:
-   - Al cargar una historia en edición se guarda una línea base:
-     1) valor RAW exacto proveniente de historias_clinicas;
-     2) representación que los recopiladores actuales producen
-        inmediatamente después de cargar esa misma historia.
-   - Al guardar:
-     * si los controles siguen produciendo exactamente la misma
-       representación de la línea base, se devuelve el RAW original;
-     * si existe un cambio real del usuario, se devuelve el valor nuevo.
-
-   ALCANCE:
+   CAMPOS PROTEGIDOS:
    - antecedentes_personales
+   - antecedentes_quirurgicos
    - antecedentes_gineco_obstetricos
    - antecedentes_familiares
+   - medicacion_actual
+   - alergias
 
-   NO TOCA:
-   - Index
-   - Apps Script
-   - guardarHistoriaClinicaERP()
-   - fechas / actualizado_en
-   - botones rápidos
-   - segundo clic / snapshots
-   - aislamiento por paciente
-   - PAP / Colposcopia / Biopsia repetibles
-   - Anamnesis / Examen físico / Diagnóstico / Plan / Obstetricia
+   PRINCIPIO:
+   1. Después de cargar la historia se conserva:
+      a) el valor RAW exacto leído de historias_clinicas;
+      b) el valor que este mismo módulo reconstruye tras la carga.
+   2. Al guardar:
+      - si el valor enviado sigue siendo equivalente al reconstruido
+        tras la carga, NO hubo cambio del usuario y se restaura el RAW;
+      - si existe una modificación real, se conserva el valor nuevo.
+   3. El Index puede entonces reconocer que los seis campos siguen
+      iguales y omitir el POST, evitando mover actualizado_en.
+
+   NO MODIFICA:
+   - botones rápidos / estados morados / snapshots;
+   - familiares;
+   - PAP / Colposcopia / Biopsia repetibles;
+   - aislamiento entre pacientes;
+   - diseño desktop/móvil;
+   - Index;
+   - Apps Script;
+   - otros módulos.
    ============================================================ */
 (function(){
   'use strict';
 
-  const ESTADO = {
-    idHistoria:'',
-    idPaciente:'',
-    personales:null,
-    gineco:null,
-    familiares:null
+  const CAMPOS = [
+    'antecedentes_personales',
+    'antecedentes_quirurgicos',
+    'antecedentes_gineco_obstetricos',
+    'antecedentes_familiares',
+    'medicacion_actual',
+    'alergias'
+  ];
+
+  const BASELINE = {
+    id_historia:'',
+    id_paciente:'',
+    raw:null,
+    reconstruido:null
   };
 
   function texto_(valor){
     return String(valor === null || valor === undefined ? '' : valor);
   }
 
-  function idHistoriaEdicionActual_(){
+  function canonico_(valor){
+    if(valor === null || valor === undefined) return '';
+
+    if(typeof valor === 'number' || typeof valor === 'boolean'){
+      return String(valor);
+    }
+
+    if(Array.isArray(valor)){
+      return '[' + valor.map(canonico_).join(',') + ']';
+    }
+
+    if(valor && typeof valor === 'object'){
+      return '{' + Object.keys(valor)
+        .sort()
+        .map(function(k){
+          return JSON.stringify(k) + ':' + canonico_(valor[k]);
+        })
+        .join(',') + '}';
+    }
+
+    const raw = texto_(valor)
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .trim();
+
+    if(!raw) return '';
+
+    /*
+      Los antecedentes estructurados usan marcadores del tipo:
+      AUROSANAX_..._V1::{...}
+      Se conserva el prefijo y solo se canoniza el JSON interno.
+    */
+    const separador = raw.indexOf('::');
+    if(separador > 0){
+      const prefijo = raw.slice(0, separador + 2);
+      const contenido = raw.slice(separador + 2).trim();
+
+      if(
+        (contenido.startsWith('{') && contenido.endsWith('}')) ||
+        (contenido.startsWith('[') && contenido.endsWith(']'))
+      ){
+        try{
+          return prefijo + canonico_(JSON.parse(contenido));
+        }catch(_error){}
+      }
+    }
+
+    if(
+      (raw.startsWith('{') && raw.endsWith('}')) ||
+      (raw.startsWith('[') && raw.endsWith(']'))
+    ){
+      try{
+        return canonico_(JSON.parse(raw));
+      }catch(_error){}
+    }
+
+    return raw;
+  }
+
+  function idHistoriaEdicion_(){
     try{
       if(typeof editingHistoryId !== 'undefined'){
         return texto_(editingHistoryId).trim();
@@ -5455,10 +5524,10 @@ function recopilarAntecedentesPersonalesCompletos(){
     return texto_(window.editingHistoryId).trim();
   }
 
-  function idPacienteActivoActual_(){
-    const selector = document.getElementById('hcPacienteSelect');
-    const desdeSelector = texto_(selector?.value).trim();
-    if(desdeSelector) return desdeSelector;
+  function idPacienteActivo_(){
+    const select = document.getElementById('hcPacienteSelect');
+    const idSelect = texto_(select?.value).trim();
+    if(idSelect) return idSelect;
 
     try{
       if(typeof activePatientId !== 'undefined'){
@@ -5469,138 +5538,142 @@ function recopilarAntecedentesPersonalesCompletos(){
     return texto_(window.activePatientId).trim();
   }
 
-  function canonicoObjeto_(valor){
-    if(Array.isArray(valor)){
-      return '[' + valor.map(canonicoObjeto_).join(',') + ']';
+  function recolectarEstadoActual_(){
+    const estado = {
+      antecedentes_personales:'',
+      antecedentes_quirurgicos:'',
+      antecedentes_gineco_obstetricos:'',
+      antecedentes_familiares:'',
+      medicacion_actual:'',
+      alergias:''
+    };
+
+    try{
+      estado.antecedentes_personales =
+        typeof recopilarAntecedentesPersonalesCompletos === 'function'
+          ? recopilarAntecedentesPersonalesCompletos()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAntecedentesPersonales')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar personales.', error);
     }
 
-    if(valor && typeof valor === 'object'){
-      return '{' + Object.keys(valor)
-        .sort()
-        .map(k => JSON.stringify(k) + ':' + canonicoObjeto_(valor[k]))
-        .join(',') + '}';
+    try{
+      estado.antecedentes_quirurgicos =
+        typeof recopilarAntecedentesQuirurgicosEstructurados === 'function'
+          ? recopilarAntecedentesQuirurgicosEstructurados()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAntecedentesQuirurgicos')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar quirúrgicos.', error);
     }
 
-    return JSON.stringify(valor);
+    try{
+      estado.antecedentes_gineco_obstetricos =
+        typeof recopilarAntecedentesGinecoObstetricosCompletos === 'function'
+          ? recopilarAntecedentesGinecoObstetricosCompletos()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcRevisionSistemas')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar gineco-obstétricos.', error);
+    }
+
+    try{
+      estado.antecedentes_familiares =
+        typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'
+          ? window.recopilarAntecedentesFamiliaresEstructurados()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAntecedentesFamiliares')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar familiares.', error);
+    }
+
+    try{
+      estado.medicacion_actual =
+        typeof getValueIfExists === 'function'
+          ? getValueIfExists('hcMedicacionActual')
+          : texto_(document.getElementById('hcMedicacionActual')?.value);
+    }catch(_error){}
+
+    try{
+      estado.alergias =
+        typeof recopilarAlergiasEstructuradas === 'function'
+          ? recopilarAlergiasEstructuradas()
+          : (typeof getValueIfExists === 'function'
+              ? getValueIfExists('hcAlergias')
+              : '');
+    }catch(error){
+      console.warn('AUROSANAX Antecedentes: no se pudo capturar alergias.', error);
+    }
+
+    return estado;
   }
 
-  function canonico_(valor){
-    const raw = texto_(valor).trim();
-    if(!raw) return '';
-
-    const pos = raw.indexOf('::');
-    if(pos > 0){
-      const prefijo = raw.slice(0, pos + 2);
-      const cuerpo = raw.slice(pos + 2).trim();
-
-      if(
-        (cuerpo.startsWith('{') && cuerpo.endsWith('}')) ||
-        (cuerpo.startsWith('[') && cuerpo.endsWith(']'))
-      ){
-        try{
-          return prefijo + canonicoObjeto_(JSON.parse(cuerpo));
-        }catch(_error){}
-      }
-    }
-
-    if(
-      (raw.startsWith('{') && raw.endsWith('}')) ||
-      (raw.startsWith('[') && raw.endsWith(']'))
-    ){
-      try{
-        return canonicoObjeto_(JSON.parse(raw));
-      }catch(_error){}
-    }
-
-    return raw.replace(/\s+/g, ' ').trim();
+  function limpiarBaseline_(){
+    BASELINE.id_historia = '';
+    BASELINE.id_paciente = '';
+    BASELINE.raw = null;
+    BASELINE.reconstruido = null;
   }
 
-  const personalesOriginal =
-    typeof window.recopilarAntecedentesPersonalesCompletos === 'function'
-      ? window.recopilarAntecedentesPersonalesCompletos
-      : null;
-
-  const ginecoOriginal =
-    typeof window.recopilarAntecedentesGinecoObstetricosCompletos === 'function'
-      ? window.recopilarAntecedentesGinecoObstetricosCompletos
-      : null;
-
-  const familiaresOriginal =
-    typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'
-      ? window.recopilarAntecedentesFamiliaresEstructurados
-      : null;
-
-  function esHistoriaEdicionActual_(h){
-    const idHistoria = texto_(h?.id_historia || h?.id).trim();
-    const idEdicion = idHistoriaEdicionActual_();
-
-    if(!idHistoria || !idEdicion) return false;
-    return idHistoria === idEdicion;
-  }
-
-  function capturarLineaBase_(h){
-    if(!h || !esHistoriaEdicionActual_(h)) return;
+  function capturarBaseline_(h){
+    if(!h) return false;
 
     const idHistoria = texto_(h.id_historia || h.id).trim();
-    const idPaciente = texto_(h.id_paciente).trim();
+    const idEdicion = idHistoriaEdicion_();
 
-    let personalesActual = '';
-    let ginecoActual = '';
-    let familiaresActual = '';
-
-    try{
-      personalesActual = personalesOriginal ? personalesOriginal() : '';
-    }catch(error){
-      console.warn('AUROSANAX Antecedentes: no se pudo capturar línea base personales.', error);
+    /*
+      Solo se arma línea base cuando realmente estamos editando
+      la misma historia que acaba de cargarse.
+    */
+    if(!idHistoria || !idEdicion || idHistoria !== idEdicion){
+      return false;
     }
 
-    try{
-      ginecoActual = ginecoOriginal ? ginecoOriginal() : '';
-    }catch(error){
-      console.warn('AUROSANAX Antecedentes: no se pudo capturar línea base gineco-obstétrica.', error);
-    }
+    BASELINE.id_historia = idHistoria;
+    BASELINE.id_paciente = texto_(h.id_paciente).trim();
 
-    try{
-      familiaresActual = familiaresOriginal ? familiaresOriginal() : '';
-    }catch(error){
-      console.warn('AUROSANAX Antecedentes: no se pudo capturar línea base familiares.', error);
-    }
+    BASELINE.raw = {};
+    CAMPOS.forEach(function(campo){
+      BASELINE.raw[campo] = texto_(h[campo]);
+    });
 
-    ESTADO.idHistoria = idHistoria;
-    ESTADO.idPaciente = idPaciente;
+    /*
+      Importante: se toma DESPUÉS de que el archivo estable terminó
+      de cargar todos los controles. Así las normalizaciones propias
+      del módulo forman parte de la referencia y no cuentan como
+      cambios hechos por el usuario.
+    */
+    BASELINE.reconstruido = recolectarEstadoActual_();
 
-    ESTADO.personales = {
-      raw:texto_(h.antecedentes_personales),
-      canonico:canonico_(personalesActual)
-    };
-
-    ESTADO.gineco = {
-      raw:texto_(h.antecedentes_gineco_obstetricos),
-      canonico:canonico_(ginecoActual)
-    };
-
-    ESTADO.familiares = {
-      raw:texto_(h.antecedentes_familiares),
-      canonico:canonico_(familiaresActual)
-    };
-
-    const panel = document.getElementById('hc_antecedentes');
-    if(panel){
-      panel.dataset.auroAntecedentesBaselineHistoria = idHistoria;
-      panel.dataset.auroAntecedentesBaselinePaciente = idPaciente;
-    }
+    return true;
   }
 
-  function puedeUsarLineaBase_(){
-    const idEdicion = idHistoriaEdicionActual_();
-    if(!idEdicion || idEdicion !== ESTADO.idHistoria) return false;
+  function baselineValido_(h){
+    if(!h || !BASELINE.raw || !BASELINE.reconstruido) return false;
 
-    const idPacienteActual = idPacienteActivoActual_();
+    const idHistoria = texto_(h.id_historia || h.id).trim();
+    const idPacienteHistoria = texto_(h.id_paciente).trim();
+    const idPacienteActivo = idPacienteActivo_();
+
+    if(!idHistoria || idHistoria !== BASELINE.id_historia) return false;
 
     if(
-      ESTADO.idPaciente &&
-      idPacienteActual &&
-      ESTADO.idPaciente !== idPacienteActual
+      BASELINE.id_paciente &&
+      idPacienteHistoria &&
+      BASELINE.id_paciente !== idPacienteHistoria
+    ){
+      return false;
+    }
+
+    if(
+      BASELINE.id_paciente &&
+      idPacienteActivo &&
+      BASELINE.id_paciente !== idPacienteActivo
     ){
       return false;
     }
@@ -5608,86 +5681,106 @@ function recopilarAntecedentesPersonalesCompletos(){
     return true;
   }
 
-  function preservarRawSiSinCambios_(actual, baseline){
-    if(!baseline || !puedeUsarLineaBase_()) return actual;
+  /*
+    Conservamos la protección estable que ya existía y añadimos
+    únicamente la barrera de igualdad contra la línea base.
+  */
+  const proteccionAnterior =
+    typeof window.auroAplicarProteccionAntecedentesEdicion === 'function'
+      ? window.auroAplicarProteccionAntecedentesEdicion
+      : null;
 
-    if(canonico_(actual) === baseline.canonico){
-      return baseline.raw;
+  window.auroAplicarProteccionAntecedentesEdicion = function(data){
+    let salida = data || {};
+
+    if(proteccionAnterior){
+      salida = proteccionAnterior.call(this, salida) || salida;
     }
 
-    return actual;
-  }
+    let h = null;
+    try{
+      h = typeof auroHistoriaActualEdicion === 'function'
+        ? auroHistoriaActualEdicion()
+        : null;
+    }catch(_error){}
 
-  if(personalesOriginal){
-    window.recopilarAntecedentesPersonalesCompletos = function(){
-      const actual = personalesOriginal.apply(this, arguments);
-      return preservarRawSiSinCambios_(actual, ESTADO.personales);
-    };
-  }
+    if(!h || !baselineValido_(h)){
+      return salida;
+    }
 
-  if(ginecoOriginal){
-    window.recopilarAntecedentesGinecoObstetricosCompletos = function(){
-      const actual = ginecoOriginal.apply(this, arguments);
-      return preservarRawSiSinCambios_(actual, ESTADO.gineco);
-    };
-  }
+    CAMPOS.forEach(function(campo){
+      /*
+        Comparamos contra lo que el propio módulo reconstruyó al cargar.
+        Si sigue igual, el usuario no modificó ese campo.
+        Se devuelve el RAW exacto para que el comparador del Index vea
+        igualdad real con historias_clinicas y corte el POST.
+      */
+      if(
+        canonico_(salida[campo]) ===
+        canonico_(BASELINE.reconstruido[campo])
+      ){
+        salida[campo] = BASELINE.raw[campo];
+      }
+    });
 
-  if(familiaresOriginal){
-    window.recopilarAntecedentesFamiliaresEstructurados = function(){
-      const actual = familiaresOriginal.apply(this, arguments);
-      return preservarRawSiSinCambios_(actual, ESTADO.familiares);
-    };
-  }
+    return salida;
+  };
 
-  if(typeof window.auroCargarAntecedentesDesdeHistoria === 'function'){
-    const cargarOriginal = window.auroCargarAntecedentesDesdeHistoria;
+  /*
+    Captura FINAL: este wrapper se instala al final del archivo estable,
+    después de familiares, repetibles y aislamiento. Por ello observa
+    el estado ya reconstruido por toda la cadena estable.
+  */
+  if(
+    typeof window.auroCargarAntecedentesDesdeHistoria === 'function' &&
+    window.auroCargarAntecedentesDesdeHistoria.__auroSinCambiosRealesV2 !== true
+  ){
+    const cargarAnterior = window.auroCargarAntecedentesDesdeHistoria;
 
-    window.auroCargarAntecedentesDesdeHistoria = function(h, modo){
-      const resultado = cargarOriginal.apply(this, arguments);
+    const cargarConBaseline = function(h, modo){
+      const resultado = cargarAnterior.apply(this, arguments);
 
-      if(esHistoriaEdicionActual_(h)){
-        capturarLineaBase_(h);
+      try{
+        capturarBaseline_(h);
+      }catch(error){
+        console.warn(
+          'AUROSANAX Antecedentes: no se pudo capturar línea base de edición.',
+          error
+        );
       }
 
       return resultado;
     };
+
+    cargarConBaseline.__auroSinCambiosRealesV2 = true;
+    window.auroCargarAntecedentesDesdeHistoria = cargarConBaseline;
   }
 
-  const selector = document.getElementById('hcPacienteSelect');
-  if(selector){
-    selector.addEventListener('change', function(){
-      const nuevo = texto_(selector.value).trim();
-      if(ESTADO.idPaciente && nuevo && nuevo !== ESTADO.idPaciente){
-        ESTADO.idHistoria = '';
-        ESTADO.idPaciente = '';
-        ESTADO.personales = null;
-        ESTADO.gineco = null;
-        ESTADO.familiares = null;
-      }
-    }, true);
+  /*
+    Al cambiar realmente de paciente invalidamos la línea base anterior.
+    No limpiamos controles aquí; eso sigue siendo responsabilidad del
+    aislamiento estable ya existente.
+  */
+  const selectorPaciente = document.getElementById('hcPacienteSelect');
+  if(
+    selectorPaciente &&
+    selectorPaciente.dataset.auroBaselineAntecedentesV2 !== '1'
+  ){
+    selectorPaciente.dataset.auroBaselineAntecedentesV2 = '1';
+    selectorPaciente.addEventListener('change', limpiarBaseline_, true);
   }
 
-  window.auroAntecedentesDiagnosticoLineaBase = function(){
+  window.auroAntecedentesDebugSinCambiosV2 = function(){
     return {
-      id_historia:ESTADO.idHistoria,
-      id_paciente:ESTADO.idPaciente,
-      personales:ESTADO.personales ? {
-        raw:ESTADO.personales.raw,
-        canonico:ESTADO.personales.canonico
-      } : null,
-      gineco:ESTADO.gineco ? {
-        raw:ESTADO.gineco.raw,
-        canonico:ESTADO.gineco.canonico
-      } : null,
-      familiares:ESTADO.familiares ? {
-        raw:ESTADO.familiares.raw,
-        canonico:ESTADO.familiares.canonico
-      } : null
+      id_historia:BASELINE.id_historia,
+      id_paciente:BASELINE.id_paciente,
+      baseline_disponible:!!(BASELINE.raw && BASELINE.reconstruido),
+      raw:BASELINE.raw,
+      reconstruido:BASELINE.reconstruido
     };
   };
 
   console.log(
-    'AUROSANAX antecedentes.js: barrera propia de SIN CAMBIOS REALES V1 cargada.'
+    'AUROSANAX antecedentes.js: BARRERA SIN CAMBIOS REALES V2 instalada.'
   );
 })();
-
