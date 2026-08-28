@@ -7753,6 +7753,26 @@ async function guardarHistoriaClinicaERP(){
   const atencionUX = auroHistoriaAtencionResumen();
   const moduloGuardadoUXInicial = auroHistoriaModuloActivo();
 
+  /*
+    AUROSANAX - BARRERA QUIRÚRGICA EXAMEN FÍSICO
+    ----------------------------------------------------------
+    Examen físico persiste de forma independiente por id_atencion.
+    Si la historia YA existe y el módulo activo es hc_examen,
+    este guardado global NO debe reescribir historias_clinicas.
+
+    El guardado propio de examenfisico.js continúa funcionando
+    exactamente como antes. Historia nueva NO queda bloqueada.
+  */
+  if(
+    editingHistoryId &&
+    moduloGuardadoUXInicial === 'hc_examen'
+  ){
+    console.log(
+      'AUROSANAX INDEX: omitida escritura global de historias_clinicas desde Examen físico.'
+    );
+    return;
+  }
+
   const unirLinea = arr => arr.filter(Boolean).join(' | ');
 
   const examenFisico = auroConstruirExamenFisicoCompleto();
