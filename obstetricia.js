@@ -9,8 +9,9 @@
 'use strict';
 const MODULO='AUROSANAX_OBSTETRICIA_V1';
 const STORAGE_KEY='aurosanax_obstetricia_local_v1';
-const VERSION='20260829_obstetricia_v1_0_3_aislamiento_sintomas_anamnesis';
+const VERSION='20260830_obstetricia_v1_0_4_noop_cambios_reales_refresco_tarjeta';
 let registroActual=null,cargando=false,guardando=false,ultimoIdAtencion='',contextoSeleccionado=null,cargaAntecedentesSeq=0;
+let cambiosUsuarioObstetricia=false,firmaBaseObstetricia='';
 const $=id=>document.getElementById(id), txt=v=>String(v??'').trim(), now=()=>new Date().toISOString();
 function fechaHoy(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function horaActual(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`}
@@ -665,10 +666,141 @@ function actualizarEstado(){
 function embarazo(){return{embarazo_multiple:getValue('obsTipoEmbarazo')==='Múltiple',tipo_embarazo:getValue('obsTipoEmbarazo'),numero_fetos:getValue('obsNumeroFetos'),situacion_fetal:getValue('obsSituacionFetal'),presentacion_fetal:getValue('obsPresentacionFetal'),posicion_fetal:getValue('obsPosicionFetal')}}
 function sintomas(){if(!obsTieneControlesSintomasPropios())return parseJSON(registroActual?.sintomas_obstetricos_json,{});return{sangrado_vaginal:obsGetValue('obsSintSangrado'),perdida_liquido:obsGetValue('obsSintPerdidaLiquido'),dolor_pelvico:obsGetValue('obsSintDolorPelvico'),contracciones:obsGetValue('obsSintContracciones'),cefalea:obsGetValue('obsSintCefalea'),fosfenos:obsGetValue('obsSintFosfenos'),tinnitus:obsGetValue('obsSintTinnitus'),epigastralgia:obsGetValue('obsSintEpigastralgia'),disuria:obsGetValue('obsSintDisuria'),otros:obsGetValue('obsSintOtros'),descripcion:obsGetValue('obsSintDescripcion')}}
 function evaluacion(){return{movimientos_fetales:getValue('obsMovimientosFetales'),actividad_uterina:getValue('obsActividadUterina'),edema:getValue('obsEdema'),estado_membranas:getValue('obsEstadoMembranas'),hallazgos_relevantes:getValue('obsHallazgos')}}
+
+/* ============================================================
+   AUROSANAX OBSTETRICIA v1.0.4
+   GUARDADO SOLO ANTE CAMBIO CLÍNICO REAL
+   ------------------------------------------------------------
+   - La carga/limpieza fija una firma base del formulario.
+   - Solo input/change real del usuario marca edición.
+   - Si se cambia y luego se vuelve al valor original: NO POST.
+   - La firma excluye ids, timestamps y contexto automático.
+   - No toca Anamnesis, Antecedentes ni otros módulos.
+============================================================ */
+function auroOrdenarValorObstetricia(valor){
+  if(Array.isArray(valor))return valor.map(auroOrdenarValorObstetricia);
+  if(valor&&typeof valor==='object'){
+    return Object.keys(valor).sort().reduce((salida,clave)=>{
+      salida[clave]=auroOrdenarValorObstetricia(valor[clave]);
+      return salida
+    },{})
+  }
+  return valor
+}
+function auroFirmaFormularioObstetricia(){
+  return JSON.stringify(auroOrdenarValorObstetricia({
+    tipo_atencion:getValue('obsTipoAtencion'),
+    fum:getValue('obsFum'),
+    fpp:getValue('obsFpp'),
+    edad_gestacional_semanas:getValue('obsEgSemanas'),
+    edad_gestacional_dias:getValue('obsEgDias'),
+    altura_uterina:getValue('obsAlturaUterina'),
+    frecuencia_cardiaca_fetal:getValue('obsFcf'),
+    riesgo_obstetrico:getValue('obsRiesgoObstetrico'),
+    proximo_control:getValue('obsProximoControl'),
+    embarazo_actual_json:embarazo(),
+    sintomas_obstetricos_json:sintomas(),
+    evaluacion_obstetrica_json:evaluacion(),
+    observaciones:getValue('obsObservaciones')
+  }))
+}
+function auroFijarBaseObstetricia(){
+  firmaBaseObstetricia=auroFirmaFormularioObstetricia();
+  cambiosUsuarioObstetricia=false
+}
+function auroInstalarDetectorCambiosObstetricia(){
+  const sec=$('obstetricia');
+  if(!sec||sec.dataset.auroDetectorCambiosObstetricia==='true')return;
+  sec.dataset.auroDetectorCambiosObstetricia='true';
+
+  const marcar=evento=>{
+    const e=evento?.target;
+    if(!e||!e.matches('input,select,textarea'))return;
+    if(e.disabled||e.readOnly)return;
+    cambiosUsuarioObstetricia=true
+  };
+
+  sec.addEventListener('input',marcar);
+  sec.addEventListener('change',marcar)
+}
 function construir(){const c=contextoActual(),e=registroActual||{};return{id_obstetricia:txt(e.id_obstetricia)||idTemporal(),id_atencion:c.id_atencion,numero_consulta:c.numero_consulta,id_paciente:c.id_paciente,nombre_paciente:c.nombre_paciente,id_historia:c.id_historia,id_medico:c.id_medico,nombre_medico:c.nombre_medico,fecha_atencion:c.fecha_atencion,hora_atencion:c.hora_atencion,tipo_atencion:getValue('obsTipoAtencion')||c.tipo_atencion,fum:getValue('obsFum'),fpp:getValue('obsFpp'),edad_gestacional_semanas:getValue('obsEgSemanas'),edad_gestacional_dias:getValue('obsEgDias'),altura_uterina:getValue('obsAlturaUterina'),frecuencia_cardiaca_fetal:getValue('obsFcf'),riesgo_obstetrico:getValue('obsRiesgoObstetrico'),proximo_control:getValue('obsProximoControl'),embarazo_actual_json:JSON.stringify(embarazo()),sintomas_obstetricos_json:JSON.stringify(sintomas()),evaluacion_obstetrica_json:JSON.stringify(evaluacion()),observaciones:getValue('obsObservaciones'),estado_registro:txt(e.estado_registro)||'Activo',creado_en:e.creado_en||now(),actualizado_en:now(),creado_por:txt(e.creado_por)||usuarioActual()}}
-function limpiar(){registroActual=null;['obsFum','obsFpp','obsEgSemanas','obsEgDias','obsAlturaUterina','obsFcf','obsTipoEmbarazo','obsNumeroFetos','obsSituacionFetal','obsPresentacionFetal','obsPosicionFetal','obsMovimientosFetales','obsActividadUterina','obsEdema','obsEstadoMembranas','obsHallazgos','obsRiesgoObstetrico','obsProximoControl','obsObservaciones'].forEach(id=>setValue(id,''));['obsSintOtros','obsSintDescripcion'].forEach(id=>obsSetValue(id,''));['obsSintSangrado','obsSintPerdidaLiquido','obsSintDolorPelvico','obsSintContracciones','obsSintCefalea','obsSintFosfenos','obsSintTinnitus','obsSintEpigastralgia','obsSintDisuria'].forEach(id=>obsSetValue(id,false));setValue('obsTipoAtencion',contextoActual().tipo_atencion||'');actualizarEstado()}
-function cargarRegistro(x){const r=normalizar(x);registroActual=r;setValue('obsTipoAtencion',r.tipo_atencion);setValue('obsFum',r.fum);setValue('obsFpp',r.fpp);setValue('obsEgSemanas',r.edad_gestacional_semanas);setValue('obsEgDias',r.edad_gestacional_dias);setValue('obsAlturaUterina',r.altura_uterina);setValue('obsFcf',r.frecuencia_cardiaca_fetal);setValue('obsRiesgoObstetrico',r.riesgo_obstetrico);setValue('obsProximoControl',r.proximo_control);const e=r.embarazo_actual_json||{};setValue('obsTipoEmbarazo',e.tipo_embarazo||(e.embarazo_multiple?'Múltiple':''));setValue('obsNumeroFetos',e.numero_fetos);setValue('obsSituacionFetal',e.situacion_fetal);setValue('obsPresentacionFetal',e.presentacion_fetal);setValue('obsPosicionFetal',e.posicion_fetal);const s=r.sintomas_obstetricos_json||{};for(const [id,k] of [['obsSintSangrado','sangrado_vaginal'],['obsSintPerdidaLiquido','perdida_liquido'],['obsSintDolorPelvico','dolor_pelvico'],['obsSintContracciones','contracciones'],['obsSintCefalea','cefalea'],['obsSintFosfenos','fosfenos'],['obsSintTinnitus','tinnitus'],['obsSintEpigastralgia','epigastralgia'],['obsSintDisuria','disuria']])obsSetValue(id,s[k]);obsSetValue('obsSintOtros',s.otros);obsSetValue('obsSintDescripcion',s.descripcion);const v=r.evaluacion_obstetrica_json||{};setValue('obsMovimientosFetales',v.movimientos_fetales);setValue('obsActividadUterina',v.actividad_uterina);setValue('obsEdema',v.edema);setValue('obsEstadoMembranas',v.estado_membranas);setValue('obsHallazgos',v.hallazgos_relevantes);setValue('obsObservaciones',r.observaciones);actualizarEstado()}
-async function guardar(){if(guardando)return;const r=construir(),err=[];if(!r.id_atencion)err.push('No existe atención activa.');if(!r.id_paciente)err.push('No existe paciente seleccionada.');if(err.length)return notificar(err.join(' '),'error');guardando=true;estadoVisualBotonGuardarObs('guardando');try{const editar=!!txt(registroActual?.id_obstetricia);actualizarLocal(r);await enviarRemoto(r,editar);registroActual=normalizar(r);notificar(editar?'Los cambios de Obstetricia se guardaron correctamente en la base.':'El registro de Obstetricia se guardó correctamente en la base.','success');estadoVisualBotonGuardarObs('exito',editar?'Obstetricia actualizada ✓':'Obstetricia guardada ✓');await new Promise(resolve=>setTimeout(resolve,1200))}catch(e){console.error(MODULO,e);notificar(`Guardado local. Falló sincronización: ${e.message}`,'error');estadoVisualBotonGuardarObs('error','Sincronización pendiente · Reintentar');await new Promise(resolve=>setTimeout(resolve,1800))}finally{guardando=false;[$('obsBtnGuardar'),$('obsBtnGuardarInferior')].filter(Boolean).forEach(b=>{b.disabled=false;b.classList.remove('obs-btn-saving','obs-btn-success','obs-btn-error')});actualizarEstado()}}
+function limpiar(){registroActual=null;['obsFum','obsFpp','obsEgSemanas','obsEgDias','obsAlturaUterina','obsFcf','obsTipoEmbarazo','obsNumeroFetos','obsSituacionFetal','obsPresentacionFetal','obsPosicionFetal','obsMovimientosFetales','obsActividadUterina','obsEdema','obsEstadoMembranas','obsHallazgos','obsRiesgoObstetrico','obsProximoControl','obsObservaciones'].forEach(id=>setValue(id,''));['obsSintOtros','obsSintDescripcion'].forEach(id=>obsSetValue(id,''));['obsSintSangrado','obsSintPerdidaLiquido','obsSintDolorPelvico','obsSintContracciones','obsSintCefalea','obsSintFosfenos','obsSintTinnitus','obsSintEpigastralgia','obsSintDisuria'].forEach(id=>obsSetValue(id,false));setValue('obsTipoAtencion',contextoActual().tipo_atencion||'');auroFijarBaseObstetricia();actualizarEstado()}
+function cargarRegistro(x){const r=normalizar(x);registroActual=r;setValue('obsTipoAtencion',r.tipo_atencion);setValue('obsFum',r.fum);setValue('obsFpp',r.fpp);setValue('obsEgSemanas',r.edad_gestacional_semanas);setValue('obsEgDias',r.edad_gestacional_dias);setValue('obsAlturaUterina',r.altura_uterina);setValue('obsFcf',r.frecuencia_cardiaca_fetal);setValue('obsRiesgoObstetrico',r.riesgo_obstetrico);setValue('obsProximoControl',r.proximo_control);const e=r.embarazo_actual_json||{};setValue('obsTipoEmbarazo',e.tipo_embarazo||(e.embarazo_multiple?'Múltiple':''));setValue('obsNumeroFetos',e.numero_fetos);setValue('obsSituacionFetal',e.situacion_fetal);setValue('obsPresentacionFetal',e.presentacion_fetal);setValue('obsPosicionFetal',e.posicion_fetal);const s=r.sintomas_obstetricos_json||{};for(const [id,k] of [['obsSintSangrado','sangrado_vaginal'],['obsSintPerdidaLiquido','perdida_liquido'],['obsSintDolorPelvico','dolor_pelvico'],['obsSintContracciones','contracciones'],['obsSintCefalea','cefalea'],['obsSintFosfenos','fosfenos'],['obsSintTinnitus','tinnitus'],['obsSintEpigastralgia','epigastralgia'],['obsSintDisuria','disuria']])obsSetValue(id,s[k]);obsSetValue('obsSintOtros',s.otros);obsSetValue('obsSintDescripcion',s.descripcion);const v=r.evaluacion_obstetrica_json||{};setValue('obsMovimientosFetales',v.movimientos_fetales);setValue('obsActividadUterina',v.actividad_uterina);setValue('obsEdema',v.edema);setValue('obsEstadoMembranas',v.estado_membranas);setValue('obsHallazgos',v.hallazgos_relevantes);setValue('obsObservaciones',r.observaciones);auroFijarBaseObstetricia();actualizarEstado()}
+async function guardar(){
+  if(guardando)return;
+
+  const c=contextoActual(),err=[];
+  if(!c.id_atencion)err.push('No existe atención activa.');
+  if(!c.id_paciente)err.push('No existe paciente seleccionada.');
+  if(err.length)return notificar(err.join(' '),'error');
+
+  const firmaActual=auroFirmaFormularioObstetricia();
+
+  /*
+    CANDADO NO-OP:
+    Sin edición del usuario, o si cambió y luego volvió exactamente al
+    contenido cargado, no se construye payload, no se actualiza timestamp,
+    no se toca localStorage y no se realiza POST.
+  */
+  if(!cambiosUsuarioObstetricia ||
+     (firmaBaseObstetricia&&firmaActual===firmaBaseObstetricia)){
+    cambiosUsuarioObstetricia=false;
+    notificar('No hay cambios en Obstetricia. No se realizó ningún guardado.','info');
+    actualizarEstado();
+    return{success:true,omitido:true,sin_cambios:true,id_atencion:c.id_atencion}
+  }
+
+  const r=construir();
+  guardando=true;
+  estadoVisualBotonGuardarObs('guardando');
+
+  try{
+    const editar=!!txt(registroActual?.id_obstetricia);
+    actualizarLocal(r);
+    await enviarRemoto(r,editar);
+
+    registroActual=normalizar(r);
+    firmaBaseObstetricia=auroFirmaFormularioObstetricia();
+    cambiosUsuarioObstetricia=false;
+
+    notificar(
+      editar
+        ?'Los cambios de Obstetricia se guardaron correctamente en la base.'
+        :'El registro de Obstetricia se guardó correctamente en la base.',
+      'success'
+    );
+    estadoVisualBotonGuardarObs(
+      'exito',
+      editar?'Obstetricia actualizada ✓':'Obstetricia guardada ✓'
+    );
+
+    try{
+      window.dispatchEvent(new CustomEvent('aurosanax:obstetricia-guardada',{
+        detail:{
+          id_atencion:txt(r.id_atencion),
+          id_obstetricia:txt(r.id_obstetricia),
+          actualizado_en:txt(registroActual?.actualizado_en)
+        }
+      }))
+    }catch(_){}
+
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    return{success:true,id_atencion:r.id_atencion,id_obstetricia:r.id_obstetricia}
+  }catch(e){
+    console.error(MODULO,e);
+    notificar(`Guardado local. Falló sincronización: ${e.message}`,'error');
+    estadoVisualBotonGuardarObs('error','Sincronización pendiente · Reintentar');
+    await new Promise(resolve=>setTimeout(resolve,1800));
+    return{success:false,error:e}
+  }finally{
+    guardando=false;
+    [$('obsBtnGuardar'),$('obsBtnGuardarInferior')].filter(Boolean).forEach(b=>{
+      b.disabled=false;
+      b.classList.remove('obs-btn-saving','obs-btn-success','obs-btn-error')
+    });
+    actualizarEstado()
+  }
+}
 async function cargar(forzar=false){if(cargando)return;cargando=true;try{const c=contextoActual();pintarContexto(c);await cargarAntecedentes(c);if(!c.id_atencion||!c.id_paciente){limpiar();ultimoIdAtencion='';return}if(!forzar&&ultimoIdAtencion===c.id_atencion&&registroActual)return;ultimoIdAtencion=c.id_atencion;let lista=[];try{const rem=(await listarRemotos()).map(normalizarRemotoObstetricia),m=new Map();leerLocales().forEach(r=>m.set(txt(r.id_obstetricia)||`ATN:${txt(r.id_atencion)}`,r));rem.forEach(r=>m.set(txt(r.id_obstetricia)||`ATN:${txt(r.id_atencion)}`,r));lista=Array.from(m.values());guardarLocales(lista)}catch(e){console.warn(MODULO,'Respaldo local',e);lista=leerLocales()}const e=lista.filter(r=>txt(r.id_atencion)===c.id_atencion).sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)));if(e[0]){cargarRegistro(e[0]);notificar('Registro obstétrico cargado.','info')}else{limpiar();setValue('obsTipoAtencion',c.tipo_atencion)}}finally{cargando=false}}
 function interceptar(){const o=window.showScreen;if(typeof o!=='function'||o.__obsInterceptado)return;function w(id){const r=o.apply(this,arguments);if(id==='obstetricia')setTimeout(()=>cargar(true),60);return r}w.__obsInterceptado=true;window.showScreen=w}
 function evento(ev){
@@ -696,6 +828,6 @@ function evento(ev){
   limpiar();
   setTimeout(()=>cargar(true),80)
 }
-function inicializar(){if(!renderizar())return;interceptar();['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:paciente-seleccionado','aurosanax:historia-cargada','aurosanax:atencion-limpiada','aurosanax:paciente-limpiado'].forEach(n=>window.addEventListener(n,evento));setInterval(()=>{const a=resolverAtencion(),id=txt(a?.id_atencion||a?.id);if(id!==ultimoIdAtencion){contextoSeleccionado=a||null;cargar(true)}},1500);cargar(true);console.info(`${MODULO} cargado. ${VERSION}`)}
+function inicializar(){if(!renderizar())return;auroInstalarDetectorCambiosObstetricia();interceptar();['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:paciente-seleccionado','aurosanax:historia-cargada','aurosanax:atencion-limpiada','aurosanax:paciente-limpiado'].forEach(n=>window.addEventListener(n,evento));setInterval(()=>{const a=resolverAtencion(),id=txt(a?.id_atencion||a?.id);if(id!==ultimoIdAtencion){contextoSeleccionado=a||null;cargar(true)}},1500);cargar(true);console.info(`${MODULO} cargado. ${VERSION}`)}
 window.AurosanaxObstetricia={version:VERSION,inicializar,cargar,guardar,limpiar,obtenerRegistroActual:()=>registroActual?{...registroActual}:null,obtenerContexto:contextoActual};window.inicializarObstetricia=inicializar;window.cargarObstetriciaPorAtencion=cargar;window.guardarObstetriciaERP=guardar;window.limpiarObstetriciaERP=limpiar;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inicializar);else inicializar();
 })();
