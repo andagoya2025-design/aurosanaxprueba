@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.17';
+  const VERSION = '3.6.18-R1';
   const state = {
     inicializado: false,
     cargando: false,
@@ -64,7 +64,19 @@ Función:
       Firma clínica confirmada por atención. El autosave no vuelve a enviar
       un registro si un evento programático no cambió realmente su contenido.
     */
-    firmaPersistidaPorAtencion: {}
+    firmaPersistidaPorAtencion: {},
+
+    /*
+      AUROSANAX 3.6.18-R1 - CAPA RÁPIDA NO AUTORITATIVA
+      -------------------------------------------------
+      firmaRemotaEnCursoPorAtencion evita duplicar el mismo POST cuando
+      autosave y botón coinciden sobre exactamente la misma firma clínica.
+
+      guardadoVisualPorAtencion vive solo en RAM y sirve para respuesta
+      inmediata del dispositivo. Google Sheets sigue siendo la autoridad.
+    */
+    firmaRemotaEnCursoPorAtencion: {},
+    guardadoVisualPorAtencion: {}
   };
 
   const $ = id => document.getElementById(id);
@@ -2622,17 +2634,23 @@ Función:
     }));
   }
 
-  async function auroConfirmarAnamnesisSheets(data, token, intentos = 5) {
+  async function auroConfirmarAnamnesisSheets(data, token, intentos = 4) {
     const idAtencion = texto(data?.id_atencion);
     if (!idAtencion || !auroTokenContextoValido(token, true)) return null;
 
     const firmaEsperada = auroFirmaAnamnesis(data);
-    const esperas = [300, 500, 800, 1200, 1700];
+
+    /*
+      Confirmación remota real, pero desacoplada de la respuesta visual.
+      Primera lectura inmediata y luego tres lecturas cortas, todas frescas.
+    */
+    const esperas = [0, 180, 450, 900];
 
     for (let intento = 0; intento < intentos; intento += 1) {
       if (!auroTokenContextoValido(token, true)) return null;
 
-      await auroDormirContextoAnamnesis(esperas[intento] || 1000);
+      const espera = esperas[intento] ?? 900;
+      if (espera > 0) await auroDormirContextoAnamnesis(espera);
 
       if (!auroTokenContextoValido(token, true)) return null;
 
@@ -2646,11 +2664,7 @@ Función:
   }
 
   async function auroProcesarGuardadoConfirmadoAnamnesis(idAtencion, mostrarEstado) {
-    let ultimoResultado = {
-      success: false,
-      confirmado: false,
-      id_atencion: idAtencion
-    };
+    let ultimoResultado = { success: false, confirmado: false, id_atencion: idAtencion };
 
     while (state.guardadosRemotosPendientes[idAtencion]) {
       const pendiente = state.guardadosRemotosPendientes[idAtencion];
@@ -2662,35 +2676,23 @@ Función:
       if (!auroTokenContextoValido(token, true) ||
           texto(data.id_atencion) !== texto(token?.id_atencion)) {
         ultimoResultado = {
-          success: false,
-          confirmado: false,
-          cancelado_contexto: true,
-          id_atencion: idAtencion
+          success: false, confirmado: false, cancelado_contexto: true, id_atencion: idAtencion
         };
         continue;
       }
 
-      if (mostrarEstado) {
-        estado('Guardando anamnesis de la atención activa…', 'info');
-      }
+      const firmaObjetivo = auroFirmaAnamnesis(data);
+      state.firmaRemotaEnCursoPorAtencion[idAtencion] = firmaObjetivo;
 
-      let envio = await auroEnviarAnamnesisSheets(data, token);
-      let confirmado = envio?.success === true &&
-        auroTokenContextoValido(token, true)
-          ? await auroConfirmarAnamnesisSheets(data, token, 4)
-          : null;
+      if (mostrarEstado) estado('Sincronizando anamnesis con Google Sheets…', 'info');
 
-      /*
-        El reintento solo existe mientras el MISMO contexto sigue activo.
-        Un cambio de atención invalida el token y elimina el reenvío fantasma.
-      */
-      if (!confirmado && auroTokenContextoValido(token, true)) {
-        envio = await auroEnviarAnamnesisSheets(data, token);
-        confirmado = envio?.success === true &&
-          auroTokenContextoValido(token, true)
-            ? await auroConfirmarAnamnesisSheets(data, token, 5)
-            : null;
-      }
+      /* Un cambio clínico real = un POST. La confirmación posterior solo lee. */
+      const envio = await auroEnviarAnamnesisSheets(data, token);
+      const confirmado = envio?.success === true && auroTokenContextoValido(token, true)
+        ? await auroConfirmarAnamnesisSheets(data, token, 4)
+        : null;
+
+      delete state.firmaRemotaEnCursoPorAtencion[idAtencion];
 
       ultimoResultado = {
         success: !!confirmado,
@@ -2702,21 +2704,66 @@ Función:
       };
 
       if (confirmado) {
-        state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(data);
-        state.firmaPersistidaPorAtencion[idAtencion] = auroFirmaAnamnesis(data);
+        const confirmadoLocal = {
+          ...data,
+          actualizado_en: confirmado.actualizado_en || data.actualizado_en
+        };
+
+        state.cacheAtenciones[idAtencion] = auroClonarAnamnesis(confirmadoLocal);
+        state.firmaPersistidaPorAtencion[idAtencion] = firmaObjetivo;
+        state.cambiosUsuarioPorAtencion[idAtencion] = false;
 
         const cacheLocal = auroLeerCacheAnamnesisLocal();
-        cacheLocal[idAtencion] = auroClonarAnamnesis(data);
+        cacheLocal[idAtencion] = auroClonarAnamnesis(confirmadoLocal);
         auroGuardarCacheAnamnesisLocal(cacheLocal);
 
-        if (mostrarEstado && auroTokenContextoValido(token, false)) {
-          estado('Anamnesis guardada y verificada para esta atención.', 'ok');
+        if (state.guardadoVisualPorAtencion[idAtencion]) {
+          state.guardadoVisualPorAtencion[idAtencion] = {
+            ...state.guardadoVisualPorAtencion[idAtencion],
+            confirmado: true,
+            pendiente: false,
+            actualizado_en_remoto: texto(confirmado.actualizado_en)
+          };
         }
-      } else if (mostrarEstado && auroTokenContextoValido(token, false)) {
-        estado(
-          'No se confirmó todavía el guardado remoto. Los datos permanecen seguros en pantalla.',
-          'warn'
-        );
+
+        try {
+          window.dispatchEvent(new CustomEvent('aurosanax:anamnesis-confirmada', {
+            detail: {
+              id_atencion: idAtencion,
+              id_paciente: texto(token.id_paciente),
+              id_historia: texto(token.id_historia),
+              firma: firmaObjetivo,
+              actualizado_en: texto(confirmado.actualizado_en)
+            }
+          }));
+        } catch (_) {}
+
+        if (mostrarEstado && auroTokenContextoValido(token, false)) {
+          estado('Anamnesis confirmada en Google Sheets.', 'ok');
+        }
+      } else if (auroTokenContextoValido(token, false)) {
+        if (state.guardadoVisualPorAtencion[idAtencion]) {
+          state.guardadoVisualPorAtencion[idAtencion] = {
+            ...state.guardadoVisualPorAtencion[idAtencion],
+            confirmado: false,
+            pendiente: true
+          };
+        }
+
+        try {
+          window.dispatchEvent(new CustomEvent('aurosanax:anamnesis-sincronizacion-pendiente', {
+            detail: {
+              id_atencion: idAtencion,
+              id_paciente: texto(token.id_paciente),
+              id_historia: texto(token.id_historia),
+              firma: firmaObjetivo
+            }
+          }));
+        } catch (_) {}
+
+        if (mostrarEstado) {
+          estado('El contenido quedó en memoria local; la confirmación remota sigue pendiente.', 'warn');
+        }
       }
     }
 
@@ -2745,10 +2792,18 @@ Función:
     data.id_paciente = texto(token.id_paciente || data.id_paciente);
     data.id_historia = texto(token.id_historia || data.id_historia);
 
-    state.guardadosRemotosPendientes[idAtencion] = {
-      data,
-      token
-    };
+    const firmaSolicitada = auroFirmaAnamnesis(data);
+    const firmaEnCurso = texto(state.firmaRemotaEnCursoPorAtencion[idAtencion]);
+    const firmaPendiente = state.guardadosRemotosPendientes[idAtencion]
+      ? auroFirmaAnamnesis(state.guardadosRemotosPendientes[idAtencion].data)
+      : '';
+
+    if (state.guardadosRemotosEnCurso[idAtencion] &&
+        (firmaSolicitada === firmaEnCurso || firmaSolicitada === firmaPendiente)) {
+      return state.guardadosRemotosEnCurso[idAtencion];
+    }
+
+    state.guardadosRemotosPendientes[idAtencion] = { data, token };
 
     if (state.guardadosRemotosEnCurso[idAtencion]) {
       return state.guardadosRemotosEnCurso[idAtencion];
@@ -2770,20 +2825,14 @@ Función:
     state.guardadoPendiente = null;
 
     if (state.contextoInvalidado) {
-      return {
-        success: false,
-        message: 'La atención está cambiando. Los datos permanecen en pantalla.'
-      };
+      return { success: false, message: 'La atención está cambiando. Los datos permanecen en pantalla.' };
     }
 
     const idAtencion = texto(state.idAtencionActual);
     const token = auroCrearTokenContextoAnamnesis();
 
     if (!idAtencion || !auroTokenContextoValido(token, true)) {
-      return {
-        success: false,
-        message: 'No existe una atención activa sincronizada. Los datos permanecen en pantalla.'
-      };
+      return { success: false, message: 'No existe una atención activa sincronizada. Los datos permanecen en pantalla.' };
     }
 
     const data = guardarAnamnesisTemporal();
@@ -2793,24 +2842,75 @@ Función:
     data.id_paciente = texto(token.id_paciente);
     data.id_historia = texto(token.id_historia);
 
-    const resultado = await auroGuardarDatosAnamnesisConfirmados(
-      data,
-      { mostrarEstado: true, token }
-    );
+    const firmaActual = auroFirmaAnamnesis(data);
+    const firmaPersistida = texto(state.firmaPersistidaPorAtencion[idAtencion]);
+    const firmaEnCurso = texto(state.firmaRemotaEnCursoPorAtencion[idAtencion]);
+    const firmaPendiente = state.guardadosRemotosPendientes[idAtencion]
+      ? auroFirmaAnamnesis(state.guardadosRemotosPendientes[idAtencion].data)
+      : '';
 
-    if (resultado && resultado.success &&
-        auroTokenContextoValido(token, false)) {
+    /* Sin cambios reales: no POST y no movimiento de timestamp remoto. */
+    if (firmaPersistida && firmaActual === firmaPersistida) {
       state.cambiosUsuarioPorAtencion[idAtencion] = false;
+      estado('No hay cambios nuevos en Anamnesis.', 'ok');
+      return {
+        success: true, confirmado: true, sin_cambios: true, omitido: true, id_atencion: idAtencion
+      };
     }
 
-    return resultado;
+    const ahora = new Date().toISOString();
+
+    state.guardadoVisualPorAtencion[idAtencion] = {
+      firma: firmaActual,
+      actualizado_en_local: ahora,
+      confirmado: false,
+      pendiente: true
+    };
+
+    try {
+      window.dispatchEvent(new CustomEvent('aurosanax:anamnesis-guardado-local', {
+        detail: {
+          id_atencion: idAtencion,
+          id_paciente: texto(token.id_paciente),
+          id_historia: texto(token.id_historia),
+          firma: firmaActual,
+          actualizado_en: ahora,
+          compartiendo_sincronizacion: firmaActual === firmaEnCurso || firmaActual === firmaPendiente
+        }
+      }));
+    } catch (_) {}
+
+    estado('Anamnesis guardada en memoria. Sincronizando con Google Sheets…', 'ok');
+
+    /*
+      Si el autosave ya sincroniza la misma firma, no se duplica el POST.
+      Si no, se inicia la sincronización remota. En ambos casos el botón
+      recibe respuesta inmediata porque no espera la latencia de Sheets.
+    */
+    if (!(firmaActual === firmaEnCurso || firmaActual === firmaPendiente)) {
+      auroGuardarDatosAnamnesisConfirmados(
+        data,
+        { mostrarEstado: false, token }
+      ).catch(error => {
+        console.warn('AUROSANAX Anamnesis: sincronización remota pendiente.', error);
+      });
+    }
+
+    return {
+      success: true,
+      aceptado_localmente: true,
+      pendiente_confirmacion: true,
+      compartiendo_sincronizacion: firmaActual === firmaEnCurso || firmaActual === firmaPendiente,
+      id_atencion: idAtencion,
+      actualizado_en_local: ahora
+    };
   }
 
   async function auroBuscarAnamnesisSheets(idAtencion) {
     try {
       const respuesta = await consultarAccion(
         'buscarAnamnesisPorAtencion',
-        { id_atencion: idAtencion }
+        { id_atencion: idAtencion, _: Date.now() }
       );
 
       const registro = respuesta?.data || respuesta?.anamnesis || respuesta;
@@ -2965,6 +3065,7 @@ Función:
 
     if (anterior) {
       delete state.guardadosRemotosPendientes[anterior];
+      delete state.firmaRemotaEnCursoPorAtencion[anterior];
       state.cambiosUsuarioPorAtencion[anterior] = false;
     }
 
@@ -3131,6 +3232,7 @@ Función:
       const anterior = texto(state.idAtencionActual);
       if (anterior) {
         delete state.guardadosRemotosPendientes[anterior];
+        delete state.firmaRemotaEnCursoPorAtencion[anterior];
         state.cambiosUsuarioPorAtencion[anterior] = false;
       }
 
@@ -3245,6 +3347,9 @@ Función:
         ),
         firma_persistida: texto(
           state.firmaPersistidaPorAtencion[state.idAtencionActual]
+        ),
+        guardado_visual: auroClonarAnamnesis(
+          state.guardadoVisualPorAtencion[state.idAtencionActual] || null
         )
       };
     }
