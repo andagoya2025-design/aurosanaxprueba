@@ -7069,11 +7069,46 @@ function auroHistoriaFormatearFechaReal(valor){
   if(!raw) return '';
 
   /*
+    AUROSANAX INDEX 89 - FIX VISUAL QUIRÚRGICO DE ZONA HORARIA
+    -----------------------------------------------------------
+    Alcance EXCLUSIVO:
+    - Corrige timestamps ISO que sí traen zona horaria explícita
+      (Z o ±HH:MM), como los creados en memoria con toISOString().
+    - Los muestra en America/Guayaquil.
+    - Conserva literalmente los timestamps históricos sin zona
+      (yyyy-mm-dd hh:mm:ss), porque ya representan hora de pared.
+    - SOLO PRESENTACIÓN: no guarda, no hace POST, no modifica fechas
+      persistidas ni toca Obstetricia, Anamnesis, Antecedentes u otros módulos.
+  */
+  const isoConZona = raw.match(
+    /^\d{4}-\d{2}-\d{2}T\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})$/i
+  );
+
+  if(isoConZona){
+    const fechaZona = new Date(raw);
+    if(!Number.isNaN(fechaZona.getTime())){
+      try{
+        return fechaZona.toLocaleString('es-EC', {
+          timeZone:'America/Guayaquil',
+          year:'numeric',
+          month:'2-digit',
+          day:'2-digit',
+          hour:'2-digit',
+          minute:'2-digit',
+          second:'2-digit',
+          hour12:false
+        });
+      }catch(e){}
+    }
+  }
+
+  /*
     Fechas históricas del ERP pueden venir como:
     - yyyy-mm-dd hh:mm:ss
-    - ISO
+    - ISO sin zona explícita
     - dd/mm/yyyy hh:mm
-    Se evita reinterpretar agresivamente para no introducir desfases horarios.
+    Los valores sin zona se conservan como hora de pared para evitar
+    introducir un segundo desplazamiento sobre datos ya normalizados.
   */
   const isoLocal = raw.match(
     /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/
@@ -7091,6 +7126,7 @@ function auroHistoriaFormatearFechaReal(valor){
   if(!Number.isNaN(fecha.getTime()) && raw.includes('T')){
     try{
       return fecha.toLocaleString('es-EC', {
+        timeZone:'America/Guayaquil',
         year:'numeric',
         month:'2-digit',
         day:'2-digit',
