@@ -773,6 +773,20 @@
       cursor:wait!important;
       opacity:1!important;
     }
+    #historia .clinical-actions button.auro-hc-btn-exito{
+      background:linear-gradient(135deg,#f0fdf4,#ecfdf5)!important;
+      border:1px solid #bbf7d0!important;
+      color:#166534!important;
+      box-shadow:0 8px 20px rgba(22,163,74,.10)!important;
+      opacity:1!important;
+    }
+    #historia .clinical-actions button.auro-hc-btn-error{
+      background:linear-gradient(135deg,#fef2f2,#fff1f2)!important;
+      border:1px solid #fecaca!important;
+      color:#991b1b!important;
+      box-shadow:0 8px 20px rgba(220,38,38,.10)!important;
+      opacity:1!important;
+    }
     #historia .clinical-actions .auro-hc-spin{
       display:inline-block;
       animation:auroHcSpin .8s linear infinite;
@@ -7633,24 +7647,53 @@ function auroHistoriaBotonGuardarPrincipal(){
   );
 }
 
-function auroHistoriaSetBotonesGuardando(guardando){
+function auroHistoriaSetBotonesGuardando(estado){
   const btn = auroHistoriaBotonGuardarPrincipal();
   if(!btn) return;
 
-  if(guardando){
-    if(!btn.dataset.auroTextoOriginal){
-      btn.dataset.auroTextoOriginal = btn.innerHTML;
-    }
+  const modo = estado === true
+    ? 'guardando'
+    : (estado === false ? 'normal' : String(estado || 'normal'));
+
+  if(modo !== 'normal' && !btn.dataset.auroTextoOriginal){
+    btn.dataset.auroTextoOriginal = btn.innerHTML;
+  }
+
+  btn.classList.remove(
+    'auro-hc-btn-guardando',
+    'auro-hc-btn-exito',
+    'auro-hc-btn-error'
+  );
+
+  if(modo === 'guardando'){
     btn.disabled = true;
+    btn.setAttribute('aria-busy','true');
     btn.classList.add('auro-hc-btn-guardando');
-    btn.innerHTML = '<i class="bi bi-hourglass-split me-1 auro-hc-spin"></i> Guardando...';
-  }else{
+    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1 auro-hc-spin"></i> Guardando...';
+    return;
+  }
+
+  if(modo === 'exito'){
+    btn.disabled = true;
+    btn.removeAttribute('aria-busy');
+    btn.classList.add('auro-hc-btn-exito');
+    btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Historia actualizada ✓';
+    return;
+  }
+
+  if(modo === 'error'){
     btn.disabled = false;
-    btn.classList.remove('auro-hc-btn-guardando');
-    if(btn.dataset.auroTextoOriginal){
-      btn.innerHTML = btn.dataset.auroTextoOriginal;
-      delete btn.dataset.auroTextoOriginal;
-    }
+    btn.removeAttribute('aria-busy');
+    btn.classList.add('auro-hc-btn-error');
+    btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Error al guardar';
+    return;
+  }
+
+  btn.disabled = false;
+  btn.removeAttribute('aria-busy');
+  if(btn.dataset.auroTextoOriginal){
+    btn.innerHTML = btn.dataset.auroTextoOriginal;
+    delete btn.dataset.auroTextoOriginal;
   }
 }
 
@@ -8642,6 +8685,8 @@ async function guardarHistoriaClinicaERP(){
     'saving'
   );
 
+  let auroHistoriaGuardadoUXExitoso = false;
+
   try{
     await fetch(API_URL, {
       method: 'POST',
@@ -8794,13 +8839,25 @@ async function guardarHistoriaClinicaERP(){
     }
 
     actualizarDashboard();
+    auroHistoriaGuardadoUXExitoso = true;
   }catch(error){
     console.error(error);
     auroHistoriaMostrarEstado('No se pudo guardar o actualizar. Revise la conexión o Apps Script.', 'error');
   }finally{
-    auroHistoriaSetBotonesGuardando(false);
     if(typeof auroPlanActualizarBotonesHistoria === 'function'){
       auroPlanActualizarBotonesHistoria();
+    }
+
+    if(auroHistoriaGuardadoUXExitoso){
+      auroHistoriaSetBotonesGuardando('exito');
+      setTimeout(function(){
+        auroHistoriaSetBotonesGuardando(false);
+      }, 1400);
+    }else{
+      auroHistoriaSetBotonesGuardando('error');
+      setTimeout(function(){
+        auroHistoriaSetBotonesGuardando(false);
+      }, 1800);
     }
   }
 }
