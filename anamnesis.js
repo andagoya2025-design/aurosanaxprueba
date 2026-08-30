@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.18';
+  const VERSION = '3.6.17';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2622,30 +2622,17 @@ Función:
     }));
   }
 
-  /*
-    AUROSANAX 3.6.18 - CONFIRMACIÓN REMOTA RÁPIDA SIN PERDER CERTEZA
-    ----------------------------------------------------------------
-    - Conserva la validación por firma clínica exacta.
-    - Conserva el candado de contexto por id_atencion / epoch.
-    - La primera lectura se realiza inmediatamente después del POST.
-    - Las siguientes lecturas usan esperas cortas y progresivas.
-    - No declara éxito hasta leer en Sheets exactamente la misma firma.
-    - No modifica payload, Apps Script, timestamps ni otros módulos.
-  */
   async function auroConfirmarAnamnesisSheets(data, token, intentos = 5) {
     const idAtencion = texto(data?.id_atencion);
     if (!idAtencion || !auroTokenContextoValido(token, true)) return null;
 
     const firmaEsperada = auroFirmaAnamnesis(data);
-    const esperas = [0, 120, 300, 650, 1200];
+    const esperas = [300, 500, 800, 1200, 1700];
 
     for (let intento = 0; intento < intentos; intento += 1) {
       if (!auroTokenContextoValido(token, true)) return null;
 
-      const espera = Number(esperas[intento] ?? 1200);
-      if (espera > 0) {
-        await auroDormirContextoAnamnesis(espera);
-      }
+      await auroDormirContextoAnamnesis(esperas[intento] || 1000);
 
       if (!auroTokenContextoValido(token, true)) return null;
 
@@ -2683,37 +2670,6 @@ Función:
         continue;
       }
 
-      /*
-        3.6.18 - CANDADO ANTIDUPLICADO EN COLA.
-        Si un autosave ya confirmó exactamente esta firma mientras otra
-        solicitud idéntica quedó en cola (por ejemplo, clic manual durante
-        un guardado en curso), la segunda solicitud NO vuelve a hacer POST
-        ni modifica actualizado_en.
-      */
-      const firmaPendiente = auroFirmaAnamnesis(data);
-      const firmaPersistidaActual = texto(
-        state.firmaPersistidaPorAtencion[idAtencion]
-      );
-
-      if (firmaPersistidaActual && firmaPendiente === firmaPersistidaActual) {
-        state.cambiosUsuarioPorAtencion[idAtencion] = false;
-
-        ultimoResultado = {
-          success: true,
-          confirmado: true,
-          omitido: true,
-          sin_cambios: true,
-          id_atencion: idAtencion,
-          data
-        };
-
-        if (mostrarEstado && auroTokenContextoValido(token, false)) {
-          estado('Anamnesis actualizada. No existen cambios pendientes.', 'ok');
-        }
-
-        continue;
-      }
-
       if (mostrarEstado) {
         estado('Guardando anamnesis de la atención activa…', 'info');
       }
@@ -2721,14 +2677,12 @@ Función:
       let envio = await auroEnviarAnamnesisSheets(data, token);
       let confirmado = envio?.success === true &&
         auroTokenContextoValido(token, true)
-          ? await auroConfirmarAnamnesisSheets(data, token, 5)
+          ? await auroConfirmarAnamnesisSheets(data, token, 4)
           : null;
 
       /*
         El reintento solo existe mientras el MISMO contexto sigue activo.
         Un cambio de atención invalida el token y elimina el reenvío fantasma.
-        La primera ronda ahora realiza confirmación rápida y progresiva antes
-        de considerar este reenvío de respaldo.
       */
       if (!confirmado && auroTokenContextoValido(token, true)) {
         envio = await auroEnviarAnamnesisSheets(data, token);
@@ -2790,36 +2744,6 @@ Función:
 
     data.id_paciente = texto(token.id_paciente || data.id_paciente);
     data.id_historia = texto(token.id_historia || data.id_historia);
-
-    /*
-      3.6.18 - NO-OP CENTRAL POR FIRMA.
-      Aplica por igual a autosave y guardado manual, tanto en una atención
-      abierta como en una atención histórica/finalizada que el núcleo haya
-      seleccionado válidamente. Si el contenido clínico actual ya coincide
-      con la firma confirmada, no se encola ni se realiza un nuevo POST.
-    */
-    const firmaActual = auroFirmaAnamnesis(data);
-    const firmaPersistida = texto(
-      state.firmaPersistidaPorAtencion[idAtencion]
-    );
-
-    if (firmaPersistida && firmaActual === firmaPersistida) {
-      state.cambiosUsuarioPorAtencion[idAtencion] = false;
-
-      if (opciones.mostrarEstado === true &&
-          auroTokenContextoValido(token, false)) {
-        estado('Anamnesis actualizada. No existen cambios pendientes.', 'ok');
-      }
-
-      return {
-        success: true,
-        confirmado: true,
-        omitido: true,
-        sin_cambios: true,
-        id_atencion: idAtencion,
-        data
-      };
-    }
 
     state.guardadosRemotosPendientes[idAtencion] = {
       data,
