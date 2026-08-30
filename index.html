@@ -10814,132 +10814,289 @@ document.addEventListener('click',e=>{
   <script src="antecedentes.js?v=20260824_1"></script>
   <!-- AUROSANAX - Módulo Anamnesis inteligente -->
   <script src="anamnesis.js?v=20260824_1"></script>
+  <!-- =========================================================
+       AUROSANAX INDEX 83 — FEEDBACK VISUAL QUIRÚRGICO ANAMNESIS
+       ---------------------------------------------------------
+       ALCANCE EXCLUSIVO:
+       - SOLO modifica visualmente el botón global ya existente.
+       - NO modifica anamnesis.js.
+       - NO llama guardarAnamnesisPorAtencion().
+       - NO llama guardarHistoriaClinicaERP().
+       - NO hace fetch / GET / POST.
+       - NO usa localStorage.
+       - NO cambia id_atencion, id_historia, timestamps ni barreras.
+       - El verde aparece SOLO cuando la firma persistida que expone
+         Anamnesis coincide con la firma clínica ACTUAL de la pantalla.
+       - Si el usuario vuelve exactamente al estado ya persistido,
+         vuelve a normal sin inventar un nuevo guardado.
+  ========================================================== -->
+  <script id="auro-anamnesis-feedback-boton-v3">
+  (function auroAnamnesisFeedbackBotonV3(){
+    'use strict';
 
-<!-- =========================================================
-     AUROSANAX INDEX 82 — FEEDBACK VISUAL ANAMNESIS
-     CAPA DE SOLO LECTURA / ANTIRREGRESIVA
-     ---------------------------------------------------------
-     - NO modifica anamnesis.js.
-     - NO llama funciones de guardado.
-     - NO hace POST/GET/fetch.
-     - NO toca Apps Script, Sheets ni timestamps.
-     - NO cambia id_atencion, id_historia ni id_paciente.
-     - NO modifica el autosave de 700 ms ni sus firmas/tokens.
-     - SOLO compara la firma clínica ACTUAL con la firma
-       persistida que Anamnesis ya expone públicamente.
-     - Si cambia la atención/epoch, el ciclo visual se cancela.
-========================================================== -->
-<script id="auro-anamnesis-feedback-visual-v1">
-(function auroAnamnesisFeedbackVisualV1(){
-  'use strict';
+    if(window.__auroAnamnesisFeedbackBotonV3) return;
+    window.__auroAnamnesisFeedbackBotonV3 = true;
 
-  if(window.__auroAnamnesisFeedbackVisualV1) return;
-  window.__auroAnamnesisFeedbackVisualV1 = true;
+    const V = {
+      ciclo: 0,
+      timer: null,
+      original: null
+    };
 
-  const ESTADO = {
-    ciclo: 0,
-    debounce: null,
-    polling: null,
-    avisoLento: null,
-    cierre: null,
-    montado: false
-  };
+    const texto = valor => String(valor ?? '').trim();
 
-  const texto = valor => String(valor ?? '').trim();
-  const $ = id => document.getElementById(id);
-
-  function apiAnamnesis(){
-    const api = window.auroAnamnesis;
-    if(!api || typeof api !== 'object') return null;
-    if(typeof api.obtenerDatosAnamnesis !== 'function') return null;
-    if(typeof api.obtenerContextoSeguro !== 'function') return null;
-    return api;
-  }
-
-  function contextoSeguro(){
-    try{
-      return apiAnamnesis()?.obtenerContextoSeguro?.() || null;
-    }catch(error){
-      return null;
-    }
-  }
-
-  function contextoValido(ctx){
-    if(!ctx || ctx.invalidado) return false;
-
-    const id = texto(ctx.id_atencion);
-    const maestro = texto(ctx.id_atencion_maestra);
-
-    if(!id) return false;
-    if(maestro && maestro !== id) return false;
-
-    return true;
-  }
-
-  function ordenarJson(valor){
-    if(Array.isArray(valor)){
-      return valor.map(ordenarJson);
+    function moduloActivo(){
+      return texto(
+        document.querySelector('#historia .clinical-panel.active')?.id
+      );
     }
 
-    if(valor && typeof valor === 'object'){
-      return Object.keys(valor)
-        .sort()
-        .reduce((salida, clave) => {
-          salida[clave] = ordenarJson(valor[clave]);
-          return salida;
-        }, {});
+    function botonHistoria(){
+      try{
+        if(typeof window.auroHistoriaBotonGuardarPrincipal === 'function'){
+          const btn = window.auroHistoriaBotonGuardarPrincipal();
+          if(btn) return btn;
+        }
+      }catch(e){}
+
+      return document.querySelector(
+        '#historia .clinical-actions > button[onclick*="guardarHistoriaClinicaERP"]'
+      );
     }
 
-    return valor;
-  }
-
-  function claveControl(control, indice){
-    if(!control) return '';
-    if(control.id) return 'id:' + control.id;
-
-    if(control.dataset?.auroQuestion){
-      const valor = control.type === 'radio' || control.type === 'checkbox'
-        ? ':' + texto(control.value)
-        : '';
-      return 'question:' + control.dataset.auroQuestion + valor;
+    function contexto(){
+      try{
+        if(window.auroAnamnesis &&
+           typeof window.auroAnamnesis.obtenerContextoSeguro === 'function'){
+          return window.auroAnamnesis.obtenerContextoSeguro() || {};
+        }
+      }catch(e){}
+      return {};
     }
 
-    if(control.name){
-      const valor = control.type === 'radio' || control.type === 'checkbox'
-        ? ':' + texto(control.value)
-        : '';
-      return 'name:' + control.name + valor;
+    function contextoValido(ctx){
+      const id = texto(ctx?.id_atencion);
+      const idMaestro = texto(ctx?.id_atencion_maestra);
+
+      return !!(
+        id &&
+        !ctx?.invalidado &&
+        idMaestro &&
+        id === idMaestro
+      );
     }
 
-    return 'index:' + indice;
-  }
+    function guardarOriginal(btn){
+      if(V.original && V.original.btn === btn) return;
 
-  function capturarControlesSoloLectura(){
-    const panel = $('hc_anamnesis');
-    if(!panel) return {};
+      V.original = {
+        btn,
+        html: btn.innerHTML,
+        title: btn.getAttribute('title'),
+        ariaBusy: btn.getAttribute('aria-busy')
+      };
+    }
 
-    const salida = {};
+    function limpiarClases(btn){
+      if(!btn) return;
+      btn.classList.remove(
+        'auro-hc-btn-guardando',
+        'auro-hc-btn-exito',
+        'auro-hc-btn-error'
+      );
+    }
 
-    [...panel.querySelectorAll('input, select, textarea')]
-      .forEach((control, indice) => {
+    function restaurar(){
+      if(V.timer){
+        clearTimeout(V.timer);
+        V.timer = null;
+      }
+
+      const original = V.original;
+      const btn = original?.btn || botonHistoria();
+
+      if(btn){
+        limpiarClases(btn);
+
+        if(original){
+          btn.innerHTML = original.html;
+
+          if(original.title == null){
+            btn.removeAttribute('title');
+          }else{
+            btn.setAttribute('title', original.title);
+          }
+
+          if(original.ariaBusy == null){
+            btn.removeAttribute('aria-busy');
+          }else{
+            btn.setAttribute('aria-busy', original.ariaBusy);
+          }
+        }else{
+          btn.removeAttribute('aria-busy');
+        }
+      }
+
+      V.original = null;
+    }
+
+    function cancelar(){
+      V.ciclo += 1;
+      restaurar();
+    }
+
+    function pintarGuardando(){
+      const btn = botonHistoria();
+      if(!btn) return false;
+
+      /*
+        No toma el control si el botón ya está mostrando un estado real
+        producido por el guardado general de Historia/Antecedentes.
+      */
+      if(
+        btn.classList.contains('auro-hc-btn-guardando') ||
+        btn.classList.contains('auro-hc-btn-exito') ||
+        btn.classList.contains('auro-hc-btn-error')
+      ){
+        return false;
+      }
+
+      guardarOriginal(btn);
+      limpiarClases(btn);
+      btn.classList.add('auro-hc-btn-guardando');
+      btn.setAttribute('aria-busy','true');
+      btn.setAttribute(
+        'title',
+        'Anamnesis se está guardando automáticamente en la atención seleccionada.'
+      );
+      btn.innerHTML =
+        '<i class="bi bi-arrow-repeat me-1 auro-hc-spin"></i> Guardando anamnesis…';
+
+      return true;
+    }
+
+    function pintarExito(ciclo){
+      if(ciclo !== V.ciclo) return;
+
+      const btn = botonHistoria();
+      if(!btn || moduloActivo() !== 'hc_anamnesis'){
+        cancelar();
+        return;
+      }
+
+      limpiarClases(btn);
+      btn.classList.add('auro-hc-btn-exito');
+      btn.removeAttribute('aria-busy');
+      btn.setAttribute(
+        'title',
+        'Anamnesis guardada y confirmada para esta atención.'
+      );
+      btn.innerHTML =
+        '<i class="bi bi-check-circle-fill me-1"></i> Anamnesis guardada ✓';
+
+      V.timer = setTimeout(function(){
+        if(ciclo !== V.ciclo) return;
+        restaurar();
+      }, 1500);
+    }
+
+    function pintarNoConfirmado(ciclo){
+      if(ciclo !== V.ciclo) return;
+
+      const btn = botonHistoria();
+      if(!btn || moduloActivo() !== 'hc_anamnesis'){
+        cancelar();
+        return;
+      }
+
+      limpiarClases(btn);
+      btn.classList.add('auro-hc-btn-error');
+      btn.removeAttribute('aria-busy');
+      btn.setAttribute(
+        'title',
+        'La pantalla todavía no confirma que la última edición de Anamnesis haya quedado persistida.'
+      );
+      btn.innerHTML =
+        '<i class="bi bi-exclamation-triangle-fill me-1"></i> Guardado no confirmado';
+
+      V.timer = setTimeout(function(){
+        if(ciclo !== V.ciclo) return;
+        restaurar();
+      }, 2200);
+    }
+
+    function ordenar(valor){
+      if(Array.isArray(valor)){
+        return valor.map(ordenar);
+      }
+
+      if(valor && typeof valor === 'object'){
+        return Object.keys(valor)
+          .sort()
+          .reduce(function(salida, clave){
+            salida[clave] = ordenar(valor[clave]);
+            return salida;
+          }, {});
+      }
+
+      return valor;
+    }
+
+    function claveControl(control, indice){
+      if(!control) return '';
+      if(control.id) return 'id:' + control.id;
+
+      if(control.dataset?.auroQuestion){
+        const sufijo =
+          control.type === 'radio' || control.type === 'checkbox'
+            ? ':' + texto(control.value)
+            : '';
+        return 'question:' + control.dataset.auroQuestion + sufijo;
+      }
+
+      if(control.name){
+        const sufijo =
+          control.type === 'radio' || control.type === 'checkbox'
+            ? ':' + texto(control.value)
+            : '';
+        return 'name:' + control.name + sufijo;
+      }
+
+      return 'index:' + indice;
+    }
+
+    function capturarControles(){
+      const panel = document.getElementById('hc_anamnesis');
+      if(!panel) return {};
+
+      const salida = {};
+      const controles = [
+        ...panel.querySelectorAll('input, select, textarea')
+      ];
+
+      controles.forEach(function(control, indice){
         if(
           !control ||
           control.disabled ||
           control.type === 'button' ||
           control.type === 'submit' ||
           control.type === 'reset'
-        ) return;
+        ){
+          return;
+        }
 
         if([
           'hcMotivoConsulta',
           'hcEnfermedadActual',
           'auroPlantillaAnamnesisSelect'
-        ].includes(control.id)) return;
+        ].includes(control.id)){
+          return;
+        }
 
         const clave = claveControl(control, indice);
         if(!clave) return;
 
-        const tipoControl = String(
+        const tipoControl = (
           control.type || control.tagName.toLowerCase()
         ).toLowerCase();
 
@@ -10960,392 +11117,192 @@ document.addEventListener('click',e=>{
         };
       });
 
-    return salida;
-  }
-
-  function firmaActualSoloLectura(){
-    const api = apiAnamnesis();
-    const ctx = contextoSeguro();
-
-    if(!api || !contextoValido(ctx)) return null;
-
-    let datos = null;
-    try{
-      datos = api.obtenerDatosAnamnesis() || {};
-    }catch(error){
-      return null;
+      return salida;
     }
 
-    const idAtencion = texto(ctx.id_atencion || datos.id_atencion);
-    if(!idAtencion) return null;
-
-    const firma = JSON.stringify(
-      ordenarJson({
-        id_atencion: idAtencion,
-        motivo_consulta: texto(datos.motivo_consulta),
-        enfermedad_actual: texto(datos.enfermedad_actual),
-        id_plantilla_anamnesis: texto(datos.id_plantilla_anamnesis),
-        narrativa_generada: texto(datos.narrativa_generada),
-        respuestas_json: datos.respuestas_json || {},
-        controles_json: capturarControlesSoloLectura()
-      })
-    );
-
-    return {
-      firma,
-      id_atencion: idAtencion,
-      epoch: Number(ctx.epoch || 0),
-      firma_persistida: texto(ctx.firma_persistida)
-    };
-  }
-
-  function instalarEstilos(){
-    if($('auroAnamnesisFeedbackVisualStylesV1')) return;
-
-    const style = document.createElement('style');
-    style.id = 'auroAnamnesisFeedbackVisualStylesV1';
-    style.textContent = `
-      #hc_anamnesis .auro-anamnesis-save-row{
-        display:flex;
-        justify-content:flex-end;
-        align-items:center;
-        margin:-2px 0 12px;
-      }
-      #hc_anamnesis .auro-anamnesis-save-visual{
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        gap:7px;
-        min-height:38px;
-        max-width:100%;
-        padding:8px 12px;
-        border:1px solid #fbcfe8;
-        border-radius:12px;
-        background:#fdf2f8;
-        color:#8b1e5a;
-        box-shadow:0 7px 18px rgba(139,30,90,.06);
-        font-size:12.5px;
-        line-height:1.25;
-        font-weight:850;
-        transition:
-          background .18s ease,
-          color .18s ease,
-          border-color .18s ease,
-          box-shadow .18s ease,
-          transform .18s ease;
-      }
-      #hc_anamnesis .auro-anamnesis-save-visual.is-saving{
-        background:#fff7ed;
-        color:#9a3412;
-        border-color:#fed7aa;
-        box-shadow:0 8px 20px rgba(234,88,12,.10);
-      }
-      #hc_anamnesis .auro-anamnesis-save-visual.is-saved{
-        background:#f0fdf4;
-        color:#166534;
-        border-color:#bbf7d0;
-        box-shadow:0 8px 20px rgba(22,163,74,.10);
-      }
-      #hc_anamnesis .auro-anamnesis-save-visual.is-error{
-        background:#fef2f2;
-        color:#991b1b;
-        border-color:#fecaca;
-        box-shadow:0 8px 20px rgba(220,38,38,.10);
-      }
-      #hc_anamnesis .auro-anamnesis-save-visual.is-hidden{
-        display:none;
-      }
-      #hc_anamnesis .auro-anamnesis-save-icon{
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        flex:0 0 auto;
-      }
-      #hc_anamnesis .auro-anamnesis-save-visual.is-saving .auro-anamnesis-save-icon{
-        animation:auroAnamnesisSaveSpin .8s linear infinite;
-      }
-      @keyframes auroAnamnesisSaveSpin{
-        to{transform:rotate(360deg)}
-      }
-      @media(max-width:760px){
-        #hc_anamnesis .auro-anamnesis-save-row{
-          justify-content:stretch;
+    function firmaActual(){
+      try{
+        if(
+          !window.auroAnamnesis ||
+          typeof window.auroAnamnesis.obtenerDatosAnamnesis !== 'function'
+        ){
+          return '';
         }
-        #hc_anamnesis .auro-anamnesis-save-visual{
-          width:100%;
-          min-height:42px;
-        }
+
+        const datos = window.auroAnamnesis.obtenerDatosAnamnesis() || {};
+        const ctx = contexto();
+
+        const firma = {
+          id_atencion: texto(ctx.id_atencion || datos.id_atencion),
+          motivo_consulta: texto(datos.motivo_consulta),
+          enfermedad_actual: texto(datos.enfermedad_actual),
+          id_plantilla_anamnesis: texto(datos.id_plantilla_anamnesis),
+          narrativa_generada: texto(datos.narrativa_generada),
+          respuestas_json: datos.respuestas_json || {},
+          controles_json: capturarControles()
+        };
+
+        return JSON.stringify(ordenar(firma));
+      }catch(error){
+        console.warn(
+          'AUROSANAX UX Anamnesis: no se pudo calcular la firma visual de solo lectura.',
+          error
+        );
+        return '';
       }
-      @media(prefers-reduced-motion:reduce){
-        #hc_anamnesis .auro-anamnesis-save-visual,
-        #hc_anamnesis .auro-anamnesis-save-icon{
-          transition:none!important;
-          animation:none!important;
-        }
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-  function asegurarIndicador(){
-    const panel = $('hc_anamnesis');
-    if(!panel) return null;
-
-    instalarEstilos();
-
-    let indicador = $('auroAnamnesisSaveVisual');
-    if(indicador) return indicador;
-
-    const fila = document.createElement('div');
-    fila.className = 'auro-anamnesis-save-row';
-    fila.dataset.auroVisualOnly = 'true';
-
-    indicador = document.createElement('div');
-    indicador.id = 'auroAnamnesisSaveVisual';
-    indicador.className = 'auro-anamnesis-save-visual is-hidden';
-    indicador.setAttribute('role', 'status');
-    indicador.setAttribute('aria-live', 'polite');
-    indicador.setAttribute('aria-atomic', 'true');
-    indicador.dataset.auroVisualOnly = 'true';
-
-    fila.appendChild(indicador);
-
-    const subtitulo = panel.querySelector('.clinical-subtitle');
-    if(subtitulo){
-      subtitulo.insertAdjacentElement('afterend', fila);
-    }else{
-      panel.prepend(fila);
     }
 
-    return indicador;
-  }
+    function vigilarConfirmacion(ciclo, idAtencion, epoch, firmaInicial, inicio){
+      if(ciclo !== V.ciclo) return;
 
-  function pintar(modo, mensaje){
-    const indicador = asegurarIndicador();
-    if(!indicador) return;
-
-    indicador.className = 'auro-anamnesis-save-visual';
-
-    let icono = '<i class="bi bi-shield-check"></i>';
-
-    if(modo === 'saving'){
-      indicador.classList.add('is-saving');
-      icono = '<i class="bi bi-arrow-repeat"></i>';
-    }else if(modo === 'saved'){
-      indicador.classList.add('is-saved');
-      icono = '<i class="bi bi-check-circle-fill"></i>';
-    }else if(modo === 'error'){
-      indicador.classList.add('is-error');
-      icono = '<i class="bi bi-exclamation-triangle-fill"></i>';
-    }else if(modo === 'hidden'){
-      indicador.classList.add('is-hidden');
-    }
-
-    indicador.innerHTML =
-      '<span class="auro-anamnesis-save-icon">' + icono + '</span>' +
-      '<span class="auro-anamnesis-save-text"></span>';
-
-    const textoEl = indicador.querySelector('.auro-anamnesis-save-text');
-    if(textoEl) textoEl.textContent = mensaje || '';
-  }
-
-  function cancelarTemporizadores(){
-    clearTimeout(ESTADO.debounce);
-    clearInterval(ESTADO.polling);
-    clearTimeout(ESTADO.avisoLento);
-    clearTimeout(ESTADO.cierre);
-
-    ESTADO.debounce = null;
-    ESTADO.polling = null;
-    ESTADO.avisoLento = null;
-    ESTADO.cierre = null;
-  }
-
-  function mismaAtencion(captura, ctx){
-    if(!captura || !contextoValido(ctx)) return false;
-
-    return (
-      texto(ctx.id_atencion) === texto(captura.id_atencion) &&
-      Number(ctx.epoch || 0) === Number(captura.epoch || 0)
-    );
-  }
-
-  function sincronizarEstadoPersistido(){
-    cancelarTemporizadores();
-    ESTADO.ciclo += 1;
-
-    const ctx = contextoSeguro();
-    if(!contextoValido(ctx)){
-      pintar('hidden', '');
-      return;
-    }
-
-    if(texto(ctx.firma_persistida)){
-      pintar('saved', 'Anamnesis guardada ✓');
-    }else{
-      pintar('neutral', 'Anamnesis lista para registrar');
-    }
-  }
-
-  function cambioVisualizable(evento){
-    const objetivo = evento?.target || null;
-    const panel = $('hc_anamnesis');
-
-    if(!objetivo || !panel || !panel.contains(objetivo)) return false;
-    if(objetivo.closest?.('[data-auro-visual-only="true"]')) return false;
-    if(objetivo.disabled) return false;
-    if(objetivo.dataset?.auroAsignandoContexto === 'true') return false;
-    if(objetivo.dataset?.auroCabeceraContexto === 'true') return false;
-    if(objetivo.id === 'auroPlantillaAnamnesisSelect') return false;
-
-    const tipo = String(objetivo.type || '').toLowerCase();
-    if(['button','submit','reset','file'].includes(tipo)) return false;
-
-    return true;
-  }
-
-  function iniciarSeguimientoVisual(evento){
-    if(!cambioVisualizable(evento)) return;
-
-    const ctxInicial = contextoSeguro();
-    if(!contextoValido(ctxInicial)) return;
-
-    cancelarTemporizadores();
-    const ciclo = ++ESTADO.ciclo;
-
-    pintar('saving', 'Guardando anamnesis…');
-
-    /*
-      El motor real conserva su debounce propio de 700 ms.
-      Esta espera es SOLO visual y permite capturar la firma objetivo
-      después de que el mismo evento haya terminado de propagarse.
-    */
-    ESTADO.debounce = setTimeout(() => {
-      if(ciclo !== ESTADO.ciclo) return;
-
-      const objetivo = firmaActualSoloLectura();
-      if(!objetivo) {
-        sincronizarEstadoPersistido();
+      if(moduloActivo() !== 'hc_anamnesis'){
+        cancelar();
         return;
       }
 
-      const captura = {
-        id_atencion: objetivo.id_atencion,
-        epoch: objetivo.epoch,
-        firma_objetivo: objetivo.firma
-      };
+      const ctx = contexto();
 
-      const confirmar = () => {
-        if(ciclo !== ESTADO.ciclo) return true;
+      if(
+        !contextoValido(ctx) ||
+        texto(ctx.id_atencion) !== idAtencion ||
+        Number(ctx.epoch || 0) !== epoch
+      ){
+        cancelar();
+        return;
+      }
 
-        const ctx = contextoSeguro();
-        if(!mismaAtencion(captura, ctx)){
-          sincronizarEstadoPersistido();
-          return true;
-        }
+      const actual = firmaActual();
+      const persistida = texto(ctx.firma_persistida);
 
-        const persistida = texto(ctx.firma_persistida);
-        if(persistida && persistida === captura.firma_objetivo){
-          pintar('saved', 'Anamnesis guardada ✓');
-          clearTimeout(ESTADO.avisoLento);
-          ESTADO.avisoLento = null;
-          return true;
-        }
-
-        return false;
-      };
-
-      if(confirmar()) return;
-
-      ESTADO.polling = setInterval(() => {
-        if(confirmar()){
-          clearInterval(ESTADO.polling);
-          ESTADO.polling = null;
-        }
-      }, 220);
+      if(!actual){
+        cancelar();
+        return;
+      }
 
       /*
-        Si la confirmación real tarda más de lo habitual, solo se informa.
-        Se sigue observando durante otros 15 s para permitir recuperación.
+        NO-OP real:
+        la pantalla volvió exactamente a la firma ya persistida.
+        No se inventa verde ni una nueva actualización.
       */
-      ESTADO.avisoLento = setTimeout(() => {
-        if(ciclo !== ESTADO.ciclo) return;
-        const ctx = contextoSeguro();
-        if(!mismaAtencion(captura, ctx)) return;
-
-        if(texto(ctx.firma_persistida) !== captura.firma_objetivo){
-          pintar('error', 'Guardado no confirmado aún');
-        }
-      }, 15000);
-
-      ESTADO.cierre = setTimeout(() => {
-        if(ciclo !== ESTADO.ciclo) return;
-        clearInterval(ESTADO.polling);
-        ESTADO.polling = null;
-
-        const ctx = contextoSeguro();
-        if(!mismaAtencion(captura, ctx)){
-          sincronizarEstadoPersistido();
-          return;
-        }
-
-        if(texto(ctx.firma_persistida) === captura.firma_objetivo){
-          pintar('saved', 'Anamnesis guardada ✓');
-        }else{
-          pintar('error', 'Guardado no confirmado');
-        }
-      }, 30000);
-    }, 820);
-  }
-
-  function instalar(){
-    if(ESTADO.montado) return true;
-
-    const panel = $('hc_anamnesis');
-    if(!panel || !apiAnamnesis()) return false;
-
-    ESTADO.montado = true;
-    asegurarIndicador();
-
-    panel.addEventListener('input', iniciarSeguimientoVisual, true);
-    panel.addEventListener('change', iniciarSeguimientoVisual, true);
-
-    const refrescar = () => {
-      setTimeout(sincronizarEstadoPersistido, 250);
-      setTimeout(sincronizarEstadoPersistido, 900);
-    };
-
-    window.addEventListener('aurosanax:atencion-iniciada', refrescar);
-    window.addEventListener('aurosanax:atencion-seleccionada', refrescar);
-    window.addEventListener('aurosanax:atencion-actualizada', refrescar);
-
-    window.addEventListener('aurosanax:atencion-limpiada', () => {
-      cancelarTemporizadores();
-      ESTADO.ciclo += 1;
-      pintar('hidden', '');
-    });
-
-    sincronizarEstadoPersistido();
-    return true;
-  }
-
-  if(!instalar()){
-    let intentos = 0;
-    const espera = setInterval(() => {
-      intentos += 1;
-      if(instalar() || intentos >= 30){
-        clearInterval(espera);
+      if(actual === firmaInicial && persistida === firmaInicial){
+        restaurar();
+        return;
       }
-    }, 250);
-  }
 
-  console.info(
-    'AUROSANAX: feedback visual de Anamnesis instalado en modo solo lectura.'
-  );
-})();
-</script>
-<!-- ===== FIN FEEDBACK VISUAL ANAMNESIS ===== -->
+      /*
+        Confirmación real:
+        el verde aparece únicamente cuando la firma ACTUAL de pantalla
+        coincide con la firma que Anamnesis ya confirmó como persistida.
+      */
+      if(persistida && actual === persistida){
+        pintarExito(ciclo);
+        return;
+      }
+
+      /*
+        El motor de Anamnesis puede confirmar con varios reintentos.
+        Se deja margen amplio para no declarar fallo prematuramente.
+      */
+      if(Date.now() - inicio >= 22000){
+        pintarNoConfirmado(ciclo);
+        return;
+      }
+
+      V.timer = setTimeout(function(){
+        vigilarConfirmacion(
+          ciclo,
+          idAtencion,
+          epoch,
+          firmaInicial,
+          inicio
+        );
+      }, 250);
+    }
+
+    function manejarEdicion(evento){
+      /*
+        SOLO interacción humana real.
+        Eventos programáticos de restauración/sincronización no deben
+        encender estados de guardado.
+      */
+      if(evento?.isTrusted !== true) return;
+      if(moduloActivo() !== 'hc_anamnesis') return;
+
+      const objetivo = evento.target;
+      if(!objetivo) return;
+      if(objetivo.dataset?.auroAsignandoContexto === 'true') return;
+      if(objetivo.dataset?.auroCabeceraContexto === 'true') return;
+      if(objetivo.disabled || objetivo.readOnly) return;
+
+      const ctx = contexto();
+      if(!contextoValido(ctx)) return;
+
+      const idAtencion = texto(ctx.id_atencion);
+      const epoch = Number(ctx.epoch || 0);
+      const firmaInicial = texto(ctx.firma_persistida);
+      const actual = firmaActual();
+
+      if(!actual) return;
+
+      /*
+        Si el evento deja exactamente el contenido ya persistido,
+        no existe nada que representar como guardado.
+      */
+      if(firmaInicial && actual === firmaInicial){
+        cancelar();
+        return;
+      }
+
+      V.ciclo += 1;
+      const ciclo = V.ciclo;
+
+      if(V.timer){
+        clearTimeout(V.timer);
+        V.timer = null;
+      }
+
+      if(!pintarGuardando()) return;
+
+      /*
+        Anamnesis conserva intacto su debounce propio de 700 ms.
+        Este temporizador NO guarda; solo comienza a observar la firma.
+      */
+      V.timer = setTimeout(function(){
+        vigilarConfirmacion(
+          ciclo,
+          idAtencion,
+          epoch,
+          firmaInicial,
+          Date.now()
+        );
+      }, 760);
+    }
+
+    function instalar(){
+      const panel = document.getElementById('hc_anamnesis');
+      if(!panel) return false;
+
+      panel.addEventListener('input', manejarEdicion);
+      panel.addEventListener('change', manejarEdicion);
+
+      [
+        'aurosanax:atencion-iniciada',
+        'aurosanax:atencion-seleccionada',
+        'aurosanax:atencion-limpiada',
+        'aurosanax:historia-nueva'
+      ].forEach(function(nombre){
+        window.addEventListener(nombre, cancelar);
+      });
+
+      return true;
+    }
+
+    if(!instalar()){
+      document.addEventListener('DOMContentLoaded', instalar, {once:true});
+    }
+  })();
+  </script>
+
 
   <!-- =========================================================
        AUROSANAX · DICTADO CLÍNICO · CONEXIÓN REVERSIBLE
