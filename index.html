@@ -12594,7 +12594,7 @@ document.addEventListener('click',e=>{
 
 
 <!-- ============================================================
-     AUROSANAX INDEX 87 — BOTÓN CONTEXTUAL DE ANAMNESIS
+     AUROSANAX INDEX 88 — BOTÓN CONTEXTUAL DE ANAMNESIS
      INTERVENCIÓN VISUAL QUIRÚRGICA ANTIRREGRESIVA
      ------------------------------------------------------------
      ALCANCE EXCLUSIVO:
@@ -12602,14 +12602,14 @@ document.addEventListener('click',e=>{
        el botón global y muestra "Actualizar anamnesis" en el mismo lugar.
      - NO modifica autosave, POST, GET, Apps Script, firmas, timestamps,
        id_atencion, atenciones abiertas/finalizadas ni otros módulos.
-     - El botón NO guarda por sí mismo: confirma visualmente el autosave
-       oficial ya existente mediante firma_persistida pública.
+     - El botón usa el guardador oficial ya existente de Anamnesis y
+       muestra su resultado confirmado; no crea un sistema paralelo.
      - No escucha input/change; nunca se activa solo al editar.
 ============================================================ -->
-<style id="auro-index87-anamnesis-boton-contextual-style">
+<style id="auro-index88-anamnesis-boton-contextual-style">
   #auroBtnActualizarAnamnesisContextual[hidden]{display:none!important}
 </style>
-<script id="auro-index87-anamnesis-boton-contextual-script">
+<script id="auro-index88-anamnesis-boton-contextual-script">
 (function(){
   'use strict';
 
@@ -12664,7 +12664,7 @@ document.addEventListener('click',e=>{
     btn.addEventListener('click', function(evento){
       evento.preventDefault();
       evento.stopPropagation();
-      auroIndex87ConfirmarAnamnesis(this);
+      auroIndex88ConfirmarAnamnesis(this);
     });
 
     global.insertAdjacentElement('afterend', btn);
@@ -12873,7 +12873,7 @@ document.addEventListener('click',e=>{
     return { confirmado:false };
   }
 
-  async function auroIndex87ConfirmarAnamnesis(btn){
+  async function auroIndex88ConfirmarAnamnesis(btn){
     if(!btn || btn.disabled) return false;
     if(moduloActivo() !== 'hc_anamnesis' || !historiaExistente()){
       configurar(moduloActivo());
@@ -12903,19 +12903,49 @@ document.addEventListener('click',e=>{
       return false;
     }
 
-    /* Con cambio pendiente: el autosave oficial de anamnesis.js sigue siendo
-       el único que guarda. Este botón únicamente espera su confirmación real. */
+    /* Con cambio pendiente: el botón llama de inmediato al guardador oficial
+       ya existente de Anamnesis. Ese guardador cancela el debounce pendiente,
+       persiste por la misma id_atencion y solo retorna success al confirmar.
+       No se crea ninguna ruta de guardado paralela ni se toca Apps Script. */
+    const guardarOficial = window.auroAnamnesis?.guardarAnamnesisPorAtencion ||
+      window.guardarAnamnesisPorAtencion;
+
+    if(typeof guardarOficial !== 'function'){
+      estadoBoton(btn, 'error');
+      restaurarDespues(btn, 2000, tokenOperacion);
+      return false;
+    }
+
     estadoBoton(btn, 'guardando');
-    const resultado = await esperarConfirmacion(inicial, tokenOperacion);
+
+    let resultado = null;
+    try{
+      resultado = await guardarOficial();
+    }catch(error){
+      console.error('AUROSANAX INDEX 88: error al ejecutar guardado oficial de Anamnesis.', error);
+      resultado = { success:false };
+    }
 
     if(tokenOperacion !== operacion) return false;
+    if(moduloActivo() !== 'hc_anamnesis') return false;
 
-    if(resultado?.cancelado || resultado?.cambio_posterior){
+    const actual = capturaFirmaActual();
+    if(!actual || !contextoCompatible(inicial, actual)){
       estadoBoton(btn, 'normal');
       return false;
     }
 
-    if(resultado?.confirmado){
+    /* Si el profesional siguió editando durante el guardado, no mostramos
+       un verde correspondiente a una firma anterior. El nuevo cambio queda
+       bajo el autosave oficial de Anamnesis. */
+    if(actual.firma !== inicial.firma){
+      estadoBoton(btn, 'normal');
+      return false;
+    }
+
+    if(resultado?.success === true &&
+       actual.firma_persistida &&
+       actual.firma_persistida === inicial.firma){
       estadoBoton(btn, 'exito');
       restaurarDespues(btn, 1400, tokenOperacion);
       return false;
@@ -12991,7 +13021,7 @@ document.addEventListener('click',e=>{
   }
 })();
 </script>
-<!-- FIN AUROSANAX INDEX 87 — BOTÓN CONTEXTUAL DE ANAMNESIS -->
+<!-- FIN AUROSANAX INDEX 88 — BOTÓN CONTEXTUAL DE ANAMNESIS -->
 </body>
 </html>
 <!--
