@@ -1357,11 +1357,25 @@ function auroMostrarExamenFisicoPrevio(h){
     return;
   }
 
+  /*
+    PA desglosada en el resumen previo — SOLO PRESENTACIÓN.
+    El dato persistido sigue siendo presion_arterial = "sistólica/diastólica".
+    Si el formato histórico no es inequívoco, se conserva el valor original.
+  */
+  const paRegistrada = String(h.presion_arterial || '').trim();
+  const paRegistradaMatch = paRegistrada.match(/^\s*(\d{2,3})\s*\/\s*(\d{2,3})\s*$/);
+  const signosPresion = paRegistradaMatch
+    ? [
+        'PA sistólica: ' + paRegistradaMatch[1] + ' mmHg',
+        'PA diastólica: ' + paRegistradaMatch[2] + ' mmHg'
+      ]
+    : (paRegistrada ? ['PA: ' + paRegistrada] : []);
+
   const signos = [
     h.peso_kg ? 'Peso: ' + h.peso_kg + ' kg' : '',
     h.talla_cm ? 'Talla: ' + h.talla_cm + ' cm' : '',
     auroIMCClinicoSeguro(h.imc, h.peso_kg, h.talla_cm) ? 'IMC: ' + auroIMCClinicoSeguro(h.imc, h.peso_kg, h.talla_cm) : '',
-    h.presion_arterial ? 'PA: ' + h.presion_arterial : '',
+    ...signosPresion,
     h.frecuencia_cardiaca ? 'FC: ' + h.frecuencia_cardiaca : '',
     h.temperatura ? 'Temperatura: ' + h.temperatura + ' °C' : '',
     h.saturacion ? 'SatO₂: ' + h.saturacion + ' %' : ''
