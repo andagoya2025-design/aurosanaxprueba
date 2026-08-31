@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    Archivo de reemplazo propuesto: informe_historico.js
    Entrega externa: TXT completo para revisión manual
-   Versión propuesta: 2.1.0-VISOR-PREMIUM-ANTIRREGRESIVO
+   Versión propuesta: 2.2.0-DOCUMENTO-CLINICO-PROFESIONAL-ANTIRREGRESIVO
    Fecha: 2026-08-31
    Baseline leído en GitHub (SOLO LECTURA):
    informe_historico.js v1.0.0
@@ -38,6 +38,9 @@
   12. El informe ordena y presenta; NO corrige ni reescribe el registro clínico.
   13. VISOR PREMIUM: zoom y ajuste al ancho afectan SOLO la vista previa.
       El HTML documental y la impresión/PDF A4 permanecen sin modificación.
+  14. DOCUMENTO CLÍNICO PROFESIONAL: dato ausente = espacio ausente. La
+      maquetación documental se redistribuye sin fabricar información ni dejar
+      tarjetas/celdas vacías. Los textos clínicos extensos aprovechan el ancho.
 ============================================================================ */
 (function(){
   'use strict';
@@ -47,7 +50,7 @@
     return;
   }
 
-  const VERSION = '2.1.0-VISOR-PREMIUM-ANTIRREGRESIVO';
+  const VERSION = '2.2.0-DOCUMENTO-CLINICO-PROFESIONAL-ANTIRREGRESIVO';
   const MODULO = 'AUROSANAX INFORME HISTÓRICO';
   const MAX_CONCURRENCIA = 5;
 
@@ -836,9 +839,17 @@
     }).filter(x=>x && valorClinico(x.titulo));
 
     if(!normalizados.length) return '';
-    return `<div class="aih-ant-group ${clase}"><h3>${esc(titulo)}</h3><div class="aih-ant-grid">${normalizados.map(x=>
-      `<div class="aih-ant-item"><b>${esc(x.titulo)}</b>${valorClinico(x.detalle)?`<span>${esc(x.detalle)}</span>`:''}</div>`
-    ).join('')}</div></div>`;
+
+    /*
+      V2.2 — MAQUETACIÓN DOCUMENTAL ADAPTATIVA / SOLO PRESENTACIÓN.
+      No crea, elimina ni modifica antecedentes. La clase ancha solo permite
+      que un antecedente narrativo use todo el renglón y evita huecos visuales.
+    */
+    return `<div class="aih-ant-group ${clase}"><h3>${esc(titulo)}</h3><div class="aih-ant-grid">${normalizados.map(x=>{
+      const largo = `${txt(x.titulo)} ${txt(x.detalle)}`.length;
+      const ancha = largo > 135 ? ' aih-ant-item-wide' : '';
+      return `<div class="aih-ant-item${ancha}"><b>${esc(x.titulo)}</b>${valorClinico(x.detalle)?`<span>${esc(x.detalle)}</span>`:''}</div>`;
+    }).join('')}</div></div>`;
   }
 
   function helperAntecedente(nombre){
@@ -1314,9 +1325,8 @@
       return '';
     }
 
+    /* Fecha y hora permanecen en la cabecera documental; no se duplican abajo. */
     const cabecera = miniDatos([
-      ['Fecha',fecha],
-      ['Hora',hora],
       ['Tipo de atención',a.tipo_atencion || a.tipo],
       ['Especialidad',medico.especialidad],
       ['Profesional',medico.nombre],
@@ -1325,9 +1335,10 @@
 
     return `<article class="aih-attention">
       <div class="aih-attention-head">
-        <div>
-          <span class="aih-attention-kicker">Consulta N.º ${esc(a.numero_consulta || a.consulta || numero)}</span>
-          <h2>${esc(fecha || 'Atención clínica')}${hora?` · ${esc(hora)}`:''}</h2>
+        <div class="aih-attention-index">${esc(a.numero_consulta || a.consulta || numero)}</div>
+        <div class="aih-attention-title">
+          <span class="aih-attention-kicker">Atención clínica · Consulta N.º ${esc(a.numero_consulta || a.consulta || numero)}</span>
+          <h2>${esc(fecha || 'Atención clínica')}${hora?` <small>· ${esc(hora)}</small>`:''}</h2>
         </div>
       </div>
       ${cabecera}
@@ -1490,11 +1501,25 @@
 
     state.excluidos.atencionesSinContenido = 0;
     let numeroVisible = 0;
+    const fechasVisibles = [];
     const atencionesHtml = modelo.atenciones.map(d=>{
       const html = renderAtencion(d,numeroVisible+1,modelo.medicos);
-      if(html) numeroVisible += 1;
+      if(html){
+        numeroVisible += 1;
+        const rawFecha = d?.atencion?.fecha_atencion || d?.atencion?.fecha_consulta || d?.atencion?.fecha;
+        const iso = fechaISO(rawFecha);
+        const vista = fechaVista(rawFecha);
+        if(iso && vista) fechasVisibles.push({iso,vista});
+      }
       return html;
     }).filter(Boolean).join('');
+
+    const fechasOrdenadas = fechasVisibles.slice().sort((a,b)=>a.iso.localeCompare(b.iso));
+    const periodo = !fechasOrdenadas.length
+      ? ''
+      : fechasOrdenadas.length === 1
+        ? fechasOrdenadas[0].vista
+        : `${fechasOrdenadas[0].vista} – ${fechasOrdenadas[fechasOrdenadas.length-1].vista}`;
 
     const cabPaciente = miniDatos([
       ['Documento',p.documento],
@@ -1504,6 +1529,12 @@
       ['Historia clínica',p.id_historia],
       ['Teléfono',p.telefono],
       ['Correo',p.correo]
+    ]);
+
+    const resumenDocumento = miniDatos([
+      ['Periodo documentado',periodo],
+      ['Atenciones incluidas',numeroVisible ? String(numeroVisible) : ''],
+      ['Fecha de emisión',generado]
     ]);
 
     const emisor = inst.emisor || {};
@@ -1519,7 +1550,10 @@
     const nota = `El presente Informe Clínico Histórico constituye un resumen longitudinal generado a partir de los registros clínicos persistidos disponibles en el expediente electrónico al momento de su emisión. La información se presenta respetando su asociación con las atenciones y documentos clínicos fuente correspondientes. Este resumen no sustituye los registros originales que integran la Historia Clínica.`;
 
     return `<div class="aih-doc">
-      <div class="aih-confidential">CONFIDENCIAL</div>
+      <div class="aih-topline">
+        <div class="aih-confidential">CONFIDENCIAL</div>
+        <div class="aih-doc-code">Informe clínico longitudinal · HISTORICO V2.2</div>
+      </div>
 
       <header class="aih-header">
         <div class="aih-legal">
@@ -1544,9 +1578,11 @@
         ${cabPaciente}
       </section>
 
+      ${resumenDocumento ? `<section class="aih-document-summary">${resumenDocumento}</section>` : ''}
+
       ${renderAntecedentes(modelo.historia)}
 
-      ${atencionesHtml ? `<section class="aih-major aih-timeline"><h2>Historial cronológico de atenciones</h2>${atencionesHtml}</section>` : ''}
+      ${atencionesHtml ? `<section class="aih-major aih-timeline"><div class="aih-major-heading"><span>Curso clínico</span><h2>Historial cronológico de atenciones</h2></div>${atencionesHtml}</section>` : ''}
       ${renderRegistrosSinAtencion(modelo.globales)}
       ${renderEvolutivos(modelo.globales)}
 
@@ -1563,7 +1599,7 @@
         <div>
           <span>Emitido: ${esc(generado)}</span>
           <span>Atenciones con contenido clínico incluidas: ${numeroVisible}</span>
-          <span>Versión documental: HISTORICO_V2</span>
+          <span>Versión documental: HISTORICO_V2.2</span>
         </div>
       </footer>
 
@@ -1576,37 +1612,96 @@
   ======================================================================== */
   function cssDocumento(){
     return `
-      :root{--aih-primary:#8b1e5a;--aih-primary-soft:#fbf4f8;--aih-text:#172033;--aih-muted:#64748b;--aih-line:#e6e8ec;--aih-danger:#9f1239}
+      :root{--aih-primary:#7a174f;--aih-primary-2:#a52a6a;--aih-primary-soft:#fbf6f9;--aih-text:#18212f;--aih-muted:#687386;--aih-line:#dfe4ea;--aih-line-soft:#edf0f3;--aih-danger:#9f1239;--aih-paper:#fff}
       *{box-sizing:border-box}
-      body{margin:0;background:#eef1f5;color:var(--aih-text);font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-      .aih-doc{width:210mm;min-height:297mm;margin:18px auto;background:#fff;padding:12mm 13mm 15mm;box-shadow:0 10px 35px rgba(15,23,42,.12);position:relative}
-      .aih-confidential{display:inline-block;border:1px solid #991b1b;color:#991b1b;font-size:8.5px;font-weight:900;letter-spacing:.16em;padding:4px 8px;border-radius:5px;margin-bottom:9px}
-      .aih-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:1px solid var(--aih-line);padding-bottom:10px}
-      .aih-legal h1{font-size:16px;margin:0;color:#111827}.aih-legal p{font-size:10px;margin:3px 0;color:#475569}.aih-legal small{display:block;font-size:8.8px;color:#64748b}
-      .aih-brand{display:flex;gap:8px;align-items:center;text-align:right;justify-content:flex-end;max-width:46%}.aih-brand img{width:40px;height:40px;object-fit:contain}.aih-brand b{display:block;font-size:12px;color:var(--aih-primary)}.aih-brand span{display:block;font-size:8.5px;color:#94a3b8;margin-top:2px}
-      .aih-document-title{text-align:center;padding:14px 0 11px}.aih-document-title>span{font-size:8.5px;color:#64748b;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.aih-document-title h2{font-size:18px;margin:4px 0 2px;color:#111827;letter-spacing:.02em}.aih-document-title p{font-size:10px;color:#64748b;margin:0}
-      .aih-patient{border:1px solid #eadde5;background:#fff;border-radius:10px;padding:10px 11px;margin-bottom:13px}.aih-patient-name span{font-size:8px;text-transform:uppercase;color:#94a3b8;font-weight:800;letter-spacing:.08em}.aih-patient-name h2{font-size:16px;margin:2px 0 8px;color:#111827}
-      .aih-major{margin:15px 0}.aih-major>h2,.aih-signature>h2{font-size:13.5px;color:var(--aih-primary);margin:0 0 8px;border-bottom:1px solid #eadde5;padding-bottom:5px}
-      .aih-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.aih-mini{border-bottom:1px solid #eef0f2;padding:4px 2px;min-width:0}.aih-mini span{display:block;font-size:7.8px;text-transform:uppercase;color:#94a3b8;font-weight:800;margin-bottom:2px}.aih-mini b{font-size:9.8px;line-height:1.3;word-break:break-word;color:#1f2937}
-      .aih-attention{border:1px solid #dde2e8;border-radius:10px;padding:10px 11px;margin:0 0 11px;break-inside:auto;page-break-inside:auto}.aih-attention-head{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #edf0f3;padding-bottom:6px;margin-bottom:7px}.aih-attention-kicker{font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:var(--aih-primary);font-weight:900}.aih-attention-head h2{font-size:12.5px;margin:2px 0 0;color:#111827}
-      .aih-module{margin:10px 0 0;padding-top:2px}.aih-module-title{font-size:11.5px;color:#1f2937;margin:0 0 6px;font-weight:900}.aih-special{background:#fffafd;border:1px solid #f0e3ea;border-radius:8px;padding:8px}
-      .aih-block{margin:7px 0;break-inside:auto;page-break-inside:auto}.aih-block h3{font-size:9.6px;margin:0 0 3px;color:#475569;border-left:2px solid var(--aih-primary);padding-left:5px}.aih-block-body{font-size:9.8px;line-height:1.45;color:#273244}.aih-danger h3{color:var(--aih-danger);border-left-color:#e11d48}.aih-danger .aih-block-body{color:#7f1d1d}
-      .aih-kv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.aih-kv{border-bottom:1px solid #eef0f3;padding:4px 2px}.aih-kv span{display:block;font-size:8px;color:#94a3b8;font-weight:700;margin-bottom:1px}.aih-kv b{font-size:9.5px;font-weight:700}.aih-kv-block{grid-column:1/-1}.aih-kv-block>div{margin-top:3px}
-      .aih-lines{display:grid;gap:4px}.aih-line{display:grid;grid-template-columns:minmax(120px,32%) 1fr;gap:8px;border-bottom:1px solid #eef0f3;padding:4px 0}.aih-line span{font-size:8.5px;color:#64748b;font-weight:800}.aih-line div{font-size:9.7px;line-height:1.4}
-      .aih-list{margin:3px 0;padding-left:17px}.aih-list li{font-size:9.6px;margin:3px 0;line-height:1.35}.aih-doc-list{list-style:none;padding-left:0}.aih-doc-list li{padding:5px 0;border-bottom:1px solid #eef0f3}.aih-doc-list b{display:block}.aih-doc-list small{display:block;color:#64748b;margin-top:2px}
-      .aih-dx-list,.aih-med-list{display:grid;gap:4px}.aih-dx,.aih-med{border:1px solid #edf0f3;border-radius:6px;padding:5px 7px}.aih-dx b,.aih-med b{display:block;font-size:9.8px}.aih-dx small,.aih-med small{display:block;font-size:8.5px;color:#64748b;margin-top:2px;line-height:1.3}.aih-recipe{margin-top:5px}.aih-recipe h4{font-size:9.5px;margin:0 0 4px;color:#475569}
-      .aih-ant-group{margin:7px 0}.aih-ant-group>h3{font-size:9.8px;margin:0 0 4px;color:#475569}.aih-ant-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.aih-ant-item{border:1px solid #edf0f3;border-radius:6px;padding:5px 7px}.aih-ant-item b{display:block;font-size:9.4px}.aih-ant-item span{display:block;font-size:8.5px;color:#64748b;margin-top:2px}.aih-ant-alert .aih-ant-item{border-color:#fecdd3;background:#fffafb}
-      .aih-table-wrap{overflow:hidden;border:1px solid #edf0f3;border-radius:7px}.aih-table{width:100%;border-collapse:collapse;font-size:9px}.aih-table th{background:#f8fafc;text-align:left;color:#475569}.aih-table td,.aih-table th{padding:5px 6px;border-bottom:1px solid #edf0f3;vertical-align:top}
-      .aih-associated{border:1px solid #e5e7eb;border-radius:9px;padding:9px 10px;background:#fcfcfd}.aih-associated-note{font-size:8.5px;line-height:1.4;color:#64748b;margin:-2px 0 8px}
-      .aih-signature{margin:18px 0 12px}.aih-signature-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:end}.aih-signature-grid>div:first-child{display:grid;gap:2px;font-size:9px}.aih-signature-grid b{font-size:10.5px}.aih-signature-grid span{color:#64748b}.aih-sign-line{border-top:1px solid #94a3b8;padding-top:4px;text-align:center;font-size:8px}
-      .aih-note{border-top:1px solid #e5e7eb;padding-top:8px;margin-top:13px}.aih-note b{font-size:8.5px;text-transform:uppercase;color:#475569}.aih-note p{font-size:8.5px;line-height:1.4;color:#64748b;margin:3px 0 0}
-      .aih-footer-doc{margin-top:13px;padding-top:8px;border-top:1px solid #dce2e8;display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:8px;color:#64748b}.aih-footer-doc div{display:grid;gap:2px}.aih-footer-doc div:last-child{text-align:right}
+      html{background:#e9edf2}
+      body{margin:0;background:#e9edf2;color:var(--aih-text);font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .aih-doc{width:210mm;min-height:297mm;margin:18px auto;background:var(--aih-paper);padding:10mm 12mm 15mm;box-shadow:0 12px 38px rgba(15,23,42,.13);position:relative;font-size:10px;line-height:1.42}
+
+      .aih-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
+      .aih-confidential{display:inline-flex;align-items:center;border:1px solid #b4233c;color:#9f1239;font-size:7.5px;font-weight:900;letter-spacing:.16em;padding:3px 7px;border-radius:4px}
+      .aih-doc-code{font-size:7.4px;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;font-weight:800;text-align:right}
+
+      .aih-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-top:2px solid var(--aih-primary);border-bottom:1px solid var(--aih-line);padding:9px 0 8px}
+      .aih-legal{min-width:0;flex:1 1 auto}.aih-legal h1{font-size:15.5px;margin:0;color:#111827;line-height:1.15}.aih-legal p{font-size:9.5px;margin:3px 0 0;color:#475569}.aih-legal small{display:block;font-size:8px;color:#7b8798;margin-top:2px}
+      .aih-brand{display:flex;gap:8px;align-items:center;text-align:right;justify-content:flex-end;max-width:47%;min-width:0}.aih-brand img{width:38px;height:38px;object-fit:contain}.aih-brand b{display:block;font-size:12.2px;color:var(--aih-primary);line-height:1.15}.aih-brand span{display:block;font-size:8px;color:#7b8798;margin-top:2px;line-height:1.25}
+
+      .aih-document-title{text-align:left;padding:13px 0 10px;border-bottom:1px solid var(--aih-line-soft)}
+      .aih-document-title>span{font-size:7.6px;color:#8a516f;text-transform:uppercase;letter-spacing:.11em;font-weight:900}
+      .aih-document-title h2{font-size:18px;margin:3px 0 1px;color:#111827;letter-spacing:.012em;line-height:1.14}
+      .aih-document-title p{font-size:9.5px;color:#6b7280;margin:0}
+
+      .aih-patient{padding:10px 0 8px;margin:0;border-bottom:1px solid var(--aih-line)}
+      .aih-patient-name{display:flex;align-items:baseline;gap:9px;margin-bottom:5px}.aih-patient-name span{font-size:7.5px;text-transform:uppercase;color:#8a516f;font-weight:900;letter-spacing:.09em}.aih-patient-name h2{font-size:15px;margin:0;color:#111827;line-height:1.25}
+      .aih-document-summary{margin:0;padding:6px 0 8px;border-bottom:1px solid var(--aih-line);background:linear-gradient(90deg,#fff,var(--aih-primary-soft),#fff)}
+
+      /* Distribución fluida: el último dato crece y no deja celdas vacías. */
+      .aih-mini-grid{display:flex;flex-wrap:wrap;gap:0 12px;align-items:stretch}
+      .aih-mini{flex:1 1 145px;min-width:0;border-bottom:1px solid var(--aih-line-soft);padding:4px 1px 5px}
+      .aih-mini span{display:block;font-size:7.3px;text-transform:uppercase;color:#8a516f;font-weight:900;letter-spacing:.045em;margin-bottom:1px}
+      .aih-mini b{display:block;font-size:9.5px;line-height:1.35;overflow-wrap:anywhere;color:#222b38}
+      .aih-document-summary .aih-mini{border-bottom:0;padding-top:3px;padding-bottom:3px}
+
+      .aih-major{margin:13px 0 0}
+      .aih-major>h2,.aih-signature>h2{font-size:12.7px;color:#1f2937;margin:0 0 7px;border-bottom:1px solid #d8c3cf;padding:0 0 5px;font-weight:900}
+      .aih-major-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;border-bottom:1px solid #d8c3cf;padding-bottom:5px;margin-bottom:8px}
+      .aih-major-heading span{font-size:7.4px;color:var(--aih-primary);text-transform:uppercase;letter-spacing:.09em;font-weight:900;white-space:nowrap}
+      .aih-major-heading h2{font-size:12.8px;color:#1f2937;margin:0;font-weight:900;text-align:right}
+
+      /* Antecedentes: grupos sin reserva de espacio y tarjetas fluidas. */
+      .aih-ant-group{margin:0;padding:7px 0;border-bottom:1px solid var(--aih-line-soft)}
+      .aih-ant-group:last-child{border-bottom:0}
+      .aih-ant-group>h3{font-size:9.3px;margin:0 0 5px;color:#4a3240;text-transform:uppercase;letter-spacing:.035em;font-weight:900}
+      .aih-ant-grid{display:flex;flex-wrap:wrap;gap:5px}
+      .aih-ant-item{flex:1 1 180px;min-width:0;border-left:2px solid #d9b5c9;background:#fcfbfc;padding:5px 7px;break-inside:avoid;page-break-inside:avoid}
+      .aih-ant-item-wide{flex-basis:100%}
+      .aih-ant-item b{display:block;font-size:9.4px;line-height:1.3;color:#1f2937;overflow-wrap:anywhere}
+      .aih-ant-item span{display:block;font-size:8.5px;line-height:1.38;color:#5f6b7b;margin-top:2px;white-space:normal;overflow-wrap:anywhere}
+      .aih-ant-alert>h3{color:var(--aih-danger)}.aih-ant-alert .aih-ant-item{border-left-color:#e11d48;background:#fffafa}
+
+      .aih-attention{margin:0 0 11px;border-top:1px solid #cfd6df;border-bottom:1px solid #e6eaf0;padding:0 0 10px;break-inside:auto;page-break-inside:auto}
+      .aih-attention:first-of-type{border-top:0}
+      .aih-attention-head{display:flex;align-items:center;gap:9px;background:linear-gradient(90deg,var(--aih-primary-soft),#fff 72%);border-left:3px solid var(--aih-primary);padding:7px 8px;margin-bottom:5px}
+      .aih-attention-index{width:25px;height:25px;flex:0 0 25px;border-radius:50%;display:grid;place-items:center;background:#fff;border:1px solid #d8c3cf;color:var(--aih-primary);font-size:9px;font-weight:900}
+      .aih-attention-title{min-width:0}.aih-attention-kicker{display:block;font-size:7.2px;text-transform:uppercase;letter-spacing:.075em;color:var(--aih-primary);font-weight:900;margin-bottom:1px}
+      .aih-attention-head h2{font-size:11.7px;margin:0;color:#111827;line-height:1.2}.aih-attention-head h2 small{font-size:9.2px;color:#64748b;font-weight:700}
+      .aih-attention>.aih-mini-grid{padding:0 4px 3px}
+
+      .aih-module{margin:8px 4px 0;padding-top:7px;border-top:1px solid var(--aih-line-soft)}
+      .aih-module-title{font-size:10.3px;color:#2d3748;margin:0 0 5px;font-weight:900;text-transform:uppercase;letter-spacing:.025em}
+      .aih-special{background:#fff;border-left:2px solid #dfc4d3;padding-left:8px}
+      .aih-block{margin:5px 0 7px;break-inside:auto;page-break-inside:auto}
+      .aih-block h3{font-size:8.7px;margin:0 0 2px;color:#6d3655;font-weight:900}
+      .aih-block-body{font-size:9.5px;line-height:1.48;color:#273244;overflow-wrap:anywhere}
+      .aih-danger h3{color:var(--aih-danger)}.aih-danger .aih-block-body{color:#7f1d1d}
+
+      .aih-kv-grid{display:flex;flex-wrap:wrap;gap:4px 12px}.aih-kv{flex:1 1 175px;min-width:0;border-bottom:1px solid var(--aih-line-soft);padding:4px 1px}.aih-kv span{display:block;font-size:7.7px;color:#7b8798;font-weight:800;margin-bottom:1px}.aih-kv b{font-size:9.3px;font-weight:700;line-height:1.35}.aih-kv-block{flex-basis:100%}.aih-kv-block>div{margin-top:3px}
+      .aih-lines{display:grid;gap:0}.aih-line{display:grid;grid-template-columns:minmax(112px,29%) 1fr;gap:8px;border-bottom:1px solid var(--aih-line-soft);padding:4px 0}.aih-line:last-child{border-bottom:0}.aih-line span{font-size:8.1px;color:#697586;font-weight:900}.aih-line div{font-size:9.5px;line-height:1.43;overflow-wrap:anywhere}
+
+      .aih-list{margin:2px 0;padding-left:17px}.aih-list li{font-size:9.3px;margin:3px 0;line-height:1.4}.aih-doc-list{list-style:none;padding-left:0}.aih-doc-list li{padding:4px 0;border-bottom:1px solid var(--aih-line-soft)}.aih-doc-list li:last-child{border-bottom:0}.aih-doc-list b{display:block}.aih-doc-list small{display:block;color:#697586;margin-top:1px}
+      .aih-dx-list,.aih-med-list{display:grid;gap:0}.aih-dx,.aih-med{padding:5px 3px;border-bottom:1px solid var(--aih-line-soft);break-inside:avoid;page-break-inside:avoid}.aih-dx:last-child,.aih-med:last-child{border-bottom:0}.aih-dx b,.aih-med b{display:block;font-size:9.5px;line-height:1.35}.aih-dx small,.aih-med small{display:block;font-size:8.3px;color:#697586;margin-top:2px;line-height:1.35}.aih-recipe{margin-top:4px}.aih-recipe h4{font-size:9px;margin:0 0 3px;color:#6d3655;font-weight:900}
+
+      .aih-table-wrap{overflow:hidden;border:1px solid var(--aih-line);border-radius:4px}.aih-table{width:100%;border-collapse:collapse;font-size:8.6px}.aih-table th{background:#f7f8fa;text-align:left;color:#475569;font-weight:900}.aih-table td,.aih-table th{padding:4px 5px;border-bottom:1px solid var(--aih-line-soft);vertical-align:top}
+      .aih-associated{border-left:3px solid #94a3b8;padding-left:9px}.aih-associated-note{font-size:8.2px;line-height:1.42;color:#697586;margin:-1px 0 7px}
+
+      .aih-signature{margin:17px 0 11px;break-inside:avoid;page-break-inside:avoid}.aih-signature-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:end}.aih-signature-grid>div:first-child{display:grid;gap:2px;font-size:8.6px}.aih-signature-grid b{font-size:10px}.aih-signature-grid span{color:#697586}.aih-sign-line{border-top:1px solid #8f99a8;padding-top:4px;text-align:center;font-size:7.7px;color:#64748b}
+      .aih-note{border-top:1px solid var(--aih-line);padding-top:7px;margin-top:12px}.aih-note b{font-size:7.8px;text-transform:uppercase;color:#475569;letter-spacing:.04em}.aih-note p{font-size:8px;line-height:1.4;color:#697586;margin:3px 0 0}
+      .aih-footer-doc{margin-top:11px;padding-top:7px;border-top:1px solid #cfd6df;display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:7.6px;color:#697586}.aih-footer-doc div{display:grid;gap:1px}.aih-footer-doc div:last-child{text-align:right}.aih-footer-doc b{color:#394454}
       .aih-running-footer{display:none}
-      @page{size:A4;margin:12mm 11mm 15mm}
+
+      @page{size:A4;margin:11mm 10mm 14mm}
       @media print{
-        body{background:#fff}.aih-doc{width:auto;min-height:auto;margin:0;padding:0;box-shadow:none}
-        .aih-attention-head,.aih-mini,.aih-dx,.aih-med,.aih-doc-list li,.aih-ant-item{break-inside:avoid;page-break-inside:avoid}
-        .aih-running-footer{display:block;position:fixed;left:0;right:0;bottom:-8mm;border-top:1px solid #e5e7eb;padding-top:2mm;text-align:center;font-size:7.5px;color:#94a3b8;background:#fff}
+        html,body{background:#fff}
+        .aih-doc{width:auto;min-height:auto;margin:0;padding:0;box-shadow:none}
+        .aih-header,.aih-patient,.aih-document-summary,.aih-attention-head,.aih-mini,.aih-dx,.aih-med,.aih-doc-list li,.aih-ant-item,.aih-table tr{break-inside:avoid;page-break-inside:avoid}
+        .aih-module-title,.aih-block h3,.aih-ant-group>h3{break-after:avoid;page-break-after:avoid}
+        .aih-running-footer{display:block;position:fixed;left:0;right:0;bottom:-7.5mm;border-top:1px solid #dfe4ea;padding-top:1.8mm;text-align:center;font-size:7px;color:#94a3b8;background:#fff}
+      }
+
+      @media(max-width:760px){
+        .aih-doc{width:210mm;min-height:297mm}
+        .aih-mini{flex-basis:135px}
+        .aih-ant-item{flex-basis:165px}
       }
     `;
   }
