@@ -5421,44 +5421,16 @@
       return;
     }
 
-    if(typeof window.verRecetaEmitida !== 'function'){
-      alert('El visor original de Recetas no está disponible.');
+    if(typeof window.pdfRecetaEmitida !== 'function'){
+      alert('La vista oficial de Recetas no está disponible.');
       return;
     }
 
     try{
-      await window.verRecetaEmitida(id);
-      await new Promise(r=>setTimeout(r,80));
-
-      const preview = document.getElementById('recetaPreview');
-      if(!preview || !texto(preview.innerHTML)){
-        throw new Error('No se encontró la vista previa original de la receta.');
-      }
-
-      cerrarReceta();
-
-      const o = document.createElement('div');
-      o.id = 'auroVistaRecetaOverlay';
-      o.className = 'avi-rx-overlay';
-      o.innerHTML =
-        '<div class="avi-rx-shell">'+
-          '<div class="avi-head">'+
-            '<div><h3>Receta médica</h3><p>ID: '+esc(id)+'</p></div>'+
-            '<button type="button" class="avi-close" data-avi-cerrar-rx>'+
-              '<i class="bi bi-x-lg"></i> Cerrar'+
-            '</button>'+
-          '</div>'+
-          '<div class="avi-rx-view">'+preview.innerHTML+'</div>'+
-        '</div>';
-
-      document.body.appendChild(o);
-
-      o.querySelector('[data-avi-cerrar-rx]').addEventListener('click',cerrarReceta);
-      o.addEventListener('click',e=>{ if(e.target === o) cerrarReceta(); });
-
+      await window.pdfRecetaEmitida(id);
     }catch(e){
       console.error(MODULO,e);
-      alert('No se pudo abrir el visor de la receta.');
+      alert('No se pudo abrir la vista oficial de la receta.');
     }
   }
 
