@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.18-R1';
+  const VERSION = '3.6.18-R2';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2687,6 +2687,24 @@ Función:
       if (mostrarEstado) estado('Sincronizando anamnesis con Google Sheets…', 'info');
 
       /* Un cambio clínico real = un POST. La confirmación posterior solo lee. */
+      /*
+        AUROSANAX 3.6.18-R2 - SEÑAL VISUAL, SIN PERSISTENCIA
+        ---------------------------------------------------
+        Informa al INDEX que YA comenzó el guardado real de esta firma.
+        No escribe, no lee, no altera la cola, no modifica timestamps y
+        no participa en la decisión clínica de guardar/no guardar.
+      */
+      try {
+        window.dispatchEvent(new CustomEvent('aurosanax:anamnesis-sincronizando', {
+          detail: {
+            id_atencion: idAtencion,
+            id_paciente: texto(token.id_paciente),
+            id_historia: texto(token.id_historia),
+            firma: firmaObjetivo
+          }
+        }));
+      } catch (_) {}
+
       const envio = await auroEnviarAnamnesisSheets(data, token);
       const confirmado = envio?.success === true && auroTokenContextoValido(token, true)
         ? await auroConfirmarAnamnesisSheets(data, token, 4)
