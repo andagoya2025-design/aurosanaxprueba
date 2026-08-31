@@ -7141,6 +7141,73 @@ function auroHistoriaFechaRegistro(registro){
   ).trim();
 }
 
+/* ============================================================
+   AUROSANAX INDEX 94
+   HORA LITERAL DE GOOGLE SHEETS - SOLO MÓDULOS INDEPENDIENTES
+   ------------------------------------------------------------
+   ALCANCE ESTRICTO:
+   - hc_estetica
+   - hc_diagnostico
+   - hc_plan
+   - hc_recomendaciones
+   - hc_certificados
+   - hc_docs
+
+   SOLO PRESENTACIÓN / SOLO LECTURA:
+   - NO hace GET adicional.
+   - NO hace POST.
+   - NO guarda.
+   - NO escribe localStorage.
+   - NO modifica timestamps persistidos.
+   - NO altera Anamnesis, Antecedentes, Examen físico ni Obstetricia.
+   - Reutiliza la fecha que el resolver REAL del módulo ya leyó.
+============================================================ */
+function auroHistoriaModuloHoraLiteralSheets(idModulo){
+  return new Set([
+    'hc_estetica',
+    'hc_diagnostico',
+    'hc_plan',
+    'hc_recomendaciones',
+    'hc_certificados',
+    'hc_docs'
+  ]).has(String(idModulo || '').trim());
+}
+
+function auroHistoriaFormatearFechaLiteralSheets(valor){
+  const raw = String(valor || '').trim();
+  if(!raw) return '';
+
+  /*
+    Google Sheets / Apps Script puede serializar una celda horaria como ISO
+    terminado en Z aunque la hora de pared almacenada en la hoja sea la que
+    debe mostrarse al médico. Para estos seis módulos se conservan literalmente
+    los componentes de fecha/hora y NO se aplica conversión UTC.
+  */
+  const iso = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/
+  );
+
+  if(iso){
+    return (
+      iso[3] + '/' + iso[2] + '/' + iso[1] + ' ' +
+      String(iso[4]).padStart(2,'0') + ':' + iso[5] +
+      (iso[6] ? ':' + iso[6] : '')
+    );
+  }
+
+  /*
+    Si ya viene en formato local/es-EC o en otro formato no ISO, se presenta
+    tal cual. No se intenta reinterpretar ni convertir zona horaria.
+  */
+  return raw;
+}
+
+function auroHistoriaFormatearFechaPorModulo(valor, idModulo){
+  return auroHistoriaModuloHoraLiteralSheets(idModulo)
+    ? auroHistoriaFormatearFechaLiteralSheets(valor)
+    : auroHistoriaFormatearFechaReal(valor);
+}
+
 function auroHistoriaRegistroHistoriaActual(){
   try{
     if(window.historiaActual && typeof window.historiaActual === 'object'){
@@ -7606,7 +7673,10 @@ async function auroHistoriaRefrescarEstadoConsultaActiva(idModulo){
   if(auroHistoriaModuloActivo() !== modulo) return;
 
   if(resultado && resultado.existe){
-    const fecha = auroHistoriaFormatearFechaReal(resultado.fecha);
+    const fecha = auroHistoriaFormatearFechaPorModulo(
+      resultado.fecha,
+      modulo
+    );
 
     auroHistoriaMostrarEstado(
       nombreModulo +
