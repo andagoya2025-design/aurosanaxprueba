@@ -5054,10 +5054,6 @@ async function auroRecetaAbrirOficialDesdeIndex(){
 }
 
 function showClinicalTab(id,btn){
-  if(id !== 'hc_anamnesis' && typeof auroAnamnesisRestaurarBotonVisual === 'function'){
-    auroAnamnesisRestaurarBotonVisual();
-  }
-
   /*
     Higiene visual del piloto:
     al cambiar de pestaña clínica no se arrastra una vista paciente abierta.
@@ -7660,117 +7656,6 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
     if(auroHistoriaModuloActivo() === 'hc_obstetricia'){
       auroHistoriaRefrescarEstadoConsultaActiva('hc_obstetricia');
     }
-  });
-
-  /* ============================================================
-     AUROSANAX INDEX 92 - FEEDBACK VISUAL DEL BOTÓN EN ANAMNESIS
-     ------------------------------------------------------------
-     SOLO PRESENTACIÓN. El botón no adquiere ninguna función clínica.
-     La persistencia sigue perteneciendo exclusivamente a anamnesis.js.
-     No se agregan llamadas de red, escrituras locales ni listeners de edición.
-  ============================================================ */
-  let __auroAnamnesisBotonVisualGeneracion = 0;
-  let __auroAnamnesisBotonVisualTimer = null;
-
-  function auroAnamnesisBotonVisual(){
-    return typeof auroHistoriaBotonGuardarPrincipal === 'function'
-      ? auroHistoriaBotonGuardarPrincipal()
-      : null;
-  }
-
-  function auroAnamnesisRestaurarBotonVisual(){
-    __auroAnamnesisBotonVisualGeneracion += 1;
-    if(__auroAnamnesisBotonVisualTimer){
-      clearTimeout(__auroAnamnesisBotonVisualTimer);
-      __auroAnamnesisBotonVisualTimer = null;
-    }
-    const btn = auroAnamnesisBotonVisual();
-    if(!btn) return;
-    btn.classList.remove('auro-hc-btn-guardando','auro-hc-btn-exito','auro-hc-btn-error');
-    btn.removeAttribute('aria-busy');
-    if(btn.dataset.auroAnamnesisTextoOriginal){
-      btn.innerHTML = btn.dataset.auroAnamnesisTextoOriginal;
-      delete btn.dataset.auroAnamnesisTextoOriginal;
-    }
-  }
-
-  function auroAnamnesisPintarBotonVisual(modo){
-    if(auroHistoriaModuloActivo() !== 'hc_anamnesis') return;
-    const btn = auroAnamnesisBotonVisual();
-    if(!btn) return;
-    if(!btn.dataset.auroAnamnesisTextoOriginal){
-      btn.dataset.auroAnamnesisTextoOriginal = btn.innerHTML;
-    }
-    __auroAnamnesisBotonVisualGeneracion += 1;
-    const generacion = __auroAnamnesisBotonVisualGeneracion;
-    if(__auroAnamnesisBotonVisualTimer){
-      clearTimeout(__auroAnamnesisBotonVisualTimer);
-      __auroAnamnesisBotonVisualTimer = null;
-    }
-    btn.classList.remove('auro-hc-btn-guardando','auro-hc-btn-exito','auro-hc-btn-error');
-
-    if(modo === 'guardando'){
-      btn.setAttribute('aria-busy','true');
-      btn.classList.add('auro-hc-btn-guardando');
-      btn.innerHTML = '<i class="bi bi-arrow-repeat me-1 auro-hc-spin"></i> Guardando anamnesis…';
-      __auroAnamnesisBotonVisualTimer = setTimeout(function(){
-        if(generacion !== __auroAnamnesisBotonVisualGeneracion) return;
-        auroAnamnesisRestaurarBotonVisual();
-      },6000);
-      return;
-    }
-
-    btn.removeAttribute('aria-busy');
-    if(modo === 'exito'){
-      btn.classList.add('auro-hc-btn-exito');
-      btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Anamnesis actualizada ✓';
-      __auroAnamnesisBotonVisualTimer = setTimeout(function(){
-        if(generacion !== __auroAnamnesisBotonVisualGeneracion) return;
-        auroAnamnesisRestaurarBotonVisual();
-      },1400);
-      return;
-    }
-
-    if(modo === 'pendiente'){
-      btn.classList.add('auro-hc-btn-error');
-      btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Sincronización pendiente';
-      __auroAnamnesisBotonVisualTimer = setTimeout(function(){
-        if(generacion !== __auroAnamnesisBotonVisualGeneracion) return;
-        auroAnamnesisRestaurarBotonVisual();
-      },2200);
-      return;
-    }
-
-    auroAnamnesisRestaurarBotonVisual();
-  }
-
-  function auroAnamnesisEventoVisualValido(detalle){
-    if(auroHistoriaModuloActivo() !== 'hc_anamnesis') return false;
-    const actual = auroHistoriaAtencionResumen();
-    const idActual = String(actual?.id || '').trim();
-    const idEvento = String(detalle?.id_atencion || '').trim();
-    return !!idActual && !!idEvento && idActual === idEvento;
-  }
-
-  window.addEventListener('aurosanax:anamnesis-sincronizando', function(evento){
-    const detalle = evento?.detail || {};
-    if(!auroAnamnesisEventoVisualValido(detalle)) return;
-    auroAnamnesisPintarBotonVisual('guardando');
-  });
-  window.addEventListener('aurosanax:anamnesis-guardado-local', function(evento){
-    const detalle = evento?.detail || {};
-    if(!auroAnamnesisEventoVisualValido(detalle)) return;
-    auroAnamnesisPintarBotonVisual('guardando');
-  });
-  window.addEventListener('aurosanax:anamnesis-confirmada', function(evento){
-    const detalle = evento?.detail || {};
-    if(!auroAnamnesisEventoVisualValido(detalle)) return;
-    auroAnamnesisPintarBotonVisual('exito');
-  });
-  window.addEventListener('aurosanax:anamnesis-sincronizacion-pendiente', function(evento){
-    const detalle = evento?.detail || {};
-    if(!auroAnamnesisEventoVisualValido(detalle)) return;
-    auroAnamnesisPintarBotonVisual('pendiente');
   });
 
   /*
@@ -12808,6 +12693,213 @@ document.addEventListener('click',e=>{
   }else{
     refrescar();
   }
+})();
+</script>
+
+
+<!-- ============================================================
+     AUROSANAX INDEX 93 - BOTÓN ANAMNESIS SOLO POR CLICK
+     ------------------------------------------------------------
+     BASE: INDEX 91 estable.
+     OBJETIVO ÚNICO:
+     - El feedback naranja/verde/rojo del botón se activa SOLO al hacer click.
+     - Los input/change de Anamnesis NO activan visualmente el botón.
+     - El autosave 700 ms de anamnesis.js permanece silencioso e intacto.
+     - En historia existente, el click usa el guardador público ya existente
+       guardarAnamnesisPorAtencion(); ANAMNESIS 16 evita POST duplicado si
+       el autosave ya sincroniza la misma firma.
+     - Historia nueva conserva guardarHistoriaClinicaERP() sin interceptar.
+     - No se toca showClinicalTab(), Antecedentes, Obstetricia ni otros módulos.
+============================================================ -->
+<script>
+(function(){
+  'use strict';
+
+  if(window.__auroIndex93BotonAnamnesisSoloClick) return;
+  window.__auroIndex93BotonAnamnesisSoloClick = true;
+
+  let ciclo = null;
+  let timer = null;
+
+  function moduloActivo(){
+    try{
+      return typeof auroHistoriaModuloActivo === 'function'
+        ? String(auroHistoriaModuloActivo() || '').trim()
+        : '';
+    }catch(_){ return ''; }
+  }
+
+  function botonGlobal(){
+    try{
+      return typeof auroHistoriaBotonGuardarPrincipal === 'function'
+        ? auroHistoriaBotonGuardarPrincipal()
+        : document.querySelector('#historia button[onclick*="guardarHistoriaClinicaERP"]');
+    }catch(_){ return null; }
+  }
+
+  function idAtencionActual(){
+    try{
+      const r = typeof auroHistoriaAtencionResumen === 'function'
+        ? auroHistoriaAtencionResumen()
+        : null;
+      return String(r?.id || '').trim();
+    }catch(_){ return ''; }
+  }
+
+  function historiaExistente(){
+    try{
+      return !!String(typeof editingHistoryId !== 'undefined' ? editingHistoryId : '').trim();
+    }catch(_){ return false; }
+  }
+
+  function guardarTextoOriginal(btn){
+    if(btn && !btn.dataset.auroIndex93TextoOriginal){
+      btn.dataset.auroIndex93TextoOriginal = btn.innerHTML;
+    }
+  }
+
+  function limpiarTimer(){
+    if(timer){
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function restaurar(){
+    limpiarTimer();
+    ciclo = null;
+    const btn = botonGlobal();
+    if(!btn) return;
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.classList.remove('auro-hc-btn-guardando','auro-hc-btn-exito','auro-hc-btn-error');
+    if(btn.dataset.auroIndex93TextoOriginal){
+      btn.innerHTML = btn.dataset.auroIndex93TextoOriginal;
+      delete btn.dataset.auroIndex93TextoOriginal;
+    }
+  }
+
+  function pintar(modo, texto){
+    const btn = botonGlobal();
+    if(!btn || moduloActivo() !== 'hc_anamnesis') return;
+    guardarTextoOriginal(btn);
+    limpiarTimer();
+    btn.classList.remove('auro-hc-btn-guardando','auro-hc-btn-exito','auro-hc-btn-error');
+
+    if(modo === 'guardando'){
+      btn.disabled = true;
+      btn.setAttribute('aria-busy','true');
+      btn.classList.add('auro-hc-btn-guardando');
+      btn.innerHTML = '<i class="bi bi-arrow-repeat me-1 auro-hc-spin"></i> Guardando anamnesis…';
+      timer = setTimeout(function(){
+        if(ciclo) pintar('error','Guardado no confirmado');
+      }, 9000);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.removeAttribute('aria-busy');
+
+    if(modo === 'exito'){
+      btn.classList.add('auro-hc-btn-exito');
+      btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> ' + (texto || 'Anamnesis actualizada ✓');
+      timer = setTimeout(restaurar, 1400);
+      return;
+    }
+
+    btn.classList.add('auro-hc-btn-error');
+    btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (texto || 'Sincronización pendiente');
+    timer = setTimeout(restaurar, 2200);
+  }
+
+  function eventoCoincide(detalle){
+    if(!ciclo || moduloActivo() !== 'hc_anamnesis') return false;
+    const idEvento = String(detalle?.id_atencion || '').trim();
+    if(!idEvento || idEvento !== ciclo.id_atencion) return false;
+    if(ciclo.firma && detalle?.firma && String(detalle.firma) !== ciclo.firma) return false;
+    return true;
+  }
+
+  /*
+    El guardado-local SOLO se usa para capturar la firma del CLICK manual.
+    Como INDEX 93 NO escucha input/change ni anamnesis-sincronizando,
+    un autosave por marcar Dolor pélvico jamás pinta el botón.
+  */
+  window.addEventListener('aurosanax:anamnesis-guardado-local', function(evento){
+    const detalle = evento?.detail || {};
+    if(!eventoCoincide(detalle)) return;
+    if(detalle.firma) ciclo.firma = String(detalle.firma);
+  });
+
+  window.addEventListener('aurosanax:anamnesis-confirmada', function(evento){
+    const detalle = evento?.detail || {};
+    if(!eventoCoincide(detalle)) return;
+    pintar('exito','Anamnesis actualizada ✓');
+  });
+
+  window.addEventListener('aurosanax:anamnesis-sincronizacion-pendiente', function(evento){
+    const detalle = evento?.detail || {};
+    if(!eventoCoincide(detalle)) return;
+    pintar('error','Sincronización pendiente');
+  });
+
+  /* Cambio de atención: nunca arrastrar el estado visual de otra consulta. */
+  window.addEventListener('aurosanax:atencion-seleccionada', restaurar);
+  window.addEventListener('aurosanax:atencion-limpiada', restaurar);
+
+  /*
+    CAPTURA DEL CLICK SOLO EN ANAMNESIS + HISTORIA EXISTENTE.
+    Historia nueva sigue por la ruta global original para crear la historia.
+  */
+  document.addEventListener('click', function(evento){
+    const btn = botonGlobal();
+    if(!btn || !evento.target?.closest) return;
+    if(evento.target.closest('button') !== btn) return;
+    if(moduloActivo() !== 'hc_anamnesis') return;
+    if(!historiaExistente()) return;
+
+    const idAtencion = idAtencionActual();
+    if(!idAtencion) return;
+    if(typeof window.guardarAnamnesisPorAtencion !== 'function') return;
+
+    /* Evita que el onclick global reescriba/recorra Historia clínica. */
+    evento.preventDefault();
+    evento.stopPropagation();
+    if(typeof evento.stopImmediatePropagation === 'function'){
+      evento.stopImmediatePropagation();
+    }
+
+    if(ciclo) return;
+
+    ciclo = { id_atencion:idAtencion, firma:'' };
+    pintar('guardando');
+
+    Promise.resolve(window.guardarAnamnesisPorAtencion())
+      .then(function(resultado){
+        if(!ciclo || ciclo.id_atencion !== idAtencion) return;
+
+        if(resultado?.sin_cambios === true){
+          pintar('exito','Sin cambios ✓');
+          return;
+        }
+
+        if(resultado?.success !== true){
+          pintar('error', resultado?.message || 'No se pudo guardar');
+          return;
+        }
+
+        /*
+          Si hay cambio real, se mantiene naranja hasta que ANAMNESIS 16
+          emita la confirmación real de Google Sheets para esta atención/firma.
+        */
+      })
+      .catch(function(error){
+        console.error('AUROSANAX INDEX 93: error visual al guardar Anamnesis.', error);
+        if(ciclo && ciclo.id_atencion === idAtencion){
+          pintar('error','No se pudo guardar');
+        }
+      });
+  }, true);
 })();
 </script>
 
