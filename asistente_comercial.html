@@ -1505,6 +1505,18 @@ article[aria-labelledby="acOperacionTitulo"] .ac-card-help{
   }
 }
 
+
+/* ============================================================
+   IPHONE STANDALONE · SAFE AREA INFERIOR
+   ANTIRREGRESIVO · 2026-08-31
+   Solo presentación. Android y Safari normal quedan sin cambios.
+   ============================================================ */
+@media (display-mode: standalone) and (max-width:430px){
+  html:not(.ac-android) #acApp .ac-shell{
+    padding-bottom:calc(26px + env(safe-area-inset-bottom))!important;
+  }
+}
+
 </style>
 </head>
 
@@ -1578,7 +1590,7 @@ article[aria-labelledby="acOperacionTitulo"] .ac-card-help{
 
   <script>window.AC_API_URL=window.AC_API_URL||"https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec";</script>
   <script src="asistente_comercial_config.js?v=1.0.0"></script>
-  <script src="asistente_comercial.js?v=1.7.0"></script>
+  <script src="asistente_comercial.js?v=1.7.6"></script>
 
   <!-- Adaptador visual vigente, conservado -->
   <script>
