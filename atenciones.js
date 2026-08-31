@@ -3926,14 +3926,14 @@
 
       /*
         PA canónica en Vista Integral — SOLO PRESENTACIÓN.
-        El dueño del dato es Examen físico; hcPA ya contiene sistólica/diastólica.
+        El dueño del dato es Examen físico; hcPA conserva sistólica/diastólica.
         Aquí no se escribe, recalcula ni persiste ningún valor clínico.
+        Si el formato no es inequívoco, se conserva el comportamiento previo.
       */
       const paCanonica = texto(document.getElementById('hcPA')?.value || '');
       const paMatch = paCanonica.match(/^\s*(\d{2,3})\s*\/\s*(\d{2,3})\s*$/);
 
       if(paMatch){
-        const paVisual = paMatch[1]+'/'+paMatch[2];
         let paInsertada = false;
 
         base = base.reduce((salida,p)=>{
@@ -3950,12 +3950,20 @@
           }
 
           if(!paInsertada){
-            salida.push({
-              ...p,
-              etiqueta:'Presión arterial',
-              valor:paVisual,
-              anchoCompleto:false
-            });
+            salida.push(
+              {
+                ...p,
+                etiqueta:'Presión arterial sistólica',
+                valor:paMatch[1]+' mmHg',
+                anchoCompleto:false
+              },
+              {
+                ...p,
+                etiqueta:'Presión arterial diastólica',
+                valor:paMatch[2]+' mmHg',
+                anchoCompleto:false
+              }
+            );
             paInsertada = true;
           }
 
