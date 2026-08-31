@@ -12977,6 +12977,293 @@ document.addEventListener('click',e=>{
 })();
 </script>
 
+<!-- ============================================================
+     AUROSANAX INDEX 96 - EXAMEN FÍSICO · CLICK PROPIETARIO
+     ------------------------------------------------------------
+     BASE EXACTA: INDEX 95 estable.
+     ALCANCE ÚNICO: hc_examen + historia existente.
+
+     OBJETIVOS:
+     - Mantener intacto examenfisico.js y todos sus ítems clínicos.
+     - Evitar la espera histórica de 450 ms en el click manual:
+       este listener de captura llama inmediatamente al guardador público
+       ya existente del Examen físico.
+     - Evitar doble click / doble ejecución.
+     - Dar feedback visual SOLO por click:
+         naranja = guardando
+         verde   = actualizado / sin cambios
+         rojo    = error
+     - Reutilizar SIN MODIFICAR:
+         auroGuardarExamenFisicoSheets()
+         barrera SIN CAMBIOS REALES V1
+         refresco visual V2 de actualizado_en
+         guardado principal + sistemas + regionales + diagnósticos
+     - Historia nueva NO se intercepta.
+     - No toca Anamnesis, Antecedentes, Obstetricia, Diagnóstico,
+       Plan, Estética, Recomendaciones, Certificados ni Documentos.
+     - No agrega input/change, autosave, POST ni GET propios.
+============================================================ -->
+<script>
+(function(){
+  'use strict';
+
+  if(window.__auroIndex96BotonExamenSoloClick) return;
+  window.__auroIndex96BotonExamenSoloClick = true;
+
+  let ciclo = null;
+  let timer = null;
+
+  function moduloActivo(){
+    try{
+      return typeof auroHistoriaModuloActivo === 'function'
+        ? String(auroHistoriaModuloActivo() || '').trim()
+        : '';
+    }catch(_){ return ''; }
+  }
+
+  function botonGlobal(){
+    try{
+      return typeof auroHistoriaBotonGuardarPrincipal === 'function'
+        ? auroHistoriaBotonGuardarPrincipal()
+        : document.querySelector('#historia button[onclick*="guardarHistoriaClinicaERP"]');
+    }catch(_){ return null; }
+  }
+
+  function idAtencionActual(){
+    try{
+      const r = typeof auroHistoriaAtencionResumen === 'function'
+        ? auroHistoriaAtencionResumen()
+        : null;
+      return String(r?.id || '').trim();
+    }catch(_){ return ''; }
+  }
+
+  function historiaExistente(){
+    try{
+      return !!String(
+        typeof editingHistoryId !== 'undefined' ? editingHistoryId : ''
+      ).trim();
+    }catch(_){ return false; }
+  }
+
+  function guardarTextoOriginal(btn){
+    if(btn && !btn.dataset.auroIndex96ExamenTextoOriginal){
+      btn.dataset.auroIndex96ExamenTextoOriginal = btn.innerHTML;
+    }
+  }
+
+  function limpiarTimer(){
+    if(timer){
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function restaurar(){
+    limpiarTimer();
+    ciclo = null;
+
+    const btn = botonGlobal();
+    if(!btn) return;
+
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.classList.remove(
+      'auro-hc-btn-guardando',
+      'auro-hc-btn-exito',
+      'auro-hc-btn-error'
+    );
+
+    if(btn.dataset.auroIndex96ExamenTextoOriginal){
+      btn.innerHTML = btn.dataset.auroIndex96ExamenTextoOriginal;
+      delete btn.dataset.auroIndex96ExamenTextoOriginal;
+    }
+  }
+
+  function pintar(modo, texto){
+    const btn = botonGlobal();
+    if(!btn) return;
+
+    if(moduloActivo() !== 'hc_examen'){
+      if(modo !== 'guardando') restaurar();
+      return;
+    }
+
+    guardarTextoOriginal(btn);
+    limpiarTimer();
+
+    btn.classList.remove(
+      'auro-hc-btn-guardando',
+      'auro-hc-btn-exito',
+      'auro-hc-btn-error'
+    );
+
+    if(modo === 'guardando'){
+      btn.disabled = true;
+      btn.setAttribute('aria-busy','true');
+      btn.classList.add('auro-hc-btn-guardando');
+      btn.innerHTML =
+        '<i class="bi bi-arrow-repeat me-1 auro-hc-spin"></i> Guardando examen físico…';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.removeAttribute('aria-busy');
+
+    if(modo === 'exito'){
+      btn.classList.add('auro-hc-btn-exito');
+      btn.innerHTML =
+        '<i class="bi bi-check-circle-fill me-1"></i> ' +
+        (texto || 'Examen físico actualizado ✓');
+      timer = setTimeout(restaurar, 1400);
+      return;
+    }
+
+    btn.classList.add('auro-hc-btn-error');
+    btn.innerHTML =
+      '<i class="bi bi-exclamation-triangle-fill me-1"></i> ' +
+      (texto || 'No se pudo guardar');
+    timer = setTimeout(restaurar, 2200);
+  }
+
+  function payloadTieneDatosReales(payload){
+    payload = payload || {};
+
+    return [
+      payload.peso_kg,
+      payload.talla_cm,
+      payload.imc,
+      payload.presion_arterial,
+      payload.frecuencia_cardiaca,
+      payload.temperatura,
+      payload.saturacion,
+      payload.examen_fisico
+    ].some(function(valor){
+      return String(valor == null ? '' : valor).trim() !== '';
+    });
+  }
+
+  window.addEventListener('aurosanax:atencion-seleccionada', restaurar);
+  window.addEventListener('aurosanax:atencion-limpiada', restaurar);
+  window.addEventListener('aurosanax:historia-nueva', restaurar);
+
+  document.addEventListener('click', function(evento){
+    const btn = botonGlobal();
+
+    if(!btn || !evento.target?.closest) return;
+    if(evento.target.closest('button') !== btn) return;
+    if(moduloActivo() !== 'hc_examen') return;
+    if(!historiaExistente()) return;
+
+    const idAtencion = idAtencionActual();
+    if(!idAtencion) return;
+    if(typeof window.auroGuardarExamenFisicoSheets !== 'function') return;
+    if(typeof window.auroExamenFisicoPayload !== 'function') return;
+
+    /*
+      Examen físico ya tiene persistencia propia por id_atencion.
+      Este listener evita que, en historia existente, el mismo click:
+      1) recorra guardarHistoriaClinicaERP();
+      2) llegue al listener histórico diferido de 450 ms.
+    */
+    evento.preventDefault();
+    evento.stopPropagation();
+    if(typeof evento.stopImmediatePropagation === 'function'){
+      evento.stopImmediatePropagation();
+    }
+
+    if(ciclo) return;
+
+    let payload = null;
+
+    try{
+      payload = window.auroExamenFisicoPayload();
+    }catch(error){
+      console.error(
+        'AUROSANAX INDEX 96: no se pudo preparar Examen físico.',
+        error
+      );
+      ciclo = { id_atencion:idAtencion };
+      pintar('error','No se pudo preparar el examen');
+      return;
+    }
+
+    if(!payload || !payload.id_atencion){
+      ciclo = { id_atencion:idAtencion };
+      pintar('error','No hay atención activa');
+      return;
+    }
+
+    const idPayload = String(payload.id_atencion || '').trim();
+    if(idPayload !== idAtencion){
+      ciclo = { id_atencion:idAtencion };
+      pintar('error','La atención no coincide');
+      return;
+    }
+
+    /*
+      Conserva la protección histórica:
+      no crear una fila nueva completamente vacía.
+      Si ya existe id_examen, sí permite guardar una limpieza real.
+    */
+    const idExamenExistente = String(payload.id_examen || '').trim();
+    const hayDatosFisicos = payloadTieneDatosReales(payload);
+
+    ciclo = { id_atencion:idAtencion };
+
+    if(!idExamenExistente && !hayDatosFisicos){
+      pintar('exito','Sin cambios ✓');
+      return;
+    }
+
+    pintar('guardando');
+
+    Promise.resolve(window.auroGuardarExamenFisicoSheets())
+      .then(function(resultado){
+        if(!ciclo || ciclo.id_atencion !== idAtencion) return;
+
+        if(
+          idAtencionActual() !== idAtencion ||
+          moduloActivo() !== 'hc_examen'
+        ){
+          restaurar();
+          return;
+        }
+
+        if(resultado?.sin_cambios === true){
+          pintar('exito','Sin cambios ✓');
+          return;
+        }
+
+        if(resultado?.success !== true){
+          pintar(
+            'error',
+            resultado?.message || 'No se pudo guardar'
+          );
+          return;
+        }
+
+        /*
+          El guardador actual ya terminó:
+          principal + detalle + baseline + relectura de Sheets +
+          refresco de la tarjeta inferior hc_examen.
+        */
+        pintar('exito','Examen físico actualizado ✓');
+      })
+      .catch(function(error){
+        console.error(
+          'AUROSANAX INDEX 96: error al guardar Examen físico.',
+          error
+        );
+
+        if(ciclo && ciclo.id_atencion === idAtencion){
+          pintar('error','No se pudo guardar');
+        }
+      });
+  }, true);
+})();
+</script>
+
 </body>
 </html>
 <!--
