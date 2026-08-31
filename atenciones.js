@@ -3922,7 +3922,47 @@
     if(!Array.isArray(originales) || !originales.length) return originales || [];
 
     try{
-      const base = deduplicarPares(originales);
+      let base = deduplicarPares(originales);
+
+      /*
+        PA canónica en Vista Integral — SOLO PRESENTACIÓN.
+        El dueño del dato es Examen físico; hcPA ya contiene sistólica/diastólica.
+        Aquí no se escribe, recalcula ni persiste ningún valor clínico.
+      */
+      const paCanonica = texto(document.getElementById('hcPA')?.value || '');
+      const paMatch = paCanonica.match(/^\s*(\d{2,3})\s*\/\s*(\d{2,3})\s*$/);
+
+      if(paMatch){
+        const paVisual = paMatch[1]+'/'+paMatch[2];
+        let paInsertada = false;
+
+        base = base.reduce((salida,p)=>{
+          const e = norm(p?.etiqueta || '');
+          const esPA = (
+            e === 'presion arterial' ||
+            e === 'presion arterial sistolica' ||
+            e === 'presion arterial diastolica'
+          );
+
+          if(!esPA){
+            salida.push(p);
+            return salida;
+          }
+
+          if(!paInsertada){
+            salida.push({
+              ...p,
+              etiqueta:'Presión arterial',
+              valor:paVisual,
+              anchoCompleto:false
+            });
+            paInsertada = true;
+          }
+
+          return salida;
+        },[]);
+      }
+
       const regiones = base
         .map(p=>normalizarClaveClinicaExamen(p?.etiqueta || ''))
         .filter(x=>x && x !== 'dato clinico');
