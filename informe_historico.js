@@ -1,21 +1,41 @@
 /* ============================================================================
    AUROSANAX CLINICAL ERP
-   Archivo: informe_historico.js
-   Módulo: Informe Clínico Histórico / Resumen longitudinal de atenciones
-   Versión: 1.0.0
-   Fecha: 2026-08-28
+   Archivo de reemplazo propuesto: informe_historico.js
+   Entrega externa: TXT completo para revisión manual
+   Versión propuesta: 2.0.0-GOLD-STANDARD-ANTIRREGRESIVO
+   Fecha: 2026-08-31
+   Baseline leído en GitHub (SOLO LECTURA):
+   informe_historico.js v1.0.0
+   SHA: ca779d0729d706a1fef8306d2e1f0da8e1536746
    ---------------------------------------------------------------------------
-   PRINCIPIOS DE DISEÑO / ANTIRREGRESIÓN
-   - SOLO LECTURA. Este archivo NO ejecuta POST, PUT, PATCH ni DELETE.
-   - NO modifica imprimirHistoriaClinica() ni el Informe de atención estable.
-   - NO cambia la atención activa, no navega entre consultas y no dispara autosaves.
-   - La fuente maestra de cada consulta es id_atencion.
-   - Datos longitudinales se mantienen separados de datos por atención.
-   - No se renderizan títulos, cajas ni espacios de módulos sin información útil.
-   - Vista previa e impresión usan el MISMO HTML documental.
-   - Los datos persistentes del backend tienen prioridad sobre respaldos locales.
-   - Los módulos sin vínculo inequívoco a id_atencion se muestran como asociados,
-     nunca se fuerzan dentro de una consulta.
+   OBJETIVO QUIRÚRGICO
+   - Corregir exclusivamente lectura, asociación, validación y presentación del
+     Informe Clínico Histórico.
+   - NO modificar ningún guardado clínico propietario.
+   - NO modificar Apps Script, Google Sheets, Atenciones, Anamnesis, Examen,
+     Obstetricia, Ginecología, Diagnóstico, Plan, Recetas ni documentos.
+   - Mantener el contrato público histórico:
+       window.auroInformeHistorico.abrir()
+       window.auroInformeHistorico.imprimir()
+       window.auroInformeHistorico.cerrar()
+       window.auroInformeHistorico.diagnostico()
+   - Se agrega de forma aditiva:
+       window.auroInformeHistorico.actualizar()
+
+   PRINCIPIOS GOLD STANDARD / ANTIRREGRESIÓN
+   1. SOLO LECTURA: exclusivamente GET. Nunca POST/PUT/PATCH/DELETE.
+   2. BACKEND PERSISTENTE COMO AUTORIDAD. RAM solo como respaldo marcado.
+   3. UNA ATENCIÓN, UN CONTEXTO; UN PACIENTE, UNA IDENTIDAD.
+   4. id_atencion es frontera de datos por consulta.
+   5. No se cambia la atención activa, no se navega y no se disparan autosaves.
+   6. Un dato vacío, placeholder o estado interno NO se convierte en dato clínico.
+   7. Un módulo sin contenido clínico real NO se imprime ni reserva espacio.
+   8. No se infiere pertenencia por fecha.
+   9. Fallo de una fuente clínica != fuente vacía.
+  10. Si una fuente clínica crítica no pudo verificarse, la vista previa puede
+      mostrarse como INCOMPLETA, pero el PDF definitivo queda bloqueado.
+  11. Vista previa y PDF usan el MISMO HTML documental validado.
+  12. El informe ordena y presenta; NO corrige ni reescribe el registro clínico.
 ============================================================================ */
 (function(){
   'use strict';
@@ -25,14 +45,24 @@
     return;
   }
 
-  const VERSION = '1.0.0';
+  const VERSION = '2.0.0-GOLD-STANDARD-ANTIRREGRESIVO';
   const MODULO = 'AUROSANAX INFORME HISTÓRICO';
   const MAX_CONCURRENCIA = 5;
-  const INVALIDOS = new Set([
-    '', '-', '—', 'no registrado', 'sin registrar', 'sin información',
-    'sin informacion', 'sin dato', 'sin datos', 'no valorado',
-    'no aplica', 'n/a', 'na', 'undefined', 'null', '[object object]',
-    'seleccione', 'seleccione...', 'pendiente'
+
+  const INVALIDOS_BASE = new Set([
+    '', '-', '—', 'undefined', 'null', '[object object]',
+    'no registrado', 'no registrada', 'sin registrar',
+    'no registrado en esta atencion', 'no registrada en esta atencion',
+    'sin información', 'sin informacion', 'sin información registrada',
+    'sin informacion registrada', 'sin dato', 'sin datos', 'no valorado',
+    'no disponible', 'n/a', 'na', 'seleccione', 'seleccione...',
+    'seleccionar', 'elegir indicacion rapida...', 'pendiente', '[]', '{}'
+  ]);
+
+  const INVALIDOS_OBSTETRICIA = new Set([
+    ...INVALIDOS_BASE,
+    '0', '0.0', '00', 'no clasificado', 'no clasificada',
+    'no aplica', 'ninguno', 'ninguna', 'sin clasificar'
   ]);
 
   const state = {
@@ -41,8 +71,15 @@
     idPaciente: '',
     datos: null,
     htmlDocumento: '',
+    validacion: null,
+    fuentes: {},
     advertencias: [],
-    errores: []
+    errores: [],
+    excluidos: {
+      sinPertenencia: 0,
+      sinAtencion: 0,
+      atencionesSinContenido: 0
+    }
   };
 
   /* ========================================================================
@@ -71,7 +108,7 @@
   function arr(v){
     if(Array.isArray(v)) return v;
     if(!v || typeof v !== 'object') return [];
-    const candidatos = [v.data, v.registros, v.resultado, v.items, v.lista];
+    const candidatos = [v.data, v.datos, v.registros, v.resultado, v.result, v.items, v.lista];
     return candidatos.find(Array.isArray) || [];
   }
 
@@ -80,6 +117,7 @@
     if(Array.isArray(v)) return v[0] || null;
     if(typeof v !== 'object') return null;
     if(v.data && !Array.isArray(v.data) && typeof v.data === 'object') return v.data;
+    if(v.datos && !Array.isArray(v.datos) && typeof v.datos === 'object') return v.datos;
     if(v.registro && typeof v.registro === 'object') return v.registro;
     if(v.resultado && !Array.isArray(v.resultado) && typeof v.resultado === 'object') return v.resultado;
     return v;
@@ -102,19 +140,50 @@
     return fallback;
   }
 
-  function valorUtil(v){
-    if(v === null || v === undefined) return false;
-    if(typeof v === 'boolean') return v === true;
-    if(typeof v === 'number') return Number.isFinite(v);
-    if(Array.isArray(v)) return v.some(valorUtil);
-    if(typeof v === 'object') return Object.values(v).some(valorUtil);
+  function esClaveTecnica(k){
+    const n = norm(k).replace(/\s+/g,'_');
+    if(!n) return true;
+    if(/^id($|_)/.test(n)) return true;
+    if(/(^|_)(creado|actualizado|modificado|eliminado)(_en|_por)?$/.test(n)) return true;
+    if(/^(creado_en|actualizado_en|creado_por|actualizado_por|modulo_version|version|timestamp)$/.test(n)) return true;
+    if(/^(estado_registro|estado_examen|estado_documento|estado_historia)$/.test(n)) return true;
+    if(/^_/.test(n)) return true;
+    if(/cabecera_contexto|valor_confirmado|interno|tecnico|debug/.test(n)) return true;
+    return false;
+  }
+
+  function esPlaceholder(v, opciones={}){
+    if(v === null || v === undefined) return true;
+    if(typeof v === 'boolean') return v === false;
+    if(typeof v === 'number'){
+      if(!Number.isFinite(v)) return true;
+      return opciones.ceroVacio === true && v === 0;
+    }
+    if(typeof v === 'object') return false;
+
     const n = norm(v);
-    return !!n && !INVALIDOS.has(n);
+    if(!n) return true;
+    const invalidos = opciones.obstetricia ? INVALIDOS_OBSTETRICIA : INVALIDOS_BASE;
+    if(invalidos.has(n)) return true;
+    if(opciones.ceroVacio === true && /^0(?:[.,]0+)?$/.test(n)) return true;
+    if(/^(cargando|seleccione primero|sin consulta activa|sin atencion activa)/.test(n)) return true;
+    return false;
+  }
+
+  function valorClinico(v, opciones={}){
+    if(esPlaceholder(v,opciones)) return false;
+    if(typeof v === 'boolean') return v === true;
+    if(typeof v === 'number') return Number.isFinite(v) && !(opciones.ceroVacio === true && v === 0);
+    if(Array.isArray(v)) return v.some(x=>valorClinico(x,opciones));
+    if(v && typeof v === 'object'){
+      return Object.entries(v).some(([k,x])=>!esClaveTecnica(k) && valorClinico(x,opciones));
+    }
+    return true;
   }
 
   function primer(){
     for(const v of arguments){
-      if(valorUtil(v)) return v;
+      if(valorClinico(v)) return v;
     }
     return '';
   }
@@ -123,14 +192,22 @@
     o = o || {};
     return txt(
       o.nombre_completo || o.nombre_paciente || o.paciente_nombre || o.nombre ||
-      [o.nombres || o.nombre1, o.apellidos || [o.apellido_paterno,o.apellido_materno].filter(Boolean).join(' ')].filter(Boolean).join(' ')
+      [o.nombres || o.nombre1, o.apellidos || [o.apellido_paterno,o.apellido_materno].filter(Boolean).join(' ')]
+        .filter(Boolean).join(' ')
     ).replace(/\s+/g,' ').trim();
   }
 
   function humanizar(k){
+    const original = txt(k)
+      .replace(/^(id|question|name):/i,'')
+      .replace(/^hc/i,'')
+      .replace(/^auroDyn_/i,'')
+      .replace(/^ginSint/i,'')
+      .replace(/^obsSint/i,'');
+
     const mapa = {
-      fum:'FUM', fpp:'FPP', fcf:'FCF', imc:'IMC', cie10:'CIE-10',
-      id_atencion:'ID atención', id_historia:'ID historia', id_paciente:'ID paciente',
+      fum:'FUM', fur:'FUM', fpp:'FPP', fcf:'FCF', imc:'IMC', cie10:'CIE-10',
+      pa:'Presión arterial', fc:'Frecuencia cardíaca', fr:'Frecuencia respiratoria', spo2:'Saturación',
       presion_arterial:'Presión arterial', frecuencia_cardiaca:'Frecuencia cardíaca',
       frecuencia_respiratoria:'Frecuencia respiratoria', saturacion:'Saturación',
       temperatura:'Temperatura', peso_kg:'Peso', talla_cm:'Talla',
@@ -147,14 +224,23 @@
       proximo_control:'Próximo control', observaciones:'Observaciones',
       medicamento:'Medicamento', presentacion:'Presentación', via:'Vía', cantidad:'Cantidad',
       frecuencia:'Frecuencia', duracion:'Duración', indicaciones:'Indicaciones',
-      nombre_documento:'Documento', categoria:'Categoría', tipo_documento:'Tipo de documento'
+      dolor_pelvico:'Dolor pélvico', sangrado:'Sangrado', leucorrea:'Leucorrea', prurito:'Prurito',
+      disuria:'Disuria', dispareunia:'Dispareunia', amenorrea:'Amenorrea', dismenorrea:'Dismenorrea',
+      masa:'Sensación de masa', sequedad:'Sequedad vaginal', incontinencia:'Incontinencia',
+      menopausia:'Síntomas menopáusicos', perdida_liquido:'Pérdida de líquido',
+      contracciones:'Contracciones', cefalea:'Cefalea', fosfenos:'Fosfenos', tinnitus:'Tinnitus',
+      epigastralgia:'Epigastralgia', otros:'Otros síntomas', descripcion:'Descripción'
     };
-    if(mapa[k]) return mapa[k];
-    return txt(k)
-      .replace(/^id_/,'')
-      .replace(/_json$/,'')
-      .replace(/_/g,' ')
-      .replace(/\b\w/g,m=>m.toUpperCase());
+
+    const clave = norm(original).replace(/\s+/g,'_');
+    if(mapa[clave]) return mapa[clave];
+
+    return original
+      .replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g,'$1 $2')
+      .replace(/[_-]+/g,' ')
+      .replace(/\s+/g,' ')
+      .trim()
+      .replace(/\b\w/g,m=>m.toUpperCase()) || 'Dato clínico';
   }
 
   function fechaISO(v){
@@ -169,7 +255,7 @@
 
   function fechaVista(v){
     const iso = fechaISO(v);
-    if(!iso) return txt(v);
+    if(!iso) return valorClinico(v) ? txt(v) : '';
     const [y,m,d] = iso.split('-');
     return `${d}/${m}/${y}`;
   }
@@ -177,7 +263,7 @@
   function horaVista(v){
     const raw = txt(v);
     if(!raw) return '';
-    const m = raw.match(/(\d{1,2}):(\d{2})/);
+    const m = raw.match(/(?:T|\s)?(\d{1,2}):(\d{2})/);
     return m ? `${String(m[1]).padStart(2,'0')}:${m[2]}` : raw;
   }
 
@@ -191,7 +277,7 @@
 
   function esAtencionClinicaValida(a){
     const e = norm(a?.estado_atencion || a?.estado || a?.estado_consulta);
-    return !/(anulad|cancelad|archivad)/.test(e);
+    return !/(anulad|cancelad|archivad|eliminad)/.test(e);
   }
 
   function idPacienteSeleccionado(){
@@ -212,6 +298,7 @@
     try{
       if(typeof API_URL !== 'undefined' && API_URL) return txt(API_URL);
     }catch(_e){}
+
     return txt(
       window.API_URL ||
       window.APP_SCRIPT_URL ||
@@ -221,12 +308,27 @@
     );
   }
 
+  function registrarFuente(clave, datos){
+    state.fuentes[clave] = {
+      ...(state.fuentes[clave] || {}),
+      ...datos
+    };
+  }
+
   /* ========================================================================
      API: EXCLUSIVAMENTE GET
   ======================================================================== */
   async function get(accion, params={}, opciones={}){
     const base = apiUrl();
-    if(!base) throw new Error('API_URL no está definida.');
+    const clave = txt(opciones.clave || accion);
+    const critica = opciones.critica === true;
+
+    if(!base){
+      const error = new Error('API_URL no está definida.');
+      registrarFuente(clave,{accion,ok:false,critica,error:error.message});
+      if(opciones.fatal) throw error;
+      return opciones.defecto ?? null;
+    }
 
     const q = new URLSearchParams({accion, _:String(Date.now())});
     Object.entries(params || {}).forEach(([k,v])=>{
@@ -240,13 +342,17 @@
         redirect:'follow'
       });
       if(!r.ok) throw new Error(`HTTP ${r.status} en ${accion}`);
-      return await r.json();
-    }catch(error){
-      if(opciones.opcional){
-        state.advertencias.push(`${accion}: ${error.message}`);
-        return opciones.defecto ?? null;
+      const data = await r.json();
+      if(data && typeof data === 'object' && !Array.isArray(data) && data.success === false){
+        throw new Error(txt(data.message || data.error || `Apps Script reportó error en ${accion}`));
       }
-      throw error;
+      registrarFuente(clave,{accion,ok:true,critica,error:'',respaldo_local:false});
+      return data;
+    }catch(error){
+      registrarFuente(clave,{accion,ok:false,critica,error:error?.message || String(error),respaldo_local:false});
+      state.advertencias.push(`${accion}: ${error?.message || error}`);
+      if(opciones.fatal) throw error;
+      return opciones.defecto ?? null;
     }
   }
 
@@ -268,32 +374,88 @@
   }
 
   /* ========================================================================
-     RESOLUCIÓN DE DATOS MAESTROS
+     FUENTES MAESTRAS: BACKEND PRIMERO, RAM SOLO RESPALDO MARCADO
   ======================================================================== */
-  async function cargarPaciente(idPaciente){
+  function pacienteLocal(idPaciente){
     const listas = [window.patients, window.pacientes, window.listaPacientes, window.pacientesData].filter(Array.isArray);
     for(const lista of listas){
       const p = lista.find(x=>txt(x?.id_paciente || x?.id) === idPaciente);
       if(p) return p;
     }
-
-    const remoto = await get('listarPacientes',{}, {opcional:true, defecto:[]});
-    return arr(remoto).find(x=>txt(x?.id_paciente || x?.id) === idPaciente) || null;
+    try{
+      const p = window.getPacienteActivo?.();
+      if(txt(p?.id_paciente || p?.id) === idPaciente) return p;
+    }catch(_e){}
+    return null;
   }
 
-  async function cargarHistoriasPaciente(idPaciente){
-    const locales = [window.historiasClinicas, window.historias, window.listaHistorias].filter(Array.isArray);
-    for(const lista of locales){
+  async function cargarPaciente(idPaciente){
+    const remoto = await get('listarPacientes',{}, {
+      clave:'maestro:pacientes',
+      critica:true,
+      defecto:[]
+    });
+
+    const encontrado = arr(remoto).find(x=>txt(x?.id_paciente || x?.id) === idPaciente) || null;
+    if(encontrado) return encontrado;
+
+    const local = pacienteLocal(idPaciente);
+    if(local){
+      registrarFuente('maestro:pacientes',{
+        accion:'listarPacientes',
+        ok:state.fuentes['maestro:pacientes']?.ok === true,
+        critica:true,
+        respaldo_local:true,
+        observacion:'Paciente resuelto desde memoria local.'
+      });
+      state.advertencias.push('Paciente resuelto desde memoria local; el documento requiere verificación persistente.');
+      return local;
+    }
+    return null;
+  }
+
+  function historiasLocales(idPaciente){
+    const listas = [window.historiasClinicas, window.historias, window.listaHistorias].filter(Array.isArray);
+    for(const lista of listas){
       const encontradas = lista.filter(x=>txt(x?.id_paciente) === idPaciente);
       if(encontradas.length) return encontradas;
     }
+    return [];
+  }
 
-    const remoto = await get('listarHistoriasClinicas',{}, {opcional:true, defecto:[]});
-    return arr(remoto).filter(x=>txt(x?.id_paciente) === idPaciente);
+  async function cargarHistoriasPaciente(idPaciente){
+    const remoto = await get('listarHistoriasClinicas',{}, {
+      clave:'maestro:historias',
+      critica:true,
+      defecto:[]
+    });
+
+    const remotas = arr(remoto).filter(x=>txt(x?.id_paciente) === idPaciente);
+    if(remotas.length) return remotas;
+
+    const locales = historiasLocales(idPaciente);
+    if(locales.length){
+      registrarFuente('maestro:historias',{
+        accion:'listarHistoriasClinicas',
+        ok:state.fuentes['maestro:historias']?.ok === true,
+        critica:true,
+        respaldo_local:true,
+        observacion:'Historia resuelta desde memoria local.'
+      });
+      state.advertencias.push('Historia clínica resuelta desde memoria local; requiere verificación persistente.');
+      return locales;
+    }
+    return [];
   }
 
   async function cargarAtencionesPaciente(idPaciente){
-    const remoto = await get('listarAtenciones');
+    const remoto = await get('listarAtenciones',{}, {
+      clave:'maestro:atenciones',
+      critica:true,
+      fatal:true,
+      defecto:[]
+    });
+
     return arr(remoto)
       .filter(a=>txt(a?.id_paciente) === idPaciente)
       .filter(esAtencionClinicaValida)
@@ -301,14 +463,22 @@
   }
 
   async function cargarMedicos(){
-    const remoto = await get('listarMedicosActivos',{}, {opcional:true, defecto:[]});
+    const remoto = await get('listarMedicosActivos',{}, {
+      clave:'maestro:medicos',
+      critica:false,
+      defecto:[]
+    });
     const remotos = arr(remoto);
     if(remotos.length) return remotos;
     return [window.medicos, window.medicosActivos, window.listaMedicos].find(Array.isArray) || [];
   }
 
   async function cargarConfiguracion(){
-    const remoto = await get('obtenerConfiguracion',{}, {opcional:true, defecto:{}});
+    const remoto = await get('obtenerConfiguracion',{}, {
+      clave:'maestro:configuracion',
+      critica:false,
+      defecto:{}
+    });
     return obj(remoto) || window.auroConfiguracionCentro || window.configuracionCentro || window.configuracionInstitucional || {};
   }
 
@@ -320,7 +490,7 @@
       h?.antecedentes_familiares,
       h?.medicacion_actual,
       h?.alergias
-    ].some(valorUtil);
+    ].some(v=>valorClinico(v));
 
     return (historias || [])
       .filter(tiene)
@@ -333,19 +503,32 @@
 
   /* ========================================================================
      CARGADORES CLÍNICOS POR ATENCIÓN
+     Un fallo queda registrado como FUENTE NO VERIFICADA; no se finge vacío.
   ======================================================================== */
   async function cargarModuloAtencion(a){
     const id = txt(a?.id_atencion);
-    if(!id) return {atencion:a};
+    if(!id){
+      return {
+        atencion:a,
+        anamnesis:null,
+        examen:null,
+        diagnosticos:[],
+        plan:null,
+        recomendaciones:null,
+        certificados:[],
+        documentos:[],
+        _sinIdAtencion:true
+      };
+    }
 
     const [anamnesisR, examenR, diagnosticosR, planR, recomendacionesR, certificadosR, documentosR] = await Promise.all([
-      get('buscarAnamnesisPorAtencion',{id_atencion:id},{opcional:true,defecto:null}),
-      get('buscarExamenFisicoPorAtencion',{id_atencion:id},{opcional:true,defecto:null}),
-      get('listarDiagnosticosPorAtencion',{id_atencion:id},{opcional:true,defecto:[]}),
-      get('buscarPlanPorAtencion',{id_atencion:id},{opcional:true,defecto:null}),
-      get('buscarRecomendacionPorAtencion',{id_atencion:id},{opcional:true,defecto:null}),
-      get('listarCertificadosPorAtencion',{id_atencion:id},{opcional:true,defecto:[]}),
-      get('listarDocumentosPorAtencion',{id_atencion:id},{opcional:true,defecto:[]})
+      get('buscarAnamnesisPorAtencion',{id_atencion:id},{clave:`anamnesis:${id}`,critica:true,defecto:null}),
+      get('buscarExamenFisicoPorAtencion',{id_atencion:id},{clave:`examen:${id}`,critica:true,defecto:null}),
+      get('listarDiagnosticosPorAtencion',{id_atencion:id},{clave:`diagnosticos:${id}`,critica:true,defecto:[]}),
+      get('buscarPlanPorAtencion',{id_atencion:id},{clave:`plan:${id}`,critica:true,defecto:null}),
+      get('buscarRecomendacionPorAtencion',{id_atencion:id},{clave:`recomendaciones:${id}`,critica:true,defecto:null}),
+      get('listarCertificadosPorAtencion',{id_atencion:id},{clave:`certificados:${id}`,critica:true,defecto:[]}),
+      get('listarDocumentosPorAtencion',{id_atencion:id},{clave:`documentos:${id}`,critica:true,defecto:[]})
     ]);
 
     return {
@@ -360,86 +543,114 @@
     };
   }
 
-  async function cargarColeccionesGlobales(idPaciente){
-    const [recetasR, obstR, gineR, esteticaR, preR, bioR, procR, consR, segR] = await Promise.all([
-      get('listarRecetas',{}, {opcional:true,defecto:[]}),
-      get('listarObstetricia',{}, {opcional:true,defecto:[]}),
-      get('listarGinecologia',{}, {opcional:true,defecto:[]}),
-      get('listarEstetica',{}, {opcional:true,defecto:[]}),
-      get('listarPreatenciones',{}, {opcional:true,defecto:[]}),
-      get('listarBioimpedancia',{}, {opcional:true,defecto:[]}),
-      get('listarProcedimientos',{}, {opcional:true,defecto:[]}),
-      get('listarConsentimientos',{}, {opcional:true,defecto:[]}),
-      get('listarSeguimientos',{}, {opcional:true,defecto:[]})
-    ]);
+  async function cargarColeccionesGlobales(){
+    const definiciones = [
+      ['recetas','listarRecetas'],
+      ['obstetricia','listarObstetricia'],
+      ['ginecologia','listarGinecologia'],
+      ['estetica','listarEstetica'],
+      ['preatenciones','listarPreatenciones'],
+      ['bioimpedancia','listarBioimpedancia'],
+      ['procedimientos','listarProcedimientos'],
+      ['consentimientos','listarConsentimientos'],
+      ['seguimientos','listarSeguimientos']
+    ];
 
-    const soloPaciente = lista => arr(lista).filter(x=>{
-      const id = txt(x?.id_paciente || x?.paciente_id);
-      return !id || id === idPaciente;
-    });
+    const resultados = await Promise.all(definiciones.map(([clave,accion])=>
+      get(accion,{}, {clave:`global:${clave}`,critica:true,defecto:[]})
+    ));
 
+    return Object.fromEntries(definiciones.map(([clave],i)=>[clave,arr(resultados[i])]));
+  }
+
+  /* ========================================================================
+     RELACIÓN CLÍNICA ESTRICTA
+  ======================================================================== */
+  function construirRelacion(idPaciente, historias, atenciones){
     return {
-      recetas:soloPaciente(recetasR),
-      obstetricia:soloPaciente(obstR),
-      ginecologia:soloPaciente(gineR),
-      estetica:soloPaciente(esteticaR),
-      preatenciones:soloPaciente(preR),
-      bioimpedancia:soloPaciente(bioR),
-      procedimientos:soloPaciente(procR),
-      consentimientos:soloPaciente(consR),
-      seguimientos:soloPaciente(segR)
+      idPaciente:txt(idPaciente),
+      idsHistoria:new Set((historias || []).map(h=>txt(h?.id_historia || h?.id)).filter(Boolean)),
+      idsAtencion:new Set((atenciones || []).map(a=>txt(a?.id_atencion)).filter(Boolean))
     };
   }
 
-  function indexarPorAtencion(lista){
+  function pertenecePaciente(registro, relacion){
+    if(!registro || typeof registro !== 'object') return false;
+
+    const idP = txt(registro.id_paciente || registro.paciente_id);
+    const idA = txt(registro.id_atencion || registro.atencion_id);
+    const idH = txt(registro.id_historia || registro.historia_id);
+
+    if(idP) return idP === relacion.idPaciente;
+    if(idA) return relacion.idsAtencion.has(idA);
+    if(idH) return relacion.idsHistoria.has(idH);
+    return false;
+  }
+
+  function filtrarPorPertenencia(lista, relacion){
+    const salida = [];
+    (lista || []).forEach(r=>{
+      if(pertenecePaciente(r,relacion)) salida.push(r);
+      else state.excluidos.sinPertenencia += 1;
+    });
+    return salida;
+  }
+
+  function indexarPorAtencion(lista, relacion){
     const m = new Map();
     (lista || []).forEach(x=>{
-      const id = txt(x?.id_atencion);
-      if(!id) return;
+      const id = txt(x?.id_atencion || x?.atencion_id);
+      if(!id || !relacion.idsAtencion.has(id)) return;
       if(!m.has(id)) m.set(id,[]);
       m.get(id).push(x);
     });
     return m;
   }
 
-  function asociarEstetica(atenciones, registros){
-    const porFechaAtencion = new Map();
-    atenciones.forEach(a=>{
-      const f = fechaISO(a?.fecha_atencion || a?.fecha_consulta || a?.fecha);
-      if(!f) return;
-      if(!porFechaAtencion.has(f)) porFechaAtencion.set(f,[]);
-      porFechaAtencion.get(f).push(a);
+  function asociarColecciones(detalleAtenciones, globalesBase, relacion){
+    const globales = {};
+    Object.entries(globalesBase || {}).forEach(([k,lista])=>{
+      globales[k] = filtrarPorPertenencia(lista,relacion);
     });
 
-    const porAtencion = new Map();
-    const ambiguos = [];
+    const mapas = {
+      recetas:indexarPorAtencion(globales.recetas,relacion),
+      obstetricia:indexarPorAtencion(globales.obstetricia,relacion),
+      ginecologia:indexarPorAtencion(globales.ginecologia,relacion),
+      estetica:indexarPorAtencion(globales.estetica,relacion),
+      preatenciones:indexarPorAtencion(globales.preatenciones,relacion)
+    };
 
-    (registros || []).forEach(r=>{
-      const f = fechaISO(r?.fecha_atencion || r?.fecha || r?.creado_en);
-      if(!f){ ambiguos.push(r); return; }
-      const candidatas = porFechaAtencion.get(f) || [];
-      if(candidatas.length === 1){
-        const id = txt(candidatas[0].id_atencion);
-        if(!porAtencion.has(id)) porAtencion.set(id,[]);
-        porAtencion.get(id).push(r);
-      }else{
-        ambiguos.push(r);
-      }
+    detalleAtenciones.forEach(d=>{
+      const id = txt(d.atencion?.id_atencion);
+      d.recetas = mapas.recetas.get(id) || [];
+      d.obstetricia = mapas.obstetricia.get(id) || [];
+      d.ginecologia = mapas.ginecologia.get(id) || [];
+      d.estetica = mapas.estetica.get(id) || [];
+      d.preatencion = mapas.preatenciones.get(id) || [];
     });
 
-    return {porAtencion, ambiguos};
+    const sinAtencion = {};
+    ['recetas','obstetricia','ginecologia','estetica','preatenciones','bioimpedancia','procedimientos','consentimientos','seguimientos']
+      .forEach(k=>{
+        sinAtencion[k] = (globales[k] || []).filter(r=>!txt(r?.id_atencion || r?.atencion_id));
+      });
+
+    state.excluidos.sinAtencion = Object.values(sinAtencion).reduce((n,l)=>n+(l?.length||0),0);
+
+    return {...globales, sinAtencion};
   }
 
   /* ========================================================================
-     NORMALIZACIÓN / ESTRUCTURA DOCUMENTAL
+     NORMALIZACIÓN DOCUMENTAL
   ======================================================================== */
   function medicoDeAtencion(a, medicos){
     const id = txt(a?.id_medico);
     const m = (medicos || []).find(x=>txt(x?.id_medico || x?.id || x?.codigo) === id) || {};
     return {
       id,
-      nombre: nombreCompleto(m) || txt(a?.nombre_medico || a?.medico_nombre),
-      especialidad: txt(
+      nombre:nombreCompleto(m) || txt(a?.nombre_medico || a?.medico_nombre),
+      especialidad:txt(
         m?.especialidad_principal || m?.especialidad || m?.especialidad_medica ||
         a?.especialidad || a?.especialidad_atencion || a?.medico_especialidad
       ),
@@ -451,8 +662,14 @@
   function normalizarInstitucion(c){
     c = c || {};
     if(c.datos && typeof c.datos === 'object') c = c.datos;
+
+    const nombreComercial = txt(c.nombre_comercial || c.nombre_clinica || c.nombre_centro) || 'AUROSANAX';
+    const profesional = txt(
+      c.nombre_profesional || c.profesional_responsable || c.titular_profesional || c.medico_responsable
+    );
+
     return {
-      nombre:txt(c.nombre_clinica || c.nombre_centro || c.nombre_comercial || c.razon_social) || 'AUROSANAX',
+      nombre_comercial:nombreComercial,
       subtitulo:txt(c.subtitulo_clinica || c.descripcion_clinica || c.eslogan_clinica),
       razon_social:txt(c.razon_social),
       ruc:txt(c.ruc),
@@ -463,7 +680,13 @@
       email:txt(c.email_clinica || c.correo_clinica || c.email || c.correo),
       web:txt(c.sitio_web_clinica || c.web_clinica || c.web),
       logo:txt(c.logo_url || c.logo_drive_url || c.logo),
-      color:txt(c.color_principal) || '#8b1e5a'
+      color:txt(c.color_principal) || '#8b1e5a',
+      emisor:{
+        nombre:profesional,
+        especialidad:txt(c.especialidad_profesional || c.especialidad_medica || c.especialidad),
+        registro:txt(c.registro_profesional || c.registro_msp || c.msp),
+        ruc:txt(c.ruc)
+      }
     };
   }
 
@@ -491,84 +714,67 @@
     };
   }
 
-  function normalizarAntecedentes(h){
-    h = h || {};
-    return [
-      ['Antecedentes personales', h.antecedentes_personales],
-      ['Antecedentes quirúrgicos', h.antecedentes_quirurgicos],
-      ['Alergias', h.alergias],
-      ['Antecedentes gineco-obstétricos', h.antecedentes_gineco_obstetricos],
-      ['Medicación actual', h.medicacion_actual],
-      ['Antecedentes familiares', h.antecedentes_familiares]
-    ].filter(([,v])=>valorUtil(v));
-  }
-
-  function datosObjetoUtil(o, excluir=[]){
-    const no = new Set([
-      'id','id_atencion','id_paciente','id_historia','id_medico','id_cita',
-      'creado_en','actualizado_en','creado_por','actualizado_por','modulo_version',
-      'estado','estado_registro','estado_examen',
-      ...excluir
-    ]);
-
-    return Object.entries(o || {})
-      .filter(([k,v])=>!no.has(k) && valorUtil(v));
-  }
-
-  function asociarColecciones(datos, globales){
-    const recetas = indexarPorAtencion(globales.recetas);
-    const obst = indexarPorAtencion(globales.obstetricia);
-    const gine = indexarPorAtencion(globales.ginecologia);
-    const pre = indexarPorAtencion(globales.preatenciones);
-    const estetica = asociarEstetica(datos.map(x=>x.atencion), globales.estetica);
-
-    datos.forEach(d=>{
-      const id = txt(d.atencion?.id_atencion);
-      d.recetas = recetas.get(id) || [];
-      d.obstetricia = obst.get(id) || [];
-      d.ginecologia = gine.get(id) || [];
-      d.preatencion = pre.get(id) || [];
-      d.estetica = estetica.porAtencion.get(id) || [];
-    });
-
-    return {
-      ...globales,
-      esteticaAmbigua:estetica.ambiguos
-    };
-  }
-
   /* ========================================================================
-     RENDER DE DATOS GENÉRICOS
+     LIMPIEZA CLÍNICA ESTRUCTURADA
   ======================================================================== */
-  function contenidoEstructurado(valor, profundidad=0){
-    if(profundidad > 4 || !valorUtil(valor)) return '';
+  function limpiarObjetoClinico(valor, opciones={}, profundidad=0){
+    if(profundidad > 6) return null;
 
-    const parsed = typeof valor === 'string' ? parseJSON(valor, null) : valor;
+    if(Array.isArray(valor)){
+      const a = valor
+        .map(x=>limpiarObjetoClinico(x,opciones,profundidad+1))
+        .filter(x=>x !== null && x !== undefined && x !== '' && !(Array.isArray(x) && !x.length));
+      return a.length ? a : null;
+    }
 
-    if(Array.isArray(parsed)){
-      const items = parsed.map(v=>contenidoEstructurado(v, profundidad+1)).filter(Boolean);
+    if(valor && typeof valor === 'object'){
+      const salida = {};
+      Object.entries(valor).forEach(([k,v])=>{
+        if(esClaveTecnica(k)) return;
+        if(opciones.excluirClaves && opciones.excluirClaves.some(rx=>rx.test(norm(k)))) return;
+        const limpio = limpiarObjetoClinico(v,opciones,profundidad+1);
+        if(limpio === null || limpio === undefined || limpio === '') return;
+        if(Array.isArray(limpio) && !limpio.length) return;
+        if(limpio && typeof limpio === 'object' && !Array.isArray(limpio) && !Object.keys(limpio).length) return;
+        salida[k] = limpio;
+      });
+      return Object.keys(salida).length ? salida : null;
+    }
+
+    if(!valorClinico(valor,opciones)) return null;
+    if(typeof valor === 'boolean') return valor === true ? 'Sí' : null;
+    return valor;
+  }
+
+  function contenidoEstructurado(valor, opciones={}, profundidad=0){
+    if(profundidad > 6) return '';
+
+    const base = typeof valor === 'string' ? (()=>{
+      const raw = txt(valor);
+      const prefijo = raw.match(/^[A-Z0-9_\-]+::/);
+      const limpio = prefijo ? raw.slice(prefijo[0].length) : raw;
+      const p = parseJSON(limpio,null);
+      return p === null ? limpio : p;
+    })() : valor;
+
+    const limpio = limpiarObjetoClinico(base,opciones,0);
+    if(limpio === null || limpio === undefined || limpio === '') return '';
+
+    if(Array.isArray(limpio)){
+      const items = limpio.map(v=>contenidoEstructurado(v,opciones,profundidad+1)).filter(Boolean);
       return items.length ? `<ul class="aih-list">${items.map(x=>`<li>${x}</li>`).join('')}</ul>` : '';
     }
 
-    if(parsed && typeof parsed === 'object'){
-      const filas = Object.entries(parsed)
-        .filter(([,v])=>valorUtil(v))
-        .map(([k,v])=>{
-          if(v && typeof v === 'object'){
-            const interno = contenidoEstructurado(v, profundidad+1);
-            return interno ? `<div class="aih-kv aih-kv-block"><span>${esc(humanizar(k))}</span><div>${interno}</div></div>` : '';
-          }
-          return `<div class="aih-kv"><span>${esc(humanizar(k))}</span><b>${esc(v)}</b></div>`;
-        })
-        .filter(Boolean);
+    if(limpio && typeof limpio === 'object'){
+      const filas = Object.entries(limpio).map(([k,v])=>{
+        if(v && typeof v === 'object'){
+          const interno = contenidoEstructurado(v,opciones,profundidad+1);
+          return interno ? `<div class="aih-kv aih-kv-block"><span>${esc(humanizar(k))}</span><div>${interno}</div></div>` : '';
+        }
+        return `<div class="aih-kv"><span>${esc(humanizar(k))}</span><b>${esc(v)}</b></div>`;
+      }).filter(Boolean);
       return filas.length ? `<div class="aih-kv-grid">${filas.join('')}</div>` : '';
     }
-
-    const raw = txt(valor);
-    const prefijo = raw.match(/^[A-Z0-9_\-]+::/);
-    const limpio = prefijo ? raw.slice(prefijo[0].length) : raw;
-    const parseado = parseJSON(limpio, null);
-    if(parseado) return contenidoEstructurado(parseado, profundidad+1);
 
     return esc(limpio).replace(/\n/g,'<br>');
   }
@@ -579,178 +785,380 @@
     return `<section class="aih-block ${clase}"><h3>${esc(titulo)}</h3><div class="aih-block-body">${c}</div></section>`;
   }
 
-  function miniDatos(pares){
-    const utiles = (pares || []).filter(([,v])=>valorUtil(v));
+  function miniDatos(pares, opciones={}){
+    const utiles = (pares || []).filter(item=>{
+      const v = Array.isArray(item) ? item[1] : item?.valor;
+      const o = Array.isArray(item) ? opciones : {...opciones,...(item?.opciones || {})};
+      return valorClinico(v,o);
+    });
     if(!utiles.length) return '';
-    return `<div class="aih-mini-grid">${utiles.map(([l,v])=>`<div class="aih-mini"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>`;
+
+    return `<div class="aih-mini-grid">${utiles.map(item=>{
+      const l = Array.isArray(item) ? item[0] : item.label;
+      const v = Array.isArray(item) ? item[1] : item.valor;
+      return `<div class="aih-mini"><span>${esc(l)}</span><b>${esc(v)}</b></div>`;
+    }).join('')}</div>`;
   }
 
-  function renderAntecedentes(antecedentes){
-    const html = (antecedentes || []).map(([titulo,valor])=>{
-      const c = contenidoEstructurado(valor);
-      return c ? bloque(titulo,c, norm(titulo).includes('alerg') ? 'aih-danger' : '') : '';
-    }).filter(Boolean).join('');
+  function ultimoRegistro(lista){
+    return (lista || []).slice().sort((a,b)=>
+      txt(b?.actualizado_en || b?.creado_en).localeCompare(txt(a?.actualizado_en || a?.creado_en))
+    )[0] || null;
+  }
+
+  function contenidoEquivalente(a,b){
+    const na = norm(a).replace(/[.;:,]+$/,'');
+    const nb = norm(b).replace(/[.;:,]+$/,'');
+    return !!na && !!nb && (na === nb || (na.length > 20 && nb.includes(na)) || (nb.length > 20 && na.includes(nb)));
+  }
+
+  /* ========================================================================
+     ANTECEDENTES LONGITUDINALES
+     Se intenta aprovechar los helpers premium ya existentes en antecedentes.js
+     sin escribir en dicho módulo. Si no están disponibles, fallback local seguro.
+  ======================================================================== */
+  function itemsAntecedenteHTML(titulo, items, clase=''){
+    const lista = Array.isArray(items) ? items : [];
+    const normalizados = lista.map(item=>{
+      if(typeof item === 'string') return {titulo:item,detalle:''};
+      if(!item || typeof item !== 'object') return null;
+      return {
+        titulo:txt(item.titulo || item.nombre || item.label || item.patologia || item.alergia || item.medicamento || item.texto),
+        detalle:txt(item.detalle || item.descripcion || item.valor || item.parentesco)
+      };
+    }).filter(x=>x && valorClinico(x.titulo));
+
+    if(!normalizados.length) return '';
+    return `<div class="aih-ant-group ${clase}"><h3>${esc(titulo)}</h3><div class="aih-ant-grid">${normalizados.map(x=>
+      `<div class="aih-ant-item"><b>${esc(x.titulo)}</b>${valorClinico(x.detalle)?`<span>${esc(x.detalle)}</span>`:''}</div>`
+    ).join('')}</div></div>`;
+  }
+
+  function helperAntecedente(nombre){
+    return typeof window[nombre] === 'function' ? window[nombre] : null;
+  }
+
+  function renderAntecedentes(historia){
+    if(!historia) return '';
+    const bloques = [];
+
+    try{
+      const extraer = helperAntecedente('auroExtraerItemsAntecedentePremium');
+      if(extraer){
+        const personales = txt(historia.antecedentes_personales);
+        const gineco = txt(historia.antecedentes_gineco_obstetricos);
+        const jsonPersonales = parseJSON(personales.replace(/^AUROSANAX_ANT_PERSONALES_V1::/i,''),null);
+        const jsonGineco = parseJSON(gineco.replace(/^AUROSANAX_ANT_GINECO_OBS_V1::/i,''),null);
+
+        const fuentePat = jsonPersonales?.patologicos ?? personales;
+        bloques.push(itemsAntecedenteHTML('Patológicos personales', extraer(fuentePat,'patologia')));
+        bloques.push(itemsAntecedenteHTML('Quirúrgicos', extraer(historia.antecedentes_quirurgicos || '','quirurgico')));
+        bloques.push(itemsAntecedenteHTML('Alergias', extraer(historia.alergias || '','alergia'),'aih-ant-alert'));
+        bloques.push(itemsAntecedenteHTML('Medicación actual', extraer(historia.medicacion_actual || '','medicacion')));
+        bloques.push(itemsAntecedenteHTML('Familiares', extraer(historia.antecedentes_familiares || '','familiares')));
+
+        if(jsonPersonales){
+          const grupos = [
+            ['COVID-19','auroResumenCovidItemsDesdeJson'],
+            ['Vacunas registradas','auroResumenVacunasItemsDesdeJson'],
+            ['Hábitos registrados','auroResumenHabitosItemsDesdeJson'],
+            ['Actividad física registrada','auroResumenEstiloVidaItemsDesdeJson'],
+            ['Alimentación','auroResumenAlimentacionItemsDesdeJson']
+          ];
+          grupos.forEach(([titulo,fn])=>{
+            const h = helperAntecedente(fn);
+            if(h) bloques.push(itemsAntecedenteHTML(titulo,h(jsonPersonales)));
+          });
+        }
+
+        if(jsonGineco){
+          const hObs = helperAntecedente('auroResumenObstetricosItemsDesdeJson');
+          const hGin = helperAntecedente('auroResumenGinecologicosItemsDesdeJson');
+          if(hObs) bloques.push(itemsAntecedenteHTML('Obstétricos',hObs(jsonGineco)));
+          if(hGin) bloques.push(itemsAntecedenteHTML('Ginecológicos',hGin(jsonGineco)));
+        }else{
+          bloques.push(itemsAntecedenteHTML('Gineco-obstétricos',extraer(gineco,'gineco')));
+        }
+      }
+    }catch(error){
+      console.warn(MODULO,'No se pudieron usar helpers premium de Antecedentes; se usa fallback seguro.',error);
+    }
+
+    if(!bloques.filter(Boolean).length){
+      const pares = [
+        ['Antecedentes personales',historia.antecedentes_personales],
+        ['Antecedentes quirúrgicos',historia.antecedentes_quirurgicos],
+        ['Alergias',historia.alergias],
+        ['Antecedentes gineco-obstétricos',historia.antecedentes_gineco_obstetricos],
+        ['Medicación actual',historia.medicacion_actual],
+        ['Antecedentes familiares',historia.antecedentes_familiares]
+      ];
+      pares.forEach(([titulo,v])=>{
+        const c = contenidoEstructurado(v,{});
+        if(c) bloques.push(bloque(titulo,c,norm(titulo).includes('alerg')?'aih-danger':''));
+      });
+    }
+
+    const html = bloques.filter(Boolean).join('');
     return html ? `<section class="aih-major"><h2>Antecedentes clínicos longitudinales</h2>${html}</section>` : '';
+  }
+
+  /* ========================================================================
+     ANAMNESIS - solo contenido clínico persistido
+  ======================================================================== */
+  function controlesAnamnesisPares(controles){
+    const salida = [];
+    Object.entries(controles || {}).forEach(([clave,dato])=>{
+      if(!dato || typeof dato !== 'object') return;
+      if(dato.cabecera_contexto === true) return;
+      const tipo = norm(dato.tipo);
+      if((tipo === 'checkbox' || tipo === 'radio') && dato.checked !== true) return;
+
+      let valor = txt(dato.valor);
+      if((tipo === 'checkbox' || tipo === 'radio') && (!valor || norm(valor) === 'on')) valor = 'Sí';
+      if(!valorClinico(valor)) return;
+
+      salida.push([humanizar(clave),valor]);
+    });
+    return salida;
+  }
+
+  function respuestasAnamnesisPares(respuestas, motivo, enfermedad){
+    const limpio = limpiarObjetoClinico(respuestas,{
+      excluirClaves:[/^_modo_captura$/, /motivo/, /enfermedad/, /plantilla/]
+    });
+    if(!limpio || typeof limpio !== 'object' || Array.isArray(limpio)) return [];
+
+    return Object.entries(limpio).flatMap(([k,v])=>{
+      if(v && typeof v === 'object') return [];
+      const valor = txt(v);
+      if(!valorClinico(valor)) return [];
+      if(contenidoEquivalente(valor,motivo) || contenidoEquivalente(valor,enfermedad)) return [];
+      if(norm(enfermedad).includes(norm(valor)) && norm(valor).length > 3) return [];
+      return [[humanizar(k),valor]];
+    });
+  }
+
+  function paresClinicosHTML(pares){
+    const vistos = new Set();
+    const utiles = [];
+    (pares || []).forEach(([label,v])=>{
+      if(!valorClinico(v)) return;
+      const clave = `${norm(label)}||${norm(v)}`;
+      if(vistos.has(clave)) return;
+      vistos.add(clave);
+      utiles.push([label,v]);
+    });
+    if(!utiles.length) return '';
+    return `<div class="aih-lines">${utiles.map(([l,v])=>
+      `<div class="aih-line"><span>${esc(l)}</span><div>${esc(v).replace(/\n/g,'<br>')}</div></div>`
+    ).join('')}</div>`;
   }
 
   function renderAnamnesis(r){
     if(!r) return '';
     const partes = [];
-    if(valorUtil(r.motivo_consulta)) partes.push(bloque('Motivo de consulta', contenidoEstructurado(r.motivo_consulta)));
-    if(valorUtil(r.enfermedad_actual)) partes.push(bloque('Enfermedad actual', contenidoEstructurado(r.enfermedad_actual)));
-
-    const respuestas = parseJSON(r.respuestas_json, null);
-    const controles = parseJSON(r.controles_json, null);
+    const motivo = txt(r.motivo_consulta);
+    const enfermedad = txt(r.enfermedad_actual);
     const narrativa = txt(r.narrativa_generada);
 
-    if(valorUtil(narrativa) && norm(narrativa) !== norm(r.enfermedad_actual)){
-      partes.push(bloque('Síntesis de anamnesis', contenidoEstructurado(narrativa)));
+    if(valorClinico(motivo)) partes.push(bloque('Motivo de consulta',esc(motivo).replace(/\n/g,'<br>')));
+    if(valorClinico(enfermedad)) partes.push(bloque('Enfermedad actual',esc(enfermedad).replace(/\n/g,'<br>')));
+    else if(valorClinico(narrativa)) partes.push(bloque('Enfermedad actual',esc(narrativa).replace(/\n/g,'<br>')));
+
+    const respuestas = respuestasAnamnesisPares(parseJSON(r.respuestas_json,{}) || {},motivo,enfermedad || narrativa);
+    const controles = controlesAnamnesisPares(parseJSON(r.controles_json,{}) || {});
+    const extras = [...respuestas,...controles].filter(([,v])=>{
+      if(contenidoEquivalente(v,motivo) || contenidoEquivalente(v,enfermedad) || contenidoEquivalente(v,narrativa)) return false;
+      return true;
+    });
+    const extraHtml = paresClinicosHTML(extras);
+    if(extraHtml) partes.push(bloque('Datos complementarios de anamnesis',extraHtml));
+
+    return partes.length ? `<section class="aih-module"><h3 class="aih-module-title">Anamnesis</h3>${partes.join('')}</section>` : '';
+  }
+
+  /* ========================================================================
+     SIGNOS VITALES - fusión campo por campo Examen > Preatención
+  ======================================================================== */
+  function vital(r, claves, opciones={}){
+    for(const k of claves){
+      const v = r?.[k];
+      if(valorClinico(v,opciones)) return txt(v);
+    }
+    return '';
+  }
+
+  function signosVitales(examen, preatencionLista){
+    const pre = ultimoRegistro(preatencionLista) || {};
+    const ex = examen || {};
+    const elegir = (claves,o={}) => vital(ex,claves,o) || vital(pre,claves,o);
+
+    return [
+      ['Peso',elegir(['peso_kg','peso'])],
+      ['Talla',elegir(['talla_cm','talla'])],
+      ['IMC',elegir(['imc'])],
+      ['Presión arterial',elegir(['presion_arterial','pa'])],
+      ['Frecuencia cardíaca',elegir(['frecuencia_cardiaca','fc'])],
+      ['Frecuencia respiratoria',elegir(['frecuencia_respiratoria','fr'])],
+      ['Temperatura',elegir(['temperatura'])],
+      ['Saturación',elegir(['saturacion','spo2'])]
+    ].filter(([,v])=>valorClinico(v));
+  }
+
+  function renderExamen(examen, preatencionLista){
+    const partes = [];
+    const vitales = signosVitales(examen,preatencionLista);
+    if(vitales.length) partes.push(bloque('Signos vitales',miniDatos(vitales)));
+
+    if(examen){
+      const general = primer(examen.examen_fisico, examen.examen_general, examen.hallazgos_generales, examen.observaciones_examen);
+      const sistemas = primer(examen.examenes_sistemas, examen.sistemas, examen.sistemas_json, examen.revision_sistemas_json, examen.revision_sistemas);
+      const regional = primer(examen.examenes_regionales, examen.regionales, examen.regional_json, examen.examen_regional);
+
+      const cGeneral = contenidoEstructurado(general,{});
+      const cSistemas = contenidoEstructurado(sistemas,{excluirClaves:[/no_valorado/,/estado/]});
+      const cRegional = contenidoEstructurado(regional,{excluirClaves:[/no_valorado/,/estado/]});
+
+      if(cGeneral) partes.push(bloque('Examen físico',cGeneral));
+      if(cSistemas && !contenidoEquivalente(txt(sistemas),txt(general))) partes.push(bloque('Examen por sistemas',cSistemas));
+      if(cRegional && !contenidoEquivalente(txt(regional),txt(general))) partes.push(bloque('Examen regional',cRegional));
     }
 
-    const detalle = contenidoEstructurado(respuestas) || contenidoEstructurado(controles);
-    if(detalle) partes.push(bloque('Datos complementarios de anamnesis', detalle));
-    return partes.join('');
+    return partes.length ? `<section class="aih-module"><h3 class="aih-module-title">Examen físico</h3>${partes.join('')}</section>` : '';
   }
 
-  function renderPreatencion(lista, examen){
-    if(!lista?.length) return '';
-    if(examen && datosObjetoUtil(examen).some(([k])=>/peso|talla|imc|presion|frecuencia|temperatura|saturacion/.test(norm(k)))) return '';
-
-    const r = lista.slice().sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)))[0];
-    const vitales = miniDatos([
-      ['Peso', primer(r.peso_kg,r.peso)],
-      ['Talla', primer(r.talla_cm,r.talla)],
-      ['IMC', r.imc],
-      ['Presión arterial', primer(r.presion_arterial,r.pa)],
-      ['Frecuencia cardíaca', primer(r.frecuencia_cardiaca,r.fc)],
-      ['Frecuencia respiratoria', primer(r.frecuencia_respiratoria,r.fr)],
-      ['Temperatura', r.temperatura],
-      ['Saturación', primer(r.saturacion,r.spo2)]
-    ]);
-    return vitales ? bloque('Signos vitales registrados en preatención', vitales, 'aih-soft') : '';
-  }
-
-  function renderExamen(r){
+  /* ========================================================================
+     OBSTETRICIA - política estricta anti-placeholder
+  ======================================================================== */
+  function renderObstetricia(lista){
+    const r = ultimoRegistro(lista);
     if(!r) return '';
 
-    const vitales = miniDatos([
-      ['Peso', primer(r.peso_kg,r.peso)],
-      ['Talla', primer(r.talla_cm,r.talla)],
-      ['IMC', r.imc],
-      ['Presión arterial', primer(r.presion_arterial,r.pa)],
-      ['Frecuencia cardíaca', primer(r.frecuencia_cardiaca,r.fc)],
-      ['Frecuencia respiratoria', primer(r.frecuencia_respiratoria,r.fr)],
-      ['Temperatura', r.temperatura],
-      ['Saturación', primer(r.saturacion,r.spo2)]
-    ]);
-
-    const partes = [];
-    if(vitales) partes.push(bloque('Signos vitales',vitales));
-
-    const general = primer(r.examen_fisico, r.examen_general, r.hallazgos_generales, r.observaciones_examen);
-    if(valorUtil(general)) partes.push(bloque('Examen físico',contenidoEstructurado(general)));
-
-    const sistemas = primer(r.examenes_sistemas, r.sistemas, r.sistemas_json, r.revision_sistemas_json, r.revision_sistemas);
-    if(valorUtil(sistemas)) partes.push(bloque('Examen por sistemas',contenidoEstructurado(sistemas)));
-
-    const regionales = primer(r.examenes_regionales, r.regionales, r.regional_json, r.examen_regional);
-    if(valorUtil(regionales)) partes.push(bloque('Examen regional',contenidoEstructurado(regionales)));
-
-    return partes.join('');
-  }
-
-  function renderObstetricia(lista){
-    if(!lista?.length) return '';
-    const r = lista.slice().sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)))[0];
-
+    const o = {obstetricia:true,ceroVacio:true};
     const cab = miniDatos([
-      ['FUM', fechaVista(r.fum || r.fur)],
-      ['FPP', fechaVista(r.fpp)],
-      ['Edad gestacional', [txt(r.edad_gestacional_semanas) ? `${txt(r.edad_gestacional_semanas)} sem` : '', txt(r.edad_gestacional_dias) ? `${txt(r.edad_gestacional_dias)} días` : ''].filter(Boolean).join(' + ')],
-      ['Altura uterina', r.altura_uterina],
-      ['FCF', r.frecuencia_cardiaca_fetal],
-      ['Riesgo obstétrico', r.riesgo_obstetrico],
-      ['Próximo control', fechaVista(r.proximo_control)]
-    ]);
+      {label:'FUM',valor:fechaVista(r.fum || r.fur),opciones:o},
+      {label:'FPP',valor:fechaVista(r.fpp),opciones:o},
+      {label:'Edad gestacional',valor:[
+        valorClinico(r.edad_gestacional_semanas,o) ? `${txt(r.edad_gestacional_semanas)} sem` : '',
+        valorClinico(r.edad_gestacional_dias,o) ? `${txt(r.edad_gestacional_dias)} días` : ''
+      ].filter(Boolean).join(' + '),opciones:o},
+      {label:'Peso materno',valor:r.peso_materno,opciones:o},
+      {label:'Presión arterial',valor:r.presion_arterial,opciones:o},
+      {label:'Altura uterina',valor:r.altura_uterina,opciones:o},
+      {label:'FCF',valor:r.frecuencia_cardiaca_fetal,opciones:o},
+      {label:'Riesgo obstétrico',valor:r.riesgo_obstetrico,opciones:o},
+      {label:'Próximo control',valor:fechaVista(r.proximo_control),opciones:o}
+    ],o);
 
     const extras = [
-      ['Embarazo actual', r.embarazo_actual_json],
-      ['Síntomas obstétricos', r.sintomas_obstetricos_json],
-      ['Evaluación obstétrica', r.evaluacion_obstetrica_json],
-      ['Impresión obstétrica', r.impresion_obstetrica],
-      ['Observaciones', r.observaciones]
-    ].map(([t,v])=>valorUtil(v) ? bloque(t,contenidoEstructurado(v)) : '').filter(Boolean).join('');
+      ['Embarazo actual',r.embarazo_actual_json],
+      ['Síntomas obstétricos',r.sintomas_obstetricos_json],
+      ['Evaluación obstétrica',r.evaluacion_obstetrica_json],
+      ['Impresión obstétrica',r.impresion_obstetrica],
+      ['Observaciones',r.observaciones]
+    ].map(([titulo,v])=>{
+      const c = contenidoEstructurado(v,{obstetricia:true,ceroVacio:true,excluirClaves:[/estado/,/clasific/]});
+      return c ? bloque(titulo,c) : '';
+    }).filter(Boolean).join('');
 
-    return (cab || extras) ? `<section class="aih-special"><h3 class="aih-special-title">Evaluación obstétrica</h3>${cab}${extras}</section>` : '';
+    if(!cab && !extras) return '';
+    return `<section class="aih-module aih-special"><h3 class="aih-module-title">Obstetricia</h3>${cab}${extras}</section>`;
   }
 
   function renderGinecologia(lista){
-    if(!lista?.length) return '';
-    const r = lista.slice().sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)))[0];
+    const r = ultimoRegistro(lista);
+    if(!r) return '';
     const partes = [];
-    if(valorUtil(r.fum_actual)) partes.push(miniDatos([['FUM actual',fechaVista(r.fum_actual)]]));
-    if(valorUtil(r.motivo_ginecologico)) partes.push(bloque('Motivo ginecológico',contenidoEstructurado(r.motivo_ginecologico)));
-    if(valorUtil(r.sintomas_json)) partes.push(bloque('Síntomas ginecológicos',contenidoEstructurado(r.sintomas_json)));
-    if(valorUtil(r.examen_ginecologico_json)) partes.push(bloque('Examen ginecológico',contenidoEstructurado(r.examen_ginecologico_json)));
-    if(valorUtil(r.estudios_ginecologicos_json)) partes.push(bloque('Estudios ginecológicos',contenidoEstructurado(r.estudios_ginecologicos_json)));
-    if(valorUtil(r.impresion_ginecologica)) partes.push(bloque('Impresión ginecológica',contenidoEstructurado(r.impresion_ginecologica)));
-    if(valorUtil(r.observaciones)) partes.push(bloque('Observaciones ginecológicas',contenidoEstructurado(r.observaciones)));
-    return partes.length ? `<section class="aih-special"><h3 class="aih-special-title">Evaluación ginecológica</h3>${partes.join('')}</section>` : '';
+
+    if(valorClinico(r.fum_actual)) partes.push(miniDatos([['FUM actual',fechaVista(r.fum_actual)]]));
+    [
+      ['Motivo ginecológico',r.motivo_ginecologico],
+      ['Síntomas ginecológicos',r.sintomas_json],
+      ['Examen ginecológico',r.examen_ginecologico_json],
+      ['Estudios ginecológicos',r.estudios_ginecologicos_json],
+      ['Impresión ginecológica',r.impresion_ginecologica],
+      ['Observaciones ginecológicas',r.observaciones]
+    ].forEach(([titulo,v])=>{
+      const c = contenidoEstructurado(v,{excluirClaves:[/estado/,/interno/]});
+      if(c) partes.push(bloque(titulo,c));
+    });
+
+    return partes.length ? `<section class="aih-module aih-special"><h3 class="aih-module-title">Ginecología</h3>${partes.join('')}</section>` : '';
   }
 
   function renderEstetica(lista){
-    if(!lista?.length) return '';
-    const r = lista.slice().sort((a,b)=>txt(b.actualizado_en||b.creado_en).localeCompare(txt(a.actualizado_en||a.creado_en)))[0];
-    const evalClinica = parseJSON(r.evaluacion_clinica,null) || r.evaluacion_clinica;
-    const c = [
-      miniDatos([
-        ['Área', r.zona_tratamiento],
-        ['Procedimiento sugerido', r.procedimiento_sugerido],
-        ['Plan de sesiones', r.plan_sesiones]
-      ]),
-      valorUtil(evalClinica) ? contenidoEstructurado(evalClinica) : ''
-    ].filter(Boolean).join('');
-    return c ? `<section class="aih-special"><h3 class="aih-special-title">Evaluación estética funcional</h3>${c}</section>` : '';
+    const r = ultimoRegistro(lista);
+    if(!r) return '';
+
+    const cab = miniDatos([
+      ['Área',r.zona_tratamiento],
+      ['Procedimiento sugerido',r.procedimiento_sugerido],
+      ['Plan de sesiones',r.plan_sesiones]
+    ]);
+    const evalClinica = contenidoEstructurado(r.evaluacion_clinica,{excluirClaves:[/estado/,/interno/]});
+    if(!cab && !evalClinica) return '';
+
+    return `<section class="aih-module aih-special"><h3 class="aih-module-title">Evaluación estética funcional</h3>${cab}${evalClinica?bloque('Evaluación clínica',evalClinica):''}</section>`;
   }
 
   function renderDiagnosticos(lista){
     const validos = (lista || []).filter(d=>{
       const e = norm(d?.estado || d?.estado_registro);
-      return !/(anulad|eliminad|inactiv)/.test(e) && [d?.codigo_cie10,d?.cie10,d?.codigo,d?.diagnostico,d?.descripcion,d?.nombre].some(valorUtil);
+      if(/(anulad|eliminad|inactiv|cancelad)/.test(e)) return false;
+      return [d?.codigo_cie10,d?.cie10,d?.codigo,d?.diagnostico,d?.descripcion,d?.nombre,d?.nombre_diagnostico]
+        .some(v=>valorClinico(v));
     });
     if(!validos.length) return '';
 
-    return bloque('Diagnósticos de la atención', `<div class="aih-dx-list">${validos.map(d=>{
+    const html = validos.map(d=>{
       const codigo = txt(d.codigo_cie10 || d.cie10 || d.codigo);
       const descripcion = txt(d.diagnostico || d.descripcion || d.nombre || d.nombre_diagnostico);
-      const tipo = txt(d.tipo || d.tipo_diagnostico || d.clasificacion);
-      return `<div class="aih-dx"><b>${esc([codigo,descripcion].filter(Boolean).join(' — '))}</b>${valorUtil(tipo)?`<small>${esc(tipo)}</small>`:''}</div>`;
-    }).join('')}</div>`);
+      const principalRaw = d.principal !== undefined ? d.principal : d.es_principal;
+      const principal = principalRaw === true || ['si','sí','true','1'].includes(norm(principalRaw)) ? 'Principal' : '';
+      const tipo = valorClinico(d.tipo_diagnostico || d.tipo || d.clasificacion)
+        ? txt(d.tipo_diagnostico || d.tipo || d.clasificacion)
+        : '';
+      const titulo = [codigo,descripcion].filter(valorClinico).join(' — ');
+      if(!titulo) return '';
+      const meta = [principal,tipo].filter(valorClinico);
+      return `<div class="aih-dx"><b>${esc(titulo)}</b>${meta.length?`<small>${esc(meta.join(' · '))}</small>`:''}</div>`;
+    }).filter(Boolean).join('');
+
+    return html ? `<section class="aih-module"><h3 class="aih-module-title">Diagnósticos</h3><div class="aih-dx-list">${html}</div></section>` : '';
   }
 
   function renderPlan(p){
     if(!p) return '';
     const partes = [];
+    const opcionesPlan = {
+      excluirClaves:[/en_plan/,/en plan/,/flag/,/estado/,/aplicado/,/seleccionado/,/interno/]
+    };
 
-    const medicamentos = primer(p.medicamentos_json, p.medicamentos, p.receta_medica, p.receta_medicamentos);
-    const ordenes = primer(p.ordenes_json, p.ordenes_medicas, p.examenes_solicitados);
-    const interconsulta = primer(p.interconsulta_json, p.interconsulta, p.interconsultas_json);
-    const evaluaciones = primer(p.evaluaciones_json, p.evaluaciones);
+    const campos = [
+      ['Plan terapéutico',primer(p.plan_tratamiento,p.plan_terapeutico)],
+      ['Medicamentos indicados en Plan',primer(p.medicamentos_json,p.medicamentos,p.receta_medica,p.receta_medicamentos)],
+      ['Exámenes / órdenes solicitadas',primer(p.ordenes_json,p.ordenes_medicas,p.examenes_solicitados)],
+      ['Interconsultas',primer(p.interconsulta_json,p.interconsulta,p.interconsultas_json)],
+      ['Evaluaciones',primer(p.evaluaciones_json,p.evaluaciones)],
+      ['Indicaciones para el paciente',primer(p.indicaciones_paciente,p.indicaciones)]
+    ];
 
-    if(valorUtil(p.plan_tratamiento || p.plan_terapeutico)) partes.push(bloque('Plan terapéutico',contenidoEstructurado(p.plan_tratamiento || p.plan_terapeutico)));
-    if(valorUtil(medicamentos)) partes.push(bloque('Medicamentos indicados en Plan',contenidoEstructurado(medicamentos)));
-    if(valorUtil(ordenes)) partes.push(bloque('Órdenes médicas',contenidoEstructurado(ordenes)));
-    if(valorUtil(interconsulta)) partes.push(bloque('Interconsulta',contenidoEstructurado(interconsulta)));
-    if(valorUtil(evaluaciones)) partes.push(bloque('Evaluaciones',contenidoEstructurado(evaluaciones)));
-    if(valorUtil(p.indicaciones_paciente || p.indicaciones)) partes.push(bloque('Indicaciones para el paciente',contenidoEstructurado(p.indicaciones_paciente || p.indicaciones)));
+    const vistos = [];
+    campos.forEach(([titulo,v])=>{
+      const c = contenidoEstructurado(v,opcionesPlan);
+      if(!c) return;
+      const comparable = norm(txt(v));
+      if(comparable && vistos.some(x=>x === comparable)) return;
+      if(comparable) vistos.push(comparable);
+      partes.push(bloque(titulo,c));
+    });
 
-    const control = miniDatos([
-      ['Próximo control',fechaVista(p.proximo_control || p.control)],
-      ['Estado del plan',p.estado_plan || p.estado_historia]
-    ]);
-    if(control) partes.push(bloque('Seguimiento del plan',control));
+    if(valorClinico(p.proximo_control || p.control)){
+      partes.push(bloque('Próximo control',esc(fechaVista(p.proximo_control || p.control))));
+    }
 
-    return partes.join('');
+    return partes.length ? `<section class="aih-module"><h3 class="aih-module-title">Plan terapéutico</h3>${partes.join('')}</section>` : '';
   }
 
   function parseMedicamentos(v){
@@ -758,118 +1166,131 @@
     if(Array.isArray(parsed)) return parsed;
     if(parsed && typeof parsed === 'object') return [parsed];
     const raw = txt(v);
-    if(!raw) return [];
-    return raw.split(/\n+/).map(x=>txt(x).replace(/^\s*\d+\.\s*/, '')).filter(valorUtil).map(texto=>({texto}));
+    if(!valorClinico(raw)) return [];
+    return raw.split(/\n+/)
+      .map(x=>txt(x).replace(/^\s*\d+\.\s*/,''))
+      .filter(valorClinico)
+      .map(texto=>({texto}));
   }
 
   function renderRecetas(lista){
     const validas = (lista || []).filter(r=>{
       const e = norm(r?.estado || r?.estado_receta);
-      return !/(anulad|cancelad|eliminad)/.test(e) && valorUtil(r?.medicamento || r?.medicamentos || r?.receta_medica);
+      if(/(anulad|cancelad|eliminad)/.test(e)) return false;
+      const meds = parseMedicamentos(r?.medicamento || r?.medicamentos || r?.receta_medica);
+      return meds.length > 0;
     });
     if(!validas.length) return '';
 
-    return validas.map((r,idx)=>{
+    const recetasHtml = validas.map((r,idx)=>{
       const meds = parseMedicamentos(r.medicamento || r.medicamentos || r.receta_medica);
       const cuerpo = meds.map((m,i)=>{
         if(typeof m === 'string') return `<div class="aih-med"><b>${i+1}. ${esc(m)}</b></div>`;
         if(m.texto) return `<div class="aih-med"><b>${i+1}. ${esc(m.texto)}</b></div>`;
+
         const nombre = txt(m.med || m.medicamento || m.nombre);
         const presentacion = txt(m.pres || m.presentacion);
-        const detalle = [
-          txt(m.via) ? `Vía: ${txt(m.via)}` : '',
-          txt(m.cantidad) ? `Cantidad: ${txt(m.cantidad)}` : '',
-          txt(m.frec || m.frecuencia) ? `Frecuencia: ${txt(m.frec || m.frecuencia)}` : '',
-          txt(m.dur || m.duracion) ? `Duración: ${txt(m.dur || m.duracion)}` : '',
-          txt(m.ind || m.indicaciones) ? `Indicaciones: ${txt(m.ind || m.indicaciones)}` : '',
-          norm(m.continuo) === 'si' ? 'Tratamiento continuo' : ''
-        ].filter(Boolean).join(' · ');
-        return `<div class="aih-med"><b>${i+1}. ${esc([nombre,presentacion].filter(Boolean).join(' '))}</b>${detalle?`<small>${esc(detalle)}</small>`:''}</div>`;
-      }).join('');
+        if(!valorClinico(nombre) && !valorClinico(presentacion)) return '';
 
+        const detalle = [
+          valorClinico(m.via) ? `Vía: ${txt(m.via)}` : '',
+          valorClinico(m.cantidad) ? `Cantidad: ${txt(m.cantidad)}` : '',
+          valorClinico(m.frec || m.frecuencia) ? `Frecuencia: ${txt(m.frec || m.frecuencia)}` : '',
+          valorClinico(m.dur || m.duracion) ? `Duración: ${txt(m.dur || m.duracion)}` : '',
+          valorClinico(m.ind || m.indicaciones) ? `Indicaciones: ${txt(m.ind || m.indicaciones)}` : '',
+          ['si','sí','true','1'].includes(norm(m.continuo)) ? 'Tratamiento continuo' : ''
+        ].filter(Boolean).join(' · ');
+
+        return `<div class="aih-med"><b>${i+1}. ${esc([nombre,presentacion].filter(valorClinico).join(' '))}</b>${detalle?`<small>${esc(detalle)}</small>`:''}</div>`;
+      }).filter(Boolean).join('');
+
+      if(!cuerpo) return '';
       const extra = miniDatos([
         ['Fecha de emisión',fechaVista(r.fecha_receta || r.fecha_emision || r.creado_en)],
         ['Profesional',r.nombre_medico || r.medico_nombre]
       ]);
-      return bloque(validas.length>1 ? `Receta médica emitida ${idx+1}` : 'Receta médica emitida', `${extra}<div class="aih-med-list">${cuerpo}</div>`);
-    }).join('');
+      return `<div class="aih-recipe"><h4>${esc(validas.length>1 ? `Receta ${idx+1}` : 'Receta médica')}</h4>${extra}<div class="aih-med-list">${cuerpo}</div></div>`;
+    }).filter(Boolean).join('');
+
+    return recetasHtml ? `<section class="aih-module"><h3 class="aih-module-title">Recetas asociadas</h3>${recetasHtml}</section>` : '';
   }
 
   function renderRecomendaciones(r){
     if(!r) return '';
-    const detalle = parseJSON(r.detalle_json,null) || {};
+    const detalle = parseJSON(r.detalle_json,{}) || {};
     const partes = [];
 
-    const generales = primer(
-      detalle.recomendaciones_generales,
-      detalle.recomendaciones,
-      r.recomendaciones_generales,
-      r.recomendaciones,
-      r.detalle
-    );
-    const alertas = primer(detalle.signos_alarma, detalle.alertas, r.signos_alarma);
-    const infeccion = primer(detalle.signos_infeccion, detalle.infeccion, r.signos_infeccion);
-    const cuidados = primer(detalle.cuidados, detalle.cuidados_generales, detalle.dieta, r.cuidados);
-    const seguimiento = primer(detalle.seguimiento, r.seguimiento, r.proximo_control);
+    const campos = [
+      ['Recomendaciones',primer(detalle.recomendaciones_generales,detalle.recomendaciones,r.recomendaciones_generales,r.recomendaciones,r.detalle)],
+      ['Cuidados',primer(detalle.cuidados,detalle.cuidados_generales,detalle.dieta,r.cuidados)],
+      ['Signos de alarma',primer(detalle.signos_alarma,detalle.alertas,r.signos_alarma),'aih-danger'],
+      ['Signos de posible infección',primer(detalle.signos_infeccion,detalle.infeccion,r.signos_infeccion),'aih-danger'],
+      ['Seguimiento recomendado',primer(detalle.seguimiento,r.seguimiento,r.proximo_control)]
+    ];
 
-    if(valorUtil(generales)) partes.push(bloque('Recomendaciones',contenidoEstructurado(generales)));
-    if(valorUtil(cuidados)) partes.push(bloque('Cuidados',contenidoEstructurado(cuidados)));
-    if(valorUtil(alertas)) partes.push(bloque('Signos de alarma',contenidoEstructurado(alertas),'aih-danger'));
-    if(valorUtil(infeccion)) partes.push(bloque('Signos de posible infección',contenidoEstructurado(infeccion),'aih-danger'));
-    if(valorUtil(seguimiento)) partes.push(bloque('Seguimiento recomendado',contenidoEstructurado(seguimiento)));
+    campos.forEach(([titulo,v,clase])=>{
+      const c = contenidoEstructurado(v,{excluirClaves:[/estado/,/interno/]});
+      if(c) partes.push(bloque(titulo,c,clase || ''));
+    });
 
-    if(!partes.length){
-      const generic = datosObjetoUtil(r,['detalle_json']);
-      if(generic.length) partes.push(bloque('Recomendaciones',contenidoEstructurado(Object.fromEntries(generic))));
-    }
-    return partes.join('');
+    return partes.length ? `<section class="aih-module"><h3 class="aih-module-title">Recomendaciones</h3>${partes.join('')}</section>` : '';
   }
 
   function renderCertificados(lista){
-    const validos = (lista || []).filter(r=>!/(anulad|cancelad)/.test(norm(r?.estado)) && valorUtil(r));
+    const validos = (lista || []).filter(r=>{
+      if(/(anulad|cancelad|eliminad)/.test(norm(r?.estado))) return false;
+      const d = parseJSON(r?.detalle_json,{}) || {};
+      return [r?.tipo_certificado,d?.tipo_certificado,r?.motivo,d?.dias_reposo,r?.dias_reposo]
+        .some(v=>valorClinico(v));
+    });
     if(!validos.length) return '';
+
     const items = validos.map(r=>{
       const d = parseJSON(r.detalle_json,{}) || {};
-      const titulo = primer(r.tipo_certificado,d.tipo_certificado,r.motivo,'Certificado médico');
-      const detalle = [
+      const titulo = primer(r.tipo_certificado,d.tipo_certificado,r.motivo);
+      if(!valorClinico(titulo)) return '';
+      const meta = [
         fechaVista(r.fecha_emision || r.fecha_certificado || r.creado_en),
-        valorUtil(d.dias_reposo || r.dias_reposo) ? `${primer(d.dias_reposo,r.dias_reposo)} día(s) de reposo` : ''
-      ].filter(Boolean).join(' · ');
-      return `<li><b>${esc(titulo)}</b>${detalle?`<small>${esc(detalle)}</small>`:''}</li>`;
-    }).join('');
-    return bloque('Documentos emitidos',`<ul class="aih-list aih-doc-list">${items}</ul>`);
+        valorClinico(d.dias_reposo || r.dias_reposo) ? `${txt(d.dias_reposo || r.dias_reposo)} día(s) de reposo` : ''
+      ].filter(valorClinico).join(' · ');
+      return `<li><b>${esc(titulo)}</b>${meta?`<small>${esc(meta)}</small>`:''}</li>`;
+    }).filter(Boolean).join('');
+
+    return items ? `<section class="aih-module"><h3 class="aih-module-title">Certificados emitidos</h3><ul class="aih-list aih-doc-list">${items}</ul></section>` : '';
   }
 
   function renderDocumentos(lista){
-    const validos = (lista || []).filter(r=>!/(anulad|cancelad)/.test(norm(r?.estado || r?.estado_documento)) && valorUtil(r?.nombre_documento || r?.archivo_nombre || r?.categoria || r?.tipo_documento));
+    const validos = (lista || []).filter(r=>
+      !/(anulad|cancelad|eliminad)/.test(norm(r?.estado || r?.estado_documento)) &&
+      [r?.nombre_documento,r?.archivo_nombre,r?.nombre_archivo,r?.titulo,r?.categoria,r?.tipo_documento].some(v=>valorClinico(v))
+    );
     if(!validos.length) return '';
+
     const items = validos.map(r=>{
-      const nombre = primer(r.nombre_documento,r.archivo_nombre,r.nombre_archivo,r.titulo,r.categoria,'Documento clínico');
-      const meta = [primer(r.categoria,r.tipo_documento), fechaVista(r.fecha_documento || r.fecha_atencion || r.creado_en)].filter(valorUtil).join(' · ');
+      const nombre = primer(r.nombre_documento,r.archivo_nombre,r.nombre_archivo,r.titulo,r.categoria);
+      if(!valorClinico(nombre)) return '';
+      const meta = [
+        primer(r.categoria,r.tipo_documento),
+        fechaVista(r.fecha_documento || r.fecha_atencion || r.creado_en)
+      ].filter(valorClinico).join(' · ');
       return `<li><b>${esc(nombre)}</b>${meta?`<small>${esc(meta)}</small>`:''}</li>`;
-    }).join('');
-    return bloque('Documentos clínicos asociados',`<ul class="aih-list aih-doc-list">${items}</ul>`);
+    }).filter(Boolean).join('');
+
+    return items ? `<section class="aih-module"><h3 class="aih-module-title">Documentos clínicos asociados</h3><ul class="aih-list aih-doc-list">${items}</ul></section>` : '';
   }
 
+  /* ========================================================================
+     ATENCIÓN - no se inventa texto cuando no existe contenido clínico
+  ======================================================================== */
   function renderAtencion(d, numero, medicos){
     const a = d.atencion || {};
     const medico = medicoDeAtencion(a,medicos);
     const fecha = fechaVista(a.fecha_atencion || a.fecha_consulta || a.fecha);
     const hora = horaVista(a.hora_atencion || a.hora_consulta || a.hora);
 
-    const cabecera = miniDatos([
-      ['Fecha',fecha],
-      ['Hora',hora],
-      ['Tipo de atención',a.tipo_atencion || a.tipo],
-      ['Especialidad',medico.especialidad],
-      ['Profesional',medico.nombre],
-      ['Estado',a.estado_atencion || a.estado]
-    ]);
-
     const contenido = [
-      renderPreatencion(d.preatencion,d.examen),
       renderAnamnesis(d.anamnesis),
-      renderExamen(d.examen),
+      renderExamen(d.examen,d.preatencion),
       renderObstetricia(d.obstetricia),
       renderGinecologia(d.ginecologia),
       renderEstetica(d.estetica),
@@ -881,176 +1302,305 @@
       renderDocumentos(d.documentos)
     ].filter(Boolean).join('');
 
-    /* Una atención puede existir aun sin módulos clínicos persistidos. La cabecera
-       se conserva porque la atención misma es un registro clínico real. */
+    if(!contenido){
+      state.excluidos.atencionesSinContenido += 1;
+      return '';
+    }
+
+    const cabecera = miniDatos([
+      ['Fecha',fecha],
+      ['Hora',hora],
+      ['Tipo de atención',a.tipo_atencion || a.tipo],
+      ['Especialidad',medico.especialidad],
+      ['Profesional',medico.nombre],
+      ['Estado',a.estado_atencion || a.estado]
+    ]);
+
     return `<article class="aih-attention">
       <div class="aih-attention-head">
-        <div><span class="aih-attention-kicker">Atención N.º ${numero}</span><h2>${esc(fecha || 'Atención clínica')}${hora?` · ${esc(hora)}`:''}</h2></div>
-        <span class="aih-attention-id">${esc(txt(a.id_atencion))}</span>
+        <div>
+          <span class="aih-attention-kicker">Consulta N.º ${esc(a.numero_consulta || a.consulta || numero)}</span>
+          <h2>${esc(fecha || 'Atención clínica')}${hora?` · ${esc(hora)}`:''}</h2>
+        </div>
       </div>
       ${cabecera}
-      ${contenido || '<div class="aih-attention-empty">Registro de atención sin contenido clínico adicional persistido.</div>'}
+      ${contenido}
     </article>`;
+  }
+
+  /* ========================================================================
+     EVOLUTIVOS / ASOCIADOS
+  ======================================================================== */
+  function renderBioimpedancia(lista){
+    const registros = (lista || []).filter(r=>{
+      return [r?.peso_kg,r?.peso,r?.imc,r?.porcentaje_grasa,r?.grasa_corporal,r?.masa_muscular,r?.musculo,r?.porcentaje_agua,r?.agua_corporal]
+        .some(v=>valorClinico(v));
+    }).sort((a,b)=>fechaISO(a.fecha||a.fecha_registro||a.creado_en).localeCompare(fechaISO(b.fecha||b.fecha_registro||b.creado_en)));
+
+    if(!registros.length) return '';
+
+    const columnas = [
+      ['Peso',r=>primer(r.peso_kg,r.peso)],
+      ['IMC',r=>r.imc],
+      ['Grasa corporal',r=>primer(r.porcentaje_grasa,r.grasa_corporal)],
+      ['Masa muscular',r=>primer(r.masa_muscular,r.musculo)],
+      ['Agua',r=>primer(r.porcentaje_agua,r.agua_corporal)]
+    ].filter(([,fn])=>registros.some(r=>valorClinico(fn(r))));
+
+    const filas = registros.map(r=>{
+      const f = fechaVista(r.fecha || r.fecha_registro || r.creado_en);
+      return `<tr><td>${esc(f)}</td>${columnas.map(([,fn])=>`<td>${esc(valorClinico(fn(r))?fn(r):'')}</td>`).join('')}</tr>`;
+    }).join('');
+
+    return `<section class="aih-major"><h2>Evolución corporal / Bioimpedancia</h2><div class="aih-table-wrap"><table class="aih-table"><thead><tr><th>Fecha</th>${columnas.map(([t])=>`<th>${esc(t)}</th>`).join('')}</tr></thead><tbody>${filas}</tbody></table></div></section>`;
+  }
+
+  function resumenAsociados(titulo, lista, campos){
+    const items = (lista || []).map(r=>{
+      const nombre = primer(...campos.map(k=>r?.[k]));
+      if(!valorClinico(nombre)) return '';
+      const meta = [
+        fechaVista(r.fecha || r.fecha_atencion || r.fecha_procedimiento || r.creado_en),
+        valorClinico(r.estado) && !/^(activo|registrado)$/i.test(txt(r.estado)) ? r.estado : ''
+      ].filter(valorClinico).join(' · ');
+      return `<li><b>${esc(nombre)}</b>${meta?`<small>${esc(meta)}</small>`:''}</li>`;
+    }).filter(Boolean).join('');
+
+    return items ? `<section class="aih-major"><h2>${esc(titulo)}</h2><ul class="aih-list aih-doc-list">${items}</ul></section>` : '';
+  }
+
+  function renderRegistrosSinAtencion(globales){
+    const s = globales?.sinAtencion || {};
+    const partes = [];
+
+    const obs = renderObstetricia(s.obstetricia || []);
+    const gin = renderGinecologia(s.ginecologia || []);
+    const est = renderEstetica(s.estetica || []);
+    const rec = renderRecetas(s.recetas || []);
+
+    const vitales = signosVitales(null,s.preatenciones || []);
+    const pre = vitales.length
+      ? `<section class="aih-module"><h3 class="aih-module-title">Preatención / signos vitales asociados</h3>${miniDatos(vitales)}</section>`
+      : '';
+
+    [pre,obs,gin,est,rec].filter(Boolean).forEach(x=>partes.push(x));
+    if(!partes.length) return '';
+
+    return `<section class="aih-major aih-associated"><h2>Registros clínicos asociados sin atención específica</h2><p class="aih-associated-note">Estos registros pertenecen inequívocamente al paciente o a su historia clínica, pero no contienen un id_atencion verificable. Se presentan separados y no se atribuyen a ninguna consulta.</p>${partes.join('')}</section>`;
   }
 
   function renderEvolutivos(globales){
     const secciones = [];
+    const bio = renderBioimpedancia(globales.bioimpedancia);
+    if(bio) secciones.push(bio);
 
-    if(globales.bioimpedancia?.length){
-      const filas = globales.bioimpedancia
-        .slice()
-        .sort((a,b)=>fechaISO(a.fecha||a.fecha_registro||a.creado_en).localeCompare(fechaISO(b.fecha||b.fecha_registro||b.creado_en)))
-        .map(r=>{
-          const f = fechaVista(r.fecha || r.fecha_registro || r.creado_en);
-          const datos = [
-            ['Peso',primer(r.peso_kg,r.peso)],['IMC',r.imc],['Grasa',primer(r.porcentaje_grasa,r.grasa_corporal)],
-            ['Masa muscular',primer(r.masa_muscular,r.musculo)],['Agua',primer(r.porcentaje_agua,r.agua_corporal)]
-          ].filter(([,v])=>valorUtil(v));
-          if(!datos.length) return '';
-          return `<tr><td>${esc(f)}</td>${datos.map(([,v])=>`<td>${esc(v)}</td>`).join('')}</tr>`;
-        }).filter(Boolean);
-      if(filas.length){
-        secciones.push(`<section class="aih-major"><h2>Evolución corporal / Bioimpedancia</h2><div class="aih-table-wrap"><table class="aih-table"><tbody>${filas.join('')}</tbody></table></div></section>`);
-      }
-    }
-
-    function resumenAsociados(titulo, lista, campos){
-      const validos = (lista || []).filter(valorUtil);
-      if(!validos.length) return '';
-      const items = validos.map(r=>{
-        const nombre = primer(...campos.map(k=>r?.[k]), titulo);
-        const meta = [fechaVista(r.fecha || r.fecha_atencion || r.fecha_procedimiento || r.creado_en), r.estado].filter(valorUtil).join(' · ');
-        return `<li><b>${esc(nombre)}</b>${meta?`<small>${esc(meta)}</small>`:''}</li>`;
-      }).join('');
-      return `<section class="aih-major"><h2>${esc(titulo)}</h2><ul class="aih-list aih-doc-list">${items}</ul></section>`;
-    }
-
-    const esteticaAmb = resumenAsociados('Registros estéticos no vinculados inequívocamente a una atención',globales.esteticaAmbigua,['procedimiento_sugerido','zona_tratamiento']);
     const proc = resumenAsociados('Procedimientos asociados',globales.procedimientos,['nombre_procedimiento','procedimiento','tipo_procedimiento']);
     const cons = resumenAsociados('Consentimientos asociados',globales.consentimientos,['tipo_consentimiento','nombre_consentimiento','procedimiento']);
     const seg = resumenAsociados('Seguimientos asociados',globales.seguimientos,['tipo_seguimiento','motivo','mensaje']);
-    [esteticaAmb,proc,cons,seg].filter(Boolean).forEach(x=>secciones.push(x));
+    [proc,cons,seg].filter(Boolean).forEach(x=>secciones.push(x));
+
+    const esteticaSin = resumenAsociados('Registros estéticos asociados sin atención específica',globales.sinAtencion?.estetica,['procedimiento_sugerido','zona_tratamiento']);
+    if(esteticaSin) secciones.push(esteticaSin);
 
     return secciones.join('');
   }
 
   /* ========================================================================
-     CONSTRUCCIÓN DEL INFORME
+     VALIDACIÓN GOLD STANDARD
   ======================================================================== */
+  function validarModelo(modelo){
+    const idsCrudos = modelo.atenciones.map(x=>txt(x.atencion?.id_atencion));
+    const idsPresentes = idsCrudos.filter(Boolean);
+    const unicos = new Set(idsPresentes);
+    const problemas = [];
+    const advertencias = [];
+    const faltantesDocumentales = [];
+
+    if(!valorClinico(modelo.institucion?.emisor?.nombre)){
+      faltantesDocumentales.push('Profesional responsable de la emisión no configurado.');
+    }
+
+    if(!modelo.paciente?.id_paciente) problemas.push('Falta id_paciente del paciente.');
+    if(idsCrudos.some(x=>!x)) problemas.push('Existe una atención sin id_atencion.');
+    if(idsPresentes.length !== unicos.size) problemas.push('Existen id_atencion duplicados.');
+
+    const fallosCriticos = Object.entries(state.fuentes)
+      .filter(([,f])=>f?.critica === true && f?.ok !== true)
+      .map(([clave,f])=>`${clave}: ${f?.error || 'fuente no verificada'}`);
+
+    const respaldosLocales = Object.entries(state.fuentes)
+      .filter(([,f])=>f?.respaldo_local === true)
+      .map(([clave])=>clave);
+
+    if(state.excluidos.sinPertenencia){
+      advertencias.push(`${state.excluidos.sinPertenencia} registro(s) fueron excluidos por no demostrar pertenencia al paciente.`);
+    }
+    if(state.excluidos.sinAtencion){
+      advertencias.push(`${state.excluidos.sinAtencion} registro(s) con pertenencia confirmada no poseen id_atencion; no se forzaron dentro de una consulta.`);
+    }
+
+    let estado = 'VALIDADO';
+    if(problemas.length) estado = 'ERROR_INTEGRIDAD';
+    else if(fallosCriticos.length || respaldosLocales.length || faltantesDocumentales.length) estado = 'INCOMPLETO';
+
+    return {
+      estado,
+      valido:estado === 'VALIDADO',
+      pdfPermitido:estado === 'VALIDADO',
+      problemas,
+      advertencias,
+      fallosCriticos,
+      respaldosLocales,
+      faltantesDocumentales,
+      resumen:{
+        atenciones:modelo.atenciones.length,
+        ids_unicos:unicos.size,
+        diagnosticos:modelo.atenciones.reduce((n,x)=>n+(x.diagnosticos?.length||0),0),
+        recetas:modelo.atenciones.reduce((n,x)=>n+(x.recetas?.length||0),0),
+        documentos:modelo.atenciones.reduce((n,x)=>n+(x.documentos?.length||0),0),
+        obstetricia:modelo.atenciones.reduce((n,x)=>n+(x.obstetricia?.length||0),0),
+        fuentes_no_verificadas:fallosCriticos.length,
+        respaldos_locales:respaldosLocales.length,
+        faltantes_documentales:faltantesDocumentales.length
+      }
+    };
+  }
+
+  /* ========================================================================
+     CONSTRUCCIÓN DOCUMENTAL PREMIUM / PERFIL LEGAL BAJO
+  ======================================================================== */
+  function ahoraGuayaquil(){
+    return new Intl.DateTimeFormat('es-EC',{
+      timeZone:'America/Guayaquil',
+      year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false
+    }).format(new Date());
+  }
+
   function construirDocumento(modelo){
     const inst = modelo.institucion;
     const p = modelo.paciente;
+    const generado = ahoraGuayaquil();
+
+    state.excluidos.atencionesSinContenido = 0;
+    let numeroVisible = 0;
+    const atencionesHtml = modelo.atenciones.map(d=>{
+      const html = renderAtencion(d,numeroVisible+1,modelo.medicos);
+      if(html) numeroVisible += 1;
+      return html;
+    }).filter(Boolean).join('');
 
     const cabPaciente = miniDatos([
       ['Documento',p.documento],
       ['Fecha de nacimiento',fechaVista(p.fecha_nacimiento)],
       ['Edad',p.edad],
       ['Sexo',p.sexo],
-      ['Estado civil',p.estado_civil],
-      ['Ocupación',p.ocupacion],
-      ['Teléfono / WhatsApp',p.telefono],
-      ['Correo',p.correo],
-      ['Dirección',p.direccion],
-      ['Seguro médico',p.seguro],
-      ['Tipo de sangre',p.tipo_sangre],
-      ['Contacto de emergencia',p.contacto_emergencia],
-      ['Teléfono emergencia',p.telefono_emergencia],
       ['Historia clínica',p.id_historia],
-      ['Fecha de apertura',fechaVista(p.fecha_apertura)]
+      ['Teléfono',p.telefono],
+      ['Correo',p.correo]
     ]);
 
-    const atencionesHtml = modelo.atenciones.map((d,i)=>renderAtencion(d,i+1,modelo.medicos)).join('');
-    const evolutivosHtml = renderEvolutivos(modelo.globales);
-    const generado = new Intl.DateTimeFormat('es-EC',{
-      timeZone:'America/Guayaquil',
-      year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false
-    }).format(new Date());
+    const emisor = inst.emisor || {};
+    const emisorHtml = valorClinico(emisor.nombre) ? `
+      <section class="aih-signature">
+        <h2>Profesional responsable de la emisión</h2>
+        <div class="aih-signature-grid">
+          <div><b>${esc(emisor.nombre)}</b>${valorClinico(emisor.especialidad)?`<span>${esc(emisor.especialidad)}</span>`:''}${valorClinico(emisor.registro)?`<span>Registro profesional: ${esc(emisor.registro)}</span>`:''}${valorClinico(emisor.ruc)?`<span>RUC: ${esc(emisor.ruc)}</span>`:''}</div>
+          <div class="aih-sign-line"><span>Firma / firma electrónica</span></div>
+        </div>
+      </section>` : '';
+
+    const nota = `El presente Informe Clínico Histórico constituye un resumen longitudinal generado a partir de los registros clínicos persistidos disponibles en el expediente electrónico al momento de su emisión. La información se presenta respetando su asociación con las atenciones y documentos clínicos fuente correspondientes. Este resumen no sustituye los registros originales que integran la Historia Clínica.`;
 
     return `<div class="aih-doc">
+      <div class="aih-confidential">CONFIDENCIAL</div>
+
       <header class="aih-header">
-        <div class="aih-brand">
-          ${inst.logo ? `<img src="${esc(inst.logo)}" alt="Logo">` : `<div class="aih-logo-fallback">A</div>`}
-          <div><h1>${esc(inst.nombre)}</h1>${valorUtil(inst.subtitulo)?`<p>${esc(inst.subtitulo)}</p>`:''}</div>
+        <div class="aih-legal">
+          ${valorClinico(emisor.nombre)?`<h1>${esc(emisor.nombre)}</h1>`:''}
+          ${valorClinico(emisor.especialidad)?`<p>${esc(emisor.especialidad)}</p>`:''}
+          ${valorClinico(emisor.ruc)?`<small>RUC: ${esc(emisor.ruc)}</small>`:''}
         </div>
-        <div class="aih-title"><span>Documento clínico confidencial</span><h2>INFORME CLÍNICO HISTÓRICO</h2><p>Resumen longitudinal de atenciones</p></div>
+        <div class="aih-brand">
+          ${inst.logo ? `<img src="${esc(inst.logo)}" alt="">` : ''}
+          <div><b>${esc(inst.nombre_comercial)}</b>${valorClinico(inst.subtitulo)?`<span>${esc(inst.subtitulo)}</span>`:''}</div>
+        </div>
       </header>
+
+      <div class="aih-document-title">
+        <span>Documento clínico confidencial</span>
+        <h2>INFORME CLÍNICO HISTÓRICO</h2>
+        <p>Resumen longitudinal del expediente clínico</p>
+      </div>
 
       <section class="aih-patient">
         <div class="aih-patient-name"><span>Paciente</span><h2>${esc(p.nombre || 'Paciente')}</h2></div>
         ${cabPaciente}
       </section>
 
-      ${renderAntecedentes(modelo.antecedentes)}
+      ${renderAntecedentes(modelo.historia)}
 
-      <section class="aih-major aih-timeline"><h2>Historial de atenciones</h2>${atencionesHtml || '<div class="aih-attention-empty">No existen atenciones clínicas registradas para este paciente.</div>'}</section>
-      ${evolutivosHtml}
+      ${atencionesHtml ? `<section class="aih-major aih-timeline"><h2>Historial cronológico de atenciones</h2>${atencionesHtml}</section>` : ''}
+      ${renderRegistrosSinAtencion(modelo.globales)}
+      ${renderEvolutivos(modelo.globales)}
+
+      ${emisorHtml}
+
+      <section class="aih-note"><b>Nota documental</b><p>${esc(nota)}</p></section>
 
       <footer class="aih-footer-doc">
-        <div><b>${esc(inst.nombre)}</b>${valorUtil(inst.direccion)?`<span>${esc(inst.direccion)}</span>`:''}${valorUtil(inst.telefono)?`<span>${esc(inst.telefono)}</span>`:''}</div>
-        <div><span>Generado: ${esc(generado)}</span><span>Atenciones incluidas: ${modelo.atenciones.length}</span><span>Versión documental: HISTORICO_V1</span></div>
+        <div>
+          <b>${esc(inst.nombre_comercial)}</b>
+          ${valorClinico(inst.direccion)?`<span>${esc(inst.direccion)}</span>`:''}
+          ${valorClinico(inst.telefono)?`<span>${esc(inst.telefono)}</span>`:''}
+        </div>
+        <div>
+          <span>Emitido: ${esc(generado)}</span>
+          <span>Atenciones con contenido clínico incluidas: ${numeroVisible}</span>
+          <span>Versión documental: HISTORICO_V2</span>
+        </div>
       </footer>
+
+      <div class="aih-running-footer">${esc(p.nombre || '')}${valorClinico(p.id_historia)?` · HC ${esc(p.id_historia)}`:''} · Documento clínico confidencial</div>
     </div>`;
   }
 
   /* ========================================================================
-     VALIDACIÓN DEL MODELO
-  ======================================================================== */
-  function validarModelo(modelo){
-    const ids = modelo.atenciones.map(x=>txt(x.atencion?.id_atencion)).filter(Boolean);
-    const unicos = new Set(ids);
-    const dx = modelo.atenciones.reduce((n,x)=>n+(x.diagnosticos?.length||0),0);
-    const recetas = modelo.atenciones.reduce((n,x)=>n+(x.recetas?.length||0),0);
-    const docs = modelo.atenciones.reduce((n,x)=>n+(x.documentos?.length||0),0);
-    const obst = modelo.atenciones.reduce((n,x)=>n+(x.obstetricia?.length||0),0);
-
-    const problemas = [];
-    if(!modelo.paciente.id_paciente) problemas.push('Falta id_paciente.');
-    if(ids.length !== unicos.size) problemas.push('Existen id_atencion duplicados.');
-    if(ids.some(x=>!x)) problemas.push('Existe una atención sin id_atencion.');
-
-    return {
-      valido:problemas.length===0,
-      problemas,
-      resumen:{
-        atenciones:modelo.atenciones.length,
-        ids_unicos:unicos.size,
-        diagnosticos:dx,
-        recetas,
-        documentos:docs,
-        obstetricia:obst,
-        estetica_ambigua:modelo.globales.esteticaAmbigua?.length || 0,
-        advertencias_backend:state.advertencias.length
-      }
-    };
-  }
-
-  /* ========================================================================
-     CSS DOCUMENTAL Y PREVIEW
+     CSS DOCUMENTAL PREMIUM, LIMPIO Y A4
   ======================================================================== */
   function cssDocumento(){
     return `
-      :root{--aih-primary:#8b1e5a;--aih-text:#172033;--aih-muted:#64748b;--aih-line:#e5e7eb;--aih-soft:#fff7fb}
+      :root{--aih-primary:#8b1e5a;--aih-primary-soft:#fbf4f8;--aih-text:#172033;--aih-muted:#64748b;--aih-line:#e6e8ec;--aih-danger:#9f1239}
       *{box-sizing:border-box}
       body{margin:0;background:#eef1f5;color:var(--aih-text);font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-      .aih-doc{width:210mm;min-height:297mm;margin:18px auto;background:#fff;padding:13mm 13mm 15mm;box-shadow:0 10px 35px rgba(15,23,42,.12)}
-      .aih-header{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;border-bottom:2px solid var(--aih-primary);padding-bottom:12px;margin-bottom:14px}
-      .aih-brand{display:flex;gap:11px;align-items:center}.aih-brand img{width:54px;height:54px;object-fit:contain}.aih-logo-fallback{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:var(--aih-primary);color:#fff;font-weight:900;font-size:24px}
-      .aih-brand h1{font-size:18px;margin:0;color:var(--aih-primary)}.aih-brand p{font-size:10px;margin:3px 0 0;color:var(--aih-muted)}
-      .aih-title{text-align:right}.aih-title span{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--aih-muted);font-weight:700}.aih-title h2{font-size:17px;margin:4px 0 2px}.aih-title p{margin:0;font-size:10px;color:var(--aih-muted)}
-      .aih-patient{border:1px solid #ead7e2;background:linear-gradient(135deg,#fff,#fff9fc);border-radius:14px;padding:12px;margin-bottom:14px}.aih-patient-name span{font-size:9px;text-transform:uppercase;color:var(--aih-muted);font-weight:800}.aih-patient-name h2{font-size:18px;margin:2px 0 9px;color:#111827}
-      .aih-major{margin:16px 0}.aih-major>h2{font-size:15px;color:var(--aih-primary);margin:0 0 9px;border-bottom:1px solid #ead7e2;padding-bottom:6px}
-      .aih-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.aih-mini{border:1px solid var(--aih-line);border-radius:8px;padding:6px 8px;min-width:0;background:#fff}.aih-mini span{display:block;font-size:8.5px;text-transform:uppercase;color:var(--aih-muted);font-weight:800;margin-bottom:2px}.aih-mini b{font-size:10.5px;line-height:1.3;word-break:break-word}
-      .aih-attention{border:1px solid #dce2e8;border-radius:14px;padding:12px;margin:0 0 14px;break-inside:auto;page-break-inside:auto}.aih-attention-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;border-bottom:1px solid #edf0f3;padding-bottom:8px;margin-bottom:8px}.aih-attention-kicker{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--aih-primary);font-weight:900}.aih-attention-head h2{font-size:14px;margin:2px 0 0;color:#111827}.aih-attention-id{font-size:8px;color:#94a3b8;max-width:180px;overflow-wrap:anywhere}
-      .aih-block{margin:9px 0;break-inside:auto;page-break-inside:auto}.aih-block h3{font-size:11px;margin:0 0 5px;color:#334155;border-left:3px solid var(--aih-primary);padding-left:6px}.aih-block-body{font-size:10.3px;line-height:1.45;color:#273244}.aih-soft .aih-block-body{background:#f8fafc;padding:8px;border-radius:8px}.aih-danger h3{color:#9f1239;border-left-color:#e11d48}.aih-danger .aih-block-body{background:#fff1f2;padding:8px;border-radius:8px}
-      .aih-special{border:1px solid #f0d9e6;background:#fffafd;border-radius:10px;padding:9px;margin:10px 0}.aih-special-title{font-size:11.5px;color:var(--aih-primary);margin:0 0 7px}
-      .aih-kv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.aih-kv{border:1px solid #edf0f3;border-radius:7px;padding:5px 7px}.aih-kv span{display:block;font-size:8.5px;color:var(--aih-muted);font-weight:700;margin-bottom:2px}.aih-kv b{font-size:10px;font-weight:700}.aih-kv-block{grid-column:1/-1}.aih-kv-block>div{margin-top:4px}
-      .aih-list{margin:4px 0;padding-left:18px}.aih-list li{font-size:10px;margin:3px 0;line-height:1.35}.aih-doc-list{list-style:none;padding-left:0}.aih-doc-list li{padding:6px 7px;border:1px solid #edf0f3;border-radius:7px;margin:5px 0}.aih-doc-list b{display:block}.aih-doc-list small{display:block;color:var(--aih-muted);margin-top:2px}
-      .aih-dx-list,.aih-med-list{display:grid;gap:5px}.aih-dx,.aih-med{border:1px solid #edf0f3;border-radius:7px;padding:6px 8px}.aih-dx b,.aih-med b{display:block;font-size:10.3px}.aih-dx small,.aih-med small{display:block;font-size:9px;color:var(--aih-muted);margin-top:2px;line-height:1.35}
-      .aih-attention-empty{font-size:10px;color:var(--aih-muted);padding:8px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc}
-      .aih-table-wrap{overflow:hidden;border:1px solid #edf0f3;border-radius:8px}.aih-table{width:100%;border-collapse:collapse;font-size:9.5px}.aih-table td,.aih-table th{padding:6px;border-bottom:1px solid #edf0f3;vertical-align:top}
-      .aih-footer-doc{margin-top:18px;padding-top:9px;border-top:1px solid #dce2e8;display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:8.5px;color:var(--aih-muted)}.aih-footer-doc div{display:grid;gap:2px}.aih-footer-doc div:last-child{text-align:right}
-      @page{size:A4;margin:10mm}
-      @media print{body{background:#fff}.aih-doc{width:auto;min-height:auto;margin:0;padding:0;box-shadow:none}.aih-attention{break-inside:auto;page-break-inside:auto}.aih-attention-head,.aih-mini,.aih-dx,.aih-med,.aih-doc-list li{break-inside:avoid;page-break-inside:avoid}}
+      .aih-doc{width:210mm;min-height:297mm;margin:18px auto;background:#fff;padding:12mm 13mm 15mm;box-shadow:0 10px 35px rgba(15,23,42,.12);position:relative}
+      .aih-confidential{display:inline-block;border:1px solid #991b1b;color:#991b1b;font-size:8.5px;font-weight:900;letter-spacing:.16em;padding:4px 8px;border-radius:5px;margin-bottom:9px}
+      .aih-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:1px solid var(--aih-line);padding-bottom:10px}
+      .aih-legal h1{font-size:16px;margin:0;color:#111827}.aih-legal p{font-size:10px;margin:3px 0;color:#475569}.aih-legal small{display:block;font-size:8.8px;color:#64748b}
+      .aih-brand{display:flex;gap:8px;align-items:center;text-align:right;justify-content:flex-end;max-width:46%}.aih-brand img{width:40px;height:40px;object-fit:contain}.aih-brand b{display:block;font-size:12px;color:var(--aih-primary)}.aih-brand span{display:block;font-size:8.5px;color:#94a3b8;margin-top:2px}
+      .aih-document-title{text-align:center;padding:14px 0 11px}.aih-document-title>span{font-size:8.5px;color:#64748b;text-transform:uppercase;letter-spacing:.1em;font-weight:800}.aih-document-title h2{font-size:18px;margin:4px 0 2px;color:#111827;letter-spacing:.02em}.aih-document-title p{font-size:10px;color:#64748b;margin:0}
+      .aih-patient{border:1px solid #eadde5;background:#fff;border-radius:10px;padding:10px 11px;margin-bottom:13px}.aih-patient-name span{font-size:8px;text-transform:uppercase;color:#94a3b8;font-weight:800;letter-spacing:.08em}.aih-patient-name h2{font-size:16px;margin:2px 0 8px;color:#111827}
+      .aih-major{margin:15px 0}.aih-major>h2,.aih-signature>h2{font-size:13.5px;color:var(--aih-primary);margin:0 0 8px;border-bottom:1px solid #eadde5;padding-bottom:5px}
+      .aih-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.aih-mini{border-bottom:1px solid #eef0f2;padding:4px 2px;min-width:0}.aih-mini span{display:block;font-size:7.8px;text-transform:uppercase;color:#94a3b8;font-weight:800;margin-bottom:2px}.aih-mini b{font-size:9.8px;line-height:1.3;word-break:break-word;color:#1f2937}
+      .aih-attention{border:1px solid #dde2e8;border-radius:10px;padding:10px 11px;margin:0 0 11px;break-inside:auto;page-break-inside:auto}.aih-attention-head{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #edf0f3;padding-bottom:6px;margin-bottom:7px}.aih-attention-kicker{font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:var(--aih-primary);font-weight:900}.aih-attention-head h2{font-size:12.5px;margin:2px 0 0;color:#111827}
+      .aih-module{margin:10px 0 0;padding-top:2px}.aih-module-title{font-size:11.5px;color:#1f2937;margin:0 0 6px;font-weight:900}.aih-special{background:#fffafd;border:1px solid #f0e3ea;border-radius:8px;padding:8px}
+      .aih-block{margin:7px 0;break-inside:auto;page-break-inside:auto}.aih-block h3{font-size:9.6px;margin:0 0 3px;color:#475569;border-left:2px solid var(--aih-primary);padding-left:5px}.aih-block-body{font-size:9.8px;line-height:1.45;color:#273244}.aih-danger h3{color:var(--aih-danger);border-left-color:#e11d48}.aih-danger .aih-block-body{color:#7f1d1d}
+      .aih-kv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.aih-kv{border-bottom:1px solid #eef0f3;padding:4px 2px}.aih-kv span{display:block;font-size:8px;color:#94a3b8;font-weight:700;margin-bottom:1px}.aih-kv b{font-size:9.5px;font-weight:700}.aih-kv-block{grid-column:1/-1}.aih-kv-block>div{margin-top:3px}
+      .aih-lines{display:grid;gap:4px}.aih-line{display:grid;grid-template-columns:minmax(120px,32%) 1fr;gap:8px;border-bottom:1px solid #eef0f3;padding:4px 0}.aih-line span{font-size:8.5px;color:#64748b;font-weight:800}.aih-line div{font-size:9.7px;line-height:1.4}
+      .aih-list{margin:3px 0;padding-left:17px}.aih-list li{font-size:9.6px;margin:3px 0;line-height:1.35}.aih-doc-list{list-style:none;padding-left:0}.aih-doc-list li{padding:5px 0;border-bottom:1px solid #eef0f3}.aih-doc-list b{display:block}.aih-doc-list small{display:block;color:#64748b;margin-top:2px}
+      .aih-dx-list,.aih-med-list{display:grid;gap:4px}.aih-dx,.aih-med{border:1px solid #edf0f3;border-radius:6px;padding:5px 7px}.aih-dx b,.aih-med b{display:block;font-size:9.8px}.aih-dx small,.aih-med small{display:block;font-size:8.5px;color:#64748b;margin-top:2px;line-height:1.3}.aih-recipe{margin-top:5px}.aih-recipe h4{font-size:9.5px;margin:0 0 4px;color:#475569}
+      .aih-ant-group{margin:7px 0}.aih-ant-group>h3{font-size:9.8px;margin:0 0 4px;color:#475569}.aih-ant-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.aih-ant-item{border:1px solid #edf0f3;border-radius:6px;padding:5px 7px}.aih-ant-item b{display:block;font-size:9.4px}.aih-ant-item span{display:block;font-size:8.5px;color:#64748b;margin-top:2px}.aih-ant-alert .aih-ant-item{border-color:#fecdd3;background:#fffafb}
+      .aih-table-wrap{overflow:hidden;border:1px solid #edf0f3;border-radius:7px}.aih-table{width:100%;border-collapse:collapse;font-size:9px}.aih-table th{background:#f8fafc;text-align:left;color:#475569}.aih-table td,.aih-table th{padding:5px 6px;border-bottom:1px solid #edf0f3;vertical-align:top}
+      .aih-associated{border:1px solid #e5e7eb;border-radius:9px;padding:9px 10px;background:#fcfcfd}.aih-associated-note{font-size:8.5px;line-height:1.4;color:#64748b;margin:-2px 0 8px}
+      .aih-signature{margin:18px 0 12px}.aih-signature-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:end}.aih-signature-grid>div:first-child{display:grid;gap:2px;font-size:9px}.aih-signature-grid b{font-size:10.5px}.aih-signature-grid span{color:#64748b}.aih-sign-line{border-top:1px solid #94a3b8;padding-top:4px;text-align:center;font-size:8px}
+      .aih-note{border-top:1px solid #e5e7eb;padding-top:8px;margin-top:13px}.aih-note b{font-size:8.5px;text-transform:uppercase;color:#475569}.aih-note p{font-size:8.5px;line-height:1.4;color:#64748b;margin:3px 0 0}
+      .aih-footer-doc{margin-top:13px;padding-top:8px;border-top:1px solid #dce2e8;display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:8px;color:#64748b}.aih-footer-doc div{display:grid;gap:2px}.aih-footer-doc div:last-child{text-align:right}
+      .aih-running-footer{display:none}
+      @page{size:A4;margin:12mm 11mm 15mm}
+      @media print{
+        body{background:#fff}.aih-doc{width:auto;min-height:auto;margin:0;padding:0;box-shadow:none}
+        .aih-attention-head,.aih-mini,.aih-dx,.aih-med,.aih-doc-list li,.aih-ant-item{break-inside:avoid;page-break-inside:avoid}
+        .aih-running-footer{display:block;position:fixed;left:0;right:0;bottom:-8mm;border-top:1px solid #e5e7eb;padding-top:2mm;text-align:center;font-size:7.5px;color:#94a3b8;background:#fff}
+      }
     `;
   }
 
@@ -1059,12 +1609,12 @@
     const s = document.createElement('style');
     s.id = 'auroInformeHistoricoPreviewCSS';
     s.textContent = `
-      .aih-overlay{position:fixed;inset:0;z-index:2147482000;background:rgba(15,23,42,.62);display:flex;flex-direction:column;padding:18px;backdrop-filter:blur(5px)}
-      .aih-preview-shell{width:min(1220px,100%);height:100%;margin:auto;background:#f6f7f9;border-radius:20px;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr);box-shadow:0 30px 90px rgba(15,23,42,.35)}
-      .aih-preview-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:13px 16px;background:#fff;border-bottom:1px solid #e5e7eb}.aih-preview-head h3{margin:0;font-size:17px;color:#111827}.aih-preview-head small{display:block;color:#64748b;margin-top:2px}.aih-preview-actions{display:flex;gap:8px;flex-wrap:wrap}.aih-preview-actions button{border-radius:11px;padding:8px 12px;font-weight:800;border:1px solid #d8dee6;background:#fff;cursor:pointer}.aih-preview-actions .primary{background:#8b1e5a;color:#fff;border-color:#8b1e5a}
-      .aih-validation{padding:9px 16px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:7px;flex-wrap:wrap}.aih-validation span{font-size:10.5px;border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:5px 8px;font-weight:750;color:#475569}.aih-validation .warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.aih-validation .bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
-      .aih-preview-body{overflow:auto;padding:8px}.aih-loading{display:grid;place-items:center;height:100%;min-height:320px;color:#64748b}.aih-loading-card{background:#fff;padding:24px 28px;border-radius:18px;box-shadow:0 12px 35px rgba(15,23,42,.12);text-align:center}.aih-spinner{width:34px;height:34px;border:4px solid #f1d9e7;border-top-color:#8b1e5a;border-radius:50%;margin:0 auto 12px;animation:aihspin .75s linear infinite}@keyframes aihspin{to{transform:rotate(360deg)}}
-      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column}.aih-preview-actions{width:100%}.aih-preview-actions button{flex:1}.aih-preview-body{padding:0}.aih-preview-body .aih-doc{transform-origin:top left;margin:0;box-shadow:none}.aih-validation{padding:8px 10px}}
+      .aih-overlay{position:fixed;inset:0;z-index:2147482000;background:rgba(15,23,42,.62);display:flex;flex-direction:column;padding:16px;backdrop-filter:blur(5px)}
+      .aih-preview-shell{width:min(1180px,100%);height:100%;margin:auto;background:#f6f7f9;border-radius:18px;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr);box-shadow:0 30px 90px rgba(15,23,42,.35)}
+      .aih-preview-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 15px;background:#fff;border-bottom:1px solid #e5e7eb}.aih-preview-head h3{margin:0;font-size:16px;color:#111827}.aih-preview-head small{display:block;color:#64748b;margin-top:2px}.aih-preview-actions{display:flex;gap:7px;flex-wrap:wrap}.aih-preview-actions button{border-radius:9px;padding:8px 11px;font-weight:800;border:1px solid #d8dee6;background:#fff;cursor:pointer}.aih-preview-actions .primary{background:#8b1e5a;color:#fff;border-color:#8b1e5a}.aih-preview-actions button:disabled{opacity:.45;cursor:not-allowed}
+      .aih-validation{padding:8px 15px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:6px;flex-wrap:wrap}.aih-validation span{font-size:10px;border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:5px 8px;font-weight:750;color:#475569}.aih-validation .ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}.aih-validation .warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.aih-validation .bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
+      .aih-preview-body{overflow:auto;padding:8px}.aih-loading{display:grid;place-items:center;height:100%;min-height:320px;color:#64748b}.aih-loading-card{background:#fff;padding:22px 26px;border-radius:16px;box-shadow:0 12px 35px rgba(15,23,42,.12);text-align:center;max-width:580px}.aih-spinner{width:32px;height:32px;border:4px solid #f1d9e7;border-top-color:#8b1e5a;border-radius:50%;margin:0 auto 11px;animation:aihspin .75s linear infinite}@keyframes aihspin{to{transform:rotate(360deg)}}
+      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column}.aih-preview-actions{width:100%}.aih-preview-actions button{flex:1}.aih-preview-body{padding:0}.aih-preview-body .aih-doc{width:100%;min-height:auto;margin:0;padding:18px 14px;box-shadow:none}.aih-mini-grid,.aih-kv-grid,.aih-ant-grid{grid-template-columns:1fr}.aih-line{grid-template-columns:1fr;gap:2px}.aih-validation{padding:7px 9px}}
     `;
     document.head.appendChild(s);
   }
@@ -1081,8 +1631,9 @@
     overlay.innerHTML = `
       <div class="aih-preview-shell" role="dialog" aria-modal="true" aria-label="Vista previa del Informe Clínico Histórico">
         <div class="aih-preview-head">
-          <div><h3>Informe Clínico Histórico</h3><small>Vista previa · solo lectura</small></div>
+          <div><h3>Informe Clínico Histórico</h3><small>Vista previa · solo lectura · datos persistidos</small></div>
           <div class="aih-preview-actions">
+            <button type="button" id="aihBtnActualizar">Actualizar información</button>
             <button type="button" id="aihBtnCerrar">Cerrar</button>
             <button type="button" class="primary" id="aihBtnImprimir">Imprimir / PDF</button>
           </div>
@@ -1092,6 +1643,7 @@
       </div>`;
     document.body.appendChild(overlay);
 
+    overlay.querySelector('#aihBtnActualizar')?.addEventListener('click',actualizar);
     overlay.querySelector('#aihBtnCerrar')?.addEventListener('click',cerrar);
     overlay.querySelector('#aihBtnImprimir')?.addEventListener('click',imprimir);
     overlay.addEventListener('click',e=>{ if(e.target===overlay) cerrar(); });
@@ -1104,30 +1656,37 @@
     overlay.style.display = 'flex';
     const body = document.getElementById('aihPreviewBody');
     const val = document.getElementById('aihValidation');
+    const btn = document.getElementById('aihBtnImprimir');
+    if(btn) btn.disabled = true;
     if(val) val.innerHTML = '';
-    if(body) body.innerHTML = `<div class="aih-loading"><div class="aih-loading-card"><div class="aih-spinner"></div><b>${esc(texto)}</b><div style="margin-top:5px;font-size:12px">Lectura de datos clínicos. No se modifica la historia.</div></div></div>`;
+    if(body) body.innerHTML = `<div class="aih-loading"><div class="aih-loading-card"><div class="aih-spinner"></div><b>${esc(texto)}</b><div style="margin-top:5px;font-size:12px">Lectura fresca del expediente persistido. No se modifica la historia clínica.</div></div></div>`;
   }
 
   function renderValidacion(v){
     const el = document.getElementById('aihValidation');
     if(!el) return;
+
     const r = v.resumen;
     const pills = [
-      [`${r.atenciones} atenciones`,false],
-      [`${r.ids_unicos} IDs únicos`,false],
-      [`${r.diagnosticos} diagnósticos`,false],
-      [`${r.recetas} recetas`,false],
-      [`${r.documentos} documentos`,false],
-      [`${r.obstetricia} registros obstétricos`,false],
-      [r.estetica_ambigua ? `${r.estetica_ambigua} estética sin vínculo inequívoco` : '',!!r.estetica_ambigua],
-      [r.advertencias_backend ? `${r.advertencias_backend} fuentes opcionales no disponibles` : '',!!r.advertencias_backend]
+      [v.estado === 'VALIDADO' ? 'VALIDADO' : v.estado === 'INCOMPLETO' ? 'INCOMPLETO · PDF bloqueado' : 'ERROR DE INTEGRIDAD · PDF bloqueado', v.estado === 'VALIDADO'?'ok':v.estado === 'INCOMPLETO'?'warn':'bad'],
+      [`${r.atenciones} atenciones detectadas`,''],
+      [`${r.diagnosticos} diagnósticos`,''],
+      [`${r.recetas} recetas`,''],
+      [r.fuentes_no_verificadas ? `${r.fuentes_no_verificadas} fuente(s) clínica(s) no verificadas` : '', r.fuentes_no_verificadas?'bad':''],
+      [r.respaldos_locales ? `${r.respaldos_locales} fuente(s) usando respaldo local` : '', r.respaldos_locales?'warn':''],
+      [r.faltantes_documentales ? 'Falta configurar profesional responsable de emisión' : '', r.faltantes_documentales?'warn':''],
+      [state.excluidos.sinPertenencia ? `${state.excluidos.sinPertenencia} registro(s) excluidos por pertenencia` : '', state.excluidos.sinPertenencia?'warn':''],
+      [state.excluidos.atencionesSinContenido ? `${state.excluidos.atencionesSinContenido} atención(es) sin contenido clínico no impresas` : '', '']
     ].filter(([t])=>t);
 
-    if(!v.valido) pills.push([v.problemas.join(' · '),'bad']);
-    el.innerHTML = pills.map(([t,c])=>`<span class="${c===true?'warn':c==='bad'?'bad':''}">${esc(t)}</span>`).join('');
+    if(v.problemas.length) pills.push([v.problemas.join(' · '),'bad']);
+    el.innerHTML = pills.map(([t,c])=>`<span class="${c||''}">${esc(t)}</span>`).join('');
+
+    const btn = document.getElementById('aihBtnImprimir');
+    if(btn) btn.disabled = !v.pdfPermitido;
   }
 
-  function renderPreview(modelo,validacion){
+  function renderPreview(validacion){
     const body = document.getElementById('aihPreviewBody');
     if(!body) return;
     renderValidacion(validacion);
@@ -1139,6 +1698,8 @@
     overlay.style.display = 'flex';
     const body = document.getElementById('aihPreviewBody');
     const val = document.getElementById('aihValidation');
+    const btn = document.getElementById('aihBtnImprimir');
+    if(btn) btn.disabled = true;
     if(val) val.innerHTML = '<span class="bad">No se pudo construir el informe</span>';
     if(body) body.innerHTML = `<div class="aih-loading"><div class="aih-loading-card"><b style="color:#9f1239">${esc(error?.message || error || 'Error desconocido')}</b><div style="margin-top:8px;font-size:12px;color:#64748b">No se realizó ninguna escritura en la historia clínica.</div></div></div>`;
   }
@@ -1149,8 +1710,12 @@
   }
 
   function imprimir(){
-    if(!state.htmlDocumento){
+    if(!state.htmlDocumento || !state.validacion){
       alert('Genere primero la vista previa del Informe Clínico Histórico.');
+      return;
+    }
+    if(!state.validacion.pdfPermitido){
+      alert('El Informe Histórico no está completamente validado. Corrija o vuelva a verificar las fuentes antes de generar el PDF definitivo.');
       return;
     }
 
@@ -1175,12 +1740,13 @@
       cargarAtencionesPaciente(idPaciente),
       cargarMedicos(),
       cargarConfiguracion(),
-      cargarColeccionesGlobales(idPaciente)
+      cargarColeccionesGlobales()
     ]);
 
     if(token !== state.token) throw new Error('La generación anterior fue cancelada por un nuevo contexto.');
 
     const historia = historiaConAntecedentes(historias || []);
+    const relacion = construirRelacion(idPaciente,historias,atenciones);
     const detalleAtenciones = await mapLimit(atenciones,MAX_CONCURRENCIA,cargarModuloAtencion);
 
     if(token !== state.token) throw new Error('El paciente cambió durante la generación del informe.');
@@ -1188,17 +1754,28 @@
       throw new Error('El paciente seleccionado cambió durante la generación. Vuelva a abrir el informe.');
     }
 
-    const globales = asociarColecciones(detalleAtenciones,globalesBase);
+    const globales = asociarColecciones(detalleAtenciones,globalesBase,relacion);
 
     return {
       institucion:normalizarInstitucion(configuracion),
       paciente:normalizarPaciente(paciente,historia),
       historia,
-      antecedentes:normalizarAntecedentes(historia),
       medicos,
       atenciones:detalleAtenciones,
-      globales
+      globales,
+      relacion
     };
+  }
+
+  function reiniciarEstadoGeneracion(idPaciente){
+    state.idPaciente = idPaciente;
+    state.datos = null;
+    state.htmlDocumento = '';
+    state.validacion = null;
+    state.fuentes = {};
+    state.advertencias = [];
+    state.errores = [];
+    state.excluidos = {sinPertenencia:0,sinAtencion:0,atencionesSinContenido:0};
   }
 
   async function abrir(){
@@ -1212,21 +1789,17 @@
 
     const token = ++state.token;
     state.cargando = true;
-    state.idPaciente = idPaciente;
-    state.datos = null;
-    state.htmlDocumento = '';
-    state.advertencias = [];
-    state.errores = [];
+    reiniciarEstadoGeneracion(idPaciente);
     mostrarCargando();
 
     try{
       const modelo = await construirModelo(idPaciente,token);
       if(token !== state.token) return;
 
-      const validacion = validarModelo(modelo);
       state.datos = modelo;
       state.htmlDocumento = construirDocumento(modelo);
-      renderPreview(modelo,validacion);
+      state.validacion = validarModelo(modelo);
+      renderPreview(state.validacion);
     }catch(error){
       console.error(MODULO,error);
       state.errores.push(error?.message || String(error));
@@ -1236,12 +1809,18 @@
     }
   }
 
+  async function actualizar(){
+    if(state.cargando) return;
+    return abrir();
+  }
+
   /* ========================================================================
-     INTERFAZ PÚBLICA MÍNIMA
+     INTERFAZ PÚBLICA - COMPATIBLE + ADITIVA
   ======================================================================== */
   window.auroInformeHistorico = Object.freeze({
     version:VERSION,
     abrir,
+    actualizar,
     imprimir,
     cerrar,
     diagnostico:function(){
@@ -1250,12 +1829,16 @@
         cargando:state.cargando,
         id_paciente:state.idPaciente,
         tiene_modelo:!!state.datos,
+        estado_validacion:state.validacion?.estado || '',
+        pdf_permitido:state.validacion?.pdfPermitido === true,
         atenciones:state.datos?.atenciones?.length || 0,
+        fuentes:{...state.fuentes},
+        excluidos:{...state.excluidos},
         advertencias:[...state.advertencias],
         errores:[...state.errores]
       };
     }
   });
 
-  console.info(`${MODULO} v${VERSION}: cargado en modo solo lectura.`);
+  console.info(`${MODULO} v${VERSION}: cargado en modo SOLO LECTURA / GOLD STANDARD.`);
 })();
