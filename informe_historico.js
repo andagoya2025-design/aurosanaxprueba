@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    Archivo de reemplazo propuesto: informe_historico.js
    Entrega externa: TXT completo para revisión manual
-   Versión propuesta: 2.0.0-GOLD-STANDARD-ANTIRREGRESIVO
+   Versión propuesta: 2.1.0-VISOR-PREMIUM-ANTIRREGRESIVO
    Fecha: 2026-08-31
    Baseline leído en GitHub (SOLO LECTURA):
    informe_historico.js v1.0.0
@@ -36,6 +36,8 @@
       mostrarse como INCOMPLETA, pero el PDF definitivo queda bloqueado.
   11. Vista previa y PDF usan el MISMO HTML documental validado.
   12. El informe ordena y presenta; NO corrige ni reescribe el registro clínico.
+  13. VISOR PREMIUM: zoom y ajuste al ancho afectan SOLO la vista previa.
+      El HTML documental y la impresión/PDF A4 permanecen sin modificación.
 ============================================================================ */
 (function(){
   'use strict';
@@ -45,7 +47,7 @@
     return;
   }
 
-  const VERSION = '2.0.0-GOLD-STANDARD-ANTIRREGRESIVO';
+  const VERSION = '2.1.0-VISOR-PREMIUM-ANTIRREGRESIVO';
   const MODULO = 'AUROSANAX INFORME HISTÓRICO';
   const MAX_CONCURRENCIA = 5;
 
@@ -79,6 +81,11 @@
       sinPertenencia: 0,
       sinAtencion: 0,
       atencionesSinContenido: 0
+    },
+    /* Solo presentación. No participa en lectura, validación ni PDF. */
+    visor: {
+      zoom: 1.25,
+      ajusteAncho: false
     }
   };
 
@@ -1604,17 +1611,101 @@
     `;
   }
 
+  /* ========================================================================
+     VISOR PREMIUM V2.1 - SOLO PRESENTACIÓN / ANTIRREGRESIVO
+     ------------------------------------------------------------------------
+     - Pantalla casi completa.
+     - Zoom independiente del documento.
+     - Ajuste al ancho del área visible.
+     - NO modifica state.htmlDocumento.
+     - NO modifica cssDocumento() ni imprimir().
+     - NO consulta backend ni dispara eventos clínicos.
+  ======================================================================== */
+  const VISOR_ZOOM_MIN = 0.75;
+  const VISOR_ZOOM_MAX = 2.00;
+  const VISOR_ZOOM_STEP = 0.10;
+
+  function visorDocumento(){
+    return document.querySelector('#aihPreviewDocument .aih-doc');
+  }
+
+  function visorZoomNormalizado(valor){
+    const n = Number(valor);
+    if(!Number.isFinite(n)) return 1.25;
+    return Math.min(VISOR_ZOOM_MAX, Math.max(VISOR_ZOOM_MIN, n));
+  }
+
+  function actualizarControlesVisor(){
+    const etiqueta = document.getElementById('aihZoomLabel');
+    const btnMenos = document.getElementById('aihBtnZoomMenos');
+    const btnMas = document.getElementById('aihBtnZoomMas');
+    const btnAjustar = document.getElementById('aihBtnAjustarAncho');
+    const zoom = visorZoomNormalizado(state.visor?.zoom);
+
+    if(etiqueta) etiqueta.textContent = `${Math.round(zoom * 100)}%`;
+    if(btnMenos) btnMenos.disabled = zoom <= VISOR_ZOOM_MIN + 0.001;
+    if(btnMas) btnMas.disabled = zoom >= VISOR_ZOOM_MAX - 0.001;
+    if(btnAjustar){
+      btnAjustar.classList.toggle('active', state.visor?.ajusteAncho === true);
+      btnAjustar.setAttribute('aria-pressed', state.visor?.ajusteAncho === true ? 'true' : 'false');
+    }
+  }
+
+  function aplicarZoomVisor(valor, opciones={}){
+    const doc = visorDocumento();
+    const zoom = visorZoomNormalizado(valor);
+
+    state.visor = state.visor || {zoom:1.25,ajusteAncho:false};
+    state.visor.zoom = zoom;
+    state.visor.ajusteAncho = opciones.ajusteAncho === true;
+
+    if(doc){
+      /* CSS zoom solo afecta el visor. La impresión usa otra ventana/HTML. */
+      doc.style.zoom = String(zoom);
+      doc.style.margin = '0 auto 42px';
+    }
+
+    actualizarControlesVisor();
+  }
+
+  function cambiarZoomVisor(delta){
+    const actual = visorZoomNormalizado(state.visor?.zoom);
+    aplicarZoomVisor(actual + Number(delta || 0), {ajusteAncho:false});
+  }
+
+  function ajustarVisorAlAncho(){
+    const body = document.getElementById('aihPreviewBody');
+    const doc = visorDocumento();
+    if(!body || !doc) return;
+
+    /* Medición neutral: se calcula el ancho A4 sin zoom previo. */
+    const scrollIzq = body.scrollLeft;
+    doc.style.zoom = '1';
+
+    requestAnimationFrame(()=>{
+      const anchoDocumento = doc.getBoundingClientRect().width || doc.offsetWidth || 1;
+      const margenSeguro = window.innerWidth <= 760 ? 16 : 44;
+      const anchoDisponible = Math.max(1, body.clientWidth - margenSeguro);
+      const zoom = visorZoomNormalizado(anchoDisponible / anchoDocumento);
+      aplicarZoomVisor(zoom,{ajusteAncho:true});
+      body.scrollLeft = Math.max(0, scrollIzq);
+    });
+  }
+
   function instalarPreviewCSS(){
     if(document.getElementById('auroInformeHistoricoPreviewCSS')) return;
     const s = document.createElement('style');
     s.id = 'auroInformeHistoricoPreviewCSS';
     s.textContent = `
-      .aih-overlay{position:fixed;inset:0;z-index:2147482000;background:rgba(15,23,42,.62);display:flex;flex-direction:column;padding:16px;backdrop-filter:blur(5px)}
-      .aih-preview-shell{width:min(1180px,100%);height:100%;margin:auto;background:#f6f7f9;border-radius:18px;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr);box-shadow:0 30px 90px rgba(15,23,42,.35)}
-      .aih-preview-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 15px;background:#fff;border-bottom:1px solid #e5e7eb}.aih-preview-head h3{margin:0;font-size:16px;color:#111827}.aih-preview-head small{display:block;color:#64748b;margin-top:2px}.aih-preview-actions{display:flex;gap:7px;flex-wrap:wrap}.aih-preview-actions button{border-radius:9px;padding:8px 11px;font-weight:800;border:1px solid #d8dee6;background:#fff;cursor:pointer}.aih-preview-actions .primary{background:#8b1e5a;color:#fff;border-color:#8b1e5a}.aih-preview-actions button:disabled{opacity:.45;cursor:not-allowed}
-      .aih-validation{padding:8px 15px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:6px;flex-wrap:wrap}.aih-validation span{font-size:10px;border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:5px 8px;font-weight:750;color:#475569}.aih-validation .ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}.aih-validation .warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.aih-validation .bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
-      .aih-preview-body{overflow:auto;padding:8px}.aih-loading{display:grid;place-items:center;height:100%;min-height:320px;color:#64748b}.aih-loading-card{background:#fff;padding:22px 26px;border-radius:16px;box-shadow:0 12px 35px rgba(15,23,42,.12);text-align:center;max-width:580px}.aih-spinner{width:32px;height:32px;border:4px solid #f1d9e7;border-top-color:#8b1e5a;border-radius:50%;margin:0 auto 11px;animation:aihspin .75s linear infinite}@keyframes aihspin{to{transform:rotate(360deg)}}
-      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column}.aih-preview-actions{width:100%}.aih-preview-actions button{flex:1}.aih-preview-body{padding:0}.aih-preview-body .aih-doc{width:100%;min-height:auto;margin:0;padding:18px 14px;box-shadow:none}.aih-mini-grid,.aih-kv-grid,.aih-ant-grid{grid-template-columns:1fr}.aih-line{grid-template-columns:1fr;gap:2px}.aih-validation{padding:7px 9px}}
+      .aih-overlay{position:fixed;inset:0;z-index:2147482000;background:rgba(15,23,42,.66);display:flex;flex-direction:column;padding:6px;backdrop-filter:blur(5px)}
+      .aih-preview-shell{width:calc(100vw - 12px);max-width:none;height:calc(100vh - 12px);margin:auto;background:#eef1f5;border-radius:16px;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr);box-shadow:0 30px 90px rgba(15,23,42,.38)}
+      .aih-preview-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 13px;background:#fff;border-bottom:1px solid #e5e7eb;min-height:58px}.aih-preview-head h3{margin:0;font-size:16px;color:#111827}.aih-preview-head small{display:block;color:#64748b;margin-top:2px}.aih-preview-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.aih-preview-actions button{border-radius:9px;padding:8px 11px;font-weight:800;border:1px solid #d8dee6;background:#fff;color:#344054;cursor:pointer;white-space:nowrap}.aih-preview-actions .primary{background:#8b1e5a;color:#fff;border-color:#8b1e5a}.aih-preview-actions button:disabled{opacity:.45;cursor:not-allowed}.aih-preview-actions button.active{background:#fff7fb;color:#8b1e5a;border-color:#d9a5c2}
+      .aih-zoom-group{display:inline-flex;align-items:center;gap:0;border:1px solid #d8dee6;border-radius:10px;overflow:hidden;background:#fff;height:36px}.aih-zoom-group button{height:34px;min-width:36px;padding:0 10px;border:0;border-radius:0;border-right:1px solid #e5e7eb;font-size:16px;line-height:1}.aih-zoom-group button:last-child{border-right:0}.aih-zoom-label{min-width:58px;text-align:center;font-size:11px;font-weight:900;color:#475569;padding:0 8px;user-select:none}
+      .aih-validation{padding:7px 13px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:6px;flex-wrap:wrap}.aih-validation span{font-size:10px;border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:5px 8px;font-weight:750;color:#475569}.aih-validation .ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}.aih-validation .warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.aih-validation .bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
+      .aih-preview-body{overflow:auto;padding:0;background:#dde3ea;overscroll-behavior:contain}.aih-preview-stage{min-width:100%;width:max-content;min-height:100%;padding:18px 22px 46px}.aih-preview-stage .aih-doc{margin:0 auto 42px;transform-origin:top center}.aih-loading{display:grid;place-items:center;height:100%;min-height:320px;color:#64748b}.aih-loading-card{background:#fff;padding:22px 26px;border-radius:16px;box-shadow:0 12px 35px rgba(15,23,42,.12);text-align:center;max-width:580px}.aih-spinner{width:32px;height:32px;border:4px solid #f1d9e7;border-top-color:#8b1e5a;border-radius:50%;margin:0 auto 11px;animation:aihspin .75s linear infinite}@keyframes aihspin{to{transform:rotate(360deg)}}
+      @media(max-width:980px){.aih-preview-head{align-items:flex-start}.aih-preview-actions{max-width:70%}.aih-preview-actions button{padding:7px 9px;font-size:11px}.aih-zoom-group{height:34px}.aih-zoom-group button{height:32px}.aih-validation{max-height:70px;overflow:auto}}
+      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{width:100vw;height:100vh;border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column;padding:9px 10px}.aih-preview-actions{width:100%;max-width:none;justify-content:flex-start}.aih-preview-actions>button{flex:1 1 auto}.aih-zoom-group{flex:0 0 auto}.aih-preview-body{padding:0}.aih-preview-stage{padding:8px 8px 34px}.aih-preview-stage .aih-doc{margin:0 auto 30px}.aih-validation{padding:6px 8px;max-height:64px}.aih-mini-grid,.aih-kv-grid,.aih-ant-grid{grid-template-columns:1fr}.aih-line{grid-template-columns:1fr;gap:2px}}
+      @media(max-width:460px){.aih-preview-actions{gap:5px}.aih-preview-actions button{font-size:10.5px;padding:7px 8px}.aih-zoom-label{min-width:50px;padding:0 5px}.aih-zoom-group button{min-width:32px;padding:0 8px}.aih-preview-head small{font-size:10px}}
     `;
     document.head.appendChild(s);
   }
@@ -1634,6 +1725,12 @@
           <div><h3>Informe Clínico Histórico</h3><small>Vista previa · solo lectura · datos persistidos</small></div>
           <div class="aih-preview-actions">
             <button type="button" id="aihBtnActualizar">Actualizar información</button>
+            <button type="button" id="aihBtnAjustarAncho" aria-pressed="false" title="Ajustar el documento al ancho disponible">Ajustar ancho</button>
+            <div class="aih-zoom-group" role="group" aria-label="Zoom de vista previa">
+              <button type="button" id="aihBtnZoomMenos" aria-label="Reducir zoom" title="Reducir zoom">−</button>
+              <span class="aih-zoom-label" id="aihZoomLabel">125%</span>
+              <button type="button" id="aihBtnZoomMas" aria-label="Aumentar zoom" title="Aumentar zoom">+</button>
+            </div>
             <button type="button" id="aihBtnCerrar">Cerrar</button>
             <button type="button" class="primary" id="aihBtnImprimir">Imprimir / PDF</button>
           </div>
@@ -1644,10 +1741,14 @@
     document.body.appendChild(overlay);
 
     overlay.querySelector('#aihBtnActualizar')?.addEventListener('click',actualizar);
+    overlay.querySelector('#aihBtnAjustarAncho')?.addEventListener('click',ajustarVisorAlAncho);
+    overlay.querySelector('#aihBtnZoomMenos')?.addEventListener('click',()=>cambiarZoomVisor(-VISOR_ZOOM_STEP));
+    overlay.querySelector('#aihBtnZoomMas')?.addEventListener('click',()=>cambiarZoomVisor(VISOR_ZOOM_STEP));
     overlay.querySelector('#aihBtnCerrar')?.addEventListener('click',cerrar);
     overlay.querySelector('#aihBtnImprimir')?.addEventListener('click',imprimir);
     overlay.addEventListener('click',e=>{ if(e.target===overlay) cerrar(); });
     document.addEventListener('keydown',e=>{ if(e.key==='Escape' && overlay.style.display!=='none') cerrar(); });
+    actualizarControlesVisor();
     return overlay;
   }
 
@@ -1690,7 +1791,16 @@
     const body = document.getElementById('aihPreviewBody');
     if(!body) return;
     renderValidacion(validacion);
-    body.innerHTML = `<style>${cssDocumento()}</style>${state.htmlDocumento}`;
+    body.innerHTML = `<style>${cssDocumento()}</style><div class="aih-preview-stage"><div id="aihPreviewDocument">${state.htmlDocumento}</div></div>`;
+
+    requestAnimationFrame(()=>{
+      /* En teléfono el ancho manda; en escritorio se conserva 125% inicial. */
+      if(window.matchMedia?.('(max-width:760px)')?.matches || state.visor?.ajusteAncho === true){
+        ajustarVisorAlAncho();
+      }else{
+        aplicarZoomVisor(state.visor?.zoom || 1.25,{ajusteAncho:false});
+      }
+    });
   }
 
   function mostrarError(error){
