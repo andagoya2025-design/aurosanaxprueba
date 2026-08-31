@@ -5054,6 +5054,10 @@ async function auroRecetaAbrirOficialDesdeIndex(){
 }
 
 function showClinicalTab(id,btn){
+  if(id !== 'hc_anamnesis' && typeof auroAnamnesisRestaurarBotonVisual === 'function'){
+    auroAnamnesisRestaurarBotonVisual();
+  }
+
   /*
     Higiene visual del piloto:
     al cambiar de pestaña clínica no se arrastra una vista paciente abierta.
@@ -7656,6 +7660,117 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
     if(auroHistoriaModuloActivo() === 'hc_obstetricia'){
       auroHistoriaRefrescarEstadoConsultaActiva('hc_obstetricia');
     }
+  });
+
+  /* ============================================================
+     AUROSANAX INDEX 92 - FEEDBACK VISUAL DEL BOTÓN EN ANAMNESIS
+     ------------------------------------------------------------
+     SOLO PRESENTACIÓN. El botón no adquiere ninguna función clínica.
+     La persistencia sigue perteneciendo exclusivamente a anamnesis.js.
+     No se agregan llamadas de red, escrituras locales ni listeners de edición.
+  ============================================================ */
+  let __auroAnamnesisBotonVisualGeneracion = 0;
+  let __auroAnamnesisBotonVisualTimer = null;
+
+  function auroAnamnesisBotonVisual(){
+    return typeof auroHistoriaBotonGuardarPrincipal === 'function'
+      ? auroHistoriaBotonGuardarPrincipal()
+      : null;
+  }
+
+  function auroAnamnesisRestaurarBotonVisual(){
+    __auroAnamnesisBotonVisualGeneracion += 1;
+    if(__auroAnamnesisBotonVisualTimer){
+      clearTimeout(__auroAnamnesisBotonVisualTimer);
+      __auroAnamnesisBotonVisualTimer = null;
+    }
+    const btn = auroAnamnesisBotonVisual();
+    if(!btn) return;
+    btn.classList.remove('auro-hc-btn-guardando','auro-hc-btn-exito','auro-hc-btn-error');
+    btn.removeAttribute('aria-busy');
+    if(btn.dataset.auroAnamnesisTextoOriginal){
+      btn.innerHTML = btn.dataset.auroAnamnesisTextoOriginal;
+      delete btn.dataset.auroAnamnesisTextoOriginal;
+    }
+  }
+
+  function auroAnamnesisPintarBotonVisual(modo){
+    if(auroHistoriaModuloActivo() !== 'hc_anamnesis') return;
+    const btn = auroAnamnesisBotonVisual();
+    if(!btn) return;
+    if(!btn.dataset.auroAnamnesisTextoOriginal){
+      btn.dataset.auroAnamnesisTextoOriginal = btn.innerHTML;
+    }
+    __auroAnamnesisBotonVisualGeneracion += 1;
+    const generacion = __auroAnamnesisBotonVisualGeneracion;
+    if(__auroAnamnesisBotonVisualTimer){
+      clearTimeout(__auroAnamnesisBotonVisualTimer);
+      __auroAnamnesisBotonVisualTimer = null;
+    }
+    btn.classList.remove('auro-hc-btn-guardando','auro-hc-btn-exito','auro-hc-btn-error');
+
+    if(modo === 'guardando'){
+      btn.setAttribute('aria-busy','true');
+      btn.classList.add('auro-hc-btn-guardando');
+      btn.innerHTML = '<i class="bi bi-arrow-repeat me-1 auro-hc-spin"></i> Guardando anamnesis…';
+      __auroAnamnesisBotonVisualTimer = setTimeout(function(){
+        if(generacion !== __auroAnamnesisBotonVisualGeneracion) return;
+        auroAnamnesisRestaurarBotonVisual();
+      },6000);
+      return;
+    }
+
+    btn.removeAttribute('aria-busy');
+    if(modo === 'exito'){
+      btn.classList.add('auro-hc-btn-exito');
+      btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Anamnesis actualizada ✓';
+      __auroAnamnesisBotonVisualTimer = setTimeout(function(){
+        if(generacion !== __auroAnamnesisBotonVisualGeneracion) return;
+        auroAnamnesisRestaurarBotonVisual();
+      },1400);
+      return;
+    }
+
+    if(modo === 'pendiente'){
+      btn.classList.add('auro-hc-btn-error');
+      btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Sincronización pendiente';
+      __auroAnamnesisBotonVisualTimer = setTimeout(function(){
+        if(generacion !== __auroAnamnesisBotonVisualGeneracion) return;
+        auroAnamnesisRestaurarBotonVisual();
+      },2200);
+      return;
+    }
+
+    auroAnamnesisRestaurarBotonVisual();
+  }
+
+  function auroAnamnesisEventoVisualValido(detalle){
+    if(auroHistoriaModuloActivo() !== 'hc_anamnesis') return false;
+    const actual = auroHistoriaAtencionResumen();
+    const idActual = String(actual?.id || '').trim();
+    const idEvento = String(detalle?.id_atencion || '').trim();
+    return !!idActual && !!idEvento && idActual === idEvento;
+  }
+
+  window.addEventListener('aurosanax:anamnesis-sincronizando', function(evento){
+    const detalle = evento?.detail || {};
+    if(!auroAnamnesisEventoVisualValido(detalle)) return;
+    auroAnamnesisPintarBotonVisual('guardando');
+  });
+  window.addEventListener('aurosanax:anamnesis-guardado-local', function(evento){
+    const detalle = evento?.detail || {};
+    if(!auroAnamnesisEventoVisualValido(detalle)) return;
+    auroAnamnesisPintarBotonVisual('guardando');
+  });
+  window.addEventListener('aurosanax:anamnesis-confirmada', function(evento){
+    const detalle = evento?.detail || {};
+    if(!auroAnamnesisEventoVisualValido(detalle)) return;
+    auroAnamnesisPintarBotonVisual('exito');
+  });
+  window.addEventListener('aurosanax:anamnesis-sincronizacion-pendiente', function(evento){
+    const detalle = evento?.detail || {};
+    if(!auroAnamnesisEventoVisualValido(detalle)) return;
+    auroAnamnesisPintarBotonVisual('pendiente');
   });
 
   /*
