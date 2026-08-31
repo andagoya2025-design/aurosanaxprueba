@@ -7152,6 +7152,7 @@ function auroHistoriaFechaRegistro(registro){
    - hc_recomendaciones
    - hc_certificados
    - hc_docs
+   - hc_examen (solo hora visual del registro ya leído)
 
    SOLO PRESENTACIÓN / SOLO LECTURA:
    - NO hace GET adicional.
@@ -7159,7 +7160,9 @@ function auroHistoriaFechaRegistro(registro){
    - NO guarda.
    - NO escribe localStorage.
    - NO modifica timestamps persistidos.
-   - NO altera Anamnesis, Antecedentes, Examen físico ni Obstetricia.
+   - NO altera Anamnesis, Antecedentes ni Obstetricia.
+   - Examen físico conserva íntegro su guardado; solo cambia cómo se presenta
+     el timestamp que su resolver REAL ya leyó desde Google Sheets.
    - Reutiliza la fecha que el resolver REAL del módulo ya leyó.
 ============================================================ */
 function auroHistoriaModuloHoraLiteralSheets(idModulo){
@@ -7169,7 +7172,8 @@ function auroHistoriaModuloHoraLiteralSheets(idModulo){
     'hc_plan',
     'hc_recomendaciones',
     'hc_certificados',
-    'hc_docs'
+    'hc_docs',
+    'hc_examen'
   ]).has(String(idModulo || '').trim());
 }
 
