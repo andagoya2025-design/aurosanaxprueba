@@ -324,18 +324,20 @@
               <div class="col-md-6">
                 <label class="form-label">Cédula / documento *</label>
                 <input id="numero_documento" type="text" inputmode="numeric" maxlength="10" class="form-control" required placeholder="Ej. 0912345678" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
+                <div class="micro-help">10 dígitos, sin espacios ni guiones.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">Nombres completos *</label>
-                <input id="nombre_completo" class="form-control" required placeholder="Nombre y apellido">
+                <input id="nombre_completo" class="form-control" required autocomplete="name" placeholder="Nombre y apellido">
               </div>
               <div class="col-md-6">
                 <label class="form-label">WhatsApp / teléfono *</label>
-                <input id="whatsapp" type="text" inputmode="numeric" maxlength="10" class="form-control" required placeholder="Ej. 0999999999" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
+                <input id="whatsapp" type="text" inputmode="numeric" maxlength="10" autocomplete="off" class="form-control" required placeholder="Ej. 0999999999" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
+                <div class="micro-help">10 dígitos y empieza con 09. Ej. 0991234567.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">Correo opcional</label>
-                <input id="email" type="email" class="form-control" placeholder="correo@ejemplo.com">
+                <input id="email" type="email" class="form-control" autocomplete="email" placeholder="correo@ejemplo.com">
               </div>
               <div class="col-12">
                 <label class="form-label">Observación</label>
@@ -959,6 +961,14 @@
       if(el) el.classList.add('field-error');
     }
 
+    function desplazarPrimerErrorFormulario(){
+      const primerError = document.querySelector('#citaForm .field-error');
+      if(!primerError) return;
+      requestAnimationFrame(function(){
+        primerError.scrollIntoView({behavior:'smooth', block:'center'});
+      });
+    }
+
     function soloDigitos(valor){
       return String(valor || '').replace(/\D/g,'');
     }
@@ -1176,6 +1186,7 @@
 
       if(errores.length){
         setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> Revise la información:<ul class="validation-list"><li>' + errores.join('</li><li>') + '</li></ul>');
+        desplazarPrimerErrorFormulario();
         return false;
       }
       return true;
@@ -1383,6 +1394,7 @@
         marcarCampoError('numero_documento');
         marcarCampoError('nombre_completo');
         setStatus('err','<i class="bi bi-person-x-fill me-1"></i> ' + identidadInicial.mensaje);
+        desplazarPrimerErrorFormulario();
         return;
       }
 
@@ -1420,6 +1432,7 @@
           marcarCampoError('numero_documento');
           marcarCampoError('nombre_completo');
           setStatus('err','<i class="bi bi-person-x-fill me-1"></i> ' + identidadActual.mensaje);
+          desplazarPrimerErrorFormulario();
           return;
         }
 
@@ -1517,6 +1530,7 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       const hoy = new Date();
+      document.getElementById('fecha_cita').min = fechaISO(hoy);
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
