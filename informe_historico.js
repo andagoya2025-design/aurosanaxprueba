@@ -2,11 +2,11 @@
    AUROSANAX CLINICAL ERP
    Archivo de reemplazo propuesto: informe_historico.js
    Entrega externa: TXT completo para revisión manual
-   Versión propuesta: 2.2.0-DOCUMENTO-CLINICO-PROFESIONAL-ANTIRREGRESIVO
+   Versión propuesta: 2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO
    Fecha: 2026-08-31
    Baseline leído en GitHub (SOLO LECTURA):
-   informe_historico.js v1.0.0
-   SHA: ca779d0729d706a1fef8306d2e1f0da8e1536746
+   informe_historico.js v2.2.0-DOCUMENTO-CLINICO-PROFESIONAL-ANTIRREGRESIVO
+   SHA: 85fb25bf00fb8d200b54a256f685e7d077f7ca39
    ---------------------------------------------------------------------------
    OBJETIVO QUIRÚRGICO
    - Corregir exclusivamente lectura, asociación, validación y presentación del
@@ -41,6 +41,15 @@
   14. DOCUMENTO CLÍNICO PROFESIONAL: dato ausente = espacio ausente. La
       maquetación documental se redistribuye sin fabricar información ni dejar
       tarjetas/celdas vacías. Los textos clínicos extensos aprovechan el ancho.
+
+   OPTIMIZACIÓN QUIRÚRGICA V2.3 — SOLO MOTOR PRIVADO DE LECTURA
+   - Mantiene exactamente los mismos endpoints GET y el mismo filtrado clínico.
+   - No modifica Apps Script, Sheets, módulos propietarios ni estado global ERP.
+   - Limita únicamente las solicitudes iniciadas por este Informe Histórico.
+   - Inicia el detalle por atención apenas está disponible listarAtenciones,
+     sin esperar innecesariamente las demás fuentes maestras/globales.
+   - Añade métricas privadas de rendimiento para diagnóstico; no persisten datos.
+   - No introduce caché clínica persistente ni cambia la frescura de las lecturas.
 ============================================================================ */
 (function(){
   'use strict';
@@ -50,9 +59,9 @@
     return;
   }
 
-  const VERSION = '2.2.0-DOCUMENTO-CLINICO-PROFESIONAL-ANTIRREGRESIVO';
+  const VERSION = '2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO';
   const MODULO = 'AUROSANAX INFORME HISTÓRICO';
-  const MAX_CONCURRENCIA = 5;
+  const MAX_GET_CONCURRENCIA = 8;
 
   const INVALIDOS_BASE = new Set([
     '', '-', '—', 'undefined', 'null', '[object object]',
@@ -84,6 +93,18 @@
       sinPertenencia: 0,
       sinAtencion: 0,
       atencionesSinContenido: 0
+    },
+    /*
+      V2.3: diagnóstico de rendimiento SOLO EN RAM PRIVADA DEL INFORME.
+      No participa en el modelo clínico, no se persiste y no modifica otros módulos.
+    */
+    rendimiento: {
+      inicio_ms: 0,
+      fin_ms: 0,
+      total_ms: 0,
+      solicitudes: 0,
+      pico_concurrencia: 0,
+      endpoints: {}
     },
     /* Solo presentación. No participa en lectura, validación ni PDF. */
     visor: {
@@ -327,7 +348,98 @@
 
   /* ========================================================================
      API: EXCLUSIVAMENTE GET
+     V2.3 — COLA PRIVADA DE LECTURA CONTROLADA
+     ------------------------------------------------------------------------
+     Esta cola SOLO administra fetch() iniciados por informe_historico.js.
+     No intercepta window.fetch, no modifica API_URL, no cambia endpoints,
+     no toca eventos/estado de otros módulos y no persiste caché clínica.
   ======================================================================== */
+  const colaGet = {
+    activos: 0,
+    espera: [],
+    pico: 0
+  };
+
+  function relojMs(){
+    try{
+      if(typeof performance !== 'undefined' && typeof performance.now === 'function'){
+        return performance.now();
+      }
+    }catch(_e){}
+    return Date.now();
+  }
+
+  function reiniciarRendimiento(){
+    state.rendimiento = {
+      inicio_ms: relojMs(),
+      fin_ms: 0,
+      total_ms: 0,
+      solicitudes: 0,
+      pico_concurrencia: 0,
+      endpoints: {}
+    };
+    colaGet.pico = colaGet.activos;
+  }
+
+  function registrarMetricaGet(accion, datos={}){
+    const r = state.rendimiento || (state.rendimiento = {endpoints:{}});
+    r.endpoints = r.endpoints || {};
+    const clave = txt(accion) || 'GET';
+    const item = r.endpoints[clave] || {
+      solicitudes: 0,
+      exitos: 0,
+      errores: 0,
+      total_ms: 0,
+      red_ms: 0,
+      cola_ms: 0,
+      max_ms: 0
+    };
+
+    const total = Number(datos.total_ms || 0);
+    const red = Number(datos.red_ms || 0);
+    const cola = Number(datos.cola_ms || 0);
+
+    item.solicitudes += 1;
+    if(datos.ok === true) item.exitos += 1;
+    else item.errores += 1;
+    item.total_ms += total;
+    item.red_ms += red;
+    item.cola_ms += cola;
+    item.max_ms = Math.max(item.max_ms, total);
+    r.endpoints[clave] = item;
+    r.solicitudes = Number(r.solicitudes || 0) + 1;
+    r.pico_concurrencia = Math.max(Number(r.pico_concurrencia || 0), colaGet.pico);
+  }
+
+  function drenarColaGet(){
+    while(colaGet.activos < MAX_GET_CONCURRENCIA && colaGet.espera.length){
+      const item = colaGet.espera.shift();
+      colaGet.activos += 1;
+      colaGet.pico = Math.max(colaGet.pico, colaGet.activos);
+      if(state.rendimiento){
+        state.rendimiento.pico_concurrencia = Math.max(
+          Number(state.rendimiento.pico_concurrencia || 0),
+          colaGet.pico
+        );
+      }
+
+      Promise.resolve()
+        .then(item.tarea)
+        .then(item.resolve,item.reject)
+        .finally(()=>{
+          colaGet.activos = Math.max(0,colaGet.activos-1);
+          drenarColaGet();
+        });
+    }
+  }
+
+  function ejecutarGetControlado(tarea){
+    return new Promise((resolve,reject)=>{
+      colaGet.espera.push({tarea,resolve,reject});
+      drenarColaGet();
+    });
+  }
+
   async function get(accion, params={}, opciones={}){
     const base = apiUrl();
     const clave = txt(opciones.clave || accion);
@@ -345,42 +457,47 @@
       if(v !== undefined && v !== null && txt(v)) q.append(k, String(v));
     });
 
+    const programadoEn = relojMs();
+    let inicioRed = programadoEn;
+
     try{
-      const r = await fetch(base + '?' + q.toString(), {
-        method:'GET',
-        cache:'no-store',
-        redirect:'follow'
+      const data = await ejecutarGetControlado(async()=>{
+        inicioRed = relojMs();
+        const r = await fetch(base + '?' + q.toString(), {
+          method:'GET',
+          cache:'no-store',
+          redirect:'follow'
+        });
+        if(!r.ok) throw new Error(`HTTP ${r.status} en ${accion}`);
+        const payload = await r.json();
+        if(payload && typeof payload === 'object' && !Array.isArray(payload) && payload.success === false){
+          throw new Error(txt(payload.message || payload.error || `Apps Script reportó error en ${accion}`));
+        }
+        return payload;
       });
-      if(!r.ok) throw new Error(`HTTP ${r.status} en ${accion}`);
-      const data = await r.json();
-      if(data && typeof data === 'object' && !Array.isArray(data) && data.success === false){
-        throw new Error(txt(data.message || data.error || `Apps Script reportó error en ${accion}`));
-      }
+
+      const fin = relojMs();
+      registrarMetricaGet(accion,{
+        ok:true,
+        cola_ms:Math.max(0,inicioRed-programadoEn),
+        red_ms:Math.max(0,fin-inicioRed),
+        total_ms:Math.max(0,fin-programadoEn)
+      });
       registrarFuente(clave,{accion,ok:true,critica,error:'',respaldo_local:false});
       return data;
     }catch(error){
+      const fin = relojMs();
+      registrarMetricaGet(accion,{
+        ok:false,
+        cola_ms:Math.max(0,inicioRed-programadoEn),
+        red_ms:Math.max(0,fin-inicioRed),
+        total_ms:Math.max(0,fin-programadoEn)
+      });
       registrarFuente(clave,{accion,ok:false,critica,error:error?.message || String(error),respaldo_local:false});
       state.advertencias.push(`${accion}: ${error?.message || error}`);
       if(opciones.fatal) throw error;
       return opciones.defecto ?? null;
     }
-  }
-
-  async function mapLimit(items, limit, worker){
-    const salida = new Array(items.length);
-    let cursor = 0;
-    const n = Math.max(1, Math.min(limit || 1, items.length || 1));
-
-    async function hilo(){
-      while(true){
-        const i = cursor++;
-        if(i >= items.length) return;
-        salida[i] = await worker(items[i], i);
-      }
-    }
-
-    await Promise.all(Array.from({length:n}, hilo));
-    return salida;
   }
 
   /* ========================================================================
@@ -1939,26 +2056,49 @@
      ORQUESTADOR PRINCIPAL
   ======================================================================== */
   async function construirModelo(idPaciente, token){
-    const [paciente, historias, atenciones, medicos, configuracion, globalesBase] = await Promise.all([
-      cargarPaciente(idPaciente),
-      cargarHistoriasPaciente(idPaciente),
-      cargarAtencionesPaciente(idPaciente),
-      cargarMedicos(),
-      cargarConfiguracion(),
-      cargarColeccionesGlobales()
-    ]);
+    /*
+      V2.3 — SOLAPAMIENTO SEGURO DE LECTURAS
+      Todas las fuentes conservan sus mismos GET. La única diferencia es temporal:
+      en cuanto listarAtenciones termina, se encola el detalle por id_atencion sin
+      esperar a que concluyan médicos/configuración/colecciones globales.
+      MAX_GET_CONCURRENCIA limita globalmente SOLO las lecturas de este informe.
+    */
+    const pacienteP = cargarPaciente(idPaciente);
+    const historiasP = cargarHistoriasPaciente(idPaciente);
+    const atencionesP = cargarAtencionesPaciente(idPaciente);
+    const medicosP = cargarMedicos();
+    const configuracionP = cargarConfiguracion();
+    const globalesP = cargarColeccionesGlobales();
+
+    const atenciones = await atencionesP;
 
     if(token !== state.token) throw new Error('La generación anterior fue cancelada por un nuevo contexto.');
 
-    const historia = historiaConAntecedentes(historias || []);
-    const relacion = construirRelacion(idPaciente,historias,atenciones);
-    const detalleAtenciones = await mapLimit(atenciones,MAX_CONCURRENCIA,cargarModuloAtencion);
+    /*
+      No existe límite por "grupo de atención". Cada cargarModuloAtencion puede
+      encolar sus 7 GET, pero la cola privada permite como máximo
+      MAX_GET_CONCURRENCIA solicitudes reales simultáneas.
+    */
+    const detalleAtencionesP = Promise.all(
+      (atenciones || []).map(cargarModuloAtencion)
+    );
+
+    const [paciente, historias, medicos, configuracion, globalesBase, detalleAtenciones] = await Promise.all([
+      pacienteP,
+      historiasP,
+      medicosP,
+      configuracionP,
+      globalesP,
+      detalleAtencionesP
+    ]);
 
     if(token !== state.token) throw new Error('El paciente cambió durante la generación del informe.');
     if(idPacienteSeleccionado() && idPacienteSeleccionado() !== idPaciente){
       throw new Error('El paciente seleccionado cambió durante la generación. Vuelva a abrir el informe.');
     }
 
+    const historia = historiaConAntecedentes(historias || []);
+    const relacion = construirRelacion(idPaciente,historias,atenciones);
     const globales = asociarColecciones(detalleAtenciones,globalesBase,relacion);
 
     return {
@@ -1981,6 +2121,7 @@
     state.advertencias = [];
     state.errores = [];
     state.excluidos = {sinPertenencia:0,sinAtencion:0,atencionesSinContenido:0};
+    reiniciarRendimiento();
   }
 
   async function abrir(){
@@ -2010,7 +2151,34 @@
       state.errores.push(error?.message || String(error));
       mostrarError(error);
     }finally{
-      if(token === state.token) state.cargando = false;
+      if(token === state.token){
+        state.cargando = false;
+        const fin = relojMs();
+        state.rendimiento.fin_ms = fin;
+        state.rendimiento.total_ms = Math.max(0,fin-Number(state.rendimiento.inicio_ms || fin));
+
+        try{
+          console.info(`${MODULO} V2.3 rendimiento`, {
+            total_ms:Math.round(state.rendimiento.total_ms),
+            solicitudes:state.rendimiento.solicitudes,
+            pico_concurrencia:state.rendimiento.pico_concurrencia,
+            endpoints:Object.fromEntries(
+              Object.entries(state.rendimiento.endpoints || {}).map(([accion,m])=>[
+                accion,
+                {
+                  solicitudes:m.solicitudes,
+                  exitos:m.exitos,
+                  errores:m.errores,
+                  total_ms:Math.round(m.total_ms),
+                  red_ms:Math.round(m.red_ms),
+                  cola_ms:Math.round(m.cola_ms),
+                  max_ms:Math.round(m.max_ms)
+                }
+              ])
+            )
+          });
+        }catch(_e){}
+      }
     }
   }
 
@@ -2039,6 +2207,26 @@
         atenciones:state.datos?.atenciones?.length || 0,
         fuentes:{...state.fuentes},
         excluidos:{...state.excluidos},
+        rendimiento:{
+          total_ms:Math.round(Number(state.rendimiento?.total_ms || 0)),
+          solicitudes:Number(state.rendimiento?.solicitudes || 0),
+          pico_concurrencia:Number(state.rendimiento?.pico_concurrencia || 0),
+          limite_concurrencia:MAX_GET_CONCURRENCIA,
+          endpoints:Object.fromEntries(
+            Object.entries(state.rendimiento?.endpoints || {}).map(([accion,m])=>[
+              accion,
+              {
+                solicitudes:m.solicitudes,
+                exitos:m.exitos,
+                errores:m.errores,
+                total_ms:Math.round(m.total_ms),
+                red_ms:Math.round(m.red_ms),
+                cola_ms:Math.round(m.cola_ms),
+                max_ms:Math.round(m.max_ms)
+              }
+            ])
+          )
+        },
         advertencias:[...state.advertencias],
         errores:[...state.errores]
       };
