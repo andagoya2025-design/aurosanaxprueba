@@ -2,11 +2,11 @@
    AUROSANAX CLINICAL ERP
    Archivo de reemplazo propuesto: informe_historico.js
    Entrega externa: TXT completo para revisión manual
-   Versión propuesta: 2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO
+   Versión propuesta: 2.4.0-DEPURACION-DOCUMENTAL-ORDENADA-ANTIRREGRESIVO
    Fecha: 2026-08-31
    Baseline leído en GitHub (SOLO LECTURA):
-   informe_historico.js v2.2.0-DOCUMENTO-CLINICO-PROFESIONAL-ANTIRREGRESIVO
-   SHA: 85fb25bf00fb8d200b54a256f685e7d077f7ca39
+   informe_historico.js v2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO
+   SHA: f8229f1d30d3247743bd0528e44d48d32efe87e5
    ---------------------------------------------------------------------------
    OBJETIVO QUIRÚRGICO
    - Corregir exclusivamente lectura, asociación, validación y presentación del
@@ -50,6 +50,18 @@
      sin esperar innecesariamente las demás fuentes maestras/globales.
    - Añade métricas privadas de rendimiento para diagnóstico; no persisten datos.
    - No introduce caché clínica persistente ni cambia la frescura de las lecturas.
+
+   DEPURACIÓN DOCUMENTAL QUIRÚRGICA V2.4 — SOLO PRESENTACIÓN / VALIDACIÓN
+   - El Informe Histórico deja de exigir un "profesional responsable de emisión"
+     fijo en Configuración; cada atención conserva su profesional real.
+   - Los contadores técnicos de pertenencia permanecen en diagnóstico interno,
+     pero dejan de mostrarse como alertas clínicas al usuario.
+   - Las atenciones vacías no se imprimen y se resumen de forma clínica, no técnica.
+   - Estética se presenta una sola vez por registro con contenido real; se elimina
+     la segunda representación duplicada en la sección evolutiva.
+   - Los registros sin id_atencion se muestran agrupados como "Otros registros
+     clínicos del paciente" sin atribuirlos artificialmente a una consulta.
+   - No se implementan cambios de permisos en esta fase; seguridad queda intacta.
 ============================================================================ */
 (function(){
   'use strict';
@@ -59,7 +71,7 @@
     return;
   }
 
-  const VERSION = '2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO';
+  const VERSION = '2.4.0-DEPURACION-DOCUMENTAL-ORDENADA-ANTIRREGRESIVO';
   const MODULO = 'AUROSANAX INFORME HISTÓRICO';
   const MAX_GET_CONCURRENCIA = 8;
 
@@ -1222,19 +1234,48 @@
     return partes.length ? `<section class="aih-module aih-special"><h3 class="aih-module-title">Ginecología</h3>${partes.join('')}</section>` : '';
   }
 
-  function renderEstetica(lista){
-    const r = ultimoRegistro(lista);
-    if(!r) return '';
+  function renderEstetica(lista, opciones={}){
+    const registros = (lista || []).filter(r=>{
+      if(!r || typeof r !== 'object') return false;
+      const e = norm(r?.estado || r?.estado_registro);
+      if(/(anulad|cancelad|eliminad|inactiv)/.test(e)) return false;
 
-    const cab = miniDatos([
-      ['Área',r.zona_tratamiento],
-      ['Procedimiento sugerido',r.procedimiento_sugerido],
-      ['Plan de sesiones',r.plan_sesiones]
-    ]);
-    const evalClinica = contenidoEstructurado(r.evaluacion_clinica,{excluirClaves:[/estado/,/interno/]});
-    if(!cab && !evalClinica) return '';
+      const cab = [r.zona_tratamiento,r.procedimiento_sugerido,r.plan_sesiones]
+        .some(v=>valorClinico(v));
+      const evalClinica = contenidoEstructurado(r.evaluacion_clinica,{excluirClaves:[/estado/,/interno/]});
+      return cab || !!evalClinica;
+    }).slice().sort((a,b)=>{
+      const fa = fechaISO(a?.fecha || a?.fecha_atencion || a?.fecha_registro || a?.creado_en);
+      const fb = fechaISO(b?.fecha || b?.fecha_atencion || b?.fecha_registro || b?.creado_en);
+      if(fa && fb && fa !== fb) return fa.localeCompare(fb);
+      return txt(a?.creado_en || a?.actualizado_en).localeCompare(txt(b?.creado_en || b?.actualizado_en));
+    });
 
-    return `<section class="aih-module aih-special"><h3 class="aih-module-title">Evaluación estética funcional</h3>${cab}${evalClinica?bloque('Evaluación clínica',evalClinica):''}</section>`;
+    if(!registros.length) return '';
+
+    const items = registros.map((r,idx)=>{
+      const fecha = opciones.mostrarFecha === true
+        ? fechaVista(r.fecha || r.fecha_atencion || r.fecha_registro || r.creado_en)
+        : '';
+      const cab = miniDatos([
+        ['Fecha',fecha],
+        ['Área',r.zona_tratamiento],
+        ['Procedimiento sugerido',r.procedimiento_sugerido],
+        ['Plan de sesiones',r.plan_sesiones]
+      ]);
+      const evalClinica = contenidoEstructurado(r.evaluacion_clinica,{excluirClaves:[/estado/,/interno/]});
+      if(!cab && !evalClinica) return '';
+
+      const tituloRegistro = registros.length > 1
+        ? `<h4 class="aih-record-title">Registro ${idx+1}</h4>`
+        : '';
+
+      return `<div class="aih-record">${tituloRegistro}${cab}${evalClinica?bloque('Evaluación clínica',evalClinica):''}</div>`;
+    }).filter(Boolean).join('');
+
+    return items
+      ? `<section class="aih-module aih-special"><h3 class="aih-module-title">Evaluación estética funcional</h3>${items}</section>`
+      : '';
   }
 
   function renderDiagnosticos(lista){
@@ -1508,20 +1549,19 @@
     const s = globales?.sinAtencion || {};
     const partes = [];
 
-    const obs = renderObstetricia(s.obstetricia || []);
-    const gin = renderGinecologia(s.ginecologia || []);
-    const est = renderEstetica(s.estetica || []);
-    const rec = renderRecetas(s.recetas || []);
-
     const vitales = signosVitales(null,s.preatenciones || []);
     const pre = vitales.length
-      ? `<section class="aih-module"><h3 class="aih-module-title">Preatención / signos vitales asociados</h3>${miniDatos(vitales)}</section>`
+      ? `<section class="aih-module"><h3 class="aih-module-title">Signos vitales no vinculados a una atención</h3>${miniDatos(vitales)}</section>`
       : '';
+    const obs = renderObstetricia(s.obstetricia || []);
+    const gin = renderGinecologia(s.ginecologia || []);
+    const est = renderEstetica(s.estetica || [],{mostrarFecha:true});
+    const rec = renderRecetas(s.recetas || []);
 
     [pre,obs,gin,est,rec].filter(Boolean).forEach(x=>partes.push(x));
     if(!partes.length) return '';
 
-    return `<section class="aih-major aih-associated"><h2>Registros clínicos asociados sin atención específica</h2><p class="aih-associated-note">Estos registros pertenecen inequívocamente al paciente o a su historia clínica, pero no contienen un id_atencion verificable. Se presentan separados y no se atribuyen a ninguna consulta.</p>${partes.join('')}</section>`;
+    return `<section class="aih-major aih-associated"><h2>Otros registros clínicos del paciente</h2><p class="aih-associated-note">Registros clínicos del expediente que pertenecen al paciente, pero no están vinculados a una atención específica. Se presentan por separado y no se atribuyen a ninguna consulta.</p>${partes.join('')}</section>`;
   }
 
   function renderEvolutivos(globales){
@@ -1530,12 +1570,9 @@
     if(bio) secciones.push(bio);
 
     const proc = resumenAsociados('Procedimientos asociados',globales.procedimientos,['nombre_procedimiento','procedimiento','tipo_procedimiento']);
-    const cons = resumenAsociados('Consentimientos asociados',globales.consentimientos,['tipo_consentimiento','nombre_consentimiento','procedimiento']);
     const seg = resumenAsociados('Seguimientos asociados',globales.seguimientos,['tipo_seguimiento','motivo','mensaje']);
-    [proc,cons,seg].filter(Boolean).forEach(x=>secciones.push(x));
-
-    const esteticaSin = resumenAsociados('Registros estéticos asociados sin atención específica',globales.sinAtencion?.estetica,['procedimiento_sugerido','zona_tratamiento']);
-    if(esteticaSin) secciones.push(esteticaSin);
+    const cons = resumenAsociados('Consentimientos asociados',globales.consentimientos,['tipo_consentimiento','nombre_consentimiento','procedimiento']);
+    [proc,seg,cons].filter(Boolean).forEach(x=>secciones.push(x));
 
     return secciones.join('');
   }
@@ -1549,11 +1586,13 @@
     const unicos = new Set(idsPresentes);
     const problemas = [];
     const advertencias = [];
+    /*
+      V2.4: se conserva el campo por compatibilidad del diagnóstico público,
+      pero ya no se exige un profesional institucional fijo para emitir el
+      resumen histórico. El profesional clínico sigue perteneciendo a cada
+      atención mediante su id_medico.
+    */
     const faltantesDocumentales = [];
-
-    if(!valorClinico(modelo.institucion?.emisor?.nombre)){
-      faltantesDocumentales.push('Profesional responsable de la emisión no configurado.');
-    }
 
     if(!modelo.paciente?.id_paciente) problemas.push('Falta id_paciente del paciente.');
     if(idsCrudos.some(x=>!x)) problemas.push('Existe una atención sin id_atencion.');
@@ -1567,16 +1606,17 @@
       .filter(([,f])=>f?.respaldo_local === true)
       .map(([clave])=>clave);
 
-    if(state.excluidos.sinPertenencia){
-      advertencias.push(`${state.excluidos.sinPertenencia} registro(s) fueron excluidos por no demostrar pertenencia al paciente.`);
-    }
-    if(state.excluidos.sinAtencion){
-      advertencias.push(`${state.excluidos.sinAtencion} registro(s) con pertenencia confirmada no poseen id_atencion; no se forzaron dentro de una consulta.`);
-    }
+    /*
+      Los contadores técnicos permanecen disponibles en diagnostico().
+      No se convierten en alertas clínicas visibles porque "sin pertenencia"
+      puede corresponder legítimamente a filas de otros pacientes recibidas en
+      colecciones globales, y "sin atención" puede ser un registro histórico
+      válido que no debe atribuirse artificialmente a una consulta.
+    */
 
     let estado = 'VALIDADO';
     if(problemas.length) estado = 'ERROR_INTEGRIDAD';
-    else if(fallosCriticos.length || respaldosLocales.length || faltantesDocumentales.length) estado = 'INCOMPLETO';
+    else if(fallosCriticos.length || respaldosLocales.length) estado = 'INCOMPLETO';
 
     return {
       estado,
@@ -1596,7 +1636,7 @@
         obstetricia:modelo.atenciones.reduce((n,x)=>n+(x.obstetricia?.length||0),0),
         fuentes_no_verificadas:fallosCriticos.length,
         respaldos_locales:respaldosLocales.length,
-        faltantes_documentales:faltantesDocumentales.length
+        faltantes_documentales:0
       }
     };
   }
@@ -1654,29 +1694,19 @@
       ['Fecha de emisión',generado]
     ]);
 
-    const emisor = inst.emisor || {};
-    const emisorHtml = valorClinico(emisor.nombre) ? `
-      <section class="aih-signature">
-        <h2>Profesional responsable de la emisión</h2>
-        <div class="aih-signature-grid">
-          <div><b>${esc(emisor.nombre)}</b>${valorClinico(emisor.especialidad)?`<span>${esc(emisor.especialidad)}</span>`:''}${valorClinico(emisor.registro)?`<span>Registro profesional: ${esc(emisor.registro)}</span>`:''}${valorClinico(emisor.ruc)?`<span>RUC: ${esc(emisor.ruc)}</span>`:''}</div>
-          <div class="aih-sign-line"><span>Firma / firma electrónica</span></div>
-        </div>
-      </section>` : '';
-
     const nota = `El presente Informe Clínico Histórico constituye un resumen longitudinal generado a partir de los registros clínicos persistidos disponibles en el expediente electrónico al momento de su emisión. La información se presenta respetando su asociación con las atenciones y documentos clínicos fuente correspondientes. Este resumen no sustituye los registros originales que integran la Historia Clínica.`;
 
     return `<div class="aih-doc">
       <div class="aih-topline">
         <div class="aih-confidential">CONFIDENCIAL</div>
-        <div class="aih-doc-code">Informe clínico longitudinal · HISTORICO V2.2</div>
+        <div class="aih-doc-code">Informe clínico longitudinal · HISTÓRICO V2.4</div>
       </div>
 
       <header class="aih-header">
         <div class="aih-legal">
-          ${valorClinico(emisor.nombre)?`<h1>${esc(emisor.nombre)}</h1>`:''}
-          ${valorClinico(emisor.especialidad)?`<p>${esc(emisor.especialidad)}</p>`:''}
-          ${valorClinico(emisor.ruc)?`<small>RUC: ${esc(emisor.ruc)}</small>`:''}
+          <h1>Informe clínico longitudinal</h1>
+          <p>Expediente clínico consolidado</p>
+          ${valorClinico(inst.razon_social)?`<small>${esc(inst.razon_social)}${valorClinico(inst.ruc)?` · RUC ${esc(inst.ruc)}`:''}</small>`:(valorClinico(inst.ruc)?`<small>RUC ${esc(inst.ruc)}</small>`:'')}
         </div>
         <div class="aih-brand">
           ${inst.logo ? `<img src="${esc(inst.logo)}" alt="">` : ''}
@@ -1703,8 +1733,6 @@
       ${renderRegistrosSinAtencion(modelo.globales)}
       ${renderEvolutivos(modelo.globales)}
 
-      ${emisorHtml}
-
       <section class="aih-note"><b>Nota documental</b><p>${esc(nota)}</p></section>
 
       <footer class="aih-footer-doc">
@@ -1716,7 +1744,7 @@
         <div>
           <span>Emitido: ${esc(generado)}</span>
           <span>Atenciones con contenido clínico incluidas: ${numeroVisible}</span>
-          <span>Versión documental: HISTORICO_V2.2</span>
+          <span>Versión documental: HISTORICO_V2.4</span>
         </div>
       </footer>
 
@@ -1787,6 +1815,7 @@
       .aih-module{margin:8px 4px 0;padding-top:7px;border-top:1px solid var(--aih-line-soft)}
       .aih-module-title{font-size:10.3px;color:#2d3748;margin:0 0 5px;font-weight:900;text-transform:uppercase;letter-spacing:.025em}
       .aih-special{background:#fff;border-left:2px solid #dfc4d3;padding-left:8px}
+      .aih-record{padding:3px 0 5px;border-bottom:1px solid var(--aih-line-soft)}.aih-record:last-child{border-bottom:0}.aih-record-title{font-size:8.6px;color:#6d3655;margin:1px 0 3px;font-weight:900}
       .aih-block{margin:5px 0 7px;break-inside:auto;page-break-inside:auto}
       .aih-block h3{font-size:8.7px;margin:0 0 2px;color:#6d3655;font-weight:900}
       .aih-block-body{font-size:9.5px;line-height:1.48;color:#273244;overflow-wrap:anywhere}
@@ -1980,16 +2009,17 @@
     if(!el) return;
 
     const r = v.resumen;
+    const total = Number(r.atenciones || 0);
+    const vacias = Number(state.excluidos.atencionesSinContenido || 0);
+    const incluidas = Math.max(0,total-vacias);
     const pills = [
-      [v.estado === 'VALIDADO' ? 'VALIDADO' : v.estado === 'INCOMPLETO' ? 'INCOMPLETO · PDF bloqueado' : 'ERROR DE INTEGRIDAD · PDF bloqueado', v.estado === 'VALIDADO'?'ok':v.estado === 'INCOMPLETO'?'warn':'bad'],
-      [`${r.atenciones} atenciones detectadas`,''],
-      [`${r.diagnosticos} diagnósticos`,''],
-      [`${r.recetas} recetas`,''],
-      [r.fuentes_no_verificadas ? `${r.fuentes_no_verificadas} fuente(s) clínica(s) no verificadas` : '', r.fuentes_no_verificadas?'bad':''],
-      [r.respaldos_locales ? `${r.respaldos_locales} fuente(s) usando respaldo local` : '', r.respaldos_locales?'warn':''],
-      [r.faltantes_documentales ? 'Falta configurar profesional responsable de emisión' : '', r.faltantes_documentales?'warn':''],
-      [state.excluidos.sinPertenencia ? `${state.excluidos.sinPertenencia} registro(s) excluidos por pertenencia` : '', state.excluidos.sinPertenencia?'warn':''],
-      [state.excluidos.atencionesSinContenido ? `${state.excluidos.atencionesSinContenido} atención(es) sin contenido clínico no impresas` : '', '']
+      [v.estado === 'VALIDADO' ? 'VALIDADO' : v.estado === 'INCOMPLETO' ? 'VERIFICACIÓN PENDIENTE' : 'ERROR DE INTEGRIDAD · PDF BLOQUEADO', v.estado === 'VALIDADO'?'ok':v.estado === 'INCOMPLETO'?'warn':'bad'],
+      [`${total} atención${total===1?'':'es'} registrada${total===1?'':'s'}`,''],
+      [`${incluidas} con contenido clínico`,''],
+      [r.diagnosticos ? `${r.diagnosticos} diagnóstico${r.diagnosticos===1?'':'s'}` : '',''],
+      [r.recetas ? `${r.recetas} receta${r.recetas===1?'':'s'}` : '',''],
+      [r.fuentes_no_verificadas ? `${r.fuentes_no_verificadas} fuente(s) clínica(s) pendiente(s) de verificación` : '', r.fuentes_no_verificadas?'bad':''],
+      [r.respaldos_locales ? `${r.respaldos_locales} fuente(s) usando respaldo local` : '', r.respaldos_locales?'warn':'']
     ].filter(([t])=>t);
 
     if(v.problemas.length) pills.push([v.problemas.join(' · '),'bad']);
