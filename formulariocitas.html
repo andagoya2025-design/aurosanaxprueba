@@ -323,7 +323,7 @@
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Cédula / documento *</label>
-                <input id="numero_documento" class="form-control" required placeholder="Ej. 0912345678">
+                <input id="numero_documento" type="text" inputmode="numeric" maxlength="10" class="form-control" required placeholder="Ej. 0912345678" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
               </div>
               <div class="col-md-6">
                 <label class="form-label">Nombres completos *</label>
@@ -331,7 +331,7 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label">WhatsApp / teléfono *</label>
-                <input id="whatsapp" class="form-control" required placeholder="Ej. 0999999999">
+                <input id="whatsapp" type="text" inputmode="numeric" maxlength="10" class="form-control" required placeholder="Ej. 0999999999" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
               </div>
               <div class="col-md-6">
                 <label class="form-label">Correo opcional</label>
