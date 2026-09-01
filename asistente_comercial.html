@@ -1528,6 +1528,10 @@ article[aria-labelledby="acOperacionTitulo"] .ac-card-help{
     .ac-pending-group-title{margin:10px 0 6px;padding:6px 8px;border-radius:8px;background:#f8fafc;font-size:11px;font-weight:950;letter-spacing:.03em;text-transform:uppercase;color:#475569}
     .ac-pending-group-title.is-overdue{background:#fff1f2;color:#9f1239}
     .ac-pending-group-title.is-today{background:#fff7ed;color:#9a3412}
+    /* BLOQUE 5A · CORRECCIÓN QUIRÚRGICA PENDIENTES PC
+       Solo escritorio. El encabezado temporal ocupa la fila completa del grid.
+       No altera móvil, datos, clasificación, orden, persistencia ni backend. */
+    @media(min-width:761px){#acPendientes .ac-pending-group-title{grid-column:1/-1}}
     .ac-pending-action{display:inline-flex;align-items:center;margin-top:4px;font-size:10px;font-weight:800;color:#475569}
     .ac-pending-priority.is-alta{color:#9f1239}
     .ac-pending-priority.is-media{color:#92400e}
