@@ -718,6 +718,24 @@
         ? 'editarAtencion'
         : 'guardarAtencion';
 
+      const idPacienteEnvio = String(
+        atencion.id_paciente || idPacienteActivo() || ''
+      ).trim();
+
+      const idHistoriaRegistrada = String(atencion.id_historia || '').trim();
+
+      if(
+        idHistoriaRegistrada &&
+        idPacienteEnvio &&
+        auroEstadoPertenenciaHistoria(idHistoriaRegistrada, idPacienteEnvio) === false
+      ){
+        return {
+          success:false,
+          message:
+            'Se bloqueó el envío: id_historia no corresponde al id_paciente de la atención.'
+        };
+      }
+
       const payload = {
         accion: accionAtencion,
         data: {
@@ -725,7 +743,7 @@
           numero_consulta: Number(atencion.numero_consulta || siguienteConsulta(atencion.id_paciente || idPacienteActivo()) || 1),
           id_paciente: atencion.id_paciente || '',
           id_cita: atencion.id_cita || '',
-          id_historia: atencion.id_historia || obtenerIdHistoriaActual() || '',
+          id_historia: atencion.id_historia || obtenerIdHistoriaActual(atencion.id_paciente) || '',
           id_medico: atencion.id_medico || '',
           fecha_atencion: atencion.fecha_atencion || fechaHoyISO(),
           hora_atencion: atencion.hora_atencion || horaActual(),
@@ -1030,43 +1048,154 @@
     return atencionesPaciente(idPaciente).find(a => String(a.estado_atencion).toLowerCase() === 'abierta') || null;
   }
 
+  function atencionesAbiertasPaciente(idPaciente){
+    return atencionesPaciente(idPaciente).filter(function(a){
+      return String(a.estado_atencion || '').toLowerCase() === 'abierta';
+    });
+  }
+
+  function atencionesAbiertasMedico(idMedico){
+    const id = String(idMedico || '').trim();
+    if(!id) return [];
+
+    return leerLocal()
+      .map(normalizar)
+      .filter(function(a){
+        return String(a.id_medico || '').trim() === id &&
+          String(a.estado_atencion || '').toLowerCase() === 'abierta';
+      });
+  }
+
+  function atencionAbiertaActiva(idPaciente){
+    const id = String(idPaciente || idPacienteActivo() || '').trim();
+    if(!id || !atencionActivaId) return null;
+
+    const a = leerLocal().map(normalizar).find(function(item){
+      return String(item.id_atencion || '') === String(atencionActivaId || '') &&
+        String(item.id_paciente || '').trim() === id &&
+        String(item.estado_atencion || '').toLowerCase() === 'abierta';
+    });
+
+    return a || null;
+  }
+
   function siguienteConsulta(idPaciente){
     return atencionesPaciente(idPaciente).reduce((m,a) => Math.max(m, Number(a.numero_consulta || 0)), 0) + 1;
   }
 
 
-  function obtenerIdHistoriaActual(){
+  function auroIdPacienteHistoria(historia){
+    return String(
+      historia?.id_paciente ||
+      historia?.paciente_id ||
+      ''
+    ).trim();
+  }
+
+  function auroIdHistoriaRegistro(historia){
+    return String(
+      historia?.id_historia ||
+      historia?.id ||
+      ''
+    ).trim();
+  }
+
+  function auroEstadoPertenenciaHistoria(idHistoria, idPaciente){
+    idHistoria = String(idHistoria || '').trim();
+    idPaciente = String(idPaciente || '').trim();
+
+    if(!idHistoria || !idPaciente) return null;
+
+    const candidatasDirectas = [
+      window.historiaActual,
+      window.currentHistoria
+    ].filter(function(h){
+      return h && typeof h === 'object' &&
+        auroIdHistoriaRegistro(h) === idHistoria;
+    });
+
+    if(candidatasDirectas.length){
+      const candidatasConPaciente = candidatasDirectas.filter(function(h){
+        return !!auroIdPacienteHistoria(h);
+      });
+
+      if(candidatasConPaciente.length){
+        return candidatasConPaciente.some(function(h){
+          return auroIdPacienteHistoria(h) === idPaciente;
+        });
+      }
+    }
+
+    try{
+      if(typeof window.auroHistoriasPacienteOrdenadas === 'function'){
+        const historiasPaciente = window.auroHistoriasPacienteOrdenadas(idPaciente);
+        if(Array.isArray(historiasPaciente)){
+          const existe = historiasPaciente.some(function(h){
+            return auroIdHistoriaRegistro(h) === idHistoria;
+          });
+          if(existe) return true;
+
+          /*
+            Si la fuente oficial del paciente está disponible y la historia no
+            aparece allí, existe evidencia suficiente para rechazarla.
+          */
+          if(historiasPaciente.length) return false;
+        }
+      }
+    }catch(error){
+      console.warn(MODULO, 'No se pudo validar la historia contra el paciente.', error);
+    }
+
+    try{
+      if(typeof window.auroHistoriaActualEdicion === 'function'){
+        const h = window.auroHistoriaActualEdicion();
+        if(h && auroIdHistoriaRegistro(h) === idHistoria){
+          return auroIdPacienteHistoria(h) === idPaciente;
+        }
+      }
+    }catch(error){
+      console.warn(MODULO, 'No se pudo validar la historia en edición.', error);
+    }
+
+    return null;
+  }
+
+  function obtenerIdHistoriaActual(idPacienteEsperado){
     try{
       /*
-        AUROSANAX FIX:
-        Solo se acepta una historia explícitamente activa.
-        No se toma automáticamente la historia más reciente del paciente,
-        porque podría corresponder a otra consulta.
+        AUROSANAX BLINDAJE DE CONTEXTO:
+        Una historia residual solo puede heredarse al crear/guardar una atención
+        si puede demostrarse que pertenece al paciente esperado.
+        Ante duda se devuelve vacío; nunca se reutiliza una historia de otro paciente.
       */
+      const idPaciente = String(
+        idPacienteEsperado || idPacienteActivo() || ''
+      ).trim();
+
+      if(!idPaciente) return '';
+
+      const candidatos = [];
+
       if(window.auroHistoriaSeleccionadaId){
-        return String(window.auroHistoriaSeleccionadaId).trim();
+        candidatos.push(String(window.auroHistoriaSeleccionadaId).trim());
       }
 
       if(window.editingHistoryId){
-        return String(window.editingHistoryId).trim();
+        candidatos.push(String(window.editingHistoryId).trim());
       }
 
-      if(
-        window.historiaActual &&
-        (window.historiaActual.id_historia || window.historiaActual.id)
-      ){
-        return String(
-          window.historiaActual.id_historia || window.historiaActual.id
-        ).trim();
+      if(window.historiaActual){
+        candidatos.push(auroIdHistoriaRegistro(window.historiaActual));
       }
 
-      if(
-        window.currentHistoria &&
-        (window.currentHistoria.id_historia || window.currentHistoria.id)
-      ){
-        return String(
-          window.currentHistoria.id_historia || window.currentHistoria.id
-        ).trim();
+      if(window.currentHistoria){
+        candidatos.push(auroIdHistoriaRegistro(window.currentHistoria));
+      }
+
+      for(const idHistoria of candidatos.filter(Boolean)){
+        if(auroEstadoPertenenciaHistoria(idHistoria, idPaciente) === true){
+          return idHistoria;
+        }
       }
     }catch(e){
       console.warn(MODULO, 'No se pudo obtener id_historia actual.', e);
@@ -1233,6 +1362,23 @@
       return false;
     }
 
+    const idHistoria = String(a.id_historia || '').trim();
+    if(
+      idHistoria &&
+      idPaciente &&
+      auroEstadoPertenenciaHistoria(idHistoria, idPaciente) === false
+    ){
+      console.warn(
+        'AUROSANAX ATENCIONES: se bloqueó una historia clínica de otro paciente.',
+        { idPaciente, idHistoria, idAtencion }
+      );
+      alert(
+        'La atención seleccionada contiene una historia clínica que no corresponde ' +
+        'al paciente activo. Se bloqueó la activación para proteger el contexto clínico.'
+      );
+      return false;
+    }
+
     /*
       2.5.1:
       Volver a pulsar Ver sobre la MISMA consulta no es una transición clínica.
@@ -1365,14 +1511,6 @@
       return null;
     }
 
-    const abierta = atencionAbierta(idPaciente);
-    if(abierta){
-      atencionActivaId = abierta.id_atencion;
-      renderAtencionesPaciente();
-      alert('Este paciente ya tiene una atención abierta.');
-      return abierta;
-    }
-
     /*
       Prioridad obligatoria:
       1. Cita seleccionada expresamente en Agenda.
@@ -1440,6 +1578,35 @@
       idMedico = idMedicoRegistro(seleccionado);
     }
 
+    /*
+      AUROSANAX BLINDAJE DE SESIÓN:
+      Se refresca primero la fuente persistente para no decidir con una copia
+      local antigua. Un mismo médico puede conservar varias atenciones abiertas,
+      pero solo una queda activa en pantalla.
+    */
+    await cargarAtencionesDesdeSheets(true);
+
+    const abiertasMismoMedico = atencionesAbiertasMedico(idMedico);
+    if(abiertasMismoMedico.length){
+      const activaMismoMedico = abiertasMismoMedico.find(function(a){
+        return String(a.id_atencion || '') === String(atencionActivaId || '');
+      }) || abiertasMismoMedico[0];
+
+      const mismoPaciente = String(activaMismoMedico.id_paciente || '').trim() === idPaciente;
+      const continuar = confirm(
+        'El médico seleccionado ya tiene ' + abiertasMismoMedico.length +
+        ' atención' + (abiertasMismoMedico.length === 1 ? '' : 'es') +
+        ' abierta' + (abiertasMismoMedico.length === 1 ? '' : 's') + '.\n\n' +
+        (mismoPaciente
+          ? 'Existe una atención abierta para este mismo paciente. '
+          : 'Existe una atención abierta para otro paciente. ') +
+        'Aceptar: dejar la atención anterior abierta e iniciar una nueva.\n' +
+        'Cancelar: no crear otra atención; puede usar Ver o Finalizar.'
+      );
+
+      if(!continuar) return null;
+    }
+
     const num = siguienteConsulta(idPaciente);
 
     const nueva = normalizar({
@@ -1447,7 +1614,7 @@
       numero_consulta: num,
       id_paciente: idPaciente,
       id_cita: idCita,
-      id_historia: obtenerIdHistoriaActual(),
+      id_historia: obtenerIdHistoriaActual(idPaciente),
       id_medico: idMedico,
       fecha_atencion: fechaAtencion,
       hora_atencion: horaAtencion,
@@ -1513,9 +1680,22 @@
       return;
     }
 
-    const abierta = atencionAbierta(idPaciente);
+    const abiertas = atencionesAbiertasPaciente(idPaciente);
+    let abierta = atencionAbiertaActiva(idPaciente);
+
+    if(!abierta && abiertas.length === 1){
+      abierta = abiertas[0];
+    }
+
     if(!abierta){
-      alert('No hay atención abierta para finalizar.');
+      if(abiertas.length > 1){
+        alert(
+          'Hay varias atenciones abiertas para este paciente. ' +
+          'Pulse Ver en la consulta que desea finalizar y vuelva a intentarlo.'
+        );
+      }else{
+        alert('No hay atención abierta para finalizar.');
+      }
       return;
     }
 
@@ -1583,6 +1763,14 @@
       };
     }
 
+    const estadoHistoria = auroEstadoPertenenciaHistoria(idHistoria, idPaciente);
+    if(estadoHistoria === false){
+      return {
+        success:false,
+        message:'La historia clínica recibida pertenece a otro paciente.'
+      };
+    }
+
     const lista = leerLocal().map(normalizar);
 
     /*
@@ -1599,10 +1787,27 @@
     );
 
     if(idx < 0){
-      idx = lista.findIndex(a =>
-        String(a.id_paciente || '').trim() === idPaciente &&
-        String(a.estado_atencion || '').toLowerCase() === 'abierta'
-      );
+      const abiertasPaciente = lista
+        .map((a, index) => ({a, index}))
+        .filter(x =>
+          String(x.a.id_paciente || '').trim() === idPaciente &&
+          String(x.a.estado_atencion || '').toLowerCase() === 'abierta'
+        );
+
+      /*
+        Con varias atenciones abiertas del mismo paciente no se adivina cuál
+        debe recibir la historia. La selección activa debe decidirlo.
+      */
+      if(abiertasPaciente.length === 1){
+        idx = abiertasPaciente[0].index;
+      }else if(abiertasPaciente.length > 1){
+        return {
+          success:false,
+          message:
+            'Hay varias atenciones abiertas para este paciente. ' +
+            'Seleccione primero la atención correcta antes de vincular la historia.'
+        };
+      }
     }
 
     if(idx < 0){
@@ -2474,7 +2679,7 @@
     }
 
     const arr = atencionesPaciente(idPaciente);
-    const abierta = atencionAbierta(idPaciente);
+    const abierta = atencionAbiertaActiva(idPaciente) || atencionAbierta(idPaciente);
 
     if(btnToggleConsultas){
       btnToggleConsultas.disabled = false;
@@ -2485,16 +2690,23 @@
 
 
     if(btnIniciar){
-      btnIniciar.disabled = !!abierta;
-      btnIniciar.style.opacity = abierta ? '0.55' : '1';
-      btnIniciar.style.cursor = abierta ? 'not-allowed' : 'pointer';
+      /*
+        Puede haber varias atenciones abiertas. Iniciar permanece disponible;
+        crearAtencion() exige confirmación explícita cuando el mismo médico
+        ya tiene una consulta abierta.
+      */
+      btnIniciar.disabled = false;
+      btnIniciar.style.opacity = '1';
+      btnIniciar.style.cursor = 'pointer';
     }
 
     if(btnFinalizar){
-      btnFinalizar.disabled = !abierta;
-      btnFinalizar.style.opacity = abierta ? '1' : '0.55';
-      btnFinalizar.style.cursor = abierta ? 'pointer' : 'not-allowed';
-      btnFinalizar.innerHTML = abierta
+      const abiertasPaciente = atencionesAbiertasPaciente(idPaciente);
+      const hayAbiertas = abiertasPaciente.length > 0;
+      btnFinalizar.disabled = !hayAbiertas;
+      btnFinalizar.style.opacity = hayAbiertas ? '1' : '0.55';
+      btnFinalizar.style.cursor = hayAbiertas ? 'pointer' : 'not-allowed';
+      btnFinalizar.innerHTML = hayAbiertas
         ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
         : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
     }
@@ -2508,10 +2720,12 @@
         Si hay una consulta seleccionada (atencionActivaId), se mantiene visible.
       */
       if(abierta){
+        const totalAbiertasPaciente = atencionesAbiertasPaciente(idPaciente).length;
         activaBox.style.display = 'block';
         activaBox.innerHTML =
           '<div class="auro-atencion-status abierta">' +
-          '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) + '<br>' +
+          '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) +
+          (totalAbiertasPaciente > 1 ? ' · ' + safe(totalAbiertasPaciente) + ' abiertas' : '') + '<br>' +
           '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) + '</span>' +
           '</div>';
       }else if(!atencionActivaId){
@@ -3214,6 +3428,26 @@
         : null;
 
       if(!atencion || !String(atencion.id_atencion || '').trim()){
+        return null;
+      }
+
+      const idPacienteContexto = String(atencion.id_paciente || '').trim();
+      const idPacienteVisible = String(idPacienteActivo() || '').trim();
+      const idHistoriaContexto = String(atencion.id_historia || '').trim();
+
+      if(
+        idPacienteVisible &&
+        idPacienteContexto &&
+        idPacienteVisible !== idPacienteContexto
+      ){
+        return null;
+      }
+
+      if(
+        idHistoriaContexto &&
+        idPacienteContexto &&
+        auroEstadoPertenenciaHistoria(idHistoriaContexto, idPacienteContexto) === false
+      ){
         return null;
       }
 
