@@ -9553,12 +9553,24 @@ function imprimirHistoriaClinica(){
   // Esto evita imprimir filas no marcadas y detalles duplicados como "5 años - años".
   const antecedentesHTML = auroInformeAntecedentesDesdeCampos();
 
+  /*
+    AUROSANAX INFORME DE ATENCIÓN — PA SISTÓLICA / DIASTÓLICA
+    Corrección quirúrgica SOLO de presentación documental.
+    No modifica Examen físico, guardados, IDs, backend ni Sheets.
+    Si la PA combinada no es inequívoca, conserva la presentación histórica.
+  */
+  const paInforme = auroInformeValue('hcPresionArterial') || auroInformeValue('hcPA');
+  const paInformeMatch = String(paInforme || '').trim().match(/^\s*(\d{2,3})\s*\/\s*(\d{2,3})\s*$/);
+  const paInformeHTML = paInformeMatch
+    ? `${auroInformeSiDato('Presión arterial sistólica', paInformeMatch[1] + ' mmHg')}${auroInformeSiDato('Presión arterial diastólica', paInformeMatch[2] + ' mmHg')}`
+    : auroInformeSiDato('Presión arterial', paInforme);
+
   const signos = `
     <div class="auro-info-grid compact">
       ${auroInformeSiDato('Peso', auroInformeValue('hcPeso'))}
       ${auroInformeSiDato('Talla', auroInformeValue('hcTalla'))}
       ${auroInformeSiDato('IMC', auroInformeValue('hcIMC'))}
-      ${auroInformeSiDato('Presión arterial', auroInformeValue('hcPresionArterial') || auroInformeValue('hcPA'))}
+      ${paInformeHTML}
       ${auroInformeSiDato('Frecuencia cardíaca', auroInformeValue('hcFrecuenciaCardiaca') || auroInformeValue('hcFC'))}
       ${auroInformeSiDato('Temperatura', auroInformeValue('hcTemperatura'))}
       ${auroInformeSiDato('Saturación', auroInformeValue('hcSaturacion'))}
