@@ -1565,14 +1565,67 @@
     });
   }
 
-  function medicamentoRecetaParaGuardarJSON(textoFormulario){
-    const actual = String(textoFormulario || '').trim();
+  /* =====================================================
+     AUROSANAX RECETAS 3.9 - BLINDAJE INDICACIONES PLAN → RECETA
+     ---------------------------------------------------------
+     Intervención quirúrgica y antirregresiva:
+     - Preserva el JSON canónico existente de Recetas.
+     - Si la sincronización Plan → Receta entrega un medicamento
+       estructurado sin `ind`, recupera únicamente esa indicación
+       desde el medicamento equivalente del Plan de la MISMA atención.
+     - Nunca sustituye una indicación ya escrita en Recetas.
+     - No modifica Plan, visor, PDF, CSS, responsive, IDs, endpoints,
+       Google Sheets, Apps Script ni contratos de impresión.
+  ===================================================== */
+  function auroRecetaBlindarIndicacionesDesdePlan(listaActual, listaPlan){
+    const actual = Array.isArray(listaActual) ? listaActual : [];
+    const plan = Array.isArray(listaPlan) ? listaPlan : [];
+    if(!actual.length || !plan.length) return actual;
 
-    if(medicamentoRecetaEsJSON(actual)){
-      return actual;
+    function claveMedicamento(m){
+      const x = normalizarMedicamentoRecetaObjeto(m || {});
+      return [x.med, x.pres, x.via]
+        .map(recetaNormalizarPlano)
+        .filter(Boolean)
+        .join('|');
     }
 
+    return actual.map(function(item, index){
+      if(!item || typeof item !== 'object' || item.texto) return item;
+
+      const actualNorm = normalizarMedicamentoRecetaObjeto(item);
+      if(String(actualNorm.ind || '').trim()) return item;
+
+      const clave = claveMedicamento(actualNorm);
+      const candidato = plan.find(function(m){
+        return clave && claveMedicamento(m) === clave;
+      }) || plan[index] || null;
+
+      if(!candidato) return item;
+
+      const planNorm = normalizarMedicamentoRecetaObjeto(candidato);
+      const indicacionPlan = String(planNorm.ind || '').trim();
+      if(!indicacionPlan) return item;
+
+      return Object.assign({}, item, {ind:indicacionPlan});
+    });
+  }
+
+  function medicamentoRecetaParaGuardarJSON(textoFormulario){
+    const actual = String(textoFormulario || '').trim();
     const medsPlan = recetaMedicamentosPlanActualesSeguros();
+
+    if(medicamentoRecetaEsJSON(actual)){
+      try{
+        let listaActual = JSON.parse(actual);
+        if(!Array.isArray(listaActual)) listaActual = [listaActual];
+
+        const blindada = auroRecetaBlindarIndicacionesDesdePlan(listaActual, medsPlan);
+        return JSON.stringify(blindada);
+      }catch(e){
+        return actual;
+      }
+    }
 
     if(medsPlan.length){
       return JSON.stringify(medsPlan);
