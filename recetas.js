@@ -4125,6 +4125,16 @@
   }
 
 
+  /* =====================================================
+     AUROSANAX RECETA 32 - AJUSTE VISUAL A4 QUIRÚRGICO
+     ---------------------------------------------------------
+     Solo presentación: centra verticalmente medicamento / presentación /
+     cantidad frente a indicaciones extensas y compacta cabecera y
+     diagnósticos para recuperar espacio útil sin invadir firma/sello.
+     NO modifica guardado, edición, Plan, IDs, anti-duplicidad, atención,
+     backend, Google Sheets, Apps Script ni contratos clínicos.
+  ===================================================== */
+
   /*
      AUROSANAX RECETAS 2.7 - ORIGINAL / COPIA A4 FINAL
      Intervención exclusivamente visual para la impresión del paciente.
@@ -4213,16 +4223,16 @@
 
         .auro-media-receta .auro-receta-header{
           grid-template-columns:auto 1fr auto!important;
-          gap:8px!important;
-          padding:0 0 5px!important;
-          margin:0 0 5px!important;
+          gap:6px!important;
+          padding:0 0 3px!important;
+          margin:0 0 3px!important;
           border-bottom-width:2px!important;
           flex:0 0 auto!important;
         }
 
         .auro-media-receta .auro-receta-logo-wrap{
-          width:46px!important;
-          height:46px!important;
+          width:42px!important;
+          height:42px!important;
           border-radius:9px!important;
         }
 
@@ -4232,9 +4242,9 @@
         }
 
         .auro-media-receta .auro-receta-brand small{
-          font-size:11.5px!important;
-          line-height:1.10!important;
-          margin-top:1px!important;
+          font-size:10.5px!important;
+          line-height:1.04!important;
+          margin-top:0!important;
         }
 
         .auro-media-receta .auro-receta-title{
@@ -4242,8 +4252,8 @@
         }
 
         .auro-media-receta .auro-receta-title b{
-          font-size:17.1px!important;
-          line-height:1.04!important;
+          font-size:16.4px!important;
+          line-height:1.02!important;
         }
 
         .auro-media-receta .auro-receta-title small{
@@ -4254,8 +4264,8 @@
         .auro-media-receta .modo-paciente .auro-receta-grid{
           grid-template-columns:repeat(12,minmax(0,1fr))!important;
           gap:0!important;
-          padding:0 0 4px!important;
-          margin:0 0 4px!important;
+          padding:0 0 2px!important;
+          margin:0 0 3px!important;
           border:0!important;
           border-bottom:1px solid #cbd5e1!important;
           border-radius:0!important;
@@ -4264,8 +4274,8 @@
         }
 
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-dato{
-          padding:2px 5px!important;
-          min-height:28px!important;
+          padding:1px 5px!important;
+          min-height:25px!important;
           border:0!important;
           border-right:1px solid #e5e7eb!important;
           border-radius:0!important;
@@ -4301,8 +4311,8 @@
         }
 
         .auro-media-receta .auro-rx-alergias-linea{
-          margin:0 0 4px!important;
-          padding:3px 6px!important;
+          margin:0 0 3px!important;
+          padding:2px 6px!important;
           gap:5px!important;
           border-radius:6px!important;
           flex:0 0 auto!important;
@@ -4318,15 +4328,15 @@
         }
 
         .auro-media-receta .auro-receta-section{
-          margin-top:4px!important;
+          margin-top:3px!important;
           flex:0 0 auto!important;
         }
 
         .auro-media-receta .auro-receta-section h4{
-          margin:0 0 3px!important;
-          padding-bottom:2px!important;
-          font-size:12.8px!important;
-          line-height:1.10!important;
+          margin:0 0 2px!important;
+          padding-bottom:1px!important;
+          font-size:12.2px!important;
+          line-height:1.05!important;
         }
 
         .auro-media-receta .auro-receta-box{
@@ -4345,21 +4355,52 @@
         .auro-media-receta .auro-rx-diagnostico-unico-section{
           width:fit-content!important;
           max-width:100%!important;
-          margin-top:3px!important;
+          margin-top:2px!important;
         }
 
         .auro-media-receta .auro-rx-diagnostico-unico{
-          padding:2px 0!important;
+          padding:1px 0!important;
           gap:4px!important;
         }
 
         .auro-media-receta .auro-rx-diagnostico-unico strong{
-          font-size:8.7px!important;
+          font-size:8.3px!important;
         }
 
         .auro-media-receta .auro-rx-diagnostico-unico-name{
-          font-size:7.9px!important;
-          line-height:1.12!important;
+          font-size:7.5px!important;
+          line-height:1.06!important;
+        }
+
+        /* Diagnósticos compactos: conserva código + descripción y reduce
+           únicamente su huella vertical para proteger el área de firma. */
+        .auro-media-receta .auro-rx-diagnosticos-section{
+          margin-top:2px!important;
+        }
+        .auro-media-receta .auro-rx-diagnosticos-section h4{
+          margin-bottom:2px!important;
+          padding-bottom:1px!important;
+          font-size:9.8px!important;
+          line-height:1.04!important;
+        }
+        .auro-media-receta .auro-rx-diagnostico-card{
+          padding:3px 5px 3px 0!important;
+        }
+        .auro-media-receta .auro-rx-diagnostico-card-head{
+          gap:4px!important;
+          margin-bottom:1px!important;
+        }
+        .auro-media-receta .auro-rx-diagnostico-card-head strong{
+          font-size:8.4px!important;
+        }
+        .auro-media-receta .auro-rx-dx-jerarquia,
+        .auro-media-receta .auro-rx-dx-tipo{
+          font-size:6.6px!important;
+          line-height:1!important;
+        }
+        .auro-media-receta .auro-rx-diagnostico-card-name{
+          font-size:7.3px!important;
+          line-height:1.06!important;
         }
 
         .auro-media-receta .auro-rx-table-wrap{
@@ -4389,6 +4430,19 @@
           word-break:normal!important;
         }
 
+        /* AUROSANAX RECETA 32 - alineación visual A4 exclusivamente.
+           Cuando Indicaciones crece a varias líneas, las demás columnas
+           se centran verticalmente dentro de la misma fila. */
+        .auro-media-receta .auro-rx-table td.auro-rx-col-num,
+        .auro-media-receta .auro-rx-table td.auro-rx-col-med,
+        .auro-media-receta .auro-rx-table td.auro-rx-col-pres,
+        .auro-media-receta .auro-rx-table td.auro-rx-col-cant{
+          vertical-align:middle!important;
+        }
+        .auro-media-receta .auro-rx-table td.auro-rx-col-ind{
+          vertical-align:top!important;
+        }
+
         .auro-media-receta .auro-rx-col-med strong{
           font-size:10.8px!important;
           line-height:1.10!important;
@@ -4402,7 +4456,7 @@
 
         .auro-media-receta .auro-receta-footer{
           margin-top:auto!important;
-          padding-top:5px!important;
+          padding-top:4px!important;
           gap:12px!important;
           grid-template-columns:1.1fr .9fr!important;
           align-items:start!important;
