@@ -782,6 +782,60 @@
     return null;
   }
 
+  /*
+    AUROSANAX MENSAJE QUIRÚRGICO:
+    Resuelve únicamente el nombre descriptivo de un paciente ya cargado.
+    No modifica selección, IDs, contexto clínico, localStorage ni backend.
+  */
+  function nombrePacientePorIdAtenciones(idPaciente){
+    const id = String(idPaciente || '').trim();
+    if(!id) return 'Paciente no identificado';
+
+    try{
+      const activo = pacienteActivo();
+      if(
+        activo &&
+        String(activo.id_paciente || activo.id || '').trim() === id
+      ){
+        const nombreActivo = String(
+          activo.nombre_completo ||
+          activo.nombre ||
+          ((activo.nombres || '') + ' ' + (activo.apellidos || ''))
+        ).replace(/\s+/g,' ').trim();
+
+        if(nombreActivo) return nombreActivo;
+      }
+
+      /*
+        pacientes.js mantiene el catálogo oficial en "patients".
+        Se consulta solo en lectura y por coincidencia exacta de id_paciente.
+      */
+      if(typeof patients !== 'undefined' && Array.isArray(patients)){
+        const encontrado = patients.find(function(p){
+          return String(p.id_paciente || p.id || '').trim() === id;
+        }) || null;
+
+        if(encontrado){
+          const nombre = String(
+            encontrado.nombre_completo ||
+            encontrado.nombre ||
+            ((encontrado.nombres || '') + ' ' + (encontrado.apellidos || ''))
+          ).replace(/\s+/g,' ').trim();
+
+          if(nombre) return nombre;
+        }
+      }
+    }catch(error){
+      console.warn(
+        MODULO,
+        'No se pudo resolver el nombre del paciente para el aviso de atención abierta.',
+        error
+      );
+    }
+
+    return id;
+  }
+
   function idPacienteActivo(){
     try{
       /*
@@ -1593,13 +1647,31 @@
       }) || abiertasMismoMedico[0];
 
       const mismoPaciente = String(activaMismoMedico.id_paciente || '').trim() === idPaciente;
+
+      /*
+        AUROSANAX MENSAJE QUIRÚRGICO:
+        Solo enriquece el aviso con datos ya existentes de las atenciones abiertas.
+        No cambia la decisión, el estado ni el flujo de creación.
+      */
+      const detalleAbiertas = abiertasMismoMedico.map(function(a){
+        const idPacienteAbierto = String(a.id_paciente || '').trim();
+        const nombrePacienteAbierto = nombrePacientePorIdAtenciones(idPacienteAbierto);
+        const numeroConsulta = Number(a.numero_consulta || 0);
+        const idAtencionAbierta = String(a.id_atencion || '').trim() || 'Sin ID';
+
+        return '• Paciente: ' + nombrePacienteAbierto +
+          '\n  Consulta: ' + (numeroConsulta ? '#' + numeroConsulta : 'Sin número') +
+          '\n  ID atención: ' + idAtencionAbierta;
+      }).join('\n\n');
+
       const continuar = confirm(
         'El médico seleccionado ya tiene ' + abiertasMismoMedico.length +
         ' atención' + (abiertasMismoMedico.length === 1 ? '' : 'es') +
         ' abierta' + (abiertasMismoMedico.length === 1 ? '' : 's') + '.\n\n' +
+        detalleAbiertas + '\n\n' +
         (mismoPaciente
-          ? 'Existe una atención abierta para este mismo paciente. '
-          : 'Existe una atención abierta para otro paciente. ') +
+          ? 'La atención de referencia corresponde a este mismo paciente.\n'
+          : 'La atención de referencia corresponde a otro paciente.\n') +
         'Aceptar: dejar la atención anterior abierta e iniciar una nueva.\n' +
         'Cancelar: no crear otra atención; puede usar Ver o Finalizar.'
       );
