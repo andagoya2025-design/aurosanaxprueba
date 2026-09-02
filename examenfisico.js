@@ -1550,6 +1550,87 @@ function auroSetCheckboxesPorTexto(selector, texto){
   });
 }
 
+
+/* ==========================================================
+   AUROSANAX FIX QUIRÚRGICO VISUAL REGIONAL 2026-09-01
+   ----------------------------------------------------------
+   ALCANCE EXCLUSIVO:
+   - Rehidrata en pantalla las observaciones ya persistidas
+     dentro de "Examen físico regional".
+   - Respeta la configuración regional existente y sus IDs.
+   - No guarda, no hace POST, no modifica timestamps, no toca
+     Apps Script, Google Sheets, Diagnóstico, Plan ni Recetas.
+   ========================================================== */
+function auroCargarObservacionesRegionalesDesdeTexto(textoRegional){
+  try{
+    if(typeof renderHcRegionalPanels === 'function'){
+      renderHcRegionalPanels();
+    }
+
+    const config = window.auroExamenFisicoRegionalConfig || {};
+    const bloques = String(textoRegional || '')
+      .split(/\s*\|\|\s*/)
+      .map(item => String(item || '').trim())
+      .filter(Boolean);
+
+    Object.keys(config).forEach(regionKey => {
+      const cfg = config[regionKey] || {};
+      const titulo = String(cfg.titulo || regionKey).trim();
+      if(!titulo) return;
+
+      const prefijo = titulo.toLowerCase() + ':';
+
+      const bloque = bloques.find(item =>
+        String(item || '').trim().toLowerCase().startsWith(prefijo)
+      );
+
+      if(!bloque) return;
+
+      const contenido = bloque.substring(bloque.indexOf(':') + 1).trim();
+      if(!contenido) return;
+
+      let observacion = '';
+
+      contenido
+        .split(/\s*\|\s*/)
+        .map(parte => String(parte || '').trim())
+        .filter(Boolean)
+        .forEach(parte => {
+          const match = parte.match(/^Observaci[oó]n(?:es)?\s*:\s*(.+)$/i);
+          if(match && String(match[1] || '').trim()){
+            observacion = String(match[1] || '').trim();
+          }
+        });
+
+      if(!observacion) return;
+
+      if(
+        typeof auroEsNoValoradoExamen === 'function' &&
+        auroEsNoValoradoExamen(observacion)
+      ){
+        return;
+      }
+
+      const id = typeof hcRegionalInputId === 'function'
+        ? hcRegionalInputId(regionKey)
+        : 'hcRegional_' + regionKey + '_obs';
+
+      if(typeof setValueIfExists === 'function'){
+        setValueIfExists(id, observacion);
+      }else{
+        const campo = document.getElementById(id);
+        if(campo) campo.value = observacion;
+      }
+    });
+
+  }catch(error){
+    console.warn(
+      'AUROSANAX EXAMEN: no se pudieron rehidratar observaciones regionales.',
+      error
+    );
+  }
+}
+
 function auroCargarExamenFisicoDesdeHistoria(h, modo){
   if(!h) return;
 
@@ -1601,6 +1682,7 @@ function auroCargarExamenFisicoDesdeHistoria(h, modo){
   auroSetCheckboxesPorTexto('.hcUrinarioCheck', urinario);
   auroSetCheckboxesPorTexto('.hcMusculoEsqueleticoCheck', musculo);
   auroSetCheckboxesPorTexto('.hcRegionalCheck', regional);
+  auroCargarObservacionesRegionalesDesdeTexto(regional);
 
   if(sentidos.includes('No valorado')) document.getElementById('hcSentidosNoValorado') && (document.getElementById('hcSentidosNoValorado').checked = true);
   if(respiratorio.includes('No valorado')) document.getElementById('hcRespiratorioNoValorado') && (document.getElementById('hcRespiratorioNoValorado').checked = true);
