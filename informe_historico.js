@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    Archivo de reemplazo propuesto: informe_historico.js
    Entrega externa: TXT completo para revisión manual
-   Versión propuesta: 2.5.2-RESPONSIVE-MOVIL-ANTIRREGRESIVO
+   Versión propuesta: 2.5.3-CABECERA-LOGO-SCROLLBAR-ANTIRREGRESIVO
    Fecha: 2026-09-02
    Baseline leído en GitHub (SOLO LECTURA):
    informe_historico.js v2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO
@@ -86,7 +86,7 @@
     return;
   }
 
-  const VERSION = '2.5.2-RESPONSIVE-MOVIL-ANTIRREGRESIVO';
+  const VERSION = '2.5.3-CABECERA-LOGO-SCROLLBAR-ANTIRREGRESIVO';
   const MODULO = 'AUROSANAX INFORME HISTÓRICO';
   const MAX_GET_CONCURRENCIA = 8;
 
@@ -1792,7 +1792,7 @@
           ${valorClinico(inst.razon_social)?`<small>${esc(inst.razon_social)}${valorClinico(inst.ruc)?` · RUC ${esc(inst.ruc)}`:''}</small>`:(valorClinico(inst.ruc)?`<small>RUC ${esc(inst.ruc)}</small>`:'')}
         </div>
         <div class="aih-brand">
-          ${inst.logo ? `<img src="${esc(inst.logo)}" alt="">` : ''}
+          ${inst.logo ? `<img src="${esc(inst.logo)}" alt="" onerror="this.hidden=true;this.removeAttribute('src')">` : ''}
           <div><b>${esc(inst.nombre_comercial)}</b>${valorClinico(inst.subtitulo)?`<span>${esc(inst.subtitulo)}</span>`:''}</div>
         </div>
       </header>
@@ -2050,14 +2050,16 @@
       .aih-preview-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 13px;background:#fff;border-bottom:1px solid #e5e7eb;min-height:58px}.aih-preview-head h3{margin:0;font-size:16px;color:#111827}.aih-preview-head small{display:block;color:#64748b;margin-top:2px}.aih-preview-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.aih-preview-actions button{border-radius:9px;padding:8px 11px;font-weight:800;border:1px solid #d8dee6;background:#fff;color:#344054;cursor:pointer;white-space:nowrap}.aih-preview-actions .primary{background:#8b1e5a;color:#fff;border-color:#8b1e5a}.aih-preview-actions button:disabled{opacity:.45;cursor:not-allowed}.aih-preview-actions button.active{background:#fff7fb;color:#8b1e5a;border-color:#d9a5c2}
       .aih-zoom-group{display:inline-flex;align-items:center;gap:0;border:1px solid #d8dee6;border-radius:10px;overflow:hidden;background:#fff;height:36px}.aih-zoom-group button{height:34px;min-width:36px;padding:0 10px;border:0;border-radius:0;border-right:1px solid #e5e7eb;font-size:16px;line-height:1}.aih-zoom-group button:last-child{border-right:0}.aih-zoom-label{min-width:58px;text-align:center;font-size:11px;font-weight:900;color:#475569;padding:0 8px;user-select:none}
       .aih-validation{padding:7px 13px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:6px;flex-wrap:wrap}.aih-validation span{font-size:10px;border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:5px 8px;font-weight:750;color:#475569}.aih-validation .ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}.aih-validation .warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.aih-validation .bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
-      .aih-preview-body{overflow:scroll;padding:0;background:#dde3ea;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:auto;scrollbar-color:#667387 #eef1f5}
-      #aihPreviewBody::-webkit-scrollbar,.aih-preview-body::-webkit-scrollbar{width:18px;height:18px}
-      #aihPreviewBody::-webkit-scrollbar-track,.aih-preview-body::-webkit-scrollbar-track{background:#eef1f5}
-      #aihPreviewBody::-webkit-scrollbar-thumb,.aih-preview-body::-webkit-scrollbar-thumb{background:#667387;border:4px solid #eef1f5;border-radius:12px;min-height:54px}
-      #aihPreviewBody::-webkit-scrollbar-thumb:hover,.aih-preview-body::-webkit-scrollbar-thumb:hover{background:#475569}
+      .aih-preview-body{overflow:scroll;padding:0;background:#dde3ea;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:auto;scrollbar-color:#526174 #e7ebf0}
+      /* V2.5.3: scrollbar SOLO del visor. Más visible/manipulable en escritorio; no toca la barra del navegador. */
+      #aihPreviewBody::-webkit-scrollbar,.aih-preview-body::-webkit-scrollbar{width:24px;height:24px}
+      #aihPreviewBody::-webkit-scrollbar-track,.aih-preview-body::-webkit-scrollbar-track{background:#e7ebf0;border-radius:14px}
+      #aihPreviewBody::-webkit-scrollbar-thumb,.aih-preview-body::-webkit-scrollbar-thumb{background:#526174;border:4px solid #e7ebf0;border-radius:14px;min-height:72px;min-width:72px}
+      #aihPreviewBody::-webkit-scrollbar-thumb:hover,.aih-preview-body::-webkit-scrollbar-thumb:hover{background:#334155}
+      #aihPreviewBody::-webkit-scrollbar-corner,.aih-preview-body::-webkit-scrollbar-corner{background:#e7ebf0}
       .aih-preview-stage{min-width:100%;width:max-content;min-height:100%;padding:18px 22px 46px}.aih-preview-stage .aih-doc{margin:0 auto 42px;transform-origin:top center}.aih-loading{display:grid;place-items:center;height:100%;min-height:320px;color:#64748b}.aih-loading-card{background:#fff;padding:22px 26px;border-radius:16px;box-shadow:0 12px 35px rgba(15,23,42,.12);text-align:center;max-width:580px}.aih-spinner{width:32px;height:32px;border:4px solid #f1d9e7;border-top-color:#8b1e5a;border-radius:50%;margin:0 auto 11px;animation:aihspin .75s linear infinite}@keyframes aihspin{to{transform:rotate(360deg)}}
       @media(max-width:980px){.aih-preview-head{align-items:flex-start}.aih-preview-actions{max-width:70%}.aih-preview-actions button{padding:7px 9px;font-size:11px}.aih-zoom-group{height:34px}.aih-zoom-group button{height:32px}.aih-validation{max-height:70px;overflow:auto}}
-      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{width:100vw;height:100vh;border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column;padding:9px 10px}.aih-preview-actions{width:100%;max-width:none;justify-content:flex-start}.aih-preview-actions>button{flex:1 1 auto}.aih-zoom-group{flex:0 0 auto}.aih-preview-body{padding:0}.aih-preview-stage{padding:8px 8px 34px}.aih-preview-stage .aih-doc{margin:0 auto 30px}.aih-validation{padding:6px 8px;max-height:64px}.aih-mini-grid,.aih-kv-grid,.aih-ant-grid{grid-template-columns:1fr}.aih-line{grid-template-columns:1fr;gap:2px}}
+      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{width:100vw;height:100vh;border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column;padding:9px 10px}.aih-preview-actions{width:100%;max-width:none;justify-content:flex-start}.aih-preview-actions>button{flex:1 1 auto}.aih-zoom-group{flex:0 0 auto}.aih-preview-body{padding:0}.aih-preview-stage{padding:8px 8px 34px}.aih-preview-stage .aih-doc{margin:0 auto 30px}.aih-validation{padding:6px 8px;max-height:64px}.aih-mini-grid,.aih-kv-grid,.aih-ant-grid{grid-template-columns:1fr}.aih-line{grid-template-columns:1fr;gap:2px}#aihPreviewBody::-webkit-scrollbar,.aih-preview-body::-webkit-scrollbar{width:12px;height:12px}#aihPreviewBody::-webkit-scrollbar-thumb,.aih-preview-body::-webkit-scrollbar-thumb{border-width:3px;min-height:44px;min-width:44px}}
       @media(max-width:460px){.aih-preview-actions{gap:5px}.aih-preview-actions button{font-size:10.5px;padding:7px 8px}.aih-zoom-label{min-width:50px;padding:0 5px}.aih-zoom-group button{min-width:32px;padding:0 8px}.aih-preview-head small{font-size:10px}}
     `;
     document.head.appendChild(s);
