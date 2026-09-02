@@ -1554,12 +1554,18 @@ function auroSetCheckboxesPorTexto(selector, texto){
 /* ==========================================================
    AUROSANAX FIX QUIRÚRGICO VISUAL REGIONAL 2026-09-01
    ----------------------------------------------------------
-   ALCANCE EXCLUSIVO:
-   - Rehidrata en pantalla las observaciones ya persistidas
-     dentro de "Examen físico regional".
-   - Respeta la configuración regional existente y sus IDs.
-   - No guarda, no hace POST, no modifica timestamps, no toca
-     Apps Script, Google Sheets, Diagnóstico, Plan ni Recetas.
+   OBJETIVO EXCLUSIVO:
+   - Rehidratar en pantalla las observaciones regionales ya
+     persistidas dentro de examen_fisico.
+   - Funciona para TODAS las regiones configuradas.
+   - Tolera formatos históricos "Observación:", "Observaciones:"
+     y "Obs:" y duplicaciones antiguas del título regional.
+
+   NO TOCA:
+   - Guardado / POST / Apps Script / Google Sheets
+   - id_examen / id_atencion / timestamps
+   - checks regionales (mantiene su cargador histórico)
+   - Diagnóstico / Plan / Recetas / Anamnesis / Antecedentes
    ========================================================== */
 function auroCargarObservacionesRegionalesDesdeTexto(textoRegional){
   try{
@@ -1568,39 +1574,70 @@ function auroCargarObservacionesRegionalesDesdeTexto(textoRegional){
     }
 
     const config = window.auroExamenFisicoRegionalConfig || {};
+    const normalizar = function(valor){
+      return String(valor || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
     const bloques = String(textoRegional || '')
       .split(/\s*\|\|\s*/)
-      .map(item => String(item || '').trim())
+      .map(function(item){ return String(item || '').trim(); })
       .filter(Boolean);
 
-    Object.keys(config).forEach(regionKey => {
+    Object.keys(config).forEach(function(regionKey){
       const cfg = config[regionKey] || {};
       const titulo = String(cfg.titulo || regionKey).trim();
       if(!titulo) return;
 
-      const prefijo = titulo.toLowerCase() + ':';
+      const tituloNormalizado = normalizar(titulo);
 
-      const bloque = bloques.find(item =>
-        String(item || '').trim().toLowerCase().startsWith(prefijo)
-      );
+      const bloque = bloques.find(function(item){
+        const idx = String(item || '').indexOf(':');
+        if(idx === -1) return false;
+        const etiqueta = String(item || '').substring(0, idx).trim();
+        return normalizar(etiqueta) === tituloNormalizado;
+      });
 
       if(!bloque) return;
 
-      const contenido = bloque.substring(bloque.indexOf(':') + 1).trim();
+      const idxPrimero = bloque.indexOf(':');
+      let contenido = idxPrimero === -1
+        ? ''
+        : bloque.substring(idxPrimero + 1).trim();
+
       if(!contenido) return;
 
       let observacion = '';
 
       contenido
         .split(/\s*\|\s*/)
-        .map(parte => String(parte || '').trim())
+        .map(function(parte){ return String(parte || '').trim(); })
         .filter(Boolean)
-        .forEach(parte => {
-          const match = parte.match(/^Observaci[oó]n(?:es)?\s*:\s*(.+)$/i);
+        .forEach(function(parte){
+          const match = parte.match(/^(?:Observaci[oó]n(?:es)?|Obs)\s*:\s*(.*)$/i);
           if(match && String(match[1] || '').trim()){
             observacion = String(match[1] || '').trim();
           }
         });
+
+      if(!observacion) return;
+
+      /*
+        Compatibilidad con registros antiguos que quedaron como:
+        "Genitales: Observación: Genitales: Observación: ...".
+        Solo limpia la duplicación de presentación; no cambia lo persistido.
+      */
+      const prefijoDuplicado = new RegExp(
+        '^' +
+        titulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+        '\\s*:\\s*(?:Observaci[oó]n(?:es)?|Obs)\\s*:\\s*',
+        'i'
+      );
+      observacion = observacion.replace(prefijoDuplicado, '').trim();
 
       if(!observacion) return;
 
@@ -1622,7 +1659,6 @@ function auroCargarObservacionesRegionalesDesdeTexto(textoRegional){
         if(campo) campo.value = observacion;
       }
     });
-
   }catch(error){
     console.warn(
       'AUROSANAX EXAMEN: no se pudieron rehidratar observaciones regionales.',
