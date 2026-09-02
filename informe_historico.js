@@ -2,7 +2,7 @@
    AUROSANAX CLINICAL ERP
    Archivo de reemplazo propuesto: informe_historico.js
    Entrega externa: TXT completo para revisión manual
-   Versión propuesta: 2.5.1-CORRECCION-QUIRURGICA-VISUAL-PA-ORDEN-RENDIMIENTO
+   Versión propuesta: 2.5.2-RESPONSIVE-MOVIL-ANTIRREGRESIVO
    Fecha: 2026-09-02
    Baseline leído en GitHub (SOLO LECTURA):
    informe_historico.js v2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO
@@ -70,6 +70,13 @@
    - Fechas y horas mixtas se normalizan solo para lectura/orden.
    - Se conservan todos los GET y el límite de 8 solicitudes simultáneas.
    - Se mejora legibilidad de subtítulos y barra del visor sin tocar PDF.
+
+   CORRECCIÓN QUIRÚRGICA V2.5.2 — SOLO VISOR RESPONSIVE MÓVIL
+   - Conserva íntegro el documento clínico, escritorio, impresión y PDF.
+   - En pantallas de hasta 760 px permite que "Ajustar ancho" reduzca la hoja
+     por debajo del antiguo límite visual de 75%, hasta el ancho real del móvil.
+   - En escritorio el zoom mínimo continúa siendo 75%; no cambia su conducta.
+   - No modifica lecturas GET, asociaciones, validación, contenido ni backend.
 ============================================================================ */
 (function(){
   'use strict';
@@ -79,7 +86,7 @@
     return;
   }
 
-  const VERSION = '2.5.1-CORRECCION-QUIRURGICA-VISUAL-PA-ORDEN-RENDIMIENTO';
+  const VERSION = '2.5.2-RESPONSIVE-MOVIL-ANTIRREGRESIVO';
   const MODULO = 'AUROSANAX INFORME HISTÓRICO';
   const MAX_GET_CONCURRENCIA = 8;
 
@@ -1939,6 +1946,7 @@
      - NO consulta backend ni dispara eventos clínicos.
   ======================================================================== */
   const VISOR_ZOOM_MIN = 0.75;
+  const VISOR_ZOOM_MIN_MOVIL = 0.30;
   const VISOR_ZOOM_MAX = 2.00;
   const VISOR_ZOOM_STEP = 0.10;
 
@@ -1946,10 +1954,29 @@
     return document.querySelector('#aihPreviewDocument .aih-doc');
   }
 
+  /*
+    V2.5.2 — BLINDAJE RESPONSIVE:
+    escritorio conserva exactamente el mínimo histórico de 75%.
+    Solo móvil (<=760 px) puede bajar más para que una hoja A4 entre completa
+    en el ancho físico disponible, siguiendo el principio ya probado del visor
+    de Certificados. Esto afecta únicamente la vista previa.
+  */
+  function visorEsMovil(){
+    try{
+      return window.matchMedia?.('(max-width:760px)')?.matches === true;
+    }catch(_e){
+      return Number(window.innerWidth || 0) <= 760;
+    }
+  }
+
+  function visorZoomMinimo(){
+    return visorEsMovil() ? VISOR_ZOOM_MIN_MOVIL : VISOR_ZOOM_MIN;
+  }
+
   function visorZoomNormalizado(valor){
     const n = Number(valor);
     if(!Number.isFinite(n)) return 1.25;
-    return Math.min(VISOR_ZOOM_MAX, Math.max(VISOR_ZOOM_MIN, n));
+    return Math.min(VISOR_ZOOM_MAX, Math.max(visorZoomMinimo(), n));
   }
 
   function actualizarControlesVisor(){
@@ -1960,7 +1987,7 @@
     const zoom = visorZoomNormalizado(state.visor?.zoom);
 
     if(etiqueta) etiqueta.textContent = `${Math.round(zoom * 100)}%`;
-    if(btnMenos) btnMenos.disabled = zoom <= VISOR_ZOOM_MIN + 0.001;
+    if(btnMenos) btnMenos.disabled = zoom <= visorZoomMinimo() + 0.001;
     if(btnMas) btnMas.disabled = zoom >= VISOR_ZOOM_MAX - 0.001;
     if(btnAjustar){
       btnAjustar.classList.toggle('active', state.visor?.ajusteAncho === true);
@@ -2003,6 +2030,10 @@
       const anchoDocumento = doc.getBoundingClientRect().width || doc.offsetWidth || 1;
       const margenSeguro = window.innerWidth <= 760 ? 16 : 44;
       const anchoDisponible = Math.max(1, body.clientWidth - margenSeguro);
+      /*
+        En móvil visorZoomNormalizado admite escala < 75%, necesaria para que
+        210 mm A4 entren realmente en iPhone/Android. En escritorio no cambia.
+      */
       const zoom = visorZoomNormalizado(anchoDisponible / anchoDocumento);
       aplicarZoomVisor(zoom,{ajusteAncho:true});
       body.scrollLeft = Math.max(0, scrollIzq);
