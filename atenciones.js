@@ -4917,6 +4917,7 @@
     if(!pares.length) return '';
 
     const grupos = {
+      planTerapeutico:[],
       indicaciones:[],
       medicamentos:[],
       examenes:[],
@@ -4941,7 +4942,8 @@
 
       if(esBanderaInternaPlan) return;
 
-      if(n.includes('medicamento')) grupos.medicamentos.push(p);
+      if(n.includes('plan terapeutico') || n.includes('plan de tratamiento')) grupos.planTerapeutico.push(p);
+      else if(n.includes('medicamento')) grupos.medicamentos.push(p);
       else if(n.includes('examen')) grupos.examenes.push(p);
       else if(n.includes('interconsulta')) grupos.interconsultas.push(p);
       else if(n.includes('orden')) grupos.ordenes.push(p);
@@ -4950,6 +4952,17 @@
     });
 
     let html = '';
+
+    /*
+      AUROSANAX VISTA INTEGRAL — PLAN TERAPÉUTICO VISIBLE
+      Presentación exclusivamente de lectura.
+      El contenido capturado bajo "Plan terapéutico" pertenece al Plan y
+      debe visualizarse aquí. No modifica datos, guardados ni Receta.
+    */
+    if(grupos.planTerapeutico.length){
+      html += '<div class="avi-subgroup"><h5>Plan terapéutico</h5>'+
+        paresHTML(grupos.planTerapeutico)+'</div>';
+    }
 
     if(grupos.indicaciones.length){
       html += '<div class="avi-subgroup"><h5>Indicaciones generales</h5>'+
@@ -4987,7 +5000,7 @@
       "grupos.otros" contiene banderas/campos estructurados internos del Plan
       (por ejemplo "... EN PLAN = Sí"). Se conservan en el módulo y en los
       datos, pero no se muestran en el visor clínico porque duplican o ensucian
-      la lectura de Medicamentos, Exámenes, Indicaciones, Órdenes e Interconsultas.
+      la lectura. "Plan terapéutico" se clasifica y presenta por separado.
     */
 
     return html;
@@ -7075,7 +7088,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.19.0-certificado-pie-escritorio-alineado-inteligente',
+    version:'1.20.0-plan-terapeutico-visible',
     abrir,
     cerrar,
     abrirReceta,
