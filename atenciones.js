@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_11_RECETA_COMPLETA_SIN_DUPLICIDAD';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_12_DIAGNOSTICOS_RECETA_ESTRUCTURADOS';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -5079,15 +5079,105 @@
     '</div>';
   }
 
-  function diagnosticosAtencionParaRecetaHTML(){
-    const panel = document.getElementById('hc_diagnostico');
-    if(!panel) return '';
+  function diagnosticosRecetaNormalizados(valor){
+    let lista = valor;
 
-    const items = [...panel.querySelectorAll('.auro-dx-item')];
+    if(typeof lista === 'string'){
+      const parsed = parseJSON(lista,null);
+      lista = parsed == null ? [] : parsed;
+    }
+
+    if(lista && !Array.isArray(lista)) lista = [lista];
+
+    const salida = [];
+    const vistos = new Set();
+
+    (Array.isArray(lista) ? lista : []).forEach(function(dx,index){
+      dx = dx || {};
+
+      const estado = norm(dx.estado || 'Activo');
+      if(['inactivo','inactiva','anulado','anulada','eliminado','eliminada'].includes(estado)) return;
+
+      const codigo = texto(
+        dx.codigo || dx.codigo_cie10 || dx.diagnostico_cie10 || dx.cie10 || ''
+      );
+      const nombre = texto(
+        dx.descripcion || dx.diagnostico || dx.nombre || dx.detalle || dx.texto || ''
+      );
+
+      if(!codigo && !nombre) return;
+
+      const principal = dx.principal === true ||
+        ['si','sí','true','1'].includes(norm(dx.principal));
+
+      const clave = norm(codigo+'|'+nombre);
+      if(!clave || vistos.has(clave)) return;
+      vistos.add(clave);
+
+      salida.push({
+        codigo:codigo,
+        nombre:nombre,
+        jerarquia:principal ? 'Principal' : '',
+        tipo:texto(dx.tipo_diagnostico || dx.tipo || ''),
+        principal:principal,
+        orden:index
+      });
+    });
+
+    if(salida.length && !salida.some(function(dx){ return dx.principal; })){
+      salida[0].principal = true;
+      salida[0].jerarquia = 'Principal';
+    }
+
+    salida.forEach(function(dx){
+      if(!dx.jerarquia && salida.length > 1) dx.jerarquia = 'Asociado';
+
+      const tipoNorm = norm(dx.tipo);
+      if(tipoNorm === 'definitivo') dx.tipo = 'Definitivo';
+      else if(tipoNorm === 'presuntivo') dx.tipo = 'Presuntivo';
+    });
+
+    return salida.sort(function(a,b){
+      if(a.principal !== b.principal) return Number(b.principal) - Number(a.principal);
+      return a.orden - b.orden;
+    });
+  }
+
+  function diagnosticosAtencionActivaParaReceta(idAtencion){
+    const esperado = texto(idAtencion);
+    if(!esperado) return [];
+
+    let activo = '';
+
+    try{
+      if(typeof window.getIdAtencionActiva === 'function'){
+        activo = texto(window.getIdAtencionActiva());
+      }
+    }catch(_){}
+
+    if(!activo){
+      try{
+        const ctx = typeof window.obtenerContextoAtencionActual === 'function'
+          ? window.obtenerContextoAtencionActual()
+          : null;
+        activo = texto(ctx?.id_atencion);
+      }catch(_){}
+    }
+
+    /*
+      Fallback DOM permitido únicamente cuando el DOM pertenece exactamente
+      a la misma atención que se está representando. Una Vista Integral
+      histórica nunca debe tomar diagnósticos visibles de otra consulta.
+    */
+    if(!activo || activo !== esperado) return [];
+
+    const panel = document.getElementById('hc_diagnostico');
+    if(!panel) return [];
+
     const diagnosticos = [];
     const vistos = new Set();
 
-    items.forEach(function(item){
+    [...panel.querySelectorAll('.auro-dx-item')].forEach(function(item,index){
       const codigo = limpiarTextoClinico(
         item.querySelector('.auro-dx-code,[data-cie10],.cie10-code')?.textContent || ''
       );
@@ -5102,20 +5192,73 @@
       if(vistos.has(clave)) return;
       vistos.add(clave);
 
-      let jerarquia = '';
+      let principal = /\bprincipal\b/i.test(textoItem);
       let tipo = '';
-      if(/\bprincipal\b/i.test(textoItem)) jerarquia = 'Principal';
-      else if(/\basociad[oa]s?\b/i.test(textoItem)) jerarquia = 'Asociado';
       if(/\bdefinitiv[oa]\b/i.test(textoItem)) tipo = 'Definitivo';
       else if(/\bpresuntiv[oa]\b/i.test(textoItem)) tipo = 'Presuntivo';
 
-      diagnosticos.push({codigo,nombre,jerarquia,tipo});
+      diagnosticos.push({
+        codigo:codigo,
+        nombre:nombre,
+        jerarquia:principal ? 'Principal' : '',
+        tipo:tipo,
+        principal:principal,
+        orden:index
+      });
     });
+
+    if(diagnosticos.length && !diagnosticos.some(function(dx){ return dx.principal; })){
+      diagnosticos[0].principal = true;
+      diagnosticos[0].jerarquia = 'Principal';
+    }
+
+    diagnosticos.forEach(function(dx){
+      if(!dx.jerarquia && diagnosticos.length > 1) dx.jerarquia = 'Asociado';
+    });
+
+    return diagnosticos;
+  }
+
+  function diagnosticosRecetaHTML(receta,idAtencion){
+    receta = receta || {};
+
+    /*
+      PRIORIDAD ANTIRREGRESIVA:
+      1. Diagnósticos estructurados guardados con la propia receta.
+      2. Diagnósticos del DOM/estado SOLO si la atención activa coincide exactamente.
+      3. Campo histórico singular de la propia receta como compatibilidad final.
+      Todo es lectura; no se modifica Recetas, Diagnóstico, Plan ni persistencia.
+    */
+    let diagnosticos = diagnosticosRecetaNormalizados(receta.diagnosticos);
+
+    if(!diagnosticos.length){
+      diagnosticos = diagnosticosAtencionActivaParaReceta(idAtencion);
+    }
+
+    if(!diagnosticos.length){
+      const codigo = texto(
+        receta.diagnostico_cie10 || receta.cie10 || receta.codigo_cie10 || ''
+      );
+      const nombre = texto(
+        receta.diagnostico || receta.descripcion_diagnostico || receta.descripcion || ''
+      );
+
+      if(codigo || nombre){
+        diagnosticos = [{
+          codigo:codigo,
+          nombre:nombre,
+          jerarquia:'Principal',
+          tipo:'',
+          principal:true,
+          orden:0
+        }];
+      }
+    }
 
     if(!diagnosticos.length) return '';
 
     return '<div class="avi-rx-diagnosticos">'+
-      '<h5>Diagnósticos de la atención</h5>'+
+      '<h5>Diagnósticos de la receta</h5>'+
       '<div class="avi-rx-dx-list">'+diagnosticos.map(function(dx){
         return '<div class="avi-rx-dx-row">'+
           '<div><strong>'+esc(dx.codigo || 'Diagnóstico')+'</strong>'+
@@ -5146,7 +5289,7 @@
         .filter(Boolean)
     );
 
-    const diagnosticosAtencion = diagnosticosAtencionParaRecetaHTML();
+
 
     return '<div class="avi-rx-list">'+recetas.map(function(r){
       const indicacionReceta = limpiarTextoClinico(r.indicaciones);
@@ -5172,7 +5315,7 @@
         '</div>'+
         '<div class="avi-rx-treatment-title">Tratamiento prescrito</div>'+
         tablaMedicamentosRecetaHTML(r.medicamento || r.medicamentos)+
-        diagnosticosAtencion+
+        diagnosticosRecetaHTML(r,idAtencion)+
         indicaciones+
       '</article>';
     }).join('')+'</div>';
@@ -6306,7 +6449,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.11.0-receta-completa-sin-duplicidad',
+    version:'1.12.0-diagnosticos-receta-estructurados',
     abrir,
     cerrar,
     abrirReceta,
