@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_16_RECOMENDACIONES_CERTIFICADO_OFICIAL_SCROLL_ESTABLE';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_17_SCROLL_RECETA_MULTIDISPOSITIVO_CSS_ONLY';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -5681,7 +5681,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.16.0';
+    const CSS_VERSION = '1.17.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -6120,12 +6120,16 @@
         letter-spacing:.055em;
       }
       .avi-rx-table-wrap{
+        display:block;
         width:100%;
+        max-width:100%;
+        min-width:0;
         overflow-x:auto;
-        overflow-y:visible;
+        overflow-y:hidden;
         border:1px solid #dfe4ea;
         border-radius:10px;
         -webkit-overflow-scrolling:touch;
+        scrollbar-width:thin;
       }
       .avi-rx-table{
         width:100%;
@@ -6349,27 +6353,48 @@
           desplazamiento horizontal táctil únicamente dentro de la receta.
           No altera datos, columnas, guardado, IDs ni el resto de Vista Integral.
         */
+        /*
+          RECETA · SCROLL HORIZONTAL NATIVO MULTIDISPOSITIVO
+          iPhone / iPad / Android / Safari / Chrome / WebView.
+          Corrección exclusivamente CSS:
+          - los contenedores padres pueden encogerse (min-width:0);
+          - la tabla conserva ancho documental mayor que la pantalla;
+          - el wrapper es quien recibe el desplazamiento horizontal nativo;
+          - el scroll vertical general de Vista Integral permanece intacto.
+        */
+        .avi-overlay .avi-section,
+        .avi-overlay .avi-section-body,
+        .avi-overlay .avi-rx-card,
         .avi-overlay .avi-rx-table-wrap{
-          position:relative;
+          min-width:0!important;
+          max-width:100%!important;
+          box-sizing:border-box!important;
+        }
+        .avi-overlay .avi-rx-card{
+          overflow:visible!important;
+        }
+        .avi-overlay .avi-rx-table-wrap{
+          position:relative!important;
+          display:block!important;
           width:100%!important;
           max-width:100%!important;
-          overflow-x:scroll!important;
+          min-width:0!important;
+          overflow-x:auto!important;
           overflow-y:hidden!important;
-          border:1px solid #dfe4ea!important;
-          border-radius:10px!important;
           -webkit-overflow-scrolling:touch!important;
           overscroll-behavior-x:contain;
-          touch-action:pan-x pan-y!important;
           scrollbar-width:thin;
+          touch-action:auto!important;
         }
         .avi-overlay .avi-rx-table{
           display:table!important;
-          width:760px!important;
-          min-width:760px!important;
+          width:820px!important;
+          min-width:820px!important;
           max-width:none!important;
           table-layout:fixed!important;
           border-collapse:collapse!important;
           transform:none!important;
+          margin:0!important;
         }
         .avi-overlay .avi-rx-table thead{display:table-header-group!important}
         .avi-overlay .avi-rx-table tbody{display:table-row-group!important}
@@ -6378,9 +6403,21 @@
         .avi-overlay .avi-rx-table td{
           display:table-cell!important;
           min-width:0!important;
-          text-align:left;
+          text-align:left!important;
+          white-space:normal!important;
         }
         .avi-overlay .avi-rx-table td::before{content:none!important}
+
+        .avi-overlay .avi-rx-table th:nth-child(1),
+        .avi-overlay .avi-rx-table td:nth-child(1){width:58px!important}
+        .avi-overlay .avi-rx-table th:nth-child(2),
+        .avi-overlay .avi-rx-table td:nth-child(2){width:205px!important}
+        .avi-overlay .avi-rx-table th:nth-child(3),
+        .avi-overlay .avi-rx-table td:nth-child(3){width:190px!important}
+        .avi-overlay .avi-rx-table th:nth-child(4),
+        .avi-overlay .avi-rx-table td:nth-child(4){width:92px!important}
+        .avi-overlay .avi-rx-table th:nth-child(5),
+        .avi-overlay .avi-rx-table td:nth-child(5){width:275px!important}
       }
 
       @media(max-width:430px){
@@ -6984,7 +7021,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.16.0-recomendaciones-certificado-oficial-scroll-estable',
+    version:'1.17.0-scroll-receta-multidispositivo-css-only',
     abrir,
     cerrar,
     abrirReceta,
