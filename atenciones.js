@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_14_CONTINUIDAD_DOCUMENTAL_SCROLL_MOVIL';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_15_CERTIFICADO_PROFESIONAL_CSS_VERSIONADO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -5382,33 +5382,36 @@
       cie10:'CIE-10',
       estado:'Estado'
     };
-    if(mapa[clave]) return mapa[clave];
-
-    return String(clave || '')
-      .replace(/^auro_/i,'')
-      .replace(/[_-]+/g,' ')
-      .replace(/\b\w/g,function(c){ return c.toUpperCase(); });
+    return mapa[clave] || '';
   }
 
-  function paresDocumentoVistaIntegral(registro,tipo){
+  function recomendacionParesVistaIntegral(registro){
     registro = registro || {};
-    const ignorar = new Set([
-      'id_recomendacion','id_certificado','id_atencion','id_paciente',
-      'id_historia','id_cita','id_medico','numero_consulta',
-      'nombre_paciente','nombre_medico','fecha_atencion',
-      'creado_en','actualizado_en','detalle_json'
-    ]);
-
-    const prioridad = tipo === 'certificado'
-      ? ['tipo_certificado','fecha_emision','fecha_desde','fecha_hasta','dias_reposo','reposo_dias','diagnostico_cie10','diagnostico','motivo','observaciones','estado']
-      : ['recomendacion','recomendaciones','indicaciones','cuidados','signos_alarma','seguimiento','control','observaciones','estado'];
-
+    const detalle = parseJSON(registro.detalle_json,{}) || {};
+    const permitidos = [
+      'recomendacion','recomendaciones','indicaciones','cuidados',
+      'signos_alarma','seguimiento','control','observaciones'
+    ];
     const salida = [];
     const vistos = new Set();
 
     function agregar(clave,valor){
-      if(ignorar.has(clave) || esVacio(valor)) return;
-      if(typeof valor === 'object' && valor !== null) return;
+      if(!permitidos.includes(clave) || esVacio(valor)) return;
+
+      if(Array.isArray(valor)){
+        valor = valor.map(function(x){
+          if(typeof x === 'string') return texto(x);
+          if(x && typeof x === 'object'){
+            return texto(
+              x.texto || x.descripcion || x.recomendacion ||
+              x.indicacion || x.detalle || x.nombre || ''
+            );
+          }
+          return '';
+        }).filter(Boolean).join('\n');
+      }
+
+      if(valor && typeof valor === 'object') return;
 
       const limpio = limpiarTextoClinico(valor);
       if(!limpio) return;
@@ -5420,65 +5423,198 @@
       salida.push({
         etiqueta:etiquetaDocumentoVistaIntegral(clave),
         valor:limpio,
-        anchoCompleto:limpio.length > 110
+        anchoCompleto:true
       });
     }
 
-    prioridad.forEach(function(clave){
-      if(Object.prototype.hasOwnProperty.call(registro,clave)){
-        agregar(clave,registro[clave]);
-      }
-    });
-
-    const detalle = parseJSON(registro.detalle_json,null);
-    if(detalle && typeof detalle === 'object'){
-      Object.keys(detalle).forEach(function(clave){
-        if(clave === 'version') return;
-        const valor = detalle[clave];
-
-        if(Array.isArray(valor)){
-          const items = valor.map(function(x){
-            if(typeof x === 'string') return texto(x);
-            if(x && typeof x === 'object'){
-              return texto(
-                x.texto || x.descripcion || x.recomendacion ||
-                x.indicacion || x.detalle || x.nombre || ''
-              );
-            }
-            return '';
-          }).filter(Boolean);
-
-          if(items.length) agregar(clave,items.join('\n'));
-          return;
-        }
-
-        if(valor && typeof valor === 'object'){
-          const partes = Object.keys(valor).map(function(k){
-            const v = valor[k];
-            return esVacio(v) || typeof v === 'object'
-              ? ''
-              : etiquetaDocumentoVistaIntegral(k)+': '+texto(v);
-          }).filter(Boolean);
-          if(partes.length) agregar(clave,partes.join(' · '));
-          return;
-        }
-
-        agregar(clave,valor);
-      });
-    }
-
-    Object.keys(registro).forEach(function(clave){
-      if(prioridad.includes(clave) || clave === 'detalle_json') return;
+    permitidos.forEach(function(clave){
       agregar(clave,registro[clave]);
     });
 
+    permitidos.forEach(function(clave){
+      agregar(clave,detalle[clave]);
+    });
+
+    /*
+      Compatibilidad segura con detalle_json estructurado:
+      solo se leen claves clínicas conocidas; nunca version, centro, IDs,
+      URLs, colores, objetos técnicos ni snapshots internos.
+    */
     return deduplicarPares(salida);
   }
 
   function recomendacionRegistroHTML(registro){
-    if(!registro || texto(registro.id_atencion) === '') return '';
-    const pares = paresDocumentoVistaIntegral(registro,'recomendacion');
-    return paresHTMLClinico(pares,'avi-document-grid');
+    if(!registro || !texto(registro.id_atencion)) return '';
+    const pares = recomendacionParesVistaIntegral(registro);
+    if(!pares.length) return '';
+    return paresHTMLClinico(pares,'avi-document-grid avi-document-prose');
+  }
+
+  function objetoDetalleCertificado(detalle,clave){
+    const v = detalle?.[clave];
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  }
+
+  function primerDatoCertificado(){
+    for(let i=0;i<arguments.length;i++){
+      const v = texto(arguments[i]);
+      if(v && !esVacio(v)) return v;
+    }
+    return '';
+  }
+
+  function fechaDocumentoVistaIntegral(valor){
+    const raw = texto(valor);
+    if(!raw) return '';
+
+    /*
+      Fecha civil: se toma YYYY-MM-DD sin reinterpretar zona horaria.
+      Evita cambiar accidentalmente el día de nacimiento/emisión.
+    */
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m) return m[3]+'/'+m[2]+'/'+m[1];
+
+    return raw;
+  }
+
+  function horaDocumentoVistaIntegral(valor){
+    const raw = texto(valor);
+    if(!raw) return '';
+
+    let m = raw.match(/^(?:1899-\d{2}-\d{2}T)?(\d{2}):(\d{2})/);
+    if(m) return m[1]+':'+m[2];
+
+    m = raw.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+    if(m) return m[1]+':'+m[2];
+
+    return raw;
+  }
+
+  function certificadoVistaIntegralHTML(registro){
+    registro = registro || {};
+    const detalle = parseJSON(registro.detalle_json,{}) || {};
+    const paciente = objetoDetalleCertificado(detalle,'paciente');
+    const medico = objetoDetalleCertificado(detalle,'medico');
+    const centro = objetoDetalleCertificado(detalle,'centro');
+
+    const nombrePaciente = primerDatoCertificado(
+      registro.nombre_paciente, registro.paciente_nombre,
+      paciente.nombre_completo, paciente.nombre,
+      [paciente.nombres,paciente.apellidos].filter(Boolean).join(' ')
+    );
+    const documentoPaciente = primerDatoCertificado(
+      registro.numero_documento, registro.paciente_documento,
+      paciente.numero_documento, paciente.cedula,
+      paciente.documento, paciente.identificacion
+    );
+    const nacimiento = fechaDocumentoVistaIntegral(primerDatoCertificado(
+      paciente.fecha_nacimiento, paciente.nacimiento, detalle.fecha_nacimiento
+    ));
+
+    const tipo = primerDatoCertificado(
+      registro.tipo_certificado, detalle.tipo_certificado, 'Certificado médico'
+    );
+    const fechaEmision = fechaDocumentoVistaIntegral(primerDatoCertificado(
+      registro.fecha_emision, detalle.fecha_emision, registro.fecha_atencion
+    ));
+    const horaEmision = horaDocumentoVistaIntegral(primerDatoCertificado(
+      registro.hora_emision, detalle.hora_emision, registro.hora_atencion
+    ));
+
+    const diagnostico = primerDatoCertificado(
+      registro.diagnostico, detalle.diagnostico,
+      registro.descripcion_diagnostico, detalle.descripcion_diagnostico
+    );
+    const cie10 = primerDatoCertificado(
+      registro.diagnostico_cie10, registro.cie10,
+      detalle.diagnostico_cie10, detalle.cie10
+    );
+
+    const diasReposo = primerDatoCertificado(
+      registro.dias_reposo, registro.reposo_dias,
+      detalle.dias_reposo, detalle.reposo_dias
+    );
+    const desde = fechaDocumentoVistaIntegral(primerDatoCertificado(
+      registro.fecha_desde, detalle.fecha_desde
+    ));
+    const hasta = fechaDocumentoVistaIntegral(primerDatoCertificado(
+      registro.fecha_hasta, detalle.fecha_hasta
+    ));
+
+    const cuerpo = primerDatoCertificado(
+      registro.texto_certificado, registro.certificacion, registro.contenido,
+      detalle.texto_certificado, detalle.certificacion, detalle.contenido,
+      registro.motivo, detalle.motivo,
+      registro.observaciones, detalle.observaciones
+    );
+
+    const nombreMedico = primerDatoCertificado(
+      registro.nombre_medico, medico.nombre_completo, medico.nombre,
+      [medico.nombres,medico.apellidos].filter(Boolean).join(' ')
+    );
+    const especialidad = primerDatoCertificado(
+      registro.especialidad, detalle.especialidad,
+      medico.especialidad, medico.especialidad_principal
+    );
+    const registroMsp = primerDatoCertificado(
+      medico.registro_msp, medico.msp, medico.registro_profesional
+    );
+
+    const nombreCentro = primerDatoCertificado(
+      centro.nombre, centro.nombre_clinica, centro.nombre_centro,
+      centro.nombre_comercial, centro.razon_social
+    );
+    const direccionCentro = primerDatoCertificado(
+      centro.direccion, centro.direccion_clinica
+    );
+    const ciudadCentro = primerDatoCertificado(
+      centro.ciudad, centro.ciudad_clinica
+    );
+
+    const datosPaciente = [
+      nombrePaciente ? '<div><span>Paciente</span><b>'+esc(nombrePaciente)+'</b></div>' : '',
+      documentoPaciente ? '<div><span>Documento</span><b>'+esc(documentoPaciente)+'</b></div>' : '',
+      nacimiento ? '<div><span>Fecha de nacimiento</span><b>'+esc(nacimiento)+'</b></div>' : '',
+      fechaEmision ? '<div><span>Fecha de emisión</span><b>'+esc(fechaEmision)+(horaEmision ? ' · '+esc(horaEmision) : '')+'</b></div>' : ''
+    ].filter(Boolean).join('');
+
+    const datosClinicos = [
+      diagnostico || cie10
+        ? '<div class="avi-cert-clinical-row"><span>Diagnóstico</span><b>'+esc([cie10,diagnostico].filter(Boolean).join(' — '))+'</b></div>'
+        : '',
+      diasReposo
+        ? '<div class="avi-cert-clinical-row"><span>Reposo</span><b>'+esc(diasReposo)+' día'+(String(diasReposo)==='1'?'':'s')+'</b></div>'
+        : '',
+      (desde || hasta)
+        ? '<div class="avi-cert-clinical-row"><span>Período</span><b>'+esc([desde ? 'Desde '+desde : '',hasta ? 'Hasta '+hasta : ''].filter(Boolean).join(' · '))+'</b></div>'
+        : ''
+    ].filter(Boolean).join('');
+
+    return '<article class="avi-cert-page">'+
+      '<div class="avi-cert-brand">'+
+        '<div>'+
+          (nombreCentro ? '<strong>'+esc(nombreCentro)+'</strong>' : '')+
+          ((direccionCentro || ciudadCentro)
+            ? '<small>'+esc([direccionCentro,ciudadCentro].filter(Boolean).join(' · '))+'</small>'
+            : '')+
+        '</div>'+
+        '<span>Documento clínico · Solo lectura</span>'+
+      '</div>'+
+      '<div class="avi-cert-title">'+
+        '<small>'+esc(tipo)+'</small>'+
+        '<h4>Certificado médico</h4>'+
+      '</div>'+
+      (datosPaciente ? '<div class="avi-cert-patient-grid">'+datosPaciente+'</div>' : '')+
+      (cuerpo ? '<div class="avi-cert-body"><p>'+valorClinicoVisualHTML(cuerpo)+'</p></div>' : '')+
+      (datosClinicos ? '<div class="avi-cert-clinical">'+datosClinicos+'</div>' : '')+
+      ((nombreMedico || especialidad || registroMsp)
+        ? '<div class="avi-cert-signature">'+
+            (nombreMedico ? '<strong>'+esc(nombreMedico)+'</strong>' : '')+
+            (especialidad ? '<span>'+esc(especialidad)+'</span>' : '')+
+            (registroMsp ? '<small>Registro MSP: '+esc(registroMsp)+'</small>' : '')+
+          '</div>'
+        : '')+
+    '</article>';
   }
 
   function certificadosRegistrosHTML(registros){
@@ -5495,20 +5631,8 @@
 
     if(!lista.length) return '';
 
-    return '<div class="avi-document-list">'+lista.map(function(registro,index){
-      const pares = paresDocumentoVistaIntegral(registro,'certificado');
-      if(!pares.length) return '';
-
-      return '<article class="avi-document-card">'+
-        '<div class="avi-document-head">'+
-          '<strong>'+esc(texto(registro.tipo_certificado) || 'Certificado médico')+'</strong>'+
-          (texto(registro.fecha_emision)
-            ? '<span>'+esc(fechaVisual(registro.fecha_emision))+'</span>'
-            : '')+
-        '</div>'+
-        paresHTMLClinico(pares,'avi-document-grid')+
-      '</article>';
-    }).filter(Boolean).join('')+'</div>';
+    const html = lista.map(certificadoVistaIntegralHTML).filter(Boolean).join('');
+    return html ? '<div class="avi-document-list">'+html+'</div>' : '';
   }
 
   async function completarDocumentosVistaIntegral(idAtencion){
@@ -5566,10 +5690,24 @@
   }
 
   function instalarEstilos(){
-    if(document.getElementById('auroVistaIntegralCSS')) return;
+    const CSS_VERSION = '1.15.0';
+    const existente = document.getElementById('auroVistaIntegralCSS');
+
+    /*
+      BLINDAJE RESPONSIVE VERSIONADO:
+      Si el navegador conserva CSS de una versión anterior de Vista Integral,
+      se sustituye únicamente ese style propietario. Esto evita que iPhone
+      siga aplicando la antigua receta en tarjetas después de actualizar JS.
+      No toca estilos globales, módulos clínicos ni persistencia.
+    */
+    if(existente){
+      if(texto(existente.dataset?.auroVistaVersion) === CSS_VERSION) return;
+      existente.remove();
+    }
 
     const s = document.createElement('style');
     s.id = 'auroVistaIntegralCSS';
+    s.dataset.auroVistaVersion = CSS_VERSION;
     s.textContent = `
       /* ============================================================
          AUROSANAX VISTA INTEGRAL ÉLITE - SOLO PRESENTACIÓN
@@ -6067,20 +6205,106 @@
       }
 
 
-      .avi-document-list{display:grid;gap:10px}
-      .avi-document-card{
-        border:1px solid #e6e9ee;border-radius:13px;padding:11px;background:#fff;
-      }
-      .avi-document-head{
-        display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
-        margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid #eef1f4;
-      }
-      .avi-document-head strong{color:#3f1630;font-size:12.5px}
-      .avi-document-head span{color:#64748b;font-size:10.5px;font-weight:800}
+      .avi-document-list{display:grid;gap:12px}
       .avi-document-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .avi-document-prose .avi-line{grid-column:1/-1}
+      .avi-document-prose .avi-line p{
+        text-align:justify;
+        text-justify:inter-word;
+        line-height:1.62;
+      }
+
+      .avi-cert-page{
+        width:100%;
+        border:1px solid #dedfe4;
+        border-radius:12px;
+        background:#fff;
+        padding:26px 34px 28px;
+        color:#1f2937;
+      }
+      .avi-cert-brand{
+        display:flex;justify-content:space-between;gap:18px;align-items:flex-start;
+        padding-bottom:13px;border-bottom:1px solid #dfe3e8;
+      }
+      .avi-cert-brand strong{
+        display:block;color:#6c1d52;font-size:14px;font-weight:950;
+      }
+      .avi-cert-brand small{
+        display:block;margin-top:3px;color:#64748b;font-size:10.5px;line-height:1.4;
+      }
+      .avi-cert-brand>span{
+        color:#94a3b8;font-size:9.5px;font-weight:850;text-transform:uppercase;
+        letter-spacing:.045em;text-align:right;
+      }
+      .avi-cert-title{text-align:center;padding:20px 0 15px}
+      .avi-cert-title small{
+        display:block;color:#8b1e5a;font-size:9.5px;font-weight:900;
+        text-transform:uppercase;letter-spacing:.07em;
+      }
+      .avi-cert-title h4{
+        margin:3px 0 0;color:#2b1623;font-size:20px;font-weight:950;
+      }
+      .avi-cert-patient-grid{
+        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:9px 24px;padding:13px 0;border-top:1px solid #eef0f3;border-bottom:1px solid #eef0f3;
+      }
+      .avi-cert-patient-grid div{min-width:0}
+      .avi-cert-patient-grid span,
+      .avi-cert-clinical-row span{
+        display:block;color:#7a174f;font-size:9px;font-weight:900;
+        text-transform:uppercase;letter-spacing:.045em;
+      }
+      .avi-cert-patient-grid b,
+      .avi-cert-clinical-row b{
+        display:block;margin-top:3px;color:#263142;font-size:12.3px;
+        line-height:1.45;overflow-wrap:anywhere;
+      }
+      .avi-cert-body{padding:20px 2px 14px}
+      .avi-cert-body p{
+        margin:0;color:#202938;font-size:13.4px;line-height:1.72;
+        text-align:justify;text-justify:inter-word;white-space:pre-wrap;
+      }
+      .avi-cert-clinical{
+        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:9px 24px;padding:12px 0;border-top:1px solid #eef0f3;
+      }
+      .avi-cert-clinical-row{min-width:0}
+      .avi-cert-signature{
+        margin:28px 0 0 auto;width:min(360px,52%);padding-top:10px;
+        border-top:1px solid #cfd5dc;text-align:center;
+      }
+      .avi-cert-signature strong{
+        display:block;color:#2b1623;font-size:12.5px;font-weight:950;
+      }
+      .avi-cert-signature span{
+        display:block;margin-top:2px;color:#475569;font-size:11px;
+      }
+      .avi-cert-signature small{
+        display:block;margin-top:2px;color:#64748b;font-size:9.5px;
+      }
+
       @media(max-width:760px){
         .avi-document-grid{grid-template-columns:1fr}
-        .avi-document-head{display:grid;grid-template-columns:1fr}
+        .avi-document-prose .avi-line p{text-align:left}
+        .avi-cert-page{
+          border-radius:11px;padding:17px 15px 20px;
+        }
+        .avi-cert-brand{
+          display:grid;grid-template-columns:1fr;gap:6px;
+        }
+        .avi-cert-brand>span{text-align:left}
+        .avi-cert-title{padding:16px 0 12px}
+        .avi-cert-title h4{font-size:17px}
+        .avi-cert-patient-grid,
+        .avi-cert-clinical{
+          grid-template-columns:1fr;
+        }
+        .avi-cert-body p{
+          font-size:12.6px;line-height:1.62;text-align:left;
+        }
+        .avi-cert-signature{
+          width:100%;margin-top:24px;
+        }
       }
 
       .avi-loading{padding:34px;text-align:center;color:#64748b;font-weight:750}
@@ -6159,36 +6383,38 @@
           desplazamiento horizontal táctil únicamente dentro de la receta.
           No altera datos, columnas, guardado, IDs ni el resto de Vista Integral.
         */
-        .avi-rx-table-wrap{
-          width:100%;
-          max-width:100%;
-          overflow-x:auto!important;
-          overflow-y:visible!important;
-          border:1px solid #dfe4ea;
-          border-radius:10px;
-          -webkit-overflow-scrolling:touch;
+        .avi-overlay .avi-rx-table-wrap{
+          position:relative;
+          width:100%!important;
+          max-width:100%!important;
+          overflow-x:scroll!important;
+          overflow-y:hidden!important;
+          border:1px solid #dfe4ea!important;
+          border-radius:10px!important;
+          -webkit-overflow-scrolling:touch!important;
           overscroll-behavior-x:contain;
-          touch-action:pan-x pan-y;
+          touch-action:pan-x!important;
           scrollbar-width:thin;
         }
-        .avi-rx-table{
+        .avi-overlay .avi-rx-table{
           display:table!important;
           width:760px!important;
           min-width:760px!important;
+          max-width:none!important;
           table-layout:fixed!important;
           border-collapse:collapse!important;
+          transform:none!important;
         }
-        .avi-rx-table thead{display:table-header-group!important}
-        .avi-rx-table tbody{display:table-row-group!important}
-        .avi-rx-table tr{display:table-row!important}
-        .avi-rx-table th,
-        .avi-rx-table td{
+        .avi-overlay .avi-rx-table thead{display:table-header-group!important}
+        .avi-overlay .avi-rx-table tbody{display:table-row-group!important}
+        .avi-overlay .avi-rx-table tr{display:table-row!important}
+        .avi-overlay .avi-rx-table th,
+        .avi-overlay .avi-rx-table td{
           display:table-cell!important;
-          width:auto;
-          min-width:0;
+          min-width:0!important;
           text-align:left;
         }
-        .avi-rx-table td::before{content:none!important}
+        .avi-overlay .avi-rx-table td::before{content:none!important}
       }
 
       @media(max-width:430px){
@@ -6792,7 +7018,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.14.0-continuidad-documental-scroll-movil',
+    version:'1.15.0-certificado-profesional-css-versionado',
     abrir,
     cerrar,
     abrirReceta,
