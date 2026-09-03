@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_12_DIAGNOSTICOS_RECETA_ESTRUCTURADOS';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_13_RESPONSIVE_DOCUMENTAL_PULIDO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -5068,11 +5068,11 @@
         '</tr></thead>'+
         '<tbody>'+medicamentos.map(function(m,i){
           return '<tr>'+
-            '<td class="avi-rx-num">'+esc(i+1)+'</td>'+
-            '<td><strong>'+esc(m.med || 'Medicamento')+'</strong></td>'+
-            '<td>'+esc(m.pres || '—')+'</td>'+
-            '<td class="avi-rx-cant">'+esc(m.cantidad || '—')+'</td>'+
-            '<td>'+esc(indicacionMedicamentoReceta(m) || '—')+'</td>'+
+            '<td class="avi-rx-num" data-label="N.º">'+esc(i+1)+'</td>'+
+            '<td data-label="Medicamento"><strong>'+esc(m.med || 'Medicamento')+'</strong></td>'+
+            '<td data-label="Presentación / concentración">'+esc(m.pres || '—')+'</td>'+
+            '<td class="avi-rx-cant" data-label="Cantidad">'+esc(m.cantidad || '—')+'</td>'+
+            '<td data-label="Indicaciones">'+esc(indicacionMedicamentoReceta(m) || '—')+'</td>'+
           '</tr>';
         }).join('')+'</tbody>'+
       '</table>'+
@@ -5301,8 +5301,7 @@
       return '<article class="avi-rx-card">'+
         '<div class="avi-rx-head">'+
           '<div class="avi-rx-heading">'+
-            '<span class="avi-rx-kicker"><i class="bi bi-prescription2"></i> Receta asociada</span>'+
-            '<h4>Receta médica</h4>'+
+            '<h4><i class="bi bi-prescription2"></i> Receta médica</h4>'+
           '</div>'+
           '<button type="button" class="avi-btn avi-btn-primary" data-avi-rx="'+esc(r.id_receta || r.id || '')+'">'+
             '<i class="bi bi-eye"></i> Ver receta completa'+
@@ -5319,6 +5318,251 @@
         indicaciones+
       '</article>';
     }).join('')+'</div>';
+  }
+
+
+  function registrosRespuestaVistaIntegral(respuesta){
+    if(Array.isArray(respuesta)) return respuesta;
+    if(Array.isArray(respuesta?.registros)) return respuesta.registros;
+    if(Array.isArray(respuesta?.data)) return respuesta.data;
+    if(respuesta?.data && typeof respuesta.data === 'object') return [respuesta.data];
+    if(respuesta && typeof respuesta === 'object' && !respuesta.success && !respuesta.message){
+      return [respuesta];
+    }
+    return [];
+  }
+
+  async function getSoloLecturaVistaIntegral(accion,parametros){
+    try{
+      if(typeof API_URL === 'undefined' || !API_URL) return null;
+
+      const qs = new URLSearchParams();
+      qs.set('accion',accion);
+      Object.entries(parametros || {}).forEach(function(par){
+        const clave = par[0];
+        const valor = par[1];
+        if(valor !== undefined && valor !== null && texto(valor)){
+          qs.set(clave,texto(valor));
+        }
+      });
+      qs.set('_',Date.now());
+
+      const res = await fetch(API_URL+'?'+qs.toString(),{
+        method:'GET',
+        cache:'no-store'
+      });
+      if(!res.ok) return null;
+      return await res.json();
+    }catch(error){
+      console.warn(MODULO,'No se pudo completar lectura documental '+accion+'.',error);
+      return null;
+    }
+  }
+
+  function etiquetaDocumentoVistaIntegral(clave){
+    const mapa = {
+      recomendacion:'Recomendación',
+      recomendaciones:'Recomendaciones',
+      indicaciones:'Indicaciones',
+      seguimiento:'Seguimiento',
+      control:'Control',
+      signos_alarma:'Signos de alarma',
+      cuidados:'Cuidados',
+      observaciones:'Observaciones',
+      detalle:'Detalle',
+      motivo:'Motivo',
+      tipo_certificado:'Tipo de certificado',
+      fecha_emision:'Fecha de emisión',
+      fecha_desde:'Desde',
+      fecha_hasta:'Hasta',
+      dias_reposo:'Días de reposo',
+      reposo_dias:'Días de reposo',
+      diagnostico:'Diagnóstico',
+      diagnostico_cie10:'CIE-10',
+      cie10:'CIE-10',
+      estado:'Estado'
+    };
+    if(mapa[clave]) return mapa[clave];
+
+    return String(clave || '')
+      .replace(/^auro_/i,'')
+      .replace(/[_-]+/g,' ')
+      .replace(/\b\w/g,function(c){ return c.toUpperCase(); });
+  }
+
+  function paresDocumentoVistaIntegral(registro,tipo){
+    registro = registro || {};
+    const ignorar = new Set([
+      'id_recomendacion','id_certificado','id_atencion','id_paciente',
+      'id_historia','id_cita','id_medico','numero_consulta',
+      'nombre_paciente','nombre_medico','fecha_atencion',
+      'creado_en','actualizado_en','detalle_json'
+    ]);
+
+    const prioridad = tipo === 'certificado'
+      ? ['tipo_certificado','fecha_emision','fecha_desde','fecha_hasta','dias_reposo','reposo_dias','diagnostico_cie10','diagnostico','motivo','observaciones','estado']
+      : ['recomendacion','recomendaciones','indicaciones','cuidados','signos_alarma','seguimiento','control','observaciones','estado'];
+
+    const salida = [];
+    const vistos = new Set();
+
+    function agregar(clave,valor){
+      if(ignorar.has(clave) || esVacio(valor)) return;
+      if(typeof valor === 'object' && valor !== null) return;
+
+      const limpio = limpiarTextoClinico(valor);
+      if(!limpio) return;
+
+      const firma = norm(clave+'|'+limpio);
+      if(!firma || vistos.has(firma)) return;
+      vistos.add(firma);
+
+      salida.push({
+        etiqueta:etiquetaDocumentoVistaIntegral(clave),
+        valor:limpio,
+        anchoCompleto:limpio.length > 110
+      });
+    }
+
+    prioridad.forEach(function(clave){
+      if(Object.prototype.hasOwnProperty.call(registro,clave)){
+        agregar(clave,registro[clave]);
+      }
+    });
+
+    const detalle = parseJSON(registro.detalle_json,null);
+    if(detalle && typeof detalle === 'object'){
+      Object.keys(detalle).forEach(function(clave){
+        if(clave === 'version') return;
+        const valor = detalle[clave];
+
+        if(Array.isArray(valor)){
+          const items = valor.map(function(x){
+            if(typeof x === 'string') return texto(x);
+            if(x && typeof x === 'object'){
+              return texto(
+                x.texto || x.descripcion || x.recomendacion ||
+                x.indicacion || x.detalle || x.nombre || ''
+              );
+            }
+            return '';
+          }).filter(Boolean);
+
+          if(items.length) agregar(clave,items.join('\n'));
+          return;
+        }
+
+        if(valor && typeof valor === 'object'){
+          const partes = Object.keys(valor).map(function(k){
+            const v = valor[k];
+            return esVacio(v) || typeof v === 'object'
+              ? ''
+              : etiquetaDocumentoVistaIntegral(k)+': '+texto(v);
+          }).filter(Boolean);
+          if(partes.length) agregar(clave,partes.join(' · '));
+          return;
+        }
+
+        agregar(clave,valor);
+      });
+    }
+
+    Object.keys(registro).forEach(function(clave){
+      if(prioridad.includes(clave) || clave === 'detalle_json') return;
+      agregar(clave,registro[clave]);
+    });
+
+    return deduplicarPares(salida);
+  }
+
+  function recomendacionRegistroHTML(registro){
+    if(!registro || texto(registro.id_atencion) === '') return '';
+    const pares = paresDocumentoVistaIntegral(registro,'recomendacion');
+    return paresHTMLClinico(pares,'avi-document-grid');
+  }
+
+  function certificadosRegistrosHTML(registros){
+    const lista = (Array.isArray(registros) ? registros : [])
+      .filter(function(r){
+        const estado = norm(r?.estado || 'Activo');
+        return texto(r?.id_certificado) &&
+          !['anulado','anulada','eliminado','eliminada','inactivo','inactiva'].includes(estado);
+      })
+      .sort(function(a,b){
+        return texto(b?.actualizado_en || b?.creado_en || b?.fecha_emision || '')
+          .localeCompare(texto(a?.actualizado_en || a?.creado_en || a?.fecha_emision || ''));
+      });
+
+    if(!lista.length) return '';
+
+    return '<div class="avi-document-list">'+lista.map(function(registro,index){
+      const pares = paresDocumentoVistaIntegral(registro,'certificado');
+      if(!pares.length) return '';
+
+      return '<article class="avi-document-card">'+
+        '<div class="avi-document-head">'+
+          '<strong>'+esc(texto(registro.tipo_certificado) || 'Certificado médico')+'</strong>'+
+          (texto(registro.fecha_emision)
+            ? '<span>'+esc(fechaVisual(registro.fecha_emision))+'</span>'
+            : '')+
+        '</div>'+
+        paresHTMLClinico(pares,'avi-document-grid')+
+      '</article>';
+    }).filter(Boolean).join('')+'</div>';
+  }
+
+  async function completarDocumentosVistaIntegral(idAtencion){
+    const id = texto(idAtencion);
+    if(!id) return;
+
+    const overlay = document.getElementById('auroVistaIntegralOverlay');
+    if(!overlay) return;
+
+    const idActivo = texto(
+      typeof window.getIdAtencionActiva === 'function'
+        ? window.getIdAtencionActiva()
+        : ''
+    );
+    if(idActivo !== id) return;
+
+    const resultados = await Promise.all([
+      getSoloLecturaVistaIntegral('buscarRecomendacionPorAtencion',{id_atencion:id}),
+      getSoloLecturaVistaIntegral('listarCertificadosPorAtencion',{id_atencion:id})
+    ]);
+
+    const overlayActual = document.getElementById('auroVistaIntegralOverlay');
+    if(!overlayActual) return;
+
+    const idActivoActual = texto(
+      typeof window.getIdAtencionActiva === 'function'
+        ? window.getIdAtencionActiva()
+        : ''
+    );
+    if(idActivoActual !== id) return;
+
+    const slot = overlayActual.querySelector('[data-avi-documentos="'+CSS.escape(id)+'"]');
+    if(!slot) return;
+
+    const recomendacionLista = registrosRespuestaVistaIntegral(resultados[0]);
+    const recomendacion = recomendacionLista.find(function(r){
+      return texto(r?.id_atencion) === id && texto(r?.id_recomendacion);
+    }) || null;
+
+    const certificados = registrosRespuestaVistaIntegral(resultados[1]).filter(function(r){
+      return texto(r?.id_atencion) === id && texto(r?.id_certificado);
+    });
+
+    const recomendaciones = seccion(
+      'Recomendaciones','bi-heart-pulse',
+      recomendacionRegistroHTML(recomendacion),false
+    );
+
+    const certificadosHTML = seccion(
+      'Certificados emitidos','bi-file-earmark-medical',
+      certificadosRegistrosHTML(certificados),false
+    );
+
+    slot.innerHTML = recomendaciones + certificadosHTML;
   }
 
   function instalarEstilos(){
@@ -5822,6 +6066,23 @@
         white-space:nowrap;
       }
 
+
+      .avi-document-list{display:grid;gap:10px}
+      .avi-document-card{
+        border:1px solid #e6e9ee;border-radius:13px;padding:11px;background:#fff;
+      }
+      .avi-document-head{
+        display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
+        margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid #eef1f4;
+      }
+      .avi-document-head strong{color:#3f1630;font-size:12.5px}
+      .avi-document-head span{color:#64748b;font-size:10.5px;font-weight:800}
+      .avi-document-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      @media(max-width:760px){
+        .avi-document-grid{grid-template-columns:1fr}
+        .avi-document-head{display:grid;grid-template-columns:1fr}
+      }
+
       .avi-loading{padding:34px;text-align:center;color:#64748b;font-weight:750}
 
       .avi-rx-overlay{
@@ -5891,7 +6152,53 @@
         .avi-rx-meta-compact{grid-template-columns:1fr}
         .avi-rx-dx-row{display:grid;grid-template-columns:1fr}
         .avi-rx-dx-tags{justify-content:flex-start}
-        .avi-rx-table{min-width:700px}
+
+        /*
+          RECETA RESPONSIVE MÓVIL:
+          en teléfono la tabla se convierte únicamente en presentación de tarjetas.
+          Escritorio conserva intacta la tabla profesional.
+        */
+        .avi-rx-table-wrap{
+          overflow:visible;
+          border:0;
+          border-radius:0;
+        }
+        .avi-rx-table,
+        .avi-rx-table tbody,
+        .avi-rx-table tr,
+        .avi-rx-table td{
+          display:block;
+          width:100%!important;
+          min-width:0!important;
+        }
+        .avi-rx-table{table-layout:auto}
+        .avi-rx-table thead{display:none}
+        .avi-rx-table tr{
+          margin-bottom:9px;
+          border:1px solid #e3e7ec;
+          border-radius:11px;
+          overflow:hidden;
+          background:#fff;
+        }
+        .avi-rx-table td{
+          display:grid;
+          grid-template-columns:minmax(92px,36%) minmax(0,1fr);
+          gap:8px;
+          text-align:left!important;
+          padding:8px;
+          border-top:1px solid #edf0f3;
+          overflow-wrap:anywhere;
+          word-break:normal;
+        }
+        .avi-rx-table td:first-child{border-top:0}
+        .avi-rx-table td::before{
+          content:attr(data-label);
+          color:#7a174f;
+          font-size:8.8px;
+          font-weight:900;
+          text-transform:uppercase;
+          letter-spacing:.035em;
+        }
       }
 
       @media(max-width:430px){
@@ -6244,7 +6551,7 @@
     );
 
     const recetas = seccion(
-      'Recetas asociadas','bi-prescription2',
+      'Recetas','bi-prescription2',
       recetasHTML(idAtencion),true
     );
 
@@ -6265,7 +6572,15 @@
           '</section>'
         : '')+
       '<div class="avi-clinical-divider"><span>Resumen clínico de la consulta</span></div>'+
-      anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+recetas;
+      anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+recetas+
+      '<div data-avi-documentos="'+esc(idAtencion)+'"></div>';
+
+    /*
+      Recomendaciones y Certificados se enriquecen después del render inicial
+      mediante GET de solo lectura y se aceptan únicamente si la atención
+      sigue siendo exactamente la misma. No bloquean Vista Integral.
+    */
+    completarDocumentosVistaIntegral(idAtencion);
 
     const contextBox = overlay.querySelector('[data-avi-contexto]');
     if(contextBox) contextBox.innerHTML = encabezadoContexto(a);
@@ -6449,7 +6764,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.12.0-diagnosticos-receta-estructurados',
+    version:'1.13.0-responsive-documental-pulido',
     abrir,
     cerrar,
     abrirReceta,
