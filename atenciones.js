@@ -2510,10 +2510,20 @@
       return;
     }
 
-    alert(
-      'El visor auxiliar de receta no está cargado. ' +
-      'Verifique que vista_integral_atencion.js esté incluido después de recetas.js.'
-    );
+    /*
+      Blindaje aditivo del botón Ver receta:
+      si la Vista Integral todavía no expuso su puente, se conserva el mismo
+      destino oficial de Recetas sin duplicar visor ni cambiar id_receta.
+    */
+    if(typeof window.pdfRecetaEmitida === 'function'){
+      Promise.resolve(window.pdfRecetaEmitida(id)).catch(function(error){
+        console.error(MODULO, 'No se pudo abrir la receta oficial.', error);
+        alert('No se pudo abrir la vista oficial de la receta.');
+      });
+      return;
+    }
+
+    alert('La vista oficial de Recetas no está disponible.');
   }
 
   function ocultarDetalleAtencion(){
@@ -3668,7 +3678,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_10_PULIDO_ANTIRREGRESIVO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_11_RECETA_PREVIA_PROFESIONAL_ANTIRREGRESIVA';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4894,6 +4904,103 @@
     return html ? '<div class="avi-med-grid">'+html+'</div>' : '';
   }
 
+  /* ============================================================
+     VISTA INTEGRAL · RECETA PREVIA PROFESIONAL V1.11
+     SOLO PRESENTACIÓN.
+     - No modifica recetas.js, PDF, guardado, IDs ni backend.
+     - Lee exclusivamente la receta ya asociada a esta id_atencion.
+     - La vista oficial continúa a cargo de pdfRecetaEmitida(id_receta).
+  ============================================================ */
+  function recetaDiagnosticoVisual(r){
+    const codigo = texto(r?.diagnostico_cie10 || r?.cie10 || '');
+    const descripcion = texto(
+      r?.diagnostico_descripcion ||
+      r?.descripcion_diagnostico ||
+      r?.diagnostico_nombre ||
+      r?.diagnostico ||
+      ''
+    );
+
+    if(codigo && descripcion){
+      const nc = norm(codigo);
+      const nd = norm(descripcion);
+      if(nd.includes(nc)) return descripcion;
+      return codigo + ' - ' + descripcion;
+    }
+
+    return codigo || descripcion;
+  }
+
+  function recetaIndicacionMedicamentoVisual(m){
+    if(!m || typeof m !== 'object') return '';
+
+    const partes = [];
+    const via = texto(m.via);
+    const frecuencia = texto(m.frec || m.frecuencia);
+    const duracion = texto(m.dur || m.duracion);
+    const continuo = texto(m.continuo || m.tratamiento_continuo);
+    const indicacion = texto(m.ind || m.indicaciones);
+
+    if(via) partes.push('Vía: ' + via);
+    if(frecuencia) partes.push('Frecuencia: ' + frecuencia);
+    if(duracion) partes.push('Duración: ' + duracion);
+
+    if(continuo && !/^(no|false|0)$/i.test(continuo)){
+      partes.push(/^(si|sí|true|1)$/i.test(continuo) ? 'Tratamiento continuo' : continuo);
+    }
+
+    if(indicacion) partes.push(indicacion);
+    return partes.join(' · ');
+  }
+
+  function recetaMedicamentosTablaHTML(valor){
+    const raw = texto(valor);
+    if(!raw) return '';
+
+    let data = parseJSON(raw,null);
+
+    if(!data){
+      const lista = listaDesdeValor(raw) || [raw];
+      data = lista.map(function(item){ return { texto:item }; });
+    }
+
+    if(!Array.isArray(data)) data = [data];
+
+    const filas = data.filter(Boolean).map(function(m,i){
+      if(typeof m === 'string') m = {texto:m};
+
+      const nombre = texto(m.med || m.medicamento || m.nombre || m.texto);
+      const presentacion = texto(m.pres || m.presentacion || m.concentracion || '');
+      const cantidad = texto(m.cantidad || '');
+      const indicaciones = recetaIndicacionMedicamentoVisual(m);
+
+      if(!nombre && !presentacion && !cantidad && !indicaciones) return '';
+
+      return '<tr>'+
+        '<td data-label="N.º" class="avi-rx-col-num">'+esc(i+1)+'</td>'+
+        '<td data-label="Medicamento"><strong>'+esc(nombre || 'Medicamento')+'</strong></td>'+
+        '<td data-label="Presentación / concentración">'+esc(presentacion || '—')+'</td>'+
+        '<td data-label="Cantidad" class="avi-rx-col-cant">'+esc(cantidad || '—')+'</td>'+
+        '<td data-label="Indicaciones" class="avi-rx-col-ind">'+esc(indicaciones || '—')+'</td>'+
+      '</tr>';
+    }).filter(Boolean).join('');
+
+    if(!filas) return '';
+
+    return '<div class="avi-rx-table-wrap">'+
+      '<table class="avi-rx-table">'+
+        '<thead><tr>'+
+          '<th>N.º</th>'+
+          '<th>Medicamento</th>'+
+          '<th>Presentación / concentración</th>'+
+          '<th>Cantidad</th>'+
+          '<th>Indicaciones</th>'+
+        '</tr></thead>'+
+        '<tbody>'+filas+'</tbody>'+
+      '</table>'+
+    '</div>';
+  }
+
   function planHTML(){
     const pares = capturarPanel('hc_plan');
     if(!pares.length) return '';
@@ -4991,11 +5098,9 @@
     if(!recetas.length) return '';
 
     /*
-      Evita repetición visual Plan -> Receta:
-      si las indicaciones de una receta son exactamente las mismas que ya
-      aparecen como indicaciones generales del Plan, la Vista Integral no
-      las imprime por segunda vez dentro de la tarjeta de receta.
-      La receta y sus datos permanecen intactos.
+      Conserva la regla antirregresiva existente:
+      una recomendación/indicación idéntica a la ya mostrada por Plan no se
+      repite visualmente. El dato persistido nunca se modifica.
     */
     const indicacionesPlan = new Set(
       capturarPanel('hc_plan')
@@ -5005,31 +5110,46 @@
     );
 
     return '<div class="avi-rx-list">'+recetas.map(r=>{
-      const meds = medicamentoCards(r.medicamento || r.medicamentos);
-      const indicacionReceta = limpiarTextoClinico(r.indicaciones);
-      const indicaciones = (
-        indicacionReceta &&
-        !indicacionesPlan.has(norm(indicacionReceta))
-      ) ? indicacionesHTML(indicacionReceta) : '';
+      const idReceta = texto(r.id_receta || r.id || '');
+      const diagnostico = recetaDiagnosticoVisual(r);
+      const tablaMedicamentos = recetaMedicamentosTablaHTML(r.medicamento || r.medicamentos);
 
-      return '<article class="avi-rx-card">'+
+      const recomendacionesRaw = limpiarTextoClinico(
+        r.recomendaciones ||
+        r.recomendacion ||
+        r.indicaciones_generales ||
+        r.indicaciones ||
+        ''
+      );
+
+      const recomendaciones = (
+        recomendacionesRaw &&
+        !indicacionesPlan.has(norm(recomendacionesRaw))
+      ) ? indicacionesHTML(recomendacionesRaw) : '';
+
+      return '<article class="avi-rx-card avi-rx-document-preview">'+
         '<div class="avi-rx-head">'+
           '<div class="avi-rx-heading">'+
-            '<span class="avi-rx-kicker"><i class="bi bi-prescription2"></i> Receta emitida</span>'+
+            '<span class="avi-rx-kicker"><i class="bi bi-prescription2"></i> Receta asociada</span>'+
             '<h4>Receta médica</h4>'+
-            '<small><b>ID receta</b> · '+esc(r.id_receta || r.id || '')+'</small>'+
+            (diagnostico
+              ? '<div class="avi-rx-diagnostico"><span>Diagnóstico</span><b>'+esc(diagnostico)+'</b></div>'
+              : '')+
           '</div>'+
-          '<button type="button" class="avi-btn avi-btn-primary" data-avi-rx="'+esc(r.id_receta || r.id || '')+'">'+
+          '<button type="button" class="avi-btn avi-btn-primary" data-avi-rx="'+esc(idReceta)+'" '+(!idReceta?'disabled':'')+'>'+
             '<i class="bi bi-eye"></i> Ver receta completa'+
           '</button>'+
         '</div>'+
-        '<div class="avi-rx-meta">'+
+        '<div class="avi-rx-meta avi-rx-meta-4">'+
           dato('Fecha',fechaVisual(r.fecha_receta || r.fecha))+
           dato('CIE-10',r.diagnostico_cie10 || r.cie10)+
           dato('Estado',r.estado || 'Emitida')+
+          dato('ID receta',idReceta)+
         '</div>'+
-        meds+
-        indicaciones+
+        (tablaMedicamentos || '<div class="avi-rx-empty">Sin medicamentos registrados.</div>')+
+        (recomendaciones
+          ? '<div class="avi-rx-recomendaciones"><h5>Recomendaciones</h5>'+recomendaciones+'</div>'
+          : '')+
       '</article>';
     }).join('')+'</div>';
   }
@@ -5436,6 +5556,52 @@
         gap:7px;margin:9px 0 11px;
       }
       .avi-rx-meta .avi-data{min-height:50px;padding:7px 9px}
+      .avi-rx-meta-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+      .avi-rx-diagnostico{
+        margin-top:7px;display:grid;gap:2px;
+      }
+      .avi-rx-diagnostico span{
+        color:#7a174f;font-size:9px;font-weight:900;text-transform:uppercase;
+        letter-spacing:.045em;
+      }
+      .avi-rx-diagnostico b{
+        color:#263244;font-size:11.8px;line-height:1.35;overflow-wrap:anywhere;
+      }
+      .avi-rx-table-wrap{
+        width:100%;overflow:auto;border:1px solid #dde2e8;border-radius:11px;
+        background:#fff;-webkit-overflow-scrolling:touch;
+      }
+      .avi-rx-table{
+        width:100%;border-collapse:collapse;table-layout:fixed;
+        font-size:11.5px;color:#263244;
+      }
+      .avi-rx-table th{
+        background:#30323a;color:#fff;padding:8px 7px;text-align:left;
+        font-size:9.8px;line-height:1.15;font-weight:900;
+      }
+      .avi-rx-table td{
+        padding:8px 7px;border-top:1px solid #e7e9ed;vertical-align:top;
+        line-height:1.4;overflow-wrap:anywhere;
+      }
+      .avi-rx-table th:nth-child(1),.avi-rx-table td:nth-child(1){width:5%;text-align:center}
+      .avi-rx-table th:nth-child(2),.avi-rx-table td:nth-child(2){width:19%}
+      .avi-rx-table th:nth-child(3),.avi-rx-table td:nth-child(3){width:22%}
+      .avi-rx-table th:nth-child(4),.avi-rx-table td:nth-child(4){width:9%;text-align:center}
+      .avi-rx-table th:nth-child(5),.avi-rx-table td:nth-child(5){width:45%}
+      .avi-rx-table td strong{color:#1f2937;font-weight:900}
+      .avi-rx-recomendaciones{
+        margin-top:13px;padding-top:11px;border-top:1px solid #e5e7eb;
+      }
+      .avi-rx-recomendaciones h5{
+        margin:0 0 7px;color:#334155;font-size:11.5px;font-weight:950;
+        text-transform:uppercase;letter-spacing:.045em;
+      }
+      .avi-rx-recomendaciones .avi-note{margin-top:0;border-top:0;padding-top:0;background:transparent}
+      .avi-rx-recomendaciones .avi-note>b{display:none}
+      .avi-rx-empty{
+        padding:10px;border:1px dashed #d7dce2;border-radius:10px;color:#64748b;
+        font-size:11.5px;background:#fafbfc;
+      }
       .avi-note{
         margin-top:11px;border-top:1px solid #e5e7eb;padding-top:10px;
         background:#fcfdff;
@@ -5504,6 +5670,23 @@
         .avi-section-body{padding:9px 10px 11px}
         .avi-rx-head{display:grid;grid-template-columns:1fr}
         .avi-rx-head .avi-btn{width:100%;min-height:41px}
+        .avi-rx-meta-4{grid-template-columns:1fr 1fr}
+        .avi-rx-table-wrap{overflow:visible;border:0;border-radius:0}
+        .avi-rx-table,.avi-rx-table tbody,.avi-rx-table tr,.avi-rx-table td{display:block;width:100%!important}
+        .avi-rx-table thead{display:none}
+        .avi-rx-table tr{
+          margin-bottom:9px;border:1px solid #e3e7ec;border-radius:11px;
+          overflow:hidden;background:#fff;
+        }
+        .avi-rx-table td{
+          display:grid;grid-template-columns:minmax(105px,38%) 1fr;gap:8px;
+          text-align:left!important;padding:7px 8px;border-top:1px solid #edf0f3;
+        }
+        .avi-rx-table td:first-child{border-top:0}
+        .avi-rx-table td::before{
+          content:attr(data-label);color:#7a174f;font-size:8.8px;font-weight:900;
+          text-transform:uppercase;letter-spacing:.035em;
+        }
         .avi-chip{font-size:9.3px;padding:4px 7px}
         .avi-rx-card{padding:11px;border-radius:16px}
       }
@@ -5740,6 +5923,7 @@
         }
         .avi-rx-head h4{font-size:14.5px}
         .avi-rx-meta{grid-template-columns:repeat(3,minmax(0,1fr))}
+        .avi-rx-meta.avi-rx-meta-4{grid-template-columns:repeat(4,minmax(0,1fr))}
         .avi-rx-meta .avi-data{
           border-bottom:1px solid #edf0f3;
           padding-bottom:7px;
@@ -6061,7 +6245,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.10.0-pulido-antirregresivo',
+    version:'1.11.0-receta-previa-profesional-antirregresiva',
     abrir,
     cerrar,
     abrirReceta,
