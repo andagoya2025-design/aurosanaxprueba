@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_18_CERTIFICADO_ESPACIO_FIRMA_RESPONSIVE';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_19_CERTIFICADO_PIE_ESCRITORIO_ALINEADO_INTELIGENTE';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -5681,7 +5681,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.18.0';
+    const CSS_VERSION = '1.19.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -6255,18 +6255,27 @@
       .avi-cert-footer{
         display:grid;
         grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-        gap:48px;
+        gap:56px;
         align-items:end;
         margin-top:46px;
         padding-top:10px;
         min-height:150px;
       }
+
+      /*
+        PIE DOCUMENTAL ESCRITORIO — ALINEACIÓN INTELIGENTE
+        Dos columnas independientes:
+        izquierda = dirección/correo;
+        derecha = línea de firma + profesional.
+        La dirección baja ligeramente para quedar visualmente por debajo
+        del nivel de la línea de firma, sin mezclarse con la columna derecha.
+      */
       .avi-cert-center{
         align-self:end;
         color:#64748b;
         font-size:9.7px;
         line-height:1.5;
-        padding-bottom:6px;
+        padding:0 0 22px 0;
         max-width:100%;
         overflow-wrap:anywhere;
       }
@@ -7066,7 +7075,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.18.0-certificado-espacio-firma-responsive',
+    version:'1.19.0-certificado-pie-escritorio-alineado-inteligente',
     abrir,
     cerrar,
     abrirReceta,
