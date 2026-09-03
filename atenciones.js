@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_17_SCROLL_RECETA_MULTIDISPOSITIVO_CSS_ONLY';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_18_CERTIFICADO_ESPACIO_FIRMA_RESPONSIVE';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -5681,7 +5681,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.17.0';
+    const CSS_VERSION = '1.18.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -6253,28 +6253,73 @@
       .avi-cert-reposo div{font-size:12.1px;line-height:1.5;margin-top:3px}
       .avi-cert-observaciones{margin-top:15px!important}
       .avi-cert-footer{
-        display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-        gap:40px;align-items:end;margin-top:34px;
+        display:grid;
+        grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+        gap:48px;
+        align-items:end;
+        margin-top:46px;
+        padding-top:10px;
+        min-height:150px;
       }
       .avi-cert-center{
-        color:#64748b;font-size:9.7px;line-height:1.45;
+        align-self:end;
+        color:#64748b;
+        font-size:9.7px;
+        line-height:1.5;
+        padding-bottom:6px;
+        max-width:100%;
+        overflow-wrap:anywhere;
       }
-      .avi-cert-sign{text-align:center;font-size:10.8px}
-      .avi-cert-sign-line{border-top:1px solid #111;margin-bottom:7px}
+      .avi-cert-sign{
+        align-self:end;
+        text-align:center;
+        font-size:10.8px;
+        min-height:132px;
+        display:flex;
+        flex-direction:column;
+        justify-content:flex-end;
+      }
+      .avi-cert-sign::before{
+        content:'';
+        display:block;
+        flex:1 1 auto;
+        min-height:66px;
+      }
+      .avi-cert-sign-line{
+        border-top:1px solid #111;
+        margin:0 0 7px;
+      }
       .avi-cert-sign b{display:block;font-size:12px}
       .avi-cert-sign span,.avi-cert-sign small{display:block;margin-top:2px}
 
       @media(max-width:760px){
         .avi-document-grid{grid-template-columns:1fr}
         .avi-document-prose .avi-line p{text-align:left}
-        .avi-cert-page{padding:17px 14px 21px;border-radius:9px}
+        .avi-cert-page{padding:17px 14px 24px;border-radius:9px}
         .avi-cert-official-head{grid-template-columns:1fr;gap:5px}
         .avi-cert-official-head>div:last-child{text-align:left}
         .avi-cert-official-title{font-size:16px;margin:17px 0 18px}
         .avi-cert-official-body p{font-size:12.2px;line-height:1.58;text-align:left}
         .avi-cert-line,.avi-cert-dx,.avi-cert-reposo div{font-size:11.9px}
-        .avi-cert-footer{grid-template-columns:1fr;gap:26px;margin-top:28px}
-        .avi-cert-sign{width:100%}
+        .avi-cert-footer{
+          grid-template-columns:1fr;
+          gap:24px;
+          margin-top:34px;
+          padding-top:6px;
+          min-height:0;
+        }
+        .avi-cert-center{
+          order:1;
+          padding-bottom:0;
+        }
+        .avi-cert-sign{
+          order:2;
+          width:100%;
+          min-height:154px;
+        }
+        .avi-cert-sign::before{
+          min-height:84px;
+        }
       }
 
       .avi-loading{padding:34px;text-align:center;color:#64748b;font-weight:750}
@@ -7021,7 +7066,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.17.0-scroll-receta-multidispositivo-css-only',
+    version:'1.18.0-certificado-espacio-firma-responsive',
     abrir,
     cerrar,
     abrirReceta,
