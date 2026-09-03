@@ -9511,10 +9511,9 @@ function imprimirHistoriaClinica(){
   const logoUrlsPDF = (logoUrlPDF || logoFileIdPDF) && typeof auroUrlsLogoSidebar === 'function'
     ? auroUrlsLogoSidebar(logoUrlPDF, logoFileIdPDF, logoVersionPDF)
     : [];
-  const inicialPacientePDF = auroInformeEscape(String(nombrePaciente).trim().charAt(0).toUpperCase() || 'A');
   const identidadVisualPDF = logoUrlsPDF.length
-    ? `<div class="auro-patient-avatar auro-patient-logo-wrap"><img id="auroPacienteLogoPDF" class="auro-patient-logo" src="${auroInformeEscape(logoUrlsPDF[0])}" alt="Logo institucional"><span id="auroPacienteLogoFallback" class="auro-patient-logo-fallback" style="display:none">${inicialPacientePDF}</span></div>`
-    : `<div class="auro-patient-avatar">${inicialPacientePDF}</div>`;
+    ? `<div class="auro-patient-avatar auro-patient-logo-wrap"><img id="auroPacienteLogoPDF" class="auro-patient-logo" src="${auroInformeEscape(logoUrlsPDF[0])}" alt="Logo institucional" onerror="this.parentElement.style.display='none'"></div>`
+    : '';
 
   const datosPaciente = `
     <div class="auro-patient-band">
@@ -9678,7 +9677,7 @@ function imprimirHistoriaClinica(){
   const integracionHTML = '';
 
   /* Plan: no se lee ningún DOM de Plan si su id_atencion no coincide. */
-  const medicamentosPlanHTML = planCoincideAtencionPDF ? auroInformeTablaBody('hcMedicamentosTableBody', 8) : '';
+  const medicamentosPlanHTMLBase = planCoincideAtencionPDF ? auroInformeTablaBody('hcMedicamentosTableBody', 8) : '';
   const ordenesPlanHTML = planCoincideAtencionPDF ? (() => {
     const body = document.getElementById('hcOrdenesTableBody');
     if(!body) return '';
@@ -9687,7 +9686,7 @@ function imprimirHistoriaClinica(){
         .slice(0,3)
         .map(td => String(td.innerText || '').replace(/\s+/g,' ').trim())
         .filter(Boolean)
-        .filter(x => !/^(eliminar|acción|accion|otros?)$/i.test(x));
+        .filter(x => !/^(eliminar|acción|accion|otros?|sin registros?\.?|sin registro\.?|no registra(?:do|dos)?\.?|ninguna?\.?|ninguno\.?|—|-)$/i.test(x));
       if(!celdas.length) return '';
       return `<div class="auro-list-item"><strong>${auroInformeEscape(celdas[0])}</strong>${celdas.length > 1 ? `<small>${auroInformeEscape(celdas.slice(1).join(' · '))}</small>` : ''}</div>`;
     }).filter(Boolean);
@@ -9716,32 +9715,10 @@ function imprimirHistoriaClinica(){
   const indicacionesHTML = planCoincideAtencionPDF ? auroInformeParrafo(auroInformeValue('hcIndicacionesPaciente')) : '';
   const controlHTML = planCoincideAtencionPDF ? (() => {
     const prox = auroInformeFechaClinica(auroInformeValue('hcControl'));
-    const estado = auroInformeValue('hcEstadoHistoria');
-    const items = `${auroInformeSiDato('Próximo control', prox)}${auroInformeSiDato('Estado del plan', estado)}`;
+    const items = `${auroInformeSiDato('Próximo control', prox)}`;
     return items ? `<div class="auro-info-grid compact">${items}</div>` : '';
   })() : '';
   const observaciones = auroInformeParrafo(auroInformeValue('hcObservaciones'));
-  const planIntegralHTML = `
-    ${auroInformeBloque('Medicamentos indicados', 'RX', medicamentosPlanHTML)}
-    ${auroInformeBloque('Plan terapéutico', 'PT', planTratamientoHTML)}
-    ${auroInformeBloque('Órdenes médicas', 'OM', ordenesPlanHTML)}
-    ${auroInformeBloque('Interconsulta', 'IC', interconsultaHTML)}
-    ${auroInformeBloque('Evaluaciones', 'EV', evaluacionesHTML)}
-    ${auroInformeBloque('Indicaciones para paciente', 'IP', indicacionesHTML)}
-    ${controlHTML}
-    ${auroInformeBloque('Observaciones', 'OB', observaciones)}
-  `;
-
-  const hayPlanIntegralPDF = !!(
-    medicamentosPlanHTML ||
-    planTratamientoHTML ||
-    ordenesPlanHTML ||
-    interconsultaHTML ||
-    evaluacionesHTML ||
-    indicacionesHTML ||
-    controlHTML ||
-    observaciones
-  );
   const hayAnamnesisPDF = !!(
     String(auroInformeValue('hcMotivoConsulta') || '').trim() ||
     String(auroInformeValue('hcEnfermedadActual') || '').trim() ||
@@ -9826,6 +9803,37 @@ function imprimirHistoriaClinica(){
       return [];
     }
   })();
+
+  /*
+    AUROSANAX INFORME DE ATENCIÓN — DEDUPLICACIÓN PLAN ↔ RECETA
+    Presentación exclusivamente documental:
+    - Si existe receta exacta de esta atención, los medicamentos se muestran en Receta.
+    - Plan terapéutico, órdenes, interconsulta, evaluaciones, indicaciones,
+      próximo control y observaciones solo aparecen cuando contienen datos reales.
+    - No modifica Plan, Receta, persistencia ni estados clínicos.
+  */
+  const medicamentosPlanHTML = recetasAtencionPDF.length ? '' : medicamentosPlanHTMLBase;
+  const planIntegralHTML = `
+    ${auroInformeBloque('Medicamentos', 'RX', medicamentosPlanHTML)}
+    ${auroInformeBloque('Plan terapéutico', 'PT', planTratamientoHTML)}
+    ${auroInformeBloque('Órdenes médicas', 'OM', ordenesPlanHTML)}
+    ${auroInformeBloque('Interconsulta', 'IC', interconsultaHTML)}
+    ${auroInformeBloque('Evaluaciones', 'EV', evaluacionesHTML)}
+    ${auroInformeBloque('Indicaciones', 'IP', indicacionesHTML)}
+    ${controlHTML}
+    ${auroInformeBloque('Observaciones', 'OB', observaciones)}
+  `;
+
+  const hayPlanIntegralPDF = !!(
+    medicamentosPlanHTML ||
+    planTratamientoHTML ||
+    ordenesPlanHTML ||
+    interconsultaHTML ||
+    evaluacionesHTML ||
+    indicacionesHTML ||
+    controlHTML ||
+    observaciones
+  );
 
   const auroInformeRecetaFechaPDF = valor => {
     const raw = String(valor || '').trim();
@@ -9932,18 +9940,16 @@ function imprimirHistoriaClinica(){
     return `
       <section class="auro-rx-document">
         <div class="auro-rx-document-head">
-          <div>
-            <span class="auro-rx-kicker">Prescripción</span>
-            <h3>${recetasAtencionPDF.length > 1 ? `Receta ${index + 1}` : 'Receta médica'}</h3>
+          <div class="auro-rx-heading">
+            <h3>${recetasAtencionPDF.length > 1 ? `Receta médica ${index + 1}` : 'Receta médica'}</h3>
           </div>
           <div class="auro-rx-document-meta">
             ${fechaReceta ? `<span><b>Fecha</b>${auroInformeEscape(fechaReceta)}</span>` : ''}
-            ${cie10Receta ? `<span><b>CIE-10</b>${auroInformeEscape(cie10Receta)}</span>` : ''}
             ${estadoReceta ? `<span><b>Estado</b>${auroInformeEscape(estadoReceta)}</span>` : ''}
-            ${idReceta ? `<span><b>ID</b>${auroInformeEscape(idReceta)}</span>` : ''}
+            ${idReceta ? `<span><b>ID receta</b>${auroInformeEscape(idReceta)}</span>` : ''}
           </div>
         </div>
-        ${mostrarDiagnosticoRecetaPDF ? `<div class="auro-rx-diagnostico"><strong>Diagnóstico asociado</strong><span>${auroInformeEscape(diagnosticoReceta)}</span></div>` : ''}
+        <div class="auro-rx-treatment-title">Tratamiento prescrito</div>
         ${filasMedicamentos ? `
           <div class="auro-rx-table-wrap">
             <table class="auro-rx-table">
@@ -9951,6 +9957,7 @@ function imprimirHistoriaClinica(){
               <tbody>${filasMedicamentos}</tbody>
             </table>
           </div>` : ''}
+        ${mostrarDiagnosticoRecetaPDF ? `<div class="auro-rx-diagnostico"><strong>Diagnóstico de la receta</strong><span>${cie10Receta ? `${auroInformeEscape(cie10Receta)} · ` : ''}${auroInformeEscape(diagnosticoReceta)}</span></div>` : ''}
         ${indicaciones.length ? `<div class="auro-rx-notes"><strong>Indicaciones generales</strong>${indicaciones.map(x=>`<p>${auroInformeEscape(x)}</p>`).join('')}</div>` : ''}
         ${recomendaciones.length ? `<div class="auro-rx-notes"><strong>Recomendaciones</strong>${recomendaciones.map(x=>`<p>${auroInformeEscape(x)}</p>`).join('')}</div>` : ''}
       </section>`;
@@ -10192,8 +10199,14 @@ function imprimirHistoriaClinica(){
     padding:9px 10px;background:linear-gradient(135deg,#fff7fb,#fff);
     border-bottom:1px solid #eadbe4
   }
-  .auro-rx-kicker{display:block;color:var(--auro-primary);font-size:8.8px;font-weight:900;text-transform:uppercase;letter-spacing:.07em}
-  .auro-rx-document h3{margin:2px 0 0;font-size:12.5px;color:#172033}
+  .auro-rx-heading{display:flex;align-items:center;gap:7px}
+  .auro-rx-document h3{margin:0;font-size:12.8px;color:#172033;font-weight:900}
+  .auro-rx-treatment-title{
+    padding:7px 10px 5px;
+    color:var(--auro-primary);
+    font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.055em;
+    background:#fff
+  }
   .auro-rx-document-meta{display:flex;justify-content:flex-end;gap:5px;flex-wrap:wrap}
   .auro-rx-document-meta span{border:1px solid #e6e8ed;border-radius:8px;padding:4px 6px;color:#475569;font-size:8.8px;background:#fff}
   .auro-rx-document-meta b{display:block;color:#667085;font-size:7.5px;text-transform:uppercase;margin-bottom:1px}
@@ -10345,12 +10358,12 @@ function imprimirHistoriaClinica(){
     ` : ''}
 
     ${hayPlanIntegralPDF ? `
-      <div class="auro-section-title"><span>Conducta</span> Plan terapéutico, órdenes e indicaciones</div>
+      <div class="auro-section-title"><span>Conducta</span> Plan clínico</div>
       ${planIntegralHTML}
     ` : ''}
 
     ${recetasHTML ? `
-      <div class="auro-section-title"><span>Rx</span> Prescripción médica de la atención</div>
+      <div class="auro-section-title"><span>Rx</span> Receta</div>
       ${recetasHTML}
     ` : ''}
 
