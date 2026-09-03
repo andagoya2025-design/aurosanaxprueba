@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_13_RESPONSIVE_DOCUMENTAL_PULIDO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_14_CONTINUIDAD_DOCUMENTAL_SCROLL_MOVIL';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -6154,51 +6154,41 @@
         .avi-rx-dx-tags{justify-content:flex-start}
 
         /*
-          RECETA RESPONSIVE MÓVIL:
-          en teléfono la tabla se convierte únicamente en presentación de tarjetas.
-          Escritorio conserva intacta la tabla profesional.
+          RECETA RESPONSIVE MÓVIL — SOLO PRESENTACIÓN.
+          Conserva exactamente la tabla profesional de escritorio y habilita
+          desplazamiento horizontal táctil únicamente dentro de la receta.
+          No altera datos, columnas, guardado, IDs ni el resto de Vista Integral.
         */
         .avi-rx-table-wrap{
-          overflow:visible;
-          border:0;
-          border-radius:0;
+          width:100%;
+          max-width:100%;
+          overflow-x:auto!important;
+          overflow-y:visible!important;
+          border:1px solid #dfe4ea;
+          border-radius:10px;
+          -webkit-overflow-scrolling:touch;
+          overscroll-behavior-x:contain;
+          touch-action:pan-x pan-y;
+          scrollbar-width:thin;
         }
-        .avi-rx-table,
-        .avi-rx-table tbody,
-        .avi-rx-table tr,
+        .avi-rx-table{
+          display:table!important;
+          width:760px!important;
+          min-width:760px!important;
+          table-layout:fixed!important;
+          border-collapse:collapse!important;
+        }
+        .avi-rx-table thead{display:table-header-group!important}
+        .avi-rx-table tbody{display:table-row-group!important}
+        .avi-rx-table tr{display:table-row!important}
+        .avi-rx-table th,
         .avi-rx-table td{
-          display:block;
-          width:100%!important;
-          min-width:0!important;
+          display:table-cell!important;
+          width:auto;
+          min-width:0;
+          text-align:left;
         }
-        .avi-rx-table{table-layout:auto}
-        .avi-rx-table thead{display:none}
-        .avi-rx-table tr{
-          margin-bottom:9px;
-          border:1px solid #e3e7ec;
-          border-radius:11px;
-          overflow:hidden;
-          background:#fff;
-        }
-        .avi-rx-table td{
-          display:grid;
-          grid-template-columns:minmax(92px,36%) minmax(0,1fr);
-          gap:8px;
-          text-align:left!important;
-          padding:8px;
-          border-top:1px solid #edf0f3;
-          overflow-wrap:anywhere;
-          word-break:normal;
-        }
-        .avi-rx-table td:first-child{border-top:0}
-        .avi-rx-table td::before{
-          content:attr(data-label);
-          color:#7a174f;
-          font-size:8.8px;
-          font-weight:900;
-          text-transform:uppercase;
-          letter-spacing:.035em;
-        }
+        .avi-rx-table td::before{content:none!important}
       }
 
       @media(max-width:430px){
@@ -6259,11 +6249,49 @@
         .avi-body > .avi-overview-block,
         .avi-body > .avi-clinical-divider,
         .avi-body > .avi-section,
-        .avi-body > .avi-line{
+        .avi-body > .avi-line,
+        .avi-body > [data-avi-documentos]{
           width:min(1120px,calc(100% - 36px));
           margin-left:auto;
           margin-right:auto;
           box-sizing:border-box;
+        }
+
+        /*
+          CONTINUIDAD DOCUMENTAL:
+          Recomendaciones y Certificados quedan dentro de la misma hoja clínica
+          visual de Vista Integral, con el mismo ancho y jerarquía del documento.
+          El slot no crea un segundo visor ni una fuente de datos paralela.
+        */
+        .avi-body > [data-avi-documentos]{
+          background:#fff;
+          margin-top:0;
+          margin-bottom:0;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section{
+          width:100%;
+          margin:0;
+          border:0;
+          border-radius:0;
+          box-shadow:none;
+          border-bottom:1px solid #e8ebef;
+          background:#fff;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section summary{
+          padding:12px 42px 10px;
+          font-size:13.5px;
+          color:#3f1630;
+          background:#fff!important;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section[open] summary{
+          border-bottom:1px solid #f0e4eb;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section .avi-section-body{
+          padding:14px 42px 22px;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section:last-child{
+          border-radius:0 0 10px 10px;
+          padding-bottom:18px;
         }
 
         .avi-body > .avi-overview-block:first-child{
@@ -6764,7 +6792,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.13.0-responsive-documental-pulido',
+    version:'1.14.0-continuidad-documental-scroll-movil',
     abrir,
     cerrar,
     abrirReceta,
