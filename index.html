@@ -4021,7 +4021,7 @@
 
     <section class="screen" id="historia">
       <div class="cardx p-4">
-        <div class="section-head justify-content-end"><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button id="auroBtnInformeAtencion" class="btn-soft auro-informe-view-btn" onclick="auroMarcarVistaInformeActiva('atencion'); imprimirHistoriaClinica()" title="Generar informe clínico de la atención seleccionada"><i class="bi bi-file-earmark-medical me-1"></i> Informe de atención</button><!-- AUROSANAX INFORME HISTÓRICO V1 · INTEGRACIÓN AISLADA --><button id="auroBtnInformeHistorico" class="btn-soft auro-informe-view-btn" type="button" onclick="auroMarcarVistaInformeActiva('historico'); window.auroInformeHistorico?.abrir()" title="Generar informe clínico histórico del paciente seleccionado"><i class="bi bi-journal-medical me-1"></i> Informe histórico</button><!-- FIN AUROSANAX INFORME HISTÓRICO V1 --></div></div>
+        <div class="section-head justify-content-end"><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button id="auroBtnInformeAtencion" class="btn-soft auro-informe-view-btn" onclick="imprimirHistoriaClinica()" title="Generar informe clínico de la atención seleccionada"><i class="bi bi-file-earmark-medical me-1"></i> Informe de atención</button><!-- AUROSANAX INFORME HISTÓRICO V1 · INTEGRACIÓN AISLADA --><button id="auroBtnInformeHistorico" class="btn-soft auro-informe-view-btn" type="button" onclick="auroAbrirInformeHistoricoContextual()" title="Generar informe clínico histórico del paciente seleccionado"><i class="bi bi-journal-medical me-1"></i> Informe histórico</button><!-- FIN AUROSANAX INFORME HISTÓRICO V1 --></div></div>
         <div class="patient-profile-card" id="hcPatientCard">
           <div class="patient-avatar" id="hcAvatar">A</div>
           <div>
@@ -5226,6 +5226,7 @@ function calcIMC(){const p=parseFloat((document.getElementById('hcPeso')?.value|
 function calcObstetricia(){const fur=document.getElementById('hcFUR')?.value;if(!fur)return;const d=new Date(fur+'T00:00:00');const f=new Date(d);f.setDate(f.getDate()+280);document.getElementById('hcFPP').value=f.toISOString().slice(0,10);const h=new Date();const diff=Math.floor((h-d)/(1000*60*60*24));if(diff>=0){document.getElementById('hcEG').value=Math.floor(diff/7)+' sem + '+(diff%7)+' días'}}
 
 function showScreen(id, btn){
+  if(id !== 'historia' && typeof auroLimpiarVistaInformeActiva === 'function') auroLimpiarVistaInformeActiva();
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id)?.classList.add('active');
 
@@ -5412,6 +5413,7 @@ function auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada(){
 }
 
 function seleccionarPacienteHistoria(){
+  if(typeof auroLimpiarVistaInformeActiva === 'function') auroLimpiarVistaInformeActiva();
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || activePatientId || '';
   const p = patients.find(x => String(x.id_paciente || x.id || '') === String(idPaciente));
 
@@ -9411,10 +9413,65 @@ function auroMarcarVistaInformeActiva(tipo){
       const el=document.getElementById(id);
       if(el) el.classList.remove('is-active');
     });
-    const activo=document.getElementById(mapa[String(tipo||'').trim()]||'');
+    const clave=String(tipo||'').trim();
+    const activo=document.getElementById(mapa[clave]||'');
     if(activo) activo.classList.add('is-active');
+    window.auroInformeVistaActiva=clave;
   }catch(e){}
 }
+
+function auroLimpiarVistaInformeActiva(tipo){
+  try{
+    const actual=String(window.auroInformeVistaActiva||'').trim();
+    const solicitado=String(tipo||'').trim();
+    if(solicitado && actual && solicitado!==actual) return;
+    document.querySelectorAll('#historia .auro-informe-view-btn.is-active')
+      .forEach(el=>el.classList.remove('is-active'));
+    window.auroInformeVistaActiva='';
+  }catch(e){}
+}
+
+function auroPrepararInformeHistoricoContextual(){
+  try{
+    const api=window.auroInformeHistorico;
+    if(!api || typeof api.cerrar!=='function' || api.__auroEstadoVisualContextualV11) return;
+    const cerrarOriginal=api.cerrar.bind(api);
+    api.cerrar=function(){
+      try{
+        return cerrarOriginal.apply(null,arguments);
+      }finally{
+        auroLimpiarVistaInformeActiva('historico');
+      }
+    };
+    api.__auroEstadoVisualContextualV11=true;
+  }catch(e){}
+}
+
+function auroAbrirInformeHistoricoContextual(){
+  const api=window.auroInformeHistorico;
+  if(!api || typeof api.abrir!=='function'){
+    auroLimpiarVistaInformeActiva();
+    alert('El Informe histórico todavía no está disponible.');
+    return;
+  }
+  try{
+    auroPrepararInformeHistoricoContextual();
+    auroMarcarVistaInformeActiva('historico');
+    const resultado=api.abrir();
+    if(resultado && typeof resultado.catch==='function'){
+      resultado.catch(()=>auroLimpiarVistaInformeActiva('historico'));
+    }
+    return resultado;
+  }catch(error){
+    auroLimpiarVistaInformeActiva('historico');
+    throw error;
+  }
+}
+
+/* Estado visual estrictamente contextual: cualquier cambio real de atención
+   invalida la vista marcada, sin tocar datos ni navegación clínica. */
+['aurosanax:atencion-activa','aurosanax:atencion-finalizada','aurosanax:atencion-iniciada','aurosanax:atencion-seleccionada']
+  .forEach(nombre=>window.addEventListener(nombre,()=>auroLimpiarVistaInformeActiva()));
 
 async function imprimirHistoriaClinica(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || '';
@@ -10208,28 +10265,29 @@ async function imprimirHistoriaClinica(){
     const items = certificadosPersistidosPDF.map(r => {
       const d = auroInformeParseJSONPDF(r.detalle_json, {}) || {};
       const pac = d.paciente || {};
+      const hist = d.historia || {};
       const med = d.medico || {};
       const tipo = String(r.tipo_certificado || d.tipo_certificado || 'Certificado médico').trim();
       const fechaCert = auroInformeFechaClinica(r.fecha_emision || d.fecha_emision || r.fecha_certificado || r.creado_en || '');
+      const fechaAtencionCert = auroInformeFechaClinica(d.fecha_atencion || atencionPDF?.fecha_atencion || atencionPDF?.fecha_consulta || '');
       const dias = String(d.dias_reposo ?? r.dias_reposo ?? '').trim();
       const desde = auroInformeFechaClinica(d.reposo_desde || d.fecha_desde || '');
       const hasta = auroInformeFechaClinica(d.reposo_hasta || d.fecha_hasta || '');
       const contingencia = String(d.contingencia || '').trim();
-      const contacto = String(d.contacto || '').trim();
-      const empresa = String(d.institucion_empresa || '').trim();
-      const observacion = String(d.observaciones || d.observacion || d.motivo || r.motivo || '').trim();
-      const medico = String(
-        med.nombre || med.nombre_completo || r.nombre_medico || medicoAtencionPDF || ''
-      ).trim();
-      const especialidad = String(
-        med.especialidad || r.especialidad || especialidadAtencionPDF || ''
-      ).trim();
-      const pacienteCert = String(
-        pac.nombre || pac.nombre_completo || nombrePaciente || ''
-      ).trim();
-      const documentoCert = String(
-        pac.numero_documento || pac.cedula || cedula || ''
-      ).trim();
+      const resumenClinico = String(d.resumen_clinico || d.resumen || d.observaciones || d.observacion || '').trim();
+      const actividadLaboral = String(d.actividad_laboral || pac.ocupacion || '').trim();
+      const contacto = String(d.contacto || pac.telefono || pac.whatsapp || telefono || '').trim();
+      const empresa = String(d.institucion_empresa || d.empresa || '').trim();
+      const direccionTrabajo = String(d.direccion_trabajo || d.direccion_empresa || '').trim();
+      const medico = String(med.nombre || med.nombre_completo || r.nombre_medico || medicoAtencionPDF || '').trim();
+      const especialidad = String(med.especialidad || r.especialidad || especialidadAtencionPDF || '').trim();
+      const registroMsp = String(med.registro_msp || med.msp || med.registro_profesional || '').trim();
+      const registroSenescyt = String(med.registro_senescyt || med.senescyt || '').trim();
+      const pacienteCert = String(pac.nombre || pac.nombre_completo || nombrePaciente || '').trim();
+      const documentoCert = String(pac.numero_documento || pac.cedula || cedula || '').trim();
+      const historiaCert = String(hist.id_historia || hist.numero_historia || idHistoriaPDF || '').trim();
+      const consultaCert = String(d.numero_consulta || hist.numero_consulta || atencionPDF?.numero_consulta || atencionPDF?.numero_atencion || '').trim();
+      const nacimientoCert = auroInformeFechaClinica(pac.fecha_nacimiento || pac.nacimiento || nacimientoRaw || '');
 
       const diagnosticosCert = (Array.isArray(d.diagnosticos) ? d.diagnosticos : [])
         .map(dx => {
@@ -10241,43 +10299,40 @@ async function imprimirHistoriaClinica(){
         })
         .filter(Boolean);
 
-      const filas = [
-        pacienteCert ? `<div><span>Paciente</span><b>${auroInformeEscape(pacienteCert)}</b></div>` : '',
-        documentoCert && documentoCert !== '—' ? `<div><span>Identificación</span><b>${auroInformeEscape(documentoCert)}</b></div>` : '',
-        fechaCert ? `<div><span>Fecha de emisión</span><b>${auroInformeEscape(fechaCert)}</b></div>` : '',
-        dias && dias !== '0' ? `<div><span>Reposo</span><b>${auroInformeEscape(dias)} día(s)</b></div>` : '',
-        desde ? `<div><span>Desde</span><b>${auroInformeEscape(desde)}</b></div>` : '',
-        hasta ? `<div><span>Hasta</span><b>${auroInformeEscape(hasta)}</b></div>` : '',
-        contingencia ? `<div><span>Contingencia</span><b>${auroInformeEscape(contingencia)}</b></div>` : '',
-        empresa ? `<div><span>Institución / empresa</span><b>${auroInformeEscape(empresa)}</b></div>` : '',
-        contacto ? `<div><span>Contacto</span><b>${auroInformeEscape(contacto)}</b></div>` : ''
-      ].filter(Boolean).join('');
+      const contextoTexto = [
+        pacienteCert ? `al/la paciente <strong>${auroInformeEscape(pacienteCert)}</strong>` : '',
+        documentoCert && documentoCert !== '—' ? `con documento de identidad <strong>${auroInformeEscape(documentoCert)}</strong>` : '',
+        historiaCert ? `número de historia clínica <strong>${auroInformeEscape(historiaCert)}</strong>` : '',
+        consultaCert ? `en la consulta <strong>#${auroInformeEscape(consultaCert)}</strong>` : '',
+        medico ? `atendida por <strong>${auroInformeEscape(medico)}</strong>` : ''
+      ].filter(Boolean).join(', ');
 
-      const diagnosticosHTML = diagnosticosCert.length
-        ? `<div class="auro-cert-dx"><span>Diagnóstico(s)</span>${diagnosticosCert.map(x=>`<b>${auroInformeEscape(x)}</b>`).join('')}</div>`
-        : '';
-
-      const observacionHTML = observacion
-        ? `<div class="auro-cert-note"><span>Observaciones / certificación</span><p>${auroInformeEscape(observacion)}</p></div>`
-        : '';
-
-      const firmaHTML = medico
-        ? `<div class="auro-cert-sign"><strong>${auroInformeEscape(medico)}</strong>${especialidad ? `<small>${auroInformeEscape(especialidad)}</small>` : ''}</div>`
-        : '';
+      const datos = [
+        nacimientoCert ? ['Fecha de nacimiento', nacimientoCert] : null,
+        especialidad ? ['Especialidad', especialidad] : null,
+        resumenClinico ? ['Resumen clínico', resumenClinico] : null,
+        actividadLaboral ? ['Actividad laboral', actividadLaboral] : null,
+        contacto ? ['Número de contacto', contacto] : null,
+        empresa ? ['Institución / empresa', empresa] : null,
+        direccionTrabajo ? ['Dirección de trabajo', direccionTrabajo] : null,
+        contingencia ? ['Contingencia', contingencia] : null,
+        dias && dias !== '0' ? ['Reposo', `${dias} día(s)${desde ? ' · desde '+desde : ''}${hasta ? ' · hasta '+hasta : ''}`] : null
+      ].filter(Boolean);
 
       return `
-        <article class="auro-cert-document">
-          <div class="auro-cert-head">
+        <article class="auro-cert-document auro-cert-vista-integral">
+          <div class="auro-cert-brand-row">
             <div>
-              <small>Documento clínico</small>
-              <h3>${auroInformeEscape(tipo || 'Certificado médico')}</h3>
+              <strong>${auroInformeEscape(nombreCentroPDF)}</strong>
+              ${subtituloCentroPDF ? `<small>${auroInformeEscape(subtituloCentroPDF)}</small>` : ''}
             </div>
-            ${fechaCert ? `<b>${auroInformeEscape(fechaCert)}</b>` : ''}
+            ${fechaCert ? `<b>${auroInformeEscape(ciudadCentroPDF || 'Guayaquil')} · ${auroInformeEscape(fechaCert)}</b>` : ''}
           </div>
-          ${filas ? `<div class="auro-cert-grid">${filas}</div>` : ''}
-          ${diagnosticosHTML}
-          ${observacionHTML}
-          ${firmaHTML}
+          <h2>${auroInformeEscape(tipo || 'CERTIFICADO MÉDICO').toUpperCase()}</h2>
+          ${contextoTexto ? `<p class="auro-cert-intro">Por medio del presente certifico haber atendido ${contextoTexto}${fechaAtencionCert ? `, con fecha de atención <strong>${auroInformeEscape(fechaAtencionCert)}</strong>` : ''}.</p>` : ''}
+          ${datos.length ? `<div class="auro-cert-facts">${datos.map(([k,v])=>`<div><strong>${auroInformeEscape(k)}:</strong> <span>${auroInformeEscape(v)}</span></div>`).join('')}</div>` : ''}
+          ${diagnosticosCert.length ? `<div class="auro-cert-dx-lines"><strong>Diagnóstico(s) CIE-10:</strong>${diagnosticosCert.map(x=>`<div>${auroInformeEscape(x)}</div>`).join('')}</div>` : ''}
+          ${medico ? `<div class="auro-cert-signature"><div class="auro-cert-signature-line"></div><strong>${auroInformeEscape(medico)}</strong>${especialidad ? `<span>${auroInformeEscape(especialidad)}</span>` : ''}${registroMsp ? `<span>Registro MSP: ${auroInformeEscape(registroMsp)}</span>` : ''}${registroSenescyt ? `<span>Registro SENESCYT: ${auroInformeEscape(registroSenescyt)}</span>` : ''}</div>` : ''}
         </article>`;
     }).filter(Boolean);
     return items.join('');
@@ -10484,24 +10539,26 @@ async function imprimirHistoriaClinica(){
 
   /* Certificado en Informe de Atención: lectura documental, mismo contrato visual de Vista Integral */
   .auro-cert-document{
-    border:1px solid #eadbe4;background:#fff;border-radius:13px;
-    padding:10px 11px;margin-bottom:7px;break-inside:avoid;
-    box-shadow:0 4px 12px rgba(15,23,42,.035)
+    border:1px solid #dfe4ea;background:#fff;border-radius:11px;
+    padding:14px 16px 15px;margin:0 0 8px;break-inside:auto;
+    box-shadow:none
   }
-  .auro-cert-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:7px;border-bottom:1px solid #f0e4eb}
-  .auro-cert-head small{display:block;color:var(--auro-primary);font-size:8.8px;font-weight:900;text-transform:uppercase;letter-spacing:.07em}
-  .auro-cert-head h3{margin:2px 0 0;color:#172033;font-size:13px;font-weight:900}
-  .auro-cert-head>b{color:#526071;font-size:9.8px;white-space:nowrap}
-  .auro-cert-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:7px}
-  .auro-cert-grid>div{border:1px solid #edf0f3;background:#fcfdff;border-radius:8px;padding:5px 7px;min-width:0}
-  .auro-cert-grid span,.auro-cert-dx span,.auro-cert-note span{display:block;color:#667085;font-size:8.8px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
-  .auro-cert-grid b{display:block;color:#172033;font-size:10px;line-height:1.25;overflow-wrap:anywhere}
-  .auro-cert-dx,.auro-cert-note{margin-top:6px;border:1px solid #edf0f3;border-radius:8px;padding:6px 7px;background:#fff}
-  .auro-cert-dx b{display:block;color:#273244;font-size:9.8px;line-height:1.3;margin-top:2px}
-  .auro-cert-note p{margin:0;color:#273244;font-size:9.8px;line-height:1.35;white-space:pre-wrap}
-  .auro-cert-sign{margin-top:9px;padding-top:7px;border-top:1px dashed #d8dde6;text-align:right}
-  .auro-cert-sign strong{display:block;color:#172033;font-size:10.4px}
-  .auro-cert-sign small{display:block;color:#667085;font-size:9.2px;margin-top:1px}
+  .auro-cert-vista-integral{color:#273244}
+  .auro-cert-brand-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding-bottom:7px;border-bottom:1px solid #d8dde6}
+  .auro-cert-brand-row>div>strong{display:block;color:var(--auro-primary);font-size:13.5px;font-weight:900}
+  .auro-cert-brand-row small{display:block;color:#667085;font-size:8.8px;margin-top:1px}
+  .auro-cert-brand-row>b{color:#526071;font-size:8.8px;white-space:nowrap}
+  .auro-cert-vista-integral h2{text-align:center;margin:12px 0 9px;color:#172033;font-size:14.5px;font-weight:900;letter-spacing:.07em}
+  .auro-cert-intro{margin:0 0 9px;color:#344054;font-size:9.8px;line-height:1.5;text-align:justify}
+  .auro-cert-facts{display:grid;gap:3px;margin:0 0 8px}
+  .auro-cert-facts>div{font-size:9.6px;line-height:1.4;overflow-wrap:anywhere}
+  .auro-cert-facts strong,.auro-cert-dx-lines>strong{color:#172033;text-transform:uppercase;font-size:9.1px;letter-spacing:.02em}
+  .auro-cert-dx-lines{margin-top:8px;font-size:9.6px;line-height:1.4}
+  .auro-cert-dx-lines>div{margin-top:2px;color:#344054}
+  .auro-cert-signature{width:220px;margin:28px 0 0 auto;text-align:center;color:#344054}
+  .auro-cert-signature-line{border-top:1px solid #9ca3af;margin-bottom:5px}
+  .auro-cert-signature strong{display:block;color:#172033;font-size:9.8px}
+  .auro-cert-signature span{display:block;color:#667085;font-size:8.6px;line-height:1.3;margin-top:1px}
 
   /* VISOR PREVIO PROFESIONAL */
   .auro-preview-toolbar{
@@ -10693,15 +10750,9 @@ async function imprimirHistoriaClinica(){
       ${recetasHTML}
     ` : ''}
 
-    ${recomendacionesOficialesHTML ? `
-      <div class="auro-section-title"><span>Recomendaciones</span> Indicaciones y seguimiento oficial</div>
-      ${recomendacionesOficialesHTML}
-    ` : ''}
+    ${recomendacionesOficialesHTML ? recomendacionesOficialesHTML : ''}
 
-    ${certificadosOficialesHTML ? `
-      <div class="auro-section-title"><span>Certificado</span> Documento médico emitido en esta atención</div>
-      ${certificadosOficialesHTML}
-    ` : ''}
+    ${certificadosOficialesHTML ? certificadosOficialesHTML : ''}
 
     ${documentosOficialesHTML ? `
       <div class="auro-section-title"><span>Documentos</span> Documentos de la atención</div>
@@ -10714,8 +10765,8 @@ async function imprimirHistoriaClinica(){
         ${pieInstitucionalPDF || 'Documento clínico generado desde AUROSANAX Clinical ERP.'}
       </div>
       <div class="auro-footer-right">
-        ${medicoAtencionPDF ? `<strong>${auroInformeEscape(medicoAtencionPDF)}</strong>` : ''}
-        ${especialidadAtencionPDF ? `<div>${auroInformeEscape(especialidadAtencionPDF)}</div>` : ''}
+        ${!certificadosOficialesHTML && medicoAtencionPDF ? `<strong>${auroInformeEscape(medicoAtencionPDF)}</strong>` : ''}
+        ${!certificadosOficialesHTML && especialidadAtencionPDF ? `<div>${auroInformeEscape(especialidadAtencionPDF)}</div>` : ''}
         <div>Emitido: ${auroInformeEscape(fecha)} · ${auroInformeEscape(hora)}</div>
       </div>
     </footer>
@@ -10732,6 +10783,29 @@ async function imprimirHistoriaClinica(){
   ventana.document.write(html);
   ventana.document.close();
   ventana.focus();
+
+  /* INDEX 83 V1.1: el botón representa una vista REALMENTE abierta.
+     Se apaga al cerrar el visor o cuando otro cambio clínico invalida el contexto. */
+  window.auroInformeAtencionVentana = ventana;
+  auroMarcarVistaInformeActiva('atencion');
+  const limpiarEstadoInformeAtencion = () => {
+    if(window.auroInformeAtencionVentana === ventana){
+      window.auroInformeAtencionVentana = null;
+      auroLimpiarVistaInformeActiva('atencion');
+    }
+  };
+  try{ ventana.addEventListener('beforeunload', limpiarEstadoInformeAtencion, {once:true}); }catch(_e){}
+  const auroInformeCierreTimer = window.setInterval(() => {
+    try{
+      if(ventana.closed){
+        window.clearInterval(auroInformeCierreTimer);
+        limpiarEstadoInformeAtencion();
+      }
+    }catch(_e){
+      window.clearInterval(auroInformeCierreTimer);
+      limpiarEstadoInformeAtencion();
+    }
+  }, 500);
   // V2.1: vista previa deliberada; la impresión se inicia solo desde el botón del visor.
 
 }
