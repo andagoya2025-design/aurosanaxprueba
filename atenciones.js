@@ -3685,7 +3685,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_21_PLAN_PERSISTIDO_CANONICO_ANTIRREGRESIVO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_PLAN_ESTRUCTURA_CANONICA_ANTIRREGRESIVO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4916,86 +4916,72 @@
     const pares = capturarPanel('hc_plan');
     if(!pares.length) return '';
 
+    /*
+      V1.22 — ESTRUCTURA VISUAL CANÓNICA DE PLAN
+      Solo se presentan categorías clínicas propias del módulo Plan cuando
+      contienen información real. Medicamentos/receta y diagnósticos no se
+      representan aquí para evitar duplicidad con sus módulos documentales.
+    */
     const grupos = {
       planTerapeutico:[],
       indicaciones:[],
-      medicamentos:[],
-      examenes:[],
       ordenes:[],
       interconsultas:[],
-      otros:[]
+      evaluaciones:[],
+      proximoControl:[]
     };
 
     pares.forEach(p=>{
       const n = norm(p.etiqueta);
       const v = norm(p.valor);
 
-      /*
-        Campos de apoyo internos del formulario (p. ej.
-        "EXAMEN ... EN PLAN = Sí") no son una orden clínica adicional.
-        Se omiten SOLO en Vista Integral antes de clasificar.
-      */
       const esBanderaInternaPlan =
         (n.includes(' en plan') || n.endsWith('en plan')) &&
         (v === 'si' || v === 'no' || v === 'true' || v === 'false');
 
       if(esBanderaInternaPlan) return;
 
+      /* No duplicar receta/medicamentos ni diagnósticos dentro de Plan. */
+      if(
+        n.includes('medicamento') ||
+        n.includes('receta') ||
+        n.includes('diagnost')
+      ) return;
+
       if(
         n.includes('plan terapeutico') ||
         n.includes('plan de tratamiento') ||
         n.includes('plan tratamiento')
       ) grupos.planTerapeutico.push(p);
-      else if(n.includes('medicamento')) grupos.medicamentos.push(p);
-      else if(n.includes('examen')) grupos.examenes.push(p);
       else if(n.includes('interconsulta')) grupos.interconsultas.push(p);
-      else if(n.includes('orden')) grupos.ordenes.push(p);
+      else if(n.includes('evaluacion')) grupos.evaluaciones.push(p);
+      else if(n.includes('proximo control') || n.includes('próximo control')) grupos.proximoControl.push(p);
+      else if(n.includes('orden') || n.includes('examen')) grupos.ordenes.push(p);
       else if(n.includes('indicacion')) grupos.indicaciones.push(p);
-      else grupos.otros.push(p);
     });
 
-    let html = '';
-
-    if(grupos.planTerapeutico.length){
-      html += '<div class="avi-subgroup"><h5>Plan terapéutico</h5>'+
-        paresHTMLClinico(grupos.planTerapeutico,'avi-document-prose')+'</div>';
+    function bloqueDOM(titulo,lista){
+      if(!Array.isArray(lista) || !lista.length) return '';
+      const valores = lista.map(function(p){
+        return {
+          etiqueta:'',
+          valor:p.valor,
+          anchoCompleto:true
+        };
+      });
+      return '<div class="avi-subgroup avi-plan-block"><h5>'+esc(titulo)+'</h5>'+
+        paresHTMLClinico(valores,'avi-plan-prose')+
+      '</div>';
     }
 
-    if(grupos.indicaciones.length){
-      html += '<div class="avi-subgroup"><h5>Indicaciones generales</h5>'+
-        paresHTML(grupos.indicaciones)+'</div>';
-    }
-
-    /*
-      VISTA INTEGRAL - NO DUPLICIDAD DOCUMENTAL:
-      Si la misma atención ya tiene receta asociada, los medicamentos se
-      representan en Recetas y no se repiten dentro del Plan.
-    */
-    if(grupos.medicamentos.length && !opciones.omitirMedicamentos){
-      html += '<div class="avi-subgroup"><h5>Medicamentos</h5>'+
-        grupos.medicamentos.map(p=>medicamentoCards(p.valor)).join('')+'</div>';
-    }
-
-    if(grupos.examenes.length){
-      html += '<div class="avi-subgroup">'+
-        paresHTML(grupos.examenes)+'</div>';
-    }
-
-    if(grupos.ordenes.length){
-      html += '<div class="avi-subgroup"><h5>Órdenes médicas</h5>'+
-        paresHTML(grupos.ordenes)+'</div>';
-    }
-
-    if(grupos.interconsultas.length){
-      html += '<div class="avi-subgroup"><h5>Interconsultas</h5>'+
-        paresHTML(grupos.interconsultas)+'</div>';
-    }
-
-    /*
-      "grupos.otros" permanece oculto: contiene banderas/campos internos.
-      El Plan terapéutico ya no cae en "otros"; se clasifica explícitamente.
-    */
-    return html;
+    return [
+      bloqueDOM('Plan terapéutico',grupos.planTerapeutico),
+      bloqueDOM('Órdenes médicas',grupos.ordenes),
+      bloqueDOM('Interconsulta',grupos.interconsultas),
+      bloqueDOM('Evaluaciones',grupos.evaluaciones),
+      bloqueDOM('Próximo control',grupos.proximoControl),
+      bloqueDOM('Indicaciones para el paciente',grupos.indicaciones)
+    ].filter(Boolean).join('');
   }
 
   /*
@@ -5022,16 +5008,27 @@
     return '';
   }
 
-  function bloquePlanPersistidoLista(titulo,valor){
+  function bloquePlanPersistidoLista(titulo,valor,opciones){
+    opciones = opciones || {};
     const limpio = limpiarTextoClinico(valor);
     if(!limpio) return '';
 
-    return '<div class="avi-subgroup"><h5>'+esc(titulo)+'</h5>'+
-      paresHTMLClinico([{
-        etiqueta:titulo,
-        valor:limpio,
-        anchoCompleto:true
-      }],'avi-document-prose')+
+    const lista = listaDesdeValor(valor);
+    let contenido = '';
+
+    if(lista && lista.length){
+      contenido = '<ul class="avi-clean-list">'+
+        lista.map(function(item){
+          return '<li>'+valorClinicoVisualHTML(limpiarTextoClinico(item))+'</li>';
+        }).join('')+
+      '</ul>';
+    }else{
+      contenido = '<p class="avi-plan-text">'+valorClinicoVisualHTML(limpio)+'</p>';
+    }
+
+    return '<div class="avi-subgroup avi-plan-block">'+
+      '<h5>'+esc(titulo)+'</h5>'+
+      '<div class="avi-plan-content">'+contenido+'</div>'+
     '</div>';
   }
 
@@ -5039,6 +5036,11 @@
     opciones = opciones || {};
     plan = plan || {};
 
+    /*
+      Contrato visual V1.22:
+      mostrar únicamente los ítems propios de Plan que tengan contenido real.
+      No repetir medicamentos/receta ni diagnósticos dentro de esta sección.
+    */
     const bloques = [];
 
     const tratamiento = valorPlanPersistido(
@@ -5046,25 +5048,6 @@
     );
     if(tratamiento){
       bloques.push(bloquePlanPersistidoLista('Plan terapéutico',tratamiento));
-    }
-
-    const indicaciones = valorPlanPersistido(
-      plan,'indicaciones_paciente','indicaciones','indicacionesPaciente'
-    );
-    if(indicaciones){
-      bloques.push(bloquePlanPersistidoLista('Indicaciones generales',indicaciones));
-    }
-
-    const medicamentos = valorPlanPersistido(
-      plan,'medicamentos_plan','medicamentos','medicamentosPlan','receta_medica'
-    );
-    if(medicamentos && !opciones.omitirMedicamentos){
-      const medsHTML = medicamentoCards(medicamentos);
-      if(medsHTML){
-        bloques.push(
-          '<div class="avi-subgroup"><h5>Medicamentos</h5>'+medsHTML+'</div>'
-        );
-      }
     }
 
     const ordenes = valorPlanPersistido(
@@ -5078,7 +5061,7 @@
       plan,'interconsulta','interconsultas','interconsulta_plan'
     );
     if(interconsulta){
-      bloques.push(bloquePlanPersistidoLista('Interconsultas',interconsulta));
+      bloques.push(bloquePlanPersistidoLista('Interconsulta',interconsulta));
     }
 
     const evaluaciones = valorPlanPersistido(
@@ -5093,6 +5076,13 @@
     );
     if(proximo){
       bloques.push(bloquePlanPersistidoLista('Próximo control',fechaVisual(proximo)));
+    }
+
+    const indicaciones = valorPlanPersistido(
+      plan,'indicaciones_paciente','indicaciones','indicacionesPaciente'
+    );
+    if(indicaciones){
+      bloques.push(bloquePlanPersistidoLista('Indicaciones para el paciente',indicaciones));
     }
 
     return bloques.filter(Boolean).join('');
@@ -5225,7 +5215,7 @@
       });
 
       slotPlan.innerHTML = seccion(
-        'Plan terapéutico','bi-list-check',htmlPlan,true
+        'Plan','bi-list-check',htmlPlan,true
       );
     }
 
@@ -5934,7 +5924,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.18.0';
+    const CSS_VERSION = '1.22.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -6177,6 +6167,51 @@
 
       .avi-subgroup{
         border-top:1px dashed #e7eaf0;padding-top:11px;
+      }
+      .avi-plan-block{
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+        min-width:0;
+      }
+      .avi-plan-block:first-child{
+        border-top:0;
+        padding-top:0;
+      }
+      .avi-plan-block>h5{
+        margin:0 0 8px;
+        color:#5a1740;
+        font-size:12px;
+        line-height:1.3;
+        font-weight:900;
+      }
+      .avi-plan-content,
+      .avi-plan-prose{
+        width:100%;
+        max-width:100%;
+        min-width:0;
+        box-sizing:border-box;
+      }
+      .avi-plan-content .avi-clean-list{
+        margin:0;
+        padding-left:20px;
+      }
+      .avi-plan-text{
+        margin:0;
+        color:#1f2937;
+        font-size:12.2px;
+        line-height:1.5;
+        white-space:pre-wrap;
+        overflow-wrap:anywhere;
+      }
+      .avi-plan-prose .avi-line{
+        grid-column:1/-1;
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+      }
+      .avi-plan-prose .avi-line>b:empty{
+        display:none;
       }
     /* Antecedentes: presentación clínica compacta, sin alterar datos */
 
@@ -7101,7 +7136,7 @@
     const hayRecetasAsociadas = recetasPorAtencion(idAtencion).length > 0;
 
     const planInicial = seccion(
-      'Plan terapéutico','bi-list-check',
+      'Plan','bi-list-check',
       planHTML({ omitirMedicamentos:hayRecetasAsociadas }),true
     );
 
@@ -7342,7 +7377,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.21.0-plan-persistido-canonico-antirregresivo',
+    version:'1.22.0-plan-estructura-canonica-antirregresivo',
     abrir,
     cerrar,
     abrirReceta,
