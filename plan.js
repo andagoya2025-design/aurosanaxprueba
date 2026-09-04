@@ -1877,6 +1877,227 @@ function normalizarMedTexto(t){
     return normalizarTextoPlan(t);
 }
 
+
+/* ============================================================
+   AUROSANAX PLAN - PRESENTACIONES / VÍAS INTELIGENTES v1.0
+   INTERVENCIÓN ANTIRREGRESIVA
+   - Lee variantes[] solo cuando el catálogo las ofrece.
+   - Mantiene compatibilidad total con registros planos históricos.
+   - NO cambia la estructura persistida del medicamento.
+   - NO modifica id_atencion, guardado, Recetas ni protocolos.
+============================================================ */
+
+window.auroPlanCatalogoMedicamentoActivo = null;
+
+function auroPlanCatalogoBaseSeguro(){
+    return Array.isArray(window.MEDICAMENTOS_AUROSANAX_BASE)
+        ? window.MEDICAMENTOS_AUROSANAX_BASE
+        : [];
+}
+
+function auroPlanVariantesMedicamento(item){
+    if(!item || typeof item !== 'object') return [];
+
+    const variantes = Array.isArray(item.variantes)
+        ? item.variantes.filter(v => v && typeof v === 'object')
+        : [];
+
+    if(variantes.length){
+        return variantes.map(v => ({
+            forma_farmaceutica: String(v.forma_farmaceutica || '').trim(),
+            concentracion: String(v.concentracion || '').trim(),
+            pres: String(
+                v.pres ||
+                v.presentacion ||
+                [v.concentracion, v.forma_farmaceutica].filter(Boolean).join(' ') ||
+                ''
+            ).trim(),
+            vias_compatibles: Array.isArray(v.vias_compatibles)
+                ? v.vias_compatibles.map(x => String(x || '').trim()).filter(Boolean)
+                : (v.via ? [String(v.via).trim()] : [])
+        }));
+    }
+
+    const pres = String(item.pres || '').trim();
+    const via = String(item.via || '').trim();
+
+    return (pres || via) ? [{
+        forma_farmaceutica: String(item.forma_farmaceutica || '').trim(),
+        concentracion: String(item.concentracion || '').trim(),
+        pres: pres,
+        vias_compatibles: via ? [via] : []
+    }] : [];
+}
+
+function auroPlanBuscarItemCatalogoExacto(med, pres){
+    const nMed = normalizarMedTexto(med);
+    const nPres = normalizarMedTexto(pres);
+
+    const candidatos = auroPlanCatalogoBaseSeguro().filter(item =>
+        normalizarMedTexto(item?.med) === nMed
+    );
+
+    if(!candidatos.length) return null;
+
+    if(nPres){
+        const exactoPlano = candidatos.find(item =>
+            normalizarMedTexto(item?.pres) === nPres
+        );
+        if(exactoPlano) return exactoPlano;
+
+        const exactoVariante = candidatos.find(item =>
+            auroPlanVariantesMedicamento(item).some(v =>
+                normalizarMedTexto(v.pres) === nPres
+            )
+        );
+        if(exactoVariante) return exactoVariante;
+    }
+
+    return candidatos[0] || null;
+}
+
+function auroPlanInstalarPresentacionesDisponibles(item, presentacionPreferida){
+    const campo = document.getElementById('hcMedPresentacion');
+    if(!campo || campo.tagName !== 'INPUT') return;
+
+    const variantes = auroPlanVariantesMedicamento(item);
+    const presentaciones = Array.from(new Set(
+        variantes.map(v => String(v.pres || '').trim()).filter(Boolean)
+    ));
+
+    let lista = document.getElementById('auroPlanPresentacionesMedicamentoLista');
+
+    if(!lista){
+        lista = document.createElement('datalist');
+        lista.id = 'auroPlanPresentacionesMedicamentoLista';
+        document.body.appendChild(lista);
+    }
+
+    lista.innerHTML = presentaciones
+        .map(p => `<option value="${escapeHtmlPlan(p)}"></option>`)
+        .join('');
+
+    if(presentaciones.length){
+        campo.setAttribute('list', lista.id);
+        campo.setAttribute('autocomplete', 'off');
+    }else{
+        campo.removeAttribute('list');
+    }
+
+    const preferida = String(presentacionPreferida || '').trim();
+
+    if(preferida){
+        auroPlanSetValue('hcMedPresentacion', preferida);
+    }else if(presentaciones.length === 1){
+        auroPlanSetValue('hcMedPresentacion', presentaciones[0]);
+    }
+}
+
+function auroPlanRestaurarTodasLasVias(valorPreferido){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo || campo.tagName !== 'SELECT') return;
+
+    const vias = [
+        ['VO', 'Vía oral'],
+        ['Vaginal', 'Vía vaginal'],
+        ['Tópica', 'Vía tópica'],
+        ['IM', 'Vía intramuscular'],
+        ['IV', 'Vía intravenosa'],
+        ['SC', 'Vía subcutánea'],
+        ['Sublingual', 'Vía sublingual'],
+        ['Oftálmica', 'Vía oftálmica'],
+        ['Ótica', 'Vía ótica'],
+        ['Inhalatoria', 'Vía inhalatoria'],
+        ['Rectal', 'Vía rectal'],
+        ['Nasal', 'Vía nasal']
+    ];
+
+    campo.innerHTML =
+        '<option value="">Seleccione</option>' +
+        vias.map(([valor, texto]) =>
+            `<option value="${escapeHtmlPlan(valor)}">${escapeHtmlPlan(texto)}</option>`
+        ).join('');
+
+    const preferido = String(valorPreferido || '').trim();
+    if(preferido){
+        const existe = Array.from(campo.options).some(op => op.value === preferido);
+        if(!existe){
+            const op = document.createElement('option');
+            op.value = preferido;
+            op.textContent = auroPlanNombreViaCompleta(preferido);
+            campo.appendChild(op);
+        }
+        campo.value = preferido;
+    }
+}
+
+function auroPlanAplicarViasCompatibles(item, presentacion){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo || campo.tagName !== 'SELECT') return;
+
+    const variantes = auroPlanVariantesMedicamento(item);
+    const nPres = normalizarMedTexto(presentacion);
+
+    let variante = null;
+
+    if(nPres){
+        variante = variantes.find(v => normalizarMedTexto(v.pres) === nPres) || null;
+    }
+
+    if(!variante && variantes.length === 1){
+        variante = variantes[0];
+    }
+
+    const vias = Array.from(new Set(
+        (variante?.vias_compatibles || [])
+            .map(v => String(v || '').trim())
+            .filter(Boolean)
+    ));
+
+    if(!vias.length){
+        auroPlanRestaurarTodasLasVias(campo.value);
+        return;
+    }
+
+    campo.innerHTML =
+        '<option value="">Seleccione</option>' +
+        vias.map(v =>
+            `<option value="${escapeHtmlPlan(v)}">${escapeHtmlPlan(auroPlanNombreViaCompleta(v))}</option>`
+        ).join('') +
+        '<option value="__AURO_OTRA_VIA__">Otra vía...</option>';
+
+    if(vias.length === 1){
+        campo.value = vias[0];
+    }
+}
+
+function auroPlanActivarMedicamentoCatalogo(item, presentacionPreferida){
+    window.auroPlanCatalogoMedicamentoActivo = item || null;
+
+    if(!item){
+        const campoPres = document.getElementById('hcMedPresentacion');
+        if(campoPres) campoPres.removeAttribute('list');
+        auroPlanRestaurarTodasLasVias(auroPlanGetValue('hcMedVia'));
+        return;
+    }
+
+    auroPlanInstalarPresentacionesDisponibles(item, presentacionPreferida);
+
+    const presActual = auroPlanGetValue('hcMedPresentacion');
+    auroPlanAplicarViasCompatibles(item, presActual);
+}
+
+function auroPlanActualizarViasPorPresentacion(){
+    const item = window.auroPlanCatalogoMedicamentoActivo;
+    if(!item) return;
+
+    auroPlanAplicarViasCompatibles(
+        item,
+        auroPlanGetValue('hcMedPresentacion')
+    );
+}
+
+
 function renderMedicamentoSugerencias(){
 
     const input = document.getElementById('hcMedBusqueda');
@@ -1950,6 +2171,12 @@ function seleccionarMedicamentoSugerido(el){
     auroPlanSetValue('hcMedDuracion', el.dataset.dur || '');
     auroPlanSetValue('hcMedIndicaciones', el.dataset.ind || '');
 
+    const itemCatalogo = auroPlanBuscarItemCatalogoExacto(
+        el.dataset.med || '',
+        el.dataset.pres || ''
+    );
+    auroPlanActivarMedicamentoCatalogo(itemCatalogo, el.dataset.pres || '');
+
     const box = document.getElementById('hcMedSugerencias');
     if(box) box.classList.add('d-none');
 }
@@ -1969,6 +2196,12 @@ function limpiarFormularioMedicamento(opciones){
 
     auroPlanSetValue('hcMedVia', '');
     auroPlanSetValue('hcMedContinuo', 'No');
+    window.auroPlanCatalogoMedicamentoActivo = null;
+
+    const campoPresentacion = document.getElementById('hcMedPresentacion');
+    if(campoPresentacion) campoPresentacion.removeAttribute('list');
+
+    auroPlanRestaurarTodasLasVias('');
 
     const selectorIndicacion = document.getElementById('auroPlanIndicacionRapida');
     if(selectorIndicacion) selectorIndicacion.value = '';
@@ -2055,6 +2288,17 @@ function editarMedicamentoPlan(i){
     auroPlanSetValue('hcMedDuracion', m.dur || '');
     auroPlanSetValue('hcMedIndicaciones', m.ind || '');
     auroPlanSetValue('hcMedContinuo', m.continuo || 'No');
+
+    /*
+      Edición histórica segura:
+      se conserva exactamente la presentación y vía ya guardadas.
+      Si el catálogo actual reconoce el medicamento, solo se ofrecen
+      variantes compatibles sin sobrescribir el dato clínico existente.
+    */
+    const itemCatalogo = auroPlanBuscarItemCatalogoExacto(m.med || '', m.pres || '');
+    window.auroPlanCatalogoMedicamentoActivo = itemCatalogo || null;
+    auroPlanInstalarPresentacionesDisponibles(itemCatalogo, m.pres || '');
+    auroPlanRestaurarTodasLasVias(m.via || '');
 
     auroPlanActualizarEstadoEdicionMedicamento();
 
@@ -2796,6 +3040,16 @@ function instalarEventosMedicamentosPlan(){
     });
 
     document.addEventListener('change', function(e){
+
+        if(e.target?.id === 'hcMedPresentacion'){
+            auroPlanActualizarViasPorPresentacion();
+        }
+
+        if(e.target?.id === 'hcMedVia' && e.target.value === '__AURO_OTRA_VIA__'){
+            auroPlanRestaurarTodasLasVias('');
+            e.target.focus();
+            return;
+        }
 
         const ids = [
             'hcMedPresentacion',
