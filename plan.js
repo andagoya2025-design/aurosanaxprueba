@@ -369,8 +369,86 @@ function auroPlanActualizarOpcionesVia(){
     }
 }
 
+/* ============================================================
+   AUROSANAX PLAN - VÍA LIBRE SEGURA
+   - Conserva hcMedVia como SELECT canónico.
+   - Permite escribir una vía no incluida sin cambiar persistencia.
+   - El valor libre se incorpora al mismo SELECT antes de guardar.
+============================================================ */
+function auroPlanInstalarEntradaViaLibre(){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo || campo.tagName !== 'SELECT') return null;
+
+    let entrada = document.getElementById('hcMedViaLibre');
+
+    if(!entrada){
+        entrada = document.createElement('input');
+        entrada.type = 'text';
+        entrada.id = 'hcMedViaLibre';
+        entrada.className = 'form-control form-control-sm mt-2 d-none';
+        entrada.placeholder = 'Escriba otra vía';
+        entrada.setAttribute('autocomplete', 'off');
+        entrada.setAttribute('aria-label', 'Escribir otra vía de administración');
+        campo.insertAdjacentElement('afterend', entrada);
+
+        entrada.addEventListener('input', function(){
+            const valor = String(entrada.value || '').trim();
+            let opcionLibre = Array.from(campo.options || []).find(op =>
+                op.dataset && op.dataset.auroViaLibre === '1'
+            );
+
+            if(!valor){
+                if(opcionLibre) opcionLibre.remove();
+                campo.value = Array.from(campo.options || []).some(op =>
+                    op.value === '__AURO_OTRA_VIA__'
+                ) ? '__AURO_OTRA_VIA__' : '';
+                return;
+            }
+
+            if(!opcionLibre){
+                opcionLibre = document.createElement('option');
+                opcionLibre.dataset.auroViaLibre = '1';
+                campo.appendChild(opcionLibre);
+            }
+
+            opcionLibre.value = valor;
+            opcionLibre.textContent = auroPlanNombreViaCompleta(valor);
+            campo.value = valor;
+        });
+    }
+
+    return entrada;
+}
+
+function auroPlanMostrarEntradaViaLibre(){
+    const entrada = auroPlanInstalarEntradaViaLibre();
+    if(!entrada) return;
+
+    entrada.value = '';
+    entrada.classList.remove('d-none');
+    entrada.focus();
+}
+
+function auroPlanOcultarEntradaViaLibre(){
+    const campo = document.getElementById('hcMedVia');
+    const entrada = document.getElementById('hcMedViaLibre');
+
+    if(entrada){
+        entrada.value = '';
+        entrada.classList.add('d-none');
+    }
+
+    if(campo && campo.tagName === 'SELECT'){
+        Array.from(campo.options || [])
+            .filter(op => op.dataset && op.dataset.auroViaLibre === '1')
+            .forEach(op => op.remove());
+    }
+}
+
+
 function auroPlanInstalarAyudasMedicamentos(){
     auroPlanActualizarOpcionesVia();
+    auroPlanInstalarEntradaViaLibre();
 
     auroPlanInstalarDatalist(
         'hcMedFrecuencia',
@@ -2049,7 +2127,8 @@ function auroPlanRestaurarTodasLasVias(valorPreferido){
         '<option value="">Seleccione</option>' +
         vias.map(([valor, texto]) =>
             `<option value="${escapeHtmlPlan(valor)}">${escapeHtmlPlan(texto)}</option>`
-        ).join('');
+        ).join('') +
+        '<option value="__AURO_OTRA_VIA__">Otra vía...</option>';
 
     if(preferido){
         const existe = Array.from(campo.options).some(op => op.value === preferido);
@@ -2275,6 +2354,7 @@ function limpiarFormularioMedicamento(opciones){
     if(campoPresentacion) campoPresentacion.removeAttribute('list');
 
     auroPlanRestaurarTodasLasVias('');
+    auroPlanOcultarEntradaViaLibre();
 
     const selectorIndicacion = document.getElementById('auroPlanIndicacionRapida');
     if(selectorIndicacion) selectorIndicacion.value = '';
@@ -3118,10 +3198,12 @@ function instalarEventosMedicamentosPlan(){
             auroPlanActualizarViasPorPresentacion();
         }
 
-        if(e.target?.id === 'hcMedVia' && e.target.value === '__AURO_OTRA_VIA__'){
-            auroPlanRestaurarTodasLasVias('');
-            e.target.focus();
-            return;
+        if(e.target?.id === 'hcMedVia'){
+            if(e.target.value === '__AURO_OTRA_VIA__'){
+                auroPlanMostrarEntradaViaLibre();
+                return;
+            }
+            auroPlanOcultarEntradaViaLibre();
         }
 
         const ids = [
