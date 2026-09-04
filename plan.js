@@ -2159,19 +2159,30 @@ function auroPlanAplicarViasCompatibles(item, presentacion){
         variante = variantes[0];
     }
 
-    const vias = Array.from(new Set(
+    const viasRecomendadas = Array.from(new Set(
         (variante?.vias_compatibles || [])
             .map(v => String(v || '').trim())
             .filter(Boolean)
     ));
 
+    const viasGenerales = [
+        ['VO', 'Vía oral'],
+        ['IM', 'Vía intramuscular'],
+        ['IV', 'Vía intravenosa'],
+        ['SC', 'Vía subcutánea'],
+        ['Vaginal', 'Vía vaginal'],
+        ['Tópica', 'Vía tópica'],
+        ['Sublingual', 'Vía sublingual'],
+        ['Oftálmica', 'Vía oftálmica'],
+        ['Ótica', 'Vía ótica'],
+        ['Inhalatoria', 'Vía inhalatoria'],
+        ['Rectal', 'Vía rectal'],
+        ['Nasal', 'Vía nasal']
+    ];
+
     if(campo.tagName === 'INPUT'){
-        const generales = [
-            'Vía oral','Vía intramuscular','Vía intravenosa','Vía subcutánea',
-            'Vía vaginal','Vía tópica','Vía sublingual','Vía oftálmica',
-            'Vía ótica','Vía inhalatoria','Vía rectal','Vía nasal'
-        ];
-        const recomendadas = vias.map(auroPlanNombreViaCompleta);
+        const recomendadas = viasRecomendadas.map(auroPlanNombreViaCompleta);
+        const generales = viasGenerales.map(([, texto]) => texto);
         const opciones = Array.from(new Set([...recomendadas, ...generales]));
 
         auroPlanInstalarDatalist(
@@ -2181,28 +2192,50 @@ function auroPlanAplicarViasCompatibles(item, presentacion){
             'Ej.: Vía oral'
         );
 
-        if(vias.length === 1){
-            campo.value = auroPlanNombreViaCompleta(vias[0]);
+        if(viasRecomendadas.length === 1){
+            campo.value = auroPlanNombreViaCompleta(viasRecomendadas[0]);
         }
         return;
     }
 
     if(campo.tagName !== 'SELECT') return;
 
-    if(!vias.length){
+    if(!viasRecomendadas.length){
         auroPlanRestaurarTodasLasVias(campo.value);
         return;
     }
 
+    const recomendadasNormalizadas = new Set(
+        viasRecomendadas.map(v =>
+            normalizarTextoPlan(auroPlanNombreViaCompleta(v))
+        )
+    );
+
+    const opcionesRecomendadas = viasRecomendadas.map(v => ({
+        valor: v,
+        texto: auroPlanNombreViaCompleta(v)
+    }));
+
+    const opcionesGenerales = viasGenerales
+        .filter(([, texto]) =>
+            !recomendadasNormalizadas.has(normalizarTextoPlan(texto))
+        )
+        .map(([valor, texto]) => ({valor, texto}));
+
+    const opcionesFinales = [
+        ...opcionesRecomendadas,
+        ...opcionesGenerales
+    ];
+
     campo.innerHTML =
         '<option value="">Seleccione</option>' +
-        vias.map(v =>
-            `<option value="${escapeHtmlPlan(v)}">${escapeHtmlPlan(auroPlanNombreViaCompleta(v))}</option>`
+        opcionesFinales.map(op =>
+            `<option value="${escapeHtmlPlan(op.valor)}">${escapeHtmlPlan(op.texto)}</option>`
         ).join('') +
         '<option value="__AURO_OTRA_VIA__">Otra vía...</option>';
 
-    if(vias.length === 1){
-        campo.value = vias[0];
+    if(viasRecomendadas.length === 1){
+        campo.value = viasRecomendadas[0];
     }
 }
 
