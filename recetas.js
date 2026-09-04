@@ -2385,6 +2385,7 @@
         creado_en: receta.creado_en || fechaHoraEcuadorISO(),
         actualizado_en: fechaHoraEcuadorISO(),
         id_atencion: receta.id_atencion || obtenerIdAtencionActivaSeguro() || '',
+        numero_consulta: receta.numero_consulta || '',
         forzar_nueva_receta: receta.forzar_nueva_receta || 'NO',
         token: auroRecetaTokenControlClinico()
       };
@@ -2550,6 +2551,7 @@
       id_paciente: r.id_paciente || r.paciente_id || '',
       id_historia: r.id_historia || '',
       id_atencion: r.id_atencion || '',
+      numero_consulta: r.numero_consulta || '',
       id_medico: r.id_medico || obtenerIdMedicoReal(),
       codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
       paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || '',
@@ -5070,11 +5072,13 @@
     auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     const r = window.obtenerDatosReceta();
     const paciente = auroRecetaCompletarPacienteParaImpresion(r);
+    const atencionActiva = obtenerAtencionActivaSegura();
     return {
       id_receta: recetaEditandoId || crearIdReceta(medicoAtencion?.id_medico),
       id_paciente: r.id_paciente || paciente.id_paciente || paciente.id || '',
       id_historia: r.id_historia || '',
       id_atencion: r.id_atencion || obtenerIdAtencionActivaSeguro() || '',
+      numero_consulta: String(atencionActiva?.numero_consulta || '').trim(),
       id_medico: r.id_medico || obtenerIdMedicoReal(),
       codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
       paciente_nombre: paciente.nombre || '',
