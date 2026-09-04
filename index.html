@@ -10332,7 +10332,13 @@ async function imprimirHistoriaClinica(){
           ${contextoTexto ? `<p class="auro-cert-intro">Por medio del presente certifico haber atendido ${contextoTexto}${fechaAtencionCert ? `, con fecha de atención <strong>${auroInformeEscape(fechaAtencionCert)}</strong>` : ''}.</p>` : ''}
           ${datos.length ? `<div class="auro-cert-facts">${datos.map(([k,v])=>`<div><strong>${auroInformeEscape(k)}:</strong> <span>${auroInformeEscape(v)}</span></div>`).join('')}</div>` : ''}
           ${diagnosticosCert.length ? `<div class="auro-cert-dx-lines"><strong>Diagnóstico(s) CIE-10:</strong>${diagnosticosCert.map(x=>`<div>${auroInformeEscape(x)}</div>`).join('')}</div>` : ''}
-          ${medico ? `<div class="auro-cert-signature"><div class="auro-cert-signature-line"></div><strong>${auroInformeEscape(medico)}</strong>${especialidad ? `<span>${auroInformeEscape(especialidad)}</span>` : ''}${registroMsp ? `<span>Registro MSP: ${auroInformeEscape(registroMsp)}</span>` : ''}${registroSenescyt ? `<span>Registro SENESCYT: ${auroInformeEscape(registroSenescyt)}</span>` : ''}</div>` : ''}
+          <div class="auro-cert-footer">
+            <div class="auro-cert-footer-institution">
+              ${direccionCentroPDF ? `<span>${auroInformeEscape(direccionCentroPDF)}${ciudadCentroPDF ? ` · ${auroInformeEscape(ciudadCentroPDF)}` : ''}</span>` : (ciudadCentroPDF ? `<span>${auroInformeEscape(ciudadCentroPDF)}</span>` : '')}
+              ${emailCentroPDF ? `<span>${auroInformeEscape(emailCentroPDF)}</span>` : ''}
+            </div>
+            ${medico ? `<div class="auro-cert-signature"><div class="auro-cert-signature-line"></div><strong>${auroInformeEscape(medico)}</strong>${especialidad ? `<span>${auroInformeEscape(especialidad)}</span>` : ''}${registroMsp ? `<span>Registro MSP/ACESS: ${auroInformeEscape(registroMsp)}</span>` : ''}${registroSenescyt ? `<span>Registro SENESCYT: ${auroInformeEscape(registroSenescyt)}</span>` : ''}<span>Firma y sello</span></div>` : ''}
+          </div>
         </article>`;
     }).filter(Boolean);
     return items.join('');
@@ -10555,10 +10561,24 @@ async function imprimirHistoriaClinica(){
   .auro-cert-facts strong,.auro-cert-dx-lines>strong{color:#172033;text-transform:uppercase;font-size:9.1px;letter-spacing:.02em}
   .auro-cert-dx-lines{margin-top:8px;font-size:9.6px;line-height:1.4}
   .auro-cert-dx-lines>div{margin-top:2px;color:#344054}
-  .auro-cert-signature{width:220px;margin:28px 0 0 auto;text-align:center;color:#344054}
-  .auro-cert-signature-line{border-top:1px solid #9ca3af;margin-bottom:5px}
+  /* V1.2 — footer del certificado alineado con Vista Integral:
+     institución abajo-izquierda + firma profesional abajo-derecha. */
+  .auro-cert-footer{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:28px;
+    margin-top:34px;min-height:76px
+  }
+  .auro-cert-footer-institution{
+    flex:1 1 auto;min-width:0;color:#667085;font-size:8.4px;line-height:1.35;
+    text-align:left;padding-bottom:1px
+  }
+  .auro-cert-footer-institution span{display:block}
+  .auro-cert-signature{
+    flex:0 0 250px;width:250px;margin:0;text-align:center;color:#344054;
+    align-self:flex-end
+  }
+  .auro-cert-signature-line{border-top:1px solid #667085;margin-bottom:5px}
   .auro-cert-signature strong{display:block;color:#172033;font-size:9.8px}
-  .auro-cert-signature span{display:block;color:#667085;font-size:8.6px;line-height:1.3;margin-top:1px}
+  .auro-cert-signature span{display:block;color:#667085;font-size:8.6px;line-height:1.25;margin-top:1px}
 
   /* VISOR PREVIO PROFESIONAL */
   .auro-preview-toolbar{
