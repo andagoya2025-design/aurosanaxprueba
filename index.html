@@ -9757,21 +9757,7 @@ async function imprimirHistoriaClinica(){
     ? String(window.auroDiagnosticosState?.conducta || auroInformeValue('auroDxConducta') || '').trim()
     : '';
 
-  const resumenDocumentalPDF = (() => {
-    if(resumenIntegradoPDF) return resumenIntegradoPDF;
-
-    const partes = [];
-    const motivo = String(auroInformeValue('hcMotivoConsulta') || '').trim();
-    const enfermedad = String(auroInformeValue('hcEnfermedadActual') || '').trim();
-    const examen = String(auroInformeValue('hcExamenFisico') || '').trim();
-
-    if(motivo) partes.push(`Motivo de consulta: ${motivo}`);
-    if(enfermedad) partes.push(`Evolución clínica: ${enfermedad}`);
-    if(examen) partes.push(`Hallazgos registrados: ${examen}`);
-    if(textoDiagnosticosPDF) partes.push(`Diagnóstico(s) registrado(s): ${textoDiagnosticosPDF}`);
-
-    return partes.join('. ').replace(/\.\s*\./g,'.').trim();
-  })();
+  const resumenDocumentalPDF = String(resumenIntegradoPDF || '').trim();
 
   const resumenAtencionHTML = (() => {
     const bloques = [];
