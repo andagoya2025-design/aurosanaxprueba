@@ -1891,9 +1891,29 @@ function renderMedicamentoSugerencias(){
         : [];
 
     const res = base
-        .filter(m => !q || normalizarMedTexto(
-            (m.med || '') + ' ' + (m.pres || '') + ' ' + (m.cat || '')
-        ).includes(q))
+        .filter(m => {
+            if(!q) return true;
+
+            const textoBusqueda = [
+                m.med,
+                m.pres,
+                m.cat,
+                m.principio_activo,
+                m.forma_farmaceutica,
+                m.concentracion,
+                ...(Array.isArray(m.denominaciones_comerciales)
+                    ? m.denominaciones_comerciales
+                    : (m.denominaciones_comerciales ? [m.denominaciones_comerciales] : [])),
+                ...(Array.isArray(m.nombres_alternativos)
+                    ? m.nombres_alternativos
+                    : (m.nombres_alternativos ? [m.nombres_alternativos] : []))
+            ]
+            .map(v => String(v || '').trim())
+            .filter(Boolean)
+            .join(' ');
+
+            return normalizarMedTexto(textoBusqueda).includes(q);
+        })
         .slice(0,40);
 
     if(!res.length){
