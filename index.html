@@ -384,6 +384,19 @@
       font-weight:750;
     }
 
+    /* AUROSANAX INDEX 83 - estado visual activo de informes.
+       Presentación únicamente: no altera navegación, datos ni guardados. */
+    #historia .auro-informe-view-btn{
+      transition:background .16s ease,color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+    }
+    #historia .auro-informe-view-btn.is-active{
+      background:linear-gradient(135deg,var(--primary),var(--primary-2));
+      color:#fff;
+      border-color:transparent;
+      box-shadow:0 8px 20px rgba(139,30,90,.18);
+    }
+    #historia .auro-informe-view-btn.is-active i{color:#fff}
+
     /* Actualización premium localizada de Pacientes */
     .auro-refresh-btn{
       min-width:178px;
@@ -4008,7 +4021,7 @@
 
     <section class="screen" id="historia">
       <div class="cardx p-4">
-        <div class="section-head justify-content-end"><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button class="btn-soft" onclick="imprimirHistoriaClinica()" title="Generar informe clínico de la atención seleccionada"><i class="bi bi-file-earmark-medical me-1"></i> Informe de atención</button><!-- AUROSANAX INFORME HISTÓRICO V1 · INTEGRACIÓN AISLADA --><button class="btn-soft" type="button" onclick="window.auroInformeHistorico?.abrir()" title="Generar informe clínico histórico del paciente seleccionado"><i class="bi bi-journal-medical me-1"></i> Informe histórico</button><!-- FIN AUROSANAX INFORME HISTÓRICO V1 --></div></div>
+        <div class="section-head justify-content-end"><div class="d-flex gap-2 flex-wrap"><button class="btn-soft" onclick="openHistoriasModal()"><i class="bi bi-search me-1"></i> Buscar / editar historias</button><button id="auroBtnInformeAtencion" class="btn-soft auro-informe-view-btn" onclick="auroMarcarVistaInformeActiva('atencion'); imprimirHistoriaClinica()" title="Generar informe clínico de la atención seleccionada"><i class="bi bi-file-earmark-medical me-1"></i> Informe de atención</button><!-- AUROSANAX INFORME HISTÓRICO V1 · INTEGRACIÓN AISLADA --><button id="auroBtnInformeHistorico" class="btn-soft auro-informe-view-btn" type="button" onclick="auroMarcarVistaInformeActiva('historico'); window.auroInformeHistorico?.abrir()" title="Generar informe clínico histórico del paciente seleccionado"><i class="bi bi-journal-medical me-1"></i> Informe histórico</button><!-- FIN AUROSANAX INFORME HISTÓRICO V1 --></div></div>
         <div class="patient-profile-card" id="hcPatientCard">
           <div class="patient-avatar" id="hcAvatar">A</div>
           <div>
@@ -9388,6 +9401,21 @@ function auroInformeEvaluacionesPlan(){
    - No modifica guardado, id_atencion, Última actualización, Plan, Recetas,
      Certificados, Apps Script, Google Sheets ni navegación.
 ============================================================ */
+function auroMarcarVistaInformeActiva(tipo){
+  try{
+    const mapa={
+      atencion:'auroBtnInformeAtencion',
+      historico:'auroBtnInformeHistorico'
+    };
+    Object.values(mapa).forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.classList.remove('is-active');
+    });
+    const activo=document.getElementById(mapa[String(tipo||'').trim()]||'');
+    if(activo) activo.classList.add('is-active');
+  }catch(e){}
+}
+
 async function imprimirHistoriaClinica(){
   const idPaciente = document.getElementById('hcPacienteSelect')?.value || '';
   if(!idPaciente){
@@ -10179,24 +10207,85 @@ async function imprimirHistoriaClinica(){
   const certificadosOficialesHTML = (() => {
     const items = certificadosPersistidosPDF.map(r => {
       const d = auroInformeParseJSONPDF(r.detalle_json, {}) || {};
-      const tipo = String(r.tipo_certificado || d.tipo_certificado || r.motivo || '').trim();
-      const fechaCert = auroInformeFechaClinica(r.fecha_emision || r.fecha_certificado || r.creado_en || '');
-      const dias = String(d.dias_reposo || r.dias_reposo || '').trim();
-      const motivo = String(d.motivo || r.motivo || '').trim();
-      const partes = [
-        tipo ? `<strong>${auroInformeEscape(tipo)}</strong>` : '',
-        fechaCert ? `<small>Fecha: ${auroInformeEscape(fechaCert)}</small>` : '',
-        dias ? `<small>Reposo: ${auroInformeEscape(dias)} día(s)</small>` : '',
-        motivo && motivo !== tipo ? `<small>Motivo: ${auroInformeEscape(motivo)}</small>` : ''
+      const pac = d.paciente || {};
+      const med = d.medico || {};
+      const tipo = String(r.tipo_certificado || d.tipo_certificado || 'Certificado médico').trim();
+      const fechaCert = auroInformeFechaClinica(r.fecha_emision || d.fecha_emision || r.fecha_certificado || r.creado_en || '');
+      const dias = String(d.dias_reposo ?? r.dias_reposo ?? '').trim();
+      const desde = auroInformeFechaClinica(d.reposo_desde || d.fecha_desde || '');
+      const hasta = auroInformeFechaClinica(d.reposo_hasta || d.fecha_hasta || '');
+      const contingencia = String(d.contingencia || '').trim();
+      const contacto = String(d.contacto || '').trim();
+      const empresa = String(d.institucion_empresa || '').trim();
+      const observacion = String(d.observaciones || d.observacion || d.motivo || r.motivo || '').trim();
+      const medico = String(
+        med.nombre || med.nombre_completo || r.nombre_medico || medicoAtencionPDF || ''
+      ).trim();
+      const especialidad = String(
+        med.especialidad || r.especialidad || especialidadAtencionPDF || ''
+      ).trim();
+      const pacienteCert = String(
+        pac.nombre || pac.nombre_completo || nombrePaciente || ''
+      ).trim();
+      const documentoCert = String(
+        pac.numero_documento || pac.cedula || cedula || ''
+      ).trim();
+
+      const diagnosticosCert = (Array.isArray(d.diagnosticos) ? d.diagnosticos : [])
+        .map(dx => {
+          if(!dx) return '';
+          if(typeof dx === 'string') return String(dx).trim();
+          const codigo = String(dx.codigo_cie10 || dx.codigo || dx.cie10 || '').trim();
+          const nombre = String(dx.diagnostico || dx.descripcion || dx.nombre || '').trim();
+          return [codigo,nombre].filter(Boolean).join(' — ');
+        })
+        .filter(Boolean);
+
+      const filas = [
+        pacienteCert ? `<div><span>Paciente</span><b>${auroInformeEscape(pacienteCert)}</b></div>` : '',
+        documentoCert && documentoCert !== '—' ? `<div><span>Identificación</span><b>${auroInformeEscape(documentoCert)}</b></div>` : '',
+        fechaCert ? `<div><span>Fecha de emisión</span><b>${auroInformeEscape(fechaCert)}</b></div>` : '',
+        dias && dias !== '0' ? `<div><span>Reposo</span><b>${auroInformeEscape(dias)} día(s)</b></div>` : '',
+        desde ? `<div><span>Desde</span><b>${auroInformeEscape(desde)}</b></div>` : '',
+        hasta ? `<div><span>Hasta</span><b>${auroInformeEscape(hasta)}</b></div>` : '',
+        contingencia ? `<div><span>Contingencia</span><b>${auroInformeEscape(contingencia)}</b></div>` : '',
+        empresa ? `<div><span>Institución / empresa</span><b>${auroInformeEscape(empresa)}</b></div>` : '',
+        contacto ? `<div><span>Contacto</span><b>${auroInformeEscape(contacto)}</b></div>` : ''
       ].filter(Boolean).join('');
-      return partes ? `<div class="auro-report-item"><div class="auro-report-detail">${partes}</div></div>` : '';
+
+      const diagnosticosHTML = diagnosticosCert.length
+        ? `<div class="auro-cert-dx"><span>Diagnóstico(s)</span>${diagnosticosCert.map(x=>`<b>${auroInformeEscape(x)}</b>`).join('')}</div>`
+        : '';
+
+      const observacionHTML = observacion
+        ? `<div class="auro-cert-note"><span>Observaciones / certificación</span><p>${auroInformeEscape(observacion)}</p></div>`
+        : '';
+
+      const firmaHTML = medico
+        ? `<div class="auro-cert-sign"><strong>${auroInformeEscape(medico)}</strong>${especialidad ? `<small>${auroInformeEscape(especialidad)}</small>` : ''}</div>`
+        : '';
+
+      return `
+        <article class="auro-cert-document">
+          <div class="auro-cert-head">
+            <div>
+              <small>Documento clínico</small>
+              <h3>${auroInformeEscape(tipo || 'Certificado médico')}</h3>
+            </div>
+            ${fechaCert ? `<b>${auroInformeEscape(fechaCert)}</b>` : ''}
+          </div>
+          ${filas ? `<div class="auro-cert-grid">${filas}</div>` : ''}
+          ${diagnosticosHTML}
+          ${observacionHTML}
+          ${firmaHTML}
+        </article>`;
     }).filter(Boolean);
-    return items.length ? `<div class="auro-report-grid">${items.join('')}</div>` : '';
+    return items.join('');
   })();
 
   const documentosOficialesHTML = (() => {
     const items = documentosPersistidosPDF.map(r => {
-      const nombre = String(r.nombre_documento || r.archivo_nombre || r.nombre_archivo || r.titulo || r.categoria || r.tipo_documento || '').trim();
+      const nombre = String(r.nombre_documento || r.archivo_nombre || r.nombre_archivo || r.titulo || r.nombre_original || r.categoria || r.tipo_documento || '').trim();
       if(!nombre) return '';
       const categoria = String(r.categoria || r.tipo_documento || '').trim();
       const fechaDoc = auroInformeFechaClinica(r.fecha_documento || r.fecha_atencion || r.creado_en || '');
@@ -10392,6 +10481,27 @@ async function imprimirHistoriaClinica(){
   .auro-report-item strong{display:block;color:#172033;font-size:10.4px;font-weight:900;line-height:1.2;margin-bottom:2px}
   .auro-report-detail{display:grid;gap:2px}
   .auro-report-detail small{display:block;color:#526071;font-size:9.5px;font-weight:700;line-height:1.2}
+
+  /* Certificado en Informe de Atención: lectura documental, mismo contrato visual de Vista Integral */
+  .auro-cert-document{
+    border:1px solid #eadbe4;background:#fff;border-radius:13px;
+    padding:10px 11px;margin-bottom:7px;break-inside:avoid;
+    box-shadow:0 4px 12px rgba(15,23,42,.035)
+  }
+  .auro-cert-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:7px;border-bottom:1px solid #f0e4eb}
+  .auro-cert-head small{display:block;color:var(--auro-primary);font-size:8.8px;font-weight:900;text-transform:uppercase;letter-spacing:.07em}
+  .auro-cert-head h3{margin:2px 0 0;color:#172033;font-size:13px;font-weight:900}
+  .auro-cert-head>b{color:#526071;font-size:9.8px;white-space:nowrap}
+  .auro-cert-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:7px}
+  .auro-cert-grid>div{border:1px solid #edf0f3;background:#fcfdff;border-radius:8px;padding:5px 7px;min-width:0}
+  .auro-cert-grid span,.auro-cert-dx span,.auro-cert-note span{display:block;color:#667085;font-size:8.8px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+  .auro-cert-grid b{display:block;color:#172033;font-size:10px;line-height:1.25;overflow-wrap:anywhere}
+  .auro-cert-dx,.auro-cert-note{margin-top:6px;border:1px solid #edf0f3;border-radius:8px;padding:6px 7px;background:#fff}
+  .auro-cert-dx b{display:block;color:#273244;font-size:9.8px;line-height:1.3;margin-top:2px}
+  .auro-cert-note p{margin:0;color:#273244;font-size:9.8px;line-height:1.35;white-space:pre-wrap}
+  .auro-cert-sign{margin-top:9px;padding-top:7px;border-top:1px dashed #d8dde6;text-align:right}
+  .auro-cert-sign strong{display:block;color:#172033;font-size:10.4px}
+  .auro-cert-sign small{display:block;color:#667085;font-size:9.2px;margin-top:1px}
 
   /* VISOR PREVIO PROFESIONAL */
   .auro-preview-toolbar{
@@ -10589,13 +10699,13 @@ async function imprimirHistoriaClinica(){
     ` : ''}
 
     ${certificadosOficialesHTML ? `
-      <div class="auro-section-title"><span>Certificados</span> Certificados emitidos en esta atención</div>
-      ${auroInformeBloque('Certificados clínicos', 'CE', certificadosOficialesHTML)}
+      <div class="auro-section-title"><span>Certificado</span> Documento médico emitido en esta atención</div>
+      ${certificadosOficialesHTML}
     ` : ''}
 
     ${documentosOficialesHTML ? `
-      <div class="auro-section-title"><span>Documentos</span> Documentos clínicos asociados</div>
-      ${auroInformeBloque('Documentos de la atención', 'DO', documentosOficialesHTML)}
+      <div class="auro-section-title"><span>Documentos</span> Documentos de la atención</div>
+      ${documentosOficialesHTML}
     ` : ''}
 
     <footer class="auro-footer">
