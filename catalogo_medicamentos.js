@@ -1,730 +1,188 @@
-/***********************************************************************
- AUROSANAX ERP
- Archivo: catalogo_medicamentos.js
- Módulo: Catálogo Maestro de Medicamentos
- Versión: 1.0.0
- Fecha: 2026-09-04
-
- REGLA:
- - SOLO catálogo.
- - NO guarda datos.
- - NO modifica id_atencion.
- - NO toca Plan, Recetas, Diagnósticos, Apps Script ni Google Sheets.
- - Mantiene compatibilidad con window.MEDICAMENTOS_AUROSANAX_BASE.
-************************************************************************/
-
-(function(){
-    'use strict';
-
-    const CATALOGO_AUROSANAX = [
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Metronidazol',
-            principio_activo:'Metronidazol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Metronidazole'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'500 mg',
-            pres:'500 mg tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Tinidazol',
-            principio_activo:'Tinidazol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:[],
-            forma_farmaceutica:'Tableta',
-            concentracion:'500 mg',
-            pres:'500 mg tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Secnidazol',
-            principio_activo:'Secnidazol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:[],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Clotrimazol',
-            principio_activo:'Clotrimazol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:[],
-            forma_farmaceutica:'Óvulo vaginal',
-            concentracion:'',
-            pres:'óvulo vaginal',
-            via:'VAGINAL',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Miconazol',
-            principio_activo:'Miconazol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Miconazole'],
-            forma_farmaceutica:'Óvulo vaginal',
-            concentracion:'',
-            pres:'óvulo vaginal',
-            via:'VAGINAL',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Fluconazol',
-            principio_activo:'Fluconazol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:[],
-            forma_farmaceutica:'Cápsula',
-            concentracion:'150 mg',
-            pres:'150 mg cápsula',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Nistatina',
-            principio_activo:'Nistatina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Nystatin'],
-            forma_farmaceutica:'Óvulo vaginal',
-            concentracion:'',
-            pres:'óvulo vaginal',
-            via:'VAGINAL',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Clindamicina',
-            principio_activo:'Clindamicina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Clindamicina vaginal'],
-            forma_farmaceutica:'Crema vaginal',
-            concentracion:'',
-            pres:'crema vaginal',
-            via:'VAGINAL',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANTIINFECCIOSOS',
-            med:'Azitromicina',
-            principio_activo:'Azitromicina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Azithromycin'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANTIINFECCIOSOS',
-            med:'Doxiciclina',
-            principio_activo:'Doxiciclina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Doxycycline'],
-            forma_farmaceutica:'Tableta / cápsula',
-            concentracion:'',
-            pres:'tableta / cápsula',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANTIINFECCIOSOS',
-            med:'Ceftriaxona',
-            principio_activo:'Ceftriaxona',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Ceftriaxone'],
-            forma_farmaceutica:'Inyectable',
-            concentracion:'',
-            pres:'inyectable',
-            via:'IM',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANTIINFECCIOSOS',
-            med:'Amoxicilina + ácido clavulánico',
-            principio_activo:'Amoxicilina + ácido clavulánico',
-            denominaciones_comerciales:[],
-            nombres_alternativos:[
-                'Amoxicilina ácido clavulánico',
-                'Amoxicillin clavulanate'
-            ],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANTIINFECCIOSOS',
-            med:'Cefalexina',
-            principio_activo:'Cefalexina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Cephalexin'],
-            forma_farmaceutica:'Cápsula / tableta',
-            concentracion:'',
-            pres:'cápsula / tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'UROLOGÍA',
-            med:'Nitrofurantoína',
-            principio_activo:'Nitrofurantoína',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Nitrofurantoin'],
-            forma_farmaceutica:'Cápsula',
-            concentracion:'100 mg',
-            pres:'100 mg cápsula',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'UROLOGÍA',
-            med:'Fosfomicina trometamol',
-            principio_activo:'Fosfomicina trometamol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:[
-                'Fosfomicina',
-                'Fosfomycin trometamol'
-            ],
-            forma_farmaceutica:'Sobre granulado',
-            concentracion:'3 g',
-            pres:'3 g sobre granulado',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'UROLOGÍA',
-            med:'Fenazopiridina',
-            principio_activo:'Fenazopiridina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Phenazopyridine'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANALGÉSICOS',
-            med:'Paracetamol',
-            principio_activo:'Paracetamol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Acetaminofén','Acetaminophen'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANALGÉSICOS',
-            med:'Ibuprofeno',
-            principio_activo:'Ibuprofeno',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Ibuprofen'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANALGÉSICOS',
-            med:'Naproxeno',
-            principio_activo:'Naproxeno',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Naproxen'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANALGÉSICOS',
-            med:'Ketorolaco',
-            principio_activo:'Ketorolaco',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Ketorolac'],
-            forma_farmaceutica:'Tableta / inyectable',
-            concentracion:'',
-            pres:'tableta / inyectable',
-            via:'',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ANTIESPASMÓDICOS',
-            med:'Butilbromuro de hioscina',
-            principio_activo:'Butilbromuro de hioscina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Hioscina butilbromuro','Hyoscine butylbromide'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Ácido tranexámico',
-            principio_activo:'Ácido tranexámico',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Tranexamic acid'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'HEMATOLOGÍA',
-            med:'Sulfato ferroso',
-            principio_activo:'Hierro',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Hierro','Ferrous sulfate'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'OBSTETRICIA',
-            med:'Ácido fólico',
-            principio_activo:'Ácido fólico',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Folic acid'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'ENDOCRINOLOGÍA',
-            med:'Metformina',
-            principio_activo:'Metformina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Metformin'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Espironolactona',
-            principio_activo:'Espironolactona',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Spironolactone'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Medroxiprogesterona',
-            principio_activo:'Medroxiprogesterona',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Acetato de medroxiprogesterona'],
-            forma_farmaceutica:'Tableta / inyectable',
-            concentracion:'',
-            pres:'tableta / inyectable',
-            via:'',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GINECOLOGÍA',
-            med:'Letrozol',
-            principio_activo:'Letrozol',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Letrozole'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'CARDIOVASCULAR',
-            med:'Losartán',
-            principio_activo:'Losartán',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Losartan'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'CARDIOVASCULAR',
-            med:'Enalapril',
-            principio_activo:'Enalapril',
-            denominaciones_comerciales:[],
-            nombres_alternativos:[],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'CARDIOVASCULAR',
-            med:'Amlodipino',
-            principio_activo:'Amlodipino',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Amlodipine'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'CARDIOVASCULAR',
-            med:'Hidroclorotiazida',
-            principio_activo:'Hidroclorotiazida',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Hydrochlorothiazide'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'CARDIOVASCULAR',
-            med:'Clortalidona',
-            principio_activo:'Clortalidona',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Chlorthalidone'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'CARDIOVASCULAR',
-            med:'Valsartán',
-            principio_activo:'Valsartán',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Valsartan'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'',
-            pres:'tableta',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'DERMATOLOGÍA',
-            med:'Mupirocina',
-            principio_activo:'Mupirocina',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Mupirocin'],
-            forma_farmaceutica:'Ungüento / crema',
-            concentracion:'',
-            pres:'ungüento / crema',
-            via:'TÓPICA',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'DERMATOLOGÍA',
-            med:'Ácido fusídico',
-            principio_activo:'Ácido fusídico',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Fusidic acid'],
-            forma_farmaceutica:'Crema',
-            concentracion:'',
-            pres:'crema',
-            via:'TÓPICA',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'DERMATOLOGÍA',
-            med:'Hidrocortisona',
-            principio_activo:'Hidrocortisona',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Hydrocortisone'],
-            forma_farmaceutica:'Crema',
-            concentracion:'',
-            pres:'crema',
-            via:'TÓPICA',
-            frec:'',
-            dur:'',
-            ind:''
-        },
-
-        {
-            cat:'GASTROINTESTINAL',
-            med:'Probióticos',
-            principio_activo:'Probióticos',
-            denominaciones_comerciales:[],
-            nombres_alternativos:['Probiotics'],
-            forma_farmaceutica:'Cápsula / sobre',
-            concentracion:'',
-            pres:'cápsula / sobre',
-            via:'VO',
-            frec:'',
-            dur:'',
-            ind:''
-        }
-
-    ];
-
-    function texto(valor){
-        return String(valor === null || valor === undefined ? '' : valor).trim();
-    }
-
-    function normalizar(valor){
-        return texto(valor)
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g,'')
-            .toLowerCase()
-            .replace(/\s+/g,' ')
-            .trim();
-    }
-
-    function arrayTexto(valor){
-        if(Array.isArray(valor)){
-            return valor.map(texto).filter(Boolean);
-        }
-
-        if(!texto(valor)) return [];
-
-        return [texto(valor)];
-    }
-
-    function normalizarRegistro(m){
-        m = m || {};
-
-        return {
-            cat: texto(m.cat),
-            med: texto(m.med),
-            principio_activo: texto(m.principio_activo || m.med),
-            denominaciones_comerciales: arrayTexto(m.denominaciones_comerciales),
-            nombres_alternativos: arrayTexto(m.nombres_alternativos),
-            forma_farmaceutica: texto(m.forma_farmaceutica),
-            concentracion: texto(m.concentracion),
-            pres: texto(m.pres),
-            via: texto(m.via),
-            frec: texto(m.frec),
-            dur: texto(m.dur),
-            ind: texto(m.ind)
-        };
-    }
-
-    function firmaMedicamento(m){
-        return [
-            normalizar(m.med),
-            normalizar(m.pres),
-            normalizar(m.via)
-        ].join('|');
-    }
-
-    function fusionarSinDuplicados(lista){
-        const mapa = new Map();
-
-        (lista || []).forEach(function(item){
-            const m = normalizarRegistro(item);
-
-            if(!m.med) return;
-
-            const firma = firmaMedicamento(m);
-
-            if(!mapa.has(firma)){
-                mapa.set(firma, m);
-                return;
-            }
-
-            const actual = mapa.get(firma);
-
-            actual.denominaciones_comerciales =
-                Array.from(new Set([
-                    ...actual.denominaciones_comerciales,
-                    ...m.denominaciones_comerciales
-                ]));
-
-            actual.nombres_alternativos =
-                Array.from(new Set([
-                    ...actual.nombres_alternativos,
-                    ...m.nombres_alternativos
-                ]));
-        });
-
-        return Array.from(mapa.values());
-    }
-
-    const existentes =
-        Array.isArray(window.MEDICAMENTOS_AUROSANAX_BASE)
-            ? window.MEDICAMENTOS_AUROSANAX_BASE
-            : [];
-
-    window.MEDICAMENTOS_AUROSANAX_BASE =
-        fusionarSinDuplicados([
-            ...CATALOGO_AUROSANAX,
-            ...existentes
-        ]);
-
-    window.AUROSANAX_CATALOGO_MEDICAMENTOS = {
-
-        version:'1.0.0',
-
-        obtenerTodos:function(){
-            return window.MEDICAMENTOS_AUROSANAX_BASE.slice();
-        },
-
-        cantidad:function(){
-            return window.MEDICAMENTOS_AUROSANAX_BASE.length;
-        },
-
-        buscar:function(consulta){
-            const q = normalizar(consulta);
-
-            if(!q){
-                return window.MEDICAMENTOS_AUROSANAX_BASE.slice();
-            }
-
-            return window.MEDICAMENTOS_AUROSANAX_BASE.filter(function(m){
-
-                const textoBusqueda = [
-                    m.med,
-                    m.principio_activo,
-                    m.pres,
-                    m.forma_farmaceutica,
-                    m.concentracion,
-                    m.cat,
-                    ...(m.denominaciones_comerciales || []),
-                    ...(m.nombres_alternativos || [])
-                ].join(' ');
-
-                return normalizar(textoBusqueda).includes(q);
-            });
-        }
-    };
-
-})();
+AUROSANAX ERP
+AUDITORÍA ANTIRREGRESIVA DESPUÉS DE ACTUALIZAR catalogo_medicamentos.js
+Fecha: 2026-09-04
+Modo: SOLO LECTURA
+NO SE MODIFICÓ NINGÚN ARCHIVO
+
+======================================================================
+RESULTADO DE LA AUDITORÍA
+======================================================================
+
+El archivo catalogo_medicamentos.js YA quedó limpio como JavaScript.
+
+SHA actual:
+46f8f37371cf9ea13e26506645a9245d9236ebae
+
+Ya no tiene el problema anterior de texto explicativo mezclado con código.
+
+PERO antes de conectarlo a index.html encontré un riesgo antirregresivo importante.
+
+======================================================================
+RIESGO DETECTADO
+======================================================================
+
+plan.js actualmente tiene su propia base estable de 15 medicamentos.
+
+La define así:
+
+window.MEDICAMENTOS_AUROSANAX_BASE =
+    window.MEDICAMENTOS_AUROSANAX_BASE || [ ...base actual... ];
+
+Esto significa:
+
+Si catalogo_medicamentos.js se carga ANTES de plan.js,
+Plan NO cargará su base interna antigua porque la variable ya existiría.
+
+Por lo tanto, el catálogo nuevo pasaría a reemplazar completamente esa base interna.
+
+======================================================================
+POR QUÉ NO DEBEMOS CONECTARLO TODAVÍA
+======================================================================
+
+El catálogo nuevo tiene varios medicamentos que ya existían en Plan,
+pero en algunos casos tiene vacíos los valores que Plan sí tenía definidos.
+
+Ejemplos actuales:
+
+Metronidazol en Plan:
+- presentación: 500 mg tableta
+- vía: VO
+- frecuencia: cada 12 horas
+- duración: 7 días
+- indicación: Tomar después de alimentos
+
+Metronidazol en catálogo nuevo:
+- presentación: 500 mg tableta
+- vía: VO
+- frecuencia: VACÍA
+- duración: VACÍA
+- indicación: VACÍA
+
+Ibuprofeno en Plan:
+- presentación: 400 mg tableta
+- vía: VO
+- frecuencia: cada 8 horas
+- duración: 3 a 5 días
+- indicación: Tomar después de alimentos
+
+Ibuprofeno en catálogo nuevo:
+- presentación: tableta
+- vía: VO
+- frecuencia: VACÍA
+- duración: VACÍA
+- indicación: VACÍA
+
+Paracetamol en Plan:
+- presentación: 500 mg tableta
+- frecuencia: cada 8 horas
+- duración: 3 a 5 días
+- indicación: Si dolor o fiebre
+
+Paracetamol en catálogo nuevo:
+- presentación: tableta
+- frecuencia: VACÍA
+- duración: VACÍA
+- indicación: VACÍA
+
+También ocurre con:
+- Ketorolaco
+- Amoxicilina + ácido clavulánico
+- Cefalexina
+- Mupirocina
+- Ácido fusídico
+- Hidrocortisona
+- Fenazopiridina
+- Probióticos
+y otros registros de la base estable.
+
+Si conectáramos ahora el catálogo, perderíamos esos valores prellenados del comportamiento actual.
+
+Eso sería una REGRESIÓN.
+
+======================================================================
+DECISIÓN ANTIRREGRESIVA
+======================================================================
+
+NO tocar index.html todavía.
+
+NO tocar plan.js todavía.
+
+El siguiente archivo que debemos modificar sigue siendo únicamente:
+
+catalogo_medicamentos.js
+
+======================================================================
+SIGUIENTE PASO EXACTO
+======================================================================
+
+Crear una VERSIÓN 1.0.1 del catálogo con esta regla:
+
+1. Los 15 medicamentos que ya existen en plan.js deben conservar EXACTAMENTE
+   sus datos actuales de:
+   - cat
+   - med
+   - pres
+   - via
+   - frec
+   - dur
+   - ind
+
+2. Sobre esos mismos medicamentos podemos añadir SOLO metadatos nuevos:
+   - principio_activo
+   - denominaciones_comerciales
+   - nombres_alternativos
+   - forma_farmaceutica
+   - concentracion
+
+3. Los medicamentos nuevos que no existían antes sí pueden añadirse,
+   pero sin inventar frecuencia, duración ni indicaciones universales.
+
+4. No deben existir variantes ambiguas del mismo genérico que puedan hacer
+   que un protocolo genérico seleccione arbitrariamente una presentación.
+
+5. Después de corregir el catálogo:
+   - validar sintaxis
+   - comparar los 15 medicamentos originales uno por uno
+   - confirmar que no se perdió ningún comportamiento previo
+
+6. SOLO entonces auditar y modificar index.html con una única línea de carga.
+
+======================================================================
+ARCHIVO QUE NO TOCAMOS
+======================================================================
+
+plan.js actual:
+SHA 8c7f3c901459dbd3522f7c8e421c4130db881636
+
+Se mantiene intacto.
+
+index.html actual:
+SHA auditado previamente:
+8fe226fbbfc2e813cf8f2332e875bbf832b7e054
+
+Se mantiene intacto.
+
+======================================================================
+CONCLUSIÓN
+======================================================================
+
+El catálogo ya está limpio, pero todavía NO está listo para conectarlo.
+
+El siguiente paso correcto es una última corrección antirregresiva de:
+
+catalogo_medicamentos.js
+
+para que conserve exactamente la base estable que hoy usa plan.js y, encima de ella,
+agregue los medicamentos nuevos.
+
+Después de eso recién tocamos index.html.
+
+NO debemos modificar plan.js en esta fase.
+
+======================================================================
+ESTADO
+======================================================================
+
+AUDITORÍA COMPLETADA.
+NO SE MODIFICÓ NINGÚN ARCHIVO.
+NO SE HIZO NINGÚN COMMIT.
