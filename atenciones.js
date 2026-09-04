@@ -5924,7 +5924,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.22.0';
+    const CSS_VERSION = '1.23.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -6168,6 +6168,26 @@
       .avi-subgroup{
         border-top:1px dashed #e7eaf0;padding-top:11px;
       }
+      .avi-plan-slot{
+        display:block!important;
+        width:100%!important;
+        max-width:100%!important;
+        min-width:0!important;
+        box-sizing:border-box!important;
+        clear:both;
+      }
+      .avi-plan-slot>.avi-section{
+        display:block;
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+      }
+      .avi-plan-slot .avi-section-body{
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+      }
+
       .avi-plan-block{
         width:100%;
         max-width:100%;
@@ -7141,7 +7161,7 @@
     );
 
     const plan =
-      '<div data-avi-plan="'+esc(idAtencion)+'">'+planInicial+'</div>';
+      '<div class="avi-plan-slot" data-avi-plan="'+esc(idAtencion)+'">'+planInicial+'</div>';
 
     const indicacionesLegacyInicial = seccion(
       'Indicaciones complementarias','bi-card-text',
