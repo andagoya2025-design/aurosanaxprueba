@@ -1898,9 +1898,27 @@ function auroPlanCatalogoBaseSeguro(){
 function auroPlanVariantesMedicamento(item){
     if(!item || typeof item !== 'object') return [];
 
-    const variantes = Array.isArray(item.variantes)
+    let variantes = Array.isArray(item.variantes)
         ? item.variantes.filter(v => v && typeof v === 'object')
         : [];
+
+    /*
+      Respaldo antirregresivo:
+      si el registro visible no trae variantes por una fusión histórica,
+      consulta la API pública del catálogo por medicamento.
+    */
+    if(
+        !variantes.length &&
+        window.AUROSANAX_CATALOGO_MEDICAMENTOS &&
+        typeof window.AUROSANAX_CATALOGO_MEDICAMENTOS.obtenerVariantes === 'function'
+    ){
+        try{
+            variantes = window.AUROSANAX_CATALOGO_MEDICAMENTOS
+                .obtenerVariantes(item.med || item.principio_activo || '') || [];
+        }catch(e){
+            variantes = [];
+        }
+    }
 
     if(variantes.length){
         return variantes.map(v => ({
@@ -1995,7 +2013,7 @@ function auroPlanInstalarPresentacionesDisponibles(item, presentacionPreferida){
 
 function auroPlanRestaurarTodasLasVias(valorPreferido){
     const campo = document.getElementById('hcMedVia');
-    if(!campo || campo.tagName !== 'SELECT') return;
+    if(!campo) return;
 
     const vias = [
         ['VO', 'Vía oral'],
@@ -2012,13 +2030,27 @@ function auroPlanRestaurarTodasLasVias(valorPreferido){
         ['Nasal', 'Vía nasal']
     ];
 
+    const preferido = String(valorPreferido || '').trim();
+
+    if(campo.tagName === 'INPUT'){
+        auroPlanInstalarDatalist(
+            'hcMedVia',
+            'auroPlanViasLista',
+            vias.map(([, texto]) => texto),
+            'Ej.: Vía oral'
+        );
+        if(preferido) campo.value = auroPlanNombreViaCompleta(preferido);
+        return;
+    }
+
+    if(campo.tagName !== 'SELECT') return;
+
     campo.innerHTML =
         '<option value="">Seleccione</option>' +
         vias.map(([valor, texto]) =>
             `<option value="${escapeHtmlPlan(valor)}">${escapeHtmlPlan(texto)}</option>`
         ).join('');
 
-    const preferido = String(valorPreferido || '').trim();
     if(preferido){
         const existe = Array.from(campo.options).some(op => op.value === preferido);
         if(!existe){
@@ -2033,7 +2065,7 @@ function auroPlanRestaurarTodasLasVias(valorPreferido){
 
 function auroPlanAplicarViasCompatibles(item, presentacion){
     const campo = document.getElementById('hcMedVia');
-    if(!campo || campo.tagName !== 'SELECT') return;
+    if(!campo) return;
 
     const variantes = auroPlanVariantesMedicamento(item);
     const nPres = normalizarMedTexto(presentacion);
@@ -2053,6 +2085,30 @@ function auroPlanAplicarViasCompatibles(item, presentacion){
             .map(v => String(v || '').trim())
             .filter(Boolean)
     ));
+
+    if(campo.tagName === 'INPUT'){
+        const generales = [
+            'Vía oral','Vía intramuscular','Vía intravenosa','Vía subcutánea',
+            'Vía vaginal','Vía tópica','Vía sublingual','Vía oftálmica',
+            'Vía ótica','Vía inhalatoria','Vía rectal','Vía nasal'
+        ];
+        const recomendadas = vias.map(auroPlanNombreViaCompleta);
+        const opciones = Array.from(new Set([...recomendadas, ...generales]));
+
+        auroPlanInstalarDatalist(
+            'hcMedVia',
+            'auroPlanViasLista',
+            opciones,
+            'Ej.: Vía oral'
+        );
+
+        if(vias.length === 1){
+            campo.value = auroPlanNombreViaCompleta(vias[0]);
+        }
+        return;
+    }
+
+    if(campo.tagName !== 'SELECT') return;
 
     if(!vias.length){
         auroPlanRestaurarTodasLasVias(campo.value);
@@ -2176,6 +2232,23 @@ function seleccionarMedicamentoSugerido(el){
         el.dataset.pres || ''
     );
     auroPlanActivarMedicamentoCatalogo(itemCatalogo, el.dataset.pres || '');
+
+    const frecPreferida = String(el.dataset.frec || '').trim();
+    const durPreferida = String(el.dataset.dur || '').trim();
+
+    auroPlanInstalarDatalist(
+        'hcMedFrecuencia',
+        'auroPlanFrecuenciasLista',
+        Array.from(new Set([frecPreferida, ...AURO_PLAN_FRECUENCIAS_RAPIDAS].filter(Boolean))),
+        'Ej.: Cada 12 horas'
+    );
+
+    auroPlanInstalarDatalist(
+        'hcMedDuracion',
+        'auroPlanDuracionesLista',
+        Array.from(new Set([durPreferida, ...AURO_PLAN_DURACIONES_RAPIDAS].filter(Boolean))),
+        'Ej.: 7 días'
+    );
 
     const box = document.getElementById('hcMedSugerencias');
     if(box) box.classList.add('d-none');
