@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: catalogo_medicamentos.js
  Módulo: Catálogo Maestro de Medicamentos
- Versión: 1.0.1
+ Versión: 1.1.0
  Fecha: 2026-09-04
 
  OBJETIVO ANTIRREGRESIVO
@@ -600,6 +600,48 @@
             frec:'',
             dur:'',
             ind:''
+        },
+
+        /* ============================================================
+           INCORPORACIONES VALIDADAS / CONTROLADAS v1.1.0
+           Sin pautas universales automáticas.
+        ============================================================ */
+        {
+            cat:'GINECOLOGÍA', med:'Estriol', principio_activo:'Estriol',
+            denominaciones_comerciales:[], nombres_alternativos:[],
+            forma_farmaceutica:'Crema vaginal', concentracion:'0,1 %',
+            pres:'0,1 % crema vaginal', via:'Vaginal', frec:'', dur:'', ind:''
+        },
+        {
+            cat:'GINECOLOGÍA', med:'Dienogest', principio_activo:'Dienogest',
+            denominaciones_comerciales:[], nombres_alternativos:[],
+            forma_farmaceutica:'Tableta', concentracion:'2 mg',
+            pres:'2 mg tableta', via:'VO', frec:'', dur:'', ind:''
+        },
+        {
+            cat:'ENDOCRINOLOGÍA', med:'Calcifediol', principio_activo:'Calcifediol',
+            denominaciones_comerciales:[], nombres_alternativos:[],
+            forma_farmaceutica:'Cápsula', concentracion:'0,266 mg',
+            pres:'0,266 mg cápsula', via:'VO', frec:'', dur:'', ind:''
+        },
+        {
+            cat:'OTROS', med:'Melatonina', principio_activo:'Melatonina',
+            denominaciones_comerciales:[], nombres_alternativos:[],
+            forma_farmaceutica:'Tableta', concentracion:'5 mg',
+            pres:'5 mg tableta', via:'VO', frec:'', dur:'', ind:''
+        },
+        {
+            cat:'OTROS', med:'Ácido ascórbico', principio_activo:'Ácido ascórbico',
+            denominaciones_comerciales:[], nombres_alternativos:['Vitamina C'],
+            forma_farmaceutica:'', concentracion:'',
+            pres:'', via:'', frec:'', dur:'', ind:''
+        },
+        {
+            cat:'OTROS', med:'Omega 3', principio_activo:'Omega 3',
+            denominaciones_comerciales:[], nombres_alternativos:['Omega-3'],
+            forma_farmaceutica:'Cápsula', concentracion:'1 g',
+            pres:'1 g cápsula', via:'VO', frec:'', dur:'', ind:'',
+            clasificacion:'suplemento/complementario'
         }
 
     ];
@@ -627,8 +669,73 @@
         return [texto(valor)];
     }
 
+    /* ============================================================
+       CAPA MULTIVARIANTE v1.1.0
+       - ADITIVA: no cambia los campos históricos med/pres/via.
+       - vias_compatibles son sugerencias clínicas, no bloqueos.
+       - Plan podrá ofrecer "Otra vía" usando su lista general.
+    ============================================================ */
+
+    const VARIANTES_AUROSANAX = {
+        'clotrimazol': [
+            { forma_farmaceutica:'Óvulo vaginal', concentracion:'', pres:'óvulo vaginal', vias_compatibles:['Vaginal'] },
+            { forma_farmaceutica:'Óvulo vaginal', concentracion:'500 mg', pres:'500 mg óvulo vaginal', vias_compatibles:['Vaginal'] }
+        ],
+        'clindamicina': [
+            { forma_farmaceutica:'Crema vaginal', concentracion:'', pres:'crema vaginal', vias_compatibles:['Vaginal'] },
+            { forma_farmaceutica:'Tableta / cápsula', concentracion:'300 mg', pres:'300 mg tableta / cápsula', vias_compatibles:['VO'] }
+        ],
+        'acido folico': [
+            { forma_farmaceutica:'Tableta', concentracion:'', pres:'tableta', vias_compatibles:['VO'] },
+            { forma_farmaceutica:'Tableta', concentracion:'5 mg', pres:'5 mg tableta', vias_compatibles:['VO'] }
+        ],
+        'medroxiprogesterona': [
+            { forma_farmaceutica:'Tableta / inyectable', concentracion:'', pres:'tableta / inyectable', vias_compatibles:[] },
+            { forma_farmaceutica:'Inyectable', concentracion:'150 mg/1 mL', pres:'150 mg/1 mL inyectable', vias_compatibles:['IM'] }
+        ],
+        'estriol': [
+            { forma_farmaceutica:'Crema vaginal', concentracion:'0,1 %', pres:'0,1 % crema vaginal', vias_compatibles:['Vaginal'] }
+        ],
+        'dienogest': [
+            { forma_farmaceutica:'Tableta', concentracion:'2 mg', pres:'2 mg tableta', vias_compatibles:['VO'] }
+        ],
+        'calcifediol': [
+            { forma_farmaceutica:'Cápsula', concentracion:'0,266 mg', pres:'0,266 mg cápsula', vias_compatibles:['VO'] }
+        ],
+        'melatonina': [
+            { forma_farmaceutica:'Tableta', concentracion:'5 mg', pres:'5 mg tableta', vias_compatibles:['VO'] }
+        ],
+        'acido ascorbico': [],
+        'omega 3': [
+            { forma_farmaceutica:'Cápsula', concentracion:'1 g', pres:'1 g cápsula', vias_compatibles:['VO'], estado:'uso_habitual_aurosanax' }
+        ]
+    };
+
+    const METADATOS_NUEVOS_AUROSANAX = {
+        'estriol': {cat:'GINECOLOGÍA', principio_activo:'Estriol', nombres_alternativos:[]},
+        'dienogest': {cat:'GINECOLOGÍA', principio_activo:'Dienogest', nombres_alternativos:[]},
+        'calcifediol': {cat:'ENDOCRINOLOGÍA', principio_activo:'Calcifediol', nombres_alternativos:[]},
+        'melatonina': {cat:'OTROS', principio_activo:'Melatonina', nombres_alternativos:[]},
+        'acido ascorbico': {cat:'OTROS', principio_activo:'Ácido ascórbico', nombres_alternativos:['Vitamina C']},
+        'omega 3': {cat:'OTROS', principio_activo:'Omega 3', nombres_alternativos:['Omega-3'], clasificacion:'suplemento/complementario'}
+    };
+
+    function clonarVariantes(lista){
+        return (Array.isArray(lista) ? lista : []).map(function(v){
+            return {
+                forma_farmaceutica:texto(v.forma_farmaceutica),
+                concentracion:texto(v.concentracion),
+                pres:texto(v.pres),
+                vias_compatibles:arrayTexto(v.vias_compatibles),
+                estado:texto(v.estado)
+            };
+        });
+    }
+
     function normalizarRegistro(m){
         m = m || {};
+        const clave = normalizar(m.principio_activo || m.med);
+        const variantesPropias = Array.isArray(m.variantes) ? m.variantes : VARIANTES_AUROSANAX[clave];
 
         return {
             cat: texto(m.cat),
@@ -642,7 +749,9 @@
             via: texto(m.via),
             frec: texto(m.frec),
             dur: texto(m.dur),
-            ind: texto(m.ind)
+            ind: texto(m.ind),
+            variantes: clonarVariantes(variantesPropias),
+            clasificacion: texto(m.clasificacion)
         };
     }
 
@@ -700,7 +809,7 @@
 
     window.AUROSANAX_CATALOGO_MEDICAMENTOS = {
 
-        version:'1.0.1',
+        version:'1.1.0',
 
         obtenerTodos:function(){
             return window.MEDICAMENTOS_AUROSANAX_BASE.slice();
@@ -708,6 +817,23 @@
 
         cantidad:function(){
             return window.MEDICAMENTOS_AUROSANAX_BASE.length;
+        },
+
+        obtenerVariantes:function(medicamento){
+            const q = normalizar(medicamento);
+            const item = window.MEDICAMENTOS_AUROSANAX_BASE.find(function(m){
+                return normalizar(m.med) === q || normalizar(m.principio_activo) === q;
+            });
+            return item ? clonarVariantes(item.variantes) : [];
+        },
+
+        obtenerViasCompatibles:function(medicamento, presentacion){
+            const variantes = this.obtenerVariantes(medicamento);
+            const p = normalizar(presentacion);
+            const variante = variantes.find(function(v){
+                return normalizar(v.pres) === p;
+            });
+            return variante ? arrayTexto(variante.vias_compatibles) : [];
         },
 
         buscar:function(consulta){
@@ -727,7 +853,15 @@
                     m.concentracion,
                     m.cat,
                     ...(m.denominaciones_comerciales || []),
-                    ...(m.nombres_alternativos || [])
+                    ...(m.nombres_alternativos || []),
+                    ...((m.variantes || []).flatMap(function(v){
+                        return [
+                            v.pres,
+                            v.forma_farmaceutica,
+                            v.concentracion,
+                            ...(v.vias_compatibles || [])
+                        ];
+                    }))
                 ].join(' ');
 
                 return normalizar(textoBusqueda).includes(q);
