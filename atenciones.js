@@ -5924,7 +5924,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.23.0';
+    const CSS_VERSION = '1.24.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -6170,8 +6170,6 @@
       }
       .avi-plan-slot{
         display:block!important;
-        width:100%!important;
-        max-width:100%!important;
         min-width:0!important;
         box-sizing:border-box!important;
         clear:both;
@@ -6832,6 +6830,7 @@
         .avi-body > .avi-clinical-divider,
         .avi-body > .avi-section,
         .avi-body > .avi-line,
+        .avi-body > .avi-plan-slot,
         .avi-body > [data-avi-documentos]{
           width:min(1120px,calc(100% - 36px));
           margin-left:auto;
