@@ -276,6 +276,25 @@ function auroPlanNombreViaCompleta(valor){
         : original;
 }
 
+
+function auroPlanOpcionesRapidasUnicas(opciones){
+    const vistas = new Set();
+    const salida = [];
+
+    (Array.isArray(opciones) ? opciones : []).forEach(function(opcion){
+        const valor = String(opcion || '').trim();
+        if(!valor) return;
+
+        const clave = normalizarTextoPlan(valor);
+        if(!clave || vistas.has(clave)) return;
+
+        vistas.add(clave);
+        salida.push(valor);
+    });
+
+    return salida;
+}
+
 function auroPlanInstalarDatalist(idCampo, idLista, opciones, placeholder){
     const campo = document.getElementById(idCampo);
     if(!campo) return;
@@ -293,13 +312,95 @@ function auroPlanInstalarDatalist(idCampo, idLista, opciones, placeholder){
             document.body.appendChild(lista);
         }
 
-        lista.innerHTML = (opciones || [])
+        lista.innerHTML = auroPlanOpcionesRapidasUnicas(opciones)
             .map(op => `<option value="${escapeHtmlPlan(op)}"></option>`)
             .join('');
 
         campo.setAttribute('list', idLista);
         campo.setAttribute('autocomplete', 'off');
     }
+}
+
+
+function auroPlanAbrirSugerenciasRapidas(idCampo){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return;
+
+    campo.focus();
+
+    try{
+        if(typeof campo.showPicker === 'function'){
+            campo.showPicker();
+        }
+    }catch(e){
+        /* Respaldo: el campo queda enfocado y el usuario puede desplegar la lista. */
+    }
+}
+
+function auroPlanLimpiarCampoRapido(idCampo){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return;
+
+    campo.value = '';
+    campo.dispatchEvent(new Event('input', {bubbles:true}));
+
+    requestAnimationFrame(function(){
+        auroPlanAbrirSugerenciasRapidas(idCampo);
+    });
+}
+
+function auroPlanInstalarLimpiezaRapidaCampo(idCampo, etiqueta){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return null;
+
+    const idBoton = 'auroPlanLimpiarRapido_' + idCampo;
+    let boton = document.getElementById(idBoton);
+
+    if(!boton){
+        boton = document.createElement('button');
+        boton.type = 'button';
+        boton.id = idBoton;
+        boton.className = 'auro-plan-limpiar-rapido';
+        boton.setAttribute('aria-label', 'Limpiar ' + String(etiqueta || 'campo'));
+        boton.title = 'Limpiar y elegir otra sugerencia';
+        boton.innerHTML = '<i class="bi bi-x-circle me-1"></i> Limpiar';
+
+        boton.addEventListener('click', function(){
+            auroPlanLimpiarCampoRapido(idCampo);
+        });
+
+        campo.insertAdjacentElement('afterend', boton);
+    }
+
+    return boton;
+}
+
+function auroPlanInstalarAccesoViaLibreRapido(){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo || campo.tagName !== 'SELECT') return null;
+
+    const entrada = auroPlanInstalarEntradaViaLibre();
+    if(!entrada) return null;
+
+    let boton = document.getElementById('auroPlanBtnOtraViaRapida');
+
+    if(!boton){
+        boton = document.createElement('button');
+        boton.type = 'button';
+        boton.id = 'auroPlanBtnOtraViaRapida';
+        boton.className = 'auro-plan-via-libre-rapida';
+        boton.setAttribute('aria-label', 'Escribir otra vía de administración');
+        boton.title = 'Escribir una vía diferente sin recorrer toda la lista';
+        boton.innerHTML = '<i class="bi bi-pencil-square me-1"></i> Otra vía';
+
+        boton.addEventListener('click', function(){
+            auroPlanMostrarEntradaViaLibre();
+        });
+
+        entrada.insertAdjacentElement('afterend', boton);
+    }
+
+    return boton;
 }
 
 function auroPlanInstalarAyudaIndicaciones(){
@@ -449,6 +550,7 @@ function auroPlanOcultarEntradaViaLibre(){
 function auroPlanInstalarAyudasMedicamentos(){
     auroPlanActualizarOpcionesVia();
     auroPlanInstalarEntradaViaLibre();
+    auroPlanInstalarAccesoViaLibreRapido();
 
     auroPlanInstalarDatalist(
         'hcMedFrecuencia',
@@ -463,6 +565,9 @@ function auroPlanInstalarAyudasMedicamentos(){
         AURO_PLAN_DURACIONES_RAPIDAS,
         'Ej.: 7 días'
     );
+
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedFrecuencia', 'frecuencia');
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedDuracion', 'duración');
 
     auroPlanInstalarAyudaIndicaciones();
     auroPlanPrepararControlesEdicionMedicamento();
@@ -3399,6 +3504,36 @@ function instalarResponsivePlanAndroid(){
         color:#475569;
       }
 
+      #hc_plan .auro-plan-limpiar-rapido,
+      #hc_plan .auro-plan-via-libre-rapida{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:4px;
+        min-height:30px;
+        margin-top:5px;
+        padding:4px 9px;
+        border:1px solid #d1d5db;
+        border-radius:9px;
+        background:#fff;
+        color:#475569;
+        font-size:11px;
+        font-weight:750;
+        line-height:1.1;
+        cursor:pointer;
+      }
+
+      #hc_plan .auro-plan-limpiar-rapido:hover,
+      #hc_plan .auro-plan-via-libre-rapida:hover{
+        background:#f8fafc;
+        border-color:#cbd5e1;
+        color:#1f2937;
+      }
+
+      #hc_plan .auro-plan-via-libre-rapida{
+        margin-right:6px;
+      }
+
       #hc_plan .auro-plan-aviso-edicion{
         margin:8px 0 10px;
         padding:9px 12px;
@@ -3568,6 +3703,13 @@ function instalarResponsivePlanAndroid(){
           width:100%;
           max-width:none;
           font-size:14px!important;
+        }
+
+        #hc_plan .auro-plan-limpiar-rapido,
+        #hc_plan .auro-plan-via-libre-rapida{
+          min-height:36px!important;
+          font-size:12px!important;
+          padding:6px 10px!important;
         }
 
         #hc_plan .row.g-3{
