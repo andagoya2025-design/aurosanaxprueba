@@ -7646,7 +7646,7 @@ async function auroHistoriaRefrescarEstadoConsultaActiva(idModulo){
     if(token !== window.__auroEstadoRealModuloToken) return;
 
     if(estadoHistoria.existe){
-      const fecha = auroHistoriaFormatearFechaReal(estadoHistoria.fecha);
+      const fecha = auroHistoriaFormatearFechaLiteralSheets(estadoHistoria.fecha);
       auroHistoriaMostrarEstado(
         nombreModulo +
         (fecha ? ' · Última actualización: ' + fecha : ' · Historia clínica guardada.'),
