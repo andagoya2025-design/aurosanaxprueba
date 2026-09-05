@@ -646,6 +646,107 @@ function auroPlanInstalarIndicacionesAutoExpandibles(){
 }
 
 
+const AURO_PLAN_INDICACIONES_MAX = 500;
+
+function auroPlanActualizarEstadoLimiteIndicaciones(valor){
+    const texto = String(valor || '');
+    const longitud = texto.length;
+    const contador = document.getElementById('auroPlanIndicacionesContador');
+    const guia = document.getElementById('auroPlanIndicacionesGuia');
+
+    if(contador){
+        contador.textContent = longitud + ' / ' + AURO_PLAN_INDICACIONES_MAX;
+        contador.classList.toggle(
+            'auro-plan-indicaciones-contador-alerta',
+            longitud >= AURO_PLAN_INDICACIONES_MAX
+        );
+    }
+
+    if(guia){
+        if(longitud > AURO_PLAN_INDICACIONES_MAX){
+            guia.textContent =
+                'Registro histórico superior a 500 caracteres. No se truncará automáticamente; puede reducirlo progresivamente.';
+        }else if(longitud === AURO_PLAN_INDICACIONES_MAX){
+            guia.textContent =
+                'Límite alcanzado. Máximo 500 caracteres para indicaciones nuevas.';
+        }else{
+            guia.textContent =
+                'Use este campo para instrucciones terapéuticas claras y concisas. Máximo 500 caracteres.';
+        }
+    }
+}
+
+function auroPlanLimitarIndicacionesEntrada(elemento, valorAnterior){
+    if(!elemento) return '';
+
+    const anterior = String(valorAnterior ?? '');
+    let actual = String(elemento.value || '');
+
+    /*
+      Compatibilidad histórica:
+      - Si el dato anterior ya superaba 500 caracteres, nunca se trunca.
+      - Puede mantenerse igual o reducirse progresivamente.
+      - No se permite aumentarlo mientras continúe sobre el límite.
+      - Para datos nuevos o ya <= 500, cualquier entrada se limita a 500.
+    */
+    if(anterior.length > AURO_PLAN_INDICACIONES_MAX){
+        if(actual.length > anterior.length){
+            elemento.value = anterior;
+            actual = anterior;
+        }
+    }else if(actual.length > AURO_PLAN_INDICACIONES_MAX){
+        elemento.value = actual.slice(0, AURO_PLAN_INDICACIONES_MAX);
+        actual = elemento.value;
+    }
+
+    auroPlanActualizarEstadoLimiteIndicaciones(actual);
+    return actual;
+}
+
+function auroPlanIndicacionesFormularioPermitidas(){
+    const actual = String(auroPlanGetValue('hcMedIndicaciones') || '');
+    if(actual.length <= AURO_PLAN_INDICACIONES_MAX) return true;
+
+    const indice = window.auroPlanMedicamentoEditandoIndice;
+    const editando = Number.isInteger(indice) &&
+        indice >= 0 &&
+        indice < (window.medicamentosPlanSeleccionados || []).length;
+
+    if(!editando) return false;
+
+    const anterior = String(
+        window.medicamentosPlanSeleccionados[indice]?.ind || ''
+    );
+
+    /*
+      Un registro histórico >500 puede guardarse sin pérdida si no se amplía.
+      Esto permite editar otros campos sin obligar a truncar información clínica.
+    */
+    return (
+        anterior.length > AURO_PLAN_INDICACIONES_MAX &&
+        actual.length <= anterior.length
+    );
+}
+
+function auroPlanEnfocarIndicacionesConLimite(){
+    const campo = document.getElementById('hcMedIndicaciones');
+    const editor = document.getElementById('auroPlanIndicacionesAmpliadasEditor');
+
+    if(typeof auroPlanAbrirIndicacionesAmpliadas === 'function'){
+        auroPlanAbrirIndicacionesAmpliadas();
+    }else if(campo){
+        campo.focus();
+    }
+
+    requestAnimationFrame(function(){
+        if(editor && !editor.closest('.d-none')){
+            editor.focus();
+        }else if(campo){
+            campo.focus();
+        }
+    });
+}
+
 function auroPlanCerrarIndicacionesAmpliadas(){
     const capa = document.getElementById('auroPlanIndicacionesAmpliadasCapa');
     const boton = document.getElementById('auroPlanBtnAmpliarIndicaciones');
@@ -671,6 +772,9 @@ function auroPlanAbrirIndicacionesAmpliadas(){
     if(!campo || !capa || !editor) return;
 
     editor.value = String(campo.value || '');
+    editor.dataset.auroIndicacionesAnterior = editor.value;
+    campo.dataset.auroIndicacionesAnterior = String(campo.value || '');
+    auroPlanActualizarEstadoLimiteIndicaciones(editor.value);
     capa.classList.remove('d-none');
     capa.setAttribute('aria-hidden', 'false');
 
@@ -731,6 +835,13 @@ function auroPlanInstalarEditorIndicacionesAmpliado(){
                       class="form-control auro-plan-indicaciones-editor"
                       rows="10"
                       placeholder="Escriba las indicaciones completas"></textarea>
+            <div class="auro-plan-indicaciones-limite">
+              <span id="auroPlanIndicacionesGuia">
+                Use este campo para instrucciones terapéuticas claras y concisas. Máximo 500 caracteres.
+              </span>
+              <strong id="auroPlanIndicacionesContador"
+                      aria-live="polite">0 / 500</strong>
+            </div>
             <div class="auro-plan-indicaciones-dialogo-pie">
               <span>El contenido se sincroniza automáticamente con Indicaciones.</span>
               <button type="button"
@@ -758,16 +869,39 @@ function auroPlanInstalarEditorIndicacionesAmpliado(){
 
     if(editor && editor.dataset.auroEditorIndicaciones !== '1'){
         editor.dataset.auroEditorIndicaciones = '1';
+        editor.dataset.auroIndicacionesAnterior = String(editor.value || '');
+        campo.dataset.auroIndicacionesAnterior = String(campo.value || '');
+
         editor.addEventListener('input', function(){
-            campo.value = editor.value;
-            campo.dispatchEvent(new Event('input', {bubbles:true}));
+            const anterior = String(
+                editor.dataset.auroIndicacionesAnterior ?? campo.value ?? ''
+            );
+
+            const valor = auroPlanLimitarIndicacionesEntrada(editor, anterior);
+            editor.dataset.auroIndicacionesAnterior = valor;
+
+            if(campo.value !== valor){
+                campo.value = valor;
+                campo.dataset.auroIndicacionesAnterior = valor;
+                campo.dispatchEvent(new Event('input', {bubbles:true}));
+            }
         });
 
         campo.addEventListener('input', function(){
-            if(document.activeElement !== editor){
-                editor.value = String(campo.value || '');
+            const anterior = String(
+                campo.dataset.auroIndicacionesAnterior ?? campo.value ?? ''
+            );
+
+            const valor = auroPlanLimitarIndicacionesEntrada(campo, anterior);
+            campo.dataset.auroIndicacionesAnterior = valor;
+
+            if(document.activeElement !== editor && editor.value !== valor){
+                editor.value = valor;
+                editor.dataset.auroIndicacionesAnterior = valor;
             }
         });
+
+        auroPlanActualizarEstadoLimiteIndicaciones(campo.value);
     }
 
     if(cerrar && cerrar.dataset.auroEditorIndicaciones !== '1'){
@@ -2746,6 +2880,19 @@ function limpiarFormularioMedicamento(opciones){
     const selectorIndicacion = document.getElementById('auroPlanIndicacionRapida');
     if(selectorIndicacion) selectorIndicacion.value = '';
 
+    const editorIndicaciones = document.getElementById('auroPlanIndicacionesAmpliadasEditor');
+    if(editorIndicaciones){
+        editorIndicaciones.value = '';
+        editorIndicaciones.dataset.auroIndicacionesAnterior = '';
+    }
+
+    const campoIndicaciones = document.getElementById('hcMedIndicaciones');
+    if(campoIndicaciones){
+        campoIndicaciones.dataset.auroIndicacionesAnterior = '';
+    }
+
+    auroPlanActualizarEstadoLimiteIndicaciones('');
+
     const box = document.getElementById('hcMedSugerencias');
     if(box) box.classList.add('d-none');
 
@@ -2800,6 +2947,15 @@ function agregarMedicamentoDesdeFormulario(){
         auroPlanMostrarEntradaViaLibre();
         alert('Escriba la vía de administración o seleccione una vía de la lista.');
         if(entrada) entrada.focus();
+        return;
+    }
+
+    if(!auroPlanIndicacionesFormularioPermitidas()){
+        alert(
+            'Las indicaciones nuevas permiten un máximo de 500 caracteres.\n\n' +
+            'Si este medicamento contiene un texto histórico más largo, puede conservarlo o reducirlo, pero no ampliarlo.'
+        );
+        auroPlanEnfocarIndicacionesConLimite();
         return;
     }
 
@@ -2859,6 +3015,20 @@ function editarMedicamentoPlan(i){
     auroPlanSetValue('hcMedFrecuencia', m.frec || '');
     auroPlanSetValue('hcMedDuracion', m.dur || '');
     auroPlanSetValue('hcMedIndicaciones', m.ind || '');
+
+    const campoIndicaciones = document.getElementById('hcMedIndicaciones');
+    const editorIndicaciones = document.getElementById('auroPlanIndicacionesAmpliadasEditor');
+
+    if(campoIndicaciones){
+        campoIndicaciones.dataset.auroIndicacionesAnterior = String(m.ind || '');
+    }
+
+    if(editorIndicaciones){
+        editorIndicaciones.value = String(m.ind || '');
+        editorIndicaciones.dataset.auroIndicacionesAnterior = String(m.ind || '');
+    }
+
+    auroPlanActualizarEstadoLimiteIndicaciones(m.ind || '');
     auroPlanSetValue('hcMedContinuo', m.continuo || 'No');
 
     /*
@@ -3903,6 +4073,30 @@ function instalarResponsivePlanAndroid(){
         font-size:12px;
       }
 
+      .auro-plan-indicaciones-limite{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:14px;
+        margin-top:9px;
+        color:#64748b;
+        font-size:12px;
+        line-height:1.35;
+      }
+
+      #auroPlanIndicacionesContador{
+        flex:0 0 auto;
+        min-width:72px;
+        text-align:right;
+        color:#475569;
+        font-variant-numeric:tabular-nums;
+      }
+
+      #auroPlanIndicacionesContador.auro-plan-indicaciones-contador-alerta{
+        color:#b45309;
+        font-weight:850;
+      }
+
       #hc_plan .auro-plan-indicaciones-controladas{
         min-height:44px!important;
         max-height:132px!important;
@@ -4099,6 +4293,12 @@ function instalarResponsivePlanAndroid(){
           min-height:36px!important;
           font-size:12px!important;
           padding:6px 10px!important;
+        }
+
+        .auro-plan-indicaciones-limite{
+          display:grid;
+          grid-template-columns:1fr auto;
+          gap:8px;
         }
 
         #hc_plan .row.g-3{
