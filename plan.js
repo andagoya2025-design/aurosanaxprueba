@@ -390,17 +390,52 @@ function auroPlanInstalarAccesoViaLibreRapido(){
         boton.id = 'auroPlanBtnOtraViaRapida';
         boton.className = 'auro-plan-via-libre-rapida';
         boton.setAttribute('aria-label', 'Escribir otra vía de administración');
-        boton.title = 'Escribir una vía diferente sin recorrer toda la lista';
+        boton.setAttribute('aria-expanded', 'false');
+        boton.title = 'Mostrar u ocultar una vía diferente';
         boton.innerHTML = '<i class="bi bi-pencil-square me-1"></i> Otra vía';
 
         boton.addEventListener('click', function(){
-            auroPlanMostrarEntradaViaLibre();
+            auroPlanAlternarEntradaViaLibre();
         });
 
         entrada.insertAdjacentElement('afterend', boton);
     }
 
     return boton;
+}
+
+function auroPlanAlternarEntradaViaLibre(){
+    const entrada = auroPlanInstalarEntradaViaLibre();
+    const boton = document.getElementById('auroPlanBtnOtraViaRapida');
+    if(!entrada) return;
+
+    const visible = !entrada.classList.contains('d-none');
+
+    if(visible){
+        entrada.classList.add('d-none');
+        if(boton){
+            boton.classList.remove('activo');
+            boton.setAttribute('aria-expanded', 'false');
+        }
+        return;
+    }
+
+    if(!String(entrada.value || '').trim()){
+        const campo = document.getElementById('hcMedVia');
+        if(campo && campo.tagName === 'SELECT'){
+            campo.value = Array.from(campo.options || []).some(op =>
+                op.value === '__AURO_OTRA_VIA__'
+            ) ? '__AURO_OTRA_VIA__' : campo.value;
+        }
+    }
+
+    entrada.classList.remove('d-none');
+    entrada.focus();
+
+    if(boton){
+        boton.classList.add('activo');
+        boton.setAttribute('aria-expanded', 'true');
+    }
 }
 
 function auroPlanInstalarAyudaIndicaciones(){
@@ -523,20 +558,32 @@ function auroPlanInstalarEntradaViaLibre(){
 
 function auroPlanMostrarEntradaViaLibre(){
     const entrada = auroPlanInstalarEntradaViaLibre();
+    const boton = document.getElementById('auroPlanBtnOtraViaRapida');
     if(!entrada) return;
 
     entrada.value = '';
     entrada.classList.remove('d-none');
     entrada.focus();
+
+    if(boton){
+        boton.classList.add('activo');
+        boton.setAttribute('aria-expanded', 'true');
+    }
 }
 
 function auroPlanOcultarEntradaViaLibre(){
     const campo = document.getElementById('hcMedVia');
     const entrada = document.getElementById('hcMedViaLibre');
+    const boton = document.getElementById('auroPlanBtnOtraViaRapida');
 
     if(entrada){
         entrada.value = '';
         entrada.classList.add('d-none');
+    }
+
+    if(boton){
+        boton.classList.remove('activo');
+        boton.setAttribute('aria-expanded', 'false');
     }
 
     if(campo && campo.tagName === 'SELECT'){
@@ -544,6 +591,62 @@ function auroPlanOcultarEntradaViaLibre(){
             .filter(op => op.dataset && op.dataset.auroViaLibre === '1')
             .forEach(op => op.remove());
     }
+}
+
+
+function auroPlanAjustarIndicacionesMedicamento(expandido){
+    const campo = document.getElementById('hcMedIndicaciones');
+    if(!campo || campo.tagName !== 'TEXTAREA') return;
+
+    const alturaCompacta = 44;
+    const alturaMaxima = 132;
+
+    if(expandido){
+        campo.style.height = 'auto';
+        const altura = Math.min(
+            Math.max(campo.scrollHeight || alturaCompacta, alturaCompacta),
+            alturaMaxima
+        );
+        campo.style.height = altura + 'px';
+        campo.style.overflowY =
+            (campo.scrollHeight || 0) > alturaMaxima ? 'auto' : 'hidden';
+        campo.classList.add('auro-plan-indicaciones-expandida');
+        return;
+    }
+
+    campo.style.height = alturaCompacta + 'px';
+    campo.style.overflowY =
+        (campo.scrollHeight || 0) > alturaCompacta ? 'auto' : 'hidden';
+    campo.classList.remove('auro-plan-indicaciones-expandida');
+}
+
+function auroPlanInstalarIndicacionesAutoExpandibles(){
+    const campo = document.getElementById('hcMedIndicaciones');
+    if(!campo || campo.tagName !== 'TEXTAREA') return;
+
+    if(campo.dataset.auroAutoExpand === '1'){
+        auroPlanAjustarIndicacionesMedicamento(
+            document.activeElement === campo
+        );
+        return;
+    }
+
+    campo.dataset.auroAutoExpand = '1';
+    campo.classList.add('auro-plan-indicaciones-controladas');
+
+    campo.addEventListener('focus', function(){
+        auroPlanAjustarIndicacionesMedicamento(true);
+    });
+
+    campo.addEventListener('input', function(){
+        auroPlanAjustarIndicacionesMedicamento(true);
+    });
+
+    campo.addEventListener('blur', function(){
+        auroPlanAjustarIndicacionesMedicamento(false);
+    });
+
+    auroPlanAjustarIndicacionesMedicamento(false);
 }
 
 
@@ -566,9 +669,12 @@ function auroPlanInstalarAyudasMedicamentos(){
         'Ej.: 7 días'
     );
 
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedPresentacion', 'presentación');
     auroPlanInstalarLimpiezaRapidaCampo('hcMedFrecuencia', 'frecuencia');
     auroPlanInstalarLimpiezaRapidaCampo('hcMedDuracion', 'duración');
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedIndicaciones', 'indicaciones');
 
+    auroPlanInstalarIndicacionesAutoExpandibles();
     auroPlanInstalarAyudaIndicaciones();
     auroPlanPrepararControlesEdicionMedicamento();
     auroPlanActualizarEncabezadosTablaMedicamentos();
@@ -2693,7 +2799,10 @@ function renderMedicamentosPlanTabla(){
               }</td>
               <td>${escapeHtmlPlan(m.frec)}</td>
               <td>${escapeHtmlPlan(m.dur)}</td>
-              <td>${escapeHtmlPlan(m.ind)}</td>
+              <td>
+                <div class="auro-plan-indicacion-tabla"
+                     title="${escapeHtmlPlan(m.ind)}">${escapeHtmlPlan(m.ind)}</div>
+              </td>
               <td>${escapeHtmlPlan(m.continuo)}</td>
               <td>
                 <div class="auro-plan-acciones-medicamento">
@@ -3534,6 +3643,30 @@ function instalarResponsivePlanAndroid(){
         margin-right:6px;
       }
 
+      #hc_plan .auro-plan-via-libre-rapida.activo{
+        border-color:#8b1e5a;
+        background:#fdf2f8;
+        color:#8b1e5a;
+      }
+
+      #hc_plan .auro-plan-indicaciones-controladas{
+        min-height:44px!important;
+        max-height:132px!important;
+        resize:none!important;
+        transition:height .14s ease;
+      }
+
+      #hc_plan .auro-plan-indicacion-tabla{
+        display:-webkit-box;
+        -webkit-box-orient:vertical;
+        -webkit-line-clamp:3;
+        overflow:hidden;
+        max-height:4.05em;
+        line-height:1.35;
+        word-break:normal;
+        overflow-wrap:anywhere;
+      }
+
       #hc_plan .auro-plan-aviso-edicion{
         margin:8px 0 10px;
         padding:9px 12px;
@@ -3571,6 +3704,7 @@ function instalarResponsivePlanAndroid(){
       #hc_plan .auro-plan-tabla-medicamentos th:nth-child(7),
       #hc_plan .auro-plan-tabla-medicamentos td:nth-child(7){
         min-width:190px;
+        max-width:260px;
       }
 
       @media(min-width:981px){
