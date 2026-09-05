@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: catalogo_medicamentos.js
  Módulo: Catálogo Maestro de Medicamentos
- Versión: 1.1.0
+ Versión: 1.2.0
  Fecha: 2026-09-04
 
  OBJETIVO ANTIRREGRESIVO
@@ -643,6 +643,767 @@
             pres:'1 g cápsula', via:'VO', frec:'', dur:'', ind:'',
             clasificacion:'suplemento/complementario'
         }
+,
+
+        /* ============================================================
+           AMPLIACIÓN OFICIAL-REFERENCIADA ECUADOR v1.2.0 — 50 ENTIDADES
+           - Selección orientada a práctica clínica AUROSANAX.
+           - Referencias nacionales: ARCSA + CNMB/CONASA.
+           - Frecuencia, duración e indicaciones quedan VACÍAS.
+           - Presentación/concentración/vía quedan VACÍAS cuando no se
+             ha fijado una variante específica en el catálogo.
+           - NO altera los 44 registros previos ni sus variantes.
+        ============================================================ */
+
+        {
+    cat:'GINECOLOGÍA / OBSTETRICIA',
+    med:'Progesterona',
+    principio_activo:'Progesterona',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Progesterone'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / OBSTETRICIA',
+    med:'Estradiol',
+    principio_activo:'Estradiol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Estradiol'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ANTICONCEPCIÓN',
+    med:'Levonorgestrel',
+    principio_activo:'Levonorgestrel',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Levonorgestrel'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ANTICONCEPCIÓN',
+    med:'Etinilestradiol + levonorgestrel',
+    principio_activo:'Etinilestradiol + levonorgestrel',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Ethinylestradiol + levonorgestrel'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ANTICONCEPCIÓN',
+    med:'Desogestrel',
+    principio_activo:'Desogestrel',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Desogestrel'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ANTICONCEPCIÓN',
+    med:'Drospirenona + etinilestradiol',
+    principio_activo:'Drospirenona + etinilestradiol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Drospirenone + ethinylestradiol'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ANTICONCEPCIÓN',
+    med:'Noretisterona',
+    principio_activo:'Noretisterona',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Norethisterone', 'Noretindrona'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ENDOCRINOLOGÍA',
+    med:'Cabergolina',
+    principio_activo:'Cabergolina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Cabergoline'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ENDOCRINOLOGÍA',
+    med:'Bromocriptina',
+    principio_activo:'Bromocriptina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Bromocriptine'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'OBSTETRICIA',
+    med:'Oxitocina',
+    principio_activo:'Oxitocina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Oxytocin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / OBSTETRICIA',
+    med:'Misoprostol',
+    principio_activo:'Misoprostol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Misoprostol'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'OBSTETRICIA',
+    med:'Dinoprostona',
+    principio_activo:'Dinoprostona',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Dinoprostone'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / FERTILIDAD',
+    med:'Clomifeno',
+    principio_activo:'Clomifeno',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Clomiphene', 'Citrato de clomifeno'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GINECOLOGÍA / ONCOLOGÍA',
+    med:'Tamoxifeno',
+    principio_activo:'Tamoxifeno',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Tamoxifen'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Amoxicilina',
+    principio_activo:'Amoxicilina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Amoxicillin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Ampicilina',
+    principio_activo:'Ampicilina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Ampicillin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Bencilpenicilina benzatínica',
+    principio_activo:'Bencilpenicilina benzatínica',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Penicilina G benzatínica', 'Benzathine benzylpenicillin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Ciprofloxacino',
+    principio_activo:'Ciprofloxacino',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Ciprofloxacin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Levofloxacino',
+    principio_activo:'Levofloxacino',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Levofloxacin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Cefuroxima',
+    principio_activo:'Cefuroxima',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Cefuroxime'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Cefazolina',
+    principio_activo:'Cefazolina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Cefazolin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Cefixima',
+    principio_activo:'Cefixima',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Cefixime'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Gentamicina',
+    principio_activo:'Gentamicina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Gentamicin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Amikacina',
+    principio_activo:'Amikacina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Amikacin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Trimetoprim + sulfametoxazol',
+    principio_activo:'Trimetoprim + sulfametoxazol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Cotrimoxazol', 'Trimethoprim + sulfamethoxazole'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIVIRALES',
+    med:'Aciclovir',
+    principio_activo:'Aciclovir',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Acyclovir'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIVIRALES',
+    med:'Valaciclovir',
+    principio_activo:'Valaciclovir',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Valacyclovir'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Claritromicina',
+    principio_activo:'Claritromicina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Clarithromycin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIINFECCIOSOS',
+    med:'Eritromicina',
+    principio_activo:'Eritromicina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Erythromycin'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'DOLOR / INFLAMACIÓN',
+    med:'Diclofenaco',
+    principio_activo:'Diclofenaco',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Diclofenac'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'DOLOR / INFLAMACIÓN',
+    med:'Meloxicam',
+    principio_activo:'Meloxicam',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Meloxicam'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'DOLOR / INFLAMACIÓN',
+    med:'Celecoxib',
+    principio_activo:'Celecoxib',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Celecoxib'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANALGÉSICOS',
+    med:'Tramadol',
+    principio_activo:'Tramadol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Tramadol'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANALGÉSICOS',
+    med:'Metamizol',
+    principio_activo:'Metamizol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Dipirona', 'Metamizole'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANESTÉSICOS LOCALES',
+    med:'Lidocaína',
+    principio_activo:'Lidocaína',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Lignocaína', 'Lidocaine'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GASTROENTEROLOGÍA',
+    med:'Omeprazol',
+    principio_activo:'Omeprazol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Omeprazole'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GASTROENTEROLOGÍA',
+    med:'Pantoprazol',
+    principio_activo:'Pantoprazol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Pantoprazole'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'GASTROENTEROLOGÍA',
+    med:'Famotidina',
+    principio_activo:'Famotidina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Famotidine'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIEMÉTICOS',
+    med:'Ondansetrón',
+    principio_activo:'Ondansetrón',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Ondansetron'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ANTIEMÉTICOS',
+    med:'Metoclopramida',
+    principio_activo:'Metoclopramida',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Metoclopramide'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ALERGIA / INMUNOLOGÍA',
+    med:'Loratadina',
+    principio_activo:'Loratadina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Loratadine'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ALERGIA / INMUNOLOGÍA',
+    med:'Cetirizina',
+    principio_activo:'Cetirizina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Cetirizine'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'CORTICOIDES',
+    med:'Prednisona',
+    principio_activo:'Prednisona',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Prednisone'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'CORTICOIDES',
+    med:'Dexametasona',
+    principio_activo:'Dexametasona',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Dexamethasone'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'CORTICOIDES',
+    med:'Betametasona',
+    principio_activo:'Betametasona',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Betamethasone'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'CARDIOVASCULAR',
+    med:'Furosemida',
+    principio_activo:'Furosemida',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Furosemide'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'CARDIOVASCULAR',
+    med:'Propranolol',
+    principio_activo:'Propranolol',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Propranolol'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'CARDIOVASCULAR / OBSTETRICIA',
+    med:'Nifedipino',
+    principio_activo:'Nifedipino',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Nifedipine'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'CARDIOVASCULAR / OBSTETRICIA',
+    med:'Metildopa',
+    principio_activo:'Metildopa',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Methyldopa'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+},
+
+        {
+    cat:'ENDOCRINOLOGÍA',
+    med:'Levotiroxina',
+    principio_activo:'Levotiroxina',
+    denominaciones_comerciales:[],
+    nombres_alternativos:['Levothyroxine'],
+    forma_farmaceutica:'',
+    concentracion:'',
+    pres:'',
+    via:'',
+    frec:'',
+    dur:'',
+    ind:''
+}
 
     ];
 
@@ -809,7 +1570,7 @@
 
     window.AUROSANAX_CATALOGO_MEDICAMENTOS = {
 
-        version:'1.1.0',
+        version:'1.2.0',
 
         obtenerTodos:function(){
             return window.MEDICAMENTOS_AUROSANAX_BASE.slice();
