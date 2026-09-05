@@ -646,7 +646,7 @@ function auroPlanInstalarIndicacionesAutoExpandibles(){
 }
 
 
-const AURO_PLAN_INDICACIONES_MAX = 500;
+const AURO_PLAN_INDICACIONES_MAX = 200;
 
 function auroPlanActualizarEstadoLimiteIndicaciones(valor){
     const texto = String(valor || '');
@@ -665,13 +665,13 @@ function auroPlanActualizarEstadoLimiteIndicaciones(valor){
     if(guia){
         if(longitud > AURO_PLAN_INDICACIONES_MAX){
             guia.textContent =
-                'Registro histórico superior a 500 caracteres. No se truncará automáticamente; puede reducirlo progresivamente.';
+                'Registro histórico superior a 200 caracteres. No se truncará automáticamente; puede reducirlo progresivamente.';
         }else if(longitud === AURO_PLAN_INDICACIONES_MAX){
             guia.textContent =
-                'Límite alcanzado. Máximo 500 caracteres para indicaciones nuevas.';
+                'Límite alcanzado. Máximo 200 caracteres para indicaciones nuevas.';
         }else{
             guia.textContent =
-                'Use este campo para instrucciones terapéuticas claras y concisas. Máximo 500 caracteres.';
+                'Use este campo para instrucciones terapéuticas claras y concisas. Máximo 200 caracteres.';
         }
     }
 }
@@ -684,10 +684,10 @@ function auroPlanLimitarIndicacionesEntrada(elemento, valorAnterior){
 
     /*
       Compatibilidad histórica:
-      - Si el dato anterior ya superaba 500 caracteres, nunca se trunca.
+      - Si el dato anterior ya superaba 200 caracteres, nunca se trunca.
       - Puede mantenerse igual o reducirse progresivamente.
       - No se permite aumentarlo mientras continúe sobre el límite.
-      - Para datos nuevos o ya <= 500, cualquier entrada se limita a 500.
+      - Para datos nuevos o ya <= 200, cualquier entrada se limita a 500.
     */
     if(anterior.length > AURO_PLAN_INDICACIONES_MAX){
         if(actual.length > anterior.length){
@@ -719,7 +719,7 @@ function auroPlanIndicacionesFormularioPermitidas(){
     );
 
     /*
-      Un registro histórico >500 puede guardarse sin pérdida si no se amplía.
+      Un registro histórico >200 puede guardarse sin pérdida si no se amplía.
       Esto permite editar otros campos sin obligar a truncar información clínica.
     */
     return (
@@ -837,10 +837,10 @@ function auroPlanInstalarEditorIndicacionesAmpliado(){
                       placeholder="Escriba las indicaciones completas"></textarea>
             <div class="auro-plan-indicaciones-limite">
               <span id="auroPlanIndicacionesGuia">
-                Use este campo para instrucciones terapéuticas claras y concisas. Máximo 500 caracteres.
+                Use este campo para instrucciones terapéuticas claras y concisas. Máximo 200 caracteres.
               </span>
               <strong id="auroPlanIndicacionesContador"
-                      aria-live="polite">0 / 500</strong>
+                      aria-live="polite">0 / 200</strong>
             </div>
             <div class="auro-plan-indicaciones-dialogo-pie">
               <span>El contenido se sincroniza automáticamente con Indicaciones.</span>
@@ -2952,7 +2952,7 @@ function agregarMedicamentoDesdeFormulario(){
 
     if(!auroPlanIndicacionesFormularioPermitidas()){
         alert(
-            'Las indicaciones nuevas permiten un máximo de 500 caracteres.\n\n' +
+            'Las indicaciones nuevas permiten un máximo de 200 caracteres.\n\n' +
             'Si este medicamento contiene un texto histórico más largo, puede conservarlo o reducirlo, pero no ampliarlo.'
         );
         auroPlanEnfocarIndicacionesConLimite();
