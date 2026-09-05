@@ -4433,7 +4433,7 @@
         </div>
 
 <div class="clinical-panel" id="hc_docs"><div class="clinical-subtitle"><i class="bi bi-folder2-open"></i> Documentos, resultados y archivos</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Ecografías / imágenes</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Fotografías clínicas</label><input type="file" class="form-control" multiple></div><div class="col-md-12"><div class="clinical-note"><i class="bi bi-info-circle me-1"></i> Los archivos clínicos se almacenarán de forma segura y quedarán vinculados a la historia del paciente.</div></div></div></div>
-        <div class="clinical-actions"><button class="btn-soft" data-auro-receta-global="1" aria-pressed="false" onclick="return auroRecetaAccesoPiloto(this)"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button id="hcGuardarHistoriaBtn" class="btn-auro" data-auro-historia-save-btn="1" data-auro-no-receta="1" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
+        <div class="clinical-actions"><button class="btn-soft" data-auro-receta-global="1" aria-pressed="false" onclick="return auroRecetaAccesoPiloto(this)"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
       </div>
     </section>
 
@@ -7182,7 +7182,6 @@ function auroHistoriaFechaRegistro(registro){
 ============================================================ */
 function auroHistoriaModuloHoraLiteralSheets(idModulo){
   return new Set([
-    'hc_datos',
     'hc_estetica',
     'hc_diagnostico',
     'hc_plan',
@@ -10841,11 +10840,9 @@ async function guardarRecetaERP(){
   console.warn('AUROSANAX: guardarRecetaERP legacy de index.html neutralizado. Esperando recetas.js.');
 
   const btn = document.getElementById('btnGuardarRecetaERP') ||
-    Array.from(document.querySelectorAll('button')).find(b => {
-      if(b.id === 'hcGuardarHistoriaBtn') return false;
-      if(b.dataset && b.dataset.auroNoReceta === '1') return false;
-      return String(b.textContent || '').toLowerCase().includes('guardar receta');
-    });
+    Array.from(document.querySelectorAll('button')).find(b =>
+      String(b.textContent || '').toLowerCase().includes('guardar receta')
+    );
 
   if(btn){
     btn.disabled = true;
@@ -13767,84 +13764,6 @@ document.addEventListener('click',e=>{
 })();
 </script>
 
-<!-- ============================================================
-     AUROSANAX INDEX 97 - BLINDAJE VISUAL BOTÓN HISTORIA / RECETA
-     ------------------------------------------------------------
-     ALCANCE ESTRICTO:
-     - Protege únicamente la identidad visual del botón global de Historia.
-     - No cambia onclick, no intercepta guardarHistoriaClinicaERP().
-     - No intercepta guardarRecetaERP().
-     - No hace POST, no escribe Sheets, no toca id_atencion/id_paciente.
-     - No modifica Plan, Recetas, Diagnóstico, Atenciones ni persistencia.
-============================================================ -->
-<script>
-(function(){
-  'use strict';
-
-  if(window.__auroIndex97BlindajeBotonHistoriaReceta) return;
-  window.__auroIndex97BlindajeBotonHistoriaReceta = true;
-
-  function botonHistoria(){
-    return document.getElementById('hcGuardarHistoriaBtn');
-  }
-
-  function esBotonHistoriaValido(btn){
-    if(!btn) return false;
-    if(btn.dataset?.auroHistoriaSaveBtn !== '1') return false;
-    const onclick = String(btn.getAttribute('onclick') || '');
-    return onclick.includes('guardarHistoriaClinicaERP');
-  }
-
-  function historiaEnEdicion(){
-    try{
-      return !!String(
-        typeof editingHistoryId !== 'undefined' ? editingHistoryId : ''
-      ).trim();
-    }catch(_){
-      return false;
-    }
-  }
-
-  function repararSoloSiFueRotuladoComoReceta(){
-    const btn = botonHistoria();
-    if(!esBotonHistoriaValido(btn)) return;
-
-    const texto = String(btn.textContent || '').trim().toLowerCase();
-    if(!texto.includes('receta')) return;
-
-    btn.innerHTML =
-      '<i class="bi bi-save me-1"></i> ' +
-      (historiaEnEdicion() ? 'Actualizar historia' : 'Guardar historia');
-  }
-
-  function instalar(){
-    const btn = botonHistoria();
-    if(!esBotonHistoriaValido(btn)) return;
-
-    repararSoloSiFueRotuladoComoReceta();
-
-    const observer = new MutationObserver(function(){
-      repararSoloSiFueRotuladoComoReceta();
-    });
-
-    observer.observe(btn, {
-      childList:true,
-      subtree:true,
-      characterData:true
-    });
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', instalar, { once:true });
-  }else{
-    instalar();
-  }
-
-  window.addEventListener('aurosanax:atencion-seleccionada', function(){
-    setTimeout(repararSoloSiFueRotuladoComoReceta, 0);
-  });
-})();
-</script>
 </body>
 </html>
 <!--
