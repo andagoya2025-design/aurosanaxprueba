@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.4.1
+ Versión: 1.4.2
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -23,6 +23,9 @@
  - V1.4: blindaje canónico de identidad, categoría Patología, descarga y compartir bajo demanda.
  - V1.4.1: reemplaza Compartir genérico por WhatsApp del paciente de la atención activa,
    reutilizando abrirWhatsAppPaciente(id_paciente) del ERP. No adjunta automáticamente archivos.
+ - V1.4.2: añade Correo del paciente usando exclusivamente el id_paciente de la atención activa.
+   Resuelve el campo email del registro de Pacientes y abre el cliente de correo del dispositivo.
+   No envía automáticamente ni adjunta archivos automáticamente.
 ************************************************************************/
 
 (function(){
@@ -34,7 +37,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.4.1';
+  const VERSION = '1.4.2';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -1050,6 +1053,11 @@
               <i class="bi bi-whatsapp me-1"></i> WhatsApp
             </button>
             <button type="button"
+              class="auro-doc-btn email"
+              data-auro-doc-email="${esc(id)}">
+              <i class="bi bi-envelope me-1"></i> Correo
+            </button>
+            <button type="button"
               class="auro-doc-btn danger"
               data-auro-doc-anular="${esc(id)}"
               ${state.contexto?.editable ? '' : 'disabled'}>
@@ -1775,6 +1783,60 @@
     setMsg('El módulo de WhatsApp de Pacientes no está disponible en esta sesión.','error');
   }
 
+  function abrirCorreoDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: no se abrirá Correo para un documento fuera de la atención activa.','error');
+      return;
+    }
+
+    const {ctx} = seguro;
+    const idPaciente = txt(ctx?.idPaciente);
+
+    if(!idPaciente){
+      setMsg('La atención activa no tiene un paciente válido asociado.','error');
+      return;
+    }
+
+    /*
+      Resuelve el correo SOLO desde el paciente exacto asociado a la atención activa.
+      Documentos no inventa, persiste ni mezcla correos de otros pacientes.
+      El envío queda bajo control del usuario en su cliente de correo.
+    */
+    const listaPacientes = Array.isArray(window.patients)
+      ? window.patients
+      : (typeof patients !== 'undefined' && Array.isArray(patients) ? patients : []);
+
+    const paciente = listaPacientes.find(p=>
+      txt(p?.id_paciente || p?.id) === idPaciente
+    );
+
+    if(!paciente){
+      setMsg('No se encontró el paciente de la atención activa en el módulo Pacientes.','error');
+      return;
+    }
+
+    const correo = txt(paciente.email).trim();
+    if(!correo){
+      setMsg('El paciente no tiene un correo electrónico registrado.','error');
+      return;
+    }
+
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){
+      setMsg('El correo electrónico registrado del paciente no tiene un formato válido.','error');
+      return;
+    }
+
+    const nombre = txt(paciente.nombre || ((paciente.nombres || '')+' '+(paciente.apellidos || '')).trim() || ctx?.nombrePaciente || 'Paciente');
+    const asunto = 'AUROSANAX - Documento clínico';
+    const cuerpo = 'Estimado/a '+nombre+',\n\nAdjuntamos información relacionada con su atención en AUROSANAX.\n\nSaludos cordiales,\nAUROSANAX';
+
+    window.location.href =
+      'mailto:'+encodeURIComponent(correo)+
+      '?subject='+encodeURIComponent(asunto)+
+      '&body='+encodeURIComponent(cuerpo);
+  }
+
   async function anularDocumento(idDocumento){
     if(state.subiendo) return;
 
@@ -1882,6 +1944,12 @@
       const whatsapp = e.target.closest('[data-auro-doc-whatsapp]');
       if(whatsapp){
         abrirWhatsAppDocumento(whatsapp.dataset.auroDocWhatsapp);
+        return;
+      }
+
+      const correo = e.target.closest('[data-auro-doc-email]');
+      if(correo){
+        abrirCorreoDocumento(correo.dataset.auroDocEmail);
         return;
       }
 
@@ -2044,6 +2112,7 @@
     abrir:abrirDocumento,
     descargar:descargarDocumento,
     whatsapp:abrirWhatsAppDocumento,
+    correo:abrirCorreoDocumento,
     anular:anularDocumento,
     estado:state,
     limites:LIMITES,
