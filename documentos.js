@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.4.0
+ Versión: 1.4.1
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -21,6 +21,8 @@
  - No elimina físicamente documentos clínicos desde frontend: usa anulación.
  - Responsive: escritorio, tablet, iPhone y Android.
  - V1.4: blindaje canónico de identidad, categoría Patología, descarga y compartir bajo demanda.
+ - V1.4.1: reemplaza Compartir genérico por WhatsApp del paciente de la atención activa,
+   reutilizando abrirWhatsAppPaciente(id_paciente) del ERP. No adjunta automáticamente archivos.
 ************************************************************************/
 
 (function(){
@@ -32,7 +34,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -629,7 +631,7 @@
 .auro-doc-btn{border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:7px 9px;font-size:10.5px;font-weight:850;color:#374151;cursor:pointer}
 .auro-doc-btn.open{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
 .auro-doc-btn.download{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
-.auro-doc-btn.share{border-color:#ddd6fe;background:#f5f3ff;color:#6d28d9}
+.auro-doc-btn.whatsapp{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
 .auro-doc-btn.danger{border-color:#fecdd3;background:#fff1f2;color:#9f1239}
 .auro-doc-btn:disabled{opacity:.45;cursor:not-allowed}
 .auro-doc-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
@@ -1043,10 +1045,9 @@
               <i class="bi bi-download me-1"></i> Descargar
             </button>
             <button type="button"
-              class="auro-doc-btn share"
-              data-auro-doc-share="${esc(id)}"
-              ${url ? '' : 'disabled'}>
-              <i class="bi bi-share me-1"></i> Compartir
+              class="auro-doc-btn whatsapp"
+              data-auro-doc-whatsapp="${esc(id)}">
+              <i class="bi bi-whatsapp me-1"></i> WhatsApp
             </button>
             <button type="button"
               class="auro-doc-btn danger"
@@ -1746,57 +1747,32 @@
     }
   }
 
-  async function compartirDocumento(idDocumento){
+  function abrirWhatsAppDocumento(idDocumento){
     const seguro = registroSeguro(idDocumento);
     if(!seguro){
-      setMsg('Protección de seguridad: no se compartirá un documento fuera de la atención activa.','error');
+      setMsg('Protección de seguridad: no se abrirá WhatsApp para un documento fuera de la atención activa.','error');
       return;
     }
 
-    const {r} = seguro;
-    const url = txt(r.archivo_url);
-    if(!url){
-      setMsg('Este documento no tiene un enlace disponible para compartir.','error');
+    const {ctx} = seguro;
+    const idPaciente = txt(ctx?.idPaciente);
+
+    if(!idPaciente){
+      setMsg('La atención activa no tiene un paciente válido asociado.','error');
       return;
     }
 
-    const nombre = nombreArchivoSeguro(r);
-
-    if(navigator.share){
-      try{
-        const blob = await obtenerBlobDocumento(r);
-        const file = new File([blob],nombre,{type:blob.type || txt(r.mime_type) || 'application/octet-stream'});
-        const data = {title:nombre,text:'Documento clínico AUROSANAX',files:[file]};
-
-        if(!navigator.canShare || navigator.canShare({files:[file]})){
-          await navigator.share(data);
-          return;
-        }
-      }catch(error){
-        if(error?.name === 'AbortError') return;
-      }
-
-      try{
-        await navigator.share({
-          title:nombre,
-          text:'Documento clínico AUROSANAX',
-          url
-        });
-        return;
-      }catch(error){
-        if(error?.name === 'AbortError') return;
-      }
+    /*
+      Reutiliza el flujo oficial ya existente del ERP para WhatsApp.
+      Ese flujo resuelve el teléfono registrado del paciente por id_paciente
+      y abre el chat correspondiente. Documentos NO inventa ni guarda teléfonos.
+    */
+    if(typeof window.abrirWhatsAppPaciente === 'function'){
+      window.abrirWhatsAppPaciente(idPaciente);
+      return;
     }
 
-    try{
-      if(navigator.clipboard?.writeText){
-        await navigator.clipboard.writeText(url);
-        setMsg('El enlace del documento fue copiado. Puede compartirlo por WhatsApp Business o correo.','ok');
-        return;
-      }
-    }catch(e){}
-
-    setMsg('Este navegador no ofrece compartir directamente. Use Ver o Descargar para enviar el documento.','warn');
+    setMsg('El módulo de WhatsApp de Pacientes no está disponible en esta sesión.','error');
   }
 
   async function anularDocumento(idDocumento){
@@ -1903,12 +1879,9 @@
         return;
       }
 
-      const compartir = e.target.closest('[data-auro-doc-share]');
-      if(compartir){
-        compartirDocumento(compartir.dataset.auroDocShare).catch(error=>{
-          console.error(MODULO+':',error);
-          setMsg('No se pudo compartir: '+txt(error.message || error),'error');
-        });
+      const whatsapp = e.target.closest('[data-auro-doc-whatsapp]');
+      if(whatsapp){
+        abrirWhatsAppDocumento(whatsapp.dataset.auroDocWhatsapp);
         return;
       }
 
@@ -2070,7 +2043,7 @@
     limpiarTodasLasColas,
     abrir:abrirDocumento,
     descargar:descargarDocumento,
-    compartir:compartirDocumento,
+    whatsapp:abrirWhatsAppDocumento,
     anular:anularDocumento,
     estado:state,
     limites:LIMITES,
