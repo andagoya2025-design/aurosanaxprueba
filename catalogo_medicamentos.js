@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: catalogo_medicamentos.js
  Módulo: Catálogo Maestro de Medicamentos
- Versión: 1.3.0
+ Versión: 1.4.0
  Fecha: 2026-09-04
 
  OBJETIVO ANTIRREGRESIVO
@@ -338,13 +338,13 @@
             principio_activo:'Ceftriaxona',
             denominaciones_comerciales:[],
             nombres_alternativos:['Ceftriaxone'],
-            forma_farmaceutica:'Inyectable',
-            concentracion:'según presentación registrada',
-            pres:'inyectable',
-            via:'Según presentación',
+            forma_farmaceutica:'Sólido parenteral',
+            concentracion:'500 mg y 1.000 mg',
+            pres:'500 mg / 1.000 mg sólido parenteral',
+            via:'Parenteral',
             frec:'según diagnóstico/protocolo clínico',
             dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            ind:'Antibacteriano sistémico; seleccionar dosis y esquema según diagnóstico, gravedad, edad y función renal/hepática.'
         },
 
         {
@@ -443,13 +443,13 @@
             principio_activo:'Ácido fólico',
             denominaciones_comerciales:[],
             nombres_alternativos:['Folic acid'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'según presentación registrada',
-            pres:'tableta',
+            forma_farmaceutica:'Sólido oral',
+            concentracion:'1 mg y 5 mg',
+            pres:'1 mg / 5 mg sólido oral',
             via:'VO',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            frec:'según riesgo obstétrico y protocolo clínico',
+            dur:'según etapa preconcepcional/gestacional e indicación',
+            ind:'Prevención y tratamiento de deficiencia de folato; en embarazo seleccionar dosis según riesgo obstétrico.'
         },
 
         {
@@ -458,13 +458,13 @@
             principio_activo:'Metformina',
             denominaciones_comerciales:[],
             nombres_alternativos:['Metformin'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'según presentación registrada',
-            pres:'tableta',
+            forma_farmaceutica:'Sólido oral',
+            concentracion:'500 mg - 1.000 mg',
+            pres:'500 mg - 1.000 mg sólido oral',
             via:'VO',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            frec:'según diagnóstico, tolerancia y formulación',
+            dur:'tratamiento crónico según control clínico',
+            ind:'Diabetes mellitus tipo 2 y otras indicaciones metabólicas según valoración clínica.'
         },
 
         {
@@ -518,13 +518,13 @@
             principio_activo:'Losartán',
             denominaciones_comerciales:[],
             nombres_alternativos:['Losartan'],
-            forma_farmaceutica:'Tableta',
-            concentracion:'según presentación registrada',
-            pres:'tableta',
+            forma_farmaceutica:'Sólido oral',
+            concentracion:'50 mg y 100 mg',
+            pres:'50 mg / 100 mg sólido oral',
             via:'VO',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            frec:'según diagnóstico y control tensional',
+            dur:'tratamiento crónico según control clínico',
+            ind:'Antagonista del receptor de angiotensina II; individualizar según presión arterial, función renal y potasio.'
         },
 
         {
@@ -661,13 +661,13 @@
     principio_activo:'Progesterona',
     denominaciones_comerciales:[],
     nombres_alternativos:['Progesterone'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Sólido oral',
+    concentracion:'100 mg',
+    pres:'100 mg sólido oral',
+    via:'VO/Vaginal',
+    frec:'según indicación gineco-obstétrica',
+    dur:'según indicación y seguimiento',
+    ind:'Progestágeno; seleccionar vía y esquema según indicación ginecológica u obstétrica.'
 },
 
         {
@@ -691,13 +691,13 @@
     principio_activo:'Levonorgestrel',
     denominaciones_comerciales:[],
     nombres_alternativos:['Levonorgestrel'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Sólido oral',
+    concentracion:'0,75 mg y 1,5 mg',
+    pres:'0,75 mg / 1,5 mg sólido oral',
+    via:'VO',
+    frec:'según indicación anticonceptiva',
+    dur:'según esquema indicado',
+    ind:'Anticoncepción de emergencia; seleccionar presentación y esquema conforme protocolo clínico.'
 },
 
         {
@@ -796,13 +796,13 @@
     principio_activo:'Oxitocina',
     denominaciones_comerciales:[],
     nombres_alternativos:['Oxytocin'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Líquido parenteral',
+    concentracion:'10 UI/mL',
+    pres:'10 UI/mL líquido parenteral',
+    via:'Parenteral',
+    frec:'según protocolo obstétrico',
+    dur:'según respuesta clínica y protocolo',
+    ind:'Uterotónico de uso obstétrico; administrar bajo protocolo y monitorización.'
 },
 
         {
@@ -811,13 +811,13 @@
     principio_activo:'Misoprostol',
     denominaciones_comerciales:[],
     nombres_alternativos:['Misoprostol'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Sólido oral',
+    concentracion:'200 mcg',
+    pres:'200 mcg sólido oral',
+    via:'VO/Vaginal',
+    frec:'según indicación y protocolo obstétrico/ginecológico',
+    dur:'según indicación y protocolo',
+    ind:'Prostaglandina de uso protocolizado en ginecología/obstetricia; no usar pauta automática universal.'
 },
 
         {
@@ -856,13 +856,13 @@
     principio_activo:'Tamoxifeno',
     denominaciones_comerciales:[],
     nombres_alternativos:['Tamoxifen'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Sólido oral',
+    concentracion:'10 mg - 20 mg',
+    pres:'10 mg / 20 mg sólido oral',
+    via:'VO',
+    frec:'según protocolo oncológico',
+    dur:'según protocolo oncológico y respuesta',
+    ind:'Modulador selectivo del receptor de estrógeno; uso oncológico bajo protocolo especializado.'
 },
 
         {
@@ -991,13 +991,13 @@
     principio_activo:'Gentamicina',
     denominaciones_comerciales:[],
     nombres_alternativos:['Gentamicin'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Líquido parenteral',
+    concentracion:'10 mg/mL - 140 mg/mL',
+    pres:'10 mg/mL - 140 mg/mL líquido parenteral',
+    via:'Parenteral',
+    frec:'según peso, función renal e indicación',
+    dur:'según infección, cultivo y evolución',
+    ind:'Aminoglucósido; requiere ajuste por función renal y vigilancia de toxicidad según contexto clínico.'
 },
 
         {
@@ -1291,13 +1291,13 @@
     principio_activo:'Prednisona',
     denominaciones_comerciales:[],
     nombres_alternativos:['Prednisone'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Sólido oral',
+    concentracion:'5 mg y 20 mg',
+    pres:'5 mg / 20 mg sólido oral',
+    via:'VO',
+    frec:'según diagnóstico y dosis total diaria',
+    dur:'según diagnóstico; retirar gradualmente cuando corresponda',
+    ind:'Corticoide sistémico; individualizar dosis y duración según enfermedad, respuesta y riesgo.'
 },
 
         {
@@ -1396,13 +1396,13 @@
     principio_activo:'Levotiroxina',
     denominaciones_comerciales:[],
     nombres_alternativos:['Levothyroxine'],
-    forma_farmaceutica:'',
-    concentracion:'según presentación registrada',
-    pres:'según presentación registrada',
-    via:'Según presentación',
-    frec:'según diagnóstico/protocolo clínico',
-    dur:'según diagnóstico y evolución',
-    ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+    forma_farmaceutica:'Sólido oral',
+    concentracion:'25 mcg - 200 mcg',
+    pres:'25 mcg - 200 mcg sólido oral',
+    via:'VO',
+    frec:'según dosis individual y control tiroideo',
+    dur:'tratamiento crónico según control clínico',
+    ind:'Reposición de hormona tiroidea; individualizar dosis según TSH/T4, edad, embarazo y comorbilidades.'
 },
 
         /* ============================================================
@@ -1720,13 +1720,13 @@
             principio_activo:'Carbonato de calcio',
             denominaciones_comerciales:[],
             nombres_alternativos:[],
-            forma_farmaceutica:'Tableta',
-            concentracion:'según presentación registrada',
-            pres:'tableta',
+            forma_farmaceutica:'Sólido oral',
+            concentracion:'500 mg',
+            pres:'500 mg sólido oral',
             via:'VO',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            frec:'según indicación y aporte dietario',
+            dur:'según riesgo y seguimiento',
+            ind:'Suplementación de calcio; en obstetricia ajustar según riesgo, ingesta y protocolo clínico.'
         },
 
         {
@@ -1780,13 +1780,13 @@
             principio_activo:'Sulfato de magnesio',
             denominaciones_comerciales:[],
             nombres_alternativos:[],
-            forma_farmaceutica:'Inyectable',
-            concentracion:'según presentación registrada',
-            pres:'inyectable',
-            via:'IV/IM',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            forma_farmaceutica:'Líquido parenteral',
+            concentracion:'20 %',
+            pres:'20 % líquido parenteral',
+            via:'Parenteral',
+            frec:'según protocolo obstétrico/hospitalario',
+            dur:'según protocolo y monitorización',
+            ind:'Uso hospitalario/obstétrico según indicación; requiere monitorización clínica.'
         },
 
         {
@@ -2575,13 +2575,13 @@
             principio_activo:'Loperamida',
             denominaciones_comerciales:[],
             nombres_alternativos:[],
-            forma_farmaceutica:'Cápsula',
-            concentracion:'según presentación registrada',
-            pres:'cápsula',
+            forma_farmaceutica:'Sólido oral',
+            concentracion:'2 mg',
+            pres:'2 mg sólido oral',
             via:'VO',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            frec:'según cuadro clínico y límites de dosis',
+            dur:'uso corto según evolución',
+            ind:'Antidiarreico sintomático; evitar cuando exista sospecha de diarrea invasiva u otra contraindicación.'
         },
 
         {
@@ -4405,13 +4405,13 @@
             principio_activo:'Rivaroxabán',
             denominaciones_comerciales:[],
             nombres_alternativos:[],
-            forma_farmaceutica:'Tableta',
-            concentracion:'según presentación registrada',
-            pres:'tableta',
+            forma_farmaceutica:'Sólido oral',
+            concentracion:'2,5 mg - 20 mg',
+            pres:'2,5 mg - 20 mg sólido oral',
             via:'VO',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            frec:'según indicación y dosis seleccionada',
+            dur:'según indicación tromboembólica',
+            ind:'Anticoagulante oral; seleccionar dosis según indicación, función renal, interacciones y riesgo hemorrágico.'
         },
 
         {
@@ -4435,13 +4435,13 @@
             principio_activo:'Enoxaparina',
             denominaciones_comerciales:[],
             nombres_alternativos:[],
-            forma_farmaceutica:'Inyectable',
-            concentracion:'según presentación registrada',
-            pres:'inyectable',
+            forma_farmaceutica:'Líquido parenteral',
+            concentracion:'20 mg - 100 mg',
+            pres:'20 mg - 100 mg líquido parenteral',
             via:'SC',
-            frec:'según diagnóstico/protocolo clínico',
-            dur:'según diagnóstico y evolución',
-            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+            frec:'según indicación, peso y función renal',
+            dur:'según indicación tromboembólica y protocolo',
+            ind:'Anticoagulante; ajustar dosis por indicación, peso, función renal y riesgo hemorrágico.'
         },
 
         {
@@ -4545,8 +4545,8 @@
             { forma_farmaceutica:'Tableta / cápsula', concentracion:'300 mg', pres:'300 mg tableta / cápsula', vias_compatibles:['VO'] }
         ],
         'acido folico': [
-            { forma_farmaceutica:'Tableta', concentracion:'', pres:'tableta', vias_compatibles:['VO'] },
-            { forma_farmaceutica:'Tableta', concentracion:'5 mg', pres:'5 mg tableta', vias_compatibles:['VO'] }
+            { forma_farmaceutica:'Sólido oral', concentracion:'1 mg', pres:'1 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' },
+            { forma_farmaceutica:'Sólido oral', concentracion:'5 mg', pres:'5 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' }
         ],
         'medroxiprogesterona': [
             { forma_farmaceutica:'Tableta / inyectable', concentracion:'', pres:'tableta / inyectable', vias_compatibles:[] },
@@ -4565,6 +4565,29 @@
             { forma_farmaceutica:'Tableta', concentracion:'5 mg', pres:'5 mg tableta', vias_compatibles:['VO'] }
         ],
         'acido ascorbico': [],
+        'ceftriaxona': [
+            { forma_farmaceutica:'Sólido parenteral', concentracion:'500 mg', pres:'500 mg sólido parenteral', vias_compatibles:['Parenteral'], estado:'CNMB_EC_11R_2023' },
+            { forma_farmaceutica:'Sólido parenteral', concentracion:'1.000 mg', pres:'1.000 mg sólido parenteral', vias_compatibles:['Parenteral'], estado:'CNMB_EC_11R_2023' }
+        ],
+        'tamoxifeno': [
+            { forma_farmaceutica:'Sólido oral', concentracion:'10 mg', pres:'10 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' },
+            { forma_farmaceutica:'Sólido oral', concentracion:'20 mg', pres:'20 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' }
+        ],
+        'losartan': [
+            { forma_farmaceutica:'Sólido oral', concentracion:'50 mg', pres:'50 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' },
+            { forma_farmaceutica:'Sólido oral', concentracion:'100 mg', pres:'100 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' }
+        ],
+        'levonorgestrel': [
+            { forma_farmaceutica:'Sólido oral', concentracion:'0,75 mg', pres:'0,75 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' },
+            { forma_farmaceutica:'Sólido oral', concentracion:'1,5 mg', pres:'1,5 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' }
+        ],
+        'prednisona': [
+            { forma_farmaceutica:'Sólido oral', concentracion:'5 mg', pres:'5 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' },
+            { forma_farmaceutica:'Sólido oral', concentracion:'20 mg', pres:'20 mg sólido oral', vias_compatibles:['VO'], estado:'CNMB_EC_11R_2023' }
+        ],
+        'progesterona': [
+            { forma_farmaceutica:'Sólido oral', concentracion:'100 mg', pres:'100 mg sólido oral', vias_compatibles:['VO','Vaginal'], estado:'CNMB_EC_11R_2023' }
+        ],
         'omega 3': [
             { forma_farmaceutica:'Cápsula', concentracion:'1 g', pres:'1 g cápsula', vias_compatibles:['VO'], estado:'uso_habitual_aurosanax' }
         ]
@@ -4668,7 +4691,7 @@
 
     window.AUROSANAX_CATALOGO_MEDICAMENTOS = {
 
-        version:'1.3.0',
+        version:'1.4.0',
 
         obtenerTodos:function(){
             return window.MEDICAMENTOS_AUROSANAX_BASE.slice();
