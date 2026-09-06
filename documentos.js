@@ -23,9 +23,9 @@
  - V1.4: blindaje canónico de identidad, categoría Patología, descarga y compartir bajo demanda.
  - V1.4.1: reemplaza Compartir genérico por WhatsApp del paciente de la atención activa,
    reutilizando abrirWhatsAppPaciente(id_paciente) del ERP. No adjunta automáticamente archivos.
- - V1.4.2: añade Correo del paciente usando exclusivamente el id_paciente de la atención activa.
-   Resuelve el campo email del registro de Pacientes y abre el cliente de correo del dispositivo.
-   No envía automáticamente ni adjunta archivos automáticamente.
+ - V1.4.2: añade Correo y resolución segura del paciente por id_paciente.
+   Nombre e email solo se completan desde el MISMO paciente de la atención activa.
+   No envía ni adjunta archivos automáticamente y no mezcla identidades.
 ************************************************************************/
 
 (function(){
@@ -347,16 +347,42 @@
     };
   }
 
-  function nombrePaciente(ctx){
-    const a = ctx?.atencion || {};
+  function resolverPacienteSeguro(ctx){
+    const idPaciente = txt(ctx?.idPaciente);
+    if(!idPaciente) return null;
 
     /*
-      El nombre visible de Documentos sale únicamente del objeto canónico de
-      la atención ya validada. Nunca se toma del DOM ni de otro módulo.
-      Si falta el nombre, se muestra una referencia segura por id_paciente.
+      Solo completa datos descriptivos del MISMO id_paciente ya validado
+      por contextoAtencion(). Nunca acepta otro paciente por contexto visual.
     */
-    const nombre = txt(a.nombre_paciente || a.paciente_nombre);
-    if(nombre) return nombre;
+    try{
+      if(typeof window.getPacienteActivo === 'function'){
+        const p = window.getPacienteActivo();
+        if(p && txt(p.id_paciente || p.id) === idPaciente) return p;
+      }
+    }catch(e){}
+
+    const listas = [];
+    try{ if(Array.isArray(window.patients)) listas.push(window.patients); }catch(e){}
+    try{
+      if(typeof patients !== 'undefined' && Array.isArray(patients)) listas.push(patients);
+    }catch(e){}
+
+    for(const lista of listas){
+      const p = lista.find(x=>txt(x?.id_paciente || x?.id) === idPaciente);
+      if(p) return p;
+    }
+    return null;
+  }
+
+  function nombrePaciente(ctx){
+    const a = ctx?.atencion || {};
+    const nombreAtencion = txt(a.nombre_paciente || a.paciente_nombre);
+    if(nombreAtencion) return nombreAtencion;
+
+    const p = resolverPacienteSeguro(ctx);
+    const nombreSeguro = nombreCompletoPersona(p);
+    if(nombreSeguro) return nombreSeguro;
 
     return ctx?.idPaciente ? `Paciente ${ctx.idPaciente}` : 'Paciente';
   }
@@ -1792,33 +1818,20 @@
 
     const {ctx} = seguro;
     const idPaciente = txt(ctx?.idPaciente);
-
     if(!idPaciente){
       setMsg('La atención activa no tiene un paciente válido asociado.','error');
       return;
     }
 
-    /*
-      Resuelve el correo SOLO desde el paciente exacto asociado a la atención activa.
-      Documentos no inventa, persiste ni mezcla correos de otros pacientes.
-      El envío queda bajo control del usuario en su cliente de correo.
-    */
-    const listaPacientes = Array.isArray(window.patients)
-      ? window.patients
-      : (typeof patients !== 'undefined' && Array.isArray(patients) ? patients : []);
-
-    const paciente = listaPacientes.find(p=>
-      txt(p?.id_paciente || p?.id) === idPaciente
-    );
-
+    const paciente = resolverPacienteSeguro(ctx);
     if(!paciente){
-      setMsg('No se encontró el paciente de la atención activa en el módulo Pacientes.','error');
+      setMsg('No se pudo resolver de forma segura el paciente de esta atención.','error');
       return;
     }
 
     const correo = txt(paciente.email).trim();
     if(!correo){
-      setMsg('El paciente no tiene un correo electrónico registrado.','error');
+      setMsg('El paciente no tiene un correo electrónico registrado. Regístrelo en Pacientes para poder abrir un correo dirigido.','error');
       return;
     }
 
@@ -1827,12 +1840,11 @@
       return;
     }
 
-    const nombre = txt(paciente.nombre || ((paciente.nombres || '')+' '+(paciente.apellidos || '')).trim() || ctx?.nombrePaciente || 'Paciente');
+    const nombre = nombreCompletoPersona(paciente) || nombrePaciente(ctx);
     const asunto = 'AUROSANAX - Documento clínico';
     const cuerpo = 'Estimado/a '+nombre+',\n\nAdjuntamos información relacionada con su atención en AUROSANAX.\n\nSaludos cordiales,\nAUROSANAX';
 
-    window.location.href =
-      'mailto:'+encodeURIComponent(correo)+
+    window.location.href='mailto:'+encodeURIComponent(correo)+
       '?subject='+encodeURIComponent(asunto)+
       '&body='+encodeURIComponent(cuerpo);
   }
