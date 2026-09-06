@@ -1583,7 +1583,7 @@ function recopilarAntecedentesGinecologicosEstructurados(){
     pap: { fecha: auroGet('hcGinPapFecha'), estado: auroGet('hcGinPapEstado'), resultado: auroGet('hcGinPapResultado') },
     colposcopia: { fecha: auroGet('hcGinColposcopiaFecha'), estado: auroGet('hcGinColposcopiaEstado'), resultado: auroGet('hcGinColposcopiaResultado') },
     biopsia: { fecha: auroGet('hcGinBiopsiaFecha'), resultado: auroGet('hcGinBiopsiaResultado') },
-    otros: { fecha: auroGet('hcGinOtrosFecha'), resultado: auroGet('hcGinOtrosResultado') }
+    otros: { detalle: auroGet('hcGinOtrosDetalle'), fecha: auroGet('hcGinOtrosFecha'), resultado: auroGet('hcGinOtrosResultado') }
   });
 }
 
@@ -1621,6 +1621,7 @@ function cargarAntecedentesGinecologicosEstructurados(data){
   auroSet('hcGinColposcopiaResultado', d.colposcopia?.resultado);
   auroSet('hcGinBiopsiaFecha', d.biopsia?.fecha);
   auroSet('hcGinBiopsiaResultado', d.biopsia?.resultado);
+  auroSet('hcGinOtrosDetalle', d.otros?.detalle);
   auroSet('hcGinOtrosFecha', d.otros?.fecha);
   auroSet('hcGinOtrosResultado', d.otros?.resultado);
 }
@@ -4735,7 +4736,7 @@ function recopilarAntecedentesPersonalesCompletos(){
 /* ============================================================
    AUROSANAX - GINECOLÓGICOS REPETIBLES V1
    Alcance EXCLUSIVO:
-   - Permite múltiples Citologías / PAP, Colposcopias y Biopsias.
+   - Permite múltiples Citologías / PAP, Colposcopias, Biopsias y Otros.
    - Conserva íntegros los IDs y campos originales de la primera fila.
    - NO modifica Index, Apps Script, Google Sheets ni columnas.
    - NO cambia botones de guardado, fechas, temporalidades, ayudas rápidas,
@@ -4763,6 +4764,13 @@ function recopilarAntecedentesPersonalesCompletos(){
       label: 'Biopsia',
       fechaId: 'hcGinBiopsiaFecha',
       resultadoId: 'hcGinBiopsiaResultado',
+      estadoId: ''
+    },
+    otros: {
+      label: 'Otros',
+      detalleId: 'hcGinOtrosDetalle',
+      fechaId: 'hcGinOtrosFecha',
+      resultadoId: 'hcGinOtrosResultado',
       estadoId: ''
     }
   };
@@ -4798,12 +4806,19 @@ function recopilarAntecedentesPersonalesCompletos(){
   }
 
   function leerRegistrosAdicionales_(tipo){
+    const cfg = CONFIG[tipo] || {};
     return registrosAdicionalesDOM_(tipo)
-      .map(fila => ({
-        fecha: texto_(fila.querySelector('.auro-gine-repetible-fecha')?.value),
-        resultado: texto_(fila.querySelector('.auro-gine-repetible-resultado')?.value)
-      }))
-      .filter(item => item.fecha || item.resultado);
+      .map(fila => {
+        const item = {
+          fecha: texto_(fila.querySelector('.auro-gine-repetible-fecha')?.value),
+          resultado: texto_(fila.querySelector('.auro-gine-repetible-resultado')?.value)
+        };
+        if(cfg.detalleId){
+          item.detalle = texto_(fila.querySelector('.auro-gine-repetible-detalle')?.value);
+        }
+        return item;
+      })
+      .filter(item => item.detalle || item.fecha || item.resultado);
   }
 
   function actualizarNumeracion_(tipo){
@@ -4837,11 +4852,32 @@ function recopilarAntecedentesPersonalesCompletos(){
     tdTitulo.className = 'ginecologico-descripcion';
 
     const tdFecha = document.createElement('td');
+
+    let detalle = null;
+    if(cfg.detalleId){
+      const detalleFechaWrap = document.createElement('div');
+      detalleFechaWrap.className = 'auro-gine-repetible-detalle-fecha-wrap';
+
+      detalle = document.createElement('input');
+      detalle.type = 'text';
+      detalle.className = 'form-control auro-gine-repetible-detalle';
+      detalle.placeholder = 'Especificar';
+      detalle.value = texto_(datos?.detalle);
+
+      detalleFechaWrap.appendChild(detalle);
+      tdFecha.appendChild(detalleFechaWrap);
+    }
+
     const fecha = document.createElement('input');
     fecha.type = 'date';
     fecha.className = 'form-control auro-gine-repetible-fecha';
     fecha.value = texto_(datos?.fecha);
-    tdFecha.appendChild(fecha);
+
+    if(cfg.detalleId){
+      tdFecha.querySelector('.auro-gine-repetible-detalle-fecha-wrap').appendChild(fecha);
+    }else{
+      tdFecha.appendChild(fecha);
+    }
 
     const tdResultado = document.createElement('td');
     const wrap = document.createElement('div');
@@ -4864,7 +4900,7 @@ function recopilarAntecedentesPersonalesCompletos(){
       dispararResumen_();
     });
 
-    [fecha, resultado].forEach(control => {
+    [detalle, fecha, resultado].filter(Boolean).forEach(control => {
       control.addEventListener('input', dispararResumen_);
       control.addEventListener('change', dispararResumen_);
     });
@@ -4916,7 +4952,9 @@ function recopilarAntecedentesPersonalesCompletos(){
     agregar.title = 'Agregar otro registro de ' + cfg.label;
     agregar.addEventListener('click', () => {
       const fila = crearFilaAdicional_(tipo, {});
-      const input = fila?.querySelector('.auro-gine-repetible-fecha');
+      const input = cfg.detalleId
+        ? fila?.querySelector('.auro-gine-repetible-detalle')
+        : fila?.querySelector('.auro-gine-repetible-fecha');
       if(input) input.focus();
     });
 
@@ -4949,6 +4987,12 @@ function recopilarAntecedentesPersonalesCompletos(){
       }
       #hc_antecedentes .auro-gine-repetible-row{
         background:linear-gradient(180deg,#fff 0%,#fffafd 100%);
+      }
+      #hc_antecedentes .auro-gine-repetible-detalle-fecha-wrap{
+        display:grid;
+        grid-template-columns:minmax(0,1fr) minmax(135px,.55fr);
+        gap:8px;
+        align-items:center;
       }
       #hc_antecedentes .auro-gine-repetible-resultado-wrap{
         display:grid;
@@ -5014,8 +5058,8 @@ function recopilarAntecedentesPersonalesCompletos(){
 
   /*
     GUARDADO:
-    conserva la función estable y solo añade "registros" a los tres
-    objetos autorizados. La primera fila sigue siendo fecha/estado/resultado.
+    conserva la función estable y solo añade "registros" a los tipos
+    autorizados. Los tres previos conservan su estructura; Otros añade detalle.
   */
   if(typeof window.recopilarAntecedentesGinecologicosEstructurados === 'function'){
     const recopilarOriginal = window.recopilarAntecedentesGinecologicosEstructurados;
@@ -5023,7 +5067,7 @@ function recopilarAntecedentesPersonalesCompletos(){
     window.recopilarAntecedentesGinecologicosEstructurados = function(){
       const base = recopilarOriginal.apply(this, arguments) || {};
 
-      ['pap','colposcopia','biopsia'].forEach(tipo => {
+      Object.keys(CONFIG).forEach(tipo => {
         const extras = leerRegistrosAdicionales_(tipo);
         if(!extras.length) return;
 
@@ -5055,10 +5099,10 @@ function recopilarAntecedentesPersonalesCompletos(){
       limpiarTodosAdicionales_();
       const resultado = cargarOriginal.apply(this, arguments);
 
-      ['pap','colposcopia','biopsia'].forEach(tipo => {
+      Object.keys(CONFIG).forEach(tipo => {
         const lista = Array.isArray(d?.[tipo]?.registros) ? d[tipo].registros : [];
         lista.forEach(item => {
-          if(texto_(item?.fecha) || texto_(item?.resultado)){
+          if(texto_(item?.detalle) || texto_(item?.fecha) || texto_(item?.resultado)){
             crearFilaAdicional_(tipo, item);
           }
         });
@@ -5071,7 +5115,7 @@ function recopilarAntecedentesPersonalesCompletos(){
   /*
     RESUMEN / ANTECEDENTES PREVIOS:
     conserva todas las secciones existentes y expande únicamente
-    PAP, Colposcopia y Biopsia cuando existen registros adicionales.
+    PAP, Colposcopia, Biopsia y Otros cuando existen registros adicionales.
   */
   if(typeof window.auroResumenGinecologicosItemsDesdeJson === 'function'){
     const resumenOriginal = window.auroResumenGinecologicosItemsDesdeJson;
@@ -5084,7 +5128,8 @@ function recopilarAntecedentesPersonalesCompletos(){
       const etiquetas = {
         pap:'Citología / PAP',
         colposcopia:'Colposcopia',
-        biopsia:'Biopsia'
+        biopsia:'Biopsia',
+        otros:'Otros'
       };
 
       let items = itemsOriginales.filter(item => {
@@ -5092,31 +5137,40 @@ function recopilarAntecedentesPersonalesCompletos(){
         return !Object.values(etiquetas).includes(titulo);
       });
 
-      ['pap','colposcopia','biopsia'].forEach(tipo => {
+      Object.keys(CONFIG).forEach(tipo => {
         const v = g[tipo];
         if(!v || typeof v !== 'object' || Array.isArray(v)) return;
 
         const lista = [];
-        if(texto_(v.fecha) || texto_(v.resultado)){
-          lista.push({ fecha:texto_(v.fecha), resultado:texto_(v.resultado) });
+        if(texto_(v.detalle) || texto_(v.fecha) || texto_(v.resultado)){
+          lista.push({
+            detalle:texto_(v.detalle),
+            fecha:texto_(v.fecha),
+            resultado:texto_(v.resultado)
+          });
         }
 
         if(Array.isArray(v.registros)){
           v.registros.forEach(r => {
-            if(texto_(r?.fecha) || texto_(r?.resultado)){
-              lista.push({ fecha:texto_(r?.fecha), resultado:texto_(r?.resultado) });
+            if(texto_(r?.detalle) || texto_(r?.fecha) || texto_(r?.resultado)){
+              lista.push({
+                detalle:texto_(r?.detalle),
+                fecha:texto_(r?.fecha),
+                resultado:texto_(r?.resultado)
+              });
             }
           });
         }
 
         lista.forEach((registro, indice) => {
-          const detalle = [];
-          if(registro.fecha) detalle.push('Fecha: ' + registro.fecha);
-          if(registro.resultado) detalle.push('Resultado: ' + registro.resultado);
+          const detalleResumen = [];
+          if(registro.detalle) detalleResumen.push('Detalle: ' + registro.detalle);
+          if(registro.fecha) detalleResumen.push('Fecha: ' + registro.fecha);
+          if(registro.resultado) detalleResumen.push('Resultado: ' + registro.resultado);
 
           items.push({
             titulo: etiquetas[tipo] + (indice > 0 ? ' ' + (indice + 1) : ''),
-            detalle: detalle.join(' · ')
+            detalle: detalleResumen.join(' · ')
           });
         });
       });
@@ -5143,7 +5197,7 @@ function recopilarAntecedentesPersonalesCompletos(){
   }
 
   console.log(
-    'AUROSANAX antecedentes.js: GINECOLÓGICOS REPETIBLES V1 cargado sin cambios de backend.'
+    'AUROSANAX antecedentes.js: GINECOLÓGICOS REPETIBLES V1 + Otros cargado sin cambios de backend.'
   );
 })();
 /* ============================================================
@@ -5161,7 +5215,7 @@ function recopilarAntecedentesPersonalesCompletos(){
    - NO modifica guardado, fechas, temporalidades ni Apps Script.
    - NO modifica Anamnesis, Examen físico, Diagnóstico, Plan ni otros módulos.
    - NO dispara eventos de input/change durante la limpieza para evitar autosaves.
-   - Incluye filas dinámicas de PAP / Colposcopia / Biopsia.
+   - Incluye filas dinámicas de PAP / Colposcopia / Biopsia / Otros.
    ============================================================ */
 (function(){
   'use strict';
