@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.3.0
+ Versión: 1.4.0
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -20,6 +20,7 @@
  - NO depende del botón global "Guardar historia".
  - No elimina físicamente documentos clínicos desde frontend: usa anulación.
  - Responsive: escritorio, tablet, iPhone y Android.
+ - V1.4: blindaje canónico de identidad, categoría Patología, descarga y compartir bajo demanda.
 ************************************************************************/
 
 (function(){
@@ -31,7 +32,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -112,6 +113,12 @@
       label:'Otros documentos',
       icon:'bi-file-earmark-medical',
       accept:'application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif'
+    },
+    {
+      key:'PATOLOGIA',
+      label:'Patología',
+      icon:'bi-file-earmark-medical',
+      accept:'application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif'
     }
   ]);
 
@@ -131,7 +138,8 @@
       LABORATORIO:{files:[], idAtencion:''},
       ECOGRAFIA_IMAGEN:{files:[], idAtencion:''},
       FOTOGRAFIA_CLINICA:{files:[], idAtencion:''},
-      OTRO:{files:[], idAtencion:''}
+      OTRO:{files:[], idAtencion:''},
+      PATOLOGIA:{files:[], idAtencion:''}
     },
     ultimoError:''
   };
@@ -209,6 +217,13 @@
   }
 
   function atencionActiva(){
+    /*
+      V1.4 — CONTEXTO CANÓNICO DE DOCUMENTOS
+      Documentos solo acepta una atención identificable por id_atencion.
+      No hereda id_atencion desde Plan, Examen Físico, Diagnóstico ni DOM.
+      Esas áreas pueden consumir el contexto clínico, pero no son autoridad
+      para fabricar la identidad de Documentos.
+    */
     try{
       if(typeof window.getAtencionActiva === 'function'){
         const a = window.getAtencionActiva();
@@ -223,10 +238,13 @@
       }
     }catch(e){}
 
-    return window.atencionesState?.atencionActual ||
-           window.currentAttention ||
-           window.atencionActual ||
-           null;
+    const candidatos = [
+      window.atencionesState?.atencionActual,
+      window.currentAttention,
+      window.atencionActual
+    ];
+
+    return candidatos.find(a=>a && txt(a.id_atencion)) || null;
   }
 
   function idAtencionActiva(){
@@ -237,13 +255,7 @@
       }
     }catch(e){}
 
-    const a = atencionActiva();
-    return txt(
-      a?.id_atencion ||
-      window.planState?.atencionActual ||
-      window.examenFisicoState?.atencionActual ||
-      window.auroDiagnosticosState?.atencionActual
-    );
+    return txt(atencionActiva()?.id_atencion);
   }
 
   function atencionesLocales(){
@@ -254,6 +266,12 @@
     }catch(e){
       return [];
     }
+  }
+
+  function conflictoId(a,b){
+    const x = txt(a);
+    const y = txt(b);
+    return !!(x && y && x !== y);
   }
 
   function contextoAtencion(){
@@ -267,6 +285,8 @@
         editable:false,
         bloqueada:false,
         finalizada:false,
+        valido:false,
+        motivoInvalido:'Sin atención clínica activa.',
         idPaciente:'',
         idHistoria:'',
         idMedico:'',
@@ -276,7 +296,23 @@
 
     const local = atencionesLocales();
     const respaldo = local.find(x=>txt(x?.id_atencion) === id) || {};
+
+    /*
+      El respaldo local solo puede COMPLETAR datos de la MISMA id_atencion.
+      Si contradice identificadores clínicos presentes en la atención activa,
+      se invalida el contexto en lugar de "arreglarlo" silenciosamente.
+    */
+    const contradicciones = [];
+    if(conflictoId(activa.id_paciente,respaldo.id_paciente)) contradicciones.push('id_paciente');
+    if(conflictoId(activa.id_historia,respaldo.id_historia)) contradicciones.push('id_historia');
+    if(conflictoId(activa.id_medico,respaldo.id_medico)) contradicciones.push('id_medico');
+    if(conflictoId(activa.id_cita,respaldo.id_cita)) contradicciones.push('id_cita');
+
     const a = Object.assign({}, respaldo, activa);
+    const idPaciente = txt(a.id_paciente);
+    const idHistoria = txt(a.id_historia);
+
+    if(!idPaciente) contradicciones.push('id_paciente ausente');
 
     const estado = norm(
       activa.estado_atencion ||
@@ -287,21 +323,20 @@
       a.estado_consulta
     );
 
-    /*
-      Un documento clínico puede adjuntarse luego de finalizar la consulta.
-      Solo se bloquean atenciones anuladas/canceladas/archivadas.
-    */
     const bloqueada = /(anulad|cancelad|archivad)/.test(estado);
     const finalizada = /(cerrad|finaliz|complet)/.test(estado);
+    const valido = contradicciones.length === 0;
 
     return {
       id,
       atencion:a,
-      editable:!bloqueada,
+      editable:valido && !bloqueada,
       bloqueada,
       finalizada,
-      idPaciente:txt(a.id_paciente),
-      idHistoria:txt(a.id_historia),
+      valido,
+      motivoInvalido:valido ? '' : 'Contexto clínico inconsistente: '+contradicciones.join(', ')+'.',
+      idPaciente,
+      idHistoria,
       idMedico:txt(a.id_medico),
       numeroConsulta:txt(a.numero_consulta || a.numero_atencion || a.numero)
     };
@@ -309,13 +344,16 @@
 
   function nombrePaciente(ctx){
     const a = ctx?.atencion || {};
-    return txt(
-      a.nombre_paciente ||
-      a.paciente_nombre ||
-      window.currentAttention?.nombre_paciente ||
-      window.atencionActual?.nombre_paciente ||
-      document.getElementById('hcPacienteResumen')?.textContent
-    ) || 'Paciente';
+
+    /*
+      El nombre visible de Documentos sale únicamente del objeto canónico de
+      la atención ya validada. Nunca se toma del DOM ni de otro módulo.
+      Si falta el nombre, se muestra una referencia segura por id_paciente.
+    */
+    const nombre = txt(a.nombre_paciente || a.paciente_nombre);
+    if(nombre) return nombre;
+
+    return ctx?.idPaciente ? `Paciente ${ctx.idPaciente}` : 'Paciente';
   }
 
   function nombreCompletoPersona(p){
@@ -499,6 +537,7 @@
     if(exacta) return exacta.key;
 
     if(/labor/.test(norm(v))) return 'LABORATORIO';
+    if(/patolog|anatomopat|histopat|biops/.test(norm(v))) return 'PATOLOGIA';
     if(/eco|imagen|radiol|tomograf|reson/.test(norm(v))) return 'ECOGRAFIA_IMAGEN';
     if(/foto/.test(norm(v))) return 'FOTOGRAFIA_CLINICA';
     return 'OTRO';
@@ -589,6 +628,8 @@
 .auro-doc-file-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .auro-doc-btn{border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:7px 9px;font-size:10.5px;font-weight:850;color:#374151;cursor:pointer}
 .auro-doc-btn.open{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
+.auro-doc-btn.download{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+.auro-doc-btn.share{border-color:#ddd6fe;background:#f5f3ff;color:#6d28d9}
 .auro-doc-btn.danger{border-color:#fecdd3;background:#fff1f2;color:#9f1239}
 .auro-doc-btn:disabled{opacity:.45;cursor:not-allowed}
 .auro-doc-empty{padding:18px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
@@ -744,7 +785,7 @@
             <div class="auro-doc-card-head">
               <div>
                 <b>Archivos de esta atención</b>
-                <small>Se carga solo el índice. El archivo físico se abre únicamente cuando lo solicite.</small>
+                <small>Se carga solo el índice. El archivo físico se abre, descarga o comparte únicamente cuando lo solicite.</small>
               </div>
             </div>
             <div class="auro-doc-card-body">
@@ -871,7 +912,10 @@
   function renderContexto(){
     const ctx = state.contexto || contextoAtencion();
 
-    setText('auroDocPaciente', ctx.id ? nombrePaciente(ctx) : 'Sin atención seleccionada');
+    setText(
+      'auroDocPaciente',
+      ctx.id ? (ctx.valido === false ? 'Contexto clínico no válido' : nombrePaciente(ctx)) : 'Sin atención seleccionada'
+    );
     setText(
       'auroDocAtencion',
       ctx.id
@@ -890,6 +934,8 @@
 
       if(!ctx.id){
         estado.innerHTML = '<i class="bi bi-lock"></i> Sin atención';
+      }else if(ctx.valido === false){
+        estado.innerHTML = '<i class="bi bi-shield-exclamation"></i> Contexto bloqueado';
       }else if(ctx.bloqueada){
         estado.innerHTML = '<i class="bi bi-lock"></i> Atención bloqueada';
       }else if(ctx.finalizada){
@@ -900,8 +946,12 @@
     }
 
     document.querySelectorAll('[data-auro-doc-upload]').forEach(btn=>{
-      btn.disabled = !ctx.id || !ctx.editable || state.subiendo;
+      btn.disabled = !ctx.id || ctx.valido === false || !ctx.editable || state.subiendo;
     });
+
+    if(ctx.id && ctx.valido === false){
+      setMsg(ctx.motivoInvalido || 'El contexto clínico no es seguro. Documentos quedó bloqueado.','error');
+    }
 
     renderTodasLasColas();
   }
@@ -987,6 +1037,18 @@
               <i class="bi bi-box-arrow-up-right me-1"></i> Ver
             </button>
             <button type="button"
+              class="auro-doc-btn download"
+              data-auro-doc-download="${esc(id)}"
+              ${url ? '' : 'disabled'}>
+              <i class="bi bi-download me-1"></i> Descargar
+            </button>
+            <button type="button"
+              class="auro-doc-btn share"
+              data-auro-doc-share="${esc(id)}"
+              ${url ? '' : 'disabled'}>
+              <i class="bi bi-share me-1"></i> Compartir
+            </button>
+            <button type="button"
               class="auro-doc-btn danger"
               data-auro-doc-anular="${esc(id)}"
               ${state.contexto?.editable ? '' : 'disabled'}>
@@ -1057,6 +1119,14 @@
       return [];
     }
 
+    if(ctx.valido === false){
+      state.idAtencion = ctx.id;
+      state.registros = [];
+      renderLista();
+      setMsg(ctx.motivoInvalido || 'Contexto clínico inconsistente. Documentos fue bloqueado por seguridad.','error');
+      return [];
+    }
+
     if(state.cargando) return state.registros;
 
     /*
@@ -1077,8 +1147,14 @@
 
       if(token !== state.tokenCarga) return state.registros;
 
+      /*
+        BLINDAJE V1.4:
+        un registro sin id_atencion NO se atribuye por proximidad ni por la
+        atención actualmente visible. Solo entra al índice si demuestra
+        pertenencia exacta a la id_atencion solicitada.
+      */
       state.registros = arr(data).filter(r=>
-        !txt(r.id_atencion) || txt(r.id_atencion) === ctx.id
+        txt(r.id_atencion) && txt(r.id_atencion) === ctx.id
       );
       state.idAtencion = ctx.id;
 
@@ -1276,7 +1352,27 @@
   }
 
   async function construirPayload(preparado, categoria){
-    const ctx = state.contexto || contextoAtencion();
+    /*
+      Última barrera antes de persistir: reconstruir el contexto canónico
+      en este mismo instante. Un state antiguo no puede autorizar la subida.
+    */
+    const ctx = contextoAtencion();
+    const previo = state.contexto;
+
+    if(!ctx.id || ctx.valido === false){
+      throw new Error(ctx.motivoInvalido || 'El contexto clínico dejó de ser válido antes de guardar.');
+    }
+
+    if(previo?.id && (
+      previo.id !== ctx.id ||
+      conflictoId(previo.idPaciente,ctx.idPaciente) ||
+      conflictoId(previo.idHistoria,ctx.idHistoria)
+    )){
+      throw new Error('Cambió la identidad clínica antes de guardar el documento.');
+    }
+
+    state.contexto = ctx;
+
     const base64 = await blobToBase64(preparado.blob);
     const sha256 = await sha256Blob(preparado.blob);
 
@@ -1378,6 +1474,12 @@
       return;
     }
 
+    if(ctx.valido === false){
+      setMsg(ctx.motivoInvalido || 'Contexto clínico inconsistente. No se permite seleccionar documentos.','error');
+      limpiarCola(categoria);
+      return;
+    }
+
     if(!ctx.editable){
       setMsg('La atención seleccionada está anulada, cancelada o archivada.','error');
       limpiarCola(categoria);
@@ -1438,6 +1540,12 @@
     if(!ctx.id){
       limpiarCola(categoria);
       setMsg('La atención dejó de estar seleccionada. La selección pendiente fue limpiada por seguridad.','error');
+      return;
+    }
+
+    if(ctx.valido === false){
+      limpiarCola(categoria);
+      setMsg(ctx.motivoInvalido || 'Contexto clínico inconsistente. La carga fue bloqueada.','error');
       return;
     }
 
@@ -1540,11 +1648,24 @@
   }
 
 
-  function abrirDocumento(idDocumento){
+  function registroSeguro(idDocumento){
+    const ctx = contextoAtencion();
     const r = state.registros.find(x=>txt(x.id_documento) === txt(idDocumento));
-    if(!r) return;
 
-    const url = txt(r.archivo_url);
+    if(!r || !ctx.id || ctx.valido === false) return null;
+    if(!txt(r.id_atencion) || txt(r.id_atencion) !== ctx.id) return null;
+
+    return {ctx,r};
+  }
+
+  function abrirDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: el documento no pertenece de forma inequívoca a la atención activa.','error');
+      return;
+    }
+
+    const url = txt(seguro.r.archivo_url);
     if(!url){
       setMsg('Este registro no tiene un enlace de Drive disponible.','error');
       return;
@@ -1556,6 +1677,128 @@
     }
   }
 
+  function nombreArchivoSeguro(r){
+    return txt(r?.nombre_documento || 'documento-clinico')
+      .replace(/[\/:*?"<>|]+/g,'_')
+      .slice(0,180) || 'documento-clinico';
+  }
+
+  function urlDescargaRegistro(r){
+    const idDrive = txt(r?.drive_file_id);
+    if(idDrive){
+      return 'https://drive.google.com/uc?export=download&id='+encodeURIComponent(idDrive);
+    }
+    return txt(r?.archivo_url);
+  }
+
+  async function obtenerBlobDocumento(r){
+    const url = txt(r?.archivo_url);
+    if(!url) throw new Error('Documento sin URL disponible.');
+
+    const resp = await fetch(url,{method:'GET',cache:'no-store',credentials:'omit'});
+    if(!resp.ok) throw new Error('No se pudo obtener el archivo desde Drive.');
+    return await resp.blob();
+  }
+
+  async function descargarDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: no se descargará un documento fuera de la atención activa.','error');
+      return;
+    }
+
+    const {r} = seguro;
+    const nombre = nombreArchivoSeguro(r);
+
+    try{
+      const blob = await obtenerBlobDocumento(r);
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = nombre;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(objectUrl),1500);
+      setMsg('Descarga iniciada.','ok');
+      return;
+    }catch(error){
+      /*
+        Google Drive puede impedir fetch cross-origin según permisos.
+        En ese caso se usa su URL de descarga bajo demanda sin alterar datos.
+      */
+      const url = urlDescargaRegistro(r);
+      if(!url){
+        setMsg('No existe una URL disponible para descargar este documento.','error');
+        return;
+      }
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.download = nombre;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setMsg('Se abrió la descarga mediante Google Drive.','info');
+    }
+  }
+
+  async function compartirDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: no se compartirá un documento fuera de la atención activa.','error');
+      return;
+    }
+
+    const {r} = seguro;
+    const url = txt(r.archivo_url);
+    if(!url){
+      setMsg('Este documento no tiene un enlace disponible para compartir.','error');
+      return;
+    }
+
+    const nombre = nombreArchivoSeguro(r);
+
+    if(navigator.share){
+      try{
+        const blob = await obtenerBlobDocumento(r);
+        const file = new File([blob],nombre,{type:blob.type || txt(r.mime_type) || 'application/octet-stream'});
+        const data = {title:nombre,text:'Documento clínico AUROSANAX',files:[file]};
+
+        if(!navigator.canShare || navigator.canShare({files:[file]})){
+          await navigator.share(data);
+          return;
+        }
+      }catch(error){
+        if(error?.name === 'AbortError') return;
+      }
+
+      try{
+        await navigator.share({
+          title:nombre,
+          text:'Documento clínico AUROSANAX',
+          url
+        });
+        return;
+      }catch(error){
+        if(error?.name === 'AbortError') return;
+      }
+    }
+
+    try{
+      if(navigator.clipboard?.writeText){
+        await navigator.clipboard.writeText(url);
+        setMsg('El enlace del documento fue copiado. Puede compartirlo por WhatsApp Business o correo.','ok');
+        return;
+      }
+    }catch(e){}
+
+    setMsg('Este navegador no ofrece compartir directamente. Use Ver o Descargar para enviar el documento.','warn');
+  }
+
   async function anularDocumento(idDocumento){
     if(state.subiendo) return;
 
@@ -1564,8 +1807,8 @@
 
     if(!r || !ctx.id) return;
 
-    if(txt(r.id_atencion) && txt(r.id_atencion) !== ctx.id){
-      setMsg('Protección de seguridad: el documento no pertenece a la atención activa.','error');
+    if(ctx.valido === false || !txt(r.id_atencion) || txt(r.id_atencion) !== ctx.id){
+      setMsg('Protección de seguridad: el documento no pertenece de forma inequívoca a la atención activa.','error');
       return;
     }
 
@@ -1651,6 +1894,24 @@
         return;
       }
 
+      const descargar = e.target.closest('[data-auro-doc-download]');
+      if(descargar){
+        descargarDocumento(descargar.dataset.auroDocDownload).catch(error=>{
+          console.error(MODULO+':',error);
+          setMsg('No se pudo descargar: '+txt(error.message || error),'error');
+        });
+        return;
+      }
+
+      const compartir = e.target.closest('[data-auro-doc-share]');
+      if(compartir){
+        compartirDocumento(compartir.dataset.auroDocShare).catch(error=>{
+          console.error(MODULO+':',error);
+          setMsg('No se pudo compartir: '+txt(error.message || error),'error');
+        });
+        return;
+      }
+
       const anular = e.target.closest('[data-auro-doc-anular]');
       if(anular){
         anularDocumento(anular.dataset.auroDocAnular);
@@ -1700,19 +1961,33 @@
   }
 
   function onAtencionCambio(){
-    const nuevoId = idAtencionActiva();
+    const nuevoContexto = contextoAtencion();
+    const nuevoId = txt(nuevoContexto.id);
+    const anterior = state.contexto || {};
 
-    if(nuevoId !== state.idAtencion){
+    /*
+      No basta comparar id_atencion: si por una anomalía residual la misma
+      id aparece asociada a otro paciente/historia, se trata como CAMBIO DE
+      CONTEXTO y se invalidan colas/cargas visuales igualmente.
+    */
+    const cambioContexto = (
+      nuevoId !== state.idAtencion ||
+      conflictoId(anterior.idPaciente,nuevoContexto.idPaciente) ||
+      conflictoId(anterior.idHistoria,nuevoContexto.idHistoria) ||
+      (anterior.id && anterior.valido !== false && nuevoContexto.valido === false)
+    );
+
+    if(cambioContexto){
       const teniaPendientes = CATEGORIAS.some(c=>colaCategoria(c.key).files.length > 0);
 
       state.tokenCarga++;
       state.idAtencion = nuevoId;
       state.registros = [];
-      state.contexto = contextoAtencion();
+      state.contexto = nuevoContexto;
 
       /*
         Nunca arrastrar archivos seleccionados de una consulta/paciente
-        hacia otra atención.
+        hacia otra atención o hacia un contexto clínico contradictorio.
       */
       limpiarTodasLasColas();
 
@@ -1733,7 +2008,7 @@
 
         if(teniaPendientes){
           setMsg(
-            'Cambió la atención. Se limpiaron los archivos pendientes para evitar asociarlos a otra consulta.',
+            'Cambió el contexto clínico. Se limpiaron los archivos pendientes para evitar asociarlos a otra consulta.',
             'info'
           );
         }
@@ -1743,7 +2018,7 @@
         setTimeout(()=>cargar(true),60);
       }
     }else if(state.montado){
-      state.contexto = contextoAtencion();
+      state.contexto = nuevoContexto;
       renderContexto();
     }
   }
@@ -1794,6 +2069,8 @@
     limpiarCola,
     limpiarTodasLasColas,
     abrir:abrirDocumento,
+    descargar:descargarDocumento,
+    compartir:compartirDocumento,
     anular:anularDocumento,
     estado:state,
     limites:LIMITES,
