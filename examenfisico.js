@@ -871,16 +871,283 @@ if (typeof hcDiagnosticosSeleccionados === 'undefined') {
 function normalizarDxTexto(valor){
   return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
 }
+
+/* ==========================================================
+   AUROSANAX CIE-10 VISUAL + CATÁLOGO MAESTRO 2026-09-07
+   ----------------------------------------------------------
+   ALCANCE QUIRÚRGICO Y ANTIRREGRESIVO:
+   - Conserva el código compacto interno usado por el ERP (ej. N870).
+   - Muestra al profesional el alias oficial con punto cuando corresponde
+     (ej. N87.0), sin migrar ni reescribir datos históricos.
+   - Lee el catálogo maestro ACTIVO por GET y usa especialidad, categoría,
+     subcategoría y palabras clave solo para búsqueda/organización visual.
+   - Mantiene el catálogo local histórico como fallback si la API no responde.
+   - No modifica guardado, id_atencion, id_diagnostico, protocolos, Plan,
+     Recetas, Apps Script ni Google Sheets.
+   ========================================================== */
+window.auroDxCatalogoMaestro = Array.isArray(window.auroDxCatalogoMaestro)
+  ? window.auroDxCatalogoMaestro
+  : [];
+window.auroDxCatalogoMaestroCargado = window.auroDxCatalogoMaestroCargado === true;
+window.auroDxCatalogoMaestroPromesa = window.auroDxCatalogoMaestroPromesa || null;
+
+function auroCie10Compacto(valor){
+  return String(valor || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+
+function auroExtraerAliasCie10Visual(registro){
+  const r = registro || {};
+  const compacto = auroCie10Compacto(r.codigo_cie10 || r.codigo || r.cie10 || '');
+  const candidatos = [
+    r.codigo_cie10_visual,
+    r.codigo_oficial,
+    r.alias_cie10,
+    r.palabras_clave
+  ].filter(Boolean).join(' ');
+
+  const encontrados = String(candidatos || '').match(/\b[A-Z][0-9]{2}(?:\.[0-9A-Z]{1,2})?\b/gi) || [];
+  const alias = encontrados.find(item => auroCie10Compacto(item) === compacto);
+  return alias ? String(alias).toUpperCase() : '';
+}
+
+function auroFormatearCie10Visual(valor, registro){
+  const compacto = auroCie10Compacto(valor);
+  if(!compacto) return '';
+
+  const aliasRegistro = auroExtraerAliasCie10Visual(
+    registro || window.auroDxCatalogoMaestro.find(item =>
+      auroCie10Compacto(item.codigo_cie10 || item.codigo) === compacto
+    )
+  );
+  if(aliasRegistro) return aliasRegistro;
+
+  /* Compatibilidad histórica conocida: N720 representa la categoría oficial N72. */
+  if(compacto === 'N720') return 'N72';
+
+  /* Los códigos CIE de 3 caracteres permanecen sin punto. */
+  if(/^[A-Z][0-9]{2}$/.test(compacto)) return compacto;
+
+  /* Fallback visual seguro para subcategorías de 4+ caracteres. */
+  if(/^[A-Z][0-9]{3,4}$/.test(compacto)){
+    return compacto.slice(0,3) + '.' + compacto.slice(3);
+  }
+
+  return compacto;
+}
+window.auroFormatearCie10Visual = auroFormatearCie10Visual;
+
+function auroDxApiUrlCatalogo(){
+  try{
+    if(typeof API_URL !== 'undefined' && API_URL) return String(API_URL).trim();
+  }catch(_e){}
+  try{
+    if(window.API_URL) return String(window.API_URL).trim();
+  }catch(_e){}
+  const input = document.getElementById('appsScriptUrl');
+  return input ? String(input.value || '').trim() : '';
+}
+
+function auroDxNormalizarRegistroCatalogo(raw){
+  raw = raw || {};
+  const codigo = auroCie10Compacto(raw.codigo_cie10 || raw.codigo || raw.cie10 || '');
+  return {
+    codigo,
+    nombre: String(raw.descripcion || raw.nombre || raw.diagnostico || '').trim(),
+    especialidad: String(raw.especialidad || '').trim(),
+    categoria: String(raw.categoria || '').trim(),
+    subcategoria: String(raw.subcategoria || '').trim(),
+    palabras_clave: String(raw.palabras_clave || '').trim(),
+    codigo_visual: auroFormatearCie10Visual(codigo, raw),
+    raw
+  };
+}
+
+async function auroDxCargarCatalogoMaestro(){
+  if(window.auroDxCatalogoMaestroCargado && window.auroDxCatalogoMaestro.length){
+    return window.auroDxCatalogoMaestro;
+  }
+  if(window.auroDxCatalogoMaestroPromesa) return window.auroDxCatalogoMaestroPromesa;
+
+  window.auroDxCatalogoMaestroPromesa = (async function(){
+    const API = auroDxApiUrlCatalogo();
+    if(!API) return [];
+
+    try{
+      const url = API + '?accion=listarCatalogoDiagnosticosActivos&_=' + Date.now();
+      const res = await fetch(url, {method:'GET', cache:'no-store'});
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const lista = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.data) ? data.data : (Array.isArray(data?.registros) ? data.registros : []));
+
+      const normalizados = lista
+        .map(auroDxNormalizarRegistroCatalogo)
+        .filter(item => item.codigo && item.nombre);
+
+      if(normalizados.length){
+        window.auroDxCatalogoMaestro = normalizados;
+        window.auroDxCatalogoMaestroCargado = true;
+        auroDxAsegurarFiltrosCatalogo();
+        auroDxPoblarCategorias();
+      }
+
+      return normalizados;
+    }catch(error){
+      console.warn('AUROSANAX EXAMEN: catálogo maestro CIE-10 no disponible; se conserva fallback local.', error);
+      return [];
+    }finally{
+      window.auroDxCatalogoMaestroPromesa = null;
+    }
+  })();
+
+  return window.auroDxCatalogoMaestroPromesa;
+}
+
+function auroDxAsegurarFiltrosCatalogo(){
+  if(document.getElementById('auroDxFiltrosCatalogo')) return true;
+
+  const body = document.getElementById('hcDxResultadosBody');
+  const tabla = body ? body.closest('table') : null;
+  const ancla = tabla || document.getElementById('hcDiagnosticoCieGrupo');
+  if(!ancla || !ancla.parentNode) return false;
+
+  const box = document.createElement('div');
+  box.id = 'auroDxFiltrosCatalogo';
+  box.className = 'row g-2 mb-2';
+  box.innerHTML = `
+    <div class="col-12 col-md-6">
+      <label class="form-label mb-1" for="auroDxCategoriaFiltro">Categoría</label>
+      <select id="auroDxCategoriaFiltro" class="form-select">
+        <option value="">Todas las categorías</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label mb-1" for="auroDxSubcategoriaFiltro">Subcategoría</label>
+      <select id="auroDxSubcategoriaFiltro" class="form-select">
+        <option value="">Todas las subcategorías</option>
+      </select>
+    </div>
+    <div class="col-12">
+      <small class="text-muted">Filtros de organización clínica AUROSANAX. El CIE-10 continúa siendo el diagnóstico oficial seleccionado.</small>
+    </div>
+  `;
+
+  ancla.parentNode.insertBefore(box, ancla);
+
+  const categoria = box.querySelector('#auroDxCategoriaFiltro');
+  const subcategoria = box.querySelector('#auroDxSubcategoriaFiltro');
+  categoria?.addEventListener('change', function(){
+    auroDxPoblarSubcategorias(this.value);
+    buscarDiagnosticoCie10();
+  });
+  subcategoria?.addEventListener('change', buscarDiagnosticoCie10);
+
+  return true;
+}
+
+function auroDxPoblarCategorias(){
+  const select = document.getElementById('auroDxCategoriaFiltro');
+  if(!select) return;
+  const actual = select.value;
+  const categorias = [...new Set(
+    (window.auroDxCatalogoMaestro || []).map(x => x.categoria).filter(Boolean)
+  )].sort((a,b) => a.localeCompare(b,'es'));
+
+  select.innerHTML = '<option value="">Todas las categorías</option>' +
+    categorias.map(c => `<option value="${auroEscapeHtml(c)}">${auroEscapeHtml(c)}</option>`).join('');
+  if(categorias.includes(actual)) select.value = actual;
+  auroDxPoblarSubcategorias(select.value);
+}
+
+function auroDxPoblarSubcategorias(categoria){
+  const select = document.getElementById('auroDxSubcategoriaFiltro');
+  if(!select) return;
+  const actual = select.value;
+  const catN = normalizarDxTexto(categoria);
+  const subcategorias = [...new Set(
+    (window.auroDxCatalogoMaestro || [])
+      .filter(x => !catN || normalizarDxTexto(x.categoria) === catN)
+      .map(x => x.subcategoria)
+      .filter(Boolean)
+  )].sort((a,b) => a.localeCompare(b,'es'));
+
+  select.innerHTML = '<option value="">Todas las subcategorías</option>' +
+    subcategorias.map(s => `<option value="${auroEscapeHtml(s)}">${auroEscapeHtml(s)}</option>`).join('');
+  if(subcategorias.includes(actual)) select.value = actual;
+}
+
+function auroDxFuenteBusqueda(){
+  if(window.auroDxCatalogoMaestroCargado && window.auroDxCatalogoMaestro.length){
+    return window.auroDxCatalogoMaestro;
+  }
+  return (window.hcCie10CatalogoBase || []).map(d => ({
+    codigo: auroCie10Compacto(d.codigo),
+    nombre: String(d.nombre || '').trim(),
+    especialidad:'', categoria:'', subcategoria:'', palabras_clave:'',
+    codigo_visual: auroFormatearCie10Visual(d.codigo, d),
+    raw:d
+  }));
+}
+
+function auroDxRenderResultados(){
+  const body = document.getElementById('hcDxResultadosBody');
+  if(!body) return;
+  body.innerHTML = hcDxResultadosActuales.map((d,i) => `
+    <tr>
+      <td class="diagnostico-cie-code">${auroEscapeHtml(d.codigo_visual || auroFormatearCie10Visual(d.codigo,d.raw))}</td>
+      <td>
+        ${auroEscapeHtml(String(d.nombre || '').toUpperCase())}
+        ${(d.categoria || d.subcategoria) ? `<div class="small text-muted mt-1">${auroEscapeHtml([d.categoria,d.subcategoria].filter(Boolean).join(' · '))}</div>` : ''}
+      </td>
+      <td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoCie10DesdeResultado(${i})">Agregar</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
+}
+
 function buscarDiagnosticoCie10(){
   const codigo = normalizarDxTexto(getValueIfExists('hcDxCodigoBuscar'));
   const nombre = normalizarDxTexto(getValueIfExists('hcDxNombreBuscar'));
+  const categoria = normalizarDxTexto(document.getElementById('auroDxCategoriaFiltro')?.value || '');
+  const subcategoria = normalizarDxTexto(document.getElementById('auroDxSubcategoriaFiltro')?.value || '');
   const body = document.getElementById('hcDxResultadosBody');
   if(!body) return;
-  if(!codigo && !nombre){hcDxResultadosActuales=[];body.innerHTML='<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';return;}
-  hcDxResultadosActuales = window.hcCie10CatalogoBase.filter(d => (!codigo || normalizarDxTexto(d.codigo).includes(codigo)) && (!nombre || normalizarDxTexto(d.nombre).includes(nombre))).slice(0,12);
-  body.innerHTML = hcDxResultadosActuales.map((d,i)=>`<tr><td class="diagnostico-cie-code">${d.codigo}</td><td>${String(d.nombre||'').toUpperCase()}</td><td><button type="button" class="diagnostico-add" onclick="agregarDiagnosticoCie10DesdeResultado(${i})">Agregar</button></td></tr>`).join('') || '<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
+
+  if(!window.auroDxCatalogoMaestroCargado && !window.auroDxCatalogoMaestroPromesa){
+    auroDxCargarCatalogoMaestro().then(function(lista){
+      if(lista && lista.length) buscarDiagnosticoCie10();
+    });
+  }
+
+  if(!codigo && !nombre && !categoria && !subcategoria){
+    hcDxResultadosActuales=[];
+    body.innerHTML='<tr><td colspan="3" class="diagnostico-empty">Sin Registros</td></tr>';
+    return;
+  }
+
+  hcDxResultadosActuales = auroDxFuenteBusqueda().filter(d => {
+    const contenidoCodigo = normalizarDxTexto((d.codigo || '') + ' ' + (d.codigo_visual || ''));
+    const contenidoNombre = normalizarDxTexto([
+      d.nombre,
+      d.especialidad,
+      d.categoria,
+      d.subcategoria,
+      d.palabras_clave
+    ].filter(Boolean).join(' '));
+
+    return (!codigo || contenidoCodigo.includes(codigo)) &&
+           (!nombre || contenidoNombre.includes(nombre)) &&
+           (!categoria || normalizarDxTexto(d.categoria) === categoria) &&
+           (!subcategoria || normalizarDxTexto(d.subcategoria) === subcategoria);
+  }).slice(0,24);
+
+  auroDxRenderResultados();
 }
-function agregarDiagnosticoCie10DesdeResultado(index){const d=hcDxResultadosActuales[index];if(d)agregarDiagnosticoCie10(d.codigo,d.nombre);}
+
+function agregarDiagnosticoCie10DesdeResultado(index){
+  const d=hcDxResultadosActuales[index];
+  if(d) agregarDiagnosticoCie10(d.codigo,d.nombre);
+}
 function agregarDiagnosticoCie10Manual(){const codigo=getValueIfExists('hcDxCodigoBuscar').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');const nombre=getValueIfExists('hcDxNombreBuscar').trim();if(!codigo||!nombre){alert('Ingrese código CIE-10 y nombre de diagnóstico, o seleccione un resultado de la búsqueda.');return;}agregarDiagnosticoCie10(codigo,nombre);}
 
 /* ==========================================================
@@ -916,6 +1183,19 @@ function auroLimpiarBusquedaDiagnosticoCie10(enfocarNombre){
   return true;
 }
 window.auroLimpiarBusquedaDiagnosticoCie10 = auroLimpiarBusquedaDiagnosticoCie10;
+
+function auroDxInicializarCatalogoMaestro(){
+  auroDxAsegurarFiltrosCatalogo();
+  auroDxCargarCatalogoMaestro().then(function(){
+    auroDxAsegurarFiltrosCatalogo();
+    auroDxPoblarCategorias();
+  });
+}
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', auroDxInicializarCatalogoMaestro);
+}else{
+  auroDxInicializarCatalogoMaestro();
+}
 
 function agregarDiagnosticoCie10(codigo,nombre){
   codigo = String(codigo || '').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -963,7 +1243,7 @@ function agregarDiagnosticoCie10(codigo,nombre){
 function eliminarDiagnosticoCie10(index){hcDiagnosticosSeleccionados.splice(index,1);if(hcDiagnosticosSeleccionados.length&&!hcDiagnosticosSeleccionados.some(d=>d.principal))hcDiagnosticosSeleccionados[0].principal=true;renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
 function marcarDiagnosticoPrincipal(index){hcDiagnosticosSeleccionados.forEach((d,i)=>d.principal=i===index);renderDiagnosticosSeleccionados();sincronizarDiagnosticosConCamposHistoria();}
 function cambiarTipoDiagnostico(index,valor){if(hcDiagnosticosSeleccionados[index])hcDiagnosticosSeleccionados[index].tipo=valor;sincronizarDiagnosticosConCamposHistoria();}
-function renderDiagnosticosSeleccionados(){const body=document.getElementById('hcDxSeleccionadosBody');if(!body)return;if(!hcDiagnosticosSeleccionados.length){body.innerHTML='<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';return;}body.innerHTML=hcDiagnosticosSeleccionados.map((d,i)=>`<tr><td><span class="diagnostico-cie-code">${d.codigo}</span> &nbsp; ${String(d.nombre||'').toUpperCase()}</td><td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal?'checked':''} onchange="marcarDiagnosticoPrincipal(${i})"></td><td><select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)"><option ${d.tipo==='Presuntivo'?'selected':''}>Presuntivo</option><option ${d.tipo==='Definitivo'?'selected':''}>Definitivo</option></select></td><td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');}
+function renderDiagnosticosSeleccionados(){const body=document.getElementById('hcDxSeleccionadosBody');if(!body)return;if(!hcDiagnosticosSeleccionados.length){body.innerHTML='<tr><td colspan="4" class="diagnostico-empty">Sin diagnósticos agregados</td></tr>';return;}body.innerHTML=hcDiagnosticosSeleccionados.map((d,i)=>`<tr><td><span class="diagnostico-cie-code">${auroEscapeHtml(auroFormatearCie10Visual(d.codigo))}</span> &nbsp; ${auroEscapeHtml(String(d.nombre||'').toUpperCase())}</td><td class="text-center"><input class="diagnostico-radio" type="radio" name="hcDxPrincipal" ${d.principal?'checked':''} onchange="marcarDiagnosticoPrincipal(${i})"></td><td><select class="form-select diagnostico-tipo-select" onchange="cambiarTipoDiagnostico(${i}, this.value)"><option ${d.tipo==='Presuntivo'?'selected':''}>Presuntivo</option><option ${d.tipo==='Definitivo'?'selected':''}>Definitivo</option></select></td><td class="text-center"><button type="button" class="diagnostico-delete" onclick="eliminarDiagnosticoCie10(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');}
 function sincronizarDiagnosticosConCamposHistoria(){const principal=hcDiagnosticosSeleccionados.find(d=>d.principal)||hcDiagnosticosSeleccionados[0];const secundarios=hcDiagnosticosSeleccionados.filter(d=>!principal||d.codigo!==principal.codigo);if(principal){setValueIfExists('hcCie10Principal',principal.codigo);setValueIfExists('hcDiagnosticoPrincipal',principal.nombre);}else{setValueIfExists('hcCie10Principal','');setValueIfExists('hcDiagnosticoPrincipal','');}setValueIfExists('hcCie10Secundario',secundarios.map(d=>d.codigo).join('; '));setValueIfExists('hcDiagnosticoSecundario',secundarios.map(d=>`${d.codigo} ${d.nombre} (${d.tipo})`).join('; '));}
 function recopilarDiagnosticosCie10(){sincronizarDiagnosticosConCamposHistoria();return hcDiagnosticosSeleccionados.map(d=>`${d.principal?'Principal':'Secundario'}: ${d.codigo} ${d.nombre} (${d.tipo})`).join(' || ');}
 
