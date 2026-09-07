@@ -1677,6 +1677,32 @@ function auroPlanNormalizarCodigoCie(valor){
         .toUpperCase();
 }
 
+/* ============================================================
+   AUROSANAX PLAN 35 - CIE-10 VISUAL ANTIRREGRESIVO
+   ------------------------------------------------------------
+   CAPA EXCLUSIVAMENTE DE PRESENTACIÓN:
+   - Conserva el código compacto interno para protocolos, comparaciones,
+     trazabilidad, guardado, Plan→Receta y persistencia.
+   - Muestra subcategorías CIE-10 con punto: N760 -> N76.0.
+   - Conserva categorías válidas de 3 caracteres: I10, I48, I64, etc.
+   - Compatibilidad histórica AUROSANAX: N720 se presenta como N72.
+   - No modifica id_atencion, id_diagnostico, id_protocolo, Sheets,
+     Apps Script, Recetas, eventos, selección ni contratos clínicos.
+============================================================ */
+function auroPlanCodigoCieVisual(valor){
+    const compacto = auroPlanNormalizarCodigoCie(valor);
+    if(!compacto) return '';
+
+    /* Compatibilidad histórica protegida: N720 representa la categoría oficial N72. */
+    if(compacto === 'N720') return 'N72';
+
+    /* Categorías CIE-10 válidas de tres caracteres no reciben punto artificial. */
+    if(compacto.length <= 3) return compacto;
+
+    /* Subcategorías: punto después de los tres primeros caracteres. */
+    return compacto.slice(0, 3) + '.' + compacto.slice(3);
+}
+
 function auroPlanTextoSugerenciaMedicamento(item){
     if(typeof item === 'string'){
         return String(item || '').trim();
@@ -2154,7 +2180,7 @@ function auroPlanRenderSugerenciasDiagnosticas(){
                 <div class="auro-plan-dx-card-top">
                   <div>
                     <div class="auro-plan-dx-code-line">
-                      <span class="auro-plan-dx-code">${escapeHtmlPlan(g.codigo || 'S/C')}</span>
+                      <span class="auro-plan-dx-code">${escapeHtmlPlan(auroPlanCodigoCieVisual(g.codigo) || 'S/C')}</span>
                       <span class="auro-plan-dx-name">${escapeHtmlPlan(g.descripcion || 'Sin descripción')}</span>
                     </div>
                   </div>
