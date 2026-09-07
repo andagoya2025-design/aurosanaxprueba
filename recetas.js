@@ -400,6 +400,39 @@
     return String(codigo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   }
 
+  /* =====================================================
+     AUROSANAX RECETAS 3.10 - CIE-10 VISUAL ANTIRREGRESIVO
+     ---------------------------------------------------------
+     Capa EXCLUSIVAMENTE de presentación:
+     - Conserva el código canónico/compacto para comparación y persistencia.
+     - Muestra subcategorías CIE-10 con punto: N760 -> N76.0.
+     - Conserva categorías válidas de 3 caracteres: I10, I48, I64, etc.
+     - Compatibilidad histórica AUROSANAX: N720 se presenta como N72.
+     - No modifica id_atencion, diagnósticos, Plan, backend, Sheets,
+       Apps Script, guardado, edición, PDF ni contratos clínicos.
+  ===================================================== */
+  function auroRecetaCodigoCieVisual(codigo){
+    const compacto = auroRecetaCodigoNormalizado(codigo);
+    if(!compacto) return '';
+
+    if(compacto === 'N720') return 'N72';
+    if(compacto.length <= 3) return compacto;
+
+    return compacto.slice(0, 3) + '.' + compacto.slice(3);
+  }
+
+  function auroRecetaTextoDiagnosticoVisual(texto){
+    const raw = String(texto || '').trim();
+    if(!raw) return '';
+
+    return raw.replace(
+      /^([A-Za-z][0-9]{2}(?:\.?[0-9A-Za-z]+)?)(\s*[-–:]\s*)/,
+      function(_, codigo, separador){
+        return auroRecetaCodigoCieVisual(codigo) + separador;
+      }
+    );
+  }
+
   function auroRecetaDiagnosticoGenerico(txt){
     const n = recetaNormalizarPlano(txt);
 
@@ -2027,12 +2060,12 @@
     const lista = auroRecetaDiagnosticosNormalizados(r?.diagnosticos || []);
 
     if(!lista.length){
-      return `<b>${safe(r?.diagnostico || '—')}</b>`;
+      return `<b>${safe(auroRecetaTextoDiagnosticoVisual(r?.diagnostico || '—'))}</b>`;
     }
 
     return `<div class="auro-rx-diagnosticos-lista">${lista.map(function(dx){
       return `<div class="auro-rx-diagnostico-linea ${dx.principal ? 'principal' : ''}">
-        <b>${safe(dx.texto || '—')}</b>
+        <b>${safe(auroRecetaTextoDiagnosticoVisual(dx.texto || '—'))}</b>
       </div>`;
     }).join('')}</div>`;
   }
@@ -2051,10 +2084,10 @@
 
   function auroRecetaDiagnosticoCabeceraPacienteHTML(r){
     const lista = auroRecetaDiagnosticosListaImpresion(r);
-    if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
+    if(!lista.length) return `<b>${safe(auroRecetaTextoDiagnosticoVisual(r?.diagnostico || '—'))}</b>`;
 
     const principal = lista.find(dx => dx.principal) || lista[0];
-    return `<b>${safe(principal?.texto || r?.diagnostico || '—')}</b>`;
+    return `<b>${safe(auroRecetaTextoDiagnosticoVisual(principal?.texto || r?.diagnostico || '—'))}</b>`;
   }
 
   function auroRecetaTipoDiagnosticoVisual(valor){
@@ -2081,7 +2114,7 @@
       jerarquia = dx.principal ? 'Principal' : 'Asociado';
     }else{
       codigo = String(r?.cie10 || r?.diagnostico_cie10 || '').trim();
-      descripcion = String(r?.diagnostico || '').trim();
+      descripcion = auroRecetaTextoDiagnosticoVisual(r?.diagnostico || '');
     }
 
     if(!codigo && !descripcion) return '';
@@ -2090,7 +2123,7 @@
       <div class="auro-receta-section auro-rx-diagnostico-unico-section">
         <h4>Diagnóstico de la atención</h4>
         <div class="auro-rx-diagnostico-unico">
-          ${codigo ? `<strong>${safe(codigo)}</strong>` : ''}
+          ${codigo ? `<strong>${safe(auroRecetaCodigoCieVisual(codigo))}</strong>` : ''}
           ${jerarquia ? `<span class="auro-rx-dx-jerarquia">${safe(jerarquia)}</span>` : ''}
           ${tipo ? `<span class="auro-rx-dx-tipo ${recetaNormalizarPlano(tipo) === 'definitivo' ? 'definitivo' : ''}">${safe(tipo)}</span>` : ''}
           ${descripcion ? `<span class="auro-rx-diagnostico-unico-name">${safe(descripcion)}</span>` : ''}
@@ -2113,7 +2146,7 @@
             return `
               <div class="auro-rx-diagnostico-card ${dx.principal ? 'principal' : 'asociado'}">
                 <div class="auro-rx-diagnostico-card-head">
-                  <strong>${safe(dx.codigo || 'S/C')}</strong>
+                  <strong>${safe(auroRecetaCodigoCieVisual(dx.codigo) || 'S/C')}</strong>
                   <span class="auro-rx-dx-jerarquia">${dx.principal ? 'Principal' : 'Asociado'}</span>
                   ${tipo ? `<span class="auro-rx-dx-tipo ${recetaNormalizarPlano(tipo) === 'definitivo' ? 'definitivo' : ''}">${safe(tipo)}</span>` : ''}
                 </div>
@@ -4033,7 +4066,7 @@
           <div><span>Edad</span><b>${safe(edad)}</b></div><div><span>WhatsApp</span><b>${safe(telefono)}</b></div>
           <div><span>ID paciente</span><b>${safe(idPaciente)}</b></div><div><span>ID atención</span><b>${safe(idAtencion)}</b></div>
           <div><span>ID receta</span><b>${safe(idReceta)}</b></div><div><span>ID médico</span><b>${safe(idMedico)}</b></div>
-          <div><span>CIE-10</span><b>${safe(r.cie10 || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
+          <div><span>CIE-10</span><b>${safe(auroRecetaCodigoCieVisual(r.cie10 || r.diagnostico_cie10) || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
           <div style="grid-column:1/-1"><span>Diagnóstico</span>${diagnosticosRepresentacion}</div>`
       : `
           <div class="auro-rx-dato auro-rx-paciente"><span>Paciente</span><b>${safe(nombre)}</b></div>
@@ -5872,7 +5905,7 @@
         <td class="auro-receta-consulta-td"><span class="auro-receta-consulta-badge">${r.__consulta ? 'N.º ' + safe(r.__consulta) : '—'}</span></td>
         <td>${safe(pacienteCorto)}<br><small class="text-muted">${safe(r.__paciente_cedula || '')}</small></td>
         <td class="auro-receta-medico-cell"><b>${safe(r.__especialidad || '—')}</b><small>${safe(r.__medico_nombre || '—')}</small></td>
-        <td class="auro-receta-dx-cell"><b>${safe(r.diagnostico_cie10 || '—')}</b><small>${safe(diagnostico)}</small></td>
+        <td class="auro-receta-dx-cell"><b>${safe(auroRecetaCodigoCieVisual(r.diagnostico_cie10) || '—')}</b><small>${safe(auroRecetaTextoDiagnosticoVisual(diagnostico))}</small></td>
         <td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td>
         <td>
           <button type="button" class="btn-action primary auro-receta-actions-trigger" onclick="toggleAccionesReceta('${menuId}')"><i class="bi bi-three-dots"></i> Acciones</button>
@@ -5927,8 +5960,8 @@
           '<div class="small"><b>Consulta:</b> ' + (r.__consulta ? 'N.º ' + safe(r.__consulta) : '—') + '</div>' +
           '<div class="small"><b>Paciente:</b> ' + safe(pacienteCorto) + (r.__paciente_cedula ? '<br><span class="text-muted">' + safe(r.__paciente_cedula) + '</span>' : '') + '</div>' +
           '<div class="small" style="margin-top:6px;"><b>Especialidad / médico:</b><br><span style="font-weight:900;color:#111827;">' + safe(r.__especialidad || '—') + '</span><br><span class="text-muted">' + safe(r.__medico_nombre || '—') + '</span></div>' +
-          '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || '—') + '</div>' +
-          '<div class="small"><b>Diagnóstico:</b> ' + safe(diagnostico) + '</div>' +
+          '<div class="small"><b>CIE-10:</b> ' + safe(auroRecetaCodigoCieVisual(r.diagnostico_cie10) || '—') + '</div>' +
+          '<div class="small"><b>Diagnóstico:</b> ' + safe(auroRecetaTextoDiagnosticoVisual(diagnostico)) + '</div>' +
           '<div class="d-grid gap-2 mt-2">' +
             '<button type="button" class="btn-action soft" onclick="verRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-eye me-2"></i>Vista administrativa</button>' +
             '<button type="button" class="btn-action soft" onclick="editarRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-pencil-square me-2"></i>Editar receta</button>' +
