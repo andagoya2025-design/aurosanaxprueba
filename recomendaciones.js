@@ -566,6 +566,11 @@
               <div class="auro-rec-field">
                 <label for="auroRecGenerales">Recomendaciones para el paciente</label>
                 <textarea id="auroRecGenerales" style="min-height:180px" placeholder="Escriba las recomendaciones finales de esta atención."></textarea>
+                <div style="margin-top:10px;display:flex;justify-content:flex-end">
+                  <button type="button" class="auro-rec-btn" id="auroRecBtnAgregarPlan">
+                    <i class="bi bi-plus-circle me-1"></i> Añadir indicaciones del Plan
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -674,60 +679,19 @@
   }
 
   /*
-    AUROSANAX RECOMENDACIONES V1.1.2 — PLAN → RECOMENDACIONES
+    AUROSANAX RECOMENDACIONES V1.1.3 — PLAN → RECOMENDACIONES
     ----------------------------------------------------------
-    Precarga únicamente las indicaciones para paciente del Plan de la
-    MISMA id_atencion en Recomendaciones generales.
+    Integración quirúrgica y antirregresiva.
 
-    Blindajes:
-    - no existe Recomendación guardada;
-    - Recomendaciones generales sigue vacío;
-    - existe una atención válida en Recomendaciones;
-    - Plan y Recomendaciones pertenecen a la misma id_atencion;
-    - si llega desde aurosanax:plan-cargado, el evento también debe
-      corresponder a esa misma id_atencion.
-
-    La precarga queda editable. No sincroniza permanentemente y nunca
-    sobrescribe contenido ya existente.
+    REGLAS:
+    - La autoridad de contexto siempre es la MISMA id_atencion.
+    - Si Recomendaciones generales está vacío, puede precargarse desde Plan.
+    - Si ya existe texto, nunca se modifica automáticamente.
+    - "Añadir indicaciones del Plan" agrega solo líneas nuevas.
+    - Nada se persiste hasta que el profesional pulse Guardar recomendaciones.
+    - Nunca modifica Plan, Apps Script, Sheets ni otros módulos.
   */
-  function precargarIndicacionesDesdePlanSiVacio(idAtencionEsperada){
-    if(state.idRecomendacion) return false;
-    if(getValue('auroRecGenerales')) return false;
 
-    const ctx=state.contexto || contextoAtencion();
-    const idRec=txt(ctx?.id || state.idAtencion);
-    const idPlan=txt(window.planState?.atencionActual);
-    const idEsperada=txt(idAtencionEsperada);
-
-    if(!idRec || !idPlan) return false;
-    if(idRec !== idPlan) return false;
-    if(idEsperada && idEsperada !== idRec) return false;
-
-    const campoPlan=document.getElementById('hcIndicacionesPaciente');
-    const valor=txt(campoPlan?.value || campoPlan?.textContent);
-    if(!valor) return false;
-
-    setValue('auroRecGenerales',valor);
-    return true;
-  }
-
-  /*
-    AUROSANAX RECOMENDACIONES V1.1.3 — FALLBACK PLAN GUARDADO
-    -----------------------------------------------------------
-    Complementa la V1.1.2 únicamente cuando las indicaciones no están
-    disponibles en el Plan visible (caso frecuente al abrir atenciones
-    antiguas).
-
-    Usa la función pública existente del Plan para leer el registro de
-    la MISMA id_atencion. No modifica Plan, Apps Script ni Sheets.
-
-    Blindajes antirregresivos:
-    - nunca sobrescribe Recomendaciones guardadas;
-    - nunca sobrescribe texto ya escrito;
-    - revalida la id_atencion antes y después de la espera asíncrona;
-    - si la atención cambia durante la lectura, descarta el resultado;
-    - solo lee; no guarda ni sincroniza permanentemente.
-  */
   function valorClinicoPlanATexto(valor){
     if(valor === null || valor === undefined) return '';
 
@@ -764,57 +728,158 @@
       try{
         return valorClinicoPlanATexto(JSON.parse(raw));
       }catch(e){
-        /* Compatibilidad histórica: si no es JSON válido, conservar texto. */
+        /* Compatibilidad histórica: conservar texto si no es JSON válido. */
       }
     }
 
     return raw;
   }
 
-  async function precargarIndicacionesDesdePlanGuardadoSiVacio(idAtencionEsperada){
-    if(state.idRecomendacion) return false;
-    if(getValue('auroRecGenerales')) return false;
-    if(typeof window.buscarPlanClinicoPorAtencionDesdeSheets !== 'function') return false;
+  function lineasClinicasUnicas(texto){
+    const vistas=new Set();
+    const salida=[];
+
+    String(texto || '')
+      .split(/\r?\n+/)
+      .map(x=>txt(x))
+      .filter(Boolean)
+      .forEach(linea=>{
+        const clave=norm(linea);
+        if(!clave || vistas.has(clave)) return;
+        vistas.add(clave);
+        salida.push(linea);
+      });
+
+    return salida;
+  }
+
+  async function obtenerIndicacionesPlanMismaAtencion(idAtencionEsperada){
+    const idEsperada=txt(idAtencionEsperada);
+    if(!idEsperada) return '';
 
     const ctxInicial=state.contexto || contextoAtencion();
-    const idEsperada=txt(idAtencionEsperada);
     const idInicial=txt(ctxInicial?.id || state.idAtencion);
 
-    if(!idInicial) return false;
-    if(idEsperada && idEsperada !== idInicial) return false;
+    if(!idInicial || idInicial !== idEsperada) return '';
 
+    /*
+      Camino principal: función pública ya existente del Plan.
+      Respaldo: mismo endpoint GET ya existente, sin escritura.
+    */
     let plan=null;
 
     try{
-      plan=await window.buscarPlanClinicoPorAtencionDesdeSheets(idInicial);
-    }catch(e){
-      console.warn(MODULO+': no se pudo leer el Plan guardado para precargar indicaciones.',e);
-      return false;
+      if(typeof window.buscarPlanClinicoPorAtencionDesdeSheets === 'function'){
+        plan=await window.buscarPlanClinicoPorAtencionDesdeSheets(idEsperada);
+      }else{
+        plan=await apiGet('buscarPlanPorAtencion',{id_atencion:idEsperada});
+      }
+    }catch(error){
+      console.warn(MODULO+': no se pudieron leer indicaciones del Plan.',error);
+      return '';
     }
 
     /*
-      Revalidación fuerte después del await:
-      una respuesta tardía jamás puede escribir sobre otra atención.
+      Revalidación posterior al await:
+      una respuesta tardía jamás puede aplicarse sobre otra atención.
     */
     const ctxActual=state.contexto || contextoAtencion();
     const idActual=txt(ctxActual?.id || state.idAtencion);
-
-    if(!idActual || idActual !== idInicial) return false;
-    if(idEsperada && idEsperada !== idActual) return false;
-    if(state.idRecomendacion) return false;
-    if(getValue('auroRecGenerales')) return false;
-    if(!plan || typeof plan !== 'object') return false;
+    if(!idActual || idActual !== idEsperada) return '';
 
     const valor=valorClinicoPlanATexto(
-      plan.indicaciones_paciente ??
-      plan.indicaciones ??
-      plan.indicacionesPaciente ??
+      plan?.indicaciones_paciente ??
+      plan?.indicaciones ??
+      plan?.indicacionesPaciente ??
       ''
     );
 
+    if(valor) return valor;
+
+    /*
+      Respaldo visual únicamente si Plan visible pertenece exactamente
+      a la misma atención.
+    */
+    const idPlanVisible=txt(window.planState?.atencionActual);
+    if(idPlanVisible !== idEsperada) return '';
+
+    const campoPlan=document.getElementById('hcIndicacionesPaciente');
+    return txt(campoPlan?.value || campoPlan?.textContent);
+  }
+
+  async function precargarIndicacionesDesdePlanSiVacio(idAtencionEsperada){
+    if(getValue('auroRecGenerales')) return false;
+
+    const idEsperada=txt(idAtencionEsperada);
+    const ctx=state.contexto || contextoAtencion();
+    const idRec=txt(ctx?.id || state.idAtencion);
+
+    if(!idEsperada || !idRec || idEsperada !== idRec) return false;
+
+    const valor=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
+
+    /*
+      Revalidación final y protección contra escritura del usuario
+      mientras la lectura del Plan estaba pendiente.
+    */
+    const ctxFinal=state.contexto || contextoAtencion();
+    const idFinal=txt(ctxFinal?.id || state.idAtencion);
+
+    if(idFinal !== idEsperada) return false;
+    if(getValue('auroRecGenerales')) return false;
     if(!valor) return false;
 
     setValue('auroRecGenerales',valor);
+    return true;
+  }
+
+  async function agregarIndicacionesPlanManualmente(){
+    const ctx=state.contexto || contextoAtencion();
+
+    if(!ctx?.id){
+      setMsg('Seleccione una atención antes de añadir indicaciones del Plan.','error');
+      return false;
+    }
+
+    if(!ctx.editable){
+      setMsg('La atención seleccionada está protegida contra edición.','error');
+      return false;
+    }
+
+    const idEsperada=txt(ctx.id);
+    const valorPlan=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
+
+    const ctxActual=state.contexto || contextoAtencion();
+    if(txt(ctxActual?.id) !== idEsperada) return false;
+
+    if(!valorPlan){
+      setMsg('El Plan de esta atención no tiene indicaciones para paciente disponibles.','info');
+      return false;
+    }
+
+    const actuales=getValue('auroRecGenerales');
+    const lineasActuales=lineasClinicasUnicas(actuales);
+    const clavesActuales=new Set(lineasActuales.map(norm));
+
+    const nuevas=lineasClinicasUnicas(valorPlan)
+      .filter(linea=>!clavesActuales.has(norm(linea)));
+
+    if(!nuevas.length){
+      setMsg('Las indicaciones disponibles en Plan ya están incluidas en Recomendaciones generales.','info');
+      return false;
+    }
+
+    const combinado=[
+      actuales,
+      nuevas.join('\n')
+    ].filter(Boolean).join(actuales ? '\n' : '');
+
+    setValue('auroRecGenerales',combinado);
+
+    setMsg(
+      'Se añadieron únicamente indicaciones nuevas del Plan. Revise el texto antes de guardar recomendaciones.',
+      'info'
+    );
     return true;
   }
 
@@ -886,6 +951,9 @@
 
     const guardar=document.getElementById('auroRecBtnGuardar');
     if(guardar) guardar.disabled=!editable || !ctx.id;
+
+    const agregarPlan=document.getElementById('auroRecBtnAgregarPlan');
+    if(agregarPlan) agregarPlan.disabled=!editable || !ctx.id;
 
     const estado=document.getElementById('auroRecEstado');
     if(estado){
@@ -962,31 +1030,31 @@
 
       if(registro && registro.id_recomendacion){
         aplicarRegistro(registro);
-        setMsg(ctx.editable
-          ? 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.'
-          : 'Recomendaciones históricas cargadas en modo solo lectura.','ok');
+
+        let precargadasIndicaciones=false;
+        if(ctx.editable && !getValue('auroRecGenerales')){
+          precargadasIndicaciones=await precargarIndicacionesDesdePlanSiVacio(ctx.id);
+          if(token !== state.tokenCarga) return null;
+        }
+
+        setMsg(
+          ctx.editable
+            ? (precargadasIndicaciones
+                ? 'Recomendaciones cargadas. El campo general estaba vacío y se precargaron indicaciones del Plan para revisión.'
+                : 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.')
+            : 'Recomendaciones históricas cargadas en modo solo lectura.',
+          precargadasIndicaciones ? 'info' : 'ok'
+        );
       }else{
         const precargadoSeguimiento = ctx.editable
           ? precargarSeguimientoDesdePlanSiVacio()
           : false;
 
-        let precargadasIndicaciones = ctx.editable
-          ? precargarIndicacionesDesdePlanSiVacio(ctx.id)
+        const precargadasIndicaciones = ctx.editable
+          ? await precargarIndicacionesDesdePlanSiVacio(ctx.id)
           : false;
 
-        /*
-          V1.1.3:
-          Si el Plan visible no tiene todavía las indicaciones de esta
-          atención, se consulta exclusivamente el Plan guardado de la
-          misma id_atencion. Esto cubre atenciones antiguas sin alterar
-          el camino ya estable de las atenciones abiertas.
-        */
-        if(ctx.editable && !precargadasIndicaciones && !getValue('auroRecGenerales')){
-          precargadasIndicaciones =
-            await precargarIndicacionesDesdePlanGuardadoSiVacio(ctx.id);
-
-          if(token !== state.tokenCarga) return null;
-        }
+        if(token !== state.tokenCarga) return null;
 
         setMsg(
           ctx.editable
@@ -1452,6 +1520,7 @@ html,body{background:#dfe3e8}
     const guardarBtn=document.getElementById('auroRecBtnGuardar');
     const recargarBtn=document.getElementById('auroRecBtnRecargar');
     const vistaBtn=document.getElementById('auroRecBtnVista');
+    const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
 
     if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
       guardarBtn.dataset.auroRec='1';
@@ -1464,6 +1533,10 @@ html,body{background:#dfe3e8}
     if(vistaBtn && vistaBtn.dataset.auroRec!=='1'){
       vistaBtn.dataset.auroRec='1';
       vistaBtn.addEventListener('click',vistaPrevia);
+    }
+    if(agregarPlanBtn && agregarPlanBtn.dataset.auroRec!=='1'){
+      agregarPlanBtn.dataset.auroRec='1';
+      agregarPlanBtn.addEventListener('click',agregarIndicacionesPlanManualmente);
     }
   }
 
@@ -1529,13 +1602,14 @@ html,body{background:#dfe3e8}
     misma precarga segura. Solo actúa si coinciden las id_atencion y el
     campo continúa vacío; nunca sobrescribe.
   */
-  window.addEventListener('aurosanax:plan-cargado',(evento)=>{
+  window.addEventListener('aurosanax:plan-cargado',async (evento)=>{
     const idEvento=txt(evento?.detail?.id_atencion);
     const ctx=state.contexto || contextoAtencion();
 
     if(!idEvento || !ctx?.id || idEvento !== txt(ctx.id)) return;
+    if(getValue('auroRecGenerales')) return;
 
-    if(precargarIndicacionesDesdePlanSiVacio(idEvento)){
+    if(await precargarIndicacionesDesdePlanSiVacio(idEvento)){
       setMsg(
         'Se precargaron las indicaciones para paciente del Plan en Recomendaciones generales. Puede revisarlas y editarlas antes de guardar.',
         'info'
