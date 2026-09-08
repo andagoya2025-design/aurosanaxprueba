@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.4.2
+ Versión: 1.4.3
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -26,6 +26,9 @@
  - V1.4.2: añade Correo y resolución segura del paciente por id_paciente.
    Nombre e email solo se completan desde el MISMO paciente de la atención activa.
    No envía ni adjunta archivos automáticamente y no mezcla identidades.
+ - V1.4.3: corrige sincronización visual y carrera de cargas al cambiar de atención.
+   La identidad visual se refresca de inmediato y la atención más reciente queda pendiente
+   si existe una lectura anterior en curso, sin debilitar tokenCarga ni el aislamiento clínico.
 ************************************************************************/
 
 (function(){
@@ -37,7 +40,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.4.2';
+  const VERSION = '1.4.3';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -133,6 +136,8 @@
     cargando:false,
     subiendo:false,
     tokenCarga:0,
+    recargaPendiente:false,
+    idAtencionPendiente:'',
     idAtencion:'',
     contexto:null,
     registros:[],
@@ -1137,14 +1142,46 @@
     state.contexto = ctx;
 
     /*
+      V1.4.3 — SINCRONIZACIÓN VISUAL INMEDIATA
+      La tarjeta de identidad se pinta con el contexto canónico ya disponible
+      antes de esperar lecturas auxiliares. El catálogo de médicos puede completar
+      el dato después, pero nunca debe retener visualmente al paciente anterior.
+    */
+    renderContexto();
+
+    /*
       Cargar catálogo de médicos una sola vez por sesión del módulo.
       No bloquea otras áreas y no escribe en base de datos.
     */
     if(ctx.id && !state.medicosCargados){
       await cargarMedicosActivos();
-    }
 
-    renderContexto();
+      /*
+        Una respuesta auxiliar tardía solo puede refrescar la misma atención.
+        Si el contexto cambió mientras cargaban los médicos, no repinta el anterior.
+      */
+      if(state.contexto?.id === ctx.id){
+        renderContexto();
+      }
+
+      /*
+        Si la atención cambió durante esta lectura auxiliar, esta ejecución
+        no continúa con el contexto anterior. Se entrega el turno al contexto
+        canónico más reciente sin fabricar ni reutilizar identidad clínica.
+      */
+      const actualTrasMedicos = contextoAtencion();
+      if(
+        actualTrasMedicos.id !== ctx.id ||
+        conflictoId(actualTrasMedicos.idPaciente,ctx.idPaciente) ||
+        conflictoId(actualTrasMedicos.idHistoria,ctx.idHistoria)
+      ){
+        state.contexto = actualTrasMedicos;
+        renderContexto();
+        renderLista();
+        if(panelActivo()) return await cargar(true);
+        return state.registros;
+      }
+    }
 
     if(!ctx.id){
       state.idAtencion = '';
@@ -1162,7 +1199,17 @@
       return [];
     }
 
-    if(state.cargando) return state.registros;
+    if(state.cargando){
+      /*
+        V1.4.3 — COLA DE ÚLTIMA ATENCIÓN
+        Si existe una lectura anterior en curso, no se pierde la solicitud nueva.
+        Se conserva únicamente la atención más reciente; tokenCarga sigue siendo
+        la barrera que impide que una respuesta vieja sobrescriba el contexto actual.
+      */
+      state.recargaPendiente = true;
+      state.idAtencionPendiente = ctx.id;
+      return state.registros;
+    }
 
     /*
       Si ya tenemos el índice de la misma atención y no se pidió recarga,
@@ -1203,6 +1250,13 @@
 
       return state.registros;
     }catch(error){
+      /*
+        Una petición antigua invalidada por tokenCarga tampoco puede publicar
+        su error sobre la atención nueva. La recarga pendiente resolverá el
+        contexto vigente al salir por finally.
+      */
+      if(token !== state.tokenCarga) return state.registros;
+
       console.error(MODULO+':',error);
       state.ultimoError = txt(error.message || error);
       state.registros = [];
@@ -1216,6 +1270,28 @@
       return [];
     }finally{
       state.cargando = false;
+
+      /*
+        V1.4.3 — REANUDACIÓN ANTIRREGRESIVA
+        Una carga invalidada no deja Documentos detenido. Si durante la lectura
+        llegó otro contexto, se relanza SOLO la atención más reciente y únicamente
+        si continúa siendo la atención canónica activa y el panel sigue visible.
+      */
+      const pendiente = state.recargaPendiente;
+      const idPendiente = txt(state.idAtencionPendiente);
+      state.recargaPendiente = false;
+      state.idAtencionPendiente = '';
+
+      if(pendiente && idPendiente && panelActivo()){
+        const actual = contextoAtencion();
+        if(actual.id === idPendiente && actual.valido !== false){
+          setTimeout(()=>{
+            cargar(true).catch(error=>{
+              console.error(MODULO+': no se pudo completar la recarga pendiente.', error);
+            });
+          },0);
+        }
+      }
     }
   }
 
@@ -2046,11 +2122,21 @@
 
       if(state.montado){
         const refrescarContexto = async ()=>{
-          if(state.contexto?.id && !state.medicosCargados){
-            await cargarMedicosActivos();
-          }
+          /*
+            V1.4.3:
+            la identidad y la lista vacía de la nueva atención se reflejan primero.
+            El médico puede completarse después sin retener visualmente al paciente previo.
+          */
           renderContexto();
           renderLista();
+
+          if(state.contexto?.id && !state.medicosCargados){
+            const idContexto = state.contexto.id;
+            await cargarMedicosActivos();
+            if(state.contexto?.id === idContexto){
+              renderContexto();
+            }
+          }
         };
 
         refrescarContexto().catch(error=>{
