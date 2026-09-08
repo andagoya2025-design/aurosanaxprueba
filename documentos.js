@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.4.3
+ Versión: 1.4.4
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -29,6 +29,9 @@
  - V1.4.3: corrige sincronización visual y carrera de cargas al cambiar de atención.
    La identidad visual se refresca de inmediato y la atención más reciente queda pendiente
    si existe una lectura anterior en curso, sin debilitar tokenCarga ni el aislamiento clínico.
+ - V1.4.4: limpia de forma canónica Documentos cuando el núcleo invalida la atención
+   o cambia de paciente/historia sin seleccionar todavía una nueva atención.
+   No inventa atención, no reutiliza la anterior y espera una selección explícita mediante Ver.
 ************************************************************************/
 
 (function(){
@@ -40,7 +43,7 @@
   }
 
   const MODULO = 'AUROSANAX DOCUMENTOS';
-  const VERSION = '1.4.3';
+  const VERSION = '1.4.4';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
 
   /*
@@ -2089,6 +2092,52 @@
     return [];
   }
 
+  /*
+    V1.4.4 — LIMPIEZA CANÓNICA AL QUEDAR SIN ATENCIÓN
+    -------------------------------------------------
+    El núcleo de Atenciones ya emite aurosanax:atencion-limpiada cuando una
+    atención deja de ser válida/seleccionada. Los cambios de paciente/historia
+    tampoco deben reutilizar la id_atencion anterior.
+
+    Esta rutina SOLO invalida el estado visual/transitorio de Documentos:
+    - invalida respuestas antiguas mediante tokenCarga;
+    - descarta cualquier recarga pendiente de la atención anterior;
+    - vacía contexto, registros y colas asociadas a la atención anterior;
+    - NO selecciona automáticamente otra atención;
+    - NO escribe en Sheets, Drive ni Apps Script.
+
+    La siguiente atención solo vuelve a entrar por los eventos canónicos de
+    atención seleccionada/cambiada, normalmente después de pulsar "Ver".
+  */
+  function onAtencionLimpiada(){
+    state.tokenCarga++;
+    state.recargaPendiente = false;
+    state.idAtencionPendiente = '';
+    state.idAtencion = '';
+    state.registros = [];
+    state.contexto = {
+      id:'',
+      atencion:{},
+      editable:false,
+      bloqueada:false,
+      finalizada:false,
+      valido:false,
+      motivoInvalido:'Sin atención clínica activa.',
+      idPaciente:'',
+      idHistoria:'',
+      idMedico:'',
+      numeroConsulta:''
+    };
+
+    limpiarTodasLasColas();
+
+    if(state.montado){
+      renderContexto();
+      renderLista();
+      setMsg('Seleccione una atención para consultar o cargar documentos.','info');
+    }
+  }
+
   function onAtencionCambio(){
     const nuevoContexto = contextoAtencion();
     const nuevoId = txt(nuevoContexto.id);
@@ -2169,8 +2218,17 @@
   window.addEventListener('aurosanax:atencion-cambiada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-seleccionada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-actualizada',onAtencionCambio);
-  window.addEventListener('aurosanax:paciente-cambiado',onAtencionCambio);
-  window.addEventListener('aurosanax:paciente-seleccionado',onAtencionCambio);
+
+  /*
+    V1.4.4:
+    Estos eventos significan que la atención anterior ya no debe permanecer
+    visible como contexto de Documentos. La nueva atención se cargará únicamente
+    cuando el núcleo emita su selección/cambio canónico.
+  */
+  window.addEventListener('aurosanax:atencion-limpiada',onAtencionLimpiada);
+  window.addEventListener('aurosanax:paciente-cambiado',onAtencionLimpiada);
+  window.addEventListener('aurosanax:paciente-seleccionado',onAtencionLimpiada);
+  window.addEventListener('aurosanax:historia-nueva',onAtencionLimpiada);
 
   /*
     Compatibilidad con index actual:
