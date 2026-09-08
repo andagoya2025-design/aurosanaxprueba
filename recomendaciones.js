@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.1.1
+ Versión: 1.1.2
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.1.1';
+  const VERSION = '1.1.2';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -673,6 +673,44 @@
     return false;
   }
 
+  /*
+    AUROSANAX RECOMENDACIONES V1.1.2 — PLAN → RECOMENDACIONES
+    ----------------------------------------------------------
+    Precarga únicamente las indicaciones para paciente del Plan de la
+    MISMA id_atencion en Recomendaciones generales.
+
+    Blindajes:
+    - no existe Recomendación guardada;
+    - Recomendaciones generales sigue vacío;
+    - existe una atención válida en Recomendaciones;
+    - Plan y Recomendaciones pertenecen a la misma id_atencion;
+    - si llega desde aurosanax:plan-cargado, el evento también debe
+      corresponder a esa misma id_atencion.
+
+    La precarga queda editable. No sincroniza permanentemente y nunca
+    sobrescribe contenido ya existente.
+  */
+  function precargarIndicacionesDesdePlanSiVacio(idAtencionEsperada){
+    if(state.idRecomendacion) return false;
+    if(getValue('auroRecGenerales')) return false;
+
+    const ctx=state.contexto || contextoAtencion();
+    const idRec=txt(ctx?.id || state.idAtencion);
+    const idPlan=txt(window.planState?.atencionActual);
+    const idEsperada=txt(idAtencionEsperada);
+
+    if(!idRec || !idPlan) return false;
+    if(idRec !== idPlan) return false;
+    if(idEsperada && idEsperada !== idRec) return false;
+
+    const campoPlan=document.getElementById('hcIndicacionesPaciente');
+    const valor=txt(campoPlan?.value || campoPlan?.textContent);
+    if(!valor) return false;
+
+    setValue('auroRecGenerales',valor);
+    return true;
+  }
+
   function detalleActual(){
     return {
       version:JSON_VERSION,
@@ -821,14 +859,18 @@
           ? 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.'
           : 'Recomendaciones históricas cargadas en modo solo lectura.','ok');
       }else{
-        const precargado = ctx.editable
+        const precargadoSeguimiento = ctx.editable
           ? precargarSeguimientoDesdePlanSiVacio()
+          : false;
+
+        const precargadasIndicaciones = ctx.editable
+          ? precargarIndicacionesDesdePlanSiVacio(ctx.id)
           : false;
 
         setMsg(
           ctx.editable
-            ? (precargado
-                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó el motivo de control disponible en Plan para revisión.'
+            ? ((precargadoSeguimiento || precargadasIndicaciones)
+                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó información disponible en Plan para revisión y edición.'
                 : 'Esta atención todavía no tiene recomendaciones guardadas.')
             : 'Esta atención está bloqueada y no tiene recomendaciones registradas.',
           'info'
@@ -1359,6 +1401,27 @@ html,body{background:#dfe3e8}
   window.addEventListener('aurosanax:atencion-seleccionada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-actualizada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-limpiada',onAtencionLimpiada);
+
+  /*
+    V1.1.2:
+    Si Plan termina de cargar después que Recomendaciones, se intenta la
+    misma precarga segura. Solo actúa si coinciden las id_atencion y el
+    campo continúa vacío; nunca sobrescribe.
+  */
+  window.addEventListener('aurosanax:plan-cargado',(evento)=>{
+    const idEvento=txt(evento?.detail?.id_atencion);
+    const ctx=state.contexto || contextoAtencion();
+
+    if(!idEvento || !ctx?.id || idEvento !== txt(ctx.id)) return;
+
+    if(precargarIndicacionesDesdePlanSiVacio(idEvento)){
+      setMsg(
+        'Se precargaron las indicaciones para paciente del Plan en Recomendaciones generales. Puede revisarlas y editarlas antes de guardar.',
+        'info'
+      );
+    }
+  });
+
   window.addEventListener('aurosanax:diagnosticos-actualizados',()=>{
     if(state.idAtencion) cargarDiagnosticos(state.idAtencion);
   });
