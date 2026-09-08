@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.1.0
+ Versión: 1.1.1
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -15,6 +15,8 @@
  - Atención activa: editable.
  - Responsive: escritorio, tablet, iPhone y Android.
  - No modifica Plan, Recetas, Diagnóstico, Examen Físico ni Historia.
+ - V1.1.1: limpieza canónica al cambiar de paciente/historia sin atención seleccionada.
+   Invalida el contexto anterior, evita repintados tardíos y espera una nueva atención explícita.
 ************************************************************************/
 
 (function(){
@@ -26,7 +28,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.1';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -38,7 +40,9 @@
     cargando: false,
     guardando: false,
     inicializado: false,
-    tokenCarga: 0
+    tokenCarga: 0,
+    recargaPendiente: false,
+    idAtencionPendiente: ''
   };
 
   const ALERTAS = [
@@ -762,11 +766,14 @@
     const ctx=state.contexto || contextoAtencion();
     const a=ctx.atencion || {};
 
-    setText('auroRecPaciente',nombrePacienteDesdeContexto(a) || 'Paciente de la atención');
-    setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
+    setText(
+      'auroRecPaciente',
+      ctx.id ? (nombrePacienteDesdeContexto(a) || 'Paciente de la atención') : 'Sin atención seleccionada'
+    );
+    setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Seleccione una atención para trabajar sus recomendaciones.');
     setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
-    setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
-    setText('auroRecFecha',fechaVisual(a.fecha_atencion || a.fecha_consulta || a.creado_en));
+    setText('auroRecMedico',ctx.id ? (nombreMedicoDesdeContexto(a) || '—') : '—');
+    setText('auroRecFecha',ctx.id ? fechaVisual(a.fecha_atencion || a.fecha_consulta || a.creado_en) : '—');
 
     aplicarModo();
   }
@@ -783,8 +790,20 @@
   }
 
   async function cargar(forzar){
-    if(state.cargando) return null;
     let ctx=contextoAtencion();
+
+    /*
+      V1.1.1 — ÚLTIMA ATENCIÓN GANA
+      Si una lectura anterior sigue en curso, no se pierde la nueva solicitud.
+      Se conserva únicamente la atención canónica más reciente.
+    */
+    if(state.cargando){
+      if(ctx.id){
+        state.recargaPendiente=true;
+        state.idAtencionPendiente=ctx.id;
+      }
+      return null;
+    }
 
     state.contexto=ctx;
     renderContexto();
@@ -839,11 +858,38 @@
       renderContexto();
       return registro || null;
     }catch(e){
+      /*
+        Una carga invalidada por cambio de paciente/atención no puede publicar
+        su error sobre el contexto clínico nuevo.
+      */
+      if(token !== state.tokenCarga) return null;
+
       console.error(MODULO+':',e);
       setMsg('No se pudieron cargar las recomendaciones: '+txt(e.message || e),'error');
       return null;
     }finally{
       state.cargando=false;
+
+      /*
+        V1.1.1 — REANUDACIÓN ANTIRREGRESIVA
+        Si durante la lectura llegó otra atención, se carga únicamente la más
+        reciente y solo si continúa siendo la atención canónica activa.
+      */
+      const pendiente=state.recargaPendiente;
+      const idPendiente=txt(state.idAtencionPendiente);
+      state.recargaPendiente=false;
+      state.idAtencionPendiente='';
+
+      if(pendiente && idPendiente){
+        const actual=contextoAtencion();
+        if(actual.id===idPendiente){
+          setTimeout(()=>{
+            cargar(true).catch(error=>{
+              console.error(MODULO+': no se pudo completar la recarga pendiente.',error);
+            });
+          },0);
+        }
+      }
     }
   }
 
@@ -1314,6 +1360,44 @@ html,body{background:#dfe3e8}
     return true;
   }
 
+  /*
+    V1.1.1 — LIMPIEZA CANÓNICA DE CONTEXTO
+    ---------------------------------------
+    Al cambiar de paciente/historia sin una nueva atención seleccionada,
+    Recomendaciones no conserva ni reutiliza la atención anterior.
+
+    Esta rutina solo limpia estado visual/transitorio:
+    - invalida respuestas tardías con tokenCarga;
+    - descarta recargas pendientes del contexto anterior;
+    - vacía recomendación, diagnósticos y contexto de atención;
+    - NO guarda, NO borra datos persistidos y NO selecciona otra atención.
+  */
+  function onAtencionLimpiada(){
+    state.tokenCarga++;
+    state.recargaPendiente=false;
+    state.idAtencionPendiente='';
+    state.idAtencion='';
+    state.idRecomendacion='';
+    state.registro=null;
+    state.diagnosticos=[];
+    state.contexto={
+      id:'',
+      atencion:{},
+      idPaciente:'',
+      numeroConsulta:'',
+      estadoAtencion:'',
+      finalizada:false,
+      bloqueada:false,
+      editable:false,
+      historica:false
+    };
+
+    limpiar();
+    renderDiagnosticos();
+    renderContexto();
+    setMsg('Seleccione una atención antes de trabajar Recomendaciones.','info');
+  }
+
   function onAtencionCambio(){
     const id=idAtencionActiva();
     if(id !== state.idAtencion){
@@ -1329,6 +1413,17 @@ html,body{background:#dfe3e8}
   window.addEventListener('aurosanax:atencion-cambiada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-seleccionada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-actualizada',onAtencionCambio);
+
+  /*
+    V1.1.1:
+    El cambio de paciente/historia invalida inmediatamente la atención visual
+    anterior. La nueva atención entra después por los eventos canónicos de
+    selección/cambio, normalmente al pulsar "Ver".
+  */
+  window.addEventListener('aurosanax:atencion-limpiada',onAtencionLimpiada);
+  window.addEventListener('aurosanax:paciente-cambiado',onAtencionLimpiada);
+  window.addEventListener('aurosanax:paciente-seleccionado',onAtencionLimpiada);
+  window.addEventListener('aurosanax:historia-nueva',onAtencionLimpiada);
   window.addEventListener('aurosanax:diagnosticos-actualizados',()=>{
     if(state.idAtencion) cargarDiagnosticos(state.idAtencion);
   });
