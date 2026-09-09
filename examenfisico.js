@@ -1125,21 +1125,50 @@ function buscarDiagnosticoCie10(){
     return;
   }
 
-  hcDxResultadosActuales = auroDxFuenteBusqueda().filter(d => {
-    const contenidoCodigo = normalizarDxTexto((d.codigo || '') + ' ' + (d.codigo_visual || ''));
-    const contenidoNombre = normalizarDxTexto([
-      d.nombre,
-      d.especialidad,
-      d.categoria,
-      d.subcategoria,
-      d.palabras_clave
-    ].filter(Boolean).join(' '));
+  /*
+    AUROSANAX FIX QUIRÚRGICO CIE-10 2026-09-09
+    - Conserva exactamente los mismos campos y filtros del buscador.
+    - Prioriza coincidencias en el nombre del diagnóstico antes de aplicar
+      el límite visual de 24 resultados.
+    - Evita que una coincidencia clínicamente directa (ej. "quiste" -> N75.0)
+      quede fuera de pantalla por coincidencias más amplias en palabras clave.
+    - No modifica catálogo, guardado, atención, protocolos ni datos clínicos.
+  */
+  hcDxResultadosActuales = auroDxFuenteBusqueda()
+    .filter(d => {
+      const contenidoCodigo = normalizarDxTexto((d.codigo || '') + ' ' + (d.codigo_visual || ''));
+      const contenidoNombre = normalizarDxTexto([
+        d.nombre,
+        d.especialidad,
+        d.categoria,
+        d.subcategoria,
+        d.palabras_clave
+      ].filter(Boolean).join(' '));
 
-    return (!codigo || contenidoCodigo.includes(codigo)) &&
-           (!nombre || contenidoNombre.includes(nombre)) &&
-           (!categoria || normalizarDxTexto(d.categoria) === categoria) &&
-           (!subcategoria || normalizarDxTexto(d.subcategoria) === subcategoria);
-  }).slice(0,24);
+      return (!codigo || contenidoCodigo.includes(codigo)) &&
+             (!nombre || contenidoNombre.includes(nombre)) &&
+             (!categoria || normalizarDxTexto(d.categoria) === categoria) &&
+             (!subcategoria || normalizarDxTexto(d.subcategoria) === subcategoria);
+    })
+    .sort((a,b) => {
+      if(!nombre) return 0;
+
+      const nombreA = normalizarDxTexto(a.nombre || '');
+      const nombreB = normalizarDxTexto(b.nombre || '');
+
+      const rango = valor => {
+        if(valor === nombre) return 0;
+        if(valor.startsWith(nombre)) return 1;
+        if(valor.includes(nombre)) return 2;
+        return 3;
+      };
+
+      const diferencia = rango(nombreA) - rango(nombreB);
+      if(diferencia) return diferencia;
+
+      return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es');
+    })
+    .slice(0,24);
 
   auroDxRenderResultados();
 }
