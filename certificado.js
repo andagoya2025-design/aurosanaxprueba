@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: certificado.js
  Módulo: Certificados médicos por atención
- Versión: 1.3.3 - documento maestro A4 + visor móvil escalado antirregresión
+ Versión: 1.3.9 - CIE-10 visual oficial + documento maestro A4 + visor móvil escalado antirregresión
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.8';
+const VERSION='1.3.9';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -52,6 +52,23 @@ const norm=v=>txt(v)
   .toLowerCase()
   .replace(/\s+/g,' ')
   .trim();
+
+/*
+  CIE-10 VISUAL OFICIAL / ANTIRREGRESIÓN
+  - NO modifica ni migra el código interno guardado.
+  - Solo transforma la presentación en pantalla / documento.
+  - Conserva códigos oficiales de 3 caracteres sin decimal.
+  - Respeta el legado AUROSANAX N720 como visual oficial N72.
+*/
+function cie10Visual(codigo){
+  const raw=txt(codigo).toUpperCase();
+  if(!raw) return '';
+  if(raw==='N720') return 'N72';
+  if(raw.includes('.')) return raw;
+  if(/^[A-Z][0-9]{2}$/.test(raw)) return raw;
+  if(/^[A-Z][0-9]{3,}$/.test(raw)) return raw.slice(0,3)+'.'+raw.slice(3);
+  return raw;
+}
 
 function apiUrl(){
   try{
@@ -591,7 +608,7 @@ function renderDx(){
   b.innerHTML=state.diagnosticos.map((d,i)=>`
     <label>
       <input type="checkbox" data-acdx="${i}" checked>
-      <span><b>${esc(d.codigo_cie10||d.codigo||'S/C')}</b> · ${esc(d.descripcion||d.diagnostico||'')}</span>
+      <span><b>${esc(cie10Visual(d.codigo_cie10||d.codigo)||'S/C')}</b> · ${esc(d.descripcion||d.diagnostico||'')}</span>
     </label>`).join('');
 }
 
@@ -869,7 +886,7 @@ function docHTML(data){
     : '<div></div>';
 
   const dxHtml=dx.length
-    ? dx.map(x=>`<div class="ac-dx-doc-row"><b>${esc(x.codigo_cie10||'')}</b>${x.descripcion?' '+esc(x.descripcion):''}</div>`).join('')
+    ? dx.map(x=>`<div class="ac-dx-doc-row"><b>${esc(cie10Visual(x.codigo_cie10||''))}</b>${x.descripcion?' '+esc(x.descripcion):''}</div>`).join('')
     : '<div class="ac-dx-doc-row">Sin diagnóstico seleccionado para este documento.</div>';
 
   const registros=[
