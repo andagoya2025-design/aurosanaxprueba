@@ -707,6 +707,65 @@
   }
 
 
+  /*
+    AUROSANAX FIX ANTIRREGRESIVO - CONFIRMACIÓN REMOTA DE ESTADO:
+    Verifica una atención directamente contra Google Sheets sin mezclar
+    la respuesta con localStorage. Se usa para no confirmar una finalización
+    basándose en el estado local del navegador.
+  */
+  async function verificarEstadoAtencionRemoto(idAtencion, estadoEsperado){
+    try{
+      const id = String(idAtencion || '').trim();
+      const esperado = String(estadoEsperado || '').trim();
+
+      if(!id){
+        return { success:false, message:'No se recibió un id_atencion válido para verificar.' };
+      }
+
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return { success:false, message:'API_URL no está definida en index.html' };
+      }
+
+      const res = await fetch(
+        API_URL + '?accion=listarAtenciones&_=' + Date.now(),
+        { method:'GET', cache:'no-store' }
+      );
+      const data = await res.json();
+      const remotas = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.data) ? data.data : []);
+
+      const atencionRemota = remotas
+        .map(normalizar)
+        .find(function(item){
+          return String(item.id_atencion || '').trim() === id;
+        });
+
+      if(!atencionRemota){
+        return {
+          success:false,
+          message:'La atención no apareció en la lectura remota de Google Sheets.'
+        };
+      }
+
+      const estadoRemoto = String(atencionRemota.estado_atencion || '').trim();
+      const coincide = estadoRemoto.toLowerCase() === esperado.toLowerCase();
+
+      return {
+        success:coincide,
+        estado_remoto:estadoRemoto,
+        atencion:atencionRemota,
+        message: coincide
+          ? 'Estado confirmado en Google Sheets.'
+          : 'Google Sheets devolvió un estado distinto al esperado.'
+      };
+
+    }catch(error){
+      console.warn(MODULO, 'No se pudo confirmar el estado remoto de la atención.', error);
+      return { success:false, message:error.message };
+    }
+  }
+
   async function enviarAtencionGoogleSheets(atencion, accion){
     try{
       if(!atencion) return { success:false, message:'No hay atención para enviar' };
@@ -1775,27 +1834,59 @@
 
     const lista = leerLocal();
     const idx = lista.findIndex(a => String(a.id_atencion) === String(abierta.id_atencion));
+    const baseFinalizacion = idx >= 0 ? lista[idx] : abierta;
 
-    let atencionFinalizada = null;
-
-    if(idx >= 0){
-      atencionFinalizada = Object.assign({}, lista[idx], {
-        numero_consulta: Number(lista[idx].numero_consulta || abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
-        estado_atencion: 'Finalizada',
-        actualizado_en: fechaHora()
-      });
-
-      lista[idx] = atencionFinalizada;
-      guardarLocal(lista);
-    }else{
-      atencionFinalizada = Object.assign({}, abierta, {
-        numero_consulta: Number(abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
-        estado_atencion: 'Finalizada',
-        actualizado_en: fechaHora()
-      });
-    }
+    const atencionFinalizada = Object.assign({}, baseFinalizacion, {
+      numero_consulta: Number(baseFinalizacion.numero_consulta || abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
+      estado_atencion: 'Finalizada',
+      actualizado_en: fechaHora()
+    });
 
     const idFinalizada = String(atencionFinalizada?.id_atencion || abierta.id_atencion || '').trim();
+
+    /*
+      AUROSANAX FIX ANTIRREGRESIVO:
+      No se altera localStorage ni se limpia el contexto clínico antes de que
+      Google Sheets confirme que ESTE mismo id_atencion quedó Finalizada.
+    */
+    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
+
+    if(!resultado || !resultado.success){
+      alert(
+        'No se pudo enviar la finalización a Google Sheets. ' +
+        'La atención permanece abierta en este equipo para evitar un cierre falso.'
+      );
+      return;
+    }
+
+    const verificacion = await verificarEstadoAtencionRemoto(
+      idFinalizada,
+      'Finalizada'
+    );
+
+    if(!verificacion || !verificacion.success){
+      const estadoRemoto = String(verificacion?.estado_remoto || '').trim();
+      alert(
+        'La finalización no fue confirmada en la base de datos.' +
+        (estadoRemoto ? ' Estado remoto actual: ' + estadoRemoto + '.' : '') +
+        ' La atención permanece abierta en este equipo.'
+      );
+      return;
+    }
+
+    const atencionConfirmada = Object.assign(
+      {},
+      baseFinalizacion,
+      verificacion.atencion || atencionFinalizada,
+      { estado_atencion:'Finalizada' }
+    );
+
+    if(idx >= 0){
+      lista[idx] = atencionConfirmada;
+    }else{
+      lista.unshift(atencionConfirmada);
+    }
+    guardarLocal(lista);
 
     auroInvalidarContextoAtencion({
       idAnterior:idFinalizada,
@@ -1806,14 +1897,7 @@
     });
 
     renderAtencionesPaciente();
-
-    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
-
-    if(resultado && resultado.success){
-      alert('Atención finalizada y enviada a Google Sheets.');
-    }else{
-      alert('Atención finalizada localmente, pero no se pudo enviar a Google Sheets. Revise Apps Script o conexión.');
-    }
+    alert('Atención finalizada y confirmada en Google Sheets.');
   }
 
 
