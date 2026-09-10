@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.1.3
+ Versión: 1.1.4
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.1.3';
+  const VERSION = '1.1.4';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -366,6 +366,58 @@
     return raw;
   }
 
+  /*
+    AUROSANAX RECOMENDACIONES V1.1.4 — PRESENTACIÓN VISUAL
+    -------------------------------------------------------
+    - El decimal CIE-10 se aplica SOLO al mostrar el código.
+    - Fecha atención compone fecha_atencion + hora_atencion.
+    - No modifica persistencia, payloads, endpoints ni otros módulos.
+  */
+  function cie10Visual(valor){
+    const raw=txt(valor);
+    if(!raw) return '';
+
+    const limpio=raw.toUpperCase().replace(/\s+/g,'');
+    if(/^([A-Z]\d{2})\.([0-9A-Z]{1,4})$/.test(limpio)) return limpio;
+    if(/^([A-Z]\d{2})$/.test(limpio)) return limpio;
+
+    const m=limpio.match(/^([A-Z]\d{2})([0-9A-Z]{1,4})$/);
+    return m ? `${m[1]}.${m[2]}` : raw;
+  }
+
+  function fechaAtencionVisual(fecha, hora){
+    const rawFecha=txt(fecha);
+    if(!rawFecha) return '—';
+
+    const mFecha=rawFecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    let fechaBase='';
+
+    if(mFecha){
+      fechaBase=`${mFecha[3]}/${mFecha[2]}/${mFecha[1]}`;
+    }else{
+      const d=new Date(rawFecha);
+      if(!Number.isNaN(d.getTime())){
+        fechaBase=d.toLocaleDateString('es-EC',{
+          day:'2-digit',month:'2-digit',year:'numeric'
+        });
+      }else{
+        fechaBase=rawFecha;
+      }
+    }
+
+    const rawHora=txt(hora);
+    if(!rawHora) return fechaBase;
+
+    const mHora=rawHora.match(/(?:^|[ T])(\d{1,2}):(\d{2})(?::\d{2})?$/) ||
+                rawHora.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+
+    if(!mHora) return fechaBase;
+
+    const hh=String(mHora[1]).padStart(2,'0');
+    const mm=mHora[2];
+    return `${fechaBase} · ${hh}:${mm}`;
+  }
+
   function setMsg(texto, tipo){
     const el = document.getElementById('auroRecMensaje');
     if(!el) return;
@@ -645,7 +697,7 @@
     }
 
     box.innerHTML=state.diagnosticos.map((d,i)=>{
-      const codigo=txt(d.codigo_cie10 || d.codigo || d.cie10);
+      const codigo=cie10Visual(d.codigo_cie10 || d.codigo || d.cie10);
       const nombre=txt(d.descripcion || d.nombre || d.diagnostico);
       const principal = d.principal === true || ['si','sí','true','1'].includes(norm(d.principal)) || i===0;
       return `<div class="auro-rec-dx">
@@ -979,7 +1031,13 @@
     setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
     setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
     setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
-    setText('auroRecFecha',fechaVisual(a.fecha_atencion || a.fecha_consulta || a.creado_en));
+    setText(
+      'auroRecFecha',
+      fechaAtencionVisual(
+        a.fecha_atencion || a.fecha_consulta || a.creado_en,
+        a.hora_atencion || a.hora_consulta || ''
+      )
+    );
 
     aplicarModo();
   }
@@ -1302,7 +1360,7 @@
       .map(([,l])=>l);
 
     const dx=state.diagnosticos.map(x=>({
-      codigo:txt(x.codigo_cie10||x.codigo||x.cie10),
+      codigo:cie10Visual(x.codigo_cie10||x.codigo||x.cie10),
       nombre:txt(x.descripcion||x.nombre||x.diagnostico)
     })).filter(x=>x.codigo||x.nombre);
 
