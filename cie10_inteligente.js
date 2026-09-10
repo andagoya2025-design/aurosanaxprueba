@@ -206,6 +206,21 @@
         font-size:13px;
         font-weight:750;
       }
+      .auro-cie10-source{
+        margin-top:12px;
+        padding:10px 12px;
+        border:1px solid #e5e7eb;
+        border-radius:12px;
+        background:#fff;
+        color:#475569;
+        font-size:12px;
+        font-weight:700;
+        line-height:1.45;
+      }
+      .auro-cie10-source strong{
+        color:#111827;
+        font-weight:900;
+      }
       .auro-cie10-actions{
         display:flex;
         justify-content:flex-end;
@@ -409,6 +424,13 @@
             ${listaHTML([].concat(data.alertas || [], data.controles || [], data.criterios || []), 'alertas')}
           </div>
         </div>
+
+        ${limpiarTexto(p.observaciones) ? `
+          <div class="auro-cie10-source">
+            <strong><i class="bi bi-journal-check me-1"></i> Fuente / respaldo clínico:</strong>
+            ${safeHtml(p.observaciones)}
+          </div>
+        ` : ''}
 
         <div class="auro-cie10-actions">
           <button type="button" class="auro-cie10-btn line" onclick="window.auroCie10InteligenteOcultar()">Cerrar</button>
