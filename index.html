@@ -3706,23 +3706,46 @@
 
   .auro-clinical-float-finalizar{
     display:none;
-    min-height:46px;
-    padding:10px 15px;
-    border:1px solid rgba(255,255,255,.78);
-    border-radius:15px;
+    position:fixed;
+    top:max(86px, calc(env(safe-area-inset-top) + 72px));
+    right:max(10px, env(safe-area-inset-right));
+    z-index:33;
+    width:46px;
+    min-height:150px;
+    padding:12px 8px;
+    border:1px solid rgba(255,255,255,.82);
+    border-radius:15px 0 0 15px;
     color:#fff;
-    background:linear-gradient(135deg,#991b1b,#dc2626);
-    box-shadow:0 12px 28px rgba(153,27,27,.22);
-    font-size:13px;
+    background:linear-gradient(180deg,#7f1d1d,#b91c1c);
+    box-shadow:0 12px 28px rgba(127,29,29,.20);
+    font-size:12px;
     font-weight:850;
     align-items:center;
     justify-content:center;
     gap:8px;
-    white-space:nowrap;
+    writing-mode:vertical-rl;
+    transform:rotate(180deg);
+    letter-spacing:.01em;
+    user-select:none;
+  }
+
+  .auro-clinical-float-finalizar i{
+    transform:rotate(180deg);
+    font-size:15px;
   }
 
   .auro-clinical-float-finalizar.is-visible{
     display:inline-flex;
+  }
+
+  .auro-clinical-float-finalizar.is-locked{
+    background:linear-gradient(180deg,#475569,#64748b);
+    box-shadow:0 10px 24px rgba(71,85,105,.18);
+  }
+
+  .auro-clinical-float-finalizar.is-unlocked{
+    background:linear-gradient(180deg,#991b1b,#dc2626);
+    box-shadow:0 12px 28px rgba(153,27,27,.24);
   }
 
   .auro-clinical-float-nav{
@@ -3787,10 +3810,13 @@
     }
 
     .auro-clinical-float-finalizar{
-      min-height:44px;
-      padding:9px 13px;
-      border-radius:14px;
-      font-size:12.5px;
+      top:max(82px, calc(env(safe-area-inset-top) + 68px));
+      right:max(6px, env(safe-area-inset-right));
+      width:42px;
+      min-height:136px;
+      padding:10px 7px;
+      border-radius:14px 0 0 14px;
+      font-size:11.5px;
     }
 
     .auro-clinical-float-scroll{
@@ -3818,9 +3844,9 @@
 
   @media(max-width:390px){
     .auro-clinical-float-finalizar{
-      max-width:190px;
-      white-space:normal;
-      text-align:center;
+      width:40px;
+      min-height:128px;
+      font-size:11px;
     }
 
     .auro-clinical-float-scroll{
@@ -4777,13 +4803,14 @@
 <div class="auro-clinical-float-tools" id="auroClinicalFloatTools" aria-label="Navegación rápida">
   <button
     type="button"
-    class="auro-clinical-float-finalizar"
+    class="auro-clinical-float-finalizar is-locked"
     id="auroFloatFinalizarAtencion"
-    aria-label="Finalizar atención"
-    title="Finalizar atención"
+    aria-label="Finalizar atención bloqueado"
+    title="Finalizar atención bloqueado"
+    data-auro-locked="1"
   >
-    <i class="bi bi-check2-circle"></i>
-    <span>Finalizar atención</span>
+    <i class="bi bi-lock-fill"></i>
+    <span>Finalizar</span>
   </button>
   <div class="auro-clinical-float-nav">
     <button
@@ -12658,6 +12685,55 @@ document.addEventListener('click',e=>{
     return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   }
 
+  let auroFinalizarBloqueoTimer = null;
+
+  function auroRenderEstadoFinalizar(){
+    const flotante = document.getElementById('auroFloatFinalizarAtencion');
+    if(!flotante) return;
+
+    const bloqueado = flotante.dataset.auroLocked !== '0';
+    flotante.classList.toggle('is-locked', bloqueado);
+    flotante.classList.toggle('is-unlocked', !bloqueado);
+
+    const icono = flotante.querySelector('i');
+    if(icono){
+      icono.className = bloqueado ? 'bi bi-lock-fill' : 'bi bi-unlock-fill';
+    }
+
+    flotante.setAttribute(
+      'aria-label',
+      bloqueado ? 'Finalizar atención bloqueado' : 'Finalizar atención desbloqueado'
+    );
+    flotante.title = bloqueado
+      ? 'Toque para desbloquear Finalizar'
+      : 'Toque nuevamente para confirmar Finalizar';
+  }
+
+  function auroBloquearFinalizar(){
+    const flotante = document.getElementById('auroFloatFinalizarAtencion');
+    if(!flotante) return;
+    flotante.dataset.auroLocked = '1';
+    if(auroFinalizarBloqueoTimer){
+      clearTimeout(auroFinalizarBloqueoTimer);
+      auroFinalizarBloqueoTimer = null;
+    }
+    auroRenderEstadoFinalizar();
+  }
+
+  function auroDesbloquearFinalizarTemporalmente(){
+    const flotante = document.getElementById('auroFloatFinalizarAtencion');
+    if(!flotante) return;
+    flotante.dataset.auroLocked = '0';
+    auroRenderEstadoFinalizar();
+
+    if(auroFinalizarBloqueoTimer){
+      clearTimeout(auroFinalizarBloqueoTimer);
+    }
+    auroFinalizarBloqueoTimer = window.setTimeout(function(){
+      auroBloquearFinalizar();
+    }, 8000);
+  }
+
   function auroSincronizarFinalizarFlotante(){
     const flotante = document.getElementById('auroFloatFinalizarAtencion');
     if(!flotante) return;
@@ -12672,16 +12748,38 @@ document.addEventListener('click',e=>{
     flotante.classList.toggle('is-visible', disponible);
     flotante.setAttribute('aria-hidden', disponible ? 'false' : 'true');
     flotante.tabIndex = disponible ? 0 : -1;
+
+    if(!disponible){
+      auroBloquearFinalizar();
+    }else{
+      auroRenderEstadoFinalizar();
+    }
   }
 
   function auroDelegarFinalizacion(){
+    const flotante = document.getElementById('auroFloatFinalizarAtencion');
     const real = auroBotonFinalizarReal();
 
-    if(!real || real.disabled || !auroElementoVisible(real)){
+    if(!flotante || !real || real.disabled || !auroElementoVisible(real)){
       auroSincronizarFinalizarFlotante();
       return;
     }
 
+    if(flotante.dataset.auroLocked !== '0'){
+      auroDesbloquearFinalizarTemporalmente();
+      return;
+    }
+
+    const confirmado = window.confirm(
+      '¿Desea finalizar esta atención?\n\nEsta acción cerrará la atención clínica actual.'
+    );
+
+    if(!confirmado){
+      auroBloquearFinalizar();
+      return;
+    }
+
+    auroBloquearFinalizar();
     real.click();
   }
 
@@ -12707,6 +12805,7 @@ document.addEventListener('click',e=>{
     if(finalizar && finalizar.dataset.auroBound !== '1'){
       finalizar.dataset.auroBound = '1';
       finalizar.addEventListener('click', auroDelegarFinalizacion);
+      auroRenderEstadoFinalizar();
     }
 
     auroSincronizarFinalizarFlotante();
