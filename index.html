@@ -3679,6 +3679,164 @@
     }
   </style>
 
+
+<!-- ============================================================
+     AUROSANAX INDEX 86 — CONTROLES FLOTANTES ANTIRREGRESIVOS V1
+     SOLO PRESENTACIÓN / NAVEGACIÓN.
+     No modifica guardados, IDs clínicos, showScreen() ni finalización real.
+============================================================= -->
+<style id="auro-index86-controles-flotantes-antirregresivos">
+  .auro-clinical-float-tools{
+    position:fixed;
+    right:max(18px, env(safe-area-inset-right));
+    bottom:max(20px, calc(env(safe-area-inset-bottom) + 14px));
+    z-index:32;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:9px;
+    pointer-events:none;
+  }
+
+  .auro-clinical-float-tools button{
+    pointer-events:auto;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+
+  .auro-clinical-float-finalizar{
+    display:none;
+    min-height:46px;
+    padding:10px 15px;
+    border:1px solid rgba(255,255,255,.78);
+    border-radius:15px;
+    color:#fff;
+    background:linear-gradient(135deg,#991b1b,#dc2626);
+    box-shadow:0 12px 28px rgba(153,27,27,.22);
+    font-size:13px;
+    font-weight:850;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    white-space:nowrap;
+  }
+
+  .auro-clinical-float-finalizar.is-visible{
+    display:inline-flex;
+  }
+
+  .auro-clinical-float-nav{
+    display:flex;
+    gap:8px;
+  }
+
+  .auro-clinical-float-scroll{
+    width:44px;
+    height:44px;
+    border:1px solid #ead5e2;
+    border-radius:14px;
+    display:grid;
+    place-items:center;
+    color:#7a174f;
+    background:rgba(255,255,255,.97);
+    box-shadow:0 10px 24px rgba(15,23,42,.11);
+    font-size:18px;
+    font-weight:900;
+  }
+
+  .auro-clinical-float-finalizar:hover,
+  .auro-clinical-float-scroll:hover{
+    transform:translateY(-1px);
+    filter:brightness(.99);
+  }
+
+  .auro-clinical-float-finalizar:focus-visible,
+  .auro-clinical-float-scroll:focus-visible{
+    outline:3px solid rgba(194,59,131,.24);
+    outline-offset:3px;
+  }
+
+  /* Refuerzo visual del estado existente. Solo presentación. */
+  #historia #hcSaveStatus.auro-save-status{
+    min-height:58px;
+    padding:16px 18px 16px 54px;
+    border-radius:18px;
+    font-size:15.5px;
+    line-height:1.45;
+    font-weight:850;
+    box-shadow:0 12px 30px rgba(37,99,235,.10);
+  }
+
+  #historia #hcSaveStatus.auro-save-status::before{
+    left:17px;
+    width:27px;
+    height:27px;
+    font-size:14px;
+  }
+
+  @media(max-width:980px){
+    .auro-clinical-float-tools{
+      right:max(14px, env(safe-area-inset-right));
+      bottom:max(16px, calc(env(safe-area-inset-bottom) + 10px));
+      gap:8px;
+    }
+
+    /* En Pacientes existe + Nuevo paciente abajo a la derecha. */
+    body:has(#pacientes.screen.active) .auro-clinical-float-tools{
+      bottom:max(84px, calc(env(safe-area-inset-bottom) + 78px));
+    }
+
+    .auro-clinical-float-finalizar{
+      min-height:44px;
+      padding:9px 13px;
+      border-radius:14px;
+      font-size:12.5px;
+    }
+
+    .auro-clinical-float-scroll{
+      width:42px;
+      height:42px;
+      border-radius:13px;
+      font-size:17px;
+    }
+
+    #historia #hcSaveStatus.auro-save-status{
+      min-height:54px;
+      padding:14px 14px 14px 49px;
+      border-radius:16px;
+      font-size:14px;
+      line-height:1.42;
+    }
+
+    #historia #hcSaveStatus.auro-save-status::before{
+      left:14px;
+      width:25px;
+      height:25px;
+      font-size:13px;
+    }
+  }
+
+  @media(max-width:390px){
+    .auro-clinical-float-finalizar{
+      max-width:190px;
+      white-space:normal;
+      text-align:center;
+    }
+
+    .auro-clinical-float-scroll{
+      width:40px;
+      height:40px;
+    }
+  }
+
+  @media(prefers-reduced-motion:reduce){
+    .auro-clinical-float-finalizar,
+    .auro-clinical-float-scroll{
+      transition:none;
+    }
+  }
+</style>
+
 </head>
 
 <body>
@@ -4614,6 +4772,37 @@
 
 <button class="btn-auro floating-action" onclick="openPatientModal()"><i class="bi bi-plus-lg"></i></button>
 <button type="button" class="auro-mobile-menu-fab" onclick="toggleSidebar()" aria-label="Abrir menú" title="Abrir menú"><i class="bi bi-list"></i><span>Menú</span></button>
+
+<!-- AUROSANAX INDEX 86 — CONTROLES FLOTANTES ANTIRREGRESIVOS V1 -->
+<div class="auro-clinical-float-tools" id="auroClinicalFloatTools" aria-label="Navegación rápida">
+  <button
+    type="button"
+    class="auro-clinical-float-finalizar"
+    id="auroFloatFinalizarAtencion"
+    aria-label="Finalizar atención"
+    title="Finalizar atención"
+  >
+    <i class="bi bi-check2-circle"></i>
+    <span>Finalizar atención</span>
+  </button>
+  <div class="auro-clinical-float-nav">
+    <button
+      type="button"
+      class="auro-clinical-float-scroll"
+      id="auroFloatSubir"
+      aria-label="Subir"
+      title="Subir"
+    ><i class="bi bi-arrow-up"></i></button>
+    <button
+      type="button"
+      class="auro-clinical-float-scroll"
+      id="auroFloatBajar"
+      aria-label="Bajar"
+      title="Bajar"
+    ><i class="bi bi-arrow-down"></i></button>
+  </div>
+</div>
+
 
 <div class="modal-backdropx" id="patientModal">
   <div class="modalx">
@@ -7781,7 +7970,7 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
     auroHistoriaMostrarEstado(
       'Anamnesis · Consulta ' + (atn?.consulta || 'activa') +
       (fecha ? ' · Guardado local: ' + fecha : ' · Guardado local') +
-      ' · Sincronizando con Google Sheets…',
+      ' · Guardando en la base de datos…',
       'saving'
     );
   });
@@ -7797,7 +7986,7 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
       'Anamnesis · Consulta ' + (atn?.consulta || 'activa') +
       (fecha
         ? ' · Última actualización: ' + fecha
-        : ' · Guardado confirmado en Google Sheets.'),
+        : ' · Guardado correctamente en la base de datos.'),
       'ok'
     );
   });
@@ -7810,7 +7999,7 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
 
     auroHistoriaMostrarEstado(
       'Anamnesis · Consulta ' + (atn?.consulta || 'activa') +
-      ' · Guardado local seguro · Confirmación de Google Sheets pendiente.',
+      ' · Guardado local seguro · Confirmación de la base de datos pendiente.',
       'saving'
     );
   });
@@ -12435,6 +12624,124 @@ document.addEventListener('click',e=>{
 
 <!-- AUROSANAX - Módulo Atenciones -->
 <script src="atenciones.js?v=20260824_1"></script>
+
+<script id="auro-index86-controles-flotantes-antirregresivos-js">
+/* ============================================================
+   AUROSANAX INDEX 86 — CONTROLES FLOTANTES ANTIRREGRESIVOS V1
+   - ↑ / ↓ desplazan 80% del viewport.
+   - Finalizar NO implementa lógica clínica: delega al botón real de Atenciones.
+   - No modifica showScreen(), IDs, guardados ni estado clínico.
+============================================================ */
+(function(){
+  'use strict';
+
+  const PASO_VIEWPORT = 0.80;
+
+  function auroScrollVertical(direccion){
+    const distancia = Math.max(240, Math.round(window.innerHeight * PASO_VIEWPORT));
+    window.scrollBy({
+      top: direccion * distancia,
+      left: 0,
+      behavior: 'smooth'
+    });
+  }
+
+  function auroBotonFinalizarReal(){
+    return document.getElementById('btnFinalizarAtencion');
+  }
+
+  function auroElementoVisible(el){
+    if(!el) return false;
+    const estilo = window.getComputedStyle(el);
+    if(estilo.display === 'none' || estilo.visibility === 'hidden') return false;
+    if(el.hidden) return false;
+    return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  }
+
+  function auroSincronizarFinalizarFlotante(){
+    const flotante = document.getElementById('auroFloatFinalizarAtencion');
+    if(!flotante) return;
+
+    const real = auroBotonFinalizarReal();
+    const disponible = !!(
+      real &&
+      !real.disabled &&
+      auroElementoVisible(real)
+    );
+
+    flotante.classList.toggle('is-visible', disponible);
+    flotante.setAttribute('aria-hidden', disponible ? 'false' : 'true');
+    flotante.tabIndex = disponible ? 0 : -1;
+  }
+
+  function auroDelegarFinalizacion(){
+    const real = auroBotonFinalizarReal();
+
+    if(!real || real.disabled || !auroElementoVisible(real)){
+      auroSincronizarFinalizarFlotante();
+      return;
+    }
+
+    real.click();
+  }
+
+  function auroInstalarControlesFlotantes(){
+    const subir = document.getElementById('auroFloatSubir');
+    const bajar = document.getElementById('auroFloatBajar');
+    const finalizar = document.getElementById('auroFloatFinalizarAtencion');
+
+    if(subir && subir.dataset.auroBound !== '1'){
+      subir.dataset.auroBound = '1';
+      subir.addEventListener('click', function(){
+        auroScrollVertical(-1);
+      });
+    }
+
+    if(bajar && bajar.dataset.auroBound !== '1'){
+      bajar.dataset.auroBound = '1';
+      bajar.addEventListener('click', function(){
+        auroScrollVertical(1);
+      });
+    }
+
+    if(finalizar && finalizar.dataset.auroBound !== '1'){
+      finalizar.dataset.auroBound = '1';
+      finalizar.addEventListener('click', auroDelegarFinalizacion);
+    }
+
+    auroSincronizarFinalizarFlotante();
+  }
+
+  window.auroSincronizarFinalizarFlotante = auroSincronizarFinalizarFlotante;
+
+  function auroProgramarSincronizacionFinalizar(){
+    window.setTimeout(auroSincronizarFinalizarFlotante, 0);
+    window.setTimeout(auroSincronizarFinalizarFlotante, 260);
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    auroInstalarControlesFlotantes();
+    auroProgramarSincronizacionFinalizar();
+  });
+
+  /* Solo observa acciones/eventos de Atenciones; no vigila todo el DOM. */
+  document.addEventListener('click', function(evento){
+    if(!evento.target?.closest) return;
+    if(
+      evento.target.closest('#btnIniciarAtencion') ||
+      evento.target.closest('#btnFinalizarAtencion') ||
+      evento.target.closest('[data-atencion-id]')
+    ){
+      auroProgramarSincronizacionFinalizar();
+    }
+  });
+
+  window.addEventListener('aurosanax:atencion-seleccionada', auroProgramarSincronizacionFinalizar);
+  window.addEventListener('aurosanax:atencion-limpiada', auroProgramarSincronizacionFinalizar);
+  window.addEventListener('aurosanax:atencion-finalizada', auroProgramarSincronizacionFinalizar);
+})();
+</script>
+
 
 <!-- AUROSANAX - Módulo Obstetricia por atención -->
 <script src="obstetricia.js?v=20260824_1"></script>
