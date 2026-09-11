@@ -3014,11 +3014,38 @@
 
     if(activaBox){
       /*
-        AUROSANAX FIX:
-        No sobrescribir el detalle abierto por el botón Ver.
-        Si hay una consulta seleccionada (atencionActivaId), se mantiene visible.
+        AUROSANAX SINCRONIZACIÓN VISUAL ANTIRREGRESIVA:
+        La atención seleccionada explícitamente por el usuario gobierna la caja
+        de detalle. Un render tardío NO puede sustituirla por otra atención
+        abierta del mismo paciente.
+
+        Prioridad:
+        1. atencionActivaId exacta del paciente visible.
+        2. Si no hay selección activa, mostrar la atención abierta como referencia.
+        3. Si no hay selección ni abierta, mostrar estado sin consulta abierta.
+
+        Alcance:
+        - Solo presentación.
+        - No cambia id_atencion, contexto clínico, localStorage ni backend.
+        - No altera Iniciar, Finalizar, Plan, Diagnóstico, Recetas ni Examen Físico.
       */
-      if(abierta){
+      const idSeleccionada = String(atencionActivaId || '').trim();
+
+      if(idSeleccionada){
+        const seleccionada = arr.find(function(item){
+          return String(item.id_atencion || '').trim() === idSeleccionada &&
+            String(item.id_paciente || '').trim() === String(idPaciente || '').trim();
+        }) || null;
+
+        if(seleccionada){
+          renderDetalleAtencion(seleccionada);
+        }
+        /*
+          Si existe id_atencion activo pero todavía no aparece en este render,
+          NO se cae a otra atención abierta. Se conserva la caja actual hasta
+          que la fuente correspondiente esté disponible.
+        */
+      }else if(abierta){
         const totalAbiertasPaciente = atencionesAbiertasPaciente(idPaciente).length;
         activaBox.style.display = 'block';
         activaBox.innerHTML =
@@ -3027,7 +3054,7 @@
           (totalAbiertasPaciente > 1 ? ' · ' + safe(totalAbiertasPaciente) + ' abiertas' : '') + '<br>' +
           '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(horaVisualAtencion(abierta.hora_atencion || '—')) + '</span>' +
           '</div>';
-      }else if(!atencionActivaId){
+      }else{
         activaBox.style.display = 'block';
         activaBox.innerHTML =
           '<div class="auro-atencion-status cerrada">' +
