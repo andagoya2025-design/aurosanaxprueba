@@ -3720,6 +3720,52 @@
     display:flex;
   }
 
+  /* AUROSANAX INDEX 87 — orientación visual conmutable.
+     Solo presentación; no altera la finalización clínica. */
+  .auro-finalizar-orientation-toggle{
+    position:absolute;
+    top:-13px;
+    left:-13px;
+    width:28px;
+    height:28px;
+    border:1px solid #d9dee7;
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+    color:#475569;
+    background:rgba(255,255,255,.98);
+    box-shadow:0 7px 18px rgba(15,23,42,.12);
+    cursor:pointer;
+    z-index:2;
+    padding:0;
+    font-size:13px;
+  }
+
+  .auro-finalizar-orientation-toggle:hover{filter:brightness(.98)}
+
+  .auro-finalizar-orientation-toggle:focus-visible{
+    outline:3px solid rgba(194,59,131,.24);
+    outline-offset:2px;
+  }
+
+  .auro-finalizar-float-dock.is-horizontal .auro-finalizar-drag-handle{
+    width:28px;
+    min-height:46px;
+  }
+
+  .auro-finalizar-float-dock.is-horizontal .auro-clinical-float-finalizar{
+    width:150px;
+    min-height:46px;
+    padding:10px 13px;
+    border-radius:14px;
+    writing-mode:horizontal-tb;
+    transform:none;
+  }
+
+  .auro-finalizar-float-dock.is-horizontal .auro-clinical-float-finalizar i{
+    transform:none;
+  }
+
   .auro-finalizar-drag-handle{
     width:28px;
     min-height:150px;
@@ -3811,6 +3857,86 @@
     outline-offset:3px;
   }
 
+  /* AUROSANAX INDEX 87 — aviso de guardado ELITE.
+     Es un espejo visual de los estados ya existentes; no ejecuta guardados. */
+  .auro-save-live-toast{
+    position:fixed;
+    left:50%;
+    top:max(16px, calc(env(safe-area-inset-top) + 10px));
+    transform:translateX(-50%) translateY(-8px);
+    z-index:80;
+    width:min(520px, calc(100vw - 28px));
+    min-height:54px;
+    display:flex;
+    align-items:center;
+    gap:11px;
+    padding:12px 15px;
+    border:1px solid #dbeafe;
+    border-radius:16px;
+    background:rgba(255,255,255,.98);
+    color:#1e3a8a;
+    box-shadow:0 16px 38px rgba(15,23,42,.17);
+    font-size:13.5px;
+    line-height:1.35;
+    font-weight:850;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity .16s ease,transform .16s ease,visibility .16s ease;
+  }
+
+  .auro-save-live-toast.is-visible{
+    opacity:1;
+    visibility:visible;
+    transform:translateX(-50%) translateY(0);
+  }
+
+  .auro-save-live-toast .auro-save-live-icon{
+    width:28px;
+    height:28px;
+    flex:0 0 28px;
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+    background:#dbeafe;
+    color:#1d4ed8;
+    font-size:14px;
+  }
+
+  .auro-save-live-toast.saving{
+    border-color:#fed7aa;
+    color:#9a3412;
+  }
+
+  .auro-save-live-toast.saving .auro-save-live-icon{
+    background:#ffedd5;
+    color:#c2410c;
+  }
+
+  .auro-save-live-toast.saving .auro-save-live-icon i{
+    animation:auroHcSpin .8s linear infinite;
+  }
+
+  .auro-save-live-toast.ok{
+    border-color:#bbf7d0;
+    color:#166534;
+  }
+
+  .auro-save-live-toast.ok .auro-save-live-icon{
+    background:#dcfce7;
+    color:#15803d;
+  }
+
+  .auro-save-live-toast.error{
+    border-color:#fecaca;
+    color:#991b1b;
+  }
+
+  .auro-save-live-toast.error .auro-save-live-icon{
+    background:#fee2e2;
+    color:#b91c1c;
+  }
+
   /* Refuerzo visual del estado existente. Solo presentación. */
   #historia #hcSaveStatus.auro-save-status{
     min-height:58px;
@@ -3866,6 +3992,17 @@
       height:42px;
       border-radius:13px;
       font-size:17px;
+    }
+
+    .auro-finalizar-float-dock.is-horizontal .auro-finalizar-drag-handle{
+      width:26px;
+      min-height:42px;
+    }
+
+    .auro-finalizar-float-dock.is-horizontal .auro-clinical-float-finalizar{
+      width:136px;
+      min-height:42px;
+      font-size:11.5px;
     }
 
     #historia #hcSaveStatus.auro-save-status{
@@ -4849,6 +4986,15 @@
 <!-- AUROSANAX INDEX 86 — CONTROLES FLOTANTES ANTIRREGRESIVOS V1 -->
 <div class="auro-clinical-float-tools" id="auroClinicalFloatTools" aria-label="Navegación rápida">
   <div class="auro-finalizar-float-dock" id="auroFinalizarFloatDock">
+    <button
+      type="button"
+      class="auro-finalizar-orientation-toggle"
+      id="auroFloatGirarFinalizar"
+      aria-label="Cambiar orientación del botón Finalizar"
+      title="Cambiar orientación vertical / horizontal"
+    >
+      <i class="bi bi-arrow-repeat"></i>
+    </button>
     <button
       type="button"
       class="auro-finalizar-drag-handle"
@@ -7237,6 +7383,68 @@ function auroHistoriaStatusBox(){
   return status;
 }
 
+let auroHistoriaLiveToastTimer = null;
+
+function auroHistoriaMostrarAvisoVivo(mensaje, tipo){
+  /*
+    Espejo UX del estado ya calculado por el guardado existente.
+    No guarda, no confirma y no modifica la lógica clínica.
+  */
+  let toast = document.getElementById('auroHistoriaSaveLiveToast');
+
+  if(!toast){
+    toast = document.createElement('div');
+    toast.id = 'auroHistoriaSaveLiveToast';
+    toast.className = 'auro-save-live-toast';
+    toast.setAttribute('role','status');
+    toast.setAttribute('aria-live','polite');
+    toast.setAttribute('aria-atomic','true');
+    toast.innerHTML =
+      '<span class="auro-save-live-icon" aria-hidden="true"><i class="bi bi-info-lg"></i></span>' +
+      '<span class="auro-save-live-text"></span>';
+    document.body.appendChild(toast);
+  }
+
+  if(auroHistoriaLiveToastTimer){
+    clearTimeout(auroHistoriaLiveToastTimer);
+    auroHistoriaLiveToastTimer = null;
+  }
+
+  const clase = tipo === 'saving'
+    ? 'saving'
+    : (tipo === 'error' ? 'error' : (tipo === 'ok' ? 'ok' : ''));
+
+  toast.className = 'auro-save-live-toast' + (clase ? ' ' + clase : '');
+
+  const icono = toast.querySelector('.auro-save-live-icon i');
+  const texto = toast.querySelector('.auro-save-live-text');
+
+  if(icono){
+    icono.className = tipo === 'saving'
+      ? 'bi bi-arrow-repeat'
+      : (tipo === 'ok'
+          ? 'bi bi-check-lg'
+          : (tipo === 'error'
+              ? 'bi bi-exclamation-triangle-fill'
+              : 'bi bi-info-lg'));
+  }
+
+  if(texto) texto.textContent = String(mensaje || '').trim();
+
+  if(!String(mensaje || '').trim()){
+    toast.classList.remove('is-visible');
+    return;
+  }
+
+  toast.classList.add('is-visible');
+
+  if(tipo === 'ok' || tipo === 'error'){
+    auroHistoriaLiveToastTimer = window.setTimeout(function(){
+      toast.classList.remove('is-visible');
+    }, tipo === 'ok' ? 2400 : 4000);
+  }
+}
+
 function auroHistoriaMostrarEstado(mensaje, tipo){
   const status = auroHistoriaStatusBox();
   if(!status) return;
@@ -7255,6 +7463,9 @@ function auroHistoriaMostrarEstado(mensaje, tipo){
   status.style.color = '';
 
   status.textContent = mensaje || '';
+
+  /* Refuerzo visual global, sin alterar la operación de guardado. */
+  auroHistoriaMostrarAvisoVivo(mensaje, tipo);
 }
 
 /* =====================================================
@@ -12792,13 +13003,42 @@ document.addEventListener('click',e=>{
     }, 8000);
   }
 
+  function auroAtencionSeleccionadaEsAbierta(){
+    /*
+      AUROSANAX INDEX 87 — FAIL CLOSED.
+      El flotante Finalizar solo puede existir cuando el contexto seleccionado
+      corresponde inequívocamente a una atención ABIERTA.
+
+      Fuente de contexto: obtenerContextoAtencionActual().
+      No modifica contexto, IDs, backend ni estado clínico.
+    */
+    try{
+      if(typeof window.obtenerContextoAtencionActual !== 'function') return false;
+
+      const contexto = window.obtenerContextoAtencionActual();
+      if(!contexto || !String(contexto.id_atencion || '').trim()) return false;
+
+      const estado = String(
+        contexto.estado_atencion ||
+        contexto.estado ||
+        ''
+      ).trim().toLowerCase();
+
+      return /abiert|activ|en curso|iniciad/.test(estado);
+    }catch(error){
+      return false;
+    }
+  }
+
   function auroSincronizarFinalizarFlotante(){
     const dock = document.getElementById('auroFinalizarFloatDock');
     const flotante = document.getElementById('auroFloatFinalizarAtencion');
     if(!dock || !flotante) return;
 
     const real = auroBotonFinalizarReal();
+    const contextoAbierto = auroAtencionSeleccionadaEsAbierta();
     const disponible = !!(
+      contextoAbierto &&
       real &&
       !real.disabled &&
       auroElementoVisible(real)
@@ -12819,7 +13059,13 @@ document.addEventListener('click',e=>{
     const flotante = document.getElementById('auroFloatFinalizarAtencion');
     const real = auroBotonFinalizarReal();
 
-    if(!flotante || !real || real.disabled || !auroElementoVisible(real)){
+    if(
+      !flotante ||
+      !real ||
+      real.disabled ||
+      !auroElementoVisible(real) ||
+      !auroAtencionSeleccionadaEsAbierta()
+    ){
       auroSincronizarFinalizarFlotante();
       return;
     }
@@ -12843,6 +13089,65 @@ document.addEventListener('click',e=>{
   }
 
   const AURO_FINALIZAR_POS_KEY = 'aurosanax_finalizar_flotante_pos_v1';
+  const AURO_FINALIZAR_ORIENTACION_KEY = 'aurosanax_finalizar_flotante_orientacion_v1';
+
+  function auroAplicarOrientacionFinalizar(modo){
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    const boton = document.getElementById('auroFloatGirarFinalizar');
+    if(!dock) return;
+
+    const horizontal = String(modo || '').toLowerCase() === 'horizontal';
+    dock.classList.toggle('is-horizontal', horizontal);
+
+    if(boton){
+      boton.setAttribute(
+        'aria-label',
+        horizontal
+          ? 'Cambiar botón Finalizar a orientación vertical'
+          : 'Cambiar botón Finalizar a orientación horizontal'
+      );
+      boton.title = horizontal
+        ? 'Cambiar a orientación vertical'
+        : 'Cambiar a orientación horizontal';
+    }
+
+    window.requestAnimationFrame(function(){
+      auroAjustarPosicionFinalizarAlViewport();
+    });
+  }
+
+  function auroGuardarOrientacionFinalizar(modo){
+    try{
+      localStorage.setItem(
+        AURO_FINALIZAR_ORIENTACION_KEY,
+        String(modo || '').toLowerCase() === 'horizontal'
+          ? 'horizontal'
+          : 'vertical'
+      );
+    }catch(error){
+      /* Preferencia visual solamente. */
+    }
+  }
+
+  function auroRestaurarOrientacionFinalizar(){
+    let modo = 'vertical';
+    try{
+      modo = localStorage.getItem(AURO_FINALIZAR_ORIENTACION_KEY) || 'vertical';
+    }catch(error){}
+    auroAplicarOrientacionFinalizar(modo);
+  }
+
+  function auroAlternarOrientacionFinalizar(){
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    if(!dock) return;
+
+    const modo = dock.classList.contains('is-horizontal')
+      ? 'vertical'
+      : 'horizontal';
+
+    auroAplicarOrientacionFinalizar(modo);
+    auroGuardarOrientacionFinalizar(modo);
+  }
 
   function auroLimitarNumero(valor, minimo, maximo){
     return Math.min(Math.max(valor, minimo), maximo);
@@ -12973,6 +13278,16 @@ document.addEventListener('click',e=>{
     const subir = document.getElementById('auroFloatSubir');
     const bajar = document.getElementById('auroFloatBajar');
     const finalizar = document.getElementById('auroFloatFinalizarAtencion');
+    const girarFinalizar = document.getElementById('auroFloatGirarFinalizar');
+
+    if(girarFinalizar && girarFinalizar.dataset.auroBound !== '1'){
+      girarFinalizar.dataset.auroBound = '1';
+      girarFinalizar.addEventListener('click', function(evento){
+        evento.preventDefault();
+        evento.stopPropagation();
+        auroAlternarOrientacionFinalizar();
+      });
+    }
 
     if(subir && subir.dataset.auroBound !== '1'){
       subir.dataset.auroBound = '1';
@@ -12994,6 +13309,7 @@ document.addEventListener('click',e=>{
       auroRenderEstadoFinalizar();
     }
 
+    auroRestaurarOrientacionFinalizar();
     auroInstalarArrastreFinalizar();
     auroRestaurarPosicionFinalizar();
     auroSincronizarFinalizarFlotante();
