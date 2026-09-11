@@ -24,6 +24,16 @@
   */
   let contextoAtencionEpoch = 0;
   let consultasVisible = true;
+
+  /*
+    AUROSANAX BLINDAJE TRANSACCIONAL DE INTERFAZ:
+    - Evita doble ejecución accidental de Iniciar / Finalizar.
+    - Solo vive en memoria; no persiste ni modifica datos clínicos.
+    - El backend y la confirmación autoritativa siguen siendo los dueños del estado real.
+  */
+  let creandoAtencion = false;
+  let finalizandoAtencion = false;
+
   let atencionesSheetsCargadas = false;
   let atencionesSheetsCargando = false;
   let recetasSheetsCargadas = false;
@@ -38,6 +48,40 @@
   let medicosActivosCargando = null;
 
   function $(id){ return document.getElementById(id); }
+
+  function auroEmitirEstadoProcesoAtencion(nombre, detalle){
+    try{
+      window.dispatchEvent(new CustomEvent(nombre, {
+        detail:Object.assign({
+          id_paciente:String(idPacienteActivo ? idPacienteActivo() : '').trim(),
+          id_atencion:String(atencionActivaId || '').trim()
+        }, detalle || {})
+      }));
+    }catch(error){
+      console.warn(MODULO, 'No se pudo emitir estado de proceso de atención.', error);
+    }
+  }
+
+  function auroActualizarBotonesProcesoAtencion(){
+    const btnIniciar = $('btnIniciarAtencion');
+    const btnFinalizar = $('btnFinalizarAtencion');
+
+    if(btnIniciar && creandoAtencion){
+      btnIniciar.disabled = true;
+      btnIniciar.style.opacity = '0.72';
+      btnIniciar.style.cursor = 'wait';
+      btnIniciar.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Iniciando…';
+    }
+
+    if(btnFinalizar && finalizandoAtencion){
+      btnFinalizar.disabled = true;
+      btnFinalizar.style.opacity = '0.72';
+      btnFinalizar.style.cursor = 'wait';
+      btnFinalizar.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Finalizando…';
+    }
+  }
 
   function inyectarEstilosAtenciones(){
     if(document.getElementById('auroAtencionesResponsiveCSS')) return;
@@ -1615,7 +1659,7 @@
     return true;
   }
 
-  async function crearAtencion(){
+  async function crearAtencionBase(){
     const p = pacienteActivo();
     const idPaciente = idPacienteActivo();
 
@@ -1804,7 +1848,36 @@
     return nueva;
   }
 
-  async function finalizarAtencion(){
+  async function crearAtencion(){
+    if(creandoAtencion) return null;
+
+    creandoAtencion = true;
+    auroActualizarBotonesProcesoAtencion();
+    auroEmitirEstadoProcesoAtencion('aurosanax:atencion-iniciando');
+
+    try{
+      return await crearAtencionBase();
+    }finally{
+      creandoAtencion = false;
+      auroEmitirEstadoProcesoAtencion('aurosanax:atencion-inicio-fin');
+
+      /*
+        No se fuerza un render clínico completo.
+        Solo se restaura el estado visual de botones con la fuente actual.
+      */
+      const btnIniciar = $('btnIniciarAtencion');
+      if(btnIniciar){
+        btnIniciar.disabled = false;
+        btnIniciar.style.opacity = '1';
+        btnIniciar.style.cursor = 'pointer';
+        btnIniciar.innerHTML = '<i class="bi bi-play-circle me-1"></i> Iniciar';
+      }
+
+      auroActualizarBotonesProcesoAtencion();
+    }
+  }
+
+  async function finalizarAtencionBase(){
     const idPaciente = idPacienteActivo();
     if(!idPaciente){
       alert('Seleccione primero un paciente.');
@@ -1897,7 +1970,38 @@
     });
 
     renderAtencionesPaciente();
+
+    auroEmitirEstadoProcesoAtencion('aurosanax:atencion-finalizada', {
+      id_paciente:idPaciente,
+      id_atencion:idFinalizada,
+      estado:'Finalizada',
+      confirmado:true
+    });
+
     alert('Atención finalizada y confirmada en Google Sheets.');
+  }
+
+  async function finalizarAtencion(){
+    if(finalizandoAtencion) return;
+
+    finalizandoAtencion = true;
+    auroActualizarBotonesProcesoAtencion();
+    auroEmitirEstadoProcesoAtencion('aurosanax:atencion-finalizando');
+
+    try{
+      await finalizarAtencionBase();
+    }finally{
+      finalizandoAtencion = false;
+      auroEmitirEstadoProcesoAtencion('aurosanax:atencion-finalizacion-fin');
+
+      /*
+        Restauración visual sin alterar el estado clínico.
+        Si la atención quedó finalizada, renderAtencionesPaciente() ya habrá
+        deshabilitado correctamente el botón real.
+      */
+      renderAtencionesPaciente();
+      auroActualizarBotonesProcesoAtencion();
+    }
   }
 
 
@@ -2867,21 +2971,43 @@
         Puede haber varias atenciones abiertas. Iniciar permanece disponible;
         crearAtencion() exige confirmación explícita cuando el mismo médico
         ya tiene una consulta abierta.
+
+        BLINDAJE UI:
+        durante una creación en curso se bloquea únicamente el botón para
+        impedir doble clic; no cambia la política clínica existente.
       */
-      btnIniciar.disabled = false;
-      btnIniciar.style.opacity = '1';
-      btnIniciar.style.cursor = 'pointer';
+      if(creandoAtencion){
+        btnIniciar.disabled = true;
+        btnIniciar.style.opacity = '0.72';
+        btnIniciar.style.cursor = 'wait';
+        btnIniciar.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Iniciando…';
+      }else{
+        btnIniciar.disabled = false;
+        btnIniciar.style.opacity = '1';
+        btnIniciar.style.cursor = 'pointer';
+        btnIniciar.innerHTML = '<i class="bi bi-play-circle me-1"></i> Iniciar';
+      }
     }
 
     if(btnFinalizar){
       const abiertasPaciente = atencionesAbiertasPaciente(idPaciente);
       const hayAbiertas = abiertasPaciente.length > 0;
-      btnFinalizar.disabled = !hayAbiertas;
-      btnFinalizar.style.opacity = hayAbiertas ? '1' : '0.55';
-      btnFinalizar.style.cursor = hayAbiertas ? 'pointer' : 'not-allowed';
-      btnFinalizar.innerHTML = hayAbiertas
-        ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
-        : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
+
+      if(finalizandoAtencion){
+        btnFinalizar.disabled = true;
+        btnFinalizar.style.opacity = '0.72';
+        btnFinalizar.style.cursor = 'wait';
+        btnFinalizar.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Finalizando…';
+      }else{
+        btnFinalizar.disabled = !hayAbiertas;
+        btnFinalizar.style.opacity = hayAbiertas ? '1' : '0.55';
+        btnFinalizar.style.cursor = hayAbiertas ? 'pointer' : 'not-allowed';
+        btnFinalizar.innerHTML = hayAbiertas
+          ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
+          : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
+      }
     }
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '') + ' · Vista integral activa';
@@ -2899,7 +3025,7 @@
           '<div class="auro-atencion-status abierta">' +
           '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) +
           (totalAbiertasPaciente > 1 ? ' · ' + safe(totalAbiertasPaciente) + ' abiertas' : '') + '<br>' +
-          '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) + '</span>' +
+          '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(horaVisualAtencion(abierta.hora_atencion || '—')) + '</span>' +
           '</div>';
       }else if(!atencionActivaId){
         activaBox.style.display = 'block';
