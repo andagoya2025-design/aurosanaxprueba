@@ -1236,6 +1236,37 @@
     return a || null;
   }
 
+  /*
+    AUROSANAX BLINDAJE ANTIRREGRESIVO — FINALIZAR POR CONTEXTO EXACTO:
+    El botón real Finalizar solo se habilita cuando la atención actualmente
+    seleccionada (atencionActivaId) pertenece al paciente visible y está Abierta.
+    La existencia de otra atención abierta del mismo paciente NO habilita este botón.
+  */
+  function auroActualizarBotonFinalizarPorContexto(idPaciente){
+    const btnFinalizar = $('btnFinalizarAtencion');
+    if(!btnFinalizar) return;
+
+    const id = String(idPaciente || idPacienteActivo() || '').trim();
+    const abiertaSeleccionada = id ? atencionAbiertaActiva(id) : null;
+    const disponible = !!abiertaSeleccionada;
+
+    if(finalizandoAtencion){
+      btnFinalizar.disabled = true;
+      btnFinalizar.style.opacity = '0.72';
+      btnFinalizar.style.cursor = 'wait';
+      btnFinalizar.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Finalizando…';
+      return;
+    }
+
+    btnFinalizar.disabled = !disponible;
+    btnFinalizar.style.opacity = disponible ? '1' : '0.55';
+    btnFinalizar.style.cursor = disponible ? 'pointer' : 'not-allowed';
+    btnFinalizar.innerHTML = disponible
+      ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
+      : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
+  }
+
   function siguienteConsulta(idPaciente){
     return atencionesPaciente(idPaciente).reduce((m,a) => Math.max(m, Number(a.numero_consulta || 0)), 0) + 1;
   }
@@ -1885,17 +1916,19 @@
     }
 
     const abiertas = atencionesAbiertasPaciente(idPaciente);
-    let abierta = atencionAbiertaActiva(idPaciente);
+    const abierta = atencionAbiertaActiva(idPaciente);
 
-    if(!abierta && abiertas.length === 1){
-      abierta = abiertas[0];
-    }
-
+    /*
+      BLINDAJE CRÍTICO:
+      Nunca se sustituye silenciosamente la atención seleccionada por otra
+      atención abierta del mismo paciente. Para finalizar, el id_atencion
+      seleccionado debe ser exactamente una atención Abierta.
+    */
     if(!abierta){
-      if(abiertas.length > 1){
+      if(abiertas.length){
         alert(
-          'Hay varias atenciones abiertas para este paciente. ' +
-          'Pulse Ver en la consulta que desea finalizar y vuelva a intentarlo.'
+          'La consulta seleccionada no es una atención abierta. ' +
+          'Pulse Ver en la atención abierta que desea finalizar y vuelva a intentarlo.'
         );
       }else{
         alert('No hay atención abierta para finalizar.');
@@ -2872,6 +2905,13 @@
       emitirIniciada:false,
       idAnterior:String(atencionActivaId || '').trim()
     });
+
+    /*
+      Refresco visual localizado:
+      el botón Finalizar refleja inmediatamente la atención recién seleccionada
+      sin esperar otro render general.
+    */
+    auroActualizarBotonFinalizarPorContexto(idPacienteAtencion);
   }
 
   function asegurarBloque(){
@@ -2991,23 +3031,7 @@
     }
 
     if(btnFinalizar){
-      const abiertasPaciente = atencionesAbiertasPaciente(idPaciente);
-      const hayAbiertas = abiertasPaciente.length > 0;
-
-      if(finalizandoAtencion){
-        btnFinalizar.disabled = true;
-        btnFinalizar.style.opacity = '0.72';
-        btnFinalizar.style.cursor = 'wait';
-        btnFinalizar.innerHTML =
-          '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Finalizando…';
-      }else{
-        btnFinalizar.disabled = !hayAbiertas;
-        btnFinalizar.style.opacity = hayAbiertas ? '1' : '0.55';
-        btnFinalizar.style.cursor = hayAbiertas ? 'pointer' : 'not-allowed';
-        btnFinalizar.innerHTML = hayAbiertas
-          ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
-          : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
-      }
+      auroActualizarBotonFinalizarPorContexto(idPaciente);
     }
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '') + ' · Vista integral activa';
