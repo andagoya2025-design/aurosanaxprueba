@@ -3862,7 +3862,7 @@
   .auro-save-live-toast{
     position:fixed;
     left:50%;
-    top:max(16px, calc(env(safe-area-inset-top) + 10px));
+    top:max(96px, calc(env(safe-area-inset-top) + 86px));
     transform:translateX(-50%) translateY(-8px);
     z-index:80;
     width:min(520px, calc(100vw - 28px));
@@ -3870,7 +3870,7 @@
     display:flex;
     align-items:center;
     gap:11px;
-    padding:12px 15px;
+    padding:12px 44px 12px 15px;
     border:1px solid #dbeafe;
     border-radius:16px;
     background:rgba(255,255,255,.98);
@@ -3889,6 +3889,38 @@
     opacity:1;
     visibility:visible;
     transform:translateX(-50%) translateY(0);
+  }
+
+  .auro-save-live-toast .auro-save-live-close{
+    position:absolute;
+    top:8px;
+    right:8px;
+    width:28px;
+    height:28px;
+    border:0;
+    border-radius:9px;
+    display:grid;
+    place-items:center;
+    background:transparent;
+    color:#64748b;
+    cursor:pointer;
+    pointer-events:auto;
+    -webkit-tap-highlight-color:transparent;
+    transition:background .14s ease,color .14s ease,transform .14s ease;
+  }
+
+  .auro-save-live-toast .auro-save-live-close:hover{
+    background:#f1f5f9;
+    color:#111827;
+  }
+
+  .auro-save-live-toast .auro-save-live-close:active{
+    transform:scale(.94);
+  }
+
+  .auro-save-live-toast .auro-save-live-close:focus-visible{
+    outline:3px solid rgba(194,59,131,.22);
+    outline-offset:2px;
   }
 
   .auro-save-live-toast .auro-save-live-icon{
@@ -3956,6 +3988,13 @@
   }
 
   @media(max-width:980px){
+    .auro-save-live-toast{
+      top:max(118px, calc(env(safe-area-inset-top) + 108px));
+      width:min(94vw, 520px);
+      padding:12px 42px 12px 14px;
+      font-size:13px;
+    }
+
     .auro-clinical-float-tools{
       right:max(14px, env(safe-area-inset-right));
       bottom:max(16px, calc(env(safe-area-inset-bottom) + 10px));
@@ -7401,8 +7440,26 @@ function auroHistoriaMostrarAvisoVivo(mensaje, tipo){
     toast.setAttribute('aria-atomic','true');
     toast.innerHTML =
       '<span class="auro-save-live-icon" aria-hidden="true"><i class="bi bi-info-lg"></i></span>' +
-      '<span class="auro-save-live-text"></span>';
+      '<span class="auro-save-live-text"></span>' +
+      '<button type="button" class="auro-save-live-close" aria-label="Cerrar aviso" title="Cerrar aviso">' +
+        '<i class="bi bi-x-lg" aria-hidden="true"></i>' +
+      '</button>';
     document.body.appendChild(toast);
+
+    const cerrar = toast.querySelector('.auro-save-live-close');
+    if(cerrar){
+      cerrar.addEventListener('click', function(evento){
+        evento.preventDefault();
+        evento.stopPropagation();
+
+        if(auroHistoriaLiveToastTimer){
+          clearTimeout(auroHistoriaLiveToastTimer);
+          auroHistoriaLiveToastTimer = null;
+        }
+
+        toast.classList.remove('is-visible');
+      });
+    }
   }
 
   if(auroHistoriaLiveToastTimer){
@@ -7438,10 +7495,14 @@ function auroHistoriaMostrarAvisoVivo(mensaje, tipo){
 
   toast.classList.add('is-visible');
 
-  if(tipo === 'ok' || tipo === 'error'){
+  if(tipo === 'ok' || tipo === 'error' || !tipo){
+    const espera = tipo === 'ok'
+      ? 2400
+      : (tipo === 'error' ? 4000 : 3200);
+
     auroHistoriaLiveToastTimer = window.setTimeout(function(){
       toast.classList.remove('is-visible');
-    }, tipo === 'ok' ? 2400 : 4000);
+    }, espera);
   }
 }
 
