@@ -1619,6 +1619,7 @@ function cargarPlanTemporal(idAtencion){
 function limpiarPlanTemporal(){
 
     window.auroPlanMedicamentoEditandoIndice = null;
+    window.auroPlanOrdenEditandoIndice = null;
     window.medicamentosPlanSeleccionados = [];
     window.ordenesMedicasPlanSeleccionadas = [];
     window.interconsultasPlanSeleccionadas = [];
@@ -3260,6 +3261,18 @@ function limpiarMedicamentosPlan(){
    ÓRDENES MÉDICAS DEL PLAN
 ============================================================ */
 
+/*
+   AUROSANAX PLAN 36 - EDICIÓN ANTIRREGRESIVA DE ÓRDENES
+   - Edita/Elimina únicamente la preparación del Plan.
+   - No emite documentos formales ni crea versiones.
+   - Mantiene propiedades adicionales de protocolos al editar.
+   - OTROS permite escribir una categoría clínica libre sin cambiar el JSON.
+*/
+window.auroPlanOrdenEditandoIndice =
+    Number.isInteger(window.auroPlanOrdenEditandoIndice)
+        ? window.auroPlanOrdenEditandoIndice
+        : null;
+
 function normalizarOrdenTexto(t){
     return normalizarTextoPlan(t);
 }
@@ -3306,49 +3319,265 @@ function renderOrdenesSugerencias(){
     box.classList.remove('d-none');
 }
 
+function auroPlanInstalarEntradaOrdenTipoLibre(){
+    const campo = document.getElementById('hcOrdenTipo');
+    if(!campo || campo.tagName !== 'SELECT') return null;
+
+    let entrada = document.getElementById('hcOrdenTipoLibre');
+
+    if(!entrada){
+        entrada = document.createElement('input');
+        entrada.type = 'text';
+        entrada.id = 'hcOrdenTipoLibre';
+        entrada.className = 'form-control form-control-sm mt-2 d-none';
+        entrada.placeholder = 'Escriba otro tipo de orden';
+        entrada.setAttribute('autocomplete', 'off');
+        entrada.setAttribute('aria-label', 'Escribir otro tipo de orden médica');
+        campo.insertAdjacentElement('afterend', entrada);
+    }
+
+    return entrada;
+}
+
+function auroPlanActualizarEntradaOrdenTipoLibre(){
+    const campo = document.getElementById('hcOrdenTipo');
+    const entrada = auroPlanInstalarEntradaOrdenTipoLibre();
+    if(!campo || !entrada) return;
+
+    const esOtros = normalizarOrdenTexto(campo.value) === 'otros';
+    entrada.classList.toggle('d-none', !esOtros);
+
+    if(!esOtros){
+        entrada.value = '';
+    }
+}
+
+function auroPlanCategoriaOrdenDesdeFormulario(){
+    const tipo = String(auroPlanGetValue('hcOrdenTipo') || '').trim();
+
+    if(normalizarOrdenTexto(tipo) === 'otros'){
+        return String(document.getElementById('hcOrdenTipoLibre')?.value || '').trim();
+    }
+
+    return tipo || 'OTROS';
+}
+
+function auroPlanBuscarBotonAgregarOrden(){
+    return Array.from(document.querySelectorAll('#hc_plan button, button')).find(btn =>
+        String(btn.getAttribute('onclick') || '').includes('agregarOrdenMedicaDesdeFormulario')
+    ) || null;
+}
+
+function auroPlanPrepararControlesEdicionOrden(){
+    const boton = auroPlanBuscarBotonAgregarOrden();
+    if(!boton) return;
+
+    boton.id = boton.id || 'auroPlanBtnAgregarOrden';
+    boton.classList.add('auro-plan-btn-orden-principal');
+
+    let cancelar = document.getElementById('auroPlanBtnCancelarEdicionOrden');
+    if(!cancelar){
+        cancelar = document.createElement('button');
+        cancelar.type = 'button';
+        cancelar.id = 'auroPlanBtnCancelarEdicionOrden';
+        cancelar.className = 'btn btn-sm btn-outline-secondary ms-2 d-none';
+        cancelar.innerHTML = '<i class="bi bi-x-circle me-1"></i> Cancelar edición';
+        cancelar.addEventListener('click', cancelarEdicionOrdenMedicaPlan);
+        boton.insertAdjacentElement('afterend', cancelar);
+    }
+
+    let aviso = document.getElementById('auroPlanAvisoEdicionOrden');
+    if(!aviso){
+        aviso = document.createElement('div');
+        aviso.id = 'auroPlanAvisoEdicionOrden';
+        aviso.className = 'auro-plan-aviso-edicion d-none';
+        aviso.setAttribute('role', 'status');
+        (boton.parentElement || boton).insertAdjacentElement('beforebegin', aviso);
+    }
+
+    auroPlanInstalarEntradaOrdenTipoLibre();
+    auroPlanActualizarEstadoEdicionOrden();
+    auroPlanActualizarEntradaOrdenTipoLibre();
+}
+
+function auroPlanActualizarEstadoEdicionOrden(){
+    const boton = auroPlanBuscarBotonAgregarOrden();
+    const cancelar = document.getElementById('auroPlanBtnCancelarEdicionOrden');
+    const aviso = document.getElementById('auroPlanAvisoEdicionOrden');
+    const indice = window.auroPlanOrdenEditandoIndice;
+    const editando = Number.isInteger(indice) &&
+        indice >= 0 &&
+        indice < (window.ordenesMedicasPlanSeleccionadas || []).length;
+
+    if(boton){
+        boton.innerHTML = editando
+            ? '<i class="bi bi-check-circle me-1"></i> Actualizar orden'
+            : '<i class="bi bi-plus-circle me-1"></i> Agregar';
+    }
+
+    if(cancelar) cancelar.classList.toggle('d-none', !editando);
+
+    if(aviso){
+        aviso.classList.toggle('d-none', !editando);
+        aviso.innerHTML = editando
+            ? '<i class="bi bi-pencil-square me-1"></i> Editando orden ' + (indice + 1) + '. Revise los datos y presione “Actualizar orden”.'
+            : '';
+    }
+}
+
 function seleccionarOrdenSugerida(el){
 
     if(!el) return;
 
     auroPlanSetValue('hcOrdenBusqueda', el.dataset.orden || '');
     auroPlanSetValue('hcOrdenTipo', el.dataset.cat || '');
+    auroPlanActualizarEntradaOrdenTipoLibre();
 
     const box = document.getElementById('hcOrdenSugerencias');
     if(box) box.classList.add('d-none');
 }
 
-function limpiarFormularioOrdenMedica(){
+function limpiarFormularioOrdenMedica(opciones){
+
+    opciones = opciones || {};
 
     auroPlanSetValue('hcOrdenTipo', '');
     auroPlanSetValue('hcOrdenBusqueda', '');
     auroPlanSetValue('hcOrdenObservacion', '');
 
+    const entradaLibre = document.getElementById('hcOrdenTipoLibre');
+    if(entradaLibre){
+        entradaLibre.value = '';
+        entradaLibre.classList.add('d-none');
+    }
+
     const box = document.getElementById('hcOrdenSugerencias');
     if(box) box.classList.add('d-none');
+
+    if(opciones.conservarEdicion !== true){
+        window.auroPlanOrdenEditandoIndice = null;
+    }
+
+    auroPlanActualizarEstadoEdicionOrden();
 }
 
 function agregarOrdenMedicaDesdeFormulario(){
 
     const orden = (auroPlanGetValue('hcOrdenBusqueda') || '').trim();
+    const tipoSeleccionado = String(auroPlanGetValue('hcOrdenTipo') || '').trim();
+    const categoria = auroPlanCategoriaOrdenDesdeFormulario();
 
     if(!orden){
         alert('Ingrese o seleccione una orden médica.');
         return;
     }
 
-    window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas([
-        ...(window.ordenesMedicasPlanSeleccionadas || []),
-        {
-            orden,
-            cat: auroPlanGetValue('hcOrdenTipo') || 'OTROS',
-            obs: auroPlanGetValue('hcOrdenObservacion')
-        }
-    ]);
+    if(normalizarOrdenTexto(tipoSeleccionado) === 'otros' && !categoria){
+        const entrada = auroPlanInstalarEntradaOrdenTipoLibre();
+        auroPlanActualizarEntradaOrdenTipoLibre();
+        alert('Escriba el tipo de orden médica.');
+        if(entrada) entrada.focus();
+        return;
+    }
+
+    const nuevo = {
+        orden,
+        cat: categoria || 'OTROS',
+        obs: auroPlanGetValue('hcOrdenObservacion')
+    };
+
+    const indice = window.auroPlanOrdenEditandoIndice;
+    const editando = Number.isInteger(indice) &&
+        indice >= 0 &&
+        indice < (window.ordenesMedicasPlanSeleccionadas || []).length;
+
+    if(editando){
+        const anterior = window.ordenesMedicasPlanSeleccionadas[indice] || {};
+        window.ordenesMedicasPlanSeleccionadas[indice] = {
+            ...anterior,
+            ...nuevo
+        };
+        window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas(
+            window.ordenesMedicasPlanSeleccionadas
+        );
+    }else{
+        window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas([
+            ...(window.ordenesMedicasPlanSeleccionadas || []),
+            nuevo
+        ]);
+    }
 
     limpiarFormularioOrdenMedica();
     renderOrdenesMedicasTabla();
     recopilarOrdenesMedicasPlan();
     guardarPlanTemporal();
+    auroPlanRenderSugerenciasDiagnosticas();
+}
+
+function editarOrdenMedicaPlan(i){
+
+    i = Number(i);
+
+    if(
+        Number.isNaN(i) ||
+        i < 0 ||
+        i >= (window.ordenesMedicasPlanSeleccionadas || []).length
+    ) return;
+
+    const item = window.ordenesMedicasPlanSeleccionadas[i] || {};
+    const campoTipo = document.getElementById('hcOrdenTipo');
+    const entradaLibre = auroPlanInstalarEntradaOrdenTipoLibre();
+    const categoria = String(item.cat || 'OTROS').trim() || 'OTROS';
+
+    window.auroPlanOrdenEditandoIndice = i;
+    auroPlanSetValue('hcOrdenBusqueda', item.orden || '');
+    auroPlanSetValue('hcOrdenObservacion', item.obs || '');
+
+    if(campoTipo && campoTipo.tagName === 'SELECT'){
+        const existe = Array.from(campoTipo.options || []).some(op =>
+            normalizarOrdenTexto(op.value) === normalizarOrdenTexto(categoria)
+        );
+
+        if(existe){
+            campoTipo.value = Array.from(campoTipo.options || []).find(op =>
+                normalizarOrdenTexto(op.value) === normalizarOrdenTexto(categoria)
+            )?.value || categoria;
+            if(entradaLibre) entradaLibre.value = '';
+        }else{
+            const opcionOtros = Array.from(campoTipo.options || []).find(op =>
+                normalizarOrdenTexto(op.value) === 'otros'
+            );
+            campoTipo.value = opcionOtros?.value || 'OTROS';
+            if(entradaLibre) entradaLibre.value = categoria;
+        }
+    }else{
+        auroPlanSetValue('hcOrdenTipo', categoria);
+    }
+
+    auroPlanActualizarEntradaOrdenTipoLibre();
+    if(entradaLibre && normalizarOrdenTexto(auroPlanGetValue('hcOrdenTipo')) === 'otros'){
+        entradaLibre.value = categoria;
+        entradaLibre.classList.remove('d-none');
+    }
+
+    auroPlanActualizarEstadoEdicionOrden();
+
+    const formulario = document.getElementById('hcOrdenBusqueda');
+    if(formulario){
+        formulario.focus();
+        formulario.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+}
+
+function cancelarEdicionOrdenMedicaPlan(opciones){
+    opciones = opciones || {};
+    window.auroPlanOrdenEditandoIndice = null;
+
+    if(opciones.limpiarFormulario !== false){
+        limpiarFormularioOrdenMedica();
+    }else{
+        auroPlanActualizarEstadoEdicionOrden();
+    }
 }
 
 function eliminarOrdenMedica(i){
@@ -3357,7 +3586,16 @@ function eliminarOrdenMedica(i){
 
     if(Number.isNaN(i)) return;
 
+    const indiceEditando = window.auroPlanOrdenEditandoIndice;
     window.ordenesMedicasPlanSeleccionadas.splice(i,1);
+
+    if(Number.isInteger(indiceEditando)){
+        if(indiceEditando === i){
+            cancelarEdicionOrdenMedicaPlan();
+        }else if(indiceEditando > i){
+            window.auroPlanOrdenEditandoIndice = indiceEditando - 1;
+        }
+    }
 
     renderOrdenesMedicasTabla();
     recopilarOrdenesMedicasPlan();
@@ -3373,6 +3611,7 @@ function renderOrdenesMedicasTabla(){
 
     if(!tbody) return;
 
+    auroPlanPrepararControlesEdicionOrden();
     const ordenes = window.ordenesMedicasPlanSeleccionadas || [];
 
     if(!ordenes.length){
@@ -3386,6 +3625,7 @@ function renderOrdenesMedicasTabla(){
         `;
 
         auroPlanSetValue('hcExamenesSolicitados', '');
+        auroPlanActualizarEstadoEdicionOrden();
         return;
     }
 
@@ -3395,16 +3635,28 @@ function renderOrdenesMedicasTabla(){
           <td>${escapeHtmlPlan(o.cat)}</td>
           <td>${escapeHtmlPlan(o.obs)}</td>
           <td>
-            <button type="button"
-                    class="btn btn-sm btn-outline-danger"
-                    onclick="eliminarOrdenMedica(${i})">
-              <i class="bi bi-trash"></i>
-            </button>
+            <div class="auro-plan-acciones-orden">
+              <button type="button"
+                      class="btn btn-sm btn-outline-primary"
+                      title="Editar orden"
+                      aria-label="Editar orden ${i + 1}"
+                      onclick="editarOrdenMedicaPlan(${i})">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+              <button type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      title="Eliminar orden"
+                      aria-label="Eliminar orden ${i + 1}"
+                      onclick="eliminarOrdenMedica(${i})">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
           </td>
         </tr>
     `).join('');
 
     recopilarOrdenesMedicasPlan();
+    auroPlanActualizarEstadoEdicionOrden();
 }
 
 function textoOrdenesMedicasPlan(){
@@ -3426,8 +3678,10 @@ function recopilarOrdenesMedicasPlan(){
 }
 
 function limpiarOrdenesMedicasPlan(){
+    window.auroPlanOrdenEditandoIndice = null;
     window.ordenesMedicasPlanSeleccionadas = [];
 
+    limpiarFormularioOrdenMedica();
     renderOrdenesMedicasTabla();
     recopilarOrdenesMedicasPlan();
     guardarPlanTemporal();
@@ -3848,6 +4102,8 @@ function instalarEventosMedicamentosPlan(){
 
 function instalarEventosOrdenesMedicasPlan(){
 
+    auroPlanPrepararControlesEdicionOrden();
+
     if(window.auroPlanOrdenesEventosInstalados) return;
     window.auroPlanOrdenesEventosInstalados = true;
 
@@ -3865,6 +4121,7 @@ function instalarEventosOrdenesMedicasPlan(){
 
     document.addEventListener('change', function(e){
         if(e.target && e.target.id === 'hcOrdenTipo'){
+            auroPlanActualizarEntradaOrdenTipoLibre();
             renderOrdenesSugerencias();
         }
     });
@@ -4163,6 +4420,14 @@ function instalarResponsivePlanAndroid(){
         white-space:nowrap;
       }
       #hc_plan .auro-plan-acciones-medicamento{
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:6px;
+        white-space:nowrap;
+      }
+
+      #hc_plan .auro-plan-acciones-orden{
         display:flex;
         align-items:center;
         justify-content:center;
@@ -5165,6 +5430,8 @@ async function cargarPlanClinicoDesdeSheets(idAtencion){
 
 window.editarMedicamentoPlan = editarMedicamentoPlan;
 window.cancelarEdicionMedicamentoPlan = cancelarEdicionMedicamentoPlan;
+window.editarOrdenMedicaPlan = editarOrdenMedicaPlan;
+window.cancelarEdicionOrdenMedicaPlan = cancelarEdicionOrdenMedicaPlan;
 window.auroPlanNombreViaCompleta = auroPlanNombreViaCompleta;
 
 window.guardarPlanClinicoDesdeSheets = guardarPlanClinicoDesdeSheets;
