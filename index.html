@@ -3704,12 +3704,47 @@
     touch-action:manipulation;
   }
 
-  .auro-clinical-float-finalizar{
+  .auro-finalizar-float-dock{
     display:none;
     position:fixed;
     top:max(86px, calc(env(safe-area-inset-top) + 72px));
     right:max(10px, env(safe-area-inset-right));
     z-index:33;
+    align-items:stretch;
+    gap:5px;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+
+  .auro-finalizar-float-dock.is-visible{
+    display:flex;
+  }
+
+  .auro-finalizar-drag-handle{
+    width:28px;
+    min-height:150px;
+    border:1px solid #d9dee7;
+    border-radius:13px;
+    color:#475569;
+    background:rgba(255,255,255,.96);
+    box-shadow:0 10px 24px rgba(15,23,42,.10);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:grab;
+    touch-action:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .auro-finalizar-drag-handle:active{cursor:grabbing}
+
+  .auro-finalizar-drag-handle i{
+    font-size:17px;
+    pointer-events:none;
+  }
+
+  .auro-clinical-float-finalizar{
+    display:inline-flex;
     width:46px;
     min-height:150px;
     padding:12px 8px;
@@ -3727,15 +3762,12 @@
     transform:rotate(180deg);
     letter-spacing:.01em;
     user-select:none;
+    -webkit-user-select:none;
   }
 
   .auro-clinical-float-finalizar i{
     transform:rotate(180deg);
     font-size:15px;
-  }
-
-  .auro-clinical-float-finalizar.is-visible{
-    display:inline-flex;
   }
 
   .auro-clinical-float-finalizar.is-locked{
@@ -3809,9 +3841,19 @@
       bottom:max(84px, calc(env(safe-area-inset-bottom) + 78px));
     }
 
-    .auro-clinical-float-finalizar{
+    .auro-finalizar-float-dock{
       top:max(82px, calc(env(safe-area-inset-top) + 68px));
       right:max(6px, env(safe-area-inset-right));
+      gap:4px;
+    }
+
+    .auro-finalizar-drag-handle{
+      width:26px;
+      min-height:136px;
+      border-radius:12px;
+    }
+
+    .auro-clinical-float-finalizar{
       width:42px;
       min-height:136px;
       padding:10px 7px;
@@ -3843,6 +3885,11 @@
   }
 
   @media(max-width:390px){
+    .auro-finalizar-drag-handle{
+      width:24px;
+      min-height:128px;
+    }
+
     .auro-clinical-float-finalizar{
       width:40px;
       min-height:128px;
@@ -4801,17 +4848,28 @@
 
 <!-- AUROSANAX INDEX 86 — CONTROLES FLOTANTES ANTIRREGRESIVOS V1 -->
 <div class="auro-clinical-float-tools" id="auroClinicalFloatTools" aria-label="Navegación rápida">
-  <button
-    type="button"
-    class="auro-clinical-float-finalizar is-locked"
-    id="auroFloatFinalizarAtencion"
-    aria-label="Finalizar atención bloqueado"
-    title="Finalizar atención bloqueado"
-    data-auro-locked="1"
-  >
-    <i class="bi bi-lock-fill"></i>
-    <span>Finalizar</span>
-  </button>
+  <div class="auro-finalizar-float-dock" id="auroFinalizarFloatDock">
+    <button
+      type="button"
+      class="auro-finalizar-drag-handle"
+      id="auroFloatMoverFinalizar"
+      aria-label="Mover botón Finalizar"
+      title="Mantenga presionado y arrastre para mover"
+    >
+      <i class="bi bi-grip-vertical"></i>
+    </button>
+    <button
+      type="button"
+      class="auro-clinical-float-finalizar is-locked"
+      id="auroFloatFinalizarAtencion"
+      aria-label="Finalizar atención bloqueado"
+      title="Finalizar atención bloqueado"
+      data-auro-locked="1"
+    >
+      <i class="bi bi-lock-fill"></i>
+      <span>Finalizar</span>
+    </button>
+  </div>
   <div class="auro-clinical-float-nav">
     <button
       type="button"
@@ -12735,8 +12793,9 @@ document.addEventListener('click',e=>{
   }
 
   function auroSincronizarFinalizarFlotante(){
+    const dock = document.getElementById('auroFinalizarFloatDock');
     const flotante = document.getElementById('auroFloatFinalizarAtencion');
-    if(!flotante) return;
+    if(!dock || !flotante) return;
 
     const real = auroBotonFinalizarReal();
     const disponible = !!(
@@ -12745,8 +12804,8 @@ document.addEventListener('click',e=>{
       auroElementoVisible(real)
     );
 
-    flotante.classList.toggle('is-visible', disponible);
-    flotante.setAttribute('aria-hidden', disponible ? 'false' : 'true');
+    dock.classList.toggle('is-visible', disponible);
+    dock.setAttribute('aria-hidden', disponible ? 'false' : 'true');
     flotante.tabIndex = disponible ? 0 : -1;
 
     if(!disponible){
@@ -12783,6 +12842,133 @@ document.addEventListener('click',e=>{
     real.click();
   }
 
+  const AURO_FINALIZAR_POS_KEY = 'aurosanax_finalizar_flotante_pos_v1';
+
+  function auroLimitarNumero(valor, minimo, maximo){
+    return Math.min(Math.max(valor, minimo), maximo);
+  }
+
+  function auroAplicarPosicionFinalizar(dock, left, top){
+    if(!dock) return;
+
+    const margen = 8;
+    const ancho = dock.offsetWidth || 74;
+    const alto = dock.offsetHeight || 150;
+    const maxLeft = Math.max(margen, window.innerWidth - ancho - margen);
+    const maxTop = Math.max(margen, window.innerHeight - alto - margen);
+
+    const x = auroLimitarNumero(Number(left) || margen, margen, maxLeft);
+    const y = auroLimitarNumero(Number(top) || margen, margen, maxTop);
+
+    dock.style.left = x + 'px';
+    dock.style.top = y + 'px';
+    dock.style.right = 'auto';
+    dock.style.bottom = 'auto';
+  }
+
+  function auroGuardarPosicionFinalizar(dock){
+    if(!dock) return;
+    try{
+      const rect = dock.getBoundingClientRect();
+      localStorage.setItem(
+        AURO_FINALIZAR_POS_KEY,
+        JSON.stringify({
+          left:Math.round(rect.left),
+          top:Math.round(rect.top)
+        })
+      );
+    }catch(error){
+      /* Preferencia visual solamente. */
+    }
+  }
+
+  function auroRestaurarPosicionFinalizar(){
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    if(!dock) return;
+
+    try{
+      const guardada = JSON.parse(
+        localStorage.getItem(AURO_FINALIZAR_POS_KEY) || 'null'
+      );
+
+      if(
+        guardada &&
+        Number.isFinite(Number(guardada.left)) &&
+        Number.isFinite(Number(guardada.top))
+      ){
+        auroAplicarPosicionFinalizar(dock, guardada.left, guardada.top);
+      }
+    }catch(error){
+      /* Si no existe posición válida, conserva la ubicación CSS original. */
+    }
+  }
+
+  function auroAjustarPosicionFinalizarAlViewport(){
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    if(!dock || (!dock.style.left && !dock.style.top)) return;
+
+    const rect = dock.getBoundingClientRect();
+    auroAplicarPosicionFinalizar(dock, rect.left, rect.top);
+    auroGuardarPosicionFinalizar(dock);
+  }
+
+  function auroInstalarArrastreFinalizar(){
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    const handle = document.getElementById('auroFloatMoverFinalizar');
+    if(!dock || !handle || handle.dataset.auroDragBound === '1') return;
+
+    handle.dataset.auroDragBound = '1';
+
+    let arrastrando = false;
+    let pointerId = null;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    handle.addEventListener('pointerdown', function(evento){
+      if(evento.button !== undefined && evento.button !== 0) return;
+
+      const rect = dock.getBoundingClientRect();
+      arrastrando = true;
+      pointerId = evento.pointerId;
+      offsetX = evento.clientX - rect.left;
+      offsetY = evento.clientY - rect.top;
+
+      try{ handle.setPointerCapture(pointerId); }catch(error){}
+      evento.preventDefault();
+    });
+
+    handle.addEventListener('pointermove', function(evento){
+      if(!arrastrando || evento.pointerId !== pointerId) return;
+
+      auroAplicarPosicionFinalizar(
+        dock,
+        evento.clientX - offsetX,
+        evento.clientY - offsetY
+      );
+      evento.preventDefault();
+    });
+
+    function terminarArrastre(evento){
+      if(!arrastrando) return;
+      if(evento && pointerId !== null && evento.pointerId !== pointerId) return;
+
+      arrastrando = false;
+
+      try{
+        if(pointerId !== null && handle.hasPointerCapture(pointerId)){
+          handle.releasePointerCapture(pointerId);
+        }
+      }catch(error){}
+
+      pointerId = null;
+      auroGuardarPosicionFinalizar(dock);
+    }
+
+    handle.addEventListener('pointerup', terminarArrastre);
+    handle.addEventListener('pointercancel', terminarArrastre);
+    handle.addEventListener('lostpointercapture', terminarArrastre);
+  }
+
   function auroInstalarControlesFlotantes(){
     const subir = document.getElementById('auroFloatSubir');
     const bajar = document.getElementById('auroFloatBajar');
@@ -12808,6 +12994,8 @@ document.addEventListener('click',e=>{
       auroRenderEstadoFinalizar();
     }
 
+    auroInstalarArrastreFinalizar();
+    auroRestaurarPosicionFinalizar();
     auroSincronizarFinalizarFlotante();
   }
 
@@ -12833,6 +13021,11 @@ document.addEventListener('click',e=>{
     ){
       auroProgramarSincronizacionFinalizar();
     }
+  });
+
+  window.addEventListener('resize', auroAjustarPosicionFinalizarAlViewport);
+  window.addEventListener('orientationchange', function(){
+    window.setTimeout(auroAjustarPosicionFinalizarAlViewport, 120);
   });
 
   window.addEventListener('aurosanax:atencion-seleccionada', auroProgramarSincronizacionFinalizar);
