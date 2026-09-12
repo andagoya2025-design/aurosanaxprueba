@@ -36,6 +36,15 @@
 
   let atencionesSheetsCargadas = false;
   let atencionesSheetsCargando = false;
+  let atencionesSheetsPromesa = null;
+
+  /*
+    AUROSANAX ATENCIONES — TRANSACCIONES LOCALES PENDIENTES
+    Solo protege una atención recién creada mientras se confirma su existencia
+    en Google Sheets. Una lectura remota exitosa sigue siendo la autoridad.
+  */
+  const atencionesPendientesPersistencia = new Set();
+
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
   let consultasPaginaActual = 1;
@@ -685,32 +694,37 @@
   }
 
   function mezclarAtencionesLocalesYSheets(remotas){
-    const locales = leerLocal().map(normalizar);
+    const remotasNormalizadas = (Array.isArray(remotas) ? remotas : [])
+      .map(normalizar)
+      .filter(function(a){
+        return !!String(a.id_atencion || '').trim();
+      });
+
     const mapa = new Map();
 
     /*
-      AUROSANAX FIX:
-      localStorage es solo respaldo temporal.
-      Google Sheets es la fuente principal y sobrescribe la copia local.
+      AUROSANAX BLINDAJE DE AUTORIDAD REMOTA:
+      - Una lectura GET exitosa de Google Sheets gobierna existencia y estado.
+      - localStorage es caché, no autoridad.
+      - Solo se conserva temporalmente una atención local cuyo id_atencion
+        está marcado como creación pendiente de confirmación.
+      - Si una atención fue borrada en Sheets y no está pendiente, desaparece
+        del caché en el siguiente refresco remoto exitoso.
     */
-    locales.forEach(item => {
-      const a = normalizar(item || {});
-      if(a.id_atencion){
-        mapa.set(String(a.id_atencion), a);
+    remotasNormalizadas.forEach(function(a){
+      mapa.set(String(a.id_atencion), a);
+    });
+
+    leerLocal().map(normalizar).forEach(function(local){
+      const id = String(local.id_atencion || '').trim();
+      if(!id || !atencionesPendientesPersistencia.has(id)) return;
+
+      if(!mapa.has(id)){
+        mapa.set(id, local);
       }
     });
 
-    (Array.isArray(remotas) ? remotas : []).forEach(item => {
-      const a = normalizar(item || {});
-      if(a.id_atencion){
-        mapa.set(
-          String(a.id_atencion),
-          Object.assign({}, mapa.get(String(a.id_atencion)) || {}, a)
-        );
-      }
-    });
-
-    const mezcladas = Array.from(mapa.values()).sort((a,b) => {
+    const sincronizadas = Array.from(mapa.values()).sort((a,b) => {
       const na = Number(a.numero_consulta || 0);
       const nb = Number(b.numero_consulta || 0);
       if(na !== nb) return nb - na;
@@ -718,38 +732,121 @@
         .localeCompare(String(a.fecha_atencion + ' ' + a.hora_atencion));
     });
 
-    guardarLocal(mezcladas);
-    return mezcladas;
+    guardarLocal(sincronizadas);
+    return sincronizadas;
   }
 
-  async function cargarAtencionesDesdeSheets(forzar){
-    try{
-      if(atencionesSheetsCargando) return leerLocal();
-      if(atencionesSheetsCargadas && !forzar) return leerLocal();
+  function cargarAtencionesDesdeSheets(forzar){
+    if(atencionesSheetsPromesa){
+      return atencionesSheetsPromesa;
+    }
 
-      if(typeof API_URL === 'undefined' || !API_URL){
+    if(atencionesSheetsCargadas && !forzar){
+      return Promise.resolve(leerLocal());
+    }
+
+    if(typeof API_URL === 'undefined' || !API_URL){
+      return Promise.resolve(leerLocal());
+    }
+
+    atencionesSheetsCargando = true;
+
+    atencionesSheetsPromesa = (async function(){
+      try{
+        const res = await fetch(
+          API_URL + '?accion=listarAtenciones&_=' + Date.now(),
+          { method:'GET', cache:'no-store' }
+        );
+
+        if(!res.ok){
+          throw new Error('Error HTTP ' + res.status);
+        }
+
+        const data = await res.json();
+        const remotas = Array.isArray(data)
+          ? data
+          : (Array.isArray(data?.data) ? data.data : []);
+
+        const sincronizadas = mezclarAtencionesLocalesYSheets(remotas);
+        atencionesSheetsCargadas = true;
+        return sincronizadas;
+
+      }catch(error){
+        console.warn(
+          MODULO,
+          'No se pudieron cargar atenciones desde Google Sheets.',
+          error
+        );
         return leerLocal();
+
+      }finally{
+        atencionesSheetsCargando = false;
+        atencionesSheetsPromesa = null;
+      }
+    })();
+
+    return atencionesSheetsPromesa;
+  }
+
+  async function obtenerAtencionRemotaPorId(idAtencion){
+    try{
+      const id = String(idAtencion || '').trim();
+      if(!id){
+        return {
+          success:false,
+          atencion:null,
+          message:'No se recibió un id_atencion válido para consultar.'
+        };
       }
 
-      atencionesSheetsCargando = true;
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return {
+          success:false,
+          atencion:null,
+          message:'API_URL no está definida en index.html'
+        };
+      }
 
-      const res = await fetch(API_URL + '?accion=listarAtenciones&_=' + Date.now());
+      const res = await fetch(
+        API_URL + '?accion=listarAtenciones&_=' + Date.now(),
+        { method:'GET', cache:'no-store' }
+      );
+
+      if(!res.ok){
+        return {
+          success:false,
+          atencion:null,
+          message:'Error HTTP ' + res.status
+        };
+      }
+
       const data = await res.json();
-      const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+      const remotas = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.data) ? data.data : []);
 
-      const mezcladas = mezclarAtencionesLocalesYSheets(remotas);
-      atencionesSheetsCargadas = true;
-      atencionesSheetsCargando = false;
+      const atencion = remotas
+        .map(normalizar)
+        .find(function(item){
+          return String(item.id_atencion || '').trim() === id;
+        }) || null;
 
-      return mezcladas;
-
+      return {
+        success:!!atencion,
+        atencion:atencion,
+        message:atencion
+          ? 'Atención localizada en Google Sheets.'
+          : 'La atención no apareció en Google Sheets.'
+      };
     }catch(error){
-      atencionesSheetsCargando = false;
-      console.warn(MODULO, 'No se pudieron cargar atenciones desde Google Sheets.', error);
-      return leerLocal();
+      console.warn(MODULO, 'No se pudo consultar la atención remota.', error);
+      return {
+        success:false,
+        atencion:null,
+        message:error.message || String(error)
+      };
     }
   }
-
 
   /*
     AUROSANAX FIX ANTIRREGRESIVO - CONFIRMACIÓN REMOTA DE ESTADO:
@@ -839,13 +936,32 @@
         };
       }
 
+      /*
+        AUROSANAX BLINDAJE id_cita:
+        En una edición/finalización, una copia local antigua con id_cita vacío
+        no puede borrar un vínculo de cita ya persistido. id_cita sigue siendo
+        opcional: si nunca existió, permanece vacío.
+      */
+      let idCitaEnvio = String(atencion.id_cita || '').trim();
+
+      if(accionAtencion === 'editarAtencion' && !idCitaEnvio){
+        const lecturaRemota = await obtenerAtencionRemotaPorId(atencion.id_atencion);
+        const idCitaRemota = String(
+          lecturaRemota?.atencion?.id_cita || ''
+        ).trim();
+
+        if(idCitaRemota){
+          idCitaEnvio = idCitaRemota;
+        }
+      }
+
       const payload = {
         accion: accionAtencion,
         data: {
           id_atencion: atencion.id_atencion || '',
           numero_consulta: Number(atencion.numero_consulta || siguienteConsulta(atencion.id_paciente || idPacienteActivo()) || 1),
           id_paciente: atencion.id_paciente || '',
-          id_cita: atencion.id_cita || '',
+          id_cita: idCitaEnvio,
           id_historia: atencion.id_historia || obtenerIdHistoriaActual(atencion.id_paciente) || '',
           id_medico: atencion.id_medico || '',
           fecha_atencion: atencion.fecha_atencion || fechaHoyISO(),
@@ -1774,18 +1890,42 @@
     */
     await cargarAtencionesDesdeSheets(true);
 
+    /*
+      AUROSANAX REGLA CLÍNICA — UNA SOLA ABIERTA POR PACIENTE:
+      El ERP puede conservar varias atenciones abiertas de distintos pacientes,
+      incluso para el mismo médico. Lo que se bloquea es una segunda atención
+      Abierta para el mismo id_paciente.
+    */
+    const abiertasPaciente = atencionesAbiertasPaciente(idPaciente);
+
+    if(abiertasPaciente.length){
+      const abiertaPaciente = abiertasPaciente
+        .slice()
+        .sort(function(a,b){
+          return Number(b.numero_consulta || 0) - Number(a.numero_consulta || 0);
+        })[0];
+
+      alert(
+        'Este paciente ya tiene una atención abierta' +
+        (abiertaPaciente.numero_consulta
+          ? ' (consulta #' + abiertaPaciente.numero_consulta + ')'
+          : '') +
+        '. Continúe o finalice esa atención antes de iniciar una nueva.'
+      );
+
+      return null;
+    }
+
     const abiertasMismoMedico = atencionesAbiertasMedico(idMedico);
     if(abiertasMismoMedico.length){
       const activaMismoMedico = abiertasMismoMedico.find(function(a){
         return String(a.id_atencion || '') === String(atencionActivaId || '');
       }) || abiertasMismoMedico[0];
 
-      const mismoPaciente = String(activaMismoMedico.id_paciente || '').trim() === idPaciente;
-
       /*
         AUROSANAX MENSAJE QUIRÚRGICO:
-        Solo enriquece el aviso con datos ya existentes de las atenciones abiertas.
-        No cambia la decisión, el estado ni el flujo de creación.
+        En este punto las atenciones abiertas del médico pertenecen a otros
+        pacientes, porque el mismo paciente ya fue bloqueado arriba.
       */
       const detalleAbiertas = abiertasMismoMedico.map(function(a){
         const idPacienteAbierto = String(a.id_paciente || '').trim();
@@ -1803,10 +1943,8 @@
         ' atención' + (abiertasMismoMedico.length === 1 ? '' : 'es') +
         ' abierta' + (abiertasMismoMedico.length === 1 ? '' : 's') + '.\n\n' +
         detalleAbiertas + '\n\n' +
-        (mismoPaciente
-          ? 'La atención de referencia corresponde a este mismo paciente.\n'
-          : 'La atención de referencia corresponde a otro paciente.\n') +
-        'Aceptar: dejar la atención anterior abierta e iniciar una nueva.\n' +
+        'Las atenciones abiertas corresponden a otros pacientes.\n' +
+        'Aceptar: mantenerlas abiertas e iniciar esta nueva atención.\n' +
         'Cancelar: no crear otra atención; puede usar Ver o Finalizar.'
       );
 
@@ -1832,6 +1970,7 @@
     });
 
     const lista = leerLocal();
+    atencionesPendientesPersistencia.add(String(nueva.id_atencion || '').trim());
     lista.unshift(nueva);
     guardarLocal(lista);
 
@@ -1852,6 +1991,7 @@
         return String(item.id_atencion || '') !== String(nueva.id_atencion || '');
       });
       guardarLocal(listaRollback);
+      atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
       renderAtencionesPaciente();
 
       alert(
@@ -1862,6 +2002,53 @@
       return null;
     }
 
+    /*
+      El POST usa mode:'no-cors', por lo que el navegador no puede interpretar
+      el JSON de respuesta del backend. Se confirma por GET la existencia del
+      id_atencion exacto antes de activar contexto clínico.
+    */
+    const confirmacionInicio = await verificarEstadoAtencionRemoto(
+      nueva.id_atencion,
+      'Abierta'
+    );
+
+    if(!confirmacionInicio || !confirmacionInicio.success){
+      const listaRollback = leerLocal().filter(function(item){
+        return String(item.id_atencion || '') !== String(nueva.id_atencion || '');
+      });
+
+      guardarLocal(listaRollback);
+      atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
+
+      /*
+        Reconstrucción autoritativa del caché después de un rechazo/no confirmación.
+        Si la API no responde, cargarAtencionesDesdeSheets conserva el fallback local
+        sin inventar persistencia.
+      */
+      await cargarAtencionesDesdeSheets(true);
+      renderAtencionesPaciente();
+
+      alert(
+        'La nueva atención no fue confirmada en Google Sheets. ' +
+        'No se activó la consulta para evitar una atención fantasma o duplicada.'
+      );
+      return null;
+    }
+
+    const nuevaConfirmada = normalizar(Object.assign(
+      {},
+      nueva,
+      confirmacionInicio.atencion || {}
+    ));
+
+    atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
+
+    /*
+      El caché se reconstruye desde la fuente remota ya confirmada.
+      La atención persistida conserva el mismo id_atencion.
+    */
+    await cargarAtencionesDesdeSheets(true);
+
     if(cita){
       limpiarCitaSeleccionadaAgenda();
     }
@@ -1870,13 +2057,13 @@
       La atención recién creada se activa mediante el mismo motor utilizado
       por el botón Ver. Así ningún módulo conserva el contexto anterior.
     */
-    sincronizarContextoAtencion(nueva, {
+    sincronizarContextoAtencion(nuevaConfirmada, {
       motivo:'atencion_creada',
       emitirIniciada:true
     });
 
     renderAtencionesPaciente();
-    return nueva;
+    return nuevaConfirmada;
   }
 
   async function crearAtencion(){
@@ -3023,10 +3210,14 @@
         btnIniciar.innerHTML =
           '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Iniciando…';
       }else{
-        btnIniciar.disabled = false;
-        btnIniciar.style.opacity = '1';
-        btnIniciar.style.cursor = 'pointer';
-        btnIniciar.innerHTML = '<i class="bi bi-play-circle me-1"></i> Iniciar';
+        const tieneAbiertaPaciente = atencionesAbiertasPaciente(idPaciente).length > 0;
+
+        btnIniciar.disabled = tieneAbiertaPaciente;
+        btnIniciar.style.opacity = tieneAbiertaPaciente ? '0.55' : '1';
+        btnIniciar.style.cursor = tieneAbiertaPaciente ? 'not-allowed' : 'pointer';
+        btnIniciar.innerHTML = tieneAbiertaPaciente
+          ? '<i class="bi bi-lock me-1"></i> Atención abierta'
+          : '<i class="bi bi-play-circle me-1"></i> Iniciar';
       }
     }
 
@@ -3480,6 +3671,8 @@
       atencionActivaId = '';
       atencionesSheetsCargadas = false;
       atencionesSheetsCargando = false;
+      atencionesSheetsPromesa = null;
+      atencionesPendientesPersistencia.clear();
       consultasPaginaActual = 1;
 
       return cargarAtencionesDesdeSheets(true).then(function(lista){
@@ -3911,6 +4104,8 @@
       paciente_activo: idPacienteActivo(),
       sheets_cargadas: atencionesSheetsCargadas,
       sheets_cargando: atencionesSheetsCargando,
+      sheets_promesa_activa: Boolean(atencionesSheetsPromesa),
+      atenciones_pendientes_persistencia: atencionesPendientesPersistencia.size,
       recetas_sheets_cargadas: recetasSheetsCargadas,
       recetas_sheets_cargando: recetasSheetsCargando,
       recetas_locales: leerRecetasLocales().length,
