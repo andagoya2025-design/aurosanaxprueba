@@ -1553,6 +1553,89 @@
   }
 
 
+  /*
+    AUROSANAX V30 — BLINDAJE ANTIRREGRESIVO DE CONTEXTO
+    ---------------------------------------------------
+    Devuelve la atención que gobierna actualmente el contexto visual.
+    No activa, no finaliza y no modifica persistencia.
+  */
+  function auroAtencionActivaRegistro(){
+    const id = String(atencionActivaId || '').trim();
+    if(!id) return null;
+
+    return leerLocal()
+      .map(normalizar)
+      .find(function(item){
+        return String(item.id_atencion || '').trim() === id;
+      }) || null;
+  }
+
+  /*
+    Limpieza VISUAL selectiva de módulos dependientes de una atención.
+
+    IMPORTANTE:
+    - No toca Antecedentes porque pertenecen a Historia Clínica y no a una
+      consulta individual.
+    - No borra localStorage, Google Sheets ni registros persistidos.
+    - Se utiliza únicamente cuando existe una transición clínica REAL:
+      atención A -> B, atención -> finalizada/sin atención, cambio real de
+      paciente o historia nueva.
+  */
+  function auroLimpiarCamposContextoAtencion(){
+    [
+      'hc_anamnesis',
+      'hc_examen',
+      'hc_gineco',
+      'hc_obstetricia',
+      'hc_estetica',
+      'hc_diagnostico',
+      'hc_plan',
+      'hc_docs'
+    ].forEach(function(panelId){
+      const panel = document.getElementById(panelId);
+      if(!panel) return;
+
+      panel.querySelectorAll('input, textarea, select').forEach(function(el){
+        if(el.type === 'checkbox' || el.type === 'radio'){
+          el.checked = false;
+          return;
+        }
+
+        if(el.tagName === 'SELECT'){
+          el.selectedIndex = 0;
+          return;
+        }
+
+        if(!el.readOnly && !el.disabled){
+          el.value = '';
+        }
+      });
+
+      panel.querySelectorAll('[contenteditable="true"]').forEach(function(el){
+        el.innerHTML = '';
+      });
+    });
+
+    /*
+      Se ocultan únicamente cajas de datos previos dependientes del contexto
+      de consulta. No se elimina ningún dato persistido.
+    */
+    [
+      'auroExamenFisicoPrevioBox',
+      'auroDiagnosticosPreviosBox'
+    ].forEach(function(id){
+      const box = document.getElementById(id);
+      if(box){
+        box.style.display = 'none';
+        const contenido = box.querySelector(
+          '.auro-previos-content, .auro-previos-body, [data-previos-content]'
+        );
+        if(contenido) contenido.innerHTML = '';
+      }
+    });
+  }
+
+
   function auroInvalidarContextoAtencion(opciones){
     opciones = opciones || {};
 
@@ -1589,7 +1672,12 @@
       [
         'auroLimpiarPlanVisualAntesDeCambiarAtencion',
         'auroLimpiarDiagnosticos',
-        'auroExamenFisicoLimpiarFormulario'
+        'auroExamenFisicoLimpiarFormulario',
+        'auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada',
+        'limpiarFormularioGinecologia',
+        'limpiarFormularioObstetricia',
+        'limpiarFormularioEstetica',
+        'limpiarFormularioDocumentos'
       ].forEach(function(nombre){
         try{
           if(typeof window[nombre] === 'function') window[nombre]();
@@ -1613,6 +1701,14 @@
       }catch(error){
         console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Examen Físico.', error);
       }
+
+      /*
+        Fallback visual antirregresivo:
+        si algún módulo no expone limpiador público o todavía no terminó de
+        inicializarse, se eliminan únicamente los campos VISUALES dependientes
+        de la atención. Antecedentes queda expresamente fuera.
+      */
+      auroLimpiarCamposContextoAtencion();
     }
 
     window.dispatchEvent(new CustomEvent('aurosanax:atencion-limpiada', {
@@ -3443,36 +3539,53 @@
       });
       envolverFuncion('seleccionarPacienteHistoria', function(){
         /*
-          AUROSANAX PASO 1 - INVALIDACIÓN QUIRÚRGICA AL CAMBIAR PACIENTE
-          ---------------------------------------------------------------
-          Al cambiar el paciente de Historia Clínica, la atención anterior
-          deja de ser válida inmediatamente. Se notifica el mismo evento
-          público ya utilizado por Atenciones para limpieza de contexto.
+          AUROSANAX V30 — CAMBIO REAL DE PACIENTE
+          ---------------------------------------
+          seleccionarPacienteHistoria() también puede ejecutarse durante
+          refrescos o reselecciones del MISMO paciente. Esos casos NO son una
+          transición clínica y no deben expulsar al profesional de la atención.
 
-          Alcance:
-          - No borra datos guardados.
-          - No modifica Google Sheets, IDs, endpoints ni localStorage.
-          - No cambia el flujo Iniciar / Ver / Finalizar.
-          - Solo invalida el contexto temporal de la atención anterior.
+          Solo se invalida cuando la atención activa pertenece a un paciente
+          distinto del paciente visible, o cuando ya no puede demostrarse que
+          el contexto anterior siga perteneciendo al paciente visible.
+
+          No se borra persistencia.
         */
+        const atencionAnterior = auroAtencionActivaRegistro();
         const idAtencionAnterior = String(atencionActivaId || '').trim();
+        const idPacienteAnterior = String(atencionAnterior?.id_paciente || '').trim();
+        const idPacienteNuevo = String(idPacienteActivo() || '').trim();
+
+        const mismoPacienteDemostrado = Boolean(
+          idAtencionAnterior &&
+          idPacienteAnterior &&
+          idPacienteNuevo &&
+          idPacienteAnterior === idPacienteNuevo
+        );
 
         consultasPaginaActual = 1;
 
-        auroInvalidarContextoAtencion({
-          idAnterior:idAtencionAnterior,
-          idNueva:'',
-          idPaciente:String(idPacienteActivo() || '').trim(),
-          motivo:'cambio_paciente_historia',
-          limpiarVisual:true
-        });
+        if(!mismoPacienteDemostrado && idAtencionAnterior){
+          auroInvalidarContextoAtencion({
+            idAnterior:idAtencionAnterior,
+            idNueva:'',
+            idPaciente:idPacienteNuevo,
+            motivo:'cambio_paciente_historia',
+            limpiarVisual:true
+          });
 
-        const box = $('auroAtencionActivaBox');
-        if(box){
-          box.style.display = 'none';
-          box.innerHTML = '';
+          const box = $('auroAtencionActivaBox');
+          if(box){
+            box.style.display = 'none';
+            box.innerHTML = '';
+          }
         }
 
+        /*
+          Refresco permitido:
+          actualizar el historial no modifica por sí mismo el contexto clínico.
+          Si era el mismo paciente, atencionActivaId permanece intacto.
+        */
         setTimeout(function(){
           cargarAtencionesDesdeSheets(true).then(renderAtencionesPaciente);
         },100);
@@ -3486,6 +3599,12 @@
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
+        /*
+          CONTRATO INTENCIONAL:
+          abrir una Historia Clínica desde su flujo oficial deja la historia
+          SIN atención seleccionada hasta que el profesional pulse Ver.
+          Por eso esta ruta sí invalida incluso si el paciente coincide.
+        */
         const idAtencionAnterior = String(atencionActivaId || '').trim();
         consultasPaginaActual = 1;
 
@@ -3525,6 +3644,7 @@
   function auroLimpiarCamposModulosConsultaNueva(){
     [
       'hc_antecedentes',
+      'hc_anamnesis',
       'hc_examen',
       'hc_gineco',
       'hc_obstetricia',
@@ -3616,6 +3736,7 @@
       'auroLimpiarPlanVisualAntesDeCambiarAtencion',
       'auroLimpiarDiagnosticos',
       'auroExamenFisicoLimpiarFormulario',
+      'auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada',
       'limpiarFormularioGinecologia',
       'limpiarFormularioObstetricia',
       'limpiarFormularioEstetica',
