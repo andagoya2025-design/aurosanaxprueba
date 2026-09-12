@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: ordenes_medicas.js
  Módulo: Órdenes médicas formales por atención
- Versión: 1.2.0
+ Versión: 1.3.0 - editor premium + justificativo global + documento A4 certificado
  Fecha: 2026-09-11
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -25,7 +25,7 @@
 
 if(window.auroOrdenesMedicas?.version) return;
 
-const VERSION='1.2.0';
+const VERSION='1.3.0';
 const JSON_VERSION='AUROSANAX_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -435,18 +435,47 @@ function ordenActivaFormal(){
   return ordenesActivasFormales()[0]||null;
 }
 
+async function solicitarJustificacionGlobal(opciones={}){
+  if(typeof window.auroSolicitarMotivoCorreccionClinica==='function'){
+    const r=await window.auroSolicitarMotivoCorreccionClinica({excepcional:!!opciones.excepcional});
+    if(!r) return null;
+    const motivo=txt(r.motivo_correccion||r.motivo_correccion_detalle||r.motivo_correccion_tipo);
+    if(motivo.length<3 && !txt(r.motivo_correccion_tipo)) return null;
+    return {
+      motivo_correccion:motivo||txt(r.motivo_correccion_tipo),
+      motivo_correccion_tipo:txt(r.motivo_correccion_tipo),
+      motivo_correccion_detalle:txt(r.motivo_correccion_detalle),
+      correccion_excepcional:txt(r.correccion_excepcional)||'NO'
+    };
+  }
+  const entrada=window.prompt('CORRECCIÓN CLÍNICA - JUSTIFICATIVO OBLIGATORIO\n\nEscriba un motivo breve:');
+  if(entrada===null) return null;
+  const motivo=txt(entrada);
+  if(motivo.length<3){ window.alert('La justificación es obligatoria.'); return null; }
+  return {motivo_correccion:motivo,motivo_correccion_tipo:'Corrección clínica',motivo_correccion_detalle:motivo,correccion_excepcional:'NO'};
+}
+
 function solicitarJustificacion(titulo){
-  const motivo=window.prompt(
-    String(titulo||'Justificación obligatoria')+
-    '\n\nEscriba el motivo clínico o administrativo de esta acción:'
-  );
+  const motivo=window.prompt(String(titulo||'Justificación obligatoria')+'\n\nEscriba el motivo clínico o administrativo de esta acción:');
   if(motivo===null) return null;
   const limpio=txt(motivo);
-  if(limpio.length<3){
-    window.alert('La justificación es obligatoria y debe tener al menos 3 caracteres.');
-    return null;
-  }
+  if(limpio.length<3){ window.alert('La justificación es obligatoria y debe tener al menos 3 caracteres.'); return null; }
   return limpio;
+}
+
+function catalogoOrdenesFormal(){
+  return Array.isArray(window.ORDENES_MEDICAS_AUROSANAX_BASE)
+    ? window.ORDENES_MEDICAS_AUROSANAX_BASE.map(itemOrdenNormalizado).filter(x=>x.orden)
+    : [];
+}
+function categoriasOrdenesFormal(extra=''){
+  const set=new Set(catalogoOrdenesFormal().map(x=>txt(x.cat)).filter(Boolean));
+  if(txt(extra)) set.add(txt(extra));
+  set.add('OTROS');
+  return Array.from(set).sort((a,b)=>a.localeCompare(b,'es'));
+}
+function justificacionTexto(j){
+  return txt(j?.motivo_correccion||j?.motivo_correccion_detalle||j?.motivo_correccion_tipo);
 }
 
 function clonarDocumentoEmitido(reg){
@@ -459,29 +488,27 @@ function clonarDocumentoEmitido(reg){
   });
 }
 
-function datosCorreccionDesdeDocumento(reg,items,motivo){
+function datosCorreccionDesdeDocumento(reg,items,justificacion){
   const base=clonarDocumentoEmitido(reg);
   const versionNueva=(Number(base.version)||1)+1;
   const ahora=new Date().toLocaleString('es-EC',{timeZone:'America/Guayaquil',hour12:false});
+  const motivo=justificacionTexto(justificacion);
   const detalle=Object.assign({},base.detalle_json,{
-    version:JSON_VERSION,
-    version_documento:versionNueva,
-    correccion_de:txt(reg.id_orden),
-    items:itemsUnicos(items),
+    version:JSON_VERSION,version_documento:versionNueva,correccion_de:txt(reg.id_orden),items:itemsUnicos(items),
     auditoria_correccion:{
-      motivo:txt(motivo),
-      id_orden_origen:txt(reg.id_orden),
-      version_origen:Number(reg.version||1)||1,
-      fecha_visual_ecuador:ahora
+      motivo,
+      tipo_justificativo:txt(justificacion?.motivo_correccion_tipo),
+      detalle_justificativo:txt(justificacion?.motivo_correccion_detalle),
+      correccion_excepcional:txt(justificacion?.correccion_excepcional)||'NO',
+      id_orden_origen:txt(reg.id_orden),version_origen:Number(reg.version||1)||1,fecha_visual_ecuador:ahora
     }
   });
-
   return Object.assign({},base,{
-    id_orden:txt(reg.id_orden),
-    version:versionNueva,
-    estado:'Emitida',
-    detalle_json:detalle,
-    motivo_correccion:txt(motivo)
+    id_orden:txt(reg.id_orden),version:versionNueva,estado:'Emitida',detalle_json:detalle,
+    motivo_correccion:motivo,
+    motivo_correccion_tipo:txt(justificacion?.motivo_correccion_tipo),
+    motivo_correccion_detalle:txt(justificacion?.motivo_correccion_detalle),
+    correccion_excepcional:txt(justificacion?.correccion_excepcional)||'NO'
   });
 }
 
@@ -520,16 +547,15 @@ function instalarCSS(){
 .aom-modal-title{font-size:16px;font-weight:900;color:#111827}
 .aom-modal-close{border:1px solid #d1d5db;background:#fff;border-radius:9px;width:34px;height:34px;font-size:20px;line-height:1}
 .aom-editor-list{display:grid;gap:10px}
-.aom-editor-item{display:grid;grid-template-columns:minmax(0,2fr) minmax(130px,.8fr) minmax(0,1.4fr);gap:8px;padding:10px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa}
-.aom-editor-item input,.aom-editor-item textarea{width:100%;border:1px solid #d1d5db;border-radius:9px;padding:8px;font:inherit}
+.aom-editor-item{display:grid;grid-template-columns:minmax(0,2fr) minmax(155px,.9fr) minmax(0,1.4fr);gap:9px;padding:12px;border:1px solid #ead7e2;border-radius:15px;background:linear-gradient(135deg,#fff,#fffafd)}
+.aom-editor-item input,.aom-editor-item select,.aom-editor-item textarea{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:9px;font:inherit;background:#fff}
 .aom-editor-item textarea{min-height:42px;resize:vertical}
 .aom-editor-remove{grid-column:1/-1;justify-self:end}
-.aom-editor-reason{margin-top:14px}
-.aom-editor-reason textarea{width:100%;min-height:78px;border:1px solid #d1d5db;border-radius:10px;padding:9px;font:inherit}
+.aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}
 .aom-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
-.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:16mm 17mm 18mm;margin:0 auto;font-family:Arial,sans-serif}
-.aom-doc-head{display:grid;grid-template-columns:1fr auto;gap:15px;align-items:start;border-bottom:2px solid #8b1e5a;padding-bottom:10px;margin-bottom:18px}
-.aom-doc-brand{font-size:22px;font-weight:900;color:#8b1e5a}
+.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 48mm;margin:0 auto;font-family:Arial,sans-serif;position:relative}
+.aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--aom-color,#8b1e5a);padding-bottom:10px;margin-bottom:18px}.aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}.aom-logo-wrap{width:60px;height:60px;display:grid;place-items:center;overflow:hidden}.aom-logo{max-width:100%;max-height:100%;object-fit:contain}.aom-doc-date{text-align:right;font-size:11.5px;font-weight:750}
+.aom-doc-brand{font-size:20px;font-weight:950;color:var(--aom-color,#8b1e5a);letter-spacing:.035em}
 .aom-doc-sub{font-size:10.5px;color:#4b5563;line-height:1.45;margin-top:4px}
 .aom-doc-title{text-align:center;font-size:20px;font-weight:900;letter-spacing:.06em;margin:13px 0 18px}
 .aom-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 20px;font-size:12px;margin-bottom:18px}
@@ -537,15 +563,15 @@ function instalarCSS(){
 .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
 .aom-doc-table th{background:#f8fafc;text-align:left}
-.aom-doc-sign{margin-top:38px;text-align:center;page-break-inside:avoid}
-.aom-doc-line{width:72mm;border-top:1px solid #111827;margin:0 auto 7px}
-.aom-doc-foot{margin-top:24px;padding-top:8px;border-top:1px solid #e5e7eb;text-align:center;font-size:9.5px;color:#6b7280;line-height:1.4}
+.aom-doc-bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
   .aom-primary{width:100%;justify-content:center}
   .aom-row{grid-template-columns:1fr}
   .aom-actions{justify-content:flex-start}
+  .aom-editor-item{grid-template-columns:1fr}
+  .aom-editor-custom{grid-column:auto}
 }
 @media print{.aom-print-toolbar{display:none!important}.aom-paper{box-shadow:none!important;margin:0!important}}
 `;
@@ -731,134 +757,104 @@ function cerrarEditorFormal(){
 }
 
 function recogerItemsEditorFormal(modal){
-  return Array.from(modal.querySelectorAll('[data-aom-editor-item]')).map(fila=>({
-    orden:txt(fila.querySelector('[data-campo="orden"]')?.value),
-    cat:txt(fila.querySelector('[data-campo="cat"]')?.value)||'OTROS',
-    obs:txt(fila.querySelector('[data-campo="obs"]')?.value),
-    codigo_cie10:txt(fila.dataset.cie10),
-    diagnostico:txt(fila.dataset.diagnostico)
-  })).filter(x=>x.orden);
+  return Array.from(modal.querySelectorAll('[data-aom-editor-item]')).map(fila=>{
+    const tipo=txt(fila.querySelector('[data-campo="cat"]')?.value)||'OTROS';
+    const libre=txt(fila.querySelector('[data-campo="cat-libre"]')?.value);
+    return {
+      orden:txt(fila.querySelector('[data-campo="orden"]')?.value),
+      cat:norm(tipo)==='otros'?(libre||'OTROS'):tipo,
+      obs:txt(fila.querySelector('[data-campo="obs"]')?.value),
+      codigo_cie10:txt(fila.dataset.cie10),diagnostico:txt(fila.dataset.diagnostico)
+    };
+  }).filter(x=>x.orden);
+}
+
+function opcionesCategoriaEditor(actual=''){
+  const cats=categoriasOrdenesFormal(actual);
+  const catalogCats=new Set(catalogoOrdenesFormal().map(x=>norm(x.cat)));
+  const valorSelect=actual&&catalogCats.has(norm(actual))?actual:'OTROS';
+  return {valorSelect,html:cats.map(c=>`<option value="${esc(c)}" ${norm(c)===norm(valorSelect)?'selected':''}>${esc(c)}</option>`).join('')};
 }
 
 function renderItemEditorFormal(item,index){
-  return `<div class="aom-editor-item" data-aom-editor-item="1"
-               data-cie10="${esc(item.codigo_cie10||'')}"
-               data-diagnostico="${esc(item.diagnostico||'')}">
-    <input data-campo="orden" value="${esc(item.orden||'')}" aria-label="Examen o procedimiento ${index+1}">
-    <input data-campo="cat" value="${esc(item.cat||'OTROS')}" aria-label="Categoría ${index+1}">
-    <textarea data-campo="obs" aria-label="Observación ${index+1}">${esc(item.obs||'')}</textarea>
-    <button type="button" class="aom-btn danger aom-editor-remove" data-aom-quitar-item="1">
-      <i class="bi bi-trash"></i> Quitar ítem
-    </button>
+  const x=itemOrdenNormalizado(item);
+  const cats=opcionesCategoriaEditor(x.cat);
+  const catLibre=norm(cats.valorSelect)==='otros'&&norm(x.cat)!=='otros'?x.cat:'';
+  return `<div class="aom-editor-item" data-aom-editor-item="1" data-cie10="${esc(x.codigo_cie10||'')}" data-diagnostico="${esc(x.diagnostico||'')}">
+    <div class="aom-editor-field"><label>Examen / procedimiento</label><input data-campo="orden" list="aomCatalogoOrdenes" value="${esc(x.orden||'')}" autocomplete="off"></div>
+    <div class="aom-editor-field"><label>Tipo de orden</label><select data-campo="cat">${cats.html}</select></div>
+    <div class="aom-editor-field"><label>Observación</label><textarea data-campo="obs">${esc(x.obs||'')}</textarea></div>
+    <div class="aom-editor-field aom-editor-custom" ${norm(cats.valorSelect)==='otros'?'':'style="display:none"'}><label>Otro tipo de orden</label><input data-campo="cat-libre" value="${esc(catLibre)}" placeholder="Escriba otro tipo de orden" autocomplete="off"></div>
+    <div class="aom-editor-hint">Usa el mismo catálogo maestro del Plan. Esta corrección modifica solo el documento formal emitido.</div>
+    <button type="button" class="aom-btn danger aom-editor-remove" data-aom-quitar-item="1"><i class="bi bi-trash"></i> Quitar ítem</button>
   </div>`;
 }
 
-function editarFormal(id){
-  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
-  if(!reg) return;
+function sincronizarFilaEditorCatalogo(fila){
+  const orden=fila?.querySelector('[data-campo="orden"]');
+  const tipo=fila?.querySelector('[data-campo="cat"]');
+  const libre=fila?.querySelector('[data-campo="cat-libre"]');
+  const custom=fila?.querySelector('.aom-editor-custom');
+  if(!orden||!tipo) return;
+  const exacta=catalogoOrdenesFormal().find(x=>norm(x.orden)===norm(orden.value));
+  if(exacta){ const op=Array.from(tipo.options).find(o=>norm(o.value)===norm(exacta.cat)); if(op) tipo.value=op.value; }
+  const otros=norm(tipo.value)==='otros';
+  if(custom) custom.style.display=otros?'':'none';
+  if(!otros&&libre) libre.value='';
+}
 
-  const ctx=contexto();
-  if(txt(reg.id_atencion)!==txt(ctx.id)){
-    aviso('La orden solicitada no pertenece a la atención seleccionada.','err');
-    return;
-  }
-  if(ctx.bloqueada){
-    aviso('La atención está anulada, cancelada o archivada. No se permite editar la orden.','err');
-    return;
-  }
-  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)){
-    aviso('Esta versión es histórica y no puede editarse.','warn');
-    return;
-  }
-
-  cerrarEditorFormal();
-  state.editandoId=txt(reg.id_orden);
-
-  const data=datosDocumentoEmitido(reg);
-  const items=itemsUnicos(data.detalle_json.items||[]);
-  const modal=document.createElement('div');
-  modal.id='auroOrdenMedicaEditorModal';
-  modal.className='aom-modal';
-  modal.innerHTML=`
-    <div class="aom-modal-panel" role="dialog" aria-modal="true" aria-labelledby="aomEditorTitulo">
-      <div class="aom-modal-head">
-        <div>
-          <div id="aomEditorTitulo" class="aom-modal-title">Editar orden médica emitida</div>
-          <div class="aom-meta">${esc(data.id_orden)} · v${esc(data.version)}. La corrección creará una nueva versión y conservará la anterior.</div>
-        </div>
-        <button type="button" class="aom-modal-close" data-aom-cerrar-editor="1" aria-label="Cerrar">×</button>
-      </div>
-
-      <div class="aom-editor-list" id="aomEditorLista">
-        ${items.map(renderItemEditorFormal).join('')}
-      </div>
-
-      <div class="aom-editor-reason">
-        <label><strong>Justificación obligatoria de la corrección</strong></label>
-        <textarea id="aomEditorMotivo" placeholder="Ej.: Corrección del procedimiento solicitado"></textarea>
-      </div>
-
-      <div class="aom-modal-actions">
-        <button type="button" class="aom-btn" data-aom-cancelar-editor="1">Cancelar</button>
-        <button type="button" class="aom-primary" data-aom-guardar-editor="1">
-          <i class="bi bi-save2"></i> Guardar corrección
-        </button>
-      </div>
-    </div>`;
-
-  document.body.appendChild(modal);
-
-  modal.querySelectorAll('[data-aom-quitar-item]').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const filas=modal.querySelectorAll('[data-aom-editor-item]');
-      if(filas.length<=1){
-        alert('La orden formal debe conservar al menos un ítem.');
-        return;
-      }
-      btn.closest('[data-aom-editor-item]')?.remove();
-    });
+function conectarFilaEditorFormal(fila){
+  if(!fila) return;
+  fila.querySelector('[data-campo="orden"]')?.addEventListener('input',()=>sincronizarFilaEditorCatalogo(fila));
+  fila.querySelector('[data-campo="orden"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
+  fila.querySelector('[data-campo="cat"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
+  fila.querySelector('[data-aom-quitar-item]')?.addEventListener('click',()=>{
+    const modal=fila.closest('#auroOrdenMedicaEditorModal');
+    if((modal?.querySelectorAll('[data-aom-editor-item]').length||0)<=1){ alert('La orden formal debe conservar al menos un ítem.'); return; }
+    fila.remove();
   });
+  sincronizarFilaEditorCatalogo(fila);
+}
 
+function agregarFilaEditorFormal(modal){
+  const lista=modal?.querySelector('#aomEditorLista'); if(!lista) return;
+  const tmp=document.createElement('div'); tmp.innerHTML=renderItemEditorFormal({orden:'',cat:'OTROS',obs:''},lista.querySelectorAll('[data-aom-editor-item]').length);
+  const fila=tmp.firstElementChild; if(!fila) return; lista.appendChild(fila); conectarFilaEditorFormal(fila); fila.querySelector('[data-campo="orden"]')?.focus();
+}
+
+function editarFormal(id){
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id)); if(!reg) return;
+  const ctx=contexto();
+  if(txt(reg.id_atencion)!==txt(ctx.id)){ aviso('La orden solicitada no pertenece a la atención seleccionada.','err'); return; }
+  if(ctx.bloqueada){ aviso('La atención está anulada, cancelada o archivada. No se permite editar la orden.','err'); return; }
+  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)){ aviso('Esta versión es histórica y no puede editarse.','warn'); return; }
+  cerrarEditorFormal(); state.editandoId=txt(reg.id_orden);
+  const data=datosDocumentoEmitido(reg); const items=itemsUnicos(data.detalle_json.items||[]); const catalogo=catalogoOrdenesFormal();
+  const modal=document.createElement('div'); modal.id='auroOrdenMedicaEditorModal'; modal.className='aom-modal';
+  modal.innerHTML=`<div class="aom-modal-panel" role="dialog" aria-modal="true" aria-labelledby="aomEditorTitulo">
+    <div class="aom-modal-head"><div><div id="aomEditorTitulo" class="aom-modal-title">Editar orden médica emitida</div><div class="aom-meta">${esc(data.id_orden)} · v${esc(data.version)}. La corrección crea una nueva versión y conserva la anterior.</div></div><button type="button" class="aom-modal-close" data-aom-cerrar-editor="1">×</button></div>
+    <datalist id="aomCatalogoOrdenes">${catalogo.map(x=>`<option value="${esc(x.orden)}">${esc(x.cat)}</option>`).join('')}</datalist>
+    <div class="aom-editor-toolbar"><span><strong>Editor formal premium.</strong> Mismo catálogo maestro del Plan, sin modificar el Plan.</span><button type="button" class="aom-btn aom-editor-add" data-aom-agregar-item="1"><i class="bi bi-plus-circle"></i> Agregar ítem</button></div>
+    <div class="aom-editor-list" id="aomEditorLista">${items.map(renderItemEditorFormal).join('')}</div>
+    <div class="aom-modal-actions"><button type="button" class="aom-btn" data-aom-cancelar-editor="1">Cancelar</button><button type="button" class="aom-primary" data-aom-guardar-editor="1"><i class="bi bi-shield-check"></i> Guardar corrección</button></div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('[data-aom-editor-item]').forEach(conectarFilaEditorFormal);
+  modal.querySelector('[data-aom-agregar-item]')?.addEventListener('click',()=>agregarFilaEditorFormal(modal));
   modal.querySelector('[data-aom-cerrar-editor]')?.addEventListener('click',cerrarEditorFormal);
   modal.querySelector('[data-aom-cancelar-editor]')?.addEventListener('click',cerrarEditorFormal);
-  modal.addEventListener('click',e=>{ if(e.target===modal) cerrarEditorFormal(); });
-
+  modal.addEventListener('click',e=>{if(e.target===modal) cerrarEditorFormal();});
   modal.querySelector('[data-aom-guardar-editor]')?.addEventListener('click',async()=>{
-    const motivo=txt(modal.querySelector('#aomEditorMotivo')?.value);
-    if(motivo.length<3){
-      alert('La justificación de la corrección es obligatoria.');
-      modal.querySelector('#aomEditorMotivo')?.focus();
-      return;
-    }
-
-    const itemsNuevos=recogerItemsEditorFormal(modal);
-    if(!itemsNuevos.length){
-      alert('La orden formal debe contener al menos un ítem.');
-      return;
-    }
-
-    const ctxAhora=contexto();
-    if(txt(ctxAhora.id)!==txt(reg.id_atencion)){
-      alert('La atención seleccionada cambió. No se guardó la corrección.');
-      return;
-    }
-
+    const filas=Array.from(modal.querySelectorAll('[data-aom-editor-item]'));
+    const invalida=filas.find(f=>norm(f.querySelector('[data-campo="cat"]')?.value)==='otros'&&!txt(f.querySelector('[data-campo="cat-libre"]')?.value));
+    if(invalida){ alert('Cuando seleccione OTROS debe escribir el tipo de orden médica.'); invalida.querySelector('[data-campo="cat-libre"]')?.focus(); return; }
+    const itemsNuevos=recogerItemsEditorFormal(modal); if(!itemsNuevos.length){alert('La orden formal debe contener al menos un ítem.');return;}
+    const ctxAhora=contexto(); if(txt(ctxAhora.id)!==txt(reg.id_atencion)){alert('La atención seleccionada cambió. No se guardó la corrección.');return;}
+    const justificacion=await solicitarJustificacionGlobal({excepcional:false}); if(!justificacion) return;
     if(!confirm('Se creará una nueva versión de esta orden y la versión anterior quedará como reemplazada. ¿Continuar?')) return;
-
-    const dataCorreccion=datosCorreccionDesdeDocumento(reg,itemsNuevos,motivo);
-    const guardarBtn=modal.querySelector('[data-aom-guardar-editor]');
-    if(guardarBtn) guardarBtn.disabled=true;
-
-    try{
-      const r=await post('editarOrdenMedica',dataCorreccion);
-      if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo editar la orden.');
-      cerrarEditorFormal();
-      await cargar();
-      aviso('Corrección guardada. Se creó una nueva versión y se conservó la anterior.','ok');
-    }catch(e){
-      if(guardarBtn) guardarBtn.disabled=false;
-      aviso('No se pudo guardar la corrección: '+(e.message||e),'err');
-    }
+    const dataCorreccion=datosCorreccionDesdeDocumento(reg,itemsNuevos,justificacion); const guardarBtn=modal.querySelector('[data-aom-guardar-editor]'); if(guardarBtn) guardarBtn.disabled=true;
+    try{ const r=await post('editarOrdenMedica',dataCorreccion); if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo editar la orden.'); cerrarEditorFormal(); await cargar(); aviso('Corrección guardada. Se creó una nueva versión y se conservó la anterior.','ok'); }
+    catch(e){ if(guardarBtn) guardarBtn.disabled=false; aviso('No se pudo guardar la corrección: '+(e.message||e),'err'); }
   });
 }
 
@@ -908,8 +904,9 @@ async function anular(id){
   }
   if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) return;
 
-  const motivo=solicitarJustificacion('ELIMINAR / ANULAR ORDEN MÉDICA');
-  if(!motivo) return;
+  const justificacion=await solicitarJustificacionGlobal({excepcional:false});
+  if(!justificacion) return;
+  const motivo=justificacionTexto(justificacion);
 
   if(!confirm(`La orden ${id} no se borrará físicamente. Quedará ANULADA y conservará su trazabilidad. ¿Continuar?`)) return;
 
@@ -917,6 +914,8 @@ async function anular(id){
   const detalleActualizado=Object.assign({},detalle,{
     auditoria_anulacion:{
       motivo,
+      tipo_justificativo:txt(justificacion.motivo_correccion_tipo),
+      detalle_justificativo:txt(justificacion.motivo_correccion_detalle),
       id_orden:txt(reg.id_orden),
       version:Number(reg.version||1)||1,
       fecha_visual_ecuador:new Date().toLocaleString('es-EC',{timeZone:'America/Guayaquil',hour12:false})
@@ -928,6 +927,9 @@ async function anular(id){
       id_orden:id,
       id_atencion:ctx.id,
       motivo_anulacion:motivo,
+      motivo_correccion_tipo:txt(justificacion.motivo_correccion_tipo),
+      motivo_correccion_detalle:txt(justificacion.motivo_correccion_detalle),
+      correccion_excepcional:txt(justificacion.correccion_excepcional)||'NO',
       detalle_json:detalleActualizado
     });
     if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo anular.');
@@ -947,58 +949,26 @@ function imprimirPorId(id){
 
 function docHTML(data){
   const d=data.detalle_json||{};
-  const centro=d.centro||state.configuracion||normalizarConfig(configGlobal());
-  const medico=d.medico||{};
-  const items=itemsUnicos(d.items||[]);
-  const ciudad=txt(centro.ciudad)||'Guayaquil';
-  const contacto=[centro.direccion,centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
-  const logo=txt(centro.logo);
-
-  return `<article class="aom-paper">
-    <header class="aom-doc-head">
-      <div>
-        <div class="aom-doc-brand">${esc(centro.nombre||'AUROSANAX')}</div>
-        <div class="aom-doc-sub">${esc(centro.subtitulo||'')}<br>${esc(centro.razon_social||'')}${centro.ruc?` · RUC ${esc(centro.ruc)}`:''}</div>
-      </div>
-      ${logo?`<img src="${esc(logo)}" alt="Logo" style="max-width:42mm;max-height:18mm;object-fit:contain">`:''}
-    </header>
-
+  const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
+  const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
+  const ciudad=txt(centro.ciudad)||'Guayaquil'; const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
+  const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
+  const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
+  const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
+  const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional" onerror="this.parentElement.remove();this.closest('.aom-doc-head')?.classList.add('no-logo')"></div>`:'';
+  return `<article class="aom-paper" style="--aom-color:${esc(color)}">
+    <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'AUROSANAX')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${esc(ciudad)}, ${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
-
-    <section class="aom-doc-grid">
-      <div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div>
-      <div><span class="aom-doc-label">Fecha:</span> ${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div>
-      <div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div>
-      <div><span class="aom-doc-label">Historia:</span> ${esc(data.id_historia||d.historia?.id_historia||'—')}</div>
-      <div><span class="aom-doc-label">Consulta:</span> ${esc(data.numero_consulta||d.numero_consulta||'—')}</div>
-      <div><span class="aom-doc-label">Orden:</span> ${esc(data.id_orden||'—')}</div>
-    </section>
-
-    <table class="aom-doc-table">
-      <thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead>
-      <tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody>
-    </table>
-
+    <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
+    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
-
-    <section class="aom-doc-sign">
-      <div class="aom-doc-line"></div>
-      <strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong><br>
-      <span style="font-size:11px">${esc(data.especialidad||medico.especialidad||'')}</span>
-      ${medico.registro_msp?`<br><span style="font-size:10px">Registro MSP: ${esc(medico.registro_msp)}</span>`:''}
-      ${medico.registro_senescyt?`<br><span style="font-size:10px">Registro SENESCYT: ${esc(medico.registro_senescyt)}</span>`:''}
-    </section>
-
-    <footer class="aom-doc-foot">
-      ${esc(ciudad)}, Ecuador${contacto?` · ${esc(contacto)}`:''}
-      ${data.estado?`<br>Estado documental: ${esc(data.estado)}${data.version?` · Versión ${esc(data.version)}`:''}`:''}
-    </footer>
+    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
   </article>`;
 }
 
 function estilosImpresion(){
   return `
-  @page{size:A4;margin:0}
+  @page{size:A4 portrait;margin:0}
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#eef2f7;font-family:Arial,sans-serif;color:#111827}
   .aom-print-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:center;gap:8px;padding:10px;background:#fff;border-bottom:1px solid #e5e7eb}
@@ -1006,7 +976,7 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('auroOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:absolute!important;left:17mm!important;right:17mm!important;bottom:15mm!important}}
   `;
 }
 
