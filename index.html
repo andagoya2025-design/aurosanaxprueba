@@ -3749,7 +3749,7 @@
   }
 
   .auro-finalizar-float-dock.is-horizontal .auro-finalizar-drag-handle{
-    width:28px;
+    width:42px;
     min-height:46px;
   }
 
@@ -3767,7 +3767,7 @@
   }
 
   .auro-finalizar-drag-handle{
-    width:28px;
+    width:42px;
     min-height:150px;
     border:1px solid #d9dee7;
     border-radius:13px;
@@ -3780,6 +3780,14 @@
     cursor:grab;
     touch-action:none;
     -webkit-tap-highlight-color:transparent;
+    position:relative;
+  }
+
+  .auro-finalizar-drag-handle::before{
+    content:"";
+    position:absolute;
+    inset:-4px;
+    border-radius:16px;
   }
 
   .auro-finalizar-drag-handle:active{cursor:grabbing}
@@ -4013,9 +4021,9 @@
     }
 
     .auro-finalizar-drag-handle{
-      width:26px;
+      width:48px;
       min-height:136px;
-      border-radius:12px;
+      border-radius:14px;
     }
 
     .auro-clinical-float-finalizar{
@@ -4034,8 +4042,8 @@
     }
 
     .auro-finalizar-float-dock.is-horizontal .auro-finalizar-drag-handle{
-      width:26px;
-      min-height:42px;
+      width:48px;
+      min-height:48px;
     }
 
     .auro-finalizar-float-dock.is-horizontal .auro-clinical-float-finalizar{
@@ -4062,7 +4070,7 @@
 
   @media(max-width:390px){
     .auro-finalizar-drag-handle{
-      width:24px;
+      width:48px;
       min-height:128px;
     }
 
@@ -13210,6 +13218,75 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
     auroGuardarOrientacionFinalizar(modo);
   }
 
+  function auroEsViewportMovil(){
+    return window.matchMedia('(max-width: 980px)').matches;
+  }
+
+  function auroObtenerLimitesSegurosFinalizar(dock){
+    const margen = 8;
+    const ancho = dock?.offsetWidth || 90;
+    const alto = dock?.offsetHeight || 150;
+    const movil = auroEsViewportMovil();
+
+    /*
+      Escritorio:
+      el sidebar fijo mide 280px. Reservamos además 18px de separación para
+      impedir que el flotante pueda invadir la tarjeta/contexto del menú.
+      Móvil:
+      no existe sidebar fijo ocupando ancho, por eso se conserva el borde normal.
+    */
+    const minLeft = movil ? margen : 306;
+    const maxLeft = Math.max(minLeft, window.innerWidth - ancho - margen);
+    const minTop = movil ? margen : 72;
+    const maxTop = Math.max(minTop, window.innerHeight - alto - margen);
+
+    return { minLeft, maxLeft, minTop, maxTop };
+  }
+
+  function auroPosicionFinalizarPorDefecto(dock){
+    const limites = auroObtenerLimitesSegurosFinalizar(dock);
+    const ancho = dock?.offsetWidth || 90;
+
+    if(auroEsViewportMovil()){
+      /*
+        En móvil conservamos la intención visual actual:
+        arriba a la derecha, sin forzar una nueva ubicación agresiva.
+      */
+      return {
+        left: limites.maxLeft,
+        top: Math.max(limites.minTop, 82)
+      };
+    }
+
+    /*
+      Escritorio: aparece automáticamente en el área blanca principal,
+      a la derecha del sidebar y sin tapar la tarjeta del menú.
+    */
+    return {
+      left: Math.min(
+        Math.max(360, Math.round(window.innerWidth * 0.46)),
+        limites.maxLeft
+      ),
+      top: Math.min(
+        Math.max(96, Math.round(window.innerHeight * 0.16)),
+        limites.maxTop
+      )
+    };
+  }
+
+  function auroPosicionFinalizarEsSegura(dock, left, top){
+    const limites = auroObtenerLimitesSegurosFinalizar(dock);
+
+    return (
+      Number.isFinite(left) &&
+      Number.isFinite(top) &&
+      left >= limites.minLeft &&
+      left <= limites.maxLeft &&
+      top >= limites.minTop &&
+      top <= limites.maxTop
+    );
+  }
+
   function auroLimitarNumero(valor, minimo, maximo){
     return Math.min(Math.max(valor, minimo), maximo);
   }
@@ -13217,14 +13294,19 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
   function auroAplicarPosicionFinalizar(dock, left, top){
     if(!dock) return;
 
-    const margen = 8;
-    const ancho = dock.offsetWidth || 74;
-    const alto = dock.offsetHeight || 150;
-    const maxLeft = Math.max(margen, window.innerWidth - ancho - margen);
-    const maxTop = Math.max(margen, window.innerHeight - alto - margen);
+    const limites = auroObtenerLimitesSegurosFinalizar(dock);
 
-    const x = auroLimitarNumero(Number(left) || margen, margen, maxLeft);
-    const y = auroLimitarNumero(Number(top) || margen, margen, maxTop);
+    const x = auroLimitarNumero(
+      Number(left),
+      limites.minLeft,
+      limites.maxLeft
+    );
+
+    const y = auroLimitarNumero(
+      Number(top),
+      limites.minTop,
+      limites.maxTop
+    );
 
     dock.style.left = x + 'px';
     dock.style.top = y + 'px';
@@ -13252,6 +13334,8 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
     const dock = document.getElementById('auroFinalizarFloatDock');
     if(!dock) return;
 
+    let posicion = null;
+
     try{
       const guardada = JSON.parse(
         localStorage.getItem(AURO_FINALIZAR_POS_KEY) || 'null'
@@ -13259,14 +13343,28 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 
       if(
         guardada &&
-        Number.isFinite(Number(guardada.left)) &&
-        Number.isFinite(Number(guardada.top))
+        auroPosicionFinalizarEsSegura(
+          dock,
+          Number(guardada.left),
+          Number(guardada.top)
+        )
       ){
-        auroAplicarPosicionFinalizar(dock, guardada.left, guardada.top);
+        posicion = {
+          left:Number(guardada.left),
+          top:Number(guardada.top)
+        };
       }
-    }catch(error){
-      /* Si no existe posición válida, conserva la ubicación CSS original. */
+    }catch(error){}
+
+    if(!posicion){
+      posicion = auroPosicionFinalizarPorDefecto(dock);
     }
+
+    auroAplicarPosicionFinalizar(
+      dock,
+      posicion.left,
+      posicion.top
+    );
   }
 
   function auroAjustarPosicionFinalizarAlViewport(){
@@ -13400,9 +13498,34 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
     }
   });
 
-  window.addEventListener('resize', auroAjustarPosicionFinalizarAlViewport);
+  window.addEventListener('resize', function(){
+    auroAjustarPosicionFinalizarAlViewport();
+
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    if(!dock) return;
+
+    const rect = dock.getBoundingClientRect();
+    if(!auroPosicionFinalizarEsSegura(dock, rect.left, rect.top)){
+      const posicion = auroPosicionFinalizarPorDefecto(dock);
+      auroAplicarPosicionFinalizar(dock, posicion.left, posicion.top);
+      auroGuardarPosicionFinalizar(dock);
+    }
+  });
+
   window.addEventListener('orientationchange', function(){
-    window.setTimeout(auroAjustarPosicionFinalizarAlViewport, 120);
+    window.setTimeout(function(){
+      auroAjustarPosicionFinalizarAlViewport();
+
+      const dock = document.getElementById('auroFinalizarFloatDock');
+      if(!dock) return;
+
+      const rect = dock.getBoundingClientRect();
+      if(!auroPosicionFinalizarEsSegura(dock, rect.left, rect.top)){
+        const posicion = auroPosicionFinalizarPorDefecto(dock);
+        auroAplicarPosicionFinalizar(dock, posicion.left, posicion.top);
+        auroGuardarPosicionFinalizar(dock);
+      }
+    }, 120);
   });
 
   window.addEventListener('aurosanax:atencion-seleccionada', auroProgramarSincronizacionFinalizar);
