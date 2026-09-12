@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: ordenes_medicas.js
  Módulo: Órdenes médicas formales por atención
- Versión: 1.0.0
+ Versión: 1.1.0
  Fecha: 2026-09-11
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -25,7 +25,7 @@
 
 if(window.auroOrdenesMedicas?.version) return;
 
-const VERSION='1.0.0';
+const VERSION='1.1.0';
 const JSON_VERSION='AUROSANAX_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -101,7 +101,6 @@ function respuestaOk(r){
   if(r===true) return true;
   if(!r||typeof r!=='object') return false;
   if(r.ok===true||r.success===true||r.exito===true) return true;
-  if(r.error===false) return true;
   if(txt(r.status).toLowerCase()==='ok') return true;
   return false;
 }
@@ -413,6 +412,75 @@ function datosDocumentoEmitido(reg){
   };
 }
 
+function estadoOrdenEsAnulada(r){
+  return /anulad/.test(norm(r?.estado));
+}
+
+function estadoOrdenEsReemplazada(r){
+  return /reemplaz/.test(norm(r?.estado));
+}
+
+function ordenActivaFormal(){
+  return state.ordenesEmitidas
+    .filter(r=>!estadoOrdenEsAnulada(r)&&!estadoOrdenEsReemplazada(r))
+    .sort((a,b)=>{
+      const va=Number(a?.version||0), vb=Number(b?.version||0);
+      if(vb!==va) return vb-va;
+      return txt(b?.actualizado_en||b?.creado_en||b?.fecha_emision)
+        .localeCompare(txt(a?.actualizado_en||a?.creado_en||a?.fecha_emision));
+    })[0]||null;
+}
+
+function solicitarJustificacion(titulo){
+  const motivo=window.prompt(
+    String(titulo||'Justificación obligatoria')+
+    '\n\nEscriba el motivo clínico o administrativo de esta acción:'
+  );
+  if(motivo===null) return null;
+  const limpio=txt(motivo);
+  if(limpio.length<3){
+    window.alert('La justificación es obligatoria y debe tener al menos 3 caracteres.');
+    return null;
+  }
+  return limpio;
+}
+
+function clonarDocumentoEmitido(reg){
+  const base=datosDocumentoEmitido(reg);
+  const d=parse(base.detalle_json);
+  return Object.assign({},base,{
+    detalle_json:Object.assign({},d,{
+      items:itemsUnicos(d.items||[])
+    })
+  });
+}
+
+function datosCorreccionDesdeDocumento(reg,items,motivo){
+  const base=clonarDocumentoEmitido(reg);
+  const versionNueva=(Number(base.version)||1)+1;
+  const ahora=new Date().toLocaleString('es-EC',{timeZone:'America/Guayaquil',hour12:false});
+  const detalle=Object.assign({},base.detalle_json,{
+    version:JSON_VERSION,
+    version_documento:versionNueva,
+    correccion_de:txt(reg.id_orden),
+    items:itemsUnicos(items),
+    auditoria_correccion:{
+      motivo:txt(motivo),
+      id_orden_origen:txt(reg.id_orden),
+      version_origen:Number(reg.version||1)||1,
+      fecha_visual_ecuador:ahora
+    }
+  });
+
+  return Object.assign({},base,{
+    id_orden:txt(reg.id_orden),
+    version:versionNueva,
+    estado:'Emitida',
+    detalle_json:detalle,
+    motivo_correccion:txt(motivo)
+  });
+}
+
 function instalarCSS(){
   if(document.getElementById('auroOrdenMedicaCSS')) return;
   const s=document.createElement('style');
@@ -442,6 +510,19 @@ function instalarCSS(){
 .aom-btn:hover{background:#f9fafb}
 .aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
 .aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
+.aom-modal{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.55)}
+.aom-modal-panel{width:min(920px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid #e5e7eb;box-shadow:0 28px 80px rgba(15,23,42,.28);padding:18px}
+.aom-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.aom-modal-title{font-size:16px;font-weight:900;color:#111827}
+.aom-modal-close{border:1px solid #d1d5db;background:#fff;border-radius:9px;width:34px;height:34px;font-size:20px;line-height:1}
+.aom-editor-list{display:grid;gap:10px}
+.aom-editor-item{display:grid;grid-template-columns:minmax(0,2fr) minmax(130px,.8fr) minmax(0,1.4fr);gap:8px;padding:10px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa}
+.aom-editor-item input,.aom-editor-item textarea{width:100%;border:1px solid #d1d5db;border-radius:9px;padding:8px;font:inherit}
+.aom-editor-item textarea{min-height:42px;resize:vertical}
+.aom-editor-remove{grid-column:1/-1;justify-self:end}
+.aom-editor-reason{margin-top:14px}
+.aom-editor-reason textarea{width:100%;min-height:78px;border:1px solid #d1d5db;border-radius:10px;padding:9px;font:inherit}
+.aom-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
 .aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:16mm 17mm 18mm;margin:0 auto;font-family:Arial,sans-serif}
 .aom-doc-head{display:grid;grid-template-columns:1fr auto;gap:15px;align-items:start;border-bottom:2px solid #8b1e5a;padding-bottom:10px;margin-bottom:18px}
 .aom-doc-brand{font-size:22px;font-weight:900;color:#8b1e5a}
@@ -491,10 +572,21 @@ function montar(){
 function estadoPrimario(){
   const ctx=contexto();
   const plan=itemsPlanActual();
+  const activaFormal=ordenActivaFormal();
+
   if(!ctx.id) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical',nota:'Seleccione una atención clínica.'};
   if(ctx.bloqueada) return {disabled:true,texto:'Orden médica bloqueada',icono:'bi-lock',nota:'La atención está anulada, cancelada o archivada.'};
   if(!plan.ok) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-exclamation-triangle',nota:plan.motivo};
-  if(state.editandoId) return {disabled:false,texto:'Guardar corrección de orden',icono:'bi-save2',nota:'Está corrigiendo una orden formal ya emitida.'};
+
+  if(activaFormal){
+    return {
+      disabled:false,
+      texto:'Ver orden emitida',
+      icono:'bi-eye',
+      nota:`Ya existe una orden formal activa (${txt(activaFormal.id_orden)} · v${Number(activaFormal.version||1)}). El botón no emitirá otra v1 accidentalmente.`
+    };
+  }
+
   if(!plan.items.length) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical',nota:'Agregue al menos una orden en el Plan.'};
   return {disabled:false,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical-fill',nota:`Se emitirán ${plan.items.length} ${plan.items.length===1?'orden':'órdenes'} de esta atención.`};
 }
@@ -503,7 +595,11 @@ function render(){
   const app=document.getElementById('auroOrdenMedicaFormalApp');
   if(!app) return;
   const e=estadoPrimario();
-  const emitidas=state.ordenesEmitidas.slice().sort((a,b)=>txt(b.fecha_emision).localeCompare(txt(a.fecha_emision)));
+  const emitidas=state.ordenesEmitidas.slice().sort((a,b)=>{
+    const fecha=txt(b.actualizado_en||b.creado_en||b.fecha_emision).localeCompare(txt(a.actualizado_en||a.creado_en||a.fecha_emision));
+    if(fecha!==0) return fecha;
+    return (Number(b.version)||0)-(Number(a.version)||0);
+  });
   app.innerHTML=`
     <div class="aom-shell">
       <div class="aom-head">
@@ -523,7 +619,8 @@ function render(){
     </div>`;
 
   document.getElementById('auroOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
-  app.querySelectorAll('[data-aom-abrir]').forEach(b=>b.addEventListener('click',()=>abrir(b.dataset.aomAbrir)));
+  app.querySelectorAll('[data-aom-preview]').forEach(b=>b.addEventListener('click',()=>vistaPreviaPorId(b.dataset.aomPreview)));
+  app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
   app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
 }
@@ -532,16 +629,20 @@ function filaHistorial(r){
   const id=txt(r.id_orden);
   const d=parse(r.detalle_json);
   const n=itemsUnicos(d.items||r.items||[]).length;
-  const anulada=/anulad/.test(norm(r.estado));
+  const anulada=estadoOrdenEsAnulada(r);
+  const reemplazada=estadoOrdenEsReemplazada(r);
+  const noEditable=anulada||reemplazada;
+
   return `<div class="aom-row">
     <div class="aom-row-main">
       <strong>${esc(id||'Orden médica')}</strong>
       <small>${esc(fechaVisual(r.fecha_emision))} · ${n} ${n===1?'ítem':'ítems'} · ${esc(r.estado||'Emitida')}${r.version?` · v${esc(r.version)}`:''}</small>
     </div>
     <div class="aom-actions">
-      <button type="button" class="aom-btn" data-aom-abrir="${esc(id)}"><i class="bi bi-folder2-open"></i> Abrir</button>
+      <button type="button" class="aom-btn" data-aom-preview="${esc(id)}"><i class="bi bi-eye"></i> Vista previa</button>
+      ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
-      ${anulada?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-x-circle"></i> Anular</button>`}
+      ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-trash"></i> Eliminar</button>`}
     </div>
   </div>`;
 }
@@ -564,11 +665,19 @@ function setGuardando(v){
 
 async function accionPrincipal(){
   if(state.guardando) return;
-  if(state.editandoId) return guardarCorreccion();
+  const activaFormal=ordenActivaFormal();
+  if(activaFormal) return vistaPreviaPorId(activaFormal.id_orden);
   return emitir();
 }
 
 async function emitir(){
+  const existente=ordenActivaFormal();
+  if(existente){
+    aviso('Ya existe una orden formal activa para esta atención. Ábrala o edítela; no se emitió otra v1.','warn');
+    vistaPreviaPorId(existente.id_orden);
+    return;
+  }
+
   let data;
   try{data=datosDocumentoDesdePlan();}
   catch(e){aviso(e.message||'No se pudo preparar la orden.','err');return;}
@@ -591,45 +700,146 @@ async function emitir(){
   }
 }
 
-async function guardarCorreccion(){
-  const original=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(state.editandoId));
-  if(!original){state.editandoId='';render();return;}
-  let data;
-  try{data=datosDocumentoDesdePlan();}
-  catch(e){aviso(e.message||'No se pudo preparar la corrección.','err');return;}
-
-  data.id_orden=txt(original.id_orden);
-  data.version=(Number(original.version)||1)+1;
-  data.estado='Emitida';
-  data.detalle_json.version_documento=data.version;
-  data.detalle_json.correccion_de=txt(original.id_orden);
-
-  if(!confirm('Se actualizará de forma controlada esta orden formal y aumentará su versión. ¿Continuar?')) return;
-
-  setGuardando(true);
-  aviso('Guardando corrección...');
-  try{
-    const r=await post('editarOrdenMedica',data);
-    if(!respuestaOk(r)&&r?.error) throw Error(txt(r.error||r.mensaje)||'No se pudo editar la orden.');
-    state.editandoId='';
-    await cargar();
-    aviso('Corrección guardada correctamente.','ok');
-  }catch(e){
-    aviso('No se pudo guardar la corrección: '+(e.message||e),'err');
-  }finally{
-    setGuardando(false);
-    render();
-  }
+function cerrarEditorFormal(){
+  document.getElementById('auroOrdenMedicaEditorModal')?.remove();
+  state.editandoId='';
 }
 
-function abrir(id){
+function recogerItemsEditorFormal(modal){
+  return Array.from(modal.querySelectorAll('[data-aom-editor-item]')).map(fila=>({
+    orden:txt(fila.querySelector('[data-campo="orden"]')?.value),
+    cat:txt(fila.querySelector('[data-campo="cat"]')?.value)||'OTROS',
+    obs:txt(fila.querySelector('[data-campo="obs"]')?.value),
+    codigo_cie10:txt(fila.dataset.cie10),
+    diagnostico:txt(fila.dataset.diagnostico)
+  })).filter(x=>x.orden);
+}
+
+function renderItemEditorFormal(item,index){
+  return `<div class="aom-editor-item" data-aom-editor-item="1"
+               data-cie10="${esc(item.codigo_cie10||'')}"
+               data-diagnostico="${esc(item.diagnostico||'')}">
+    <input data-campo="orden" value="${esc(item.orden||'')}" aria-label="Examen o procedimiento ${index+1}">
+    <input data-campo="cat" value="${esc(item.cat||'OTROS')}" aria-label="Categoría ${index+1}">
+    <textarea data-campo="obs" aria-label="Observación ${index+1}">${esc(item.obs||'')}</textarea>
+    <button type="button" class="aom-btn danger aom-editor-remove" data-aom-quitar-item="1">
+      <i class="bi bi-trash"></i> Quitar ítem
+    </button>
+  </div>`;
+}
+
+function editarFormal(id){
   const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
   if(!reg) return;
-  if(/anulad/.test(norm(reg.estado))){
-    state.editandoId='';
-    imprimirDocumento(datosDocumentoEmitido(reg),false);
+
+  const ctx=contexto();
+  if(txt(reg.id_atencion)!==txt(ctx.id)){
+    aviso('La orden solicitada no pertenece a la atención seleccionada.','err');
     return;
   }
+  if(ctx.bloqueada){
+    aviso('La atención está anulada, cancelada o archivada. No se permite editar la orden.','err');
+    return;
+  }
+  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)){
+    aviso('Esta versión es histórica y no puede editarse.','warn');
+    return;
+  }
+
+  cerrarEditorFormal();
+  state.editandoId=txt(reg.id_orden);
+
+  const data=datosDocumentoEmitido(reg);
+  const items=itemsUnicos(data.detalle_json.items||[]);
+  const modal=document.createElement('div');
+  modal.id='auroOrdenMedicaEditorModal';
+  modal.className='aom-modal';
+  modal.innerHTML=`
+    <div class="aom-modal-panel" role="dialog" aria-modal="true" aria-labelledby="aomEditorTitulo">
+      <div class="aom-modal-head">
+        <div>
+          <div id="aomEditorTitulo" class="aom-modal-title">Editar orden médica emitida</div>
+          <div class="aom-meta">${esc(data.id_orden)} · v${esc(data.version)}. La corrección creará una nueva versión y conservará la anterior.</div>
+        </div>
+        <button type="button" class="aom-modal-close" data-aom-cerrar-editor="1" aria-label="Cerrar">×</button>
+      </div>
+
+      <div class="aom-editor-list" id="aomEditorLista">
+        ${items.map(renderItemEditorFormal).join('')}
+      </div>
+
+      <div class="aom-editor-reason">
+        <label><strong>Justificación obligatoria de la corrección</strong></label>
+        <textarea id="aomEditorMotivo" placeholder="Ej.: Corrección del procedimiento solicitado"></textarea>
+      </div>
+
+      <div class="aom-modal-actions">
+        <button type="button" class="aom-btn" data-aom-cancelar-editor="1">Cancelar</button>
+        <button type="button" class="aom-primary" data-aom-guardar-editor="1">
+          <i class="bi bi-save2"></i> Guardar corrección
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  modal.querySelectorAll('[data-aom-quitar-item]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const filas=modal.querySelectorAll('[data-aom-editor-item]');
+      if(filas.length<=1){
+        alert('La orden formal debe conservar al menos un ítem.');
+        return;
+      }
+      btn.closest('[data-aom-editor-item]')?.remove();
+    });
+  });
+
+  modal.querySelector('[data-aom-cerrar-editor]')?.addEventListener('click',cerrarEditorFormal);
+  modal.querySelector('[data-aom-cancelar-editor]')?.addEventListener('click',cerrarEditorFormal);
+  modal.addEventListener('click',e=>{ if(e.target===modal) cerrarEditorFormal(); });
+
+  modal.querySelector('[data-aom-guardar-editor]')?.addEventListener('click',async()=>{
+    const motivo=txt(modal.querySelector('#aomEditorMotivo')?.value);
+    if(motivo.length<3){
+      alert('La justificación de la corrección es obligatoria.');
+      modal.querySelector('#aomEditorMotivo')?.focus();
+      return;
+    }
+
+    const itemsNuevos=recogerItemsEditorFormal(modal);
+    if(!itemsNuevos.length){
+      alert('La orden formal debe contener al menos un ítem.');
+      return;
+    }
+
+    const ctxAhora=contexto();
+    if(txt(ctxAhora.id)!==txt(reg.id_atencion)){
+      alert('La atención seleccionada cambió. No se guardó la corrección.');
+      return;
+    }
+
+    if(!confirm('Se creará una nueva versión de esta orden y la versión anterior quedará como reemplazada. ¿Continuar?')) return;
+
+    const dataCorreccion=datosCorreccionDesdeDocumento(reg,itemsNuevos,motivo);
+    const guardarBtn=modal.querySelector('[data-aom-guardar-editor]');
+    if(guardarBtn) guardarBtn.disabled=true;
+
+    try{
+      const r=await post('editarOrdenMedica',dataCorreccion);
+      if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo editar la orden.');
+      cerrarEditorFormal();
+      await cargar();
+      aviso('Corrección guardada. Se creó una nueva versión y se conservó la anterior.','ok');
+    }catch(e){
+      if(guardarBtn) guardarBtn.disabled=false;
+      aviso('No se pudo guardar la corrección: '+(e.message||e),'err');
+    }
+  });
+}
+
+function vistaPreviaPorId(id){
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
+  if(!reg) return;
 
   const ctx=contexto();
   if(txt(reg.id_atencion)!==txt(ctx.id)){
@@ -637,33 +847,68 @@ function abrir(id){
     return;
   }
 
-  state.editandoId=txt(reg.id_orden);
-  const d=datosDocumentoEmitido(reg);
-  window.ordenesMedicasPlanSeleccionadas=itemsUnicos(d.detalle_json.items||[]);
-  try{
-    if(typeof window.renderOrdenesMedicasTabla==='function') window.renderOrdenesMedicasTabla();
-    if(typeof window.recopilarOrdenesMedicasPlan==='function') window.recopilarOrdenesMedicasPlan();
-    if(typeof window.guardarPlanTemporal==='function') window.guardarPlanTemporal();
-  }catch(e){}
-  render();
-  aviso(`Orden ${txt(reg.id_orden)} abierta para corrección controlada. El botón principal guardará una nueva versión.`,'warn');
+  imprimirDocumento(datosDocumentoEmitido(reg),false);
+}
+
+/*
+  Compatibilidad antirregresiva:
+  - Se conservan los nombres históricos.
+  - abrir() ahora SOLO muestra vista previa y nunca modifica Plan.
+  - guardarCorreccion() ya no usa el Plan; abre el editor formal controlado.
+*/
+function abrir(id){
+  return vistaPreviaPorId(id);
+}
+
+function guardarCorreccion(){
+  if(!state.editandoId){
+    aviso('Seleccione una orden emitida y use Editar para iniciar una corrección.','warn');
+    return;
+  }
+  return editarFormal(state.editandoId);
 }
 
 async function anular(id){
   const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
   if(!reg) return;
+
   const ctx=contexto();
   if(txt(reg.id_atencion)!==txt(ctx.id)){
     aviso('La orden no pertenece a la atención seleccionada.','err');
     return;
   }
-  if(!confirm(`¿Anular la orden ${id}? El registro se conserva y solo cambiará su estado.`)) return;
+  if(ctx.bloqueada){
+    aviso('La atención está anulada, cancelada o archivada. No se permite modificar la orden.','err');
+    return;
+  }
+  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) return;
+
+  const motivo=solicitarJustificacion('ELIMINAR / ANULAR ORDEN MÉDICA');
+  if(!motivo) return;
+
+  if(!confirm(`La orden ${id} no se borrará físicamente. Quedará ANULADA y conservará su trazabilidad. ¿Continuar?`)) return;
+
+  const detalle=parse(reg.detalle_json);
+  const detalleActualizado=Object.assign({},detalle,{
+    auditoria_anulacion:{
+      motivo,
+      id_orden:txt(reg.id_orden),
+      version:Number(reg.version||1)||1,
+      fecha_visual_ecuador:new Date().toLocaleString('es-EC',{timeZone:'America/Guayaquil',hour12:false})
+    }
+  });
+
   try{
-    const r=await post('anularOrdenMedica',{id_orden:id,id_atencion:ctx.id});
-    if(!respuestaOk(r)&&r?.error) throw Error(txt(r.error||r.mensaje)||'No se pudo anular.');
+    const r=await post('anularOrdenMedica',{
+      id_orden:id,
+      id_atencion:ctx.id,
+      motivo_anulacion:motivo,
+      detalle_json:detalleActualizado
+    });
+    if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo anular.');
     if(state.editandoId===id) state.editandoId='';
     await cargar();
-    aviso('Orden anulada. El registro histórico se conserva.','ok');
+    aviso('Orden anulada. El registro histórico y la justificación se conservaron.','ok');
   }catch(e){
     aviso('No se pudo anular la orden: '+(e.message||e),'err');
   }
@@ -773,7 +1018,7 @@ async function cargar(){
     await cargarAuxiliares(ctx);
     const r=await get('listarOrdenesMedicasPorAtencion',{id_atencion:ctx.id});
     if(token!==state.token) return [];
-    state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id||!txt(x.id_atencion));
+    state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
   }catch(e){
     if(token!==state.token) return [];
     state.ordenesEmitidas=[];
