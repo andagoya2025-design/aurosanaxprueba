@@ -7015,8 +7015,9 @@ function auroPlanCargarMedicamentosDesdeTexto(texto){
 }
 
 function auroPlanCargarOrdenesDesdeTexto(texto){
-  if(typeof ordenesMedicasSeleccionadas === 'undefined') return;
-  ordenesMedicasSeleccionadas.length = 0;
+  /* Compatibilidad histórica: delega al contrato vigente de plan.js. */
+  if(!Array.isArray(window.ordenesMedicasPlanSeleccionadas)) return;
+  window.ordenesMedicasPlanSeleccionadas.length = 0;
   auroPlanLineas(texto).forEach(linea => {
     const partesObs = linea.split('|').map(x => x.trim());
     const principal = partesObs.shift() || '';
@@ -7024,10 +7025,10 @@ function auroPlanCargarOrdenesDesdeTexto(texto){
     const categoria = idx >= 0 ? principal.slice(0, idx).trim() : 'OTROS';
     const nombre = idx >= 0 ? principal.slice(idx + 1).trim() : principal;
     if(nombre){
-      ordenesMedicasSeleccionadas.push({
-        categoria: categoria || 'OTROS',
-        nombre,
-        observacion: partesObs.join(' | ')
+      window.ordenesMedicasPlanSeleccionadas.push({
+        orden: nombre,
+        cat: categoria || 'OTROS',
+        obs: partesObs.join(' | ')
       });
     }
   });
@@ -11954,21 +11955,21 @@ const ORDENES_MEDICAS_BASE = [
   {categoria:'OBSTETRICIA', nombre:'Ecografía obstétrica primer trimestre'}, {categoria:'OBSTETRICIA', nombre:'Ecografía obstétrica segundo trimestre'}, {categoria:'OBSTETRICIA', nombre:'Ecografía obstétrica tercer trimestre'}, {categoria:'OBSTETRICIA', nombre:'Screening primer trimestre'}, {categoria:'OBSTETRICIA', nombre:'Screening segundo trimestre'}, {categoria:'OBSTETRICIA', nombre:'Perfil biofísico fetal'}, {categoria:'OBSTETRICIA', nombre:'Monitoreo fetal'}, {categoria:'OBSTETRICIA', nombre:'Cervicometría'}, {categoria:'MATERNO FETAL', nombre:'Doppler materno fetal'}, {categoria:'MATERNO FETAL', nombre:'Doppler de arterias uterinas'}, {categoria:'MATERNO FETAL', nombre:'Doppler umbilical y cerebral media'},
   {categoria:'ENDOCRINOLOGÍA', nombre:'Perfil tiroideo'}, {categoria:'ENDOCRINOLOGÍA', nombre:'Anticuerpos antitiroideos'}, {categoria:'ENDOCRINOLOGÍA', nombre:'Curva de tolerancia oral a la glucosa'}, {categoria:'ENDOCRINOLOGÍA', nombre:'Índice HOMA'}, {categoria:'METABÓLICO', nombre:'Perfil metabólico completo'}, {categoria:'METABÓLICO', nombre:'Control de peso y composición corporal'}, {categoria:'NUTRICIÓN', nombre:'Valoración nutricional'}, {categoria:'CARDIOLOGÍA', nombre:'Electrocardiograma'}, {categoria:'CARDIOLOGÍA', nombre:'Holter de presión arterial'}, {categoria:'CARDIOLOGÍA', nombre:'Ecocardiograma'}, {categoria:'MEDICINA GENERAL', nombre:'Control de presión arterial'}, {categoria:'MEDICINA INTERNA', nombre:'Valoración por medicina interna'}, {categoria:'UROLOGÍA', nombre:'Valoración urológica'}, {categoria:'DERMATOLOGÍA', nombre:'Valoración dermatológica'}, {categoria:'VACUNACIÓN', nombre:'Vacuna HPV Gardasil 9'}, {categoria:'VACUNACIÓN', nombre:'Vacuna influenza'}, {categoria:'VACUNACIÓN', nombre:'Vacuna hepatitis B'}, {categoria:'PROCEDIMIENTOS', nombre:'Procedimiento con láser'}, {categoria:'PROCEDIMIENTOS', nombre:'Cauterización cervical'}, {categoria:'PROCEDIMIENTOS', nombre:'Exéresis de lesión'}, {categoria:'OTROS', nombre:'Interconsulta especializada'}
 ];
-let ordenesMedicasSeleccionadas = [];
-function normalizarOrdenTexto(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
-function renderOrdenesSugerencias(forzarListado=false){
+let ordenesMedicasSeleccionadasLegacyIndex = [];
+function normalizarOrdenTextoLegacyIndex(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
+function renderOrdenesSugerenciasLegacyIndex(forzarListado=false){
   const input=document.getElementById('hcOrdenBusqueda');
   const box=document.getElementById('hcOrdenSugerencias');
   const tipo=document.getElementById('hcOrdenTipo')?.value||'';
   if(!input||!box) return;
 
-  const q=normalizarOrdenTexto(input.value);
+  const q=normalizarOrdenTextoLegacyIndex(input.value);
 
   // Si el campo está vacío, igual se muestran opciones frecuentes para escoger,
   // especialmente cuando ya se seleccionó un tipo de orden.
   let res=ORDENES_MEDICAS_BASE.filter(o=>{
     const coincideTipo=!tipo || o.categoria===tipo;
-    const coincideTexto=!q || normalizarOrdenTexto(o.nombre+' '+o.categoria).includes(q);
+    const coincideTexto=!q || normalizarOrdenTextoLegacyIndex(o.nombre+' '+o.categoria).includes(q);
     return coincideTipo && coincideTexto;
   });
 
@@ -11986,51 +11987,49 @@ function renderOrdenesSugerencias(forzarListado=false){
   }
 
   box.innerHTML=res.map(o=>`
-    <div class="orden-sug-item" data-categoria="${escapeHtmlOrden(o.categoria)}" data-nombre="${escapeHtmlOrden(o.nombre)}">
-      <div>• ${escapeHtmlOrden(o.nombre)}</div>
-      <div class="orden-sug-cat">${escapeHtmlOrden(o.categoria)}</div>
+    <div class="orden-sug-item" data-categoria="${escapeHtmlOrdenLegacyIndex(o.categoria)}" data-nombre="${escapeHtmlOrdenLegacyIndex(o.nombre)}">
+      <div>• ${escapeHtmlOrdenLegacyIndex(o.nombre)}</div>
+      <div class="orden-sug-cat">${escapeHtmlOrdenLegacyIndex(o.categoria)}</div>
     </div>`).join('');
 
   box.classList.remove('d-none');
 }
-function escapeHtmlOrden(txt){
+function escapeHtmlOrdenLegacyIndex(txt){
   return String(txt||'').replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 }
-function seleccionarOrdenSugerida(categoria,nombre){
+function seleccionarOrdenSugeridaLegacyIndex(categoria,nombre){
   setValueIfExists('hcOrdenTipo', categoria);
   setValueIfExists('hcOrdenBusqueda', nombre);
   const box=document.getElementById('hcOrdenSugerencias');
   if(box) box.classList.add('d-none');
 }
-function agregarOrdenMedicaDesdeFormulario(){
+function agregarOrdenMedicaDesdeFormularioLegacyIndex(){
   const tipo=getValueIfExists('hcOrdenTipo')||'OTROS'; const nombre=(getValueIfExists('hcOrdenBusqueda')||'').trim(); const obs=(getValueIfExists('hcOrdenObservacion')||'').trim();
   if(!nombre){alert('Ingrese o seleccione un procedimiento/examen.'); return;}
-  ordenesMedicasSeleccionadas.push({categoria:tipo,nombre:nombre,observacion:obs});
-  setValueIfExists('hcOrdenBusqueda',''); setValueIfExists('hcOrdenObservacion',''); renderOrdenesMedicasTabla();
+  ordenesMedicasSeleccionadasLegacyIndex.push({categoria:tipo,nombre:nombre,observacion:obs});
+  setValueIfExists('hcOrdenBusqueda',''); setValueIfExists('hcOrdenObservacion',''); renderOrdenesMedicasTablaLegacyIndex();
 }
-function eliminarOrdenMedica(i){ordenesMedicasSeleccionadas.splice(i,1); renderOrdenesMedicasTabla();}
-function renderOrdenesMedicasTabla(){
+function eliminarOrdenMedicaLegacyIndex(i){ordenesMedicasSeleccionadasLegacyIndex.splice(i,1); renderOrdenesMedicasTablaLegacyIndex();}
+function renderOrdenesMedicasTablaLegacyIndex(){
   const tbody=document.getElementById('hcOrdenesTableBody'); const hidden=document.getElementById('hcExamenesSolicitados'); if(!tbody) return;
-  if(!ordenesMedicasSeleccionadas.length){tbody.innerHTML='<tr id="hcOrdenesEmpty"><td colspan="4" class="text-center text-muted py-3"><i class="bi bi-file-earmark-medical me-1"></i> Sin registros</td></tr>';} else {
-    tbody.innerHTML=ordenesMedicasSeleccionadas.map((o,i)=>`<tr><td>${o.nombre}</td><td><span class="badge bg-light text-dark border">${o.categoria}</span></td><td>${o.observacion||''}</td><td><button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarOrdenMedica(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');
+  if(!ordenesMedicasSeleccionadasLegacyIndex.length){tbody.innerHTML='<tr id="hcOrdenesEmpty"><td colspan="4" class="text-center text-muted py-3"><i class="bi bi-file-earmark-medical me-1"></i> Sin registros</td></tr>';} else {
+    tbody.innerHTML=ordenesMedicasSeleccionadasLegacyIndex.map((o,i)=>`<tr><td>${o.nombre}</td><td><span class="badge bg-light text-dark border">${o.categoria}</span></td><td>${o.observacion||''}</td><td><button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarOrdenMedicaLegacyIndex(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');
   }
-  if(hidden) hidden.value=ordenesMedicasSeleccionadas.map(o=>`${o.categoria}: ${o.nombre}${o.observacion?' | '+o.observacion:''}`).join('\n');
+  if(hidden) hidden.value=ordenesMedicasSeleccionadasLegacyIndex.map(o=>`${o.categoria}: ${o.nombre}${o.observacion?' | '+o.observacion:''}`).join('\n');
   if(typeof updateClinicalSummary==='function') updateClinicalSummary();
 }
-document.addEventListener('input',e=>{ if(e.target && e.target.id==='hcOrdenBusqueda') renderOrdenesSugerencias(); });
-document.addEventListener('focusin',e=>{ if(e.target && e.target.id==='hcOrdenBusqueda') renderOrdenesSugerencias(true); });
-document.addEventListener('change',e=>{
-  if(e.target && e.target.id==='hcOrdenTipo'){
-    setValueIfExists('hcOrdenBusqueda','');
-    renderOrdenesSugerencias(true);
-  }
-});
-document.addEventListener('click',e=>{
-  const item=e.target.closest('.orden-sug-item[data-categoria]');
-  if(item){ seleccionarOrdenSugerida(item.dataset.categoria, item.dataset.nombre); return; }
-  const box=document.getElementById('hcOrdenSugerencias');
-  if(box && !e.target.closest('#hcOrdenSugerencias') && e.target.id!=='hcOrdenBusqueda') box.classList.add('d-none');
-});
+/*
+  AUROSANAX FIX QUIRÚRGICO - INDEX SIN COLISIÓN DE ÓRDENES MÉDICAS
+  El motor antiguo se conserva únicamente como respaldo histórico interno.
+  NO instala listeners ni ocupa los nombres públicos del Plan.
+  plan.js es el propietario exclusivo de agregar/editar/eliminar/renderizar
+  las órdenes preparatorias del Plan; ordenes_medicas.js es propietario
+  exclusivo del documento formal emitido.
+*/
+function auroInstalarOrdenesMedicasLegacyIndex(){
+  console.warn('AUROSANAX: motor legacy de órdenes en index.html neutralizado. Use plan.js.');
+  return false;
+}
 </script>
   <script src="antecedentes.js?v=20260824_1"></script>
   <!-- AUROSANAX - Módulo Anamnesis inteligente -->
