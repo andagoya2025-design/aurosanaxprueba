@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: ordenes_medicas.js
  Módulo: Órdenes médicas formales por atención
- Versión: 1.1.0
+ Versión: 1.2.0
  Fecha: 2026-09-11
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -25,7 +25,7 @@
 
 if(window.auroOrdenesMedicas?.version) return;
 
-const VERSION='1.1.0';
+const VERSION='1.2.0';
 const JSON_VERSION='AUROSANAX_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -420,7 +420,7 @@ function estadoOrdenEsReemplazada(r){
   return /reemplaz/.test(norm(r?.estado));
 }
 
-function ordenActivaFormal(){
+function ordenesActivasFormales(){
   return state.ordenesEmitidas
     .filter(r=>!estadoOrdenEsAnulada(r)&&!estadoOrdenEsReemplazada(r))
     .sort((a,b)=>{
@@ -428,7 +428,11 @@ function ordenActivaFormal(){
       if(vb!==va) return vb-va;
       return txt(b?.actualizado_en||b?.creado_en||b?.fecha_emision)
         .localeCompare(txt(a?.actualizado_en||a?.creado_en||a?.fecha_emision));
-    })[0]||null;
+    });
+}
+
+function ordenActivaFormal(){
+  return ordenesActivasFormales()[0]||null;
 }
 
 function solicitarJustificacion(titulo){
@@ -572,11 +576,21 @@ function montar(){
 function estadoPrimario(){
   const ctx=contexto();
   const plan=itemsPlanActual();
-  const activaFormal=ordenActivaFormal();
+  const activas=ordenesActivasFormales();
+  const activaFormal=activas[0]||null;
 
   if(!ctx.id) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical',nota:'Seleccione una atención clínica.'};
   if(ctx.bloqueada) return {disabled:true,texto:'Orden médica bloqueada',icono:'bi-lock',nota:'La atención está anulada, cancelada o archivada.'};
   if(!plan.ok) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-exclamation-triangle',nota:plan.motivo};
+
+  if(activas.length>1){
+    return {
+      disabled:true,
+      texto:'Revisar órdenes activas',
+      icono:'bi-exclamation-triangle',
+      nota:`Se detectaron ${activas.length} órdenes formales activas para esta misma atención. No se permitirá otra emisión hasta resolver la duplicidad.`
+    };
+  }
 
   if(activaFormal){
     return {
@@ -665,13 +679,24 @@ function setGuardando(v){
 
 async function accionPrincipal(){
   if(state.guardando) return;
-  const activaFormal=ordenActivaFormal();
+  const activas=ordenesActivasFormales();
+  if(activas.length>1){
+    aviso(`Se detectaron ${activas.length} órdenes formales activas para esta atención. No se emitirá otra hasta resolver la duplicidad.`,'err');
+    return;
+  }
+  const activaFormal=activas[0]||null;
   if(activaFormal) return vistaPreviaPorId(activaFormal.id_orden);
   return emitir();
 }
 
 async function emitir(){
-  const existente=ordenActivaFormal();
+  const activas=ordenesActivasFormales();
+  if(activas.length>1){
+    aviso(`Se detectaron ${activas.length} órdenes formales activas para esta atención. Emisión bloqueada para evitar otra duplicidad.`,'err');
+    return;
+  }
+
+  const existente=activas[0]||null;
   if(existente){
     aviso('Ya existe una orden formal activa para esta atención. Ábrala o edítela; no se emitió otra v1.','warn');
     vistaPreviaPorId(existente.id_orden);
@@ -688,7 +713,7 @@ async function emitir(){
   aviso('Emitiendo orden médica...');
   try{
     const r=await post('guardarOrdenMedica',data);
-    if(!respuestaOk(r)&&r?.error) throw Error(txt(r.error||r.mensaje)||'No se pudo guardar la orden.');
+    if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo guardar la orden.');
     state.editandoId='';
     await cargar();
     aviso('Orden médica emitida correctamente.','ok');
@@ -1019,6 +1044,12 @@ async function cargar(){
     const r=await get('listarOrdenesMedicasPorAtencion',{id_atencion:ctx.id});
     if(token!==state.token) return [];
     state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
+    const activas=ordenesActivasFormales();
+    if(activas.length>1){
+      render();
+      aviso(`ALERTA: existen ${activas.length} órdenes formales activas en esta atención. Se bloqueó una nueva emisión para proteger la trazabilidad.`,'err');
+      return state.ordenesEmitidas;
+    }
   }catch(e){
     if(token!==state.token) return [];
     state.ordenesEmitidas=[];
