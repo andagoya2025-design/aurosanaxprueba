@@ -151,10 +151,47 @@
       flex:0 0 auto;
     }
 
-    .auro-patient-context-status[data-mode="actual"]::before{background:#16a34a}
-    .auro-patient-context-status[data-mode="historica"]::before{background:#64748b}
-    .auro-patient-context-status[data-mode="historia"]::before{background:#8b1e5a}
-    .auro-patient-context-status[data-mode="seleccionada"]::before{background:#2563eb}
+    /* AUROSANAX INDEX 91 — ESTADO VISUAL INEQUÍVOCO DE ATENCIÓN
+       Azul = atención realmente abierta/activa.
+       Rojo suave = consulta histórica/finalizada.
+       Gris = sin atención activa o estado no confirmado.
+       Presentación solamente: NO es fuente de verdad clínica. */
+    .auro-patient-context[data-mode="actual"]{
+      border-color:#93c5fd;
+      background:#eff6ff;
+      box-shadow:0 10px 24px rgba(37,99,235,.14);
+    }
+    .auro-patient-context[data-mode="historica"]{
+      border-color:#fecaca;
+      background:#fff1f2;
+      box-shadow:0 10px 24px rgba(185,28,28,.10);
+    }
+    .auro-patient-context[data-mode="historia"],
+    .auro-patient-context[data-mode="seleccionada"]{
+      border-color:#d1d5db;
+      background:#f8fafc;
+      box-shadow:0 10px 24px rgba(71,85,105,.10);
+    }
+
+    .auro-patient-context-status[data-mode="actual"]{
+      color:#1d4ed8;
+      font-weight:900;
+    }
+    .auro-patient-context-status[data-mode="actual"]::before{background:#2563eb}
+
+    .auro-patient-context-status[data-mode="historica"]{
+      color:#b91c1c;
+      font-weight:900;
+    }
+    .auro-patient-context-status[data-mode="historica"]::before{background:#dc2626}
+
+    .auro-patient-context-status[data-mode="historia"],
+    .auro-patient-context-status[data-mode="seleccionada"]{
+      color:#64748b;
+      font-weight:850;
+    }
+    .auro-patient-context-status[data-mode="historia"]::before,
+    .auro-patient-context-status[data-mode="seleccionada"]::before{background:#94a3b8}
 
     .auro-patient-context-separator{
       color:#cbd5e1;
@@ -14458,12 +14495,12 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
       return {
         nombre,
         modo: historica ? 'historica' : (actual ? 'actual' : 'seleccionada'),
-        estado: historica ? 'Consulta histórica' : (actual ? 'Atención actual' : 'Consulta seleccionada'),
+        estado: historica ? 'CONSULTA HISTÓRICA' : (actual ? 'ATENCIÓN ACTIVA' : 'CONSULTA SELECCIONADA'),
         consulta: numero ? ('Consulta #' + numero) : ''
       };
     }
 
-    return { nombre, modo:'historia', estado:'Historia clínica', consulta:'' };
+    return { nombre, modo:'historia', estado:'SIN ATENCIÓN ACTIVA', consulta:'' };
   }
 
   function pintarContenedor(el, contexto){
@@ -14476,6 +14513,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 
     if(!contexto){
       el.classList.remove('is-visible');
+      el.removeAttribute('data-mode');
       if(nombreEl) nombreEl.textContent = '';
       if(estadoEl){ estadoEl.textContent = ''; estadoEl.removeAttribute('data-mode'); }
       if(consultaEl) consultaEl.textContent = '';
@@ -14483,6 +14521,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
       return;
     }
 
+    el.dataset.mode = contexto.modo;
     if(nombreEl) nombreEl.textContent = contexto.nombre;
     if(estadoEl){
       estadoEl.textContent = contexto.estado;
@@ -14506,6 +14545,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
     'aurosanax:paciente-seleccionado',
     'aurosanax:atencion-seleccionada',
     'aurosanax:atencion-limpiada',
+    'aurosanax:atencion-finalizada',
     'aurosanax:historia-nueva'
   ].forEach(function(evento){
     window.addEventListener(evento, refrescar);
