@@ -3743,6 +3743,58 @@
 
   .auro-finalizar-orientation-toggle:hover{filter:brightness(.98)}
 
+  .auro-finalizar-close{
+    position:absolute;
+    top:-13px;
+    right:-13px;
+    width:28px;
+    height:28px;
+    border:1px solid #d9dee7;
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+    color:#64748b;
+    background:rgba(255,255,255,.98);
+    box-shadow:0 7px 18px rgba(15,23,42,.12);
+    cursor:pointer;
+    z-index:3;
+    padding:0;
+    font-size:13px;
+  }
+
+  .auro-finalizar-close:hover{
+    color:#991b1b;
+    background:#fff7f7;
+  }
+
+  .auro-finalizar-close:focus-visible{
+    outline:3px solid rgba(194,59,131,.24);
+    outline-offset:2px;
+  }
+
+  .auro-finalizar-restore{
+    display:none;
+    pointer-events:auto;
+    min-width:44px;
+    height:44px;
+    border:1px solid #ead5e2;
+    border-radius:14px;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    color:#7a174f;
+    background:rgba(255,255,255,.98);
+    box-shadow:0 10px 24px rgba(15,23,42,.11);
+    font-size:13px;
+    font-weight:850;
+    padding:0 12px;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+
+  .auro-finalizar-restore.is-visible{display:inline-flex}
+  .auro-finalizar-restore i{font-size:16px}
+
   .auro-finalizar-orientation-toggle:focus-visible{
     outline:3px solid rgba(194,59,131,.24);
     outline-offset:2px;
@@ -4039,6 +4091,21 @@
       height:42px;
       border-radius:13px;
       font-size:17px;
+    }
+
+    .auro-finalizar-restore{
+      min-width:42px;
+      height:42px;
+      padding:0 10px;
+      border-radius:13px;
+      font-size:12px;
+    }
+
+    .auro-finalizar-close{
+      width:30px;
+      height:30px;
+      top:-14px;
+      right:-14px;
     }
 
     .auro-finalizar-float-dock.is-horizontal .auro-finalizar-drag-handle{
@@ -5044,6 +5111,15 @@
     </button>
     <button
       type="button"
+      class="auro-finalizar-close"
+      id="auroFloatCerrarFinalizar"
+      aria-label="Ocultar botón Finalizar"
+      title="Ocultar botón Finalizar"
+    >
+      <i class="bi bi-x-lg"></i>
+    </button>
+    <button
+      type="button"
       class="auro-finalizar-drag-handle"
       id="auroFloatMoverFinalizar"
       aria-label="Mover botón Finalizar"
@@ -5063,6 +5139,16 @@
       <span>Finalizar</span>
     </button>
   </div>
+  <button
+    type="button"
+    class="auro-finalizar-restore"
+    id="auroFloatMostrarFinalizar"
+    aria-label="Mostrar botón Finalizar"
+    title="Mostrar botón Finalizar"
+  >
+    <i class="bi bi-box-arrow-in-up-right"></i>
+    <span>Finalizar</span>
+  </button>
   <div class="auro-clinical-float-nav">
     <button
       type="button"
@@ -13099,6 +13185,40 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
     }
   }
 
+  let auroFinalizarOcultoManual = false;
+
+  function auroActualizarVisibilidadManualFinalizar(){
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    const restore = document.getElementById('auroFloatMostrarFinalizar');
+    if(!dock || !restore) return;
+
+    const disponible = dock.dataset.auroDisponible === '1';
+    const mostrarDock = disponible && !auroFinalizarOcultoManual;
+    const mostrarRestore = disponible && auroFinalizarOcultoManual;
+
+    dock.classList.toggle('is-visible', mostrarDock);
+    dock.setAttribute('aria-hidden', mostrarDock ? 'false' : 'true');
+    restore.classList.toggle('is-visible', mostrarRestore);
+    restore.setAttribute('aria-hidden', mostrarRestore ? 'false' : 'true');
+  }
+
+  function auroOcultarFinalizarManual(){
+    const dock = document.getElementById('auroFinalizarFloatDock');
+    if(dock){
+      auroGuardarPosicionFinalizar(dock);
+    }
+    auroFinalizarOcultoManual = true;
+    auroBloquearFinalizar();
+    auroActualizarVisibilidadManualFinalizar();
+  }
+
+  function auroMostrarFinalizarManual(){
+    auroFinalizarOcultoManual = false;
+    auroRestaurarPosicionFinalizar();
+    auroActualizarVisibilidadManualFinalizar();
+    auroRenderEstadoFinalizar();
+  }
+
   function auroSincronizarFinalizarFlotante(){
     const dock = document.getElementById('auroFinalizarFloatDock');
     const flotante = document.getElementById('auroFloatFinalizarAtencion');
@@ -13113,15 +13233,17 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
       auroElementoVisible(real)
     );
 
-    dock.classList.toggle('is-visible', disponible);
-    dock.setAttribute('aria-hidden', disponible ? 'false' : 'true');
-    flotante.tabIndex = disponible ? 0 : -1;
+    dock.dataset.auroDisponible = disponible ? '1' : '0';
+    flotante.tabIndex = disponible && !auroFinalizarOcultoManual ? 0 : -1;
 
     if(!disponible){
+      auroFinalizarOcultoManual = false;
       auroBloquearFinalizar();
     }else{
       auroRenderEstadoFinalizar();
     }
+
+    auroActualizarVisibilidadManualFinalizar();
   }
 
   function auroDelegarFinalizacion(){
@@ -13158,7 +13280,15 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
   }
 
   const AURO_FINALIZAR_POS_KEY = 'aurosanax_finalizar_flotante_pos_v1';
+  const AURO_FINALIZAR_POS_DESKTOP_KEY = 'aurosanax_finalizar_flotante_pos_desktop_v2';
+  const AURO_FINALIZAR_POS_MOBILE_KEY = 'aurosanax_finalizar_flotante_pos_mobile_v2';
   const AURO_FINALIZAR_ORIENTACION_KEY = 'aurosanax_finalizar_flotante_orientacion_v1';
+
+  function auroClavePosicionFinalizarActual(){
+    return auroEsViewportMovil()
+      ? AURO_FINALIZAR_POS_MOBILE_KEY
+      : AURO_FINALIZAR_POS_DESKTOP_KEY;
+  }
 
   function auroAplicarOrientacionFinalizar(modo){
     const dock = document.getElementById('auroFinalizarFloatDock');
@@ -13245,30 +13375,25 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 
   function auroPosicionFinalizarPorDefecto(dock){
     const limites = auroObtenerLimitesSegurosFinalizar(dock);
-    const ancho = dock?.offsetWidth || 90;
 
     if(auroEsViewportMovil()){
-      /*
-        En móvil conservamos la intención visual actual:
-        arriba a la derecha, sin forzar una nueva ubicación agresiva.
-      */
       return {
         left: limites.maxLeft,
-        top: Math.max(limites.minTop, 82)
+        top: Math.min(Math.max(limites.minTop, 82), limites.maxTop)
       };
     }
 
     /*
-      Escritorio: aparece automáticamente en el área blanca principal,
-      a la derecha del sidebar y sin tapar la tarjeta del menú.
+      Escritorio: zona superior del contenido principal, más arriba que V89,
+      fuera del sidebar y sin tapar el título Historia clínica.
     */
     return {
       left: Math.min(
-        Math.max(360, Math.round(window.innerWidth * 0.46)),
+        Math.max(620, Math.round(window.innerWidth * 0.60)),
         limites.maxLeft
       ),
       top: Math.min(
-        Math.max(96, Math.round(window.innerHeight * 0.16)),
+        Math.max(limites.minTop, 74),
         limites.maxTop
       )
     };
@@ -13316,15 +13441,16 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 
   function auroGuardarPosicionFinalizar(dock){
     if(!dock) return;
+
+    const rect = dock.getBoundingClientRect();
+    const payload = JSON.stringify({
+      left:Math.round(rect.left),
+      top:Math.round(rect.top)
+    });
+
     try{
-      const rect = dock.getBoundingClientRect();
-      localStorage.setItem(
-        AURO_FINALIZAR_POS_KEY,
-        JSON.stringify({
-          left:Math.round(rect.left),
-          top:Math.round(rect.top)
-        })
-      );
+      localStorage.setItem(auroClavePosicionFinalizarActual(), payload);
+      localStorage.setItem(AURO_FINALIZAR_POS_KEY, payload);
     }catch(error){
       /* Preferencia visual solamente. */
     }
@@ -13336,35 +13462,37 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 
     let posicion = null;
 
-    try{
-      const guardada = JSON.parse(
-        localStorage.getItem(AURO_FINALIZAR_POS_KEY) || 'null'
-      );
+    function leerPosicion(clave){
+      try{
+        const guardada = JSON.parse(localStorage.getItem(clave) || 'null');
+        if(
+          guardada &&
+          auroPosicionFinalizarEsSegura(
+            dock,
+            Number(guardada.left),
+            Number(guardada.top)
+          )
+        ){
+          return {
+            left:Number(guardada.left),
+            top:Number(guardada.top)
+          };
+        }
+      }catch(error){}
+      return null;
+    }
 
-      if(
-        guardada &&
-        auroPosicionFinalizarEsSegura(
-          dock,
-          Number(guardada.left),
-          Number(guardada.top)
-        )
-      ){
-        posicion = {
-          left:Number(guardada.left),
-          top:Number(guardada.top)
-        };
-      }
-    }catch(error){}
+    posicion = leerPosicion(auroClavePosicionFinalizarActual());
+
+    if(!posicion){
+      posicion = leerPosicion(AURO_FINALIZAR_POS_KEY);
+    }
 
     if(!posicion){
       posicion = auroPosicionFinalizarPorDefecto(dock);
     }
 
-    auroAplicarPosicionFinalizar(
-      dock,
-      posicion.left,
-      posicion.top
-    );
+    auroAplicarPosicionFinalizar(dock, posicion.left, posicion.top);
   }
 
   function auroAjustarPosicionFinalizarAlViewport(){
@@ -13438,6 +13566,8 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
     const bajar = document.getElementById('auroFloatBajar');
     const finalizar = document.getElementById('auroFloatFinalizarAtencion');
     const girarFinalizar = document.getElementById('auroFloatGirarFinalizar');
+    const cerrarFinalizar = document.getElementById('auroFloatCerrarFinalizar');
+    const mostrarFinalizar = document.getElementById('auroFloatMostrarFinalizar');
 
     if(girarFinalizar && girarFinalizar.dataset.auroBound !== '1'){
       girarFinalizar.dataset.auroBound = '1';
@@ -13445,6 +13575,24 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
         evento.preventDefault();
         evento.stopPropagation();
         auroAlternarOrientacionFinalizar();
+      });
+    }
+
+    if(cerrarFinalizar && cerrarFinalizar.dataset.auroBound !== '1'){
+      cerrarFinalizar.dataset.auroBound = '1';
+      cerrarFinalizar.addEventListener('click', function(evento){
+        evento.preventDefault();
+        evento.stopPropagation();
+        auroOcultarFinalizarManual();
+      });
+    }
+
+    if(mostrarFinalizar && mostrarFinalizar.dataset.auroBound !== '1'){
+      mostrarFinalizar.dataset.auroBound = '1';
+      mostrarFinalizar.addEventListener('click', function(evento){
+        evento.preventDefault();
+        evento.stopPropagation();
+        auroMostrarFinalizarManual();
       });
     }
 
@@ -13508,7 +13656,9 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
     if(!auroPosicionFinalizarEsSegura(dock, rect.left, rect.top)){
       const posicion = auroPosicionFinalizarPorDefecto(dock);
       auroAplicarPosicionFinalizar(dock, posicion.left, posicion.top);
-      auroGuardarPosicionFinalizar(dock);
+      if(!auroFinalizarOcultoManual){
+        auroGuardarPosicionFinalizar(dock);
+      }
     }
   });
 
