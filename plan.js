@@ -6116,3 +6116,62 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
    - No modifica JSON, Apps Script, Google Sheets, protocolos,
      medicamentos, botones, responsive ni guardado.
 ============================================================ */
+
+/* ============================================================
+   AUROSANAX PLAN 37 - BOTÓN ESPEJO FIRMA ELECTRÓNICA RECETA
+   - Solo delega al propietario oficial Recetas.
+   - No crea PDF, no firma, no guarda receta y no cambia Plan -> Receta.
+   - No modifica persistencia por id_atencion.
+============================================================ */
+(function auroPlanInstalarFirmaElectronicaRecetaEspejo(){
+    'use strict';
+
+    function ejecutarFirmaRecetaDesdePlan(){
+        try{
+            if(typeof sincronizarPlanConReceta === 'function'){
+                sincronizarPlanConReceta();
+            }
+
+            if(
+                !window.auroRecetas ||
+                typeof window.auroRecetas.firmarElectronicaActual !== 'function'
+            ){
+                throw new Error('El módulo oficial de Recetas no se encuentra disponible para firmar.');
+            }
+
+            return window.auroRecetas.firmarElectronicaActual();
+        }catch(error){
+            console.error('AUROSANAX PLAN - FIRMA RECETA', error);
+            alert(error?.message || 'No fue posible abrir la firma electrónica de la receta.');
+            return null;
+        }
+    }
+
+    function montarBoton(){
+        if(document.getElementById('btnFirmaElectronicaPlanReceta')) return;
+
+        const caja = document.querySelector('#hc_plan .receta-medicamentos-box');
+        if(!caja) return;
+
+        const acciones = caja.querySelector('.col-md-12.d-flex.gap-2.flex-wrap');
+        if(!acciones) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'btnFirmaElectronicaPlanReceta';
+        btn.type = 'button';
+        btn.className = 'btn btn-outline-success';
+        btn.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
+        btn.title = 'Abrir la firma electrónica oficial de la receta guardada';
+        btn.addEventListener('click', ejecutarFirmaRecetaDesdePlan);
+        acciones.appendChild(btn);
+    }
+
+    window.auroPlanFirmarRecetaElectronica = ejecutarFirmaRecetaDesdePlan;
+
+    if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', montarBoton, {once:true});
+    }else{
+        montarBoton();
+    }
+})();
+
