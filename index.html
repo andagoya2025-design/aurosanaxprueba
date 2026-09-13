@@ -5249,7 +5249,7 @@
     </div>
     <div class="modalx-body">
       <div class="history-modal-grid">
-        <input id="historiaSearch" class="form-control" placeholder="Buscar por paciente, cédula o diagnóstico" oninput="renderHistoriasClinicas()">
+        <input id="historiaSearch" class="form-control" type="search" role="searchbox" aria-autocomplete="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Buscar por paciente, cédula o diagnóstico" oninput="renderHistoriasClinicas()">
         <select id="historiaPacienteFiltro" class="form-select" onchange="renderHistoriasClinicas()">
           <option value="">Todos los pacientes</option>
         </select>
