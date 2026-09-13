@@ -1,22 +1,24 @@
 /* ============================================================
    AUROSANAX ERP - FIRMA ELECTRÓNICA
    Archivo: firma_electronica.js
-   Versión: 1.0
+   Versión: 2.0
    Alcance inicial: RECETA
    ------------------------------------------------------------
-   CONTRATO:
-   - Módulo frontend único para solicitar firma electrónica.
+   CONTRATO ANTIRREGRESIVO:
+   - Mantiene window.auroFirmaElectronica.firmarDocumento(data).
    - No contiene certificado .p12, clave privada ni contraseña.
    - No declara una firma válida sin confirmación positiva del backend.
    - Falla cerrado ante configuración incompleta, sesión inválida o error.
-   - Preparado para reutilizarse después con Certificados, Órdenes Médicas
-     y Recomendaciones sin duplicar motores.
+   - Conserva aislamiento por id_atencion + id_receta.
+   - El backend crea una solicitud; este módulo espera el resultado firmado.
 ============================================================ */
 (function(){
   'use strict';
 
   const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
-  const VERSION = '1.0';
+  const VERSION = '2.0';
+  const INTERVALO_CONSULTA_MS = 2500;
+  const TIEMPO_MAXIMO_MS = 10 * 60 * 1000;
 
   function texto(valor){
     return String(valor === null || valor === undefined ? '' : valor).trim();
@@ -77,6 +79,10 @@
     return json;
   }
 
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
   function base64ABlob(base64, mime){
     const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
     const bin = atob(limpio);
@@ -120,10 +126,60 @@
     return d;
   }
 
+  async function esperarFirma(idSolicitud, solicitud){
+    const inicio = Date.now();
+
+    while((Date.now() - inicio) < TIEMPO_MAXIMO_MS){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'ERROR'){
+        throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el documento.');
+      }
+      if(valor === 'EXPIRADA'){
+        throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      }
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+
+    throw new Error('La firma no se completó dentro del tiempo permitido. Verifique que el motor de firma esté iniciado.');
+  }
+
   async function firmarDocumento(data){
     try{
       const solicitud = validarSolicitud(data);
-      const resultado = await post('firmarDocumento', solicitud);
+
+      const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
+      if(estadoMotor.disponible !== true){
+        throw new Error(
+          estadoMotor.agente_online === false
+            ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+            : 'La firma electrónica no está disponible en este momento.'
+        );
+      }
+
+      const creada = await post('firmarDocumento', solicitud);
+      const estadoInicial = texto(creada.estado_firma).toUpperCase();
+
+      let resultado;
+      if(estadoInicial === 'FIRMADO'){
+        resultado = creada;
+      }else{
+        if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+          throw new Error('El servidor no creó correctamente la solicitud de firma.');
+        }
+        resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+      }
 
       if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
         throw new Error('El servidor no confirmó un estado de firma válido.');
@@ -139,6 +195,7 @@
           tipo_documento:solicitud.tipo_documento,
           id_atencion:solicitud.id_atencion,
           id_receta:solicitud.id_receta,
+          id_solicitud:texto(resultado.id_solicitud),
           estado_firma:'FIRMADO'
         }
       }));
