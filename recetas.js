@@ -1521,6 +1521,23 @@
         if(guardar){
           guardar.setAttribute('data-auro-receta-action','guardar');
         }
+
+
+        let firmar = el('btnFirmaElectronicaReceta');
+        if(!firmar){
+          firmar = document.createElement('button');
+          firmar.id = 'btnFirmaElectronicaReceta';
+          firmar.type = 'button';
+          firmar.className = 'btn-soft';
+          firmar.setAttribute('data-auro-receta-action','firma-electronica');
+          firmar.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+          firmar.onclick = auroRecetaFirmarElectronicaActual;
+          if(pdf && pdf.parentNode){
+            pdf.insertAdjacentElement('afterend', firmar);
+          }else{
+            acciones.appendChild(firmar);
+          }
+        }
       }
     }
 
@@ -6212,6 +6229,117 @@
     if(id) recetaDiagnosticosPorAtencionCache.delete(id);
   });
 
+
+  /* =====================================================
+     AUROSANAX RECETAS 3.11 - PUENTE DE FIRMA ELECTRÓNICA
+     - Recetas conserva la autoridad documental.
+     - firma_electronica.js conserva la autoridad de transporte/estado.
+     - No firma recetas no guardadas.
+     - No modifica Plan ni persistencia clínica.
+  ===================================================== */
+  function auroRecetaRegistroFirmableActual(){
+    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    const lista = leerRecetasStorage();
+
+    if(recetaEditandoId){
+      const editando = lista.find(r => String(r.id_receta || '') === String(recetaEditandoId));
+      if(editando && !String(editando.estado || '').toLowerCase().includes('anulada')) return editando;
+    }
+
+    if(!idAtencion) return null;
+
+    const candidatas = lista.filter(r =>
+      String(r.id_atencion || '').trim() === idAtencion &&
+      !String(r.estado || '').toLowerCase().includes('anulada')
+    );
+
+    return candidatas.length ? candidatas[candidatas.length - 1] : null;
+  }
+
+  function auroRecetaDocumentoFirmableActual(){
+    const registro = auroRecetaRegistroFirmableActual();
+    if(!registro){
+      return {
+        success:false,
+        message:'Guarde la receta de la atención actual antes de firmarla electrónicamente.'
+      };
+    }
+
+    const r = recetaGuardadaAFormatoPreview(registro);
+    const idReceta = String(registro.id_receta || '').trim();
+    const idAtencion = String(registro.id_atencion || '').trim();
+
+    if(!idReceta || !idAtencion){
+      return {
+        success:false,
+        message:'La receta guardada no contiene los identificadores clínicos requeridos para firmar.'
+      };
+    }
+
+    return {
+      success:true,
+      tipo_documento:'RECETA',
+      id_documento_clinico:idReceta,
+      id_receta:idReceta,
+      id_atencion:idAtencion,
+      id_paciente:String(registro.id_paciente || r.id_paciente || r.paciente?.id_paciente || '').trim(),
+      id_historia:String(registro.id_historia || r.id_historia || '').trim(),
+      id_medico:String(registro.id_medico || r.id_medico || '').trim(),
+      nombre_archivo:'RECETA_' + idReceta + '_FIRMADA.pdf',
+      html_documento:construirHTMLRecetaPacienteDobleA4(
+        auroRecetaPrepararDatosParaRepresentacion(r)
+      )
+    };
+  }
+
+  async function auroRecetaFirmarElectronicaActual(){
+    const documento = auroRecetaDocumentoFirmableActual();
+
+    if(!documento.success){
+      mostrarMensajeReceta(
+        '<i class="bi bi-exclamation-triangle me-1"></i> ' + safe(documento.message),
+        'error'
+      );
+      return null;
+    }
+
+    if(!window.auroFirmaElectronica || typeof window.auroFirmaElectronica.firmarDocumento !== 'function'){
+      mostrarMensajeReceta(
+        '<i class="bi bi-shield-exclamation me-1"></i> El módulo de firma electrónica no se encuentra disponible.',
+        'error'
+      );
+      return null;
+    }
+
+    const btn = el('btnFirmaElectronicaReceta');
+    if(btn){
+      btn.disabled = true;
+      btn.setAttribute('aria-busy','true');
+      btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firmando…';
+    }
+
+    try{
+      const resultado = await window.auroFirmaElectronica.firmarDocumento(documento);
+      mostrarMensajeReceta(
+        '<i class="bi bi-patch-check me-1"></i> Receta firmada electrónicamente.',
+        'ok'
+      );
+      return resultado;
+    }catch(error){
+      mostrarMensajeReceta(
+        '<i class="bi bi-shield-exclamation me-1"></i> ' + safe(error?.message || 'No fue posible firmar la receta.'),
+        'error'
+      );
+      return null;
+    }finally{
+      if(btn){
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+      }
+    }
+  }
+
   /*
     API PÚBLICA OFICIAL DE RECETAS
     ------------------------------
@@ -6227,7 +6355,9 @@
     sincronizarEstadoVistaPaciente:auroRecetaActualizarBotonesAccesoGlobal,
     imprimirActual:function(){
       return auroRecetaAbrirVistaPacienteOficial();
-    }
+    },
+    obtenerDocumentoFirmableActual:auroRecetaDocumentoFirmableActual,
+    firmarElectronicaActual:auroRecetaFirmarElectronicaActual
   });
 
   window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
