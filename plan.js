@@ -6118,47 +6118,46 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 ============================================================ */
 
 /* ============================================================
-   AUROSANAX PLAN 36.1 - BARRA OFICIAL RECETA / FIRMA
-   INTEGRACIÓN LIMPIA DESDE BASE ESTABLE PLAN 36
+   AUROSANAX PLAN 36.2 - ACCIONES UNIFICADAS / FIRMA OFICIAL
+   BASE: PLAN 36 ESTABLE + CORRECCIÓN VISUAL ANTIRREGRESIVA
    ------------------------------------------------------------
    OBJETIVO:
-   - Plan NO crea una segunda lógica de firma.
-   - Recetas continúa siendo el único propietario del documento firmable.
-   - firma_electronica.js continúa siendo el único propietario del estado
-     Preparando/Firmando/Cancelar/Firmado/Cancelado.
-   - Plan solo ofrece accesos visuales a las APIs oficiales existentes.
+   - Reutilizar la barra oficial existente #auroPlanActionButtons.
+   - NO crear una segunda barra ni duplicar PDF receta.
+   - Mantener en la misma línea las acciones existentes del Plan:
+     Guardar/Actualizar plan, Limpiar plan, Editar/Guardar receta, PDF receta.
+   - Añadir únicamente Firmar receta al final de esa misma barra.
+   - Cancelar firma continúa siendo creado y controlado por
+     firma_electronica.js cuando existe una solicitud real.
 
-   VELOCIDAD / ANTIRREGRESIÓN:
-   - Cero GET preventivos.
-   - Cero sincronización Plan -> Receta al pulsar Firmar.
-   - Cero MutationObserver.
-   - Cero intervalos/timers permanentes.
-   - Montaje único e idempotente.
-   - Un solo clic delega directamente al flujo oficial de Recetas.
-   - El botón Cancelar NO se duplica aquí: firma_electronica.js lo crea,
-     activa y desactiva junto al botón de Plan cuando existe solicitud real.
-
-   NO MODIFICA:
-   - medicamentos, órdenes, interconsultas, evaluaciones;
-   - reset/undo, guardado, cache ni cambio de atención;
-   - JSON, IDs clínicos, Google Sheets, Apps Script, motor ni index.html.
+   ANTIRREGRESIÓN / VELOCIDAD:
+   - No clona ni reemplaza botones existentes.
+   - No modifica onclick, IDs ni funciones actuales.
+   - No sincroniza Plan -> Receta al pulsar Firmar.
+   - No realiza GET preventivo.
+   - No usa MutationObserver.
+   - No crea intervalos ni polling nuevo.
+   - Montaje idempotente y coste O(1).
 ============================================================ */
-(function auroPlanInstalarBarraRecetaFirmaOficial(){
+(function auroPlanInstalarFirmaEnAccionesOficiales(){
     'use strict';
 
-    const TOOLBAR_ID = 'auroPlanBarraRecetaFirmaOficial';
-    const STYLE_ID = 'auroPlanBarraRecetaFirmaOficialStyles';
-    const BTN_PDF_ID = 'auroPlanBtnRecetaPdfOficial';
-    const BTN_FIRMA_ID = 'auroPlanBtnFirmaRecetaOficial';
+    const ACTIONS_ID = 'auroPlanActionButtons';
+    const STYLE_ID = 'auroPlanFirmaAccionesUnificadasStyles';
+    const BTN_FIRMA_ID = 'btnFirmaElectronicaPlanReceta';
 
     function mostrarError(mensaje){
-        const txt = String(mensaje || 'No fue posible completar la acción de receta.').trim();
+        const txt = String(
+            mensaje || 'No fue posible iniciar la firma electrónica de la receta.'
+        ).trim();
+
         try{
             if(typeof window.mostrarToast === 'function'){
                 window.mostrarToast(txt, 'danger');
                 return;
             }
         }catch(_e){}
+
         alert(txt);
     }
 
@@ -6168,28 +6167,31 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-          #${TOOLBAR_ID}{
+          #${ACTIONS_ID}{
+            width:100%;
             display:flex;
             align-items:center;
-            justify-content:flex-end;
+            justify-content:flex-start;
             gap:8px;
             flex-wrap:wrap;
-            margin:-2px 0 12px;
+            margin:0 0 10px;
             padding:8px 10px;
             border:1px solid #ead7e2;
             border-radius:14px;
             background:#fffafd;
           }
-          #${TOOLBAR_ID} button{
+          #${ACTIONS_ID} button{
             min-height:36px;
             border-radius:10px;
-            font-weight:750;
             white-space:nowrap;
+          }
+          #${BTN_FIRMA_ID}{
+            font-weight:750;
           }
           #${BTN_FIRMA_ID}[aria-busy="true"]{
             cursor:wait !important;
           }
-          #${TOOLBAR_ID} .auro-cancelar-firma-electronica[data-auro-contexto="plan"]{
+          #${ACTIONS_ID} .auro-cancelar-firma-electronica[data-auro-contexto="plan"]{
             min-height:36px;
             margin-left:0 !important;
             padding:6px 10px;
@@ -6199,19 +6201,19 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
             color:#b91c1c;
             font-weight:750;
           }
-          #${TOOLBAR_ID} .auro-cancelar-firma-electronica[data-auro-contexto="plan"]:disabled{
+          #${ACTIONS_ID} .auro-cancelar-firma-electronica[data-auro-contexto="plan"]:disabled{
             border-color:#d1d5db;
             color:#9ca3af;
             background:#f8fafc;
             opacity:.78;
           }
           @media(max-width:760px){
-            #${TOOLBAR_ID}{
-              justify-content:stretch;
+            #${ACTIONS_ID}{
               display:grid;
               grid-template-columns:1fr;
+              gap:7px;
             }
-            #${TOOLBAR_ID} button{
+            #${ACTIONS_ID} button{
               width:100%;
             }
           }
@@ -6219,97 +6221,61 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         document.head.appendChild(style);
     }
 
-    function apiRecetasDisponible(nombre){
-        return !!(
-            window.auroRecetas &&
-            typeof window.auroRecetas[nombre] === 'function'
-        );
-    }
-
-    function abrirPdfOficial(){
-        try{
-            if(apiRecetasDisponible('imprimirActual')){
-                return window.auroRecetas.imprimirActual();
-            }
-            if(apiRecetasDisponible('abrirVistaPacienteOficial')){
-                return window.auroRecetas.abrirVistaPacienteOficial();
-            }
-            throw new Error('El módulo oficial de Recetas no está disponible para PDF / imprimir.');
-        }catch(error){
-            console.error('AUROSANAX PLAN - PDF OFICIAL RECETA', error);
-            mostrarError(error?.message || 'No fue posible abrir el PDF oficial de la receta.');
-            return null;
-        }
-    }
-
     function firmarRecetaOficial(){
         try{
-            if(!apiRecetasDisponible('firmarElectronicaActual')){
-                throw new Error('El módulo oficial de Recetas no está disponible para firma electrónica.');
+            if(
+                !window.auroRecetas ||
+                typeof window.auroRecetas.firmarElectronicaActual !== 'function'
+            ){
+                throw new Error(
+                    'El módulo oficial de Recetas no está disponible para firma electrónica.'
+                );
             }
 
             /*
-              Delegación directa: NO sincroniza, NO consulta backend y NO crea
-              estados propios. La API oficial de Recetas valida el documento y
-              firma_electronica.js refleja inmediatamente el estado en este
-              mismo botón y monta el botón Cancelar cuando corresponde.
+              Delegación directa al propietario oficial.
+              No crea estado, no sincroniza, no consulta backend por separado.
             */
             return window.auroRecetas.firmarElectronicaActual();
         }catch(error){
             console.error('AUROSANAX PLAN - FIRMA OFICIAL RECETA', error);
-            mostrarError(error?.message || 'No fue posible iniciar la firma electrónica de la receta.');
+            mostrarError(error?.message);
             return null;
         }
     }
 
     function montar(){
-        if(document.getElementById(TOOLBAR_ID)) return true;
-
-        const plan = document.getElementById('hc_plan');
-        if(!plan) return false;
+        const acciones = document.getElementById(ACTIONS_ID);
+        if(!acciones) return false;
 
         instalarEstilos();
 
-        const titulo = plan.querySelector(':scope > .clinical-subtitle') ||
-                       plan.querySelector('.clinical-subtitle');
-        if(!titulo) return false;
+        let firmar = document.getElementById(BTN_FIRMA_ID);
+        if(!firmar){
+            firmar = document.createElement('button');
+            firmar.type = 'button';
+            firmar.id = BTN_FIRMA_ID;
+            firmar.className = 'btn btn-outline-success btn-sm';
+            firmar.setAttribute('data-auro-receta-action', 'firma-electronica');
+            firmar.title = 'Firmar electrónicamente la receta guardada';
+            firmar.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
+            firmar.addEventListener('click', firmarRecetaOficial);
+            acciones.appendChild(firmar);
+        }
 
-        const barra = document.createElement('div');
-        barra.id = TOOLBAR_ID;
-        barra.setAttribute('role', 'group');
-        barra.setAttribute('aria-label', 'Acciones oficiales de receta');
-
-        const pdf = document.createElement('button');
-        pdf.type = 'button';
-        pdf.id = BTN_PDF_ID;
-        pdf.className = 'btn btn-outline-secondary btn-sm';
-        pdf.title = 'Abrir la vista oficial de la receta para PDF o impresión';
-        pdf.innerHTML = '<i class="bi bi-filetype-pdf me-1"></i> PDF / imprimir';
-        pdf.addEventListener('click', abrirPdfOficial);
-
-        const firmar = document.createElement('button');
-        firmar.type = 'button';
-        firmar.id = BTN_FIRMA_ID;
-        firmar.className = 'btn btn-outline-success btn-sm';
-        firmar.setAttribute('data-auro-receta-action', 'firma-electronica');
-        firmar.title = 'Firmar electrónicamente la receta guardada';
-        firmar.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
-        firmar.addEventListener('click', firmarRecetaOficial);
-
-        barra.appendChild(pdf);
-        barra.appendChild(firmar);
-
-        titulo.insertAdjacentElement('afterend', barra);
         return true;
     }
 
-    /* API mínima de Plan para pruebas/manuales; no duplica lógica clínica. */
-    window.auroPlanAbrirPdfRecetaOficial = abrirPdfOficial;
+    /* API mínima para pruebas/manuales; no duplica lógica clínica. */
     window.auroPlanFirmarRecetaOficial = firmarRecetaOficial;
 
-    if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', montar, {once:true});
-    }else{
-        montar();
+    if(!montar()){
+        if(document.readyState === 'loading'){
+            document.addEventListener('DOMContentLoaded', montar, {once:true});
+        }else{
+            /* Un único frame de cortesía si Index termina de montar la barra
+               en el mismo ciclo de render. No es polling ni timer permanente. */
+            requestAnimationFrame(montar);
+        }
     }
 })();
