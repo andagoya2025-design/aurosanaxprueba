@@ -252,6 +252,8 @@
       }
     }));
 
+    setEstadoBotonesFirma('normal');
+    pintarEstadoFirmaInline('Firma completada correctamente.', 'ok');
     mensajeProfesional(
       'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
       'ok'
@@ -264,6 +266,8 @@
     let clave = '';
     try{
       const solicitud = validarSolicitud(data);
+      setEstadoBotonesFirma('preparando');
+      pintarEstadoFirmaInline('Preparando firma electrónica…', 'info');
       clave = await claveFirma(solicitud);
 
       /* Si el mismo documento ya fue confirmado en esta sesión, no se vuelve
@@ -271,6 +275,8 @@
       if(firmasConfirmadas.has(clave)){
         const existente = firmasConfirmadas.get(clave);
         ultimoResultadoFirmado = existente;
+        setEstadoBotonesFirma('normal');
+        pintarEstadoFirmaInline('Esta receta ya está firmada.', 'ok');
         mensajeProfesional(
           'Esta misma versión de la receta ya fue firmada. No se generó una firma duplicada.',
           'warn'
@@ -296,7 +302,9 @@
     }catch(error){
       if(clave) firmasEnCurso.delete(clave);
       console.error(MODULO, error);
-      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+      const amable = mensajeErrorAmigable(error);
+      pintarEstadoFirmaInline(amable, 'error');
+      mensajeProfesional(amable, 'error');
       throw error;
     }
   }
@@ -931,17 +939,13 @@
          misma promesa. Así se evita doble POST incluso con doble clic. */
       if(firmasEnCurso.has(clave)){
         const activa = firmasEnCurso.get(clave);
-        if(activa && texto(activa.id_solicitud)){
-          await post('firmarDocumento', {
-            operacion_frontend:'REABRIR',
-            id_solicitud:texto(activa.id_solicitud),
-            id_atencion:solicitud.id_atencion,
-            id_receta:solicitud.id_receta
-          });
-          mensajeProfesional('Se solicitó reabrir el mismo PDF pendiente en Acrobat.', 'warn');
-        }else{
-          mensajeProfesional('La solicitud todavía se está creando. Intente nuevamente en unos segundos.', 'warn');
-        }
+        setEstadoBotonesFirma(texto(activa && activa.id_solicitud) ? 'proceso' : 'preparando');
+        pintarEstadoFirmaInline(
+          texto(activa && activa.id_solicitud)
+            ? 'La firma ya está en proceso. No necesita volver a presionar.'
+            : 'La solicitud se está preparando. Espere un momento.',
+          'info'
+        );
         return activa && activa.promesa ? activa.promesa : activa;
       }
 
@@ -1134,6 +1138,85 @@
   }
 
 
+  function pintarEstadoFirmaInline(mensaje, tipo){
+    const txt = texto(mensaje);
+    botonesFirmaVisibles().forEach(function(firmar){
+      if(!firmar || !firmar.parentNode) return;
+      const contexto = contextoBotonFirma(firmar);
+      let box = firmar.parentNode.querySelector('.auro-firma-estado-inline[data-auro-contexto="' + contexto + '"]');
+      if(!box){
+        box = document.createElement('span');
+        box.className = 'auro-firma-estado-inline';
+        box.setAttribute('data-auro-contexto', contexto);
+        box.setAttribute('role','status');
+        box.setAttribute('aria-live','polite');
+        box.style.display = 'inline-block';
+        box.style.marginLeft = '10px';
+        box.style.padding = '6px 10px';
+        box.style.borderRadius = '999px';
+        box.style.fontSize = '12px';
+        box.style.fontWeight = '700';
+        box.style.verticalAlign = 'middle';
+        const cancelar = asegurarBotonCancelarJuntoA(firmar);
+        (cancelar || firmar).insertAdjacentElement('afterend', box);
+      }
+      if(!txt){
+        box.style.display = 'none';
+        box.textContent = '';
+        return;
+      }
+      box.style.display = 'inline-block';
+      box.textContent = txt;
+      if(tipo === 'ok'){
+        box.style.background = '#dcfce7'; box.style.color = '#166534'; box.style.border = '1px solid #bbf7d0';
+      }else if(tipo === 'warn'){
+        box.style.background = '#fef3c7'; box.style.color = '#92400e'; box.style.border = '1px solid #fde68a';
+      }else if(tipo === 'error'){
+        box.style.background = '#fee2e2'; box.style.color = '#991b1b'; box.style.border = '1px solid #fecaca';
+      }else{
+        box.style.background = '#dbeafe'; box.style.color = '#1e40af'; box.style.border = '1px solid #bfdbfe';
+      }
+    });
+  }
+
+  function setEstadoBotonesFirma(modo){
+    botonesFirmaVisibles().forEach(function(btn){
+      if(!btn) return;
+      if(!btn.dataset.auroFirmaHtmlOriginal){
+        btn.dataset.auroFirmaHtmlOriginal = btn.innerHTML || '';
+        btn.dataset.auroFirmaTitleOriginal = btn.getAttribute('title') || '';
+      }
+      if(modo === 'preparando'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Preparando firma…';
+        btn.title = 'Preparando la solicitud de firma. Espere un momento.';
+      }else if(modo === 'proceso'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firma en proceso…';
+        btn.title = 'La solicitud ya fue enviada. Adobe se abrirá cuando el motor la tome.';
+      }else{
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        btn.style.cursor = 'pointer';
+        if(btn.dataset.auroFirmaHtmlOriginal) btn.innerHTML = btn.dataset.auroFirmaHtmlOriginal;
+        if(btn.dataset.auroFirmaTitleOriginal) btn.title = btn.dataset.auroFirmaTitleOriginal;
+      }
+    });
+  }
+
+  function mensajeErrorAmigable(error){
+    const raw = texto(error && error.message ? error.message : error);
+    const n = normalizarTextoUI(raw);
+    if(n.includes('tiempo de espera') && n.includes('bloqueo')){
+      return 'La firma está atendiendo otra operación. Espere unos segundos y vuelva a intentarlo.';
+    }
+    return raw || 'No fue posible completar la operación de firma electrónica.';
+  }
+
   function ocultarBotonCancelar(){
     const btn = document.getElementById('btnCancelarFirmaElectronicaReceta');
     if(btn) btn.style.display = 'none';
@@ -1211,7 +1294,9 @@
         }
       }));
 
-      mensajeProfesional('Solicitud de firma cancelada. La receta se conserva sin cambios.', 'warn');
+      pintarEstadoFirmaInline('Firma cancelada. Puede iniciar una nueva firma.', 'ok');
+      setEstadoBotonesFirma('normal');
+      mensajeProfesional('Firma cancelada. La receta se conserva sin cambios. Puede iniciar una nueva firma.', 'ok');
       return respuesta;
     }catch(error){
       console.error(MODULO, error);
@@ -1303,6 +1388,8 @@
         activa.solicitud = solicitud;
       }
       mostrarBotonCancelar(solicitud, clave);
+      setEstadoBotonesFirma('proceso');
+      pintarEstadoFirmaInline('Solicitud enviada. Abriendo Adobe…', 'info');
       resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
     }
 
@@ -1396,8 +1483,11 @@
     }catch(error){
       if(clave) firmasEnCurso.delete(clave);
       ocultarBotonCancelar();
+      setEstadoBotonesFirma('normal');
       console.error(MODULO, error);
-      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+      const amable = mensajeErrorAmigable(error);
+      pintarEstadoFirmaInline(amable, 'error');
+      mensajeProfesional(amable, 'error');
       throw error;
     }
   }
@@ -1455,7 +1545,7 @@
   'use strict';
 
   const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
-  const VERSION = '2.6-plan-cancelar-rapida-sin-preflight';
+  const VERSION = '2.7-ux-inmediata-lock-friendly';
   const INTERVALO_CONSULTA_MS = 1000;
 
   /* Una sola operación activa por receta+contenido.
