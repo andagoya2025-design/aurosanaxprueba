@@ -1455,7 +1455,7 @@
   'use strict';
 
   const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
-  const VERSION = '2.5-sin-tiempo-reabrir-cancelar-plan-rapida';
+  const VERSION = '2.6-plan-cancelar-rapida-sin-preflight';
   const INTERVALO_CONSULTA_MS = 1000;
 
   /* Una sola operación activa por receta+contenido.
@@ -1860,15 +1860,8 @@
   }
 
   async function ejecutarFirma(solicitud, clave){
-    const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
-    if(estadoMotor.disponible !== true){
-      throw new Error(
-        estadoMotor.agente_online === false
-          ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
-          : 'La firma electrónica no está disponible en este momento.'
-      );
-    }
-
+    // V2.6: se elimina el preflight redundante.
+    // El backend valida disponibilidad/heartbeat del motor al crear la solicitud.
     const creada = await post('firmarDocumento', solicitud);
     const estadoInicial = texto(creada.estado_firma).toUpperCase();
 
