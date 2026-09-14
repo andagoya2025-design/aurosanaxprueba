@@ -1538,6 +1538,7 @@
             acciones.appendChild(firmar);
           }
         }
+        auroRecetaSincronizarEstadoFirmaVisual();
       }
     }
 
@@ -3152,6 +3153,7 @@
 
     recetaAtencionActualId = actual;
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
+    auroRecetaSincronizarEstadoFirmaVisual();
   }
 
   window.obtenerDatosReceta = function(){
@@ -6292,6 +6294,113 @@
     };
   }
 
+  /*
+    AUROSANAX RECETAS 3.12 - FIRMA ELECTRÓNICA ANTIRREGRESIVA
+    ---------------------------------------------------------
+    Alcance exclusivo de este bloque:
+    - Firma únicamente una receta YA GUARDADA.
+    - Aísla por id_atencion + id_receta + contenido exacto del documento.
+    - No crea recetas, no llama guardarRecetaERP(), no modifica Plan.
+    - Impide doble clic / doble solicitud durante una firma en curso.
+    - Reutiliza en la misma sesión el PDF ya firmado si la receta no cambió.
+    - Si la receta cambia conservando su id_receta, permite firmar la nueva versión.
+    - Valida que la respuesta FIRMADO corresponda a la misma atención/receta.
+    - No descarga automáticamente: abre el PDF firmado para visualización.
+    - Al cambiar de atención/paciente, el estado visual del botón se recalcula
+      y nunca reutiliza el PDF firmado de otra atención o receta.
+  ===================================================== */
+
+  const auroRecetaFirmasSesion = new Map();
+  let auroRecetaFirmaEnCurso = null;
+
+  function auroRecetaClaveBaseFirma(documento){
+    if(!documento || !documento.success) return '';
+    return [
+      String(documento.id_atencion || '').trim(),
+      String(documento.id_receta || '').trim()
+    ].join('|');
+  }
+
+  function auroRecetaFirmaSesionCoincide(entrada, documento){
+    if(!entrada || !documento || !documento.success) return false;
+
+    return (
+      String(entrada.id_atencion || '') === String(documento.id_atencion || '') &&
+      String(entrada.id_receta || '') === String(documento.id_receta || '') &&
+      String(entrada.html_documento || '') === String(documento.html_documento || '')
+    );
+  }
+
+  function auroRecetaPintarBotonFirmaNormal(btn){
+    if(!btn) return;
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.removeAttribute('data-auro-firma-estado');
+    btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
+    btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+  }
+
+  function auroRecetaPintarBotonFirmaEnCurso(btn){
+    if(!btn) return;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy','true');
+    btn.setAttribute('data-auro-firma-estado','FIRMANDO');
+    btn.title = 'Firma electrónica en proceso';
+    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firmando…';
+  }
+
+  function auroRecetaPintarBotonFirmaConfirmada(btn){
+    if(!btn) return;
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.setAttribute('data-auro-firma-estado','FIRMADO');
+    btn.title = 'Ver PDF firmado de esta receta';
+    btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Firmada ✓';
+  }
+
+  function auroRecetaSincronizarEstadoFirmaVisual(){
+    const btn = el('btnFirmaElectronicaReceta');
+    if(!btn) return;
+
+    const documento = auroRecetaDocumentoFirmableActual();
+    if(!documento || !documento.success){
+      auroRecetaPintarBotonFirmaNormal(btn);
+      return;
+    }
+
+    if(
+      auroRecetaFirmaEnCurso &&
+      auroRecetaFirmaSesionCoincide(auroRecetaFirmaEnCurso, documento)
+    ){
+      auroRecetaPintarBotonFirmaEnCurso(btn);
+      return;
+    }
+
+    const clave = auroRecetaClaveBaseFirma(documento);
+    const firmada = clave ? auroRecetaFirmasSesion.get(clave) : null;
+
+    if(auroRecetaFirmaSesionCoincide(firmada, documento)){
+      auroRecetaPintarBotonFirmaConfirmada(btn);
+      return;
+    }
+
+    auroRecetaPintarBotonFirmaNormal(btn);
+  }
+
+  function auroRecetaAbrirPdfFirmadoSeguro(resultado, documento){
+    if(
+      !window.auroFirmaElectronica ||
+      typeof window.auroFirmaElectronica.abrirPdfFirmado !== 'function'
+    ){
+      return false;
+    }
+
+    return window.auroFirmaElectronica.abrirPdfFirmado(
+      resultado,
+      documento?.nombre_archivo || 'RECETA_FIRMADA.pdf'
+    ) === true;
+  }
+
   async function auroRecetaFirmarElectronicaActual(){
     const documento = auroRecetaDocumentoFirmableActual();
 
@@ -6300,43 +6409,138 @@
         '<i class="bi bi-exclamation-triangle me-1"></i> ' + safe(documento.message),
         'error'
       );
+      auroRecetaSincronizarEstadoFirmaVisual();
       return null;
     }
 
-    if(!window.auroFirmaElectronica || typeof window.auroFirmaElectronica.firmarDocumento !== 'function'){
+    /*
+      Antes de crear una nueva solicitud, comprueba si esta versión EXACTA
+      ya fue firmada en la sesión actual. No reutiliza firmas de otra receta,
+      otra atención ni una versión anterior del mismo documento.
+    */
+    const clave = auroRecetaClaveBaseFirma(documento);
+    const firmada = clave ? auroRecetaFirmasSesion.get(clave) : null;
+
+    if(auroRecetaFirmaSesionCoincide(firmada, documento)){
+      const abierta = auroRecetaAbrirPdfFirmadoSeguro(firmada.resultado, documento);
+      auroRecetaPintarBotonFirmaConfirmada(el('btnFirmaElectronicaReceta'));
+
+      mostrarMensajeReceta(
+        abierta
+          ? '<i class="bi bi-patch-check me-1"></i> Esta versión de la receta ya está firmada. Se abrió el PDF firmado.'
+          : '<i class="bi bi-patch-check me-1"></i> Esta versión de la receta ya está firmada. Presione “Firmada ✓” para verla.',
+        'ok'
+      );
+      return firmada.resultado;
+    }
+
+    /*
+      Una sola firma clínica en curso desde este módulo.
+      Evita doble clic y evita que un cambio rápido de contexto lance
+      dos solicitudes simultáneas desde Recetas.
+    */
+    if(auroRecetaFirmaEnCurso){
+      mostrarMensajeReceta(
+        '<i class="bi bi-hourglass-split me-1"></i> Ya existe una firma electrónica en proceso. Espere a que termine antes de iniciar otra.',
+        'error'
+      );
+      auroRecetaSincronizarEstadoFirmaVisual();
+      return null;
+    }
+
+    if(
+      !window.auroFirmaElectronica ||
+      typeof window.auroFirmaElectronica.firmarDocumento !== 'function'
+    ){
       mostrarMensajeReceta(
         '<i class="bi bi-shield-exclamation me-1"></i> El módulo de firma electrónica no se encuentra disponible.',
         'error'
       );
+      auroRecetaSincronizarEstadoFirmaVisual();
       return null;
     }
 
     const btn = el('btnFirmaElectronicaReceta');
-    if(btn){
-      btn.disabled = true;
-      btn.setAttribute('aria-busy','true');
-      btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firmando…';
-    }
+    auroRecetaFirmaEnCurso = {
+      id_atencion:String(documento.id_atencion || '').trim(),
+      id_receta:String(documento.id_receta || '').trim(),
+      html_documento:String(documento.html_documento || '')
+    };
+    auroRecetaPintarBotonFirmaEnCurso(btn);
 
     try{
       const resultado = await window.auroFirmaElectronica.firmarDocumento(documento);
+      const estado = String(resultado?.estado_firma || '').trim().toUpperCase();
+
+      if(estado !== 'FIRMADO'){
+        throw new Error('El servidor no confirmó la receta como FIRMADA.');
+      }
+
+      /*
+        Blindaje de identidad clínica.
+        Si el backend devuelve identificadores, deben corresponder exactamente
+        a la receta y atención que originaron esta solicitud.
+      */
+      const idAtencionResultado = String(resultado?.id_atencion || '').trim();
+      const idRecetaResultado = String(
+        resultado?.id_receta ||
+        resultado?.id_documento_clinico ||
+        ''
+      ).trim();
+
+      if(
+        idAtencionResultado &&
+        idAtencionResultado !== String(documento.id_atencion || '').trim()
+      ){
+        throw new Error('La firma devuelta no corresponde a la atención que originó la solicitud.');
+      }
+
+      if(
+        idRecetaResultado &&
+        idRecetaResultado !== String(documento.id_receta || '').trim()
+      ){
+        throw new Error('La firma devuelta no corresponde a la receta que originó la solicitud.');
+      }
+
+      /*
+        Cache de sesión exclusivamente para la MISMA versión documental.
+        No se persiste en localStorage ni modifica datos clínicos.
+      */
+      auroRecetaFirmasSesion.set(clave, {
+        id_atencion:String(documento.id_atencion || '').trim(),
+        id_receta:String(documento.id_receta || '').trim(),
+        html_documento:String(documento.html_documento || ''),
+        resultado:resultado
+      });
+
+      const abierta = auroRecetaAbrirPdfFirmadoSeguro(resultado, documento);
+
       mostrarMensajeReceta(
-        '<i class="bi bi-patch-check me-1"></i> Receta firmada electrónicamente.',
+        abierta
+          ? '<i class="bi bi-patch-check me-1"></i> Receta firmada electrónicamente. Se abrió el PDF firmado.'
+          : '<i class="bi bi-patch-check me-1"></i> Receta firmada electrónicamente. Si el navegador bloqueó la ventana, presione “Firmada ✓” para ver el PDF.',
         'ok'
       );
+
       return resultado;
+
     }catch(error){
       mostrarMensajeReceta(
-        '<i class="bi bi-shield-exclamation me-1"></i> ' + safe(error?.message || 'No fue posible firmar la receta.'),
+        '<i class="bi bi-shield-exclamation me-1"></i> ' +
+        safe(error?.message || 'No fue posible firmar la receta.'),
         'error'
       );
       return null;
+
     }finally{
-      if(btn){
-        btn.disabled = false;
-        btn.removeAttribute('aria-busy');
-        btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
-      }
+      auroRecetaFirmaEnCurso = null;
+
+      /*
+        Recalcula contra la atención y receta ACTUAL en pantalla.
+        Si el usuario cambió de paciente/atención mientras se firmaba,
+        nunca deja “Firmada ✓” sobre el nuevo contexto.
+      */
+      auroRecetaSincronizarEstadoFirmaVisual();
     }
   }
 
