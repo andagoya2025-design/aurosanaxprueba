@@ -6118,116 +6118,198 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 ============================================================ */
 
 /* ============================================================
-   AUROSANAX PLAN 37.1 - BOTÓN ESPEJO FIRMA ELECTRÓNICA RECETA
-   CORRECCIÓN QUIRÚRGICA ANTIRREGRESIVA
+   AUROSANAX PLAN 36.1 - BARRA OFICIAL RECETA / FIRMA
+   INTEGRACIÓN LIMPIA DESDE BASE ESTABLE PLAN 36
    ------------------------------------------------------------
-   PROPIETARIO REAL DEL FLUJO: Recetas (window.auroRecetas).
-   - Plan NO crea PDF, solicitud ni firma propia.
-   - Plan NO guarda ni modifica la receta al pulsar Firmar.
-   - Delega exactamente en Recetas.firmarElectronicaActual().
-   - Un clic muestra estado inmediato y bloquea doble clic.
-   - Conserva el ID del botón y la API pública histórica del Plan.
+   OBJETIVO:
+   - Plan NO crea una segunda lógica de firma.
+   - Recetas continúa siendo el único propietario del documento firmable.
+   - firma_electronica.js continúa siendo el único propietario del estado
+     Preparando/Firmando/Cancelar/Firmado/Cancelado.
+   - Plan solo ofrece accesos visuales a las APIs oficiales existentes.
+
+   VELOCIDAD / ANTIRREGRESIÓN:
+   - Cero GET preventivos.
+   - Cero sincronización Plan -> Receta al pulsar Firmar.
+   - Cero MutationObserver.
+   - Cero intervalos/timers permanentes.
+   - Montaje único e idempotente.
+   - Un solo clic delega directamente al flujo oficial de Recetas.
+   - El botón Cancelar NO se duplica aquí: firma_electronica.js lo crea,
+     activa y desactiva junto al botón de Plan cuando existe solicitud real.
+
+   NO MODIFICA:
+   - medicamentos, órdenes, interconsultas, evaluaciones;
+   - reset/undo, guardado, cache ni cambio de atención;
+   - JSON, IDs clínicos, Google Sheets, Apps Script, motor ni index.html.
 ============================================================ */
-(function auroPlanInstalarFirmaElectronicaRecetaEspejo(){
+(function auroPlanInstalarBarraRecetaFirmaOficial(){
     'use strict';
 
-    let firmaEspejoEnCurso = null;
+    const TOOLBAR_ID = 'auroPlanBarraRecetaFirmaOficial';
+    const STYLE_ID = 'auroPlanBarraRecetaFirmaOficialStyles';
+    const BTN_PDF_ID = 'auroPlanBtnRecetaPdfOficial';
+    const BTN_FIRMA_ID = 'auroPlanBtnFirmaRecetaOficial';
 
-    function obtenerBoton(){
-        return document.getElementById('btnFirmaElectronicaPlanReceta');
-    }
-
-    function ponerBotonEnProceso(btn){
-        if(!btn) return;
-        btn.disabled = true;
-        btn.setAttribute('aria-busy','true');
-        btn.dataset.auroFirmaEnCurso = '1';
-        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Firmando…';
-        btn.title = 'La solicitud de firma está en proceso. Espere a que se abra Adobe.';
-    }
-
-    function restaurarBoton(btn){
-        if(!btn) return;
-        btn.disabled = false;
-        btn.removeAttribute('aria-busy');
-        delete btn.dataset.auroFirmaEnCurso;
-        btn.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
-        btn.title = 'Abrir la firma electrónica oficial de la receta guardada';
-    }
-
-    async function ejecutarFirmaRecetaDesdePlan(){
-        /* Segundo clic mientras Recetas ya procesa: no crea otra operación. */
-        if(firmaEspejoEnCurso){
-            return firmaEspejoEnCurso;
-        }
-
-        const btn = obtenerBoton();
-        ponerBotonEnProceso(btn);
-
-        firmaEspejoEnCurso = (async function(){
-            try{
-                if(
-                    !window.auroRecetas ||
-                    typeof window.auroRecetas.firmarElectronicaActual !== 'function'
-                ){
-                    throw new Error('El módulo oficial de Recetas no se encuentra disponible para firmar.');
-                }
-
-                /*
-                  ESPEJO PURO:
-                  Recetas conserva toda la autoridad sobre documento, id_receta,
-                  id_atencion, validaciones, mensajes y motor de firma.
-                */
-                return await window.auroRecetas.firmarElectronicaActual();
-            }catch(error){
-                console.error('AUROSANAX PLAN - FIRMA RECETA ESPEJO', error);
-
-                /*
-                  Los errores normales de firma ya los comunica Recetas.
-                  Solo se alerta aquí si el propietario oficial no está disponible.
-                */
-                if(
-                    !window.auroRecetas ||
-                    typeof window.auroRecetas.firmarElectronicaActual !== 'function'
-                ){
-                    alert(error?.message || 'No fue posible abrir la firma electrónica de la receta.');
-                }
-                return null;
-            }finally{
-                restaurarBoton(btn);
-                firmaEspejoEnCurso = null;
+    function mostrarError(mensaje){
+        const txt = String(mensaje || 'No fue posible completar la acción de receta.').trim();
+        try{
+            if(typeof window.mostrarToast === 'function'){
+                window.mostrarToast(txt, 'danger');
+                return;
             }
-        })();
-
-        return firmaEspejoEnCurso;
+        }catch(_e){}
+        alert(txt);
     }
 
-    function montarBoton(){
-        if(document.getElementById('btnFirmaElectronicaPlanReceta')) return true;
+    function instalarEstilos(){
+        if(document.getElementById(STYLE_ID)) return;
 
-        const caja = document.querySelector('#hc_plan .receta-medicamentos-box');
-        if(!caja) return false;
+        const style = document.createElement('style');
+        style.id = STYLE_ID;
+        style.textContent = `
+          #${TOOLBAR_ID}{
+            display:flex;
+            align-items:center;
+            justify-content:flex-end;
+            gap:8px;
+            flex-wrap:wrap;
+            margin:-2px 0 12px;
+            padding:8px 10px;
+            border:1px solid #ead7e2;
+            border-radius:14px;
+            background:#fffafd;
+          }
+          #${TOOLBAR_ID} button{
+            min-height:36px;
+            border-radius:10px;
+            font-weight:750;
+            white-space:nowrap;
+          }
+          #${BTN_FIRMA_ID}[aria-busy="true"]{
+            cursor:wait !important;
+          }
+          #${TOOLBAR_ID} .auro-cancelar-firma-electronica[data-auro-contexto="plan"]{
+            min-height:36px;
+            margin-left:0 !important;
+            padding:6px 10px;
+            border:1px solid #dc2626;
+            border-radius:10px;
+            background:#fff;
+            color:#b91c1c;
+            font-weight:750;
+          }
+          #${TOOLBAR_ID} .auro-cancelar-firma-electronica[data-auro-contexto="plan"]:disabled{
+            border-color:#d1d5db;
+            color:#9ca3af;
+            background:#f8fafc;
+            opacity:.78;
+          }
+          @media(max-width:760px){
+            #${TOOLBAR_ID}{
+              justify-content:stretch;
+              display:grid;
+              grid-template-columns:1fr;
+            }
+            #${TOOLBAR_ID} button{
+              width:100%;
+            }
+          }
+        `;
+        document.head.appendChild(style);
+    }
 
-        const acciones = caja.querySelector('.col-md-12.d-flex.gap-2.flex-wrap');
-        if(!acciones) return false;
+    function apiRecetasDisponible(nombre){
+        return !!(
+            window.auroRecetas &&
+            typeof window.auroRecetas[nombre] === 'function'
+        );
+    }
 
-        const btn = document.createElement('button');
-        btn.id = 'btnFirmaElectronicaPlanReceta';
-        btn.type = 'button';
-        btn.className = 'btn btn-outline-success';
-        btn.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
-        btn.title = 'Abrir la firma electrónica oficial de la receta guardada';
-        btn.addEventListener('click', ejecutarFirmaRecetaDesdePlan);
-        acciones.appendChild(btn);
+    function abrirPdfOficial(){
+        try{
+            if(apiRecetasDisponible('imprimirActual')){
+                return window.auroRecetas.imprimirActual();
+            }
+            if(apiRecetasDisponible('abrirVistaPacienteOficial')){
+                return window.auroRecetas.abrirVistaPacienteOficial();
+            }
+            throw new Error('El módulo oficial de Recetas no está disponible para PDF / imprimir.');
+        }catch(error){
+            console.error('AUROSANAX PLAN - PDF OFICIAL RECETA', error);
+            mostrarError(error?.message || 'No fue posible abrir el PDF oficial de la receta.');
+            return null;
+        }
+    }
+
+    function firmarRecetaOficial(){
+        try{
+            if(!apiRecetasDisponible('firmarElectronicaActual')){
+                throw new Error('El módulo oficial de Recetas no está disponible para firma electrónica.');
+            }
+
+            /*
+              Delegación directa: NO sincroniza, NO consulta backend y NO crea
+              estados propios. La API oficial de Recetas valida el documento y
+              firma_electronica.js refleja inmediatamente el estado en este
+              mismo botón y monta el botón Cancelar cuando corresponde.
+            */
+            return window.auroRecetas.firmarElectronicaActual();
+        }catch(error){
+            console.error('AUROSANAX PLAN - FIRMA OFICIAL RECETA', error);
+            mostrarError(error?.message || 'No fue posible iniciar la firma electrónica de la receta.');
+            return null;
+        }
+    }
+
+    function montar(){
+        if(document.getElementById(TOOLBAR_ID)) return true;
+
+        const plan = document.getElementById('hc_plan');
+        if(!plan) return false;
+
+        instalarEstilos();
+
+        const titulo = plan.querySelector(':scope > .clinical-subtitle') ||
+                       plan.querySelector('.clinical-subtitle');
+        if(!titulo) return false;
+
+        const barra = document.createElement('div');
+        barra.id = TOOLBAR_ID;
+        barra.setAttribute('role', 'group');
+        barra.setAttribute('aria-label', 'Acciones oficiales de receta');
+
+        const pdf = document.createElement('button');
+        pdf.type = 'button';
+        pdf.id = BTN_PDF_ID;
+        pdf.className = 'btn btn-outline-secondary btn-sm';
+        pdf.title = 'Abrir la vista oficial de la receta para PDF o impresión';
+        pdf.innerHTML = '<i class="bi bi-filetype-pdf me-1"></i> PDF / imprimir';
+        pdf.addEventListener('click', abrirPdfOficial);
+
+        const firmar = document.createElement('button');
+        firmar.type = 'button';
+        firmar.id = BTN_FIRMA_ID;
+        firmar.className = 'btn btn-outline-success btn-sm';
+        firmar.setAttribute('data-auro-receta-action', 'firma-electronica');
+        firmar.title = 'Firmar electrónicamente la receta guardada';
+        firmar.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
+        firmar.addEventListener('click', firmarRecetaOficial);
+
+        barra.appendChild(pdf);
+        barra.appendChild(firmar);
+
+        titulo.insertAdjacentElement('afterend', barra);
         return true;
     }
 
-    window.auroPlanFirmarRecetaElectronica = ejecutarFirmaRecetaDesdePlan;
+    /* API mínima de Plan para pruebas/manuales; no duplica lógica clínica. */
+    window.auroPlanAbrirPdfRecetaOficial = abrirPdfOficial;
+    window.auroPlanFirmarRecetaOficial = firmarRecetaOficial;
 
     if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', montarBoton, {once:true});
+        document.addEventListener('DOMContentLoaded', montar, {once:true});
     }else{
-        montarBoton();
+        montar();
     }
 })();
-
