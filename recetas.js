@@ -1531,13 +1531,25 @@
           firmar.className = 'btn-soft';
           firmar.setAttribute('data-auro-receta-action','firma-electronica');
           firmar.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
-          firmar.onclick = auroRecetaFirmarElectronicaActual;
           if(pdf && pdf.parentNode){
             pdf.insertAdjacentElement('afterend', firmar);
           }else{
             acciones.appendChild(firmar);
           }
         }
+
+        /*
+          AUROSANAX RECETAS 3.12.1 - ENLACE ÚNICO DEL BOTÓN DE FIRMA
+          ---------------------------------------------------------
+          El botón puede existir previamente en el DOM (por Index o por una
+          renderización anterior). El handler se enlaza SIEMPRE al propietario
+          real de la acción: Recetas. Así no depende de quién creó visualmente
+          el botón y no se duplica addEventListener.
+        */
+        firmar.type = 'button';
+        firmar.setAttribute('data-auro-receta-action','firma-electronica');
+        firmar.onclick = auroRecetaFirmarElectronicaActual;
+
         auroRecetaSincronizarEstadoFirmaVisual();
       }
     }
@@ -6471,6 +6483,14 @@
     try{
       const resultado = await window.auroFirmaElectronica.firmarDocumento(documento);
       const estado = String(resultado?.estado_firma || '').trim().toUpperCase();
+
+      if(estado === 'CANCELADA'){
+        mostrarMensajeReceta(
+          '<i class="bi bi-check-circle me-1"></i> Firma cancelada. La receta se conserva sin cambios y puede iniciar una nueva firma.',
+          'ok'
+        );
+        return resultado;
+      }
 
       if(estado !== 'FIRMADO'){
         throw new Error('El servidor no confirmó la receta como FIRMADA.');
