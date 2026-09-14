@@ -1,7 +1,7 @@
 /* ============================================================
    AUROSANAX ERP - FIRMA ELECTRÓNICA
-   Archivo: firma_electronica.js
-   Versión: 2.0
+   Archivo destino: firma_electronica.js
+   Versión: 2.1
    Alcance inicial: RECETA
    ------------------------------------------------------------
    CONTRATO ANTIRREGRESIVO:
@@ -10,15 +10,26 @@
    - No declara una firma válida sin confirmación positiva del backend.
    - Falla cerrado ante configuración incompleta, sesión inválida o error.
    - Conserva aislamiento por id_atencion + id_receta.
-   - El backend crea una solicitud; este módulo espera el resultado firmado.
+   - Evita doble POST/doble firma de la misma receta y mismo contenido.
+   - NO descarga ni abre automáticamente el PDF al terminar la firma.
+   - Conserva funciones explícitas para VER o DESCARGAR el PDF firmado.
 ============================================================ */
 (function(){
   'use strict';
 
   const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
-  const VERSION = '2.0';
+  const VERSION = '2.1';
   const INTERVALO_CONSULTA_MS = 2500;
   const TIEMPO_MAXIMO_MS = 10 * 60 * 1000;
+
+  /* Una sola operación activa por receta+contenido. */
+  const firmasEnCurso = new Map();
+
+  /* Resultado confirmado en esta sesión del navegador.
+     La clave incluye la huella del HTML: si la receta cambia, puede firmarse
+     nuevamente; si no cambia, no se genera una firma duplicada. */
+  const firmasConfirmadas = new Map();
+  let ultimoResultadoFirmado = null;
 
   function texto(valor){
     return String(valor === null || valor === undefined ? '' : valor).trim();
@@ -91,13 +102,36 @@
     return new Blob([bytes], {type:mime || 'application/pdf'});
   }
 
+  function obtenerBase64Firmado(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  /* Acción EXPLÍCITA: ver. Nunca se llama automáticamente al firmar. */
   function abrirPdfFirmado(resultado, nombrePreferido){
-    const base64 = texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
     if(!base64) return false;
 
     const blob = base64ABlob(base64, 'application/pdf');
     const url = URL.createObjectURL(blob);
-    const nombre = texto(resultado.nombre_archivo || nombrePreferido || 'documento_firmado.pdf');
+    const ventana = window.open(url, '_blank', 'noopener');
+    if(!ventana){
+      URL.revokeObjectURL(url);
+      return false;
+    }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+    return true;
+  }
+
+  /* Acción EXPLÍCITA: descargar. Nunca se llama automáticamente al firmar. */
+  function descargarPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto((r && r.nombre_archivo) || nombrePreferido || 'documento_firmado.pdf');
 
     const a = document.createElement('a');
     a.href = url;
@@ -118,12 +152,25 @@
     d.html_documento = texto(d.html_documento);
 
     if(d.tipo_documento !== 'RECETA'){
-      throw new Error('Esta primera integración de firma está habilitada únicamente para Recetas.');
+      throw new Error('Esta integración de firma está habilitada únicamente para Recetas.');
     }
     if(!d.id_atencion) throw new Error('No existe una atención clínica activa para firmar.');
     if(!d.id_receta) throw new Error('Guarde la receta antes de firmarla electrónicamente.');
     if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial de la receta.');
     return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(String(valor || ''));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function claveFirma(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return solicitud.id_atencion + '|' + solicitud.id_receta + '|' + huella;
   }
 
   async function esperarFirma(idSolicitud, solicitud){
@@ -155,66 +202,119 @@
     throw new Error('La firma no se completó dentro del tiempo permitido. Verifique que el motor de firma esté iniciado.');
   }
 
+  async function ejecutarFirma(solicitud, clave){
+    const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
+    if(estadoMotor.disponible !== true){
+      throw new Error(
+        estadoMotor.agente_online === false
+          ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+          : 'La firma electrónica no está disponible en este momento.'
+      );
+    }
+
+    const creada = await post('firmarDocumento', solicitud);
+    const estadoInicial = texto(creada.estado_firma).toUpperCase();
+
+    let resultado;
+    if(estadoInicial === 'FIRMADO'){
+      resultado = creada;
+    }else{
+      if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+        throw new Error('El servidor no creó correctamente la solicitud de firma.');
+      }
+      resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
+      throw new Error('El servidor no confirmó un estado de firma válido.');
+    }
+
+    if(!obtenerBase64Firmado(resultado)){
+      throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+    }
+
+    /* Se conserva el PDF firmado en memoria para acciones explícitas posteriores.
+       NO se abre y NO se descarga aquí. */
+    ultimoResultadoFirmado = resultado;
+    firmasConfirmadas.set(clave, resultado);
+
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+      detail:{
+        tipo_documento:solicitud.tipo_documento,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta,
+        id_solicitud:texto(resultado.id_solicitud),
+        estado_firma:'FIRMADO',
+        nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+        sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+        firmado_en:texto(resultado.firmado_en),
+        pdf_disponible:true
+      }
+    }));
+
+    mensajeProfesional(
+      'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
+      'ok'
+    );
+
+    return resultado;
+  }
+
   async function firmarDocumento(data){
+    let clave = '';
     try{
       const solicitud = validarSolicitud(data);
+      clave = await claveFirma(solicitud);
 
-      const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
-      if(estadoMotor.disponible !== true){
-        throw new Error(
-          estadoMotor.agente_online === false
-            ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
-            : 'La firma electrónica no está disponible en este momento.'
+      /* Si el mismo documento ya fue confirmado en esta sesión, no se vuelve
+         a firmar ni se genera otro POST. */
+      if(firmasConfirmadas.has(clave)){
+        const existente = firmasConfirmadas.get(clave);
+        ultimoResultadoFirmado = existente;
+        mensajeProfesional(
+          'Esta misma versión de la receta ya fue firmada. No se generó una firma duplicada.',
+          'warn'
         );
+        return existente;
       }
 
-      const creada = await post('firmarDocumento', solicitud);
-      const estadoInicial = texto(creada.estado_firma).toUpperCase();
-
-      let resultado;
-      if(estadoInicial === 'FIRMADO'){
-        resultado = creada;
-      }else{
-        if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
-          throw new Error('El servidor no creó correctamente la solicitud de firma.');
-        }
-        resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+      /* Si hay una firma en curso, todos los clics posteriores reutilizan la
+         misma promesa. Así se evita doble POST incluso con doble clic. */
+      if(firmasEnCurso.has(clave)){
+        mensajeProfesional('La receta ya se está firmando. Espere la confirmación.', 'warn');
+        return firmasEnCurso.get(clave);
       }
 
-      if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
-        throw new Error('El servidor no confirmó un estado de firma válido.');
-      }
+      const operacion = ejecutarFirma(solicitud, clave);
+      firmasEnCurso.set(clave, operacion);
 
-      if(!abrirPdfFirmado(resultado, solicitud.nombre_archivo)){
-        throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+      try{
+        return await operacion;
+      }finally{
+        firmasEnCurso.delete(clave);
       }
-
-      mensajeProfesional('Documento firmado electrónicamente.', 'ok');
-      window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
-        detail:{
-          tipo_documento:solicitud.tipo_documento,
-          id_atencion:solicitud.id_atencion,
-          id_receta:solicitud.id_receta,
-          id_solicitud:texto(resultado.id_solicitud),
-          estado_firma:'FIRMADO'
-        }
-      }));
-      return resultado;
     }catch(error){
+      if(clave) firmasEnCurso.delete(clave);
       console.error(MODULO, error);
       mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
       throw error;
     }
   }
 
-  async function obtenerEstado(){
-    return post('obtenerEstadoFirmaElectronica', {});
+  async function obtenerEstado(data){
+    return post('obtenerEstadoFirmaElectronica', data || {});
+  }
+
+  function obtenerUltimoFirmado(){
+    return ultimoResultadoFirmado;
   }
 
   window.auroFirmaElectronica = Object.freeze({
     version:VERSION,
     firmarDocumento:firmarDocumento,
     obtenerEstado:obtenerEstado,
-    abrirPdfFirmado:abrirPdfFirmado
+    abrirPdfFirmado:abrirPdfFirmado,
+    descargarPdfFirmado:descargarPdfFirmado,
+    obtenerUltimoFirmado:obtenerUltimoFirmado
   });
 })();
