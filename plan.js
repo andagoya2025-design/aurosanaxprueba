@@ -6281,30 +6281,76 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 })();
 
 /* ============================================================
-   AUROSANAX PLAN 37.2 - ESTADO DOCUMENTAL + OPERATIVO DE FIRMA
+   AUROSANAX PLAN 37.3 - MÁQUINA VISUAL DE FIRMA
+   CORRECCIÓN QUIRÚRGICA / ANTIRREGRESIVA
    ------------------------------------------------------------
-   CORRECCIÓN QUIRÚRGICA:
-   - No lee el texto/DOM del botón oculto de Recetas.
-   - Obtiene el documento actual desde la API oficial de Recetas.
-   - Pregunta a firma_electronica.js V2.9 el estado de ESA versión.
-   - Los estados operativos PREPARANDO/PROCESO tienen prioridad.
-   - No modifica Plan clínico, medicamentos, guardado ni Plan -> Receta.
-   - Sin intervalos, polling nuevo ni MutationObserver.
+   OBJETIVO:
+   1) FIRMADO -> Ver receta firmada ✓
+   2) EDITANDO -> firma deshabilitada hasta Guardar corrección
+   3) GUARDADO CON CAMBIO -> Firmar nueva versión
+   4) GUARDADO SIN CAMBIO -> Ver receta firmada ✓
+   5) PREPARANDO/PROCESO -> prioridad operativa de firma V2.9
+   6) CANCELAR -> vuelve al estado documental correspondiente
+
+   BLINDAJE:
+   - No modifica Plan clínico, medicamentos ni guardado.
+   - No modifica Plan -> Receta.
+   - No modifica firma_electronica.js V2.9.
+   - No modifica Recetas V3.14.
+   - No modifica backend, motor, Index ni Sheets.
+   - No usa MutationObserver ni intervalos permanentes.
+   - Solo usa reintentos ACOTADOS tras FIRMADO para esperar que
+     la persistencia recién archivada sea visible en la consulta.
 ============================================================ */
-(function auroPlanEstadosFirmaV372(){
+(function auroPlanEstadosFirmaV373(){
   'use strict';
 
   const BTN_ID = 'btnFirmaElectronicaPlanReceta';
+  const MAX_REINTENTOS_FIRMADO = 8;
+  const ESPERA_REINTENTO_MS = 500;
+
   let secuencia = 0;
   let operativo = '';
+  let reintentoFirmado = 0;
+  let timerFirmado = null;
 
   function btn(){
     return document.getElementById(BTN_ID);
   }
 
+  function botonRecetaPlan(){
+    return document.querySelector(
+      '#auroPlanActionButtons [data-auro-receta-plan-btn="1"], ' +
+      '[data-auro-receta-plan-btn="1"]'
+    );
+  }
+
+  function estaEditandoReceta(){
+    const b = botonRecetaPlan();
+    if(!b) return false;
+    const txt = String(b.textContent || '').replace(/\s+/g,' ').trim().toLowerCase();
+    return txt.includes('guardar corrección') || txt.includes('guardando receta');
+  }
+
+  function pintarEdicion(){
+    const b = btn();
+    if(!b || operativo) return;
+    b.disabled = true;
+    b.removeAttribute('aria-busy');
+    b.setAttribute('data-auro-estado-documental','EDICION_PENDIENTE');
+    b.style.cursor = 'not-allowed';
+    b.title = 'Guarde primero la corrección antes de firmar una nueva versión';
+    b.innerHTML = '<i class="bi bi-save me-1"></i> Guarde corrección para firmar';
+  }
+
   function pintarDocumento(estado){
     const b = btn();
     if(!b || operativo) return;
+
+    if(estaEditandoReceta()){
+      pintarEdicion();
+      return;
+    }
 
     b.removeAttribute('aria-busy');
     b.removeAttribute('data-auro-firma-operativa');
@@ -6315,47 +6361,90 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       b.setAttribute('data-auro-estado-documental','FIRMADA');
       b.innerHTML = '<i class="bi bi-patch-check-fill me-1"></i> Ver receta firmada ✓';
       b.title = 'Ver el PDF firmado de la versión actual de la receta';
-    }else if(estado === 'NUEVA_VERSION'){
+      return;
+    }
+
+    if(estado === 'NUEVA_VERSION'){
       b.disabled = false;
       b.setAttribute('data-auro-estado-documental','NUEVA_VERSION');
       b.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar nueva versión';
       b.title = 'Firmar electrónicamente la nueva versión guardada de la receta';
-    }else{
-      b.disabled = false;
-      b.setAttribute('data-auro-estado-documental','SIN_FIRMA');
-      b.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
-      b.title = 'Firmar electrónicamente la receta guardada';
+      return;
     }
+
+    b.disabled = false;
+    b.setAttribute('data-auro-estado-documental','SIN_FIRMA');
+    b.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
+    b.title = 'Firmar electrónicamente la receta guardada';
   }
 
-  async function sincronizar(forzar){
+  async function obtenerEstadoPersistente(){
+    if(
+      !window.auroRecetas ||
+      typeof window.auroRecetas.obtenerDocumentoFirmableActual !== 'function' ||
+      !window.auroFirmaElectronica ||
+      typeof window.auroFirmaElectronica.obtenerEstadoVersionDocumento !== 'function'
+    ){
+      return null;
+    }
+
+    const documento = window.auroRecetas.obtenerDocumentoFirmableActual();
+    if(!documento || !documento.success) return null;
+
+    return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(documento);
+  }
+
+  async function sincronizar(){
     const miSecuencia = ++secuencia;
     if(operativo) return null;
 
+    if(estaEditandoReceta()){
+      pintarEdicion();
+      return {success:true, estado:'EDICION_PENDIENTE'};
+    }
+
     try{
-      if(
-        !window.auroRecetas ||
-        typeof window.auroRecetas.obtenerDocumentoFirmableActual !== 'function' ||
-        !window.auroFirmaElectronica ||
-        typeof window.auroFirmaElectronica.obtenerEstadoVersionDocumento !== 'function'
-      ){
-        return null;
-      }
-
-      const documento = window.auroRecetas.obtenerDocumentoFirmableActual();
-      if(!documento || !documento.success) return null;
-
-      const r = await window.auroFirmaElectronica.obtenerEstadoVersionDocumento(documento);
+      const r = await obtenerEstadoPersistente();
       if(miSecuencia !== secuencia || operativo) return r;
-
-      if(r && r.success){
-        pintarDocumento(r.estado);
-      }
+      if(r && r.success) pintarDocumento(r.estado);
       return r;
     }catch(error){
-      console.warn('AUROSANAX PLAN 37.2: estado de firma no disponible', error);
+      console.warn('AUROSANAX PLAN 37.3: estado de firma no disponible', error);
       return null;
     }
+  }
+
+  function limpiarReintentoFirmado(){
+    if(timerFirmado){
+      clearTimeout(timerFirmado);
+      timerFirmado = null;
+    }
+    reintentoFirmado = 0;
+  }
+
+  /*
+    Después de FIRMADO, el registro/archivo puede tardar unos instantes en
+    quedar visible para la consulta persistente. Se hacen como máximo
+    8 comprobaciones x 500 ms. No es polling permanente.
+  */
+  async function confirmarFirmadoPersistente(){
+    if(operativo) return;
+
+    try{
+      const r = await sincronizar();
+      if(r && r.success && r.estado === 'FIRMADA'){
+        limpiarReintentoFirmado();
+        return;
+      }
+    }catch(_e){}
+
+    reintentoFirmado += 1;
+    if(reintentoFirmado >= MAX_REINTENTOS_FIRMADO){
+      limpiarReintentoFirmado();
+      return;
+    }
+
+    timerFirmado = setTimeout(confirmarFirmadoPersistente, ESPERA_REINTENTO_MS);
   }
 
   function pintarOperativo(estado){
@@ -6370,7 +6459,10 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       b.style.cursor = 'wait';
       b.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Preparando firma…';
       b.title = 'Preparando la solicitud de firma. Espere un momento.';
-    }else if(estado === 'PROCESO'){
+      return;
+    }
+
+    if(estado === 'PROCESO'){
       operativo = 'PROCESO';
       b.disabled = true;
       b.setAttribute('aria-busy','true');
@@ -6378,22 +6470,30 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       b.style.cursor = 'wait';
       b.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Firma en proceso…';
       b.title = 'La solicitud de firma está en proceso.';
-    }else{
-      operativo = '';
-      b.removeAttribute('aria-busy');
-      b.removeAttribute('data-auro-firma-operativa');
-      sincronizar(true);
+      return;
     }
+
+    operativo = '';
+    b.removeAttribute('aria-busy');
+    b.removeAttribute('data-auro-firma-operativa');
   }
 
   /*
-    Si la versión actual ya está firmada, el botón de Plan no inicia otra firma:
-    delega al visor persistente oficial de Recetas.
-    Para SIN_FIRMA/NUEVA_VERSION se deja intacto el listener original de Plan.
+    FIRMADA: el mismo botón pasa a visor.
+    SIN_FIRMA / NUEVA_VERSION: el listener oficial Plan 36.2 continúa
+    delegando a window.auroRecetas.firmarElectronicaActual().
   */
   document.addEventListener('click', function(ev){
-    const b = ev.target && ev.target.closest ? ev.target.closest('#' + BTN_ID) : null;
+    const b = ev.target?.closest?.('#' + BTN_ID);
     if(!b) return;
+
+    if(estaEditandoReceta()){
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      pintarEdicion();
+      return;
+    }
+
     if(b.getAttribute('data-auro-estado-documental') !== 'FIRMADA') return;
 
     ev.preventDefault();
@@ -6401,50 +6501,78 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 
     try{
       const doc = window.auroRecetas?.obtenerDocumentoFirmableActual?.();
-      if(doc && doc.success && typeof window.auroRecetas?.verPdfFirmadoPersistente === 'function'){
+      if(
+        doc && doc.success &&
+        typeof window.auroRecetas?.verPdfFirmadoPersistente === 'function'
+      ){
         window.auroRecetas.verPdfFirmadoPersistente(doc.id_receta);
       }
     }catch(error){
-      console.error('AUROSANAX PLAN 37.2 - VER FIRMA', error);
+      console.error('AUROSANAX PLAN 37.3 - VER FIRMA', error);
     }
   }, true);
 
   window.addEventListener('aurosanax:firma-electronica-estado', function(ev){
     const estado = String(ev?.detail?.estado || '').toUpperCase();
+
     if(estado === 'PREPARANDO' || estado === 'PROCESO'){
+      limpiarReintentoFirmado();
       pintarOperativo(estado);
-    }else if(
-      estado === 'FIRMADO' ||
-      estado === 'CANCELADA' ||
-      estado === 'ERROR' ||
-      estado === 'NORMAL'
-    ){
+      return;
+    }
+
+    if(estado === 'FIRMADO'){
       pintarOperativo('NORMAL');
+      limpiarReintentoFirmado();
+      /*
+        Espera al siguiente ciclo y confirma contra persistencia.
+        No asume FIRMADA hasta que la huella actual aparezca archivada.
+      */
+      timerFirmado = setTimeout(confirmarFirmadoPersistente, 0);
+      return;
+    }
+
+    if(estado === 'CANCELADA' || estado === 'ERROR' || estado === 'NORMAL'){
+      pintarOperativo('NORMAL');
+      setTimeout(sincronizar, 0);
     }
   });
 
   window.addEventListener('aurosanax:firma-electronica-completada', function(){
-    operativo = '';
-    sincronizar(true);
+    pintarOperativo('NORMAL');
+    limpiarReintentoFirmado();
+    timerFirmado = setTimeout(confirmarFirmadoPersistente, 0);
   });
 
-  window.addEventListener('focus', function(){ sincronizar(true); });
-  document.addEventListener('visibilitychange', function(){
-    if(!document.hidden) sincronizar(true);
-  });
-
+  /*
+    La barra ya contiene el botón inteligente de Recetas:
+    Editar receta <-> Guardar corrección.
+    Después de cualquier acción allí, se recalcula en el siguiente ciclo.
+    Esto NO modifica el botón de Recetas ni su listener.
+  */
   document.addEventListener('click', function(ev){
-    if(ev.target?.closest?.('#auroPlanActionButtons')){
-      setTimeout(function(){ sincronizar(true); }, 0);
-    }
+    if(!ev.target?.closest?.('#auroPlanActionButtons')) return;
+
+    setTimeout(function(){
+      if(operativo) return;
+      if(estaEditandoReceta()) pintarEdicion();
+      else sincronizar();
+    }, 0);
   }, true);
+
+  window.addEventListener('focus', function(){
+    if(!operativo) sincronizar();
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden && !operativo) sincronizar();
+  });
 
   window.auroPlanSincronizarEstadoFirmaReceta = sincronizar;
 
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){ sincronizar(true); }, {once:true});
+    document.addEventListener('DOMContentLoaded', sincronizar, {once:true});
   }else{
-    requestAnimationFrame(function(){ sincronizar(true); });
+    requestAnimationFrame(sincronizar);
   }
 })();
-
