@@ -6279,3 +6279,172 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         }
     }
 })();
+
+/* ============================================================
+   AUROSANAX PLAN 37.2 - ESTADO DOCUMENTAL + OPERATIVO DE FIRMA
+   ------------------------------------------------------------
+   CORRECCIÓN QUIRÚRGICA:
+   - No lee el texto/DOM del botón oculto de Recetas.
+   - Obtiene el documento actual desde la API oficial de Recetas.
+   - Pregunta a firma_electronica.js V2.9 el estado de ESA versión.
+   - Los estados operativos PREPARANDO/PROCESO tienen prioridad.
+   - No modifica Plan clínico, medicamentos, guardado ni Plan -> Receta.
+   - Sin intervalos, polling nuevo ni MutationObserver.
+============================================================ */
+(function auroPlanEstadosFirmaV372(){
+  'use strict';
+
+  const BTN_ID = 'btnFirmaElectronicaPlanReceta';
+  let secuencia = 0;
+  let operativo = '';
+
+  function btn(){
+    return document.getElementById(BTN_ID);
+  }
+
+  function pintarDocumento(estado){
+    const b = btn();
+    if(!b || operativo) return;
+
+    b.removeAttribute('aria-busy');
+    b.removeAttribute('data-auro-firma-operativa');
+    b.style.cursor = 'pointer';
+
+    if(estado === 'FIRMADA'){
+      b.disabled = false;
+      b.setAttribute('data-auro-estado-documental','FIRMADA');
+      b.innerHTML = '<i class="bi bi-patch-check-fill me-1"></i> Ver receta firmada ✓';
+      b.title = 'Ver el PDF firmado de la versión actual de la receta';
+    }else if(estado === 'NUEVA_VERSION'){
+      b.disabled = false;
+      b.setAttribute('data-auro-estado-documental','NUEVA_VERSION');
+      b.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar nueva versión';
+      b.title = 'Firmar electrónicamente la nueva versión guardada de la receta';
+    }else{
+      b.disabled = false;
+      b.setAttribute('data-auro-estado-documental','SIN_FIRMA');
+      b.innerHTML = '<i class="bi bi-patch-check me-1"></i> Firmar receta';
+      b.title = 'Firmar electrónicamente la receta guardada';
+    }
+  }
+
+  async function sincronizar(forzar){
+    const miSecuencia = ++secuencia;
+    if(operativo) return null;
+
+    try{
+      if(
+        !window.auroRecetas ||
+        typeof window.auroRecetas.obtenerDocumentoFirmableActual !== 'function' ||
+        !window.auroFirmaElectronica ||
+        typeof window.auroFirmaElectronica.obtenerEstadoVersionDocumento !== 'function'
+      ){
+        return null;
+      }
+
+      const documento = window.auroRecetas.obtenerDocumentoFirmableActual();
+      if(!documento || !documento.success) return null;
+
+      const r = await window.auroFirmaElectronica.obtenerEstadoVersionDocumento(documento);
+      if(miSecuencia !== secuencia || operativo) return r;
+
+      if(r && r.success){
+        pintarDocumento(r.estado);
+      }
+      return r;
+    }catch(error){
+      console.warn('AUROSANAX PLAN 37.2: estado de firma no disponible', error);
+      return null;
+    }
+  }
+
+  function pintarOperativo(estado){
+    const b = btn();
+    if(!b) return;
+
+    if(estado === 'PREPARANDO'){
+      operativo = 'PREPARANDO';
+      b.disabled = true;
+      b.setAttribute('aria-busy','true');
+      b.setAttribute('data-auro-firma-operativa','PREPARANDO');
+      b.style.cursor = 'wait';
+      b.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Preparando firma…';
+      b.title = 'Preparando la solicitud de firma. Espere un momento.';
+    }else if(estado === 'PROCESO'){
+      operativo = 'PROCESO';
+      b.disabled = true;
+      b.setAttribute('aria-busy','true');
+      b.setAttribute('data-auro-firma-operativa','PROCESO');
+      b.style.cursor = 'wait';
+      b.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Firma en proceso…';
+      b.title = 'La solicitud de firma está en proceso.';
+    }else{
+      operativo = '';
+      b.removeAttribute('aria-busy');
+      b.removeAttribute('data-auro-firma-operativa');
+      sincronizar(true);
+    }
+  }
+
+  /*
+    Si la versión actual ya está firmada, el botón de Plan no inicia otra firma:
+    delega al visor persistente oficial de Recetas.
+    Para SIN_FIRMA/NUEVA_VERSION se deja intacto el listener original de Plan.
+  */
+  document.addEventListener('click', function(ev){
+    const b = ev.target && ev.target.closest ? ev.target.closest('#' + BTN_ID) : null;
+    if(!b) return;
+    if(b.getAttribute('data-auro-estado-documental') !== 'FIRMADA') return;
+
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+
+    try{
+      const doc = window.auroRecetas?.obtenerDocumentoFirmableActual?.();
+      if(doc && doc.success && typeof window.auroRecetas?.verPdfFirmadoPersistente === 'function'){
+        window.auroRecetas.verPdfFirmadoPersistente(doc.id_receta);
+      }
+    }catch(error){
+      console.error('AUROSANAX PLAN 37.2 - VER FIRMA', error);
+    }
+  }, true);
+
+  window.addEventListener('aurosanax:firma-electronica-estado', function(ev){
+    const estado = String(ev?.detail?.estado || '').toUpperCase();
+    if(estado === 'PREPARANDO' || estado === 'PROCESO'){
+      pintarOperativo(estado);
+    }else if(
+      estado === 'FIRMADO' ||
+      estado === 'CANCELADA' ||
+      estado === 'ERROR' ||
+      estado === 'NORMAL'
+    ){
+      pintarOperativo('NORMAL');
+    }
+  });
+
+  window.addEventListener('aurosanax:firma-electronica-completada', function(){
+    operativo = '';
+    sincronizar(true);
+  });
+
+  window.addEventListener('focus', function(){ sincronizar(true); });
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) sincronizar(true);
+  });
+
+  document.addEventListener('click', function(ev){
+    if(ev.target?.closest?.('#auroPlanActionButtons')){
+      setTimeout(function(){ sincronizar(true); }, 0);
+    }
+  }, true);
+
+  window.auroPlanSincronizarEstadoFirmaReceta = sincronizar;
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){ sincronizar(true); }, {once:true});
+  }else{
+    requestAnimationFrame(function(){ sincronizar(true); });
+  }
+})();
+
