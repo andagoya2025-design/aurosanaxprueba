@@ -5401,6 +5401,25 @@
         marcarEstadoRecetaGuardadaVisual(estabaEditando);
 
         /*
+          Optimización 3.15:
+          el backend ya confirmó el guardado. Se prepara UNA VEZ la representación
+          firmable de esa versión guardada para que el clic posterior en Firmar
+          nueva versión pueda reutilizarla sin reconstruir el documento.
+          No se ejecuta antes de la confirmación del backend.
+        */
+        const registroFirmableGuardado = leerRecetasStorage().find(function(item){
+          return (
+            String(item.id_atencion || '').trim() === String(r.id_atencion || '').trim() &&
+            String(item.id_receta || '').trim() === String(r.id_receta || '').trim()
+          );
+        });
+        if(registroFirmableGuardado){
+          auroRecetaPrepararDocumentoFirmablePostGuardado_(registroFirmableGuardado);
+        }else{
+          auroRecetaDocumentoFirmablePostGuardadoCache = null;
+        }
+
+        /*
           Firma versionada 3.14:
           después de guardar una corrección se invalida la caché persistente y
           se compara la huella del documento ACTUAL con todas sus firmas.
@@ -6299,8 +6318,19 @@
     return candidatas.length ? candidatas[candidatas.length - 1] : null;
   }
 
-  function auroRecetaDocumentoFirmableActual(){
-    const registro = auroRecetaRegistroFirmableActual();
+  /*
+    AUROSANAX RECETAS 3.15 - OPTIMIZACIÓN QUIRÚRGICA POST-GUARDADO
+    ----------------------------------------------------------------
+    Objetivo exclusivo: reutilizar el documento firmable que ya fue preparado
+    después de un guardado CONFIRMADO por backend. No evita ni adelanta el
+    guardado, no permite firmar durante edición y no cambia la firma electrónica.
+
+    La caché queda ligada a id_atencion + id_receta + actualizado_en. Si cualquiera
+    cambia, se descarta automáticamente y se reconstruye desde la receta guardada.
+  */
+  let auroRecetaDocumentoFirmablePostGuardadoCache = null;
+
+  function auroRecetaConstruirDocumentoFirmableDesdeRegistro_(registro){
     if(!registro){
       return {
         success:false,
@@ -6333,6 +6363,46 @@
         auroRecetaPrepararDatosParaRepresentacion(r)
       )
     };
+  }
+
+  function auroRecetaPrepararDocumentoFirmablePostGuardado_(registro){
+    const documento = auroRecetaConstruirDocumentoFirmableDesdeRegistro_(registro);
+    if(!documento || !documento.success){
+      auroRecetaDocumentoFirmablePostGuardadoCache = null;
+      return documento;
+    }
+
+    auroRecetaDocumentoFirmablePostGuardadoCache = {
+      id_atencion:String(registro.id_atencion || '').trim(),
+      id_receta:String(registro.id_receta || '').trim(),
+      actualizado_en:String(registro.actualizado_en || '').trim(),
+      documento:documento
+    };
+    return documento;
+  }
+
+  function auroRecetaDocumentoFirmableActual(){
+    const registro = auroRecetaRegistroFirmableActual();
+    if(!registro){
+      auroRecetaDocumentoFirmablePostGuardadoCache = null;
+      return {
+        success:false,
+        message:'Guarde la receta de la atención actual antes de firmarla electrónicamente.'
+      };
+    }
+
+    const cache = auroRecetaDocumentoFirmablePostGuardadoCache;
+    if(
+      cache && cache.documento && cache.documento.success &&
+      cache.id_atencion === String(registro.id_atencion || '').trim() &&
+      cache.id_receta === String(registro.id_receta || '').trim() &&
+      cache.actualizado_en === String(registro.actualizado_en || '').trim()
+    ){
+      return cache.documento;
+    }
+
+    auroRecetaDocumentoFirmablePostGuardadoCache = null;
+    return auroRecetaConstruirDocumentoFirmableDesdeRegistro_(registro);
   }
 
   /*
