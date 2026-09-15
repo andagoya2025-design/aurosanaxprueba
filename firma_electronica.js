@@ -2098,3 +2098,219 @@
     obtenerUltimoFirmado:obtenerUltimoFirmado
   });
 })();
+
+/* ============================================================
+   AUROSANAX V2.8 - PUENTE PERSISTENTE DE DOCUMENTOS FIRMADOS
+   Adhesión append-only / antirregresiva.
+   ------------------------------------------------------------
+   - Conserva íntegra la API efectiva V2.7 anterior.
+   - NO modifica el flujo Firmar / Reabrir / Cancelar.
+   - documentos_firmados pasa a ser la fuente persistente para
+     consultar firmas históricas entre sesiones y dispositivos.
+   - Consulta por IDs clínicos; no usa localStorage como verdad.
+   - Apertura persistente compatible con bloqueo de popups móvil:
+     abre la pestaña en el gesto del usuario antes de esperar red.
+============================================================ */
+(function(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function'){
+    console.error('AUROSANAX FIRMA ELECTRÓNICA V2.8: no se encontró la API V2.7 previa.');
+    return;
+  }
+
+  const VERSION = '2.8-persistente-multidispositivo';
+
+  function texto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(_e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(_e){
+      return '';
+    }
+  }
+
+  async function postPersistente(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {
+      token:tokenSesion()
+    });
+
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
+
+    if(!res.ok){
+      throw new Error('El servidor respondió HTTP ' + res.status + '.');
+    }
+
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(
+        texto(json && json.message) ||
+        'No fue posible consultar el documento firmado.'
+      );
+    }
+    return json;
+  }
+
+  function normalizarFiltro(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = texto(d.tipo_documento || 'RECETA').toUpperCase();
+    d.id_firma_documento = texto(d.id_firma_documento);
+    d.id_paciente = texto(d.id_paciente);
+    d.id_atencion = texto(d.id_atencion);
+    d.id_receta = texto(d.id_receta || d.id_documento_clinico);
+
+    if(
+      !d.id_firma_documento &&
+      !d.id_paciente &&
+      !d.id_atencion &&
+      !d.id_receta
+    ){
+      throw new Error('La consulta de firma requiere un identificador clínico.');
+    }
+    return d;
+  }
+
+  async function consultarDocumentosFirmados(data){
+    const d = normalizarFiltro(data);
+    const r = await postPersistente('consultarDocumentosFirmados', d);
+    const documentos = Array.isArray(r.documentos) ? r.documentos : [];
+    return Object.assign({}, r, {
+      documentos:documentos,
+      total:Number(r.total || documentos.length || 0),
+      documento:r.documento || (documentos.length ? documentos[0] : null)
+    });
+  }
+
+  async function obtenerDocumentoFirmado(data){
+    const r = await consultarDocumentosFirmados(data);
+    return r.documento || null;
+  }
+
+  async function obtenerDocumentoFirmadoPorReceta(idAtencion, idReceta){
+    const atencion = texto(idAtencion);
+    const receta = texto(idReceta);
+    if(!atencion || !receta){
+      throw new Error('Se requiere id_atencion + id_receta para consultar la receta firmada.');
+    }
+    return obtenerDocumentoFirmado({
+      tipo_documento:'RECETA',
+      id_atencion:atencion,
+      id_receta:receta
+    });
+  }
+
+  async function obtenerPdfFirmadoPersistente(data){
+    const d = normalizarFiltro(data);
+    if(!d.id_firma_documento && (!d.id_atencion || !d.id_receta)){
+      throw new Error(
+        'Para obtener el PDF firmado se requiere id_firma_documento o id_atencion + id_receta.'
+      );
+    }
+    return postPersistente('obtenerPdfFirmadoPersistente', d);
+  }
+
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
+
+  function base64Pdf(resultado){
+    return texto(resultado && (
+      resultado.pdf_firmado_base64 ||
+      resultado.archivo_base64
+    ));
+  }
+
+  async function abrirPdfFirmadoPersistente(data){
+    /*
+      La ventana se crea ANTES del await. Esto conserva el gesto directo
+      del usuario y reduce bloqueos en Safari/iPhone y navegadores móviles.
+    */
+    const ventana = window.open('', '_blank');
+    if(!ventana){
+      throw new Error(
+        'El navegador bloqueó la nueva pestaña. Habilite ventanas emergentes para ver el PDF firmado.'
+      );
+    }
+
+    try{
+      ventana.document.title = 'Cargando receta firmada…';
+      ventana.document.body.innerHTML =
+        '<p style="font-family:Arial,sans-serif;padding:20px">Cargando PDF firmado…</p>';
+
+      const r = await obtenerPdfFirmadoPersistente(data);
+      const b64 = base64Pdf(r);
+      if(!b64) throw new Error('El servidor no devolvió el PDF firmado.');
+
+      const blob = base64ABlob(b64, 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      ventana.location.replace(url);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+      return r;
+    }catch(error){
+      try{ ventana.close(); }catch(_e){}
+      throw error;
+    }
+  }
+
+  async function descargarPdfFirmadoPersistente(data, nombrePreferido){
+    const r = await obtenerPdfFirmadoPersistente(data);
+    const b64 = base64Pdf(r);
+    if(!b64) throw new Error('El servidor no devolvió el PDF firmado.');
+
+    const blob = base64ABlob(b64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto(
+      r.nombre_archivo || nombrePreferido || 'documento_firmado.pdf'
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return r;
+  }
+
+  const api = Object.assign({}, anterior, {
+    version:VERSION,
+    consultarDocumentosFirmados:consultarDocumentosFirmados,
+    obtenerDocumentoFirmado:obtenerDocumentoFirmado,
+    obtenerDocumentoFirmadoPorReceta:obtenerDocumentoFirmadoPorReceta,
+    obtenerPdfFirmadoPersistente:obtenerPdfFirmadoPersistente,
+    abrirPdfFirmadoPersistente:abrirPdfFirmadoPersistente,
+    descargarPdfFirmadoPersistente:descargarPdfFirmadoPersistente
+  });
+
+  window.auroFirmaElectronica = Object.freeze(api);
+
+  window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-persistente-lista', {
+    detail:{version:VERSION}
+  }));
+})();
