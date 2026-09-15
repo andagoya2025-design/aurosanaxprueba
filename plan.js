@@ -6281,7 +6281,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 })();
 
 /* ============================================================
-   AUROSANAX PLAN 37.3 - MÁQUINA VISUAL DE FIRMA
+   AUROSANAX PLAN 37.4 - MÁQUINA VISUAL DE FIRMA
    CORRECCIÓN QUIRÚRGICA / ANTIRREGRESIVA
    ------------------------------------------------------------
    OBJETIVO:
@@ -6302,7 +6302,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
    - Solo usa reintentos ACOTADOS tras FIRMADO para esperar que
      la persistencia recién archivada sea visible en la consulta.
 ============================================================ */
-(function auroPlanEstadosFirmaV373(){
+(function auroPlanEstadosFirmaV374(){
   'use strict';
 
   const BTN_ID = 'btnFirmaElectronicaPlanReceta';
@@ -6332,6 +6332,46 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     return txt.includes('guardar corrección') || txt.includes('guardando receta');
   }
 
+  function obtenerDocumentoGuardadoActual(){
+    try{
+      if(
+        !window.auroRecetas ||
+        typeof window.auroRecetas.obtenerDocumentoFirmableActual !== 'function'
+      ) return null;
+
+      const r = window.auroRecetas.obtenerDocumentoFirmableActual();
+      if(!r || r.success === false) return null;
+
+      /*
+        Compatibilidad: la API actual puede devolver el documento directamente
+        o dentro de .documento según la capa consumidora.
+      */
+      const d = r.documento && typeof r.documento === 'object' ? r.documento : r;
+
+      if(
+        !String(d.id_atencion || '').trim() ||
+        !String(d.id_receta || '').trim() ||
+        !String(d.html_documento || '').trim()
+      ) return null;
+
+      return r;
+    }catch(e){
+      return null;
+    }
+  }
+
+  function pintarRecetaNoGuardada(){
+    const b = btn();
+    if(!b || operativo) return;
+    b.disabled = true;
+    b.removeAttribute('aria-busy');
+    b.removeAttribute('data-auro-firma-operativa');
+    b.setAttribute('data-auro-estado-documental','RECETA_NO_GUARDADA');
+    b.style.cursor = 'not-allowed';
+    b.title = 'Guarde primero la receta de esta atención antes de firmarla';
+    b.innerHTML = '<i class="bi bi-save me-1"></i> Guarde la receta para firmar';
+  }
+
   function pintarEdicion(){
     const b = btn();
     if(!b || operativo) return;
@@ -6349,6 +6389,11 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 
     if(estaEditandoReceta()){
       pintarEdicion();
+      return;
+    }
+
+    if(!obtenerDocumentoGuardadoActual()){
+      pintarRecetaNoGuardada();
       return;
     }
 
@@ -6388,8 +6433,10 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return null;
     }
 
-    const documento = window.auroRecetas.obtenerDocumentoFirmableActual();
-    if(!documento || !documento.success) return null;
+    const documento = obtenerDocumentoGuardadoActual();
+    if(!documento){
+      return {success:true, estado:'RECETA_NO_GUARDADA'};
+    }
 
     return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(documento);
   }
@@ -6401,6 +6448,11 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     if(estaEditandoReceta()){
       pintarEdicion();
       return {success:true, estado:'EDICION_PENDIENTE'};
+    }
+
+    if(!obtenerDocumentoGuardadoActual()){
+      pintarRecetaNoGuardada();
+      return {success:true, estado:'RECETA_NO_GUARDADA'};
     }
 
     try{
@@ -6491,6 +6543,13 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       ev.preventDefault();
       ev.stopImmediatePropagation();
       pintarEdicion();
+      return;
+    }
+
+    if(!obtenerDocumentoGuardadoActual()){
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      pintarRecetaNoGuardada();
       return;
     }
 
