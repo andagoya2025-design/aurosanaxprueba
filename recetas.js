@@ -6564,6 +6564,435 @@
     }
   }
 
+  /* =====================================================
+     AUROSANAX RECETAS 3.13 - FIRMA PERSISTENTE MULTIDISPOSITIVO
+     ---------------------------------------------------------
+     Adhesión quirúrgica sobre Recetas:
+     - documentos_firmados es la fuente persistente autoritativa.
+     - La memoria de esta pestaña es solo caché de rendimiento.
+     - Clave clínica: tipo_documento + id_atencion + id_receta.
+     - No escribe localStorage ni datos clínicos.
+     - No modifica Plan, guardado, PDF clínico ni Apps Script.
+     - Refleja FIRMADA ✓ en historial y en la receta de la atención activa.
+     - Ver/Descargar recuperan el MISMO PDF firmado archivado.
+     - Responsive: escritorio, iPhone, Android y navegadores táctiles.
+  ===================================================== */
+
+  const auroRecetaFirmasPersistentesCache = new Map();
+  const auroRecetaFirmasPersistentesEnCurso = new Map();
+
+  function auroRecetaFirmaPersistenteClave(idAtencion, idReceta){
+    return [
+      'RECETA',
+      String(idAtencion || '').trim(),
+      String(idReceta || '').trim()
+    ].join('|');
+  }
+
+  function auroRecetaFirmaPersistenteApiDisponible(){
+    return !!(
+      window.auroFirmaElectronica &&
+      typeof window.auroFirmaElectronica.obtenerDocumentoFirmadoPorReceta === 'function'
+    );
+  }
+
+  async function auroRecetaObtenerFirmaPersistente(idAtencion, idReceta, forzar){
+    const atencion = String(idAtencion || '').trim();
+    const receta = String(idReceta || '').trim();
+    if(!atencion || !receta) return null;
+    if(!auroRecetaFirmaPersistenteApiDisponible()) return null;
+
+    const clave = auroRecetaFirmaPersistenteClave(atencion, receta);
+
+    if(!forzar && auroRecetaFirmasPersistentesCache.has(clave)){
+      return auroRecetaFirmasPersistentesCache.get(clave);
+    }
+
+    if(auroRecetaFirmasPersistentesEnCurso.has(clave)){
+      return auroRecetaFirmasPersistentesEnCurso.get(clave);
+    }
+
+    const consulta = (async function(){
+      try{
+        const doc = await window.auroFirmaElectronica
+          .obtenerDocumentoFirmadoPorReceta(atencion, receta);
+
+        /*
+          Validación defensiva: nunca aceptar como reflejo una firma que
+          pertenezca a otra atención o receta.
+        */
+        if(doc){
+          const idAtencionDoc = String(doc.id_atencion || '').trim();
+          const idRecetaDoc = String(
+            doc.id_receta || doc.id_documento_origen || ''
+          ).trim();
+
+          if(idAtencionDoc && idAtencionDoc !== atencion){
+            throw new Error('La firma persistente consultada pertenece a otra atención.');
+          }
+          if(idRecetaDoc && idRecetaDoc !== receta){
+            throw new Error('La firma persistente consultada pertenece a otra receta.');
+          }
+        }
+
+        auroRecetaFirmasPersistentesCache.set(clave, doc || null);
+        return doc || null;
+      }finally{
+        auroRecetaFirmasPersistentesEnCurso.delete(clave);
+      }
+    })();
+
+    auroRecetaFirmasPersistentesEnCurso.set(clave, consulta);
+    return consulta;
+  }
+
+  function auroRecetaFirmaPersistenteInvalidar(idAtencion, idReceta){
+    const clave = auroRecetaFirmaPersistenteClave(idAtencion, idReceta);
+    auroRecetaFirmasPersistentesCache.delete(clave);
+  }
+
+  function auroRecetaFirmaPersistenteDatosDesdeId(idReceta){
+    const receta = buscarRecetaPorId(idReceta);
+    if(!receta) return null;
+
+    const idAtencion = String(receta.id_atencion || '').trim();
+    const recetaId = String(receta.id_receta || idReceta || '').trim();
+    if(!idAtencion || !recetaId) return null;
+
+    return {
+      tipo_documento:'RECETA',
+      id_atencion:idAtencion,
+      id_receta:recetaId
+    };
+  }
+
+  async function auroRecetaVerPdfFirmadoPersistente(idReceta){
+    const datos = auroRecetaFirmaPersistenteDatosDesdeId(idReceta);
+    if(!datos){
+      mostrarMensajeReceta(
+        '<i class="bi bi-exclamation-triangle me-1"></i> No se pudo identificar la atención de esta receta.',
+        'error'
+      );
+      return null;
+    }
+
+    if(
+      !window.auroFirmaElectronica ||
+      typeof window.auroFirmaElectronica.abrirPdfFirmadoPersistente !== 'function'
+    ){
+      mostrarMensajeReceta(
+        '<i class="bi bi-shield-exclamation me-1"></i> El visor persistente de firma electrónica no está disponible.',
+        'error'
+      );
+      return null;
+    }
+
+    try{
+      return await window.auroFirmaElectronica.abrirPdfFirmadoPersistente(datos);
+    }catch(error){
+      mostrarMensajeReceta(
+        '<i class="bi bi-shield-exclamation me-1"></i> ' +
+        safe(error?.message || 'No fue posible abrir el PDF firmado.'),
+        'error'
+      );
+      return null;
+    }
+  }
+
+  async function auroRecetaDescargarPdfFirmadoPersistente(idReceta){
+    const datos = auroRecetaFirmaPersistenteDatosDesdeId(idReceta);
+    if(!datos){
+      mostrarMensajeReceta(
+        '<i class="bi bi-exclamation-triangle me-1"></i> No se pudo identificar la atención de esta receta.',
+        'error'
+      );
+      return null;
+    }
+
+    if(
+      !window.auroFirmaElectronica ||
+      typeof window.auroFirmaElectronica.descargarPdfFirmadoPersistente !== 'function'
+    ){
+      mostrarMensajeReceta(
+        '<i class="bi bi-shield-exclamation me-1"></i> La descarga persistente de firma electrónica no está disponible.',
+        'error'
+      );
+      return null;
+    }
+
+    try{
+      return await window.auroFirmaElectronica.descargarPdfFirmadoPersistente(
+        datos,
+        'RECETA_FIRMADA_' + String(idReceta || '').trim() + '.pdf'
+      );
+    }catch(error){
+      mostrarMensajeReceta(
+        '<i class="bi bi-shield-exclamation me-1"></i> ' +
+        safe(error?.message || 'No fue posible descargar el PDF firmado.'),
+        'error'
+      );
+      return null;
+    }
+  }
+
+  function auroRecetaInstalarEstilosFirmaPersistente(){
+    if(document.getElementById('auro-receta-firma-persistente-style')) return;
+
+    const style = document.createElement('style');
+    style.id = 'auro-receta-firma-persistente-style';
+    style.textContent = `
+      #recetasHistorialBox .auro-receta-firma-persistente-badge{
+        display:inline-flex;align-items:center;gap:5px;margin-top:6px;
+        padding:5px 8px;border-radius:999px;border:1px solid #bbf7d0;
+        background:#f0fdf4;color:#166534;font-size:11px;font-weight:900;
+        line-height:1;white-space:nowrap;
+      }
+      #recetasHistorialBox .auro-receta-firma-persistente-actions{
+        display:flex;gap:8px;flex-wrap:wrap;width:100%;
+      }
+      #recetasHistorialBox .auro-receta-firma-persistente-actions .btn-action{
+        min-height:38px;
+      }
+      #recetas .auro-receta-firma-persistente-reflejo{
+        display:inline-flex;align-items:center;gap:6px;
+      }
+      @media (max-width:900px){
+        #recetasHistorialBox .auro-receta-firma-persistente-actions{
+          display:grid;grid-template-columns:1fr;width:100%;
+        }
+        #recetasHistorialBox .auro-receta-firma-persistente-actions .btn-action{
+          width:100%;justify-content:center;white-space:normal;
+        }
+        #recetas .auro-receta-firma-persistente-reflejo{
+          width:100%;justify-content:center;white-space:normal;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function auroRecetaEscaparSelectorAtributo(valor){
+    if(window.CSS && typeof window.CSS.escape === 'function'){
+      return window.CSS.escape(String(valor || ''));
+    }
+    return String(valor || '').replace(/["\\]/g, '\\$&');
+  }
+
+  function auroRecetaHistorialNodosPorId(idReceta){
+    const id = String(idReceta || '').trim();
+    if(!id) return [];
+
+    const escapado = auroRecetaEscaparSelectorAtributo(id);
+    const selectores = [
+      'button[onclick*="verRecetaEmitida"][onclick*="' + escapado + '"]',
+      'button[onclick*="editarRecetaEmitida"][onclick*="' + escapado + '"]',
+      'button[onclick*="pdfRecetaEmitida"][onclick*="' + escapado + '"]'
+    ];
+
+    const vistos = new Set();
+    const nodos = [];
+    selectores.forEach(selector => {
+      document.querySelectorAll(selector).forEach(btn => {
+        const contenedor = btn.closest('.auro-receta-actions-panel, .auro-receta-mobile-card');
+        if(contenedor && !vistos.has(contenedor)){
+          vistos.add(contenedor);
+          nodos.push(contenedor);
+        }
+      });
+    });
+    return nodos;
+  }
+
+  function auroRecetaPintarFirmaEnHistorial(idReceta, doc){
+    if(!doc) return;
+    auroRecetaInstalarEstilosFirmaPersistente();
+
+    const id = String(idReceta || '').trim();
+    auroRecetaHistorialNodosPorId(id).forEach(contenedor => {
+      if(contenedor.querySelector('.auro-receta-firma-persistente-actions')) return;
+
+      const acciones = contenedor.querySelector(
+        '.auro-receta-actions-buttons, .d-grid.gap-2.mt-2'
+      );
+      if(!acciones) return;
+
+      const badge = document.createElement('span');
+      badge.className = 'auro-receta-firma-persistente-badge';
+      badge.innerHTML = '<i class="bi bi-patch-check-fill"></i> FIRMADA ✓';
+
+      if(contenedor.classList.contains('auro-receta-mobile-card')){
+        const cabecera = contenedor.querySelector('.auro-receta-mobile-head');
+        if(cabecera) cabecera.insertAdjacentElement('afterend', badge);
+        else contenedor.insertBefore(badge, acciones);
+      }else{
+        const titulo = contenedor.querySelector('.auro-receta-actions-title');
+        if(titulo) titulo.insertAdjacentElement('afterend', badge);
+        else contenedor.insertBefore(badge, acciones);
+      }
+
+      const bloque = document.createElement('div');
+      bloque.className = 'auro-receta-firma-persistente-actions';
+      bloque.innerHTML =
+        '<button type="button" class="btn-action success" ' +
+          'onclick="auroRecetaVerPdfFirmadoPersistente(\'' + safe(id) + '\')">' +
+          '<i class="bi bi-file-earmark-check"></i> Ver PDF firmado' +
+        '</button>' +
+        '<button type="button" class="btn-action soft" ' +
+          'onclick="auroRecetaDescargarPdfFirmadoPersistente(\'' + safe(id) + '\')">' +
+          '<i class="bi bi-download"></i> Descargar firmado' +
+        '</button>';
+
+      acciones.insertAdjacentElement('afterend', bloque);
+    });
+  }
+
+  async function auroRecetaSincronizarHistorialFirmasPersistentes(forzar){
+    if(!auroRecetaFirmaPersistenteApiDisponible()) return;
+
+    const recetas = obtenerRecetasPacienteActivo();
+    if(!recetas.length) return;
+
+    /*
+      Solo consulta recetas que están actualmente representadas en el DOM.
+      Evita trabajo innecesario y conserva paginación/filtros existentes.
+    */
+    for(const receta of recetas){
+      const idReceta = String(receta.id_receta || '').trim();
+      const idAtencion = String(receta.id_atencion || '').trim();
+      if(!idReceta || !idAtencion) continue;
+      if(!auroRecetaHistorialNodosPorId(idReceta).length) continue;
+
+      try{
+        const doc = await auroRecetaObtenerFirmaPersistente(
+          idAtencion,
+          idReceta,
+          !!forzar
+        );
+        if(doc) auroRecetaPintarFirmaEnHistorial(idReceta, doc);
+      }catch(error){
+        console.warn(
+          'AUROSANAX RECETAS 3.13: no se pudo consultar firma histórica',
+          idReceta,
+          error
+        );
+      }
+    }
+  }
+
+  async function auroRecetaSincronizarFirmaPersistenteActual(forzar){
+    const btn = el('btnFirmaElectronicaReceta');
+    if(!btn || !auroRecetaFirmaPersistenteApiDisponible()) return null;
+
+    const documento = auroRecetaDocumentoFirmableActual();
+    if(!documento || !documento.success) return null;
+
+    const idAtencion = String(documento.id_atencion || '').trim();
+    const idReceta = String(documento.id_receta || '').trim();
+    if(!idAtencion || !idReceta) return null;
+
+    try{
+      const doc = await auroRecetaObtenerFirmaPersistente(
+        idAtencion,
+        idReceta,
+        !!forzar
+      );
+
+      /*
+        Verifica otra vez el contexto DESPUÉS del await.
+        Si el usuario cambió de atención mientras respondía el backend,
+        no pinta el estado en la receta nueva.
+      */
+      const actual = auroRecetaDocumentoFirmableActual();
+      if(
+        !actual || !actual.success ||
+        String(actual.id_atencion || '').trim() !== idAtencion ||
+        String(actual.id_receta || '').trim() !== idReceta
+      ){
+        return doc;
+      }
+
+      if(doc){
+        auroRecetaPintarBotonFirmaConfirmada(btn);
+        btn.classList.add('auro-receta-firma-persistente-reflejo');
+        btn.title = 'Ver receta firmada de esta atención';
+        btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓';
+        btn.onclick = function(ev){
+          ev?.preventDefault?.();
+          auroRecetaVerPdfFirmadoPersistente(idReceta);
+          return false;
+        };
+      }else{
+        btn.classList.remove('auro-receta-firma-persistente-reflejo');
+        /*
+          Solo restaura el onclick oficial si no existe una firma persistente.
+          La función clínica original sigue siendo la autoridad para firmar.
+        */
+        btn.onclick = function(ev){
+          ev?.preventDefault?.();
+          auroRecetaFirmarElectronicaActual();
+          return false;
+        };
+      }
+      return doc;
+    }catch(error){
+      console.warn('AUROSANAX RECETAS 3.13: consulta persistente actual no disponible', error);
+      return null;
+    }
+  }
+
+  /*
+    Se envuelve el render ya validado: primero renderiza exactamente como antes
+    y luego añade únicamente el reflejo visual de firma persistente.
+  */
+  const auroRecetaRenderHistorialBase313 = window.renderHistorialRecetas;
+  window.renderHistorialRecetas = function(){
+    const salida = auroRecetaRenderHistorialBase313.apply(this, arguments);
+    setTimeout(function(){
+      auroRecetaSincronizarHistorialFirmasPersistentes(false);
+      auroRecetaSincronizarFirmaPersistenteActual(false);
+    }, 0);
+    return salida;
+  };
+
+  /*
+    Cuando se completa una firma en ESTE dispositivo se invalida la caché y
+    se vuelve a leer el registro persistente. Otros dispositivos lo obtendrán
+    al abrir/recargar/focalizar la misma atención.
+  */
+  window.addEventListener('aurosanax:firma-electronica-completada', function(ev){
+    const d = ev?.detail || {};
+    if(String(d.tipo_documento || '').toUpperCase() !== 'RECETA') return;
+
+    auroRecetaFirmaPersistenteInvalidar(d.id_atencion, d.id_receta);
+    setTimeout(function(){
+      auroRecetaSincronizarFirmaPersistenteActual(true);
+      auroRecetaSincronizarHistorialFirmasPersistentes(true);
+    }, 250);
+  });
+
+  /*
+    Refresco ligero al volver a la pestaña: permite que un segundo PC/teléfono
+    refleje una firma realizada en otro dispositivo sin depender de memoria local.
+  */
+  let auroRecetaFirmaPersistenteUltimoRefresco = 0;
+  function auroRecetaRefrescarFirmasAlRetomar(){
+    const ahora = Date.now();
+    if(ahora - auroRecetaFirmaPersistenteUltimoRefresco < 3000) return;
+    auroRecetaFirmaPersistenteUltimoRefresco = ahora;
+    auroRecetaSincronizarFirmaPersistenteActual(true);
+    auroRecetaSincronizarHistorialFirmasPersistentes(true);
+  }
+
+  window.addEventListener('focus', auroRecetaRefrescarFirmasAlRetomar);
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible'){
+      auroRecetaRefrescarFirmasAlRetomar();
+    }
+  });
+
+  window.auroRecetaVerPdfFirmadoPersistente = auroRecetaVerPdfFirmadoPersistente;
+  window.auroRecetaDescargarPdfFirmadoPersistente = auroRecetaDescargarPdfFirmadoPersistente;
+
   /*
     API PÚBLICA OFICIAL DE RECETAS
     ------------------------------
@@ -6581,7 +7010,11 @@
       return auroRecetaAbrirVistaPacienteOficial();
     },
     obtenerDocumentoFirmableActual:auroRecetaDocumentoFirmableActual,
-    firmarElectronicaActual:auroRecetaFirmarElectronicaActual
+    firmarElectronicaActual:auroRecetaFirmarElectronicaActual,
+    obtenerFirmaPersistenteActual:auroRecetaSincronizarFirmaPersistenteActual,
+    sincronizarFirmasPersistentesHistorial:auroRecetaSincronizarHistorialFirmasPersistentes,
+    verPdfFirmadoPersistente:auroRecetaVerPdfFirmadoPersistente,
+    descargarPdfFirmadoPersistente:auroRecetaDescargarPdfFirmadoPersistente
   });
 
   window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
