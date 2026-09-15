@@ -5418,6 +5418,19 @@
         auroRecetaPrepararFirmaRapidaPostGuardado_(registroFirmaRapida || null);
 
         /*
+          AUROSANAX RECETAS 3.17:
+          adelanta únicamente el estado de firma demostrable con la receta
+          recién confirmada y la evidencia local ya disponible. No bloquea el
+          guardado ni sustituye la sincronización persistente autoritativa.
+        */
+        auroRecetaSincronizarFirmaPostGuardadoInmediata_(
+          registroFirmaRapida || null,
+          estabaEditando
+        ).catch(function(error){
+          console.warn('AUROSANAX RECETAS 3.17: estado inmediato post-guardado no disponible', error);
+        });
+
+        /*
           Firma versionada 3.14:
           después de guardar una corrección se invalida la caché persistente y
           se compara la huella del documento ACTUAL con todas sus firmas.
@@ -6805,6 +6818,122 @@
   function auroRecetaFirmaPersistenteInvalidar(idAtencion, idReceta){
     const clave = auroRecetaFirmaPersistenteClave(idAtencion, idReceta);
     auroRecetaFirmasPersistentesCache.delete(clave);
+  }
+
+  /*
+    AUROSANAX RECETAS 3.17 - ESTADO DE FIRMA INMEDIATO POST-GUARDADO
+    ----------------------------------------------------------------
+    Objetivo exclusivo:
+    - Evitar que el botón de firma dependa visualmente de una consulta de red
+      cuando el backend YA confirmó el guardado de la receta.
+    - No sustituye la verificación persistente: solo adelanta un estado que
+      puede demostrarse con datos locales ya conocidos.
+    - La sincronización autoritativa continúa inmediatamente en segundo plano.
+
+    Blindaje:
+    - Receta nueva confirmada: puede firmarse de inmediato.
+    - Corrección: solo adelanta el estado si ya existe caché persistente válida.
+    - Si no hay evidencia suficiente, no adivina; deja actuar al sincronizador
+      persistente canónico V3.14.
+    - Una versión exacta firmada en esta sesión conserva "Firmada ✓".
+  */
+  async function auroRecetaSincronizarFirmaPostGuardadoInmediata_(registroGuardado, eraActualizacion){
+    const btn = el('btnFirmaElectronicaReceta');
+    if(!btn || !registroGuardado) return false;
+
+    const documento = auroRecetaDocumentoParaFirmaRapida_();
+    if(!documento || !documento.success) return false;
+
+    const idAtencion = String(registroGuardado.id_atencion || '').trim();
+    const idReceta = String(registroGuardado.id_receta || '').trim();
+
+    if(
+      !idAtencion || !idReceta ||
+      String(documento.id_atencion || '').trim() !== idAtencion ||
+      String(documento.id_receta || '').trim() !== idReceta
+    ){
+      return false;
+    }
+
+    const claveSesion = auroRecetaClaveBaseFirma(documento);
+    const firmadaSesion = claveSesion ? auroRecetaFirmasSesion.get(claveSesion) : null;
+    if(auroRecetaFirmaSesionCoincide(firmadaSesion, documento)){
+      auroRecetaPintarBotonFirmaConfirmada(btn);
+      return true;
+    }
+
+    /*
+      Una receta NUEVA acaba de recibir un id_receta nuevo y el backend ya
+      confirmó su persistencia. No necesita esperar la consulta de firmas para
+      habilitar su primera firma.
+    */
+    if(!eraActualizacion){
+      btn.classList.remove('auro-receta-firma-persistente-reflejo');
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      btn.removeAttribute('data-auro-firma-estado');
+      btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
+      btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+      btn.onclick = function(ev){
+        ev?.preventDefault?.();
+        auroRecetaFirmarElectronicaActual();
+        return false;
+      };
+      return true;
+    }
+
+    /*
+      En una corrección no se presupone el estado anterior. Solo se usa la
+      caché persistente si ya fue consultada para esta misma atención/receta.
+      La comparación se hace contra la huella exacta del documento guardado.
+    */
+    const clavePersistente = auroRecetaFirmaPersistenteClave(idAtencion, idReceta);
+    if(!auroRecetaFirmasPersistentesCache.has(clavePersistente)){
+      return false;
+    }
+
+    const cache = auroRecetaFirmasPersistentesCache.get(clavePersistente);
+    const docs = Array.isArray(cache) ? cache : (cache ? [cache] : []);
+    const huellaActual = await auroRecetaSha256TextoPersistente(
+      String(documento.html_documento || '')
+    );
+
+    const docVersionActual = docs.find(function(doc){
+      return String(doc?.sha256_origen || '').trim().toLowerCase() === huellaActual;
+    }) || null;
+
+    if(docVersionActual){
+      auroRecetaPintarBotonFirmaConfirmada(btn);
+      btn.classList.add('auro-receta-firma-persistente-reflejo');
+      btn.title = 'Ver esta versión firmada de la receta';
+      btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓';
+      btn.onclick = function(ev){
+        ev?.preventDefault?.();
+        auroRecetaVerPdfFirmadoPersistente(
+          idReceta,
+          String(docVersionActual.id_firma_documento || '').trim()
+        );
+        return false;
+      };
+      return true;
+    }
+
+    btn.classList.remove('auro-receta-firma-persistente-reflejo');
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.removeAttribute('data-auro-firma-estado');
+    btn.title = docs.length
+      ? 'La receta fue corregida. Firmar la nueva versión guardada'
+      : 'Firmar electrónicamente la receta guardada de esta atención';
+    btn.innerHTML = docs.length
+      ? '<i class="bi bi-patch-check"></i> Firmar nueva versión'
+      : '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+    btn.onclick = function(ev){
+      ev?.preventDefault?.();
+      auroRecetaFirmarElectronicaActual();
+      return false;
+    };
+    return true;
   }
 
   function auroRecetaFirmaPersistenteDatosDesdeId(idReceta){
