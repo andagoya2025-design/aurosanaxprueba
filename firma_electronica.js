@@ -2314,3 +2314,173 @@
     detail:{version:VERSION}
   }));
 })();
+
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 2.9
+   ESTADOS VISUALES UNIVERSALES + ESTADO DOCUMENTAL PARA PLAN
+   ------------------------------------------------------------
+   ADHESIÓN ANTIRREGRESIVA SOBRE V2.8:
+   - Conserva íntegra la API V2.8 persistente/multidispositivo.
+   - Envuelve únicamente firmarDocumento() para publicar estados visuales.
+   - Añade obtenerEstadoVersionDocumento(data), sin alterar firma/backend.
+   - No modifica polling, cancelación, REABRIR, hashes existentes ni transporte.
+============================================================ */
+(function auroFirmaEstadosUniversalesV29(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function') return;
+
+  const VERSION = '2.9-estados-visuales-plan';
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function emitir(estado, detalle){
+    try{
+      window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-estado', {
+        detail:Object.assign({estado:estado}, detalle || {})
+      }));
+    }catch(_e){}
+  }
+
+  function botonesFirma(){
+    const arr = [];
+    const add = function(el){
+      if(el && !arr.includes(el)) arr.push(el);
+    };
+    add(document.getElementById('btnFirmaElectronicaReceta'));
+    add(document.getElementById('btnFirmaElectronicaPlanReceta'));
+    document.querySelectorAll('[data-auro-receta-action="firma-electronica"]').forEach(add);
+    return arr;
+  }
+
+  function pintar(modo){
+    botonesFirma().forEach(function(btn){
+      if(!btn) return;
+
+      if(!btn.dataset.auroV29HtmlReposo){
+        btn.dataset.auroV29HtmlReposo = btn.innerHTML || '';
+        btn.dataset.auroV29TitleReposo = btn.getAttribute('title') || '';
+      }
+
+      if(modo === 'PREPARANDO'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.setAttribute('data-auro-firma-operativa','PREPARANDO');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Preparando firma…';
+        btn.title = 'Preparando la solicitud de firma. Espere un momento.';
+      }else if(modo === 'PROCESO'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.setAttribute('data-auro-firma-operativa','PROCESO');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firma en proceso…';
+        btn.title = 'La solicitud de firma está en proceso.';
+      }else{
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        btn.removeAttribute('data-auro-firma-operativa');
+        btn.style.cursor = 'pointer';
+        /*
+          No restaura HTML aquí: Recetas/Plan son propietarios del estado
+          documental de reposo y lo recalculan mediante el evento NORMAL.
+        */
+      }
+    });
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(String(valor || ''));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function obtenerEstadoVersionDocumento(data){
+    const d = Object.assign({}, data || {});
+    const idAtencion = texto(d.id_atencion);
+    const idReceta = texto(d.id_receta || d.id_documento_clinico);
+    const html = String(d.html_documento || '');
+
+    if(!idAtencion || !idReceta || !html){
+      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0};
+    }
+    if(typeof anterior.consultarDocumentosFirmados !== 'function'){
+      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0};
+    }
+
+    const huella = await sha256Texto(html);
+    const r = await anterior.consultarDocumentosFirmados({
+      tipo_documento:'RECETA',
+      id_atencion:idAtencion,
+      id_receta:idReceta
+    });
+    const docs = Array.isArray(r && r.documentos) ? r.documentos : [];
+    const firmada = docs.find(function(doc){
+      return texto(doc && doc.sha256_origen).toLowerCase() === huella;
+    }) || null;
+
+    return {
+      success:true,
+      estado:firmada ? 'FIRMADA' : (docs.length ? 'NUEVA_VERSION' : 'SIN_FIRMA'),
+      total_firmas:docs.length,
+      documento:firmada
+    };
+  }
+
+  async function firmarDocumento(data){
+    const detalle = {
+      tipo_documento:texto(data && data.tipo_documento).toUpperCase(),
+      id_atencion:texto(data && data.id_atencion),
+      id_receta:texto(data && (data.id_receta || data.id_documento_clinico))
+    };
+
+    pintar('PREPARANDO');
+    emitir('PREPARANDO', detalle);
+
+    /*
+      El POST/polling real permanece en V2.8.
+      En el siguiente ciclo visual ya existe una operación iniciada desde la UI;
+      se informa al médico que la firma está en proceso.
+    */
+    requestAnimationFrame(function(){
+      pintar('PROCESO');
+      emitir('PROCESO', detalle);
+    });
+
+    try{
+      const resultado = await anterior.firmarDocumento(data);
+      const estado = texto(resultado && resultado.estado_firma).toUpperCase();
+
+      if(estado === 'FIRMADO'){
+        emitir('FIRMADO', Object.assign({}, detalle, {
+          id_solicitud:texto(resultado && resultado.id_solicitud)
+        }));
+      }else if(estado === 'CANCELADA'){
+        emitir('CANCELADA', detalle);
+      }else{
+        emitir('NORMAL', detalle);
+      }
+      return resultado;
+    }catch(error){
+      emitir('ERROR', Object.assign({}, detalle, {
+        message:texto(error && error.message)
+      }));
+      throw error;
+    }finally{
+      pintar('NORMAL');
+      emitir('NORMAL', detalle);
+    }
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
+  }));
+})();
+
