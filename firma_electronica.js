@@ -2548,3 +2548,125 @@
     obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
   }));
 })();
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA V3.1.1
+   ENRUTAMIENTO POR EQUIPO — PUENTE LOCAL ROBUSTO
+   ------------------------------------------------------------
+   Adhesión append-only sobre el archivo completo recibido.
+   - Conserva íntegro V2.1 -> V3.0.
+   - Identifica el PC mediante el /health del motor local.
+   - Solicita acceso de red local desde el gesto directo "Firmar"
+     cuando el navegador expone la API de permisos correspondiente.
+   - Usa 127.0.0.1 y localhost como rutas compatibles.
+   - Falla cerrado: jamás crea una solicitud sin equipo destino.
+   - No modifica Adobe, doble firma, polling, cancelar, reabrir,
+     persistencia, SHA ni contratos clínicos.
+============================================================ */
+(function auroFirmaEnrutamientoEquipoV311(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function'){
+    console.error('AUROSANAX FIRMA V3.1.1: API previa no disponible.');
+    return;
+  }
+
+  const VERSION = '3.1.1-enrutamiento-equipo-local';
+  const HEALTH_URLS = [
+    'http://127.0.0.1:8080/health',
+    'http://localhost:8080/health'
+  ];
+  const TIMEOUT_MS = 3500;
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  async function habilitarRedLocal_(){
+    /*
+      Chrome/Edge modernos pueden exigir permiso explícito para que una
+      página pública consulte un servicio HTTP en loopback/red local.
+      La consulta se ejecuta dentro del clic original de Firmar.
+      Navegadores sin esta API continúan por el flujo CORS/PNA normal.
+    */
+    try{
+      if(navigator.permissions && typeof navigator.permissions.query === 'function'){
+        try{
+          const p = await navigator.permissions.query({name:'local-network-access'});
+          if(p && p.state === 'denied'){
+            throw new Error('El navegador tiene bloqueado el acceso al motor local de firma.');
+          }
+        }catch(e){
+          if(texto(e && e.message).includes('bloqueado el acceso')) throw e;
+          /* API/descriptor no soportado: continuar con fetch normal. */
+        }
+      }
+    }catch(e){
+      throw e;
+    }
+  }
+
+  async function health_(url){
+    const ctl = new AbortController();
+    const timer = setTimeout(function(){
+      try{ ctl.abort(); }catch(_e){}
+    }, TIMEOUT_MS);
+
+    try{
+      const r = await fetch(url, {
+        method:'GET',
+        mode:'cors',
+        credentials:'omit',
+        cache:'no-store',
+        signal:ctl.signal
+      });
+      if(!r.ok) return null;
+      const j = await r.json();
+      const id = texto(j && j.id_equipo);
+      if(!j || j.success !== true || !id) return null;
+      return {
+        id_equipo:id,
+        version:texto(j.version),
+        servicio:texto(j.servicio),
+        url:url
+      };
+    }catch(_e){
+      return null;
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+
+  async function obtenerEquipoLocal_(){
+    await habilitarRedLocal_();
+    for(const url of HEALTH_URLS){
+      const h = await health_(url);
+      if(h) return h;
+    }
+    return null;
+  }
+
+  async function firmarDocumento(data){
+    const h = await obtenerEquipoLocal_();
+
+    if(!h || !texto(h.id_equipo)){
+      throw new Error(
+        'No se pudo conectar con el motor de firma de este computador. ' +
+        'Verifique que el motor esté iniciado y que el navegador permita acceso a la red local.'
+      );
+    }
+
+    const dirigido = Object.assign({}, data || {}, {
+      id_equipo_destino:h.id_equipo,
+      id_equipo:h.id_equipo
+    });
+
+    return anterior.firmarDocumento(dirigido);
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerEquipoLocal:obtenerEquipoLocal_
+  }));
+})();
