@@ -2548,3 +2548,81 @@
     obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
   }));
 })();
+/* ============================================================
+ * AUROSANAX FIRMA FRONTEND V3.1 - MOTOR LOCAL / ENRUTAMIENTO
+ * ADHESIÓN QUIRÚRGICA / ANTIRREGRESIVA 2026-09-17
+ * ------------------------------------------------------------
+ * Detecta exclusivamente el motor local del computador actual mediante
+ * /health y adjunta su id_equipo como destino de la solicitud.
+ * No modifica HTML clínico, SHA, IDs, polling, REABRIR, CANCELAR,
+ * persistencia ni estado visual V3.0.
+ * ============================================================ */
+(function(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function') return;
+
+  const VERSION = '3.1-enrutamiento-motor-local';
+  const URLS_MOTOR_LOCAL = [
+    'http://127.0.0.1:8080/health',
+    'http://localhost:8080/health'
+  ];
+  let motorLocalCache = null;
+
+  function texto(v){ return String(v == null ? '' : v).trim(); }
+
+  async function consultarHealth_(url){
+    const controller = new AbortController();
+    const timer = setTimeout(function(){ controller.abort(); }, 1200);
+    try{
+      const res = await fetch(url, {
+        method:'GET',
+        cache:'no-store',
+        credentials:'omit',
+        signal:controller.signal
+      });
+      if(!res.ok) return null;
+      const data = await res.json();
+      if(!data || data.success !== true) return null;
+      if(texto(data.servicio).toUpperCase().indexOf('AUROSANAX FIRMA') === -1) return null;
+      const id = texto(data.id_equipo);
+      if(!id) return null;
+      return {id_equipo:id, health:data};
+    }catch(_e){
+      return null;
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+
+  async function obtenerMotorLocal_(){
+    if(motorLocalCache && texto(motorLocalCache.id_equipo)) return motorLocalCache;
+
+    for(const url of URLS_MOTOR_LOCAL){
+      const motor = await consultarHealth_(url);
+      if(motor){
+        motorLocalCache = motor;
+        return motor;
+      }
+    }
+
+    throw new Error(
+      'No se detectó AUROSANAX FIRMA en este computador. Encienda el motor local de firma en este equipo y vuelva a intentar.'
+    );
+  }
+
+  async function firmarDocumento(data){
+    const motor = await obtenerMotorLocal_();
+    const solicitud = Object.assign({}, data || {}, {
+      id_equipo_objetivo:motor.id_equipo
+    });
+    return anterior.firmarDocumento(solicitud);
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerMotorLocalFirma:obtenerMotorLocal_
+  }));
+})();
