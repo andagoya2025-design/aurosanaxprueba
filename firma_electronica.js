@@ -2316,22 +2316,31 @@
 })();
 
 /* ============================================================
-   AUROSANAX FIRMA ELECTRÓNICA 2.9
-   ESTADOS VISUALES UNIVERSALES + ESTADO DOCUMENTAL PARA PLAN
+   AUROSANAX FIRMA ELECTRÓNICA 3.0
+   ESTADOS VISUALES + IDENTIDAD EXACTA DE VERSIÓN FIRMADA
    ------------------------------------------------------------
-   ADHESIÓN ANTIRREGRESIVA SOBRE V2.8:
-   - Conserva íntegra la API V2.8 persistente/multidispositivo.
-   - Envuelve únicamente firmarDocumento() para publicar estados visuales.
-   - Añade obtenerEstadoVersionDocumento(data), sin alterar firma/backend.
-   - No modifica polling, cancelación, REABRIR, hashes existentes ni transporte.
+   CORRECCIÓN ANTIRREGRESIVA SOBRE V2.8:
+   - Conserva íntegro todo el baseline V2.1 -> V2.8 anterior.
+   - Sustituye únicamente la adhesión V2.9 final.
+   - Mantiene Firmar / Reabrir / Cancelar / PDF persistente.
+   - Mantiene polling efectivo existente de 1000 ms.
+   - NO añade polling, esperas ni consultas periódicas nuevas.
+   - Corrige la huella documental usando EXACTAMENTE la misma
+     normalización de entrada que usa el motor frontend efectivo:
+     String(...).trim() antes de SHA-256.
+   - Confirma en memoria la versión que acaba de devolver FIRMADO,
+     evitando que una consulta inmediata la reclasifique como nueva.
+   - En recarga/otro dispositivo, documentos_firmados sigue siendo
+     la fuente persistente de verdad.
 ============================================================ */
-(function auroFirmaEstadosUniversalesV29(){
+(function auroFirmaEstadosUniversalesV30(){
   'use strict';
 
   const anterior = window.auroFirmaElectronica;
   if(!anterior || typeof anterior.firmarDocumento !== 'function') return;
 
-  const VERSION = '2.9-estados-visuales-plan';
+  const VERSION = '3.0-estado-version-firmada';
+  const versionesFirmadasSesion = new Map();
 
   function texto(v){
     return String(v === null || v === undefined ? '' : v).trim();
@@ -2360,9 +2369,9 @@
     botonesFirma().forEach(function(btn){
       if(!btn) return;
 
-      if(!btn.dataset.auroV29HtmlReposo){
-        btn.dataset.auroV29HtmlReposo = btn.innerHTML || '';
-        btn.dataset.auroV29TitleReposo = btn.getAttribute('title') || '';
+      if(!btn.dataset.auroV30HtmlReposo){
+        btn.dataset.auroV30HtmlReposo = btn.innerHTML || '';
+        btn.dataset.auroV30TitleReposo = btn.getAttribute('title') || '';
       }
 
       if(modo === 'PREPARANDO'){
@@ -2385,50 +2394,97 @@
         btn.removeAttribute('data-auro-firma-operativa');
         btn.style.cursor = 'pointer';
         /*
-          No restaura HTML aquí: Recetas/Plan son propietarios del estado
-          documental de reposo y lo recalculan mediante el evento NORMAL.
+          Recetas/Plan siguen siendo propietarios del estado documental
+          de reposo. Este módulo solo publica el estado operativo/documental.
         */
       }
     });
   }
 
-  async function sha256Texto(valor){
-    const datos = new TextEncoder().encode(String(valor || ''));
+  async function sha256TextoNormalizado(valor){
+    /*
+      IMPORTANTE:
+      validarSolicitud() del flujo efectivo V2.7 normaliza html_documento
+      mediante texto(), es decir String(...).trim(), ANTES del POST.
+      La identidad documental debe calcularse sobre esa misma cadena.
+    */
+    const normalizado = texto(valor);
+    const datos = new TextEncoder().encode(normalizado);
     const hash = await crypto.subtle.digest('SHA-256', datos);
     return Array.from(new Uint8Array(hash))
       .map(function(b){ return b.toString(16).padStart(2, '0'); })
       .join('');
   }
 
-  async function obtenerEstadoVersionDocumento(data){
+  async function identidadVersion(data){
     const d = Object.assign({}, data || {});
     const idAtencion = texto(d.id_atencion);
     const idReceta = texto(d.id_receta || d.id_documento_clinico);
-    const html = String(d.html_documento || '');
+    const html = texto(d.html_documento);
 
-    if(!idAtencion || !idReceta || !html){
+    if(!idAtencion || !idReceta || !html) return null;
+
+    const huella = await sha256TextoNormalizado(html);
+    return {
+      id_atencion:idAtencion,
+      id_receta:idReceta,
+      huella:huella,
+      clave:idAtencion + '|' + idReceta + '|' + huella
+    };
+  }
+
+  async function obtenerEstadoVersionDocumento(data){
+    const identidad = await identidadVersion(data);
+
+    if(!identidad){
       return {success:false, estado:'NO_DISPONIBLE', total_firmas:0};
     }
+
+    /*
+      Confirmación inmediata:
+      si ESTA MISMA versión acaba de obtener FIRMADO en esta sesión,
+      no se contradice con una consulta persistente que todavía esté
+      propagándose. No genera red, espera ni polling adicional.
+    */
+    if(versionesFirmadasSesion.has(identidad.clave)){
+      const confirmado = versionesFirmadasSesion.get(identidad.clave);
+      return {
+        success:true,
+        estado:'FIRMADA',
+        total_firmas:Number(confirmado.total_firmas || 1),
+        documento:confirmado.documento || null,
+        confirmacion:'SESION'
+      };
+    }
+
     if(typeof anterior.consultarDocumentosFirmados !== 'function'){
       return {success:false, estado:'NO_DISPONIBLE', total_firmas:0};
     }
 
-    const huella = await sha256Texto(html);
     const r = await anterior.consultarDocumentosFirmados({
       tipo_documento:'RECETA',
-      id_atencion:idAtencion,
-      id_receta:idReceta
+      id_atencion:identidad.id_atencion,
+      id_receta:identidad.id_receta
     });
+
     const docs = Array.isArray(r && r.documentos) ? r.documentos : [];
     const firmada = docs.find(function(doc){
-      return texto(doc && doc.sha256_origen).toLowerCase() === huella;
+      return texto(doc && doc.sha256_origen).toLowerCase() === identidad.huella;
     }) || null;
+
+    if(firmada){
+      versionesFirmadasSesion.set(identidad.clave, {
+        documento:firmada,
+        total_firmas:docs.length
+      });
+    }
 
     return {
       success:true,
       estado:firmada ? 'FIRMADA' : (docs.length ? 'NUEVA_VERSION' : 'SIN_FIRMA'),
       total_firmas:docs.length,
-      documento:firmada
+      documento:firmada,
+      confirmacion:firmada ? 'PERSISTENTE' : ''
     };
   }
 
@@ -2442,11 +2498,6 @@
     pintar('PREPARANDO');
     emitir('PREPARANDO', detalle);
 
-    /*
-      El POST/polling real permanece en V2.8.
-      En el siguiente ciclo visual ya existe una operación iniciada desde la UI;
-      se informa al médico que la firma está en proceso.
-    */
     requestAnimationFrame(function(){
       pintar('PROCESO');
       emitir('PROCESO', detalle);
@@ -2457,14 +2508,28 @@
       const estado = texto(resultado && resultado.estado_firma).toUpperCase();
 
       if(estado === 'FIRMADO'){
+        /*
+          Registrar primero la identidad EXACTA de los datos que entraron al
+          flujo de firma. Esto es O(1), local y no añade latencia de red.
+        */
+        const identidad = await identidadVersion(data);
+        if(identidad){
+          versionesFirmadasSesion.set(identidad.clave, {
+            documento:null,
+            total_firmas:1
+          });
+        }
+
         emitir('FIRMADO', Object.assign({}, detalle, {
-          id_solicitud:texto(resultado && resultado.id_solicitud)
+          id_solicitud:texto(resultado && resultado.id_solicitud),
+          sha256_origen:identidad ? identidad.huella : ''
         }));
       }else if(estado === 'CANCELADA'){
         emitir('CANCELADA', detalle);
       }else{
         emitir('NORMAL', detalle);
       }
+
       return resultado;
     }catch(error){
       emitir('ERROR', Object.assign({}, detalle, {
@@ -2481,84 +2546,5 @@
     version:VERSION,
     firmarDocumento:firmarDocumento,
     obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
-  }));
-})();
-
-
-/* ============================================================
-   AUROSANAX FIRMA ELECTRÓNICA 3.1
-   ENRUTAMIENTO ESTRICTO AL MOTOR DEL EQUIPO DE ORIGEN
-   ------------------------------------------------------------
-   ADHESIÓN APPEND-ONLY / ANTIRREGRESIVA:
-   - Conserva íntegro V2.1 -> V3.0 anterior.
-   - Antes de CREAR una firma consulta únicamente /health del motor local.
-   - Añade id_equipo_destino a la solicitud; no cambia IDs clínicos ni HTML.
-   - REABRIR/CANCELAR y consultas persistentes conservan el flujo previo.
-   - Falla cerrado si no puede identificar el motor local: evita que otro PC
-     tome accidentalmente la solicitud.
-============================================================ */
-(function auroFirmaEnrutamientoEquipoV31(){
-  'use strict';
-
-  const anterior = window.auroFirmaElectronica;
-  if(!anterior || typeof anterior.firmarDocumento !== 'function') return;
-
-  const VERSION = '3.1-enrutamiento-equipo-origen';
-  const MOTOR_URL_DEFAULT = 'http://127.0.0.1:8080';
-
-  function texto(v){
-    return String(v === null || v === undefined ? '' : v).trim();
-  }
-
-  function motorUrl(){
-    try{
-      const configurada = texto(localStorage.getItem('aurosanax_firma_motor_url'));
-      if(configurada) return configurada.replace(/\/+$/,'');
-    }catch(_e){}
-    return MOTOR_URL_DEFAULT;
-  }
-
-  async function obtenerMotorLocal(){
-    const url = motorUrl() + '/health';
-    let res;
-    try{
-      res = await fetch(url, {
-        method:'GET',
-        cache:'no-store',
-        mode:'cors'
-      });
-    }catch(_e){
-      throw new Error('No se pudo identificar el motor de firma de este computador. Verifique que AUROSANAX Firma esté iniciado.');
-    }
-
-    if(!res.ok){
-      throw new Error('El motor local de firma respondió HTTP ' + res.status + '.');
-    }
-
-    const json = await res.json();
-    const idEquipo = texto(json && json.id_equipo);
-    if(!json || json.success !== true || !idEquipo){
-      throw new Error('El motor local no devolvió un identificador de equipo válido.');
-    }
-
-    return {
-      id_equipo:idEquipo,
-      version:texto(json.version),
-      modo_firma:texto(json.modo_firma)
-    };
-  }
-
-  async function firmarDocumento(data){
-    const motor = await obtenerMotorLocal();
-    const solicitud = Object.assign({}, data || {}, {
-      id_equipo_destino:motor.id_equipo
-    });
-    return anterior.firmarDocumento(solicitud);
-  }
-
-  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
-    version:VERSION,
-    firmarDocumento:firmarDocumento,
-    obtenerMotorLocal:obtenerMotorLocal
   }));
 })();
