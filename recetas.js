@@ -3177,15 +3177,7 @@
 
     recetaAtencionActualId = actual;
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
-
-    /*
-      AUROSANAX RECETAS 3.19 - ESTADO DE FIRMA AL ABRIR ATENCIÓN
-      La autoridad visual final es la firma persistida de la versión exacta
-      id_atencion + id_receta, no la memoria de firma de esta sesión.
-    */
-    setTimeout(function(){
-      auroRecetaSincronizarFirmaActualYPlan(true);
-    }, 0);
+    auroRecetaSincronizarEstadoFirmaVisual();
   }
 
   window.obtenerDatosReceta = function(){
@@ -6187,7 +6179,6 @@
           recetasPaginaActual = 1;
           auroRecetaSincronizarModoPrimeraReceta();
           renderHistorialRecetas();
-          auroRecetaSincronizarFirmaActualYPlan(true);
         }
       }catch(e){}
     }, 250);
@@ -6228,7 +6219,6 @@
       try{
         auroRecetaSincronizarModoPrimeraReceta();
         auroRecetaActualizarCabeceraClinicaPremium();
-        auroRecetaSincronizarFirmaActualYPlan(true);
       }catch(e){}
     }, 0);
   }
@@ -6261,7 +6251,6 @@
     cargarRecetasDesdeSheets(false).then(function(){
       auroRecetaSincronizarModoPrimeraReceta();
       renderHistorialRecetas();
-      auroRecetaSincronizarFirmaActualYPlan(true);
     });
 
     envolverRecetasFuncion('showScreen', refrescarRecetasAlEntrar);
@@ -6523,6 +6512,21 @@
       return;
     }
 
+    /*
+      AUROSANAX RECETAS 3.20 - AUTORIDAD ÚNICA DEL ESTADO DE FIRMA
+      -------------------------------------------------------------
+      La memoria de sesión conserva únicamente los estados transitorios
+      (FIRMANDO) y la confirmación inmediata de una firma hecha en este
+      dispositivo. Si la sesión no confirma la versión, NO decide que la
+      receta está sin firma: delega la decisión final a la persistencia
+      exacta por id_atencion + id_receta + hash de la versión.
+    */
+    if(auroRecetaFirmaPersistenteApiDisponible()){
+      auroRecetaSincronizarFirmaPersistenteActual(false);
+      return;
+    }
+
+    // Fallback únicamente si la API persistente no existe.
     auroRecetaPintarBotonFirmaNormal(btn);
   }
 
@@ -7151,30 +7155,6 @@
       console.warn('AUROSANAX RECETAS 3.14: consulta persistente versionada no disponible', error);
       return null;
     }
-  }
-
-  /*
-    AUROSANAX RECETAS 3.19 - PUENTE VISUAL RECETAS -> PLAN
-    ------------------------------------------------------
-    Primero resuelve la firma persistida de la receta activa y solo después
-    solicita a Plan repintar su botón. No guarda datos, no inicia una firma,
-    no modifica el motor, la doble firma ni el aislamiento por dispositivo.
-  */
-  async function auroRecetaSincronizarFirmaActualYPlan(forzar){
-    const firma = await auroRecetaSincronizarFirmaPersistenteActual(!!forzar);
-
-    try{
-      if(typeof window.auroPlanSincronizarEstadoFirmaReceta === 'function'){
-        await window.auroPlanSincronizarEstadoFirmaReceta();
-      }
-    }catch(error){
-      console.warn(
-        'AUROSANAX RECETAS 3.19: no se pudo repintar el estado visual de firma en Plan',
-        error
-      );
-    }
-
-    return firma;
   }
 
   /*
