@@ -2752,6 +2752,25 @@
       recetasSheetsCargadas = true;
       recetasSheetsCargando = false;
 
+      /*
+        AUROSANAX RECETAS 3.18 - REFLEJO VISUAL DE FIRMA EN PLAN
+        --------------------------------------------------------
+        La receta persistida ya quedo sincronizada desde la fuente remota.
+        Si Plan expone su sincronizador visual oficial, se le solicita
+        recalcular unicamente el estado del boton de firma en el siguiente
+        ciclo. No guarda Plan, no modifica receta, no crea solicitudes de
+        firma y no interviene el motor ni el aislamiento por dispositivo.
+      */
+      setTimeout(function(){
+        try{
+          if(typeof window.auroPlanSincronizarEstadoFirmaReceta === 'function'){
+            window.auroPlanSincronizarEstadoFirmaReceta();
+          }
+        }catch(error){
+          console.warn('AUROSANAX RECETAS 3.18: no se pudo refrescar el estado visual de firma en Plan', error);
+        }
+      }, 0);
+
       return mezcladas;
 
     }catch(error){
