@@ -11780,48 +11780,74 @@ function auroTextoDiagnosticoHistoria(dx){
   return [codigo, nombre].filter(Boolean).join(' - ') || 'Sin diagnóstico';
 }
 
+function auroNormalizarBusquedaHistorias(valor){
+  return String(valor || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function renderHistoriasClinicas(){
-  const q = (document.getElementById('historiaSearch')?.value || '').toLowerCase();
+  const q = auroNormalizarBusquedaHistorias(
+    document.getElementById('historiaSearch')?.value || ''
+  );
   const idPaciente = document.getElementById('historiaPacienteFiltro')?.value || '';
   const fecha = document.getElementById('historiaFechaFiltro')?.value || '';
   const list = document.getElementById('historiasList');
   if(!list) return;
 
-  const rows = historiasClinicas.filter(function(h){
+  /*
+    AUROSANAX INDEX - BUSCADOR HISTORIAS
+    Optimización local de solo lectura:
+    - normaliza tildes/acentos únicamente para comparar;
+    - no modifica nombres ni datos persistidos;
+    - calcula paciente/última atención/diagnóstico una sola vez por historia
+      durante este render.
+  */
+  const rows = historiasClinicas.map(function(h, idx){
     const p = obtenerPacientePorHistoria(h);
-    const ultimaAtencion = auroUltimaAtencionParaHistoria(h);
-    const fechaAtencion = String(ultimaAtencion?.fecha_atencion || '').slice(0,10);
-    const dx = auroDiagnosticoPrimeroAtencionHistoria(ultimaAtencion);
-    const diagnosticoTexto = auroTextoDiagnosticoHistoria(dx);
-
-    const texto = [
-      p?.nombre,
-      p?.cedula,
-      fechaAtencion,
-      diagnosticoTexto,
-      h.estado
-    ].join(' ').toLowerCase();
-
-    return (!q || texto.includes(q)) &&
-           (!idPaciente || String(h.id_paciente || '') === String(idPaciente)) &&
-           (!fecha || fechaAtencion === fecha);
-  });
-
-  list.innerHTML = rows.map(function(h, idx){
-    const p = obtenerPacientePorHistoria(h);
-    const titulo = p?.nombre || h.nombre_paciente || 'Paciente no identificado';
     const ultimaAtencion = auroUltimaAtencionParaHistoria(h);
     const fechaAtencion = String(ultimaAtencion?.fecha_atencion || '').slice(0,10);
     const dx = auroDiagnosticoPrimeroAtencionHistoria(ultimaAtencion);
     const diagnostico = auroTextoDiagnosticoHistoria(dx);
+    const titulo = p?.nombre || h.nombre_paciente || 'Paciente no identificado';
+
+    const texto = auroNormalizarBusquedaHistorias([
+      titulo,
+      p?.cedula,
+      fechaAtencion,
+      diagnostico,
+      h.estado
+    ].join(' '));
+
+    return {
+      h,
+      idx,
+      titulo,
+      fechaAtencion,
+      diagnostico,
+      coincide:
+        (!q || texto.includes(q)) &&
+        (!idPaciente || String(h.id_paciente || '') === String(idPaciente)) &&
+        (!fecha || fechaAtencion === fecha)
+    };
+  }).filter(function(row){
+    return row.coincide;
+  });
+
+  list.innerHTML = rows.map(function(row){
+    const h = row.h;
+    const idx = row.idx;
 
     return `
       <div class="history-row">
         <div class="history-row-top">
           <div class="auro-history-three-lines">
-            <div class="auro-history-name">${titulo}</div>
-            <div class="auro-history-date">${fechaAtencion ? formatearFechaVisual(fechaAtencion) : 'Sin atención registrada'}</div>
-            <div class="auro-history-dx">${diagnostico}</div>
+            <div class="auro-history-name">${row.titulo}</div>
+            <div class="auro-history-date">${row.fechaAtencion ? formatearFechaVisual(row.fechaAtencion) : 'Sin atención registrada'}</div>
+            <div class="auro-history-dx">${row.diagnostico}</div>
           </div>
           ${h.id_paciente ? `<button class="btn-action primary" onclick="editarHistoriaClinicaModal('${h.id_historia || h.id || idx}')"><i class="bi bi-pencil-square me-1"></i> Abrir / editar</button>` : `<span class="badge-auro badge-warn">Sin paciente vinculado</span>`}
         </div>
