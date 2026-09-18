@@ -7050,53 +7050,6 @@
     }
   }
 
-  /* =====================================================
-     AUROSANAX RECETAS 3.17 - PREPARACIÓN PERSISTIDA ANTES DE VALIDAR FIRMA
-     ----------------------------------------------------------------------
-     Hallazgo funcional reproducido:
-     - "PDF receta" refresca primero Recetas desde Sheets y luego construye
-       la representación oficial. Después de ese paso, otro dispositivo
-       reconoce correctamente la versión ya firmada.
-     - La comprobación de firma podía ejecutarse antes de terminar una carga
-       de Recetas; cargarRecetasDesdeSheets(true) devuelve el almacenamiento
-       local si recetasSheetsCargando sigue activo.
-
-     Corrección quirúrgica:
-     - Antes de calcular el HTML/SHA de la versión actual, esperar una carga
-       de Recetas que ya esté en curso y hacer una lectura remota forzada.
-     - No abre PDF, no guarda receta, no escribe Sheets, no modifica Plan,
-       Index, Firma Electrónica ni Apps Script.
-  ===================================================== */
-  let auroRecetaFirmaFuenteUltimaClave_ = '';
-  let auroRecetaFirmaFuenteUltimoRefresco_ = 0;
-
-  async function auroRecetaPrepararFuentePersistidaParaFirma_(forzar){
-    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
-    if(!idAtencion) return;
-
-    const ahora = Date.now();
-    const mismaVentana = (
-      !forzar &&
-      auroRecetaFirmaFuenteUltimaClave_ === idAtencion &&
-      ahora - auroRecetaFirmaFuenteUltimoRefresco_ < 2000
-    );
-    if(mismaVentana) return;
-
-    /*
-      Si existe una carga iniciada por el montaje del módulo, no competir con
-      ella ni aceptar su retorno local transitorio. Se espera a que termine.
-    */
-    const limite = Date.now() + 4000;
-    while(recetasSheetsCargando && Date.now() < limite){
-      await new Promise(resolve => setTimeout(resolve, 80));
-    }
-
-    await cargarRecetasDesdeSheets(true);
-
-    auroRecetaFirmaFuenteUltimaClave_ = idAtencion;
-    auroRecetaFirmaFuenteUltimoRefresco_ = Date.now();
-  }
-
   async function auroRecetaSincronizarFirmaPersistenteActual(forzar){
     const btn = el('btnFirmaElectronicaReceta');
     if(!btn || !auroRecetaFirmaPersistenteApiDisponible()) return null;
@@ -7121,13 +7074,6 @@
       };
       return null;
     }
-
-    /*
-      Igual que el flujo PDF oficial: la identidad documental se construye
-      después de refrescar la receta persistida, no desde una copia local
-      transitoria de otro dispositivo.
-    */
-    await auroRecetaPrepararFuentePersistidaParaFirma_(!!forzar);
 
     const documento = auroRecetaDocumentoFirmableActual();
     if(!documento || !documento.success) return null;
