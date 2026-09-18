@@ -6281,28 +6281,28 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 })();
 
 /* ============================================================
-   AUROSANAX PLAN 37.5 - MÁQUINA VISUAL DE FIRMA
-   CORRECCIÓN QUIRÚRGICA / ANTIRREGRESIVA SOBRE PLAN 37.4
+   AUROSANAX PLAN 37.4 - MÁQUINA VISUAL DE FIRMA
+   CORRECCIÓN QUIRÚRGICA / ANTIRREGRESIVA
    ------------------------------------------------------------
    OBJETIVO:
    1) FIRMADO -> Ver receta firmada ✓
    2) EDITANDO -> firma deshabilitada hasta Guardar corrección
    3) GUARDADO CON CAMBIO -> Firmar nueva versión
    4) GUARDADO SIN CAMBIO -> Ver receta firmada ✓
-   5) PREPARANDO/PROCESO -> prioridad operativa de firma existente
+   5) PREPARANDO/PROCESO -> prioridad operativa de firma V2.9
    6) CANCELAR -> vuelve al estado documental correspondiente
-   7) Conservar y abrir el id_firma_documento EXACTO de la versión actual.
 
    BLINDAJE:
-   - No modifica Plan clínico, medicamentos, órdenes, interconsultas,
-     evaluaciones, guardado, Plan -> Receta ni responsive.
-   - No modifica firma_electronica.js, Recetas, backend, motor, Index,
-     Apps Script, Sheets ni Drive.
-   - No altera el enrutamiento independiente por equipo/computadora.
+   - No modifica Plan clínico, medicamentos ni guardado.
+   - No modifica Plan -> Receta.
+   - No modifica firma_electronica.js V2.9.
+   - No modifica Recetas V3.14.
+   - No modifica backend, motor, Index ni Sheets.
    - No usa MutationObserver ni intervalos permanentes.
-   - Solo usa reintentos ACOTADOS tras FIRMADO.
+   - Solo usa reintentos ACOTADOS tras FIRMADO para esperar que
+     la persistencia recién archivada sea visible en la consulta.
 ============================================================ */
-(function auroPlanEstadosFirmaV375(){
+(function auroPlanEstadosFirmaV374(){
   'use strict';
 
   const BTN_ID = 'btnFirmaElectronicaPlanReceta';
@@ -6313,7 +6313,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   let operativo = '';
   let reintentoFirmado = 0;
   let timerFirmado = null;
-  let documentoFirmadoExacto = null;
 
   function btn(){
     return document.getElementById(BTN_ID);
@@ -6343,6 +6342,10 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       const r = window.auroRecetas.obtenerDocumentoFirmableActual();
       if(!r || r.success === false) return null;
 
+      /*
+        Compatibilidad: la API actual puede devolver el documento directamente
+        o dentro de .documento según la capa consumidora.
+      */
       const d = r.documento && typeof r.documento === 'object' ? r.documento : r;
 
       if(
@@ -6351,25 +6354,15 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         !String(d.html_documento || '').trim()
       ) return null;
 
-      /*
-        Se conserva el mismo contrato que 37.4: devolver r.
-        firma_electronica.js ya acepta el documento directo o su forma pública
-        vigente según la API consumida por este Plan.
-      */
       return r;
     }catch(e){
       return null;
     }
   }
 
-  function limpiarDocumentoFirmadoExacto(){
-    documentoFirmadoExacto = null;
-  }
-
   function pintarRecetaNoGuardada(){
     const b = btn();
     if(!b || operativo) return;
-    limpiarDocumentoFirmadoExacto();
     b.disabled = true;
     b.removeAttribute('aria-busy');
     b.removeAttribute('data-auro-firma-operativa');
@@ -6382,7 +6375,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   function pintarEdicion(){
     const b = btn();
     if(!b || operativo) return;
-    limpiarDocumentoFirmadoExacto();
     b.disabled = true;
     b.removeAttribute('aria-busy');
     b.setAttribute('data-auro-estado-documental','EDICION_PENDIENTE');
@@ -6391,7 +6383,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     b.innerHTML = '<i class="bi bi-save me-1"></i> Guarde corrección para firmar';
   }
 
-  function pintarDocumento(estado, documentoExacto){
+  function pintarDocumento(estado){
     const b = btn();
     if(!b || operativo) return;
 
@@ -6410,19 +6402,12 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     b.style.cursor = 'pointer';
 
     if(estado === 'FIRMADA'){
-      documentoFirmadoExacto =
-        documentoExacto && String(documentoExacto.id_firma_documento || '').trim()
-          ? documentoExacto
-          : null;
-
       b.disabled = false;
       b.setAttribute('data-auro-estado-documental','FIRMADA');
       b.innerHTML = '<i class="bi bi-patch-check-fill me-1"></i> Ver receta firmada ✓';
       b.title = 'Ver el PDF firmado de la versión actual de la receta';
       return;
     }
-
-    limpiarDocumentoFirmadoExacto();
 
     if(estado === 'NUEVA_VERSION'){
       b.disabled = false;
@@ -6453,16 +6438,10 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return {success:true, estado:'RECETA_NO_GUARDADA'};
     }
 
-    /*
-      Fuente persistente versionada existente:
-      devuelve FIRMADA únicamente cuando sha256_origen coincide con
-      la versión guardada actual y, en ese caso, conserva .documento
-      con su id_firma_documento exacto.
-    */
     return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(documento);
   }
 
-  async function sincronizar(){
+  async function sincronizar(refrescarFuentePersistida){
     const miSecuencia = ++secuencia;
     if(operativo) return null;
 
@@ -6471,21 +6450,33 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return {success:true, estado:'EDICION_PENDIENTE'};
     }
 
-    if(!obtenerDocumentoGuardadoActual()){
-      pintarRecetaNoGuardada();
-      return {success:true, estado:'RECETA_NO_GUARDADA'};
-    }
-
     try{
+      /*
+        AUROSANAX PLAN 37.4 - SINCRONIZACIÓN MULTIDISPOSITIVO QUIRÚRGICA
+        Al retomar Plan, la receta vigente se vuelve a leer desde Sheets
+        ANTES de calcular/comparar su huella de firma. localStorage conserva
+        su función de caché, pero no decide el estado documental entre equipos.
+        No modifica guardado, firma, PDF, SHA, id_atencion ni id_receta.
+      */
+      if(
+        refrescarFuentePersistida === true &&
+        typeof window.refrescarRecetasDesdeSheets === 'function'
+      ){
+        await window.refrescarRecetasDesdeSheets();
+        if(miSecuencia !== secuencia || operativo) return null;
+      }
+
+      if(!obtenerDocumentoGuardadoActual()){
+        pintarRecetaNoGuardada();
+        return {success:true, estado:'RECETA_NO_GUARDADA'};
+      }
+
       const r = await obtenerEstadoPersistente();
       if(miSecuencia !== secuencia || operativo) return r;
-
-      if(r && r.success){
-        pintarDocumento(r.estado, r.documento || null);
-      }
+      if(r && r.success) pintarDocumento(r.estado);
       return r;
     }catch(error){
-      console.warn('AUROSANAX PLAN 37.5: estado de firma no disponible', error);
+      console.warn('AUROSANAX PLAN 37.4: estado de firma no disponible', error);
       return null;
     }
   }
@@ -6498,6 +6489,11 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     reintentoFirmado = 0;
   }
 
+  /*
+    Después de FIRMADO, el registro/archivo puede tardar unos instantes en
+    quedar visible para la consulta persistente. Se hacen como máximo
+    8 comprobaciones x 500 ms. No es polling permanente.
+  */
   async function confirmarFirmadoPersistente(){
     if(operativo) return;
 
@@ -6550,9 +6546,9 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   }
 
   /*
-    FIRMADA: el mismo botón abre la versión exacta encontrada por la
-    comparación persistente. SIN_FIRMA / NUEVA_VERSION conserva el listener
-    oficial de Plan 36.2 para iniciar firma.
+    FIRMADA: el mismo botón pasa a visor.
+    SIN_FIRMA / NUEVA_VERSION: el listener oficial Plan 36.2 continúa
+    delegando a window.auroRecetas.firmarElectronicaActual().
   */
   document.addEventListener('click', function(ev){
     const b = ev.target?.closest?.('#' + BTN_ID);
@@ -6565,8 +6561,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return;
     }
 
-    const actual = obtenerDocumentoGuardadoActual();
-    if(!actual){
+    if(!obtenerDocumentoGuardadoActual()){
       ev.preventDefault();
       ev.stopImmediatePropagation();
       pintarRecetaNoGuardada();
@@ -6579,28 +6574,15 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     ev.stopImmediatePropagation();
 
     try{
-      if(typeof window.auroRecetas?.verPdfFirmadoPersistente !== 'function') return;
-
-      const d = actual.documento && typeof actual.documento === 'object'
-        ? actual.documento
-        : actual;
-
-      const idReceta = String(d.id_receta || '').trim();
-      const idFirma = String(documentoFirmadoExacto?.id_firma_documento || '').trim();
-
-      if(!idReceta) return;
-
-      /*
-        Si existe identidad exacta, se pasa explícitamente.
-        El segundo argumento ya forma parte del contrato vigente de Recetas.
-        El fallback sin idFirma conserva compatibilidad defensiva.
-      */
-      window.auroRecetas.verPdfFirmadoPersistente(
-        idReceta,
-        idFirma || undefined
-      );
+      const doc = window.auroRecetas?.obtenerDocumentoFirmableActual?.();
+      if(
+        doc && doc.success &&
+        typeof window.auroRecetas?.verPdfFirmadoPersistente === 'function'
+      ){
+        window.auroRecetas.verPdfFirmadoPersistente(doc.id_receta);
+      }
     }catch(error){
-      console.error('AUROSANAX PLAN 37.5 - VER FIRMA EXACTA', error);
+      console.error('AUROSANAX PLAN 37.3 - VER FIRMA', error);
     }
   }, true);
 
@@ -6616,6 +6598,10 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     if(estado === 'FIRMADO'){
       pintarOperativo('NORMAL');
       limpiarReintentoFirmado();
+      /*
+        Espera al siguiente ciclo y confirma contra persistencia.
+        No asume FIRMADA hasta que la huella actual aparezca archivada.
+      */
       timerFirmado = setTimeout(confirmarFirmadoPersistente, 0);
       return;
     }
@@ -6632,29 +6618,28 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     timerFirmado = setTimeout(confirmarFirmadoPersistente, 0);
   });
 
+  /*
+    La barra ya contiene el botón inteligente de Recetas:
+    Editar receta <-> Guardar corrección.
+    Después de cualquier acción allí, se recalcula en el siguiente ciclo.
+    Esto NO modifica el botón de Recetas ni su listener.
+  */
   document.addEventListener('click', function(ev){
     if(!ev.target?.closest?.('#auroPlanActionButtons')) return;
 
     setTimeout(function(){
       if(operativo) return;
-      if(estaEditandoReceta()){
-        pintarEdicion();
-      }else{
-        sincronizar();
-      }
+      if(estaEditandoReceta()) pintarEdicion();
+      else sincronizar();
     }, 0);
   }, true);
 
-  window.addEventListener('aurosanax:plan-cargado', function(){
-    if(!operativo) setTimeout(sincronizar, 0);
-  });
-
   window.addEventListener('focus', function(){
-    if(!operativo) sincronizar();
+    if(!operativo) sincronizar(true);
   });
 
   document.addEventListener('visibilitychange', function(){
-    if(!document.hidden && !operativo) sincronizar();
+    if(!document.hidden && !operativo) sincronizar(true);
   });
 
   window.auroPlanSincronizarEstadoFirmaReceta = sincronizar;
