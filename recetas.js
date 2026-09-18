@@ -3170,14 +3170,24 @@
 
   function verificarCambioAtencionReceta(){
     const actual = String(obtenerIdAtencionActivaSeguro() || '').trim();
+    const cambioReal = !!(recetaAtencionActualId && actual && recetaAtencionActualId !== actual);
 
-    if(recetaAtencionActualId && actual && recetaAtencionActualId !== actual){
+    if(cambioReal){
       limpiarFormularioRecetaPorCambioAtencion();
+      const btnFirma = el('btnFirmaElectronicaReceta');
+      if(btnFirma){
+        btnFirma.classList.remove('auro-receta-firma-persistente-reflejo');
+      }
     }
 
     recetaAtencionActualId = actual;
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
-    auroRecetaSincronizarEstadoFirmaVisual();
+
+    /*
+      La apertura/cambio de atención resuelve la firma desde la receta
+      persistida. No abre PDF, no firma y no escribe datos clínicos.
+    */
+    auroRecetaResolverFirmaPersistenteAlAbrirAtencion(actual);
   }
 
   window.obtenerDatosReceta = function(){
@@ -6490,6 +6500,21 @@
     const btn = el('btnFirmaElectronicaReceta');
     if(!btn) return;
 
+    /*
+      AUROSANAX RECETAS 3.17 - AUTORIDAD PERSISTENTE DEL ESTADO VISUAL
+      ---------------------------------------------------------------
+      Una vez que la versión persistida de la receta ya resolvió el botón,
+      la memoria de sesión no puede volver a degradarlo a un estado local.
+      El estado FIRMANDO sí conserva prioridad mientras existe una operación
+      real en curso. El cambio de atención libera explícitamente este reflejo.
+    */
+    if(
+      btn.classList.contains('auro-receta-firma-persistente-reflejo') &&
+      !auroRecetaFirmaEnCurso
+    ){
+      return;
+    }
+
     const documento = auroRecetaDocumentoFirmableActual();
     if(!documento || !documento.success){
       auroRecetaPintarBotonFirmaNormal(btn);
@@ -7050,6 +7075,32 @@
     }
   }
 
+  let auroRecetaFirmaAperturaSecuencia = 0;
+
+  async function auroRecetaResolverFirmaPersistenteAlAbrirAtencion(idAtencionEsperada){
+    const idEsperado = String(idAtencionEsperada || obtenerIdAtencionActivaSeguro() || '').trim();
+    if(!idEsperado) return null;
+
+    const secuencia = ++auroRecetaFirmaAperturaSecuencia;
+
+    try{
+      /*
+        Replica únicamente la preparación de datos que demostrablemente hace
+        útil el botón PDF: refrescar la receta persistida. No genera PDF y no
+        toca el motor de firma.
+      */
+      await cargarRecetasDesdeSheets(true);
+
+      if(secuencia !== auroRecetaFirmaAperturaSecuencia) return null;
+      if(String(obtenerIdAtencionActivaSeguro() || '').trim() !== idEsperado) return null;
+
+      return await auroRecetaSincronizarFirmaPersistenteActual(true);
+    }catch(error){
+      console.warn('AUROSANAX RECETAS 3.17: no se pudo resolver firma persistente al abrir atención', error);
+      return null;
+    }
+  }
+
   async function auroRecetaSincronizarFirmaPersistenteActual(forzar){
     const btn = el('btnFirmaElectronicaReceta');
     if(!btn || !auroRecetaFirmaPersistenteApiDisponible()) return null;
@@ -7116,7 +7167,12 @@
           return false;
         };
       }else{
-        btn.classList.remove('auro-receta-firma-persistente-reflejo');
+        /*
+          NUEVA_VERSION y SIN_FIRMA también son estados persistentes válidos.
+          Se marca la misma autoridad para impedir que una sincronización de
+          sesión posterior vuelva a reinterpretar el botón.
+        */
+        btn.classList.add('auro-receta-firma-persistente-reflejo');
         btn.disabled = false;
         btn.removeAttribute('aria-busy');
         btn.removeAttribute('data-auro-firma-estado');
