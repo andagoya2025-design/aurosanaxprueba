@@ -7168,10 +7168,21 @@
     refleje una firma realizada en otro dispositivo sin depender de memoria local.
   */
   let auroRecetaFirmaPersistenteUltimoRefresco = 0;
-  function auroRecetaRefrescarFirmasAlRetomar(){
+  async function auroRecetaRefrescarFirmasAlRetomar(){
     const ahora = Date.now();
     if(ahora - auroRecetaFirmaPersistenteUltimoRefresco < 3000) return;
     auroRecetaFirmaPersistenteUltimoRefresco = ahora;
+
+    /*
+      AUROSANAX RECETAS 3.17 - SINCRONIZACIÓN MULTIDISPOSITIVO DE FIRMA
+      ------------------------------------------------------------------
+      Antes de comparar la huella de la receta actual contra la firma
+      persistida, fuerza únicamente la lectura de Recetas desde Sheets.
+      Así otro dispositivo no calcula el estado de firma sobre una copia
+      local anterior. No guarda, no modifica contenido clínico, no altera
+      id_atencion/id_receta y conserva intacto el motor de firma.
+    */
+    await cargarRecetasDesdeSheets(true);
     auroRecetaSincronizarFirmaPersistenteActual(true);
     auroRecetaSincronizarHistorialFirmasPersistentes(true);
   }
