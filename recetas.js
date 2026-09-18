@@ -2431,6 +2431,13 @@
         id_paciente: receta.id_paciente || '',
         id_historia: receta.id_historia || '',
         id_medico: receta.id_medico || obtenerIdMedicoReal() || '',
+        /* Snapshot legible persistido: la firma no dependerá de la caché del navegador. */
+        paciente_nombre: receta.paciente_nombre || '',
+        paciente_cedula: receta.paciente_cedula || '',
+        paciente_telefono: receta.paciente_telefono || '',
+        paciente_edad: receta.paciente_edad || '',
+        medico: receta.medico || '',
+        codigo_medico: receta.codigo_medico || '',
         fecha_receta: receta.fecha_receta || fechaHoyReceta(),
         diagnostico_cie10: receta.diagnostico_cie10 || '',
         diagnostico: receta.diagnostico || '',
@@ -2617,7 +2624,8 @@
       numero_consulta: r.numero_consulta || '',
       id_medico: r.id_medico || obtenerIdMedicoReal(),
       codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
-      paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || '',
+      /* AUROSANAX 3.17: nombre persistido autoritativo; evita caché distinta por equipo. */
+      paciente_nombre: r.paciente_nombre || r.nombre_paciente || r.paciente || r.nombre || '',
       paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
       paciente_telefono: r.paciente_telefono || r.telefono || r.whatsapp || '',
       fecha_receta: r.fecha_receta || r.fecha || fechaHoyReceta(),
@@ -2709,7 +2717,8 @@
       const tiempoLocal = recetaTiempoSincronizacion(local);
       const tiempoRemoto = recetaTiempoSincronizacion(remota);
 
-      if(tiempoRemoto > tiempoLocal){
+      /* A igual versión temporal, la fuente persistida remota desempata. */
+      if(tiempoRemoto >= tiempoLocal){
         mapa.set(id, Object.assign({}, local, remota));
       }else{
         mapa.set(id, Object.assign({}, remota, local));
@@ -2735,7 +2744,7 @@
 
       recetasSheetsCargando = true;
 
-      const res = await fetch(API_URL + '?accion=listarRecetas&_=' + Date.now());
+      const res = await fetch(API_URL + '?accion=listarRecetas&_=' + Date.now(), {method:'GET', cache:'no-store'});
       const data = await res.json();
       const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
 
