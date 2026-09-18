@@ -6441,7 +6441,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(documento);
   }
 
-  async function sincronizar(refrescarFuentePersistida){
+  async function sincronizar(){
     const miSecuencia = ++secuencia;
     if(operativo) return null;
 
@@ -6450,33 +6450,18 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return {success:true, estado:'EDICION_PENDIENTE'};
     }
 
+    if(!obtenerDocumentoGuardadoActual()){
+      pintarRecetaNoGuardada();
+      return {success:true, estado:'RECETA_NO_GUARDADA'};
+    }
+
     try{
-      /*
-        AUROSANAX PLAN 37.4 - SINCRONIZACIÓN MULTIDISPOSITIVO QUIRÚRGICA
-        Al retomar Plan, la receta vigente se vuelve a leer desde Sheets
-        ANTES de calcular/comparar su huella de firma. localStorage conserva
-        su función de caché, pero no decide el estado documental entre equipos.
-        No modifica guardado, firma, PDF, SHA, id_atencion ni id_receta.
-      */
-      if(
-        refrescarFuentePersistida === true &&
-        typeof window.refrescarRecetasDesdeSheets === 'function'
-      ){
-        await window.refrescarRecetasDesdeSheets();
-        if(miSecuencia !== secuencia || operativo) return null;
-      }
-
-      if(!obtenerDocumentoGuardadoActual()){
-        pintarRecetaNoGuardada();
-        return {success:true, estado:'RECETA_NO_GUARDADA'};
-      }
-
       const r = await obtenerEstadoPersistente();
       if(miSecuencia !== secuencia || operativo) return r;
       if(r && r.success) pintarDocumento(r.estado);
       return r;
     }catch(error){
-      console.warn('AUROSANAX PLAN 37.4: estado de firma no disponible', error);
+      console.warn('AUROSANAX PLAN 37.3: estado de firma no disponible', error);
       return null;
     }
   }
@@ -6635,11 +6620,11 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   }, true);
 
   window.addEventListener('focus', function(){
-    if(!operativo) sincronizar(true);
+    if(!operativo) sincronizar();
   });
 
   document.addEventListener('visibilitychange', function(){
-    if(!document.hidden && !operativo) sincronizar(true);
+    if(!document.hidden && !operativo) sincronizar();
   });
 
   window.auroPlanSincronizarEstadoFirmaReceta = sincronizar;
