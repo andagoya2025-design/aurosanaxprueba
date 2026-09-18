@@ -2752,25 +2752,6 @@
       recetasSheetsCargadas = true;
       recetasSheetsCargando = false;
 
-      /*
-        AUROSANAX RECETAS 3.18 - REFLEJO VISUAL DE FIRMA EN PLAN
-        --------------------------------------------------------
-        La receta persistida ya quedo sincronizada desde la fuente remota.
-        Si Plan expone su sincronizador visual oficial, se le solicita
-        recalcular unicamente el estado del boton de firma en el siguiente
-        ciclo. No guarda Plan, no modifica receta, no crea solicitudes de
-        firma y no interviene el motor ni el aislamiento por dispositivo.
-      */
-      setTimeout(function(){
-        try{
-          if(typeof window.auroPlanSincronizarEstadoFirmaReceta === 'function'){
-            window.auroPlanSincronizarEstadoFirmaReceta();
-          }
-        }catch(error){
-          console.warn('AUROSANAX RECETAS 3.18: no se pudo refrescar el estado visual de firma en Plan', error);
-        }
-      }, 0);
-
       return mezcladas;
 
     }catch(error){
@@ -3196,7 +3177,15 @@
 
     recetaAtencionActualId = actual;
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
-    auroRecetaSincronizarEstadoFirmaVisual();
+
+    /*
+      AUROSANAX RECETAS 3.19 - ESTADO DE FIRMA AL ABRIR ATENCIÓN
+      La autoridad visual final es la firma persistida de la versión exacta
+      id_atencion + id_receta, no la memoria de firma de esta sesión.
+    */
+    setTimeout(function(){
+      auroRecetaSincronizarFirmaActualYPlan(true);
+    }, 0);
   }
 
   window.obtenerDatosReceta = function(){
@@ -6198,6 +6187,7 @@
           recetasPaginaActual = 1;
           auroRecetaSincronizarModoPrimeraReceta();
           renderHistorialRecetas();
+          auroRecetaSincronizarFirmaActualYPlan(true);
         }
       }catch(e){}
     }, 250);
@@ -6238,6 +6228,7 @@
       try{
         auroRecetaSincronizarModoPrimeraReceta();
         auroRecetaActualizarCabeceraClinicaPremium();
+        auroRecetaSincronizarFirmaActualYPlan(true);
       }catch(e){}
     }, 0);
   }
@@ -6270,6 +6261,7 @@
     cargarRecetasDesdeSheets(false).then(function(){
       auroRecetaSincronizarModoPrimeraReceta();
       renderHistorialRecetas();
+      auroRecetaSincronizarFirmaActualYPlan(true);
     });
 
     envolverRecetasFuncion('showScreen', refrescarRecetasAlEntrar);
@@ -7159,6 +7151,30 @@
       console.warn('AUROSANAX RECETAS 3.14: consulta persistente versionada no disponible', error);
       return null;
     }
+  }
+
+  /*
+    AUROSANAX RECETAS 3.19 - PUENTE VISUAL RECETAS -> PLAN
+    ------------------------------------------------------
+    Primero resuelve la firma persistida de la receta activa y solo después
+    solicita a Plan repintar su botón. No guarda datos, no inicia una firma,
+    no modifica el motor, la doble firma ni el aislamiento por dispositivo.
+  */
+  async function auroRecetaSincronizarFirmaActualYPlan(forzar){
+    const firma = await auroRecetaSincronizarFirmaPersistenteActual(!!forzar);
+
+    try{
+      if(typeof window.auroPlanSincronizarEstadoFirmaReceta === 'function'){
+        await window.auroPlanSincronizarEstadoFirmaReceta();
+      }
+    }catch(error){
+      console.warn(
+        'AUROSANAX RECETAS 3.19: no se pudo repintar el estado visual de firma en Plan',
+        error
+      );
+    }
+
+    return firma;
   }
 
   /*
