@@ -6145,7 +6145,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     const ACTIONS_ID = 'auroPlanActionButtons';
     const STYLE_ID = 'auroPlanFirmaAccionesUnificadasStyles';
     const BTN_FIRMA_ID = 'btnFirmaElectronicaPlanReceta';
-    const BTN_VER_FIRMA_ID = 'btnVerRecetaFirmadaPlan';
 
     function mostrarError(mensaje){
         const txt = String(
@@ -6191,10 +6190,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
           }
           #${BTN_FIRMA_ID}[aria-busy="true"]{
             cursor:wait !important;
-          }
-          #${BTN_VER_FIRMA_ID}{
-            font-weight:750;
-            display:none;
           }
           #${ACTIONS_ID} .auro-cancelar-firma-electronica[data-auro-contexto="plan"]{
             min-height:36px;
@@ -6268,30 +6263,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
             acciones.appendChild(firmar);
         }
 
-        let verFirmada = document.getElementById(BTN_VER_FIRMA_ID);
-        if(!verFirmada){
-            verFirmada = document.createElement('button');
-            verFirmada.type = 'button';
-            verFirmada.id = BTN_VER_FIRMA_ID;
-            verFirmada.className = 'btn btn-outline-primary btn-sm';
-            verFirmada.setAttribute('data-auro-receta-action', 'ver-firma-persistente');
-            verFirmada.title = 'Ver la receta firmada persistida de esta atención';
-            verFirmada.innerHTML = '<i class="bi bi-file-earmark-check me-1"></i> Ver receta firmada';
-            verFirmada.addEventListener('click', function(){
-                try{
-                    const r = window.auroRecetas?.obtenerDocumentoFirmableActual?.();
-                    const d = r?.documento && typeof r.documento === 'object' ? r.documento : r;
-                    const idReceta = String(d?.id_receta || '').trim();
-                    if(idReceta && typeof window.auroRecetas?.verPdfFirmadoPersistente === 'function'){
-                        window.auroRecetas.verPdfFirmadoPersistente(idReceta);
-                    }
-                }catch(error){
-                    console.error('AUROSANAX PLAN - VER RECETA FIRMADA', error);
-                }
-            });
-            acciones.appendChild(verFirmada);
-        }
-
         return true;
     }
 
@@ -6335,7 +6306,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   'use strict';
 
   const BTN_ID = 'btnFirmaElectronicaPlanReceta';
-  const BTN_VER_ID = 'btnVerRecetaFirmadaPlan';
   const MAX_REINTENTOS_FIRMADO = 8;
   const ESPERA_REINTENTO_MS = 500;
 
@@ -6346,52 +6316,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 
   function btn(){
     return document.getElementById(BTN_ID);
-  }
-
-  function btnVer(){
-    return document.getElementById(BTN_VER_ID);
-  }
-
-  function pintarBotonVerFirma(hayFirma){
-    const b = btnVer();
-    if(!b) return;
-    b.style.display = hayFirma ? '' : 'none';
-    b.disabled = !hayFirma;
-  }
-
-  async function sincronizarBotonVerFirma(forzar){
-    const r = obtenerDocumentoGuardadoActual();
-    const d = r?.documento && typeof r.documento === 'object' ? r.documento : r;
-    const idAtencion = String(d?.id_atencion || '').trim();
-    const idReceta = String(d?.id_receta || '').trim();
-    if(!idAtencion || !idReceta){
-      pintarBotonVerFirma(false);
-      return false;
-    }
-    if(!window.auroFirmaElectronica || typeof window.auroFirmaElectronica.consultarDocumentosFirmados !== 'function'){
-      pintarBotonVerFirma(false);
-      return false;
-    }
-    try{
-      const respuesta = await window.auroFirmaElectronica.consultarDocumentosFirmados({
-        tipo_documento:'RECETA',
-        id_atencion:idAtencion,
-        id_receta:idReceta,
-        forzar:!!forzar
-      });
-      const docs = Array.isArray(respuesta?.documentos) ? respuesta.documentos : [];
-      const hay = docs.some(function(doc){
-        const at = String(doc?.id_atencion || '').trim();
-        const re = String(doc?.id_receta || doc?.id_documento_origen || '').trim();
-        const estado = String(doc?.estado_firma || '').trim().toUpperCase();
-        return (!at || at === idAtencion) && (!re || re === idReceta) && estado === 'FIRMADO';
-      });
-      pintarBotonVerFirma(hay);
-      return hay;
-    }catch(_e){
-      pintarBotonVerFirma(false);
-      return false;
-    }
   }
 
   function botonRecetaPlan(){
@@ -6522,19 +6446,16 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     if(operativo) return null;
 
     if(estaEditandoReceta()){
-      pintarBotonVerFirma(false);
       pintarEdicion();
       return {success:true, estado:'EDICION_PENDIENTE'};
     }
 
     if(!obtenerDocumentoGuardadoActual()){
-      pintarBotonVerFirma(false);
       pintarRecetaNoGuardada();
       return {success:true, estado:'RECETA_NO_GUARDADA'};
     }
 
     try{
-      await sincronizarBotonVerFirma(true);
       const r = await obtenerEstadoPersistente();
       if(miSecuencia !== secuencia || operativo) return r;
       if(r && r.success) pintarDocumento(r.estado);
