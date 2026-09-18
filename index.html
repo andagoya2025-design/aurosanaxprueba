@@ -5826,6 +5826,120 @@ function calcAge(){const v=document.getElementById('hcNacimiento')?.value;if(!v)
 function calcIMC(){const p=parseFloat((document.getElementById('hcPeso')?.value||'').replace(',','.'));const tc=parseFloat((document.getElementById('hcTalla')?.value||'').replace(',','.'));if(!p||!tc)return;const t=tc/100;const imc=(p/(t*t)).toFixed(1);document.getElementById('hcIMC').value=imc;document.getElementById('hcImcResumen').textContent=imc;setTextIfExists('hcCardIMC', imc)}
 function calcObstetricia(){const fur=document.getElementById('hcFUR')?.value;if(!fur)return;const d=new Date(fur+'T00:00:00');const f=new Date(d);f.setDate(f.getDate()+280);document.getElementById('hcFPP').value=f.toISOString().slice(0,10);const h=new Date();const diff=Math.floor((h-d)/(1000*60*60*24));if(diff>=0){document.getElementById('hcEG').value=Math.floor(diff/7)+' sem + '+(diff%7)+' días'}}
 
+
+/* ============================================================
+   AUROSANAX INDEX 92 — SINCRONIZACIÓN MULTISESIÓN QUIRÚRGICA
+   Alcance:
+   - Solo lectura/refresco de datos ya persistidos.
+   - No guarda, edita ni crea registros clínicos.
+   - No cambia id_atencion, id_paciente, id_historia ni estados.
+   - Reutiliza funciones públicas existentes de cada módulo.
+   - Evita refrescos repetitivos mediante cooldown.
+============================================================ */
+let auroUltimoRefrescoMultisesion = 0;
+let auroRefrescoMultisesionEnCurso = null;
+const AURO_REFRESCO_MULTISESION_COOLDOWN_MS = 15000;
+
+function auroPantallaActivaId(){
+  const activa = document.querySelector('.screen.active');
+  return activa ? String(activa.id || '').trim() : '';
+}
+
+async function auroRefrescarMultisesionIndex(motivo, forzar){
+  const ahora = Date.now();
+
+  if(auroRefrescoMultisesionEnCurso){
+    return auroRefrescoMultisesionEnCurso;
+  }
+
+  if(
+    !forzar &&
+    auroUltimoRefrescoMultisesion &&
+    (ahora - auroUltimoRefrescoMultisesion) < AURO_REFRESCO_MULTISESION_COOLDOWN_MS
+  ){
+    return;
+  }
+
+  auroUltimoRefrescoMultisesion = ahora;
+  const pantalla = auroPantallaActivaId();
+
+  auroRefrescoMultisesionEnCurso = (async function(){
+    try{
+      const tareas = [];
+
+      /*
+        Pacientes:
+        refresca la fuente oficial cuando el usuario está realmente en Pacientes.
+        renderPatients() permanece bajo el contrato propio de pacientes.js.
+      */
+      if(
+        pantalla === 'pacientes' &&
+        typeof window.cargarPacientesDesdeSheets === 'function'
+      ){
+        tareas.push(
+          Promise.resolve(window.cargarPacientesDesdeSheets())
+            .then(function(){
+              if(typeof window.renderPatients === 'function'){
+                window.renderPatients();
+              }
+            })
+        );
+      }
+
+      /*
+        Agenda:
+        su función pública ya vuelve a consultar las citas.
+      */
+      if(
+        pantalla === 'agenda' &&
+        typeof window.cargarCitasAgendaWeb === 'function'
+      ){
+        tareas.push(Promise.resolve(window.cargarCitasAgendaWeb()));
+      }
+
+      /*
+        Historia / Atenciones:
+        Atenciones conserva la autoridad remota y su propio blindaje.
+        Index únicamente solicita el refresco existente.
+      */
+      if(
+        pantalla === 'historia' &&
+        typeof window.refrescarAtencionesDesdeSheets === 'function'
+      ){
+        tareas.push(Promise.resolve(window.refrescarAtencionesDesdeSheets()));
+      }
+
+      if(tareas.length){
+        await Promise.allSettled(tareas);
+      }
+    }catch(error){
+      console.warn(
+        'AUROSANAX INDEX: refresco multisesión no completado.',
+        motivo || '',
+        error
+      );
+    }finally{
+      auroRefrescoMultisesionEnCurso = null;
+    }
+  })();
+
+  return auroRefrescoMultisesionEnCurso;
+}
+
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible'){
+    auroRefrescarMultisesionIndex('visibilitychange', false);
+  }
+});
+
+window.addEventListener('focus', function(){
+  auroRefrescarMultisesionIndex('focus', false);
+});
+
+window.addEventListener('pageshow', function(){
+  auroRefrescarMultisesionIndex('pageshow', false);
+});
+
 function showScreen(id, btn){
   if(id !== 'historia' && typeof auroLimpiarVistaInformeActiva === 'function') auroLimpiarVistaInformeActiva();
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -5854,7 +5968,32 @@ function showScreen(id, btn){
   document.getElementById('screenSubtitle').textContent=titles[id]?.[1] || '';
   document.getElementById('sidebar').classList.remove('show');
   if(id === 'agenda') cargarCitasAgendaWeb();
-  if(id === 'pacientes') cargarCitasAgendaWeb();
+
+  /*
+    AUROSANAX SINCRONIZACIÓN MULTISESIÓN:
+    Pacientes ya no dispara Agenda por error al entrar.
+    Se relee su fuente oficial y se repinta únicamente ese módulo.
+  */
+  if(id === 'pacientes' && typeof window.cargarPacientesDesdeSheets === 'function'){
+    Promise.resolve(window.cargarPacientesDesdeSheets())
+      .then(function(){
+        if(typeof window.renderPatients === 'function') window.renderPatients();
+      })
+      .catch(function(error){
+        console.warn('AUROSANAX INDEX: no se pudo refrescar Pacientes al entrar.', error);
+      });
+  }
+
+  /*
+    Historia solicita el refresco autoritativo ya expuesto por Atenciones.
+    No crea una segunda lógica de atención.
+  */
+  if(id === 'historia' && typeof window.refrescarAtencionesDesdeSheets === 'function'){
+    Promise.resolve(window.refrescarAtencionesDesdeSheets()).catch(function(error){
+      console.warn('AUROSANAX INDEX: no se pudo refrescar Atenciones al entrar a Historia.', error);
+    });
+  }
+
   if(['ginecologia','obstetricia','estetica','bioimpedancia','procedimientos','consentimientos','recetas'].includes(id)) renderModulePatientCards();
 }
 
@@ -11612,7 +11751,7 @@ function openHistoriasModal(){
   */
   renderHistoriasClinicas();
 
-  auroCargarResumenBuscadorHistorias(false).then(function(){
+  auroCargarResumenBuscadorHistorias(true).then(function(){
     renderHistoriasClinicas();
   }).catch(function(error){
     console.warn(
