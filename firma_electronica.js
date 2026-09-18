@@ -2316,7 +2316,7 @@
 })();
 
 /* ============================================================
-   AUROSANAX FIRMA ELECTRÓNICA 3.1
+   AUROSANAX FIRMA ELECTRÓNICA 3.0
    ESTADOS VISUALES + IDENTIDAD EXACTA DE VERSIÓN FIRMADA
    ------------------------------------------------------------
    CORRECCIÓN ANTIRREGRESIVA SOBRE V2.8:
@@ -2339,7 +2339,7 @@
   const anterior = window.auroFirmaElectronica;
   if(!anterior || typeof anterior.firmarDocumento !== 'function') return;
 
-  const VERSION = '3.1-persistencia-primero-multidispositivo';
+  const VERSION = '3.0-estado-version-firmada';
   const versionesFirmadasSesion = new Map();
 
   function texto(v){
@@ -2441,82 +2441,50 @@
     }
 
     /*
-      V3.1 MULTIDISPOSITIVO:
-      documentos_firmados es la autoridad PRIMARIA incluso en el equipo
-      que acaba de firmar. La memoria de sesión deja de decidir antes que
-      la persistencia. Así todos los dispositivos recorren el mismo contrato.
+      Confirmación inmediata:
+      si ESTA MISMA versión acaba de obtener FIRMADO en esta sesión,
+      no se contradice con una consulta persistente que todavía esté
+      propagándose. No genera red, espera ni polling adicional.
     */
-    if(typeof anterior.consultarDocumentosFirmados === 'function'){
-      try{
-        const r = await anterior.consultarDocumentosFirmados({
-          tipo_documento:'RECETA',
-          id_atencion:identidad.id_atencion,
-          id_receta:identidad.id_receta
-        });
+    if(versionesFirmadasSesion.has(identidad.clave)){
+      const confirmado = versionesFirmadasSesion.get(identidad.clave);
+      return {
+        success:true,
+        estado:'FIRMADA',
+        total_firmas:Number(confirmado.total_firmas || 1),
+        documento:confirmado.documento || null,
+        confirmacion:'SESION'
+      };
+    }
 
-        const docs = Array.isArray(r && r.documentos) ? r.documentos : [];
-        const firmada = docs.find(function(doc){
-          return texto(doc && doc.sha256_origen).toLowerCase() === identidad.huella;
-        }) || null;
+    if(typeof anterior.consultarDocumentosFirmados !== 'function'){
+      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0};
+    }
 
-        if(firmada){
-          versionesFirmadasSesion.set(identidad.clave, {
-            documento:firmada,
-            total_firmas:docs.length
-          });
-          return {
-            success:true,
-            estado:'FIRMADA',
-            total_firmas:docs.length,
-            documento:firmada,
-            confirmacion:'PERSISTENTE'
-          };
-        }
+    const r = await anterior.consultarDocumentosFirmados({
+      tipo_documento:'RECETA',
+      id_atencion:identidad.id_atencion,
+      id_receta:identidad.id_receta
+    });
 
-        /*
-          Si existen firmas para la misma atención+receta pero ninguna
-          corresponde a la huella actual, se conserva el contrato de
-          nueva versión. No se convierte una firma histórica en firma actual.
-        */
-        if(docs.length){
-          return {
-            success:true,
-            estado:'NUEVA_VERSION',
-            total_firmas:docs.length,
-            documento:null,
-            confirmacion:''
-          };
-        }
+    const docs = Array.isArray(r && r.documentos) ? r.documentos : [];
+    const firmada = docs.find(function(doc){
+      return texto(doc && doc.sha256_origen).toLowerCase() === identidad.huella;
+    }) || null;
 
-        return {
-          success:true,
-          estado:'SIN_FIRMA',
-          total_firmas:0,
-          documento:null,
-          confirmacion:''
-        };
-      }catch(error){
-        /*
-          Falla cerrada para multidispositivo: un error de red/backend no
-          debe hacer que una memoria local contradiga la fuente persistente.
-        */
-        return {
-          success:false,
-          estado:'NO_DISPONIBLE',
-          total_firmas:0,
-          documento:null,
-          confirmacion:'',
-          message:texto(error && error.message)
-        };
-      }
+    if(firmada){
+      versionesFirmadasSesion.set(identidad.clave, {
+        documento:firmada,
+        total_firmas:docs.length
+      });
     }
 
     return {
-      success:false,
-      estado:'NO_DISPONIBLE',
-      total_firmas:0,
-      documento:null,
-      confirmacion:''
+      success:true,
+      estado:firmada ? 'FIRMADA' : (docs.length ? 'NUEVA_VERSION' : 'SIN_FIRMA'),
+      total_firmas:docs.length,
+      documento:firmada,
+      confirmacion:firmada ? 'PERSISTENTE' : ''
     };
   }
 
