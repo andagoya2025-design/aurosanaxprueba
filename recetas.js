@@ -2714,15 +2714,14 @@
         return;
       }
 
-      const tiempoLocal = recetaTiempoSincronizacion(local);
-      const tiempoRemoto = recetaTiempoSincronizacion(remota);
-
-      /* A igual versión temporal, la fuente persistida remota desempata. */
-      if(tiempoRemoto >= tiempoLocal){
-        mapa.set(id, Object.assign({}, local, remota));
-      }else{
-        mapa.set(id, Object.assign({}, remota, local));
-      }
+      /*
+        AUROSANAX RECETAS 3.18 - AUTORIDAD PERSISTIDA MULTIDISPOSITIVO
+        Si Sheets devuelve el mismo id_receta, la fila persistida es la
+        autoridad común. Una copia local no puede sustituir sus campos por
+        variantes propias y producir un html_documento/SHA distinto por equipo.
+        Los registros local-only continúan preservados por la rama anterior.
+      */
+      mapa.set(id, Object.assign({}, local, remota));
     });
 
     const mezcladas = Array.from(mapa.values()).sort((a,b) =>
@@ -6512,21 +6511,6 @@
       return;
     }
 
-    /*
-      AUROSANAX RECETAS 3.20 - AUTORIDAD ÚNICA DEL ESTADO DE FIRMA
-      -------------------------------------------------------------
-      La memoria de sesión conserva únicamente los estados transitorios
-      (FIRMANDO) y la confirmación inmediata de una firma hecha en este
-      dispositivo. Si la sesión no confirma la versión, NO decide que la
-      receta está sin firma: delega la decisión final a la persistencia
-      exacta por id_atencion + id_receta + hash de la versión.
-    */
-    if(auroRecetaFirmaPersistenteApiDisponible()){
-      auroRecetaSincronizarFirmaPersistenteActual(false);
-      return;
-    }
-
-    // Fallback únicamente si la API persistente no existe.
     auroRecetaPintarBotonFirmaNormal(btn);
   }
 
@@ -7196,8 +7180,18 @@
     const ahora = Date.now();
     if(ahora - auroRecetaFirmaPersistenteUltimoRefresco < 3000) return;
     auroRecetaFirmaPersistenteUltimoRefresco = ahora;
-    auroRecetaSincronizarFirmaPersistenteActual(true);
-    auroRecetaSincronizarHistorialFirmasPersistentes(true);
+
+    /*
+      Orden antirregresivo multidispositivo:
+      1) refrescar la receta persistida; 2) reconstruir html_documento;
+      3) comparar la firma. Solo lectura: no guarda ni modifica la receta.
+    */
+    Promise.resolve(cargarRecetasDesdeSheets(true))
+      .catch(function(){ return leerRecetasStorage(); })
+      .then(function(){
+        auroRecetaSincronizarFirmaPersistenteActual(true);
+        auroRecetaSincronizarHistorialFirmasPersistentes(true);
+      });
   }
 
   window.addEventListener('focus', auroRecetaRefrescarFirmasAlRetomar);
