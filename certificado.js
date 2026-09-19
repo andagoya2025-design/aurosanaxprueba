@@ -651,12 +651,87 @@ function renderHistorial(){
           <b>${esc(c.tipo_certificado||d.tipo_certificado||'Certificado')}</b>
           <div class="ac-meta">${esc(fechaVisual(c.fecha_emision||d.fecha_emision))} · ${esc(c.id_certificado)}</div>
         </div>
-        <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
+        <div class="ac-actions" style="margin-top:0">
+          <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
+          <button class="ac-btn ac-soft" data-acfirmar="${esc(c.id_certificado)}" title="Preparar este certificado guardado para firma electrónica">Firmar certificado</button>
+        </div>
       </div>
     </div>`;
   }).join('');
 
   b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
+  b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>prepararFirmaCertificado(x.dataset.acfirmar));
+}
+
+/*
+  ETAPA 1 FIRMA CERTIFICADO — CONTRATO LOCAL, SIN PERSISTENCIA
+  ------------------------------------------------------------
+  Certificados conserva la autoridad sobre qué certificado guardado se firma.
+  Esta etapa NO escribe Sheets/Drive, NO llama Apps Script de firma y NO altera
+  firma_electronica.js. Solo construye el documento exacto desde el registro
+  persistido del historial y emite un contrato explícito para el motor de firma.
+*/
+function documentoFirmableCertificado(id){
+  const registro=state.certificados.find(x=>txt(x.id_certificado)===txt(id));
+  if(!registro){
+    return {success:false,message:'No se encontró el certificado guardado seleccionado.'};
+  }
+
+  const idCertificado=txt(registro.id_certificado);
+  const idAtencion=txt(registro.id_atencion);
+  const idAtencionActual=txt(state.idAtencion||state.contexto?.id);
+
+  if(!idCertificado||!idAtencion){
+    return {success:false,message:'El certificado no contiene los identificadores requeridos para firma.'};
+  }
+  if(!idAtencionActual||idAtencion!==idAtencionActual){
+    return {success:false,message:'El certificado no pertenece a la atención actualmente seleccionada.'};
+  }
+
+  const detalle=parse(registro.detalle_json);
+  const paciente=detalle.paciente||{};
+  const historia=detalle.historia||{};
+  const medico=detalle.medico||{};
+
+  return {
+    success:true,
+    tipo_documento:'CERTIFICADO',
+    id_documento_origen:idCertificado,
+    id_documento_clinico:idCertificado,
+    id_certificado:idCertificado,
+    id_receta:'',
+    id_atencion:idAtencion,
+    numero_consulta:txt(registro.numero_consulta||state.contexto?.numeroConsulta),
+    id_paciente:txt(registro.id_paciente||paciente.id_paciente),
+    nombre_paciente:txt(registro.nombre_paciente||paciente.nombre),
+    id_historia:txt(registro.id_historia||historia.id_historia),
+    id_medico:txt(registro.id_medico||medico.id_medico),
+    nombre_medico:txt(registro.nombre_medico||medico.nombre),
+    tipo_certificado:txt(registro.tipo_certificado||detalle.tipo_certificado),
+    fecha_emision:txt(registro.fecha_emision||detalle.fecha_emision),
+    registro,
+    detalle,
+    html_documento:docHTML(registro)
+  };
+}
+
+function prepararFirmaCertificado(id){
+  const doc=documentoFirmableCertificado(id);
+  if(!doc.success){
+    msg('warn',doc.message||'No se pudo preparar el certificado para firma.');
+    return doc;
+  }
+
+  /*
+    Contrato para la siguiente etapa. El motor estable todavía no se modifica.
+    El evento transporta exclusivamente el certificado guardado seleccionado.
+  */
+  window.dispatchEvent(new CustomEvent('aurosanax:certificado-firma-solicitada',{
+    detail:{documento:doc}
+  }));
+
+  msg('ok','Certificado preparado correctamente para firma electrónica.');
+  return doc;
 }
 
 function dxSeleccionados(){
@@ -1270,7 +1345,9 @@ window.auroCertificados={
   vistaPrevia:()=>vista(false),
   imprimir:()=>vista(true),
   obtenerDatos:datos,
-  construirDocumento:docHTML
+  construirDocumento:docHTML,
+  obtenerDocumentoFirmable:(id)=>documentoFirmableCertificado(id),
+  prepararFirma:(id)=>prepararFirmaCertificado(id)
 };
 
 /*
