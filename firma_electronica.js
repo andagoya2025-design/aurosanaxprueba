@@ -2548,29 +2548,3 @@
     obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
   }));
 })();
-/* ============================================================
- AUROSANAX FIRMA 3.2 - PUENTE GENÉRICO CERTIFICADOS
- ADHESIÓN QUIRÚRGICA / ANTIRREGRESIVA 2026-09-19
- - RECETA delega íntegramente al baseline estable.
- - CERTIFICADO usa id_documento_origen; id_receta permanece vacío.
- - Consulta/visualización persistente admite identidad documental genérica.
-============================================================ */
-(function(){
-'use strict';
-if(!window.auroFirmaElectronica || window.__auroFirmaCertificados32) return;
-window.__auroFirmaCertificados32=true;
-const anterior=window.auroFirmaElectronica;
-const texto=v=>String(v??'').trim();
-const enCurso=new Map();
-const token=()=>{try{return texto(sessionStorage.getItem('aurosanax_seguridad_token'));}catch(e){return '';}};
-function apiUrl(){try{if(typeof API_URL!=='undefined'&&API_URL)return texto(API_URL);}catch(e){}return texto(window.API_URL||document.getElementById('appsScriptUrl')?.value);}
-async function post(accion,data){const r=await fetch(apiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({accion,data:Object.assign({},data||{},{token:token()})}),cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(!j||j.success!==true)throw Error(texto(j?.message)||'El servidor no confirmó la operación.');return j;}
-function normalizar(data){const d=Object.assign({},data||{});d.tipo_documento=texto(d.tipo_documento).toUpperCase();d.id_atencion=texto(d.id_atencion);d.id_documento_origen=texto(d.id_documento_origen||d.id_documento_clinico||(d.tipo_documento==='RECETA'?d.id_receta:''));d.id_documento_clinico=d.id_documento_origen;d.id_receta=d.tipo_documento==='RECETA'?texto(d.id_receta||d.id_documento_origen):'';d.html_documento=texto(d.html_documento);return d;}
-async function firmarCertificado(data){const d=normalizar(data);if(!d.id_atencion)throw Error('No existe una atención clínica para firmar.');if(!d.id_documento_origen)throw Error('Guarde el certificado antes de firmarlo electrónicamente.');if(!d.html_documento)throw Error('No fue posible preparar el certificado oficial.');const k=d.tipo_documento+'|'+d.id_atencion+'|'+d.id_documento_origen;if(enCurso.has(k))return enCurso.get(k);const op=(async()=>{const creada=await post('firmarDocumento',d);let r=creada;while(['PENDIENTE','TOMADA'].includes(texto(r.estado_firma).toUpperCase())){await new Promise(x=>setTimeout(x,1000));r=await post('obtenerEstadoFirmaElectronica',{id_solicitud:creada.id_solicitud,tipo_documento:d.tipo_documento,id_atencion:d.id_atencion,id_documento_origen:d.id_documento_origen,id_documento_clinico:d.id_documento_origen,id_receta:''});}if(texto(r.estado_firma).toUpperCase()!=='FIRMADO')throw Error(texto(r.error)||'La firma del certificado no fue completada.');window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada',{detail:{tipo_documento:'CERTIFICADO',id_documento_origen:d.id_documento_origen,id_atencion:d.id_atencion,id_solicitud:texto(r.id_solicitud),estado_firma:'FIRMADO'}}));return r;})();enCurso.set(k,op);try{return await op;}finally{enCurso.delete(k);}}
-async function firmarDocumento(data){const d=normalizar(data);if(d.tipo_documento==='RECETA')return anterior.firmarDocumento(data);if(d.tipo_documento==='CERTIFICADO')return firmarCertificado(d);throw Error('Tipo de documento no habilitado para firma electrónica.');}
-async function consultarDocumentosFirmados(data){const d=normalizar(data);return post('consultarDocumentosFirmados',{tipo_documento:d.tipo_documento||'RECETA',id_firma_documento:texto(data?.id_firma_documento),id_paciente:texto(data?.id_paciente),id_atencion:d.id_atencion,id_documento_origen:d.id_documento_origen,id_documento_clinico:d.id_documento_origen,id_receta:d.id_receta});}
-async function obtenerPdfFirmadoPersistente(data){const d=normalizar(data);return post('obtenerPdfFirmadoPersistente',{tipo_documento:d.tipo_documento||'RECETA',id_firma_documento:texto(data?.id_firma_documento),id_atencion:d.id_atencion,id_documento_origen:d.id_documento_origen,id_documento_clinico:d.id_documento_origen,id_receta:d.id_receta});}
-function b64blob(base64){const limpio=texto(base64).replace(/^data:[^;]+;base64,/,'');const bin=atob(limpio);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return new Blob([bytes],{type:'application/pdf'});}
-async function abrirPdfFirmadoPersistente(data){if(texto(data?.tipo_documento).toUpperCase()==='RECETA'&&typeof anterior.abrirPdfFirmadoPersistente==='function')return anterior.abrirPdfFirmadoPersistente(data);const w=window.open('','_blank');if(!w)throw Error('El navegador bloqueó la nueva pestaña.');try{w.document.body.innerHTML='<p style="font-family:Arial;padding:20px">Cargando PDF firmado…</p>';const r=await obtenerPdfFirmadoPersistente(data);const b=texto(r.pdf_firmado_base64||r.archivo_base64);if(!b)throw Error('El servidor no devolvió el PDF firmado.');const u=URL.createObjectURL(b64blob(b));w.location.replace(u);setTimeout(()=>URL.revokeObjectURL(u),300000);return r;}catch(e){try{w.close();}catch(_){}throw e;}}
-window.auroFirmaElectronica=Object.freeze(Object.assign({},anterior,{version:'3.2-certificados-generico',firmarDocumento,consultarDocumentosFirmados,obtenerPdfFirmadoPersistente,abrirPdfFirmadoPersistente}));
-})();
