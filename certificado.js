@@ -1269,3 +1269,105 @@ window.addEventListener('load',()=>{
 });
 
 })();
+/* ============================================================
+ AUROSANAX CERTIFICADOS 1.4.0 - FIRMA ELECTRÓNICA PERSISTENTE
+ ADHESIÓN QUIRÚRGICA / ANTIRREGRESIVA 2026-09-19
+ - Firma únicamente certificados YA guardados.
+ - Autoridad: documentos_firmados persistente.
+ - Identidad: CERTIFICADO + id_certificado + id_atencion.
+ - Documento: snapshot persistido detalle_json.
+ - No modifica Recetas, Plan ni Index.
+============================================================ */
+(function(){
+'use strict';
+if(!window.auroCertificados || window.__auroCertificadosFirma140) return;
+window.__auroCertificadosFirma140=true;
+
+const api=window.auroCertificados;
+const state=api.estado;
+const texto=v=>String(v??'').trim();
+const escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+const firmas=new Map();
+
+function clave(c){ return texto(c?.id_atencion)+'|'+texto(c?.id_certificado); }
+function nombreArchivo(c){
+  const d=(()=>{try{return typeof c.detalle_json==='object'?c.detalle_json:JSON.parse(texto(c.detalle_json)||'{}')}catch(e){return {}}})();
+  const paciente=texto(c.nombre_paciente||d?.paciente?.nombre||'PACIENTE').replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9_-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,50);
+  const consulta=texto(c.numero_consulta||'SN').replace(/[^A-Za-z0-9_-]+/g,'_');
+  return `CERTIFICADO_C${consulta}_${paciente}_${texto(c.id_certificado)}.pdf`;
+}
+function documentoGuardado(c){
+  return {
+    id_certificado:texto(c.id_certificado), id_atencion:texto(c.id_atencion), id_cita:texto(c.id_cita),
+    numero_consulta:texto(c.numero_consulta), id_paciente:texto(c.id_paciente), nombre_paciente:texto(c.nombre_paciente),
+    numero_documento:texto(c.numero_documento), id_historia:texto(c.id_historia), id_medico:texto(c.id_medico),
+    nombre_medico:texto(c.nombre_medico), especialidad:texto(c.especialidad), tipo_certificado:texto(c.tipo_certificado),
+    fecha_emision:texto(c.fecha_emision), detalle_json:typeof c.detalle_json==='string'?c.detalle_json:JSON.stringify(c.detalle_json||{}),
+    estado:texto(c.estado), version:texto(c.version)
+  };
+}
+function solicitud(c){
+  const guardado=documentoGuardado(c);
+  return {
+    tipo_documento:'CERTIFICADO', id_documento_origen:guardado.id_certificado, id_documento_clinico:guardado.id_certificado,
+    id_receta:'', id_atencion:guardado.id_atencion, id_paciente:guardado.id_paciente, id_historia:guardado.id_historia,
+    id_medico:guardado.id_medico, nombre_archivo:nombreArchivo(guardado), html_documento:api.construirDocumento(guardado)
+  };
+}
+async function consultar(c){
+  const f=window.auroFirmaElectronica;
+  if(!f?.consultarDocumentosFirmados) return null;
+  const r=await f.consultarDocumentosFirmados({tipo_documento:'CERTIFICADO',id_atencion:texto(c.id_atencion),id_documento_origen:texto(c.id_certificado)});
+  const docs=Array.isArray(r?.documentos)?r.documentos:[];
+  return docs.find(d=>texto(d.id_documento_origen)===texto(c.id_certificado)&&texto(d.id_atencion)===texto(c.id_atencion)&&texto(d.estado_firma).toUpperCase()==='FIRMADO')||null;
+}
+async function refrescarEstados(){
+  const lista=Array.isArray(state?.certificados)?state.certificados:[];
+  await Promise.all(lista.map(async c=>{try{firmas.set(clave(c),await consultar(c));}catch(e){firmas.set(clave(c),null);}}));
+  pintar();
+}
+function pintar(){
+  const box=document.getElementById('acHistorial'); if(!box) return;
+  box.querySelectorAll('[data-acfirmar]').forEach(btn=>{
+    const id=texto(btn.dataset.acfirmar); const c=(state.certificados||[]).find(x=>texto(x.id_certificado)===id); if(!c)return;
+    const doc=firmas.get(clave(c));
+    btn.disabled=false;
+    btn.innerHTML=doc?'<i class="bi bi-patch-check-fill"></i> Ver certificado firmado ✓':'<i class="bi bi-patch-check"></i> Firmar certificado';
+    btn.title=doc?'Ver el PDF firmado persistido de este certificado':'Firmar electrónicamente este certificado guardado';
+    btn.dataset.estadoFirma=doc?'FIRMADO':'SIN_FIRMA';
+  });
+}
+function instalarBotones(){
+  const box=document.getElementById('acHistorial'); if(!box)return;
+  box.querySelectorAll('[data-aceditar]').forEach(abrir=>{
+    const id=texto(abrir.dataset.aceditar); const item=abrir.closest('.ac-item'); if(!item||item.querySelector(`[data-acfirmar="${CSS.escape(id)}"]`))return;
+    const btn=document.createElement('button'); btn.type='button'; btn.className='ac-btn ac-soft'; btn.dataset.acfirmar=id; btn.textContent='Firmar certificado';
+    abrir.insertAdjacentElement('afterend',btn);
+  });
+  pintar();
+}
+async function accion(id,btn){
+  const c=(state.certificados||[]).find(x=>texto(x.id_certificado)===texto(id)); if(!c)return;
+  let doc=firmas.get(clave(c))||await consultar(c);
+  if(doc){
+    firmas.set(clave(c),doc);
+    return window.auroFirmaElectronica.abrirPdfFirmadoPersistente({tipo_documento:'CERTIFICADO',id_firma_documento:doc.id_firma_documento,id_atencion:c.id_atencion,id_documento_origen:c.id_certificado});
+  }
+  if(!window.auroFirmaElectronica?.firmarDocumento) throw new Error('El motor de firma electrónica no está disponible.');
+  btn.disabled=true; btn.innerHTML='<i class="bi bi-hourglass-split"></i> Firma en proceso…';
+  try{
+    const r=await window.auroFirmaElectronica.firmarDocumento(solicitud(c));
+    if(texto(r?.estado_firma).toUpperCase()==='FIRMADO'){
+      doc=await consultar(c); if(doc) firmas.set(clave(c),doc);
+    }
+  }finally{ await refrescarEstados(); }
+}
+document.addEventListener('click',e=>{const btn=e.target.closest?.('[data-acfirmar]');if(!btn)return;e.preventDefault();accion(btn.dataset.acfirmar,btn).catch(err=>{console.error('AUROSANAX CERTIFICADOS FIRMA',err);alert(err?.message||'No fue posible completar la firma del certificado.');refrescarEstados();});});
+const obs=new MutationObserver(()=>{instalarBotones();});
+function activar(){const box=document.getElementById('acHistorial');if(!box)return;obs.observe(box,{childList:true,subtree:true});instalarBotones();refrescarEstados();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activar,{once:true});else activar();
+['aurosanax:atencion-iniciada','aurosanax:atencion-seleccionada','aurosanax:atencion-actualizada'].forEach(n=>window.addEventListener(n,()=>setTimeout(refrescarEstados,250)));
+window.addEventListener('focus',()=>setTimeout(refrescarEstados,150));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(refrescarEstados,150);});
+window.addEventListener('aurosanax:firma-electronica-completada',e=>{if(texto(e?.detail?.tipo_documento).toUpperCase()==='CERTIFICADO')setTimeout(refrescarEstados,150);});
+})();
