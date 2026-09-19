@@ -1,18 +1,5 @@
-AUROSANAX — ESTETICA.JS V2.2 COMPLETO
-Fecha: 2026-09-19
-
-OBJETIVO:
-- Persistir id_atencion en registros NUEVOS de estetica_funcional.
-- Persistir numero_consulta, nombre_paciente y nombre_medico.
-- Resolver primero por id_atencion.
-- Mantener lectura/edición compatible de filas históricas V1 sin migrarlas automáticamente.
-- Conservar endpoints listarEstetica / guardarEstetica / editarEstetica.
-
-REQUISITO DE HOJA antes de activar esta versión:
-Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consulta, nombre_paciente, nombre_medico.
-
     /* ============================================================
-     AUROSANAX — ESTÉTICA FUNCIONAL V2.2
+     AUROSANAX — ESTÉTICA FUNCIONAL V2.3
      ARCHIVO PROPIETARIO: estetica.js
      MODULARIZACIÓN ANTIRREGRESIVA
      ------------------------------------------------------------
@@ -20,23 +7,23 @@ Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consu
      - Conserva tabla: estetica_funcional.
      - Conserva AUROSANAX_ESTETICA_V1::{JSON}.
      - NO crea columnas ni modifica backend/Sheets/Drive/Historia.
-     - id_atencion se usa como guard de contexto, NO se persiste todavía.
+     - id_atencion se persiste en registros nuevos y gobierna la resolución exacta.
      - Cero POST sin cambios reales.
      - Relectura autoritativa después de guardar.
      - Guard A→B contra respuestas tardías.
      - Anti doble carga/guardado.
     ============================================================ */
-    (function auroEsteticaV22(){
+    (function auroEsteticaV23(){
     'use strict';
 
-    const VERSION='2.2.0-aislamiento-atencion';
+    const VERSION='2.3.0-modular-independiente';
     const PREFIJO='AUROSANAX_ESTETICA_V1::';
 
-    if(window.__auroEsteticaV22Instalada){
-      console.warn('AUROSANAX ESTÉTICA V2.2: segunda instalación omitida.');
+    if(window.__auroEsteticaV23Instalada){
+      console.warn('AUROSANAX ESTÉTICA V2.3: segunda instalación omitida.');
       return;
     }
-    window.__auroEsteticaV22Instalada=true;
+    window.__auroEsteticaV23Instalada=true;
 
     const CAMPOS=Object.freeze({
      area:'hcEsteticaArea',
@@ -53,7 +40,7 @@ Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consu
      version:VERSION,id_estetica:'',id_historia:'',id_paciente:'',
      id_atencion:'',fecha_atencion:'',registro:null,firma_baseline:'',
      dirty:false,cargado:false,loading:false,saving:false,
-     loadSeq:0,saveSeq:0,epoch:0,ultimoError:'',contextKeyObservada:'',watcher:null
+     loadSeq:0,saveSeq:0,epoch:0,ultimoError:''
     };
     window.auroEsteticaState=estado;
 
@@ -145,27 +132,17 @@ Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consu
      const t=x?new Date(x).getTime():0;return isNaN(t)?0:t;
     }
     function resolver(ls,c){
-     let x=(ls||[]).filter(r=>texto(r.id_historia)===texto(c.id_historia)&&
-     texto(r.id_paciente)===texto(c.id_paciente)&&texto(r.estado||'Activo').toLowerCase()!=='anulado');
-     if(!x.length)return null;
-
-     /* V2.2: identidad fuerte por id_atencion para filas nuevas. */
      const ia=texto(c.id_atencion);
-     if(ia){
-      const exactas=x.filter(r=>texto(r.id_atencion)===ia);
-      if(exactas.length){exactas.sort((a,b)=>tiempo(b)-tiempo(a));return exactas[0]||null;}
-     }
-
-     /*
-      * Compatibilidad histórica V1: solo filas que realmente NO poseen
-      * id_atencion pueden resolverse por paciente + historia + fecha.
-      * Una fila V2.2 perteneciente a otra atención nunca entra al fallback.
-      */
-     x=x.filter(r=>!texto(r.id_atencion));
+     if(!ia)return null;
+     let x=(ls||[]).filter(r=>
+      texto(r.id_historia)===texto(c.id_historia)&&
+      texto(r.id_paciente)===texto(c.id_paciente)&&
+      texto(r.estado||'Activo').toLowerCase()!=='anulado'&&
+      texto(r.id_atencion)===ia
+     );
      if(!x.length)return null;
-     const f=fechaClave(c.fecha_atencion);
-     if(f){x=x.filter(r=>fechaClave(r.fecha_atencion)===f);if(!x.length)return null;}
-     x.sort((a,b)=>tiempo(b)-tiempo(a));return x[0]||null;
+     x.sort((a,b)=>tiempo(b)-tiempo(a));
+     return x[0]||null;
     }
     function baseline(r,c){
      estado.id_estetica=texto(r?.id_estetica||'');estado.id_historia=texto(c.id_historia);
@@ -289,17 +266,14 @@ Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consu
      if(!r||!texto(r.id_estetica))return{existe:false,fecha:'',fuente:'estetica_funcional'};
      return{existe:true,fecha:texto(r.actualizado_en||r.creado_en||r.fecha_atencion||''),fuente:'estetica_funcional'};
     }
-    function vigilarContexto(){
-     const c=contexto(),k=clave(c);
-     if(!estado.contextKeyObservada){estado.contextKeyObservada=k;return;}
-     if(k===estado.contextKeyObservada)return;
-     estado.contextKeyObservada=k;
-     /* El cambio de atención se trata como cambio de identidad clínica:
-        limpiar primero; después leer el contexto nuevo. */
-     invalidar('cambio de atención/paciente/historia');
+    function alCambiarAtencion(){
+     invalidar('evento atención seleccionada');
      limpiar();
+     const c=contexto();
      if(c.id_atencion&&c.id_paciente&&c.id_historia){
-      Promise.resolve(cargar({forzar:true})).catch(e=>console.warn('AUROSANAX ESTÉTICA V2.2: recarga de contexto falló.',e));
+      Promise.resolve(cargar({forzar:true})).catch(e=>
+       console.warn('AUROSANAX ESTÉTICA V2.3: recarga de atención falló.',e)
+      );
      }else{
       baseline(null,c);
      }
@@ -317,8 +291,12 @@ Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consu
       s.dataset.auroEsteticaPacienteV2='1';
       s.addEventListener('change',()=>{invalidar('cambio de paciente');limpiar();});
      }
-     estado.contextKeyObservada=clave(contexto());
-     if(!estado.watcher)estado.watcher=setInterval(vigilarContexto,250);
+     if(window.__auroEsteticaEventosV23!=='1'){
+      window.__auroEsteticaEventosV23='1';
+      window.addEventListener('aurosanax:atencion-seleccionada',alCambiarAtencion);
+      window.addEventListener('aurosanax:atencion-limpiada',alCambiarAtencion);
+      window.addEventListener('aurosanax:atencion-finalizada',alCambiarAtencion);
+     }
     }
     function debug(){
      const c=contexto();return{
@@ -329,7 +307,7 @@ Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consu
       dirty:estado.dirty,contexto_coincide:coincide(c),cambio_real:cambio(c),
       tiene_registro:!!estado.registro,actualizado_en:estado.registro?.actualizado_en||'',
       ultimo_error:estado.ultimoError,
-      persistencia:'V2.2: id_atencion persistido; limpieza inmediata y vigilancia de cambio de atención; fallback V1 solo histórico'
+      persistencia:'V2.3: identidad estricta por id_atencion; sin fallback por fecha; registros V1 históricos no se modifican'
      };
     }
 
@@ -346,5 +324,5 @@ Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consu
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',instalar,{once:true});
     else instalar();
 
-    console.log('AUROSANAX ESTÉTICA V2.2 instalada · identidad por atención · V1 histórico protegido.');
+    console.log('AUROSANAX ESTÉTICA V2.3 instalada · módulo independiente · identidad estricta por atención.');
     })();
