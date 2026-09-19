@@ -35,7 +35,8 @@ const state={
   configuracion:{},
   medicos:[],
   paciente:null,
-  historia:null
+  historia:null,
+  firmaCertificados:new Map()
 };
 
 const txt=v=>String(v??'').trim();
@@ -394,6 +395,10 @@ function instalarCSS(){
 @media(max-width:700px){.ac-dx label{padding:10px}.ac-dx span{font-size:12.5px;gap:8px}.ac-dx span b{min-width:54px;font-size:11px;padding:4px 7px}}
 .ac-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .ac-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:850;cursor:pointer}
+.ac-btn[disabled]{opacity:.72;cursor:wait}
+.ac-firma-preparando{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}
+.ac-firma-proceso{background:#eff6ff!important;color:#1d4ed8!important;border:1px solid #bfdbfe!important}
+.ac-firma-firmada{background:#ecfdf5!important;color:#166534!important;border:1px solid #bbf7d0!important}
 .ac-primary{background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
 .ac-soft{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8}
 .ac-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;margin-bottom:8px}
@@ -632,6 +637,25 @@ async function cargarHistorial(id, token){
 
   state.certificados=certificados;
   renderHistorial();
+
+  // Consulta persistente no bloqueante. La autoridad final será documentos_firmados
+  // cuando el backend de CERTIFICADO esté habilitado.
+  Promise.all(certificados.map(c=>consultarFirmaPersistenteCertificado(c.id_certificado)))
+    .then(()=>{
+      if(token===state.token && txt(state.idAtencion)===txt(id)) renderHistorial();
+    })
+    .catch(()=>{});
+}
+
+function estadoFirmaCertificado(id){
+  return state.firmaCertificados.get(txt(id))||{estado:'SIN_FIRMA',documento:null,error:''};
+}
+
+function fijarEstadoFirmaCertificado(id,estado,extra={}){
+  const key=txt(id);
+  if(!key) return;
+  state.firmaCertificados.set(key,Object.assign({},estadoFirmaCertificado(key),extra,{estado:txt(estado).toUpperCase()}));
+  renderHistorial();
 }
 
 function renderHistorial(){
@@ -645,6 +669,12 @@ function renderHistorial(){
 
   b.innerHTML=[...state.certificados].reverse().map(c=>{
     const d=parse(c.detalle_json);
+    const ef=estadoFirmaCertificado(c.id_certificado);
+    const firmada=ef.estado==='FIRMADA';
+    const preparando=ef.estado==='PREPARANDO';
+    const proceso=ef.estado==='PROCESO';
+    const clase=firmada?' ac-firma-firmada':(preparando?' ac-firma-preparando':(proceso?' ac-firma-proceso':''));
+    const textoBoton=firmada?'Ver certificado firmado ✓':(preparando?'Preparando firma…':(proceso?'Firma en proceso…':'Firmar certificado'));
     return `<div class="ac-item">
       <div class="ac-item-top">
         <div>
@@ -653,46 +683,40 @@ function renderHistorial(){
         </div>
         <div class="ac-actions" style="margin-top:0">
           <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
-          <button class="ac-btn ac-soft" data-acfirmar="${esc(c.id_certificado)}" title="Preparar este certificado guardado para firma electrónica">Firmar certificado</button>
+          <button class="ac-btn ac-soft${clase}" data-acfirmar="${esc(c.id_certificado)}" ${preparando||proceso?'disabled aria-busy="true"':''}>${textoBoton}</button>
         </div>
       </div>
     </div>`;
   }).join('');
 
   b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
-  b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>prepararFirmaCertificado(x.dataset.acfirmar));
+  b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>accionFirmaCertificado(x.dataset.acfirmar));
 }
 
 /*
-  ETAPA 1 FIRMA CERTIFICADO — CONTRATO LOCAL, SIN PERSISTENCIA
-  ------------------------------------------------------------
-  Certificados conserva la autoridad sobre qué certificado guardado se firma.
-  Esta etapa NO escribe Sheets/Drive, NO llama Apps Script de firma y NO altera
-  firma_electronica.js. Solo construye el documento exacto desde el registro
-  persistido del historial y emite un contrato explícito para el motor de firma.
+  FIRMA CERTIFICADO — CONTRATO FUNCIONAL DEL MÓDULO
+  -------------------------------------------------
+  - El certificado guardado es la única fuente del documento a firmar.
+  - Identidad: CERTIFICADO + id_documento_origen/id_certificado + id_atencion.
+  - Nunca convierte id_certificado en id_receta.
+  - Certificados NO escribe Drive/Sheets: delega al motor de Firma Electrónica.
+  - El estado FIRMADA solo se representa cuando existe confirmación del motor
+    o persistencia; un error devuelve el botón a estado utilizable.
 */
 function documentoFirmableCertificado(id){
   const registro=state.certificados.find(x=>txt(x.id_certificado)===txt(id));
-  if(!registro){
-    return {success:false,message:'No se encontró el certificado guardado seleccionado.'};
-  }
+  if(!registro) return {success:false,message:'No se encontró el certificado guardado seleccionado.'};
 
   const idCertificado=txt(registro.id_certificado);
   const idAtencion=txt(registro.id_atencion);
   const idAtencionActual=txt(state.idAtencion||state.contexto?.id);
-
-  if(!idCertificado||!idAtencion){
-    return {success:false,message:'El certificado no contiene los identificadores requeridos para firma.'};
-  }
-  if(!idAtencionActual||idAtencion!==idAtencionActual){
-    return {success:false,message:'El certificado no pertenece a la atención actualmente seleccionada.'};
-  }
+  if(!idCertificado||!idAtencion) return {success:false,message:'El certificado no contiene los identificadores requeridos para firma.'};
+  if(!idAtencionActual||idAtencion!==idAtencionActual) return {success:false,message:'El certificado no pertenece a la atención actualmente seleccionada.'};
 
   const detalle=parse(registro.detalle_json);
   const paciente=detalle.paciente||{};
   const historia=detalle.historia||{};
   const medico=detalle.medico||{};
-
   return {
     success:true,
     tipo_documento:'CERTIFICADO',
@@ -709,29 +733,105 @@ function documentoFirmableCertificado(id){
     nombre_medico:txt(registro.nombre_medico||medico.nombre),
     tipo_certificado:txt(registro.tipo_certificado||detalle.tipo_certificado),
     fecha_emision:txt(registro.fecha_emision||detalle.fecha_emision),
+    nombre_archivo:'CERTIFICADO_'+idCertificado+'_FIRMADO.pdf',
     registro,
     detalle,
     html_documento:docHTML(registro)
   };
 }
 
-function prepararFirmaCertificado(id){
+async function consultarFirmaPersistenteCertificado(id){
   const doc=documentoFirmableCertificado(id);
-  if(!doc.success){
-    msg('warn',doc.message||'No se pudo preparar el certificado para firma.');
-    return doc;
+  if(!doc.success) return null;
+  const motor=window.auroFirmaElectronica;
+  if(!motor||typeof motor.consultarDocumentosFirmados!=='function') return null;
+  try{
+    const r=await motor.consultarDocumentosFirmados({
+      tipo_documento:'CERTIFICADO',
+      id_documento_origen:doc.id_certificado,
+      id_certificado:doc.id_certificado,
+      id_atencion:doc.id_atencion,
+      id_receta:''
+    });
+    const docs=Array.isArray(r?.documentos)?r.documentos:[];
+    const encontrado=docs.find(x=>
+      txt(x?.tipo_documento).toUpperCase()==='CERTIFICADO' &&
+      txt(x?.id_documento_origen||x?.id_certificado)===doc.id_certificado &&
+      txt(x?.id_atencion)===doc.id_atencion &&
+      txt(x?.estado_firma).toUpperCase()==='FIRMADO'
+    )||null;
+    if(encontrado){
+      state.firmaCertificados.set(doc.id_certificado,{estado:'FIRMADA',documento:encontrado,error:''});
+      return encontrado;
+    }
+  }catch(_e){}
+  return null;
+}
+
+async function verCertificadoFirmado(id){
+  const doc=documentoFirmableCertificado(id);
+  if(!doc.success) return msg('warn',doc.message);
+  const motor=window.auroFirmaElectronica;
+  if(!motor) return msg('error','El motor de Firma Electrónica no está disponible.');
+  try{
+    if(typeof motor.abrirPdfFirmadoPersistente==='function'){
+      await motor.abrirPdfFirmadoPersistente({
+        tipo_documento:'CERTIFICADO',
+        id_documento_origen:doc.id_certificado,
+        id_certificado:doc.id_certificado,
+        id_atencion:doc.id_atencion,
+        id_receta:''
+      });
+      return;
+    }
+    if(typeof motor.abrirPdfFirmado==='function' && estadoFirmaCertificado(id).documento){
+      if(motor.abrirPdfFirmado(estadoFirmaCertificado(id).documento,doc.nombre_archivo)) return;
+    }
+    throw new Error('No está disponible la apertura persistente del certificado firmado.');
+  }catch(e){
+    msg('error',e.message||'No se pudo abrir el certificado firmado.');
   }
+}
 
-  /*
-    Contrato para la siguiente etapa. El motor estable todavía no se modifica.
-    El evento transporta exclusivamente el certificado guardado seleccionado.
-  */
-  window.dispatchEvent(new CustomEvent('aurosanax:certificado-firma-solicitada',{
-    detail:{documento:doc}
-  }));
+async function accionFirmaCertificado(id){
+  const actual=estadoFirmaCertificado(id);
+  if(actual.estado==='FIRMADA') return verCertificadoFirmado(id);
+  if(actual.estado==='PREPARANDO'||actual.estado==='PROCESO') return;
 
-  msg('ok','Certificado preparado correctamente para firma electrónica.');
-  return doc;
+  const doc=documentoFirmableCertificado(id);
+  if(!doc.success) return msg('warn',doc.message||'No se pudo preparar el certificado para firma.');
+  const motor=window.auroFirmaElectronica;
+  if(!motor||typeof motor.firmarDocumento!=='function') return msg('error','El motor de Firma Electrónica no está disponible.');
+
+  fijarEstadoFirmaCertificado(id,'PREPARANDO',{error:''});
+  msg('ok','Preparando certificado para firma electrónica…');
+
+  try{
+    await new Promise(resolve=>requestAnimationFrame(resolve));
+    fijarEstadoFirmaCertificado(id,'PROCESO');
+    const resultado=await motor.firmarDocumento(doc);
+    const estado=txt(resultado?.estado_firma).toUpperCase();
+
+    if(estado==='FIRMADO'){
+      fijarEstadoFirmaCertificado(id,'FIRMADA',{documento:resultado,error:''});
+      msg('ok','Certificado firmado electrónicamente.');
+      return resultado;
+    }
+    if(estado==='CANCELADA'){
+      fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:''});
+      msg('warn','Firma del certificado cancelada.');
+      return resultado;
+    }
+    throw new Error('El motor no confirmó la firma del certificado.');
+  }catch(e){
+    fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:txt(e?.message)});
+    msg('error',e?.message||'No se pudo completar la firma electrónica del certificado.');
+    throw e;
+  }
+}
+
+function prepararFirmaCertificado(id){
+  return accionFirmaCertificado(id);
 }
 
 function dxSeleccionados(){
@@ -1338,6 +1438,21 @@ async function inicializar(){
   nuevo();
 }
 
+window.addEventListener('aurosanax:firma-electronica-completada',function(ev){
+  const d=ev?.detail||{};
+  if(txt(d.tipo_documento).toUpperCase()!=='CERTIFICADO') return;
+  const id=txt(d.id_certificado||d.id_documento_origen);
+  if(!id) return;
+  fijarEstadoFirmaCertificado(id,'FIRMADA',{documento:d,error:''});
+});
+
+window.addEventListener('aurosanax:firma-electronica-cancelada',function(ev){
+  const d=ev?.detail||{};
+  if(txt(d.tipo_documento).toUpperCase()!=='CERTIFICADO') return;
+  const id=txt(d.id_certificado||d.id_documento_origen);
+  if(id) fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:''});
+});
+
 window.auroCertificados={
   version:VERSION,
   inicializar,
@@ -1347,7 +1462,10 @@ window.auroCertificados={
   obtenerDatos:datos,
   construirDocumento:docHTML,
   obtenerDocumentoFirmable:(id)=>documentoFirmableCertificado(id),
-  prepararFirma:(id)=>prepararFirmaCertificado(id)
+  prepararFirma:(id)=>prepararFirmaCertificado(id),
+  firmarCertificado:(id)=>accionFirmaCertificado(id),
+  verCertificadoFirmado:(id)=>verCertificadoFirmado(id),
+  consultarFirmaPersistente:(id)=>consultarFirmaPersistenteCertificado(id)
 };
 
 /*
