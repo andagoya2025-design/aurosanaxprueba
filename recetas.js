@@ -6198,6 +6198,66 @@
     window[nombre] = nueva;
   }
 
+  /* =====================================================
+     AUROSANAX RECETAS 3.17 - PREPARACIÓN CANÓNICA DE FIRMA AL CAMBIAR ATENCIÓN
+     ---------------------------------------------------------------------------
+     Objetivo antirregresivo:
+     - Reutilizar silenciosamente la MISMA preparación documental que ya
+       ocurría al pulsar "PDF receta", sin abrir PDF ni modificar Plan.
+     - Refrescar la receta persistida de la atención actual desde Sheets.
+     - Completar el diagnóstico de esa misma receta cuando corresponda.
+     - Recalcular después el estado de firma de Recetas y Plan.
+     - Proteger contra respuestas tardías de una atención anterior.
+  ===================================================== */
+  let auroRecetaSecuenciaPreparacionFirmaAtencion = 0;
+
+  async function auroRecetaPrepararFirmaCanonicaPorAtencion(idAtencion){
+    const esperado = String(idAtencion || '').trim();
+    if(!esperado) return null;
+
+    const miSecuencia = ++auroRecetaSecuenciaPreparacionFirmaAtencion;
+
+    try{
+      /* Mismo refresco autoritativo utilizado por auroRecetaDatosOficialesAtencionActual(). */
+      await cargarRecetasDesdeSheets(true);
+
+      const actualTrasCarga = String(obtenerIdAtencionActivaSeguro() || '').trim();
+      if(
+        miSecuencia !== auroRecetaSecuenciaPreparacionFirmaAtencion ||
+        actualTrasCarga !== esperado
+      ){
+        return null;
+      }
+
+      const guardada = buscarRecetaActivaPorAtencion(esperado);
+      if(guardada){
+        /* Mismo enriquecimiento canónico utilizado antes de construir el PDF oficial. */
+        await auroRecetaResolverDiagnosticoPorRecetaGuardada(guardada);
+      }
+
+      const actualTrasDiagnostico = String(obtenerIdAtencionActivaSeguro() || '').trim();
+      if(
+        miSecuencia !== auroRecetaSecuenciaPreparacionFirmaAtencion ||
+        actualTrasDiagnostico !== esperado
+      ){
+        return null;
+      }
+
+      /* Recetas actualiza su propio reflejo persistente. */
+      try{ await auroRecetaSincronizarFirmaPersistenteActual(false); }catch(e){}
+
+      /* Plan 37 conserva la autoridad de su botón; solo se le pide recalcular. */
+      if(typeof window.auroPlanSincronizarEstadoFirmaReceta === 'function'){
+        try{ await window.auroPlanSincronizarEstadoFirmaReceta(); }catch(e){}
+      }
+
+      return guardada || null;
+    }catch(error){
+      console.warn('AUROSANAX RECETAS 3.17: preparación canónica de firma no disponible', error);
+      return null;
+    }
+  }
+
   function manejarCambioAtencionReceta(evento){
     const idEvento = String(
       evento?.detail?.id_atencion ||
@@ -6221,6 +6281,13 @@
         auroRecetaActualizarCabeceraClinicaPremium();
       }catch(e){}
     }, 0);
+
+    /*
+      No abre PDF y no firma nada. Solo deja lista la representación canónica
+      de la receta guardada para que Plan detecte automáticamente FIRMADA vs
+      NUEVA_VERSION con la misma huella que ya funcionaba tras pulsar PDF.
+    */
+    auroRecetaPrepararFirmaCanonicaPorAtencion(idEvento);
   }
 
   function inicializarRecetas(){
