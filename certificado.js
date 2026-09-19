@@ -1273,6 +1273,25 @@ window.auroCertificados={
   construirDocumento:docHTML
 };
 
+/*
+  AUROSANAX FIX QUIRÚRGICO — CAMBIO DE ATENCIÓN CON CERTIFICADOS VISIBLE
+  ---------------------------------------------------------------------
+  Atenciones ya emite 'aurosanax:atencion-seleccionada' después de fijar
+  el nuevo id_atencion como contexto maestro. Certificados escucha ese
+  contrato existente y se reinicializa únicamente cuando su panel está
+  visible. No modifica Atenciones, Index, persistencia ni otros módulos.
+*/
+function auroCertificadosAlCambiarAtencion(){
+  const panel=document.getElementById('hc_certificados');
+  if(!panel || panel.offsetParent===null) return;
+
+  Promise.resolve(inicializar()).catch(error=>{
+    console.warn('AUROSANAX CERTIFICADOS: no se pudo refrescar la atención seleccionada.',error);
+  });
+}
+
+window.addEventListener('aurosanax:atencion-seleccionada',auroCertificadosAlCambiarAtencion);
+
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',()=>{mount();},{once:true});
 }else{
