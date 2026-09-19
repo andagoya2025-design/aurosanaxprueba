@@ -1,5 +1,5 @@
     /* ============================================================
-     AUROSANAX — ESTÉTICA FUNCIONAL V2.4
+     AUROSANAX — ESTÉTICA FUNCIONAL V2.4.1
      ARCHIVO PROPIETARIO: estetica.js
      MODULARIZACIÓN ANTIRREGRESIVA
      ------------------------------------------------------------
@@ -16,14 +16,14 @@
     (function auroEsteticaV23(){
     'use strict';
 
-    const VERSION='2.4.0-ux-llenado-hibrido';
+    const VERSION='2.4.1-ux-editor-ampliado';
     const PREFIJO='AUROSANAX_ESTETICA_V1::';
 
-    if(window.__auroEsteticaV24Instalada){
-      console.warn('AUROSANAX ESTÉTICA V2.4: segunda instalación omitida.');
+    if(window.__auroEsteticaV241Instalada){
+      console.warn('AUROSANAX ESTÉTICA V2.4.1: segunda instalación omitida.');
       return;
     }
-    window.__auroEsteticaV24Instalada=true;
+    window.__auroEsteticaV241Instalada=true;
 
     const CAMPOS=Object.freeze({
      area:'hcEsteticaArea',
@@ -274,7 +274,7 @@
      const c=contexto();
      if(c.id_atencion&&c.id_paciente&&c.id_historia){
       Promise.resolve(cargar({forzar:true})).catch(e=>
-       console.warn('AUROSANAX ESTÉTICA V2.4: recarga de atención falló.',e)
+       console.warn('AUROSANAX ESTÉTICA V2.4.1: recarga de atención falló.',e)
       );
      }else{
       baseline(null,c);
@@ -283,7 +283,7 @@
 
 
     /* ============================================================
-       V2.4 — UX DE LLENADO HÍBRIDO
+       V2.4.1 — UX DE LLENADO HÍBRIDO
        ------------------------------------------------------------
        Capa exclusivamente visual/aditiva:
        - Sugerencias por área sin cerrar la escritura médica.
@@ -377,6 +377,100 @@
      botonLimpiarUX(a,fn);
      el.insertAdjacentElement('afterend',a);
     }
+
+    /* ============================================================
+       V2.4.1 — EDITOR AMPLIADO PARA TEXTO CLÍNICO
+       ------------------------------------------------------------
+       Capa UX únicamente. No altera payload, JSON, resolver,
+       id_atencion, endpoints, baseline ni persistencia.
+    ============================================================ */
+    function asegurarEditorAmpliadoUX(){
+     if(document.getElementById(uxId('modalAmpliado')))return;
+     const overlay=document.createElement('div');
+     overlay.id=uxId('modalAmpliado');
+     overlay.style.cssText='display:none;position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.38);align-items:center;justify-content:center;padding:18px;';
+     overlay.innerHTML=`
+      <div role="dialog" aria-modal="true" style="width:min(760px,96vw);max-height:92vh;background:#fff;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.28);padding:18px;display:flex;flex-direction:column;gap:12px;">
+       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <strong id="${uxId('modalTitulo')}" style="font-size:1.05rem;">Editor ampliado</strong>
+        <button type="button" id="${uxId('modalCerrar')}" aria-label="Cerrar" style="border:1px solid #d7dce2;background:#fff;border-radius:9px;width:36px;height:36px;font-size:20px;line-height:1;">×</button>
+       </div>
+       <textarea id="${uxId('modalTexto')}" style="width:100%;min-height:330px;max-height:62vh;resize:vertical;border:2px solid #9fd8ee;border-radius:12px;padding:12px;font:inherit;line-height:1.45;outline:none;" placeholder="Escriba aquí..."></textarea>
+       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <span id="${uxId('modalContador')}" style="font-size:.82rem;color:#667085;">0 caracteres</span>
+        <button type="button" id="${uxId('modalListo')}" class="btn btn-primary">Listo</button>
+       </div>
+      </div>`;
+     document.body.appendChild(overlay);
+
+     const ta=document.getElementById(uxId('modalTexto'));
+     const contador=document.getElementById(uxId('modalContador'));
+     const cerrar=document.getElementById(uxId('modalCerrar'));
+     const listo=document.getElementById(uxId('modalListo'));
+     const actualizar=()=>{contador.textContent=`${ta.value.length} caracteres`;};
+     ta.addEventListener('input',actualizar);
+
+     const cerrarSinAplicar=()=>{overlay.style.display='none';overlay.dataset.target='';};
+     cerrar.addEventListener('click',cerrarSinAplicar);
+     overlay.addEventListener('click',e=>{if(e.target===overlay)cerrarSinAplicar();});
+     document.addEventListener('keydown',e=>{
+      if(e.key==='Escape'&&overlay.style.display==='flex')cerrarSinAplicar();
+     });
+     listo.addEventListener('click',()=>{
+      const id=overlay.dataset.target||'';
+      const campo=document.getElementById(id);
+      if(campo){
+       campo.value=ta.value;
+       campo.dispatchEvent(new Event('input',{bubbles:true}));
+       campo.dispatchEvent(new Event('change',{bubbles:true}));
+       marcarDirtyUX();
+      }
+      cerrarSinAplicar();
+     });
+    }
+
+    function abrirEditorAmpliadoUX(id,titulo){
+     asegurarEditorAmpliadoUX();
+     const campo=document.getElementById(id);if(!campo)return;
+     const overlay=document.getElementById(uxId('modalAmpliado'));
+     const ta=document.getElementById(uxId('modalTexto'));
+     const t=document.getElementById(uxId('modalTitulo'));
+     const contador=document.getElementById(uxId('modalContador'));
+     overlay.dataset.target=id;
+     t.textContent=titulo||'Editor ampliado';
+     ta.value=campo.value||'';
+     contador.textContent=`${ta.value.length} caracteres`;
+     overlay.style.display='flex';
+     setTimeout(()=>{ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);},0);
+    }
+
+    function agregarAmpliarUX(el,titulo){
+     if(!el)return;
+     const acciones=document.getElementById(uxId('acciones_'+el.id));
+     if(!acciones||acciones.querySelector('[data-auro-ampliar="1"]'))return;
+     const b=document.createElement('button');
+     b.type='button';b.className='btn btn-sm btn-outline-secondary';
+     b.dataset.auroAmpliar='1';
+     b.textContent='↗ Ampliar';
+     b.title='Abrir un editor amplio sin modificar el tamaño del campo';
+     b.style.cssText='padding:.18rem .55rem;font-size:.78rem;line-height:1.25;';
+     b.addEventListener('click',()=>abrirEditorAmpliadoUX(el.id,titulo));
+     acciones.appendChild(b);
+    }
+
+    function instalarEditoresAmpliadosUX(){
+     asegurarEditorAmpliadoUX();
+     [
+      [CAMPOS.facial,'Evaluación facial'],
+      [CAMPOS.corporal,'Evaluación corporal'],
+      [CAMPOS.intima,'Evaluación íntima'],
+      [CAMPOS.evolucion,'Evolución']
+     ].forEach(([id,titulo])=>{
+      const e=document.getElementById(id);
+      if(e)agregarAmpliarUX(e,titulo);
+     });
+    }
+
     function instalarUX(){
      const p=document.getElementById('hc_estetica');if(!p||p.dataset.auroEsteticaUXV24==='1')return;
      p.dataset.auroEsteticaUXV24='1';
@@ -428,6 +522,7 @@
      });
 
      actualizarAreaLibreUX();actualizarProcedimientosUX();
+     instalarEditoresAmpliadosUX();
     }
 
     function instalar(){
@@ -443,8 +538,8 @@
       s.dataset.auroEsteticaPacienteV2='1';
       s.addEventListener('change',()=>{invalidar('cambio de paciente');limpiar();});
      }
-     if(window.__auroEsteticaEventosV24!=='1'){
-      window.__auroEsteticaEventosV24='1';
+     if(window.__auroEsteticaEventosV241!=='1'){
+      window.__auroEsteticaEventosV241='1';
       window.addEventListener('aurosanax:atencion-seleccionada',alCambiarAtencion);
       window.addEventListener('aurosanax:atencion-limpiada',alCambiarAtencion);
       window.addEventListener('aurosanax:atencion-finalizada',alCambiarAtencion);
@@ -459,7 +554,7 @@
       dirty:estado.dirty,contexto_coincide:coincide(c),cambio_real:cambio(c),
       tiene_registro:!!estado.registro,actualizado_en:estado.registro?.actualizado_en||'',
       ultimo_error:estado.ultimoError,
-      persistencia:'V2.4: conserva identidad estricta V2.3 por id_atencion; UX híbrida aditiva; sin fallback por fecha'
+      persistencia:'V2.4.1: conserva identidad estricta V2.3 por id_atencion; UX híbrida aditiva; sin fallback por fecha'
      };
     }
 
@@ -476,5 +571,5 @@
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',instalar,{once:true});
     else instalar();
 
-    console.log('AUROSANAX ESTÉTICA V2.4 instalada · UX híbrida aditiva · identidad estricta por atención conservada.');
+    console.log('AUROSANAX ESTÉTICA V2.4.1 instalada · UX híbrida aditiva · identidad estricta por atención conservada.');
     })();
