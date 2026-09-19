@@ -1,19 +1,18 @@
-AUROSANAX — ESTETICA.JS V2.0 COMPLETO ARCHIVO COMPLETO, NO PARCHE Fecha:
-2026-09-19
+AUROSANAX — ESTETICA.JS V2.1 COMPLETO
+Fecha: 2026-09-19
 
-BASE AUDITADA: - Index actual: bloque Estética Funcional Independiente
-V1. - Base: estetica_funcional con registros V1 existentes. - Backend:
-listarEstetica / guardarEstetica / editarEstetica. - Regla: no inventar
-id_atencion en la tabla actual.
+OBJETIVO:
+- Persistir id_atencion en registros NUEVOS de estetica_funcional.
+- Persistir numero_consulta, nombre_paciente y nombre_medico.
+- Resolver primero por id_atencion.
+- Mantener lectura/edición compatible de filas históricas V1 sin migrarlas automáticamente.
+- Conservar endpoints listarEstetica / guardarEstetica / editarEstetica.
 
-IMPORTANTE DE INSTALACIÓN: Este archivo NO debe activarse al mismo
-tiempo que el bloque JS legacy “AUROSANAX - ESTÉTICA FUNCIONAL
-INDEPENDIENTE V1” embebido en Index. En la etapa de integración se deja
-estetica.js como único propietario. Index conserva panel, navegación y
-contratos de integración.
+REQUISITO DE HOJA antes de activar esta versión:
+Añadir al final de estetica_funcional estas columnas: id_atencion, numero_consulta, nombre_paciente, nombre_medico.
 
     /* ============================================================
-     AUROSANAX — ESTÉTICA FUNCIONAL V2.0
+     AUROSANAX — ESTÉTICA FUNCIONAL V2.1
      ARCHIVO PROPIETARIO: estetica.js
      MODULARIZACIÓN ANTIRREGRESIVA
      ------------------------------------------------------------
@@ -30,14 +29,14 @@ contratos de integración.
     (function auroEsteticaV20(){
     'use strict';
 
-    const VERSION='2.0.0-modular-antirregresiva';
+    const VERSION='2.1.0-identidad-atencion';
     const PREFIJO='AUROSANAX_ESTETICA_V1::';
 
-    if(window.__auroEsteticaV20Instalada){
-      console.warn('AUROSANAX ESTÉTICA V2: segunda instalación omitida.');
+    if(window.__auroEsteticaV21Instalada){
+      console.warn('AUROSANAX ESTÉTICA V2.1: segunda instalación omitida.');
       return;
     }
-    window.__auroEsteticaV20Instalada=true;
+    window.__auroEsteticaV21Instalada=true;
 
     const CAMPOS=Object.freeze({
      area:'hcEsteticaArea',
@@ -77,6 +76,9 @@ contratos de integración.
       atencion:a,id_atencion:ia,
       id_paciente:texto(document.getElementById('hcPacienteSelect')?.value||a?.id_paciente||''),
       id_historia:ih,id_medico:texto(a?.id_medico||''),
+      numero_consulta:texto(a?.numero_consulta||''),
+      nombre_paciente:texto(a?.nombre_paciente||''),
+      nombre_medico:texto(a?.nombre_medico||''),
       fecha_atencion:texto(a?.fecha_atencion||a?.fecha||'')
      };
     }
@@ -146,7 +148,21 @@ contratos de integración.
      let x=(ls||[]).filter(r=>texto(r.id_historia)===texto(c.id_historia)&&
      texto(r.id_paciente)===texto(c.id_paciente)&&texto(r.estado||'Activo').toLowerCase()!=='anulado');
      if(!x.length)return null;
-     /* Tabla V1 no posee id_atencion: fallback protegido por fecha. */
+
+     /* V2.1: identidad fuerte por id_atencion para filas nuevas. */
+     const ia=texto(c.id_atencion);
+     if(ia){
+      const exactas=x.filter(r=>texto(r.id_atencion)===ia);
+      if(exactas.length){exactas.sort((a,b)=>tiempo(b)-tiempo(a));return exactas[0]||null;}
+     }
+
+     /*
+      * Compatibilidad histórica V1: solo filas que realmente NO poseen
+      * id_atencion pueden resolverse por paciente + historia + fecha.
+      * Una fila V2.1 perteneciente a otra atención nunca entra al fallback.
+      */
+     x=x.filter(r=>!texto(r.id_atencion));
+     if(!x.length)return null;
      const f=fechaClave(c.fecha_atencion);
      if(f){x=x.filter(r=>fechaClave(r.fecha_atencion)===f);if(!x.length)return null;}
      x.sort((a,b)=>tiempo(b)-tiempo(a));return x[0]||null;
@@ -196,6 +212,8 @@ contratos de integración.
      return {
       id_estetica:estado.id_estetica||undefined,id_historia:c.id_historia,
       id_paciente:c.id_paciente,id_medico:c.id_medico,
+      id_atencion:c.id_atencion,numero_consulta:c.numero_consulta||'',
+      nombre_paciente:c.nombre_paciente||'',nombre_medico:c.nombre_medico||'',
       fecha_atencion:fechaClave(c.fecha_atencion)||hoy(),
       zona_tratamiento:p.area,
       evaluacion_clinica:PREFIJO+JSON.stringify({
@@ -286,7 +304,7 @@ contratos de integración.
       dirty:estado.dirty,contexto_coincide:coincide(c),cambio_real:cambio(c),
       tiene_registro:!!estado.registro,actualizado_en:estado.registro?.actualizado_en||'',
       ultimo_error:estado.ultimoError,
-      persistencia:'V1 compatible; id_atencion solo guard de frontend'
+      persistencia:'V2.1: id_atencion persistido en registros nuevos; fallback V1 solo para históricos sin id_atencion'
      };
     }
 
@@ -303,5 +321,5 @@ contratos de integración.
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',instalar,{once:true});
     else instalar();
 
-    console.log('AUROSANAX ESTÉTICA V2.0 instalada · propietario estetica.js · V1 protegido.');
+    console.log('AUROSANAX ESTÉTICA V2.1 instalada · identidad por atención · V1 histórico protegido.');
     })();
