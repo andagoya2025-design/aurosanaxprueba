@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: certificado.js
  Módulo: Certificados médicos por atención
- Versión: 1.3.9 - CIE-10 visual oficial + documento maestro A4 + visor móvil escalado antirregresión
+ Versión: 1.3.10 - consulta persistente única por atención + baseline 1.3.9
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.9';
+const VERSION='1.3.10';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -639,9 +639,13 @@ async function cargarHistorial(id, token){
   state.certificados=certificados;
   renderHistorial();
 
-  // Consulta persistente no bloqueante. La autoridad final será documentos_firmados
-  // cuando el backend de CERTIFICADO esté habilitado.
-  Promise.all(certificados.map(c=>consultarFirmaPersistenteCertificado(c.id_certificado)))
+  // AUROSANAX 1.3.10 — CONSULTA PERSISTENTE ÚNICA POR ATENCIÓN
+  // -----------------------------------------------------------
+  // En histórica NO se lanza una consulta de red por cada certificado.
+  // Se consulta documentos_firmados una sola vez por id_atencion y se
+  // cruza el resultado localmente. Es no bloqueante y conserva como
+  // autoridad final la persistencia del motor de Firma Electrónica.
+  consultarFirmasPersistentesAtencion(id,token)
     .then(()=>{
       if(token===state.token && txt(state.idAtencion)===txt(id)) renderHistorial();
     })
@@ -829,6 +833,73 @@ async function cancelarFirmaCertificado(id){
   }catch(e){
     msg('error',e?.message||'No se pudo cancelar la firma del certificado.');
     return null;
+  }
+}
+
+
+/*
+  AUROSANAX 1.3.10 — FIRMA PERSISTENTE AGRUPADA POR ATENCIÓN
+  ----------------------------------------------------------
+  - Una sola llamada de red para todos los certificados de la atención.
+  - No bloquea cargarHistorial() ni el botón Firmar certificado.
+  - No modifica firma, cancelación, PDF, Receta, Plan ni Apps Script.
+  - Filtra estrictamente CERTIFICADO + id_atencion + estado FIRMADO.
+  - Solo marca IDs que pertenecen al historial actualmente cargado.
+  - El token evita que una respuesta atrasada de otra atención repinte
+    la atención actual.
+*/
+async function consultarFirmasPersistentesAtencion(idAtencion,token){
+  const id=txt(idAtencion);
+  if(!id) return [];
+
+  const motor=window.auroFirmaElectronica;
+  if(!motor||typeof motor.consultarDocumentosFirmados!=='function') return [];
+
+  try{
+    const r=await motor.consultarDocumentosFirmados({
+      tipo_documento:'CERTIFICADO',
+      id_atencion:id,
+      id_receta:''
+    });
+
+    // ANTIRREGRESIÓN: una respuesta atrasada nunca altera otra atención.
+    if(token!==state.token || txt(state.idAtencion)!==id) return [];
+
+    const docs=Array.isArray(r?.documentos)?r.documentos:[];
+    const idsValidos=new Set(
+      state.certificados
+        .filter(c=>txt(c.id_atencion)===id)
+        .map(c=>txt(c.id_certificado))
+        .filter(Boolean)
+    );
+
+    const encontrados=[];
+    docs.forEach(x=>{
+      const tipo=txt(x?.tipo_documento).toUpperCase();
+      const estado=txt(x?.estado_firma).toUpperCase();
+      const idDoc=txt(x?.id_documento_origen||x?.id_certificado);
+      const idDocAtencion=txt(x?.id_atencion);
+
+      if(
+        tipo==='CERTIFICADO' &&
+        estado==='FIRMADO' &&
+        idDocAtencion===id &&
+        idsValidos.has(idDoc)
+      ){
+        state.firmaCertificados.set(idDoc,{
+          estado:'FIRMADA',
+          documento:x,
+          error:''
+        });
+        encontrados.push(x);
+      }
+    });
+
+    return encontrados;
+  }catch(_e){
+    // La consulta histórica es auxiliar: una falla de red no debe impedir
+    // abrir la atención ni utilizar el flujo normal de firma.
+    return [];
   }
 }
 
