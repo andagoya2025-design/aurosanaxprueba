@@ -2548,3 +2548,226 @@
     obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
   }));
 })();
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.1
+   PUENTE ANTIRREGRESIVO PARA CERTIFICADO - ETAPA 2
+   ------------------------------------------------------------
+   - Adhesión append-only sobre el baseline estable V3.0.
+   - RECETA delega íntegramente al motor estable anterior.
+   - CERTIFICADO usa identidad propia:
+       tipo_documento = CERTIFICADO
+       id_documento_origen = id_certificado
+       id_atencion = atención exacta
+       id_receta = vacío
+   - No modifica backend, Drive, Sheets, Index ni certificado.js.
+   - No convierte id_certificado en id_receta.
+   - No declara FIRMADO sin confirmación positiva del backend.
+============================================================ */
+(function auroFirmaCertificadoEtapa2V31(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function'){
+    console.error('AUROSANAX FIRMA 3.1: no se encontró el motor estable anterior.');
+    return;
+  }
+
+  const VERSION = '3.1-certificado-etapa2-antirregresivo';
+  const INTERVALO_CONSULTA_MS = 1000;
+  const certificadosEnCurso = new Map();
+  const certificadosConfirmados = new Map();
+  let ultimoCertificadoFirmado = null;
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(_e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(_e){
+      return '';
+    }
+  }
+
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {token:tokenSesion()});
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
+
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la operación de firma electrónica.');
+    }
+    return json;
+  }
+
+  function validarCertificado(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = 'CERTIFICADO';
+    d.id_atencion = texto(d.id_atencion);
+    d.id_certificado = texto(d.id_certificado || d.id_documento_origen || d.id_documento_clinico);
+    d.id_documento_origen = d.id_certificado;
+    d.id_receta = '';
+    d.html_documento = texto(d.html_documento);
+
+    if(!d.id_atencion) throw new Error('No existe una atención clínica válida para firmar el certificado.');
+    if(!d.id_certificado) throw new Error('Guarde el certificado antes de firmarlo electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial del certificado.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(texto(valor));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function identidadCertificado(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return {
+      huella:huella,
+      clave:'CERTIFICADO|' + solicitud.id_atencion + '|' + solicitud.id_documento_origen + '|' + huella
+    };
+  }
+
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
+  async function esperarFirmaCertificado(idSolicitud, solicitud){
+    while(true){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        tipo_documento:'CERTIFICADO',
+        id_documento_origen:solicitud.id_documento_origen,
+        id_certificado:solicitud.id_certificado,
+        id_atencion:solicitud.id_atencion,
+        id_receta:''
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'CANCELADA') return estado;
+      if(valor === 'ERROR') throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el certificado.');
+      if(valor === 'EXPIRADA') throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function firmarCertificado(data){
+    const solicitud = validarCertificado(data);
+    const identidad = await identidadCertificado(solicitud);
+
+    if(certificadosConfirmados.has(identidad.clave)){
+      ultimoCertificadoFirmado = certificadosConfirmados.get(identidad.clave);
+      return ultimoCertificadoFirmado;
+    }
+
+    if(certificadosEnCurso.has(identidad.clave)){
+      return certificadosEnCurso.get(identidad.clave);
+    }
+
+    const operacion = (async function(){
+      const creada = await post('firmarDocumento', solicitud);
+      const inicial = texto(creada.estado_firma).toUpperCase();
+      let resultado = creada;
+
+      if(inicial !== 'FIRMADO'){
+        if(inicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+          throw new Error('El servidor no creó correctamente la solicitud de firma del certificado.');
+        }
+        resultado = await esperarFirmaCertificado(texto(creada.id_solicitud), solicitud);
+      }
+
+      const final = texto(resultado.estado_firma).toUpperCase();
+      if(final === 'CANCELADA') return resultado;
+      if(final !== 'FIRMADO') throw new Error('El servidor no confirmó un estado de firma válido para el certificado.');
+
+      ultimoCertificadoFirmado = resultado;
+      certificadosConfirmados.set(identidad.clave, resultado);
+
+      try{
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+          detail:{
+            tipo_documento:'CERTIFICADO',
+            id_atencion:solicitud.id_atencion,
+            id_documento_origen:solicitud.id_documento_origen,
+            id_certificado:solicitud.id_certificado,
+            id_receta:'',
+            id_solicitud:texto(resultado.id_solicitud),
+            estado_firma:'FIRMADO',
+            nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+            sha256_origen:identidad.huella,
+            sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+            firmado_en:texto(resultado.firmado_en),
+            pdf_disponible:true
+          }
+        }));
+      }catch(_e){}
+
+      return resultado;
+    })();
+
+    certificadosEnCurso.set(identidad.clave, operacion);
+    try{
+      return await operacion;
+    }finally{
+      certificadosEnCurso.delete(identidad.clave);
+    }
+  }
+
+  async function firmarDocumento(data){
+    const tipo = texto(data && data.tipo_documento).toUpperCase();
+
+    /* Blindaje principal: RECETA conserva exactamente el flujo V3.0/V2.8. */
+    if(tipo === 'RECETA' || !tipo){
+      return anterior.firmarDocumento(data);
+    }
+
+    if(tipo === 'CERTIFICADO'){
+      return firmarCertificado(data);
+    }
+
+    throw new Error('Tipo de documento no habilitado para firma electrónica: ' + tipo + '.');
+  }
+
+  function obtenerUltimoCertificadoFirmado(){
+    return ultimoCertificadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    firmarCertificado:firmarCertificado,
+    obtenerUltimoCertificadoFirmado:obtenerUltimoCertificadoFirmado
+  }));
+
+  try{
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-certificado-lista', {
+      detail:{version:VERSION}
+    }));
+  }catch(_e){}
+})();
