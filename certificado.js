@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: certificado.js
  Módulo: Certificados médicos por atención
- Versión: 1.3.10 - consulta persistente única por atención + baseline 1.3.9
+ Versión: 1.3.11 - UX premium de notificaciones + consulta persistente única por atención
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.10';
+const VERSION='1.3.11';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -435,6 +435,39 @@ function instalarCSS(){
 .ac-sign{text-align:center;font-size:11.5px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
+
+.ac-toast-zone{
+  position:fixed;top:18px;right:18px;z-index:2147483000;
+  width:min(390px,calc(100vw - 28px));display:grid;gap:10px;
+  pointer-events:none
+}
+.ac-toast{
+  display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;
+  padding:13px 15px;border-radius:16px;color:#fff;
+  box-shadow:0 18px 45px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.14);
+  border:1px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  animation:acToastIn .22s ease-out both
+}
+.ac-toast-icon{
+  width:42px;height:42px;border-radius:13px;display:grid;place-items:center;
+  background:rgba(255,255,255,.17);font-size:22px;font-weight:950
+}
+.ac-toast-title{font-size:13.5px;font-weight:950;letter-spacing:.01em;line-height:1.2}
+.ac-toast-text{font-size:12px;line-height:1.35;margin-top:3px;color:rgba(255,255,255,.92)}
+.ac-toast-ok{background:linear-gradient(135deg,#047857,#059669)}
+.ac-toast-warn{background:linear-gradient(135deg,#9a6700,#b7791f)}
+.ac-toast-info{background:linear-gradient(135deg,#6c1749,#8b1e5a)}
+.ac-toast-error{background:linear-gradient(135deg,#8f1d18,#b42318)}
+.ac-toast-out{animation:acToastOut .2s ease-in both}
+@keyframes acToastIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes acToastOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.98)}}
+@media(prefers-reduced-motion:reduce){.ac-toast,.ac-toast-out{animation:none}}
+@media(max-width:700px){
+  .ac-toast-zone{top:10px;right:10px;width:calc(100vw - 20px)}
+  .ac-toast{padding:12px 13px;border-radius:14px}
+}
+
 @media(max-width:1000px){
   .ac-context-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ac-preview{padding:10px}
@@ -549,6 +582,55 @@ function mount(){
     eventos();
   }
   return m;
+}
+
+
+let acToastTimer=null;
+
+function toastPremium(tipo,texto){
+  const textoLimpio=txt(texto);
+  if(!textoLimpio) return;
+
+  let zona=document.getElementById('acToastZone');
+  if(!zona){
+    zona=document.createElement('div');
+    zona.id='acToastZone';
+    zona.className='ac-toast-zone';
+    zona.setAttribute('aria-live','polite');
+    zona.setAttribute('aria-atomic','true');
+    document.body.appendChild(zona);
+  }
+
+  if(acToastTimer){
+    clearTimeout(acToastTimer);
+    acToastTimer=null;
+  }
+
+  const mapa={
+    ok:{clase:'ok',icono:'✓',titulo:'Operación completada'},
+    warn:{clase:'warn',icono:'!',titulo:'Firma electrónica'},
+    info:{clase:'info',icono:'•',titulo:'AUROSANAX'},
+    error:{clase:'error',icono:'×',titulo:'Atención requerida'}
+  };
+  const cfg=mapa[tipo]||mapa.info;
+
+  zona.innerHTML=`<div class="ac-toast ac-toast-${cfg.clase}" role="status">
+    <div class="ac-toast-icon">${cfg.icono}</div>
+    <div>
+      <div class="ac-toast-title">${esc(cfg.titulo)}</div>
+      <div class="ac-toast-text">${esc(textoLimpio)}</div>
+    </div>
+  </div>`;
+
+  const tarjeta=zona.firstElementChild;
+  acToastTimer=setTimeout(()=>{
+    if(!tarjeta||!tarjeta.isConnected) return;
+    tarjeta.classList.add('ac-toast-out');
+    setTimeout(()=>{
+      if(tarjeta.isConnected) tarjeta.remove();
+      if(zona && !zona.children.length) zona.remove();
+    },220);
+  },3600);
 }
 
 function msg(t,s){
@@ -815,6 +897,7 @@ async function cancelarFirmaCertificado(id){
 
   try{
     msg('warn','Cancelando firma del certificado…');
+    toastPremium('info','Cancelando firma del certificado…');
     const r=await cancelar(payload);
     const estado=txt(r?.estado_firma||r?.estado).toUpperCase();
     if(r?.success===false) throw new Error(r.message||'No se pudo cancelar la firma.');
@@ -829,9 +912,11 @@ async function cancelarFirmaCertificado(id){
       error:''
     });
     msg('warn','Firma del certificado cancelada.');
+    toastPremium('warn','Firma cancelada correctamente. El certificado está disponible nuevamente.');
     return r;
   }catch(e){
     msg('error',e?.message||'No se pudo cancelar la firma del certificado.');
+    toastPremium('error',e?.message||'No se pudo cancelar la firma del certificado.');
     return null;
   }
 }
@@ -968,6 +1053,7 @@ async function accionFirmaCertificado(id){
 
   fijarEstadoFirmaCertificado(id,'PREPARANDO',{error:''});
   msg('ok','Preparando certificado para firma electrónica…');
+  toastPremium('info','Certificado enviado a firma. Abriendo Adobe…');
 
   try{
     await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -986,17 +1072,20 @@ async function accionFirmaCertificado(id){
     if(estado==='FIRMADO'){
       fijarEstadoFirmaCertificado(id,'FIRMADA',{documento:resultado,error:''});
       msg('ok','Certificado firmado electrónicamente.');
+      toastPremium('ok','Certificado firmado correctamente.');
       return resultado;
     }
     if(estado==='CANCELADA'){
       fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:''});
       msg('warn','Firma del certificado cancelada.');
+      toastPremium('warn','Firma cancelada correctamente. El certificado está disponible nuevamente.');
       return resultado;
     }
     throw new Error('El motor no confirmó la firma del certificado.');
   }catch(e){
     fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:txt(e?.message)});
     msg('error',e?.message||'No se pudo completar la firma electrónica del certificado.');
+    toastPremium('error',e?.message||'No se pudo completar la firma electrónica del certificado.');
     throw e;
   }
 }
