@@ -801,10 +801,6 @@ async function cancelarFirmaCertificado(id){
   };
 
   const cancelar=
-    // Contrato público real de Firma Electrónica: este método conserva
-    // internamente la id_solicitud creada mientras Adobe sigue esperando.
-    (typeof motor.cancelarFirmaDocumento==='function' && motor.cancelarFirmaDocumento.bind(motor)) ||
-    // Compatibilidad defensiva con posibles nombres posteriores.
     (typeof motor.cancelarFirmaElectronica==='function' && motor.cancelarFirmaElectronica.bind(motor)) ||
     (typeof motor.cancelarFirma==='function' && motor.cancelarFirma.bind(motor)) ||
     (typeof motor.cancelarDocumento==='function' && motor.cancelarDocumento.bind(motor));
@@ -818,9 +814,7 @@ async function cancelarFirmaCertificado(id){
     const r=await cancelar(payload);
     const estado=txt(r?.estado_firma||r?.estado).toUpperCase();
     if(r?.success===false) throw new Error(r.message||'No se pudo cancelar la firma.');
-    // Falla cerrado: la interfaz NO se libera hasta recibir confirmación
-    // persistida de CANCELADA/CANCELADO desde Firma Electrónica / ERP.
-    if(!['CANCELADA','CANCELADO'].includes(estado)){
+    if(estado && !['CANCELADA','CANCELADO'].includes(estado)){
       throw new Error('El motor no confirmó la cancelación del certificado.');
     }
 
