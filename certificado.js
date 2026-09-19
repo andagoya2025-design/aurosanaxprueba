@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.9';
+const VERSION='1.3.10';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -36,7 +36,9 @@ const state={
   medicos:[],
   paciente:null,
   historia:null,
-  firmaCertificados:new Map()
+  firmaCertificados:new Map(),
+  firmaInteractiva:false,
+  firmaPersistenteTimer:null
 };
 
 const txt=v=>String(v??'').trim();
@@ -639,13 +641,35 @@ async function cargarHistorial(id, token){
   state.certificados=certificados;
   renderHistorial();
 
-  // Consulta persistente no bloqueante. La autoridad final será documentos_firmados
-  // cuando el backend de CERTIFICADO esté habilitado.
-  Promise.all(certificados.map(c=>consultarFirmaPersistenteCertificado(c.id_certificado)))
-    .then(()=>{
-      if(token===state.token && txt(state.idAtencion)===txt(id)) renderHistorial();
-    })
-    .catch(()=>{});
+  /*
+    ANTIRREGRESIÓN 1.3.10 — ATENCIÓN HISTÓRICA / FIRMA PRIORITARIA
+    --------------------------------------------------------------
+    Antes se lanzaba una consulta persistente en paralelo por CADA certificado
+    apenas cargaba el historial. En atenciones históricas con varios documentos,
+    esas consultas podían competir con la acción interactiva de Firmar certificado.
+
+    Ahora:
+    - el historial queda utilizable inmediatamente;
+    - la reconciliación persistente se difiere y se ejecuta SECUENCIALMENTE;
+    - una firma interactiva tiene prioridad y detiene nuevas consultas de fondo;
+    - token + id_atencion impiden continuar trabajo perteneciente a otra atención.
+    No cambia endpoints, identidad documental, guardado, cancelación ni motor local.
+  */
+  if(state.firmaPersistenteTimer){
+    clearTimeout(state.firmaPersistenteTimer);
+    state.firmaPersistenteTimer=null;
+  }
+
+  state.firmaPersistenteTimer=setTimeout(async()=>{
+    state.firmaPersistenteTimer=null;
+    for(const c of certificados){
+      if(token!==state.token || txt(state.idAtencion)!==txt(id) || state.firmaInteractiva) break;
+      await consultarFirmaPersistenteCertificado(c.id_certificado);
+    }
+    if(token===state.token && txt(state.idAtencion)===txt(id) && !state.firmaInteractiva){
+      renderHistorial();
+    }
+  },1200);
 }
 
 function estadoFirmaCertificado(id){
@@ -895,6 +919,13 @@ async function accionFirmaCertificado(id){
   const motor=window.auroFirmaElectronica;
   if(!motor||typeof motor.firmarDocumento!=='function') return msg('error','El motor de Firma Electrónica no está disponible.');
 
+  // La acción del usuario tiene prioridad sobre reconciliaciones históricas de fondo.
+  state.firmaInteractiva=true;
+  if(state.firmaPersistenteTimer){
+    clearTimeout(state.firmaPersistenteTimer);
+    state.firmaPersistenteTimer=null;
+  }
+
   fijarEstadoFirmaCertificado(id,'PREPARANDO',{error:''});
   msg('ok','Preparando certificado para firma electrónica…');
 
@@ -927,6 +958,8 @@ async function accionFirmaCertificado(id){
     fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:txt(e?.message)});
     msg('error',e?.message||'No se pudo completar la firma electrónica del certificado.');
     throw e;
+  }finally{
+    state.firmaInteractiva=false;
   }
 }
 
@@ -1496,6 +1529,11 @@ async function inicializar(){
   mount();
 
   const token=++state.token;
+  state.firmaInteractiva=false;
+  if(state.firmaPersistenteTimer){
+    clearTimeout(state.firmaPersistenteTimer);
+    state.firmaPersistenteTimer=null;
+  }
   const c=contexto();
 
   state.contexto=c;
