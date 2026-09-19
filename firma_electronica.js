@@ -3046,3 +3046,164 @@
     obtenerUltimoCertificadoFirmado:obtenerUltimoCertificadoFirmado
   }));
 })();
+
+
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.3
+   PUENTE PERSISTENTE ANTIRREGRESIVO - VER CERTIFICADO FIRMADO
+   ------------------------------------------------------------
+   - Adhesión append-only sobre el archivo estable actual.
+   - NO modifica Firmar ni Cancelar CERTIFICADO.
+   - NO modifica el flujo persistente de RECETA.
+   - CERTIFICADO se localiza por:
+       tipo_documento = CERTIFICADO
+       id_documento_origen / id_certificado
+       id_atencion exacta
+   - Una vez localizado, reutiliza el lector persistente V2.8 por
+     id_firma_documento; no crea un segundo contrato con Drive/backend.
+============================================================ */
+(function auroFirmaVerCertificadoPersistenteV33(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(
+    !anterior ||
+    typeof anterior.consultarDocumentosFirmados !== 'function' ||
+    typeof anterior.obtenerPdfFirmadoPersistente !== 'function'
+  ){
+    console.error('AUROSANAX FIRMA 3.3: no se encontró el puente persistente estable anterior.');
+    return;
+  }
+
+  const VERSION = '3.3-ver-certificado-firmado-persistente';
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function esCertificado(data){
+    return texto(data && data.tipo_documento).toUpperCase() === 'CERTIFICADO';
+  }
+
+  function identidadCertificado(data){
+    const d = Object.assign({}, data || {});
+    const idCertificado = texto(d.id_certificado || d.id_documento_origen || d.id_documento_clinico);
+    const idAtencion = texto(d.id_atencion);
+    if(!idCertificado) throw new Error('No se encontró el identificador del certificado firmado.');
+    if(!idAtencion) throw new Error('No se encontró la atención del certificado firmado.');
+    return {id_certificado:idCertificado, id_atencion:idAtencion};
+  }
+
+  async function localizarCertificadoFirmado(data){
+    const id = identidadCertificado(data);
+    const r = await anterior.consultarDocumentosFirmados({
+      tipo_documento:'CERTIFICADO',
+      id_documento_origen:id.id_certificado,
+      id_certificado:id.id_certificado,
+      id_atencion:id.id_atencion,
+      id_receta:''
+    });
+
+    const docs = Array.isArray(r && r.documentos) ? r.documentos : [];
+    const doc = docs.find(function(x){
+      const tipo = texto(x && x.tipo_documento).toUpperCase();
+      const origen = texto(x && (x.id_documento_origen || x.id_certificado || x.id_documento_clinico));
+      const atencion = texto(x && x.id_atencion);
+      const estado = texto(x && (x.estado_firma || x.estado)).toUpperCase();
+      return tipo === 'CERTIFICADO' &&
+             origen === id.id_certificado &&
+             atencion === id.id_atencion &&
+             (!estado || estado === 'FIRMADO');
+    }) || null;
+
+    if(!doc) throw new Error('No se encontró el certificado firmado persistido para esta atención.');
+    if(!texto(doc.id_firma_documento)){
+      throw new Error('El registro del certificado firmado no contiene id_firma_documento.');
+    }
+    return doc;
+  }
+
+  async function obtenerPdfFirmadoPersistente(data){
+    if(!esCertificado(data)){
+      return anterior.obtenerPdfFirmadoPersistente(data);
+    }
+    const doc = await localizarCertificadoFirmado(data);
+    return anterior.obtenerPdfFirmadoPersistente({
+      id_firma_documento:texto(doc.id_firma_documento),
+      tipo_documento:'CERTIFICADO'
+    });
+  }
+
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
+
+  function base64Pdf(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  async function abrirPdfFirmadoPersistente(data){
+    if(!esCertificado(data)){
+      return anterior.abrirPdfFirmadoPersistente(data);
+    }
+
+    /* Abrir dentro del gesto del usuario para conservar compatibilidad con popups. */
+    const ventana = window.open('', '_blank');
+    if(!ventana){
+      throw new Error('El navegador bloqueó la nueva pestaña. Habilite ventanas emergentes para ver el PDF firmado.');
+    }
+
+    try{
+      ventana.document.title = 'Cargando certificado firmado…';
+      ventana.document.body.innerHTML =
+        '<p style="font-family:Arial,sans-serif;padding:20px">Cargando certificado firmado…</p>';
+
+      const r = await obtenerPdfFirmadoPersistente(data);
+      const b64 = base64Pdf(r);
+      if(!b64) throw new Error('El servidor no devolvió el PDF firmado del certificado.');
+
+      const blob = base64ABlob(b64, 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      ventana.location.replace(url);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+      return r;
+    }catch(error){
+      try{ ventana.close(); }catch(_e){}
+      throw error;
+    }
+  }
+
+  async function descargarPdfFirmadoPersistente(data, nombrePreferido){
+    if(!esCertificado(data)){
+      return anterior.descargarPdfFirmadoPersistente(data, nombrePreferido);
+    }
+
+    const r = await obtenerPdfFirmadoPersistente(data);
+    const b64 = base64Pdf(r);
+    if(!b64) throw new Error('El servidor no devolvió el PDF firmado del certificado.');
+
+    const blob = base64ABlob(b64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto(r.nombre_archivo || nombrePreferido || 'certificado_firmado.pdf');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return r;
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    obtenerPdfFirmadoPersistente:obtenerPdfFirmadoPersistente,
+    abrirPdfFirmadoPersistente:abrirPdfFirmadoPersistente,
+    descargarPdfFirmadoPersistente:descargarPdfFirmadoPersistente
+  }));
+})();
