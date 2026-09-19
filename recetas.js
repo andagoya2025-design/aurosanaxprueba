@@ -7465,3 +7465,130 @@
      Plan, Google Sheets, Apps Script, IDs y eventos.
    - Responsive: escritorio, Android, iPhone y iPad.
 ===================================================== */
+/* =====================================================
+   AUROSANAX RECETAS 38.2 - UX PREMIUM DE FIRMA
+   -----------------------------------------------------
+   ADHESIÓN VISUAL APPEND-ONLY ANTIRREGRESIVA SOBRE 38.1.
+   - Conserva íntegro Recetas 38.1 validado.
+   - NO modifica Plan 37.
+   - NO modifica firma_electronica.js, Apps Script, motor, Drive ni BD.
+   - NO crea POST/fetch, NO cambia identidad documental, NO cambia estados.
+   - Envuelve únicamente la API pública firmarElectronicaActual para reflejar
+     visualmente el resultado REAL devuelto por el flujo existente.
+===================================================== */
+(function auroRecetasUxPremiumFirmaV382(){
+  'use strict';
+
+  const api = window.auroRecetas;
+  if(!api || typeof api.firmarElectronicaActual !== 'function'){
+    console.warn('AUROSANAX RECETAS 38.2 UX: API de firma de Recetas no disponible.');
+    return;
+  }
+  if(api.__auroUxPremiumFirma382 === true) return;
+
+  const firmarBase = api.firmarElectronicaActual.bind(api);
+  let toast = null;
+  let timer = null;
+  let secuencia = 0;
+
+  const PALETA = Object.freeze({
+    preparando:'#8B1E5A',
+    ok:'#059669',
+    cancelada:'#B7791F',
+    error:'#B42318'
+  });
+
+  function asegurarToast(){
+    if(toast && toast.isConnected) return toast;
+
+    toast = document.getElementById('auroRecetaFirmaUxPremiumToast');
+    if(toast) return toast;
+
+    toast = document.createElement('div');
+    toast.id = 'auroRecetaFirmaUxPremiumToast';
+    toast.setAttribute('role','status');
+    toast.setAttribute('aria-live','polite');
+    toast.style.position = 'fixed';
+    toast.style.top = '18px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translate(-50%, -10px)';
+    toast.style.zIndex = '2147483000';
+    toast.style.maxWidth = 'min(92vw, 560px)';
+    toast.style.padding = '12px 18px';
+    toast.style.borderRadius = '14px';
+    toast.style.boxShadow = '0 12px 34px rgba(31, 18, 27, .20)';
+    toast.style.color = '#ffffff';
+    toast.style.fontSize = '14px';
+    toast.style.fontWeight = '700';
+    toast.style.lineHeight = '1.35';
+    toast.style.letterSpacing = '.01em';
+    toast.style.textAlign = 'center';
+    toast.style.pointerEvents = 'none';
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity .22s ease, transform .22s ease';
+    toast.style.display = 'none';
+    document.body.appendChild(toast);
+    return toast;
+  }
+
+  function mostrar(mensaje, tipo, duracion){
+    const miSecuencia = ++secuencia;
+    if(timer){ clearTimeout(timer); timer = null; }
+
+    const box = asegurarToast();
+    box.textContent = String(mensaje || '');
+    box.style.background = PALETA[tipo] || PALETA.preparando;
+    box.style.display = 'block';
+    box.style.opacity = '0';
+    box.style.transform = 'translate(-50%, -10px)';
+
+    requestAnimationFrame(function(){
+      if(miSecuencia !== secuencia) return;
+      box.style.opacity = '1';
+      box.style.transform = 'translate(-50%, 0)';
+    });
+
+    if(Number(duracion) > 0){
+      timer = setTimeout(function(){
+        if(miSecuencia !== secuencia) return;
+        box.style.opacity = '0';
+        box.style.transform = 'translate(-50%, -8px)';
+        setTimeout(function(){
+          if(miSecuencia === secuencia) box.style.display = 'none';
+        }, 230);
+      }, Number(duracion));
+    }
+  }
+
+  async function firmarConUxPremium(){
+    /* Solo comunicación visual. La autoridad sigue siendo firmarBase(). */
+    mostrar('Preparando firma electrónica de la receta…', 'preparando', 0);
+
+    try{
+      const resultado = await firmarBase();
+      const estado = String(resultado?.estado_firma || '').trim().toUpperCase();
+
+      if(estado === 'FIRMADO'){
+        mostrar('Receta firmada correctamente ✓', 'ok', 3600);
+      }else if(estado === 'CANCELADA'){
+        mostrar('Firma de receta cancelada', 'cancelada', 3600);
+      }else if(resultado === null || resultado === undefined){
+        /* El flujo base ya mostró el detalle del error/validación en Recetas. */
+        mostrar('No fue posible completar la firma de la receta', 'error', 3600);
+      }else{
+        /* No inventa un estado clínico que el flujo base no haya confirmado. */
+        mostrar('La firma de la receta no fue confirmada', 'error', 3600);
+      }
+
+      return resultado;
+    }catch(error){
+      mostrar('No fue posible completar la firma de la receta', 'error', 3600);
+      throw error;
+    }
+  }
+
+  window.auroRecetas = Object.assign({}, api, {
+    firmarElectronicaActual:firmarConUxPremium,
+    __auroUxPremiumFirma382:true
+  });
+})();
