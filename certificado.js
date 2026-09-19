@@ -583,18 +583,24 @@ function calcularHasta(){
   }
 }
 
-async function cargarDx(id){
+async function cargarDx(id, token){
+  let diagnosticos=[];
   try{
     const r=await get('listarDiagnosticosPorAtencion',{id_atencion:id});
-    state.diagnosticos=arr(r);
+    diagnosticos=arr(r);
   }catch(e){
     try{
       const r=await get('listarDiagnosticos');
-      state.diagnosticos=arr(r).filter(x=>txt(x.id_atencion)===id);
+      diagnosticos=arr(r).filter(x=>txt(x.id_atencion)===id);
     }catch(_){
-      state.diagnosticos=[];
+      diagnosticos=[];
     }
   }
+
+  // ANTIRREGRESIÓN: una respuesta atrasada de otra atención no puede repintar esta tarjeta.
+  if(token!==state.token || txt(state.idAtencion)!==txt(id)) return;
+
+  state.diagnosticos=diagnosticos;
   renderDx();
 }
 
@@ -612,13 +618,19 @@ function renderDx(){
     </label>`).join('');
 }
 
-async function cargarHistorial(id){
+async function cargarHistorial(id, token){
+  let certificados=[];
   try{
     const r=await get('listarCertificadosPorAtencion',{id_atencion:id});
-    state.certificados=arr(r);
+    certificados=arr(r);
   }catch(e){
-    state.certificados=[];
+    certificados=[];
   }
+
+  // ANTIRREGRESIÓN: solo la atención que inició esta carga puede actualizar el historial.
+  if(token!==state.token || txt(state.idAtencion)!==txt(id)) return;
+
+  state.certificados=certificados;
   renderHistorial();
 }
 
@@ -758,7 +770,7 @@ async function guardar(){
     if(r?.success===false) throw Error(r.message||'No se pudo guardar.');
     state.editandoId=txt(r.id||r.id_certificado||data.id_certificado);
     msg('ok','Certificado guardado correctamente.');
-    await cargarHistorial(c.id);
+    await cargarHistorial(c.id,state.token);
   }catch(e){
     msg('error',e.message||'Error al guardar el certificado.');
   }finally{
@@ -1233,17 +1245,20 @@ async function inicializar(){
     return;
   }
 
-  await cargarContextoAuxiliar(c);
-  if(token!==state.token) return;
-
-  renderContextoClinico();
-
-  await Promise.all([
-    cargarDx(c.id),
-    cargarHistorial(c.id)
+  // La información propia de la atención comienza a cargarse inmediatamente.
+  // Configuración/médicos se mantienen en paralelo y no bloquean la tarjeta de certificados.
+  const cargaAuxiliar=cargarContextoAuxiliar(c);
+  const cargaClinica=Promise.all([
+    cargarDx(c.id,token),
+    cargarHistorial(c.id,token)
   ]);
 
-  if(token!==state.token) return;
+  await cargaAuxiliar;
+  if(token!==state.token || txt(state.idAtencion)!==txt(c.id)) return;
+  renderContextoClinico();
+
+  await cargaClinica;
+  if(token!==state.token || txt(state.idAtencion)!==txt(c.id)) return;
 
   nuevo();
 }
