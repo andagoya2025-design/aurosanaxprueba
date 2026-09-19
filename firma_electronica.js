@@ -3207,3 +3207,171 @@
     descargarPdfFirmadoPersistente:descargarPdfFirmadoPersistente
   }));
 })();
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.4
+   PUENTE QUIRÚRGICO — CANCELAR FIRMA DE CERTIFICADO
+   ------------------------------------------------------------
+   ADHESIÓN APPEND-ONLY ANTIRREGRESIVA.
+   - Conserva íntegro TODO el baseline V2.1 -> V3.3 anterior.
+   - NO modifica RECETA, PLAN, PDF persistente, Drive ni backend.
+   - Conserva el payload completo del CERTIFICADO mientras la
+     operación está activa para que CANCELAR reutilice EXACTAMENTE
+     la misma identidad documental, aunque certificado.js envíe
+     al cancelar solamente IDs clínicos.
+   - Mantiene cancelarFirmaCertificado(data) como contrato oficial.
+   - Añade aliases de compatibilidad SOLO para CERTIFICADO:
+       cancelarFirmaElectronica(data)
+       cancelarFirma(data)
+       cancelarDocumento(data)
+     sin reemplazar contratos previos para otros documentos.
+   - No declara CANCELADA sin confirmación positiva del backend.
+============================================================ */
+(function auroFirmaCancelarCertificadoV34(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(
+    !anterior ||
+    typeof anterior.firmarDocumento !== 'function' ||
+    typeof anterior.cancelarFirmaCertificado !== 'function'
+  ){
+    console.error('AUROSANAX FIRMA 3.4: no se encontró el contrato estable de certificado V3.2/V3.3.');
+    return;
+  }
+
+  const VERSION = '3.4-cancelar-certificado-puente-quirurgico';
+  const certificadosActivos = new Map();
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function esCertificado(data){
+    const d = data || {};
+    const tipo = texto(d.tipo_documento).toUpperCase();
+    return tipo === 'CERTIFICADO' || !!texto(d.id_certificado || d.id_documento_origen);
+  }
+
+  function normalizarCertificado(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = 'CERTIFICADO';
+    d.id_atencion = texto(d.id_atencion);
+    d.id_certificado = texto(d.id_certificado || d.id_documento_origen || d.id_documento_clinico);
+    d.id_documento_origen = d.id_certificado;
+    d.id_receta = '';
+    if(Object.prototype.hasOwnProperty.call(d, 'html_documento')){
+      d.html_documento = texto(d.html_documento);
+    }
+    return d;
+  }
+
+  function claveCertificado(data){
+    const d = normalizarCertificado(data);
+    if(!d.id_atencion || !d.id_certificado) return '';
+    return d.id_atencion + '|' + d.id_certificado;
+  }
+
+  function combinarConActivo(data){
+    const recibido = normalizarCertificado(data);
+    const clave = claveCertificado(recibido);
+    const activo = clave ? certificadosActivos.get(clave) : null;
+
+    /*
+      El payload activo contiene html_documento y la identidad exacta usada
+      al iniciar la firma. Los valores recibidos al cancelar tienen prioridad
+      para IDs explícitos, pero nunca se pierde el HTML activo requerido por
+      el contrato V3.2 para localizar la solicitud exacta.
+    */
+    return normalizarCertificado(Object.assign({}, activo || {}, recibido, {
+      html_documento:texto(recibido.html_documento || (activo && activo.html_documento))
+    }));
+  }
+
+  async function firmarDocumento(data){
+    if(!esCertificado(data)){
+      return anterior.firmarDocumento(data);
+    }
+
+    const solicitud = normalizarCertificado(data);
+    const clave = claveCertificado(solicitud);
+
+    if(clave){
+      certificadosActivos.set(clave, Object.assign({}, solicitud));
+    }
+
+    try{
+      return await anterior.firmarDocumento(solicitud);
+    }finally{
+      /*
+        El motor V3.2 es la autoridad de estado y conserva internamente la
+        solicitud durante PENDIENTE/TOMADA. Este mapa es solo un puente de
+        parámetros para la llamada de cancelación y no sustituye al backend.
+      */
+      if(clave) certificadosActivos.delete(clave);
+    }
+  }
+
+  async function cancelarFirmaCertificado(data){
+    const solicitud = combinarConActivo(data);
+
+    if(!solicitud.id_atencion){
+      throw new Error('No existe una atención clínica válida para cancelar la firma del certificado.');
+    }
+    if(!solicitud.id_certificado){
+      throw new Error('No se encontró el certificado cuya firma se desea cancelar.');
+    }
+    if(!solicitud.html_documento){
+      throw new Error('No se pudo recuperar la solicitud activa del certificado. Vuelva a iniciar la firma y cancele desde la misma operación.');
+    }
+
+    const respuesta = await anterior.cancelarFirmaCertificado(solicitud);
+    const estado = texto(respuesta && respuesta.estado_firma).toUpperCase();
+
+    if(estado !== 'CANCELADA' && estado !== 'SIN_PENDIENTE'){
+      throw new Error('El servidor no confirmó la cancelación de la firma del certificado.');
+    }
+
+    if(estado === 'CANCELADA'){
+      const clave = claveCertificado(solicitud);
+      if(clave) certificadosActivos.delete(clave);
+    }
+
+    return respuesta;
+  }
+
+  function delegarCancelacionPrevia(nombre, data){
+    const fn = anterior && anterior[nombre];
+    if(typeof fn === 'function') return fn.call(anterior, data);
+    throw new Error('La cancelación solicitada no está disponible para este tipo de documento.');
+  }
+
+  async function cancelarFirmaElectronica(data){
+    if(esCertificado(data)) return cancelarFirmaCertificado(data);
+    return delegarCancelacionPrevia('cancelarFirmaElectronica', data);
+  }
+
+  async function cancelarFirma(data){
+    if(esCertificado(data)) return cancelarFirmaCertificado(data);
+    return delegarCancelacionPrevia('cancelarFirma', data);
+  }
+
+  async function cancelarDocumento(data){
+    if(esCertificado(data)) return cancelarFirmaCertificado(data);
+    return delegarCancelacionPrevia('cancelarDocumento', data);
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    cancelarFirmaCertificado:cancelarFirmaCertificado,
+    cancelarFirmaElectronica:cancelarFirmaElectronica,
+    cancelarFirma:cancelarFirma,
+    cancelarDocumento:cancelarDocumento
+  }));
+
+  try{
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-certificado-cancelacion-lista', {
+      detail:{version:VERSION}
+    }));
+  }catch(_e){}
+})();
