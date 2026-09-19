@@ -1,5 +1,5 @@
     /* ============================================================
-     AUROSANAX — ESTÉTICA FUNCIONAL V2.3
+     AUROSANAX — ESTÉTICA FUNCIONAL V2.4
      ARCHIVO PROPIETARIO: estetica.js
      MODULARIZACIÓN ANTIRREGRESIVA
      ------------------------------------------------------------
@@ -16,14 +16,14 @@
     (function auroEsteticaV23(){
     'use strict';
 
-    const VERSION='2.3.0-modular-independiente';
+    const VERSION='2.4.0-ux-llenado-hibrido';
     const PREFIJO='AUROSANAX_ESTETICA_V1::';
 
-    if(window.__auroEsteticaV23Instalada){
-      console.warn('AUROSANAX ESTÉTICA V2.3: segunda instalación omitida.');
+    if(window.__auroEsteticaV24Instalada){
+      console.warn('AUROSANAX ESTÉTICA V2.4: segunda instalación omitida.');
       return;
     }
-    window.__auroEsteticaV23Instalada=true;
+    window.__auroEsteticaV24Instalada=true;
 
     const CAMPOS=Object.freeze({
      area:'hcEsteticaArea',
@@ -80,7 +80,7 @@
     function hoy(){return fechaClave(new Date().toISOString());}
     function clave(c){return [texto(c.id_paciente),texto(c.id_historia),texto(c.id_atencion),fechaClave(c.fecha_atencion)].join('|');}
     function panel(){
-     return {area:valor(CAMPOS.area),procedimiento:valor(CAMPOS.procedimiento),
+     return {area:valorAreaUX(),procedimiento:valor(CAMPOS.procedimiento),
      sesion:valor(CAMPOS.sesion),consentimiento:valor(CAMPOS.consentimiento),
      facial:valor(CAMPOS.facial),corporal:valor(CAMPOS.corporal),
      intima:valor(CAMPOS.intima),evolucion:valor(CAMPOS.evolucion)};
@@ -100,20 +100,22 @@
      try{const o=JSON.parse(j);return o&&typeof o==='object'?o:{};}catch(e){return{evolucion:raw};}
     }
     function limpiar(){
-     setValor(CAMPOS.area,'Facial');setValor(CAMPOS.procedimiento,'');
+     setAreaUX('Facial');setValor(CAMPOS.procedimiento,'');
      setValor(CAMPOS.sesion,'');setValor(CAMPOS.consentimiento,'Pendiente');
      setValor(CAMPOS.facial,'');setValor(CAMPOS.corporal,'');
      setValor(CAMPOS.intima,'');setValor(CAMPOS.evolucion,'');
+     actualizarAreaLibreUX();actualizarProcedimientosUX();
     }
     function aplicar(r){
      limpiar();if(!r)return;
      const e=parseEval(r.evaluacion_clinica);
-     setValor(CAMPOS.area,texto(r.zona_tratamiento)||'Facial');
+     setAreaUX(texto(r.zona_tratamiento)||'Facial');
      setValor(CAMPOS.procedimiento,r.procedimiento_sugerido||'');
      setValor(CAMPOS.sesion,r.plan_sesiones||'');
      setValor(CAMPOS.consentimiento,e.consentimiento||'Pendiente');
      setValor(CAMPOS.facial,e.facial||'');setValor(CAMPOS.corporal,e.corporal||'');
      setValor(CAMPOS.intima,e.intima||'');setValor(CAMPOS.evolucion,e.evolucion||'');
+     actualizarAreaLibreUX();actualizarProcedimientosUX();
     }
     function lista(j){
      if(Array.isArray(j))return j;
@@ -272,14 +274,164 @@
      const c=contexto();
      if(c.id_atencion&&c.id_paciente&&c.id_historia){
       Promise.resolve(cargar({forzar:true})).catch(e=>
-       console.warn('AUROSANAX ESTÉTICA V2.3: recarga de atención falló.',e)
+       console.warn('AUROSANAX ESTÉTICA V2.4: recarga de atención falló.',e)
       );
      }else{
       baseline(null,c);
      }
     }
 
+
+    /* ============================================================
+       V2.4 — UX DE LLENADO HÍBRIDO
+       ------------------------------------------------------------
+       Capa exclusivamente visual/aditiva:
+       - Sugerencias por área sin cerrar la escritura médica.
+       - "Otra área" con texto libre.
+       - Procedimiento y sesión siguen siendo inputs libres.
+       - Datalist solo sugiere; nunca obliga.
+       - Botones Limpiar por campo.
+       - No altera endpoints, payload, resolver, identidad ni backend.
+    ============================================================ */
+    const AREAS_BASE=Object.freeze(['Facial','Corporal','Íntima','Capilar']);
+    const SUGERENCIAS_PROCEDIMIENTO=Object.freeze({
+     'Facial':[
+      'Limpieza facial','Hidratación facial','Rejuvenecimiento facial',
+      'Hollywood Peel','Láser CO₂ facial','Peeling facial',
+      'Bioestimulación facial','Ácido hialurónico'
+     ],
+     'Corporal':[
+      'Rejuvenecimiento corporal','Bioestimulación corporal',
+      'Tratamiento de flacidez','Tratamiento de estrías',
+      'Tratamiento de cicatrices','Depilación láser',
+      'Hidratación corporal','Protocolo despigmentante corporal'
+     ],
+     'Íntima':[
+      'Aclaramiento íntimo','Limpieza íntima','Hidratación íntima',
+      'Rejuvenecimiento íntimo','Tensado vaginal',
+      'Láser CO₂ íntimo','Tratamiento de incontinencia urinaria',
+      'Labioplastia','Tratamiento de verrugas con CO₂'
+     ],
+     'Capilar':[
+      'Evaluación capilar','Bioestimulación capilar',
+      'Terapia regenerativa capilar','Hidratación capilar',
+      'Protocolo para caída capilar'
+     ]
+    });
+    const SUGERENCIAS_SESION=Object.freeze([
+     '1 sesión','2 sesiones','3 sesiones','4 sesiones','5 sesiones','6 sesiones',
+     'Según evolución','Sesiones según respuesta clínica','Reevaluar en próxima consulta'
+    ]);
+
+    function uxId(s){return 'auroEsteticaUX_'+s;}
+    function areaSelect(){return document.getElementById(CAMPOS.area);}
+    function areaLibre(){return document.getElementById(uxId('areaLibre'));}
+    function valorAreaUX(){
+     const s=areaSelect();if(!s)return'';
+     const v=texto(s.value);
+     return v==='__OTRA__'?texto(areaLibre()?.value||''):v;
+    }
+    function setAreaUX(v){
+     const s=areaSelect();if(!s)return;
+     const x=texto(v)||'Facial';
+     if(AREAS_BASE.includes(x)){s.value=x;if(areaLibre())areaLibre().value='';}
+     else{s.value='__OTRA__';if(areaLibre())areaLibre().value=x;}
+     actualizarAreaLibreUX();actualizarProcedimientosUX();
+    }
+    function marcarDirtyUX(){
+     estado.dirty=true;
+     try{document.getElementById('hc_estetica')?.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+    }
+    function crearDatalist(id,items){
+     let d=document.getElementById(id);
+     if(!d){d=document.createElement('datalist');d.id=id;document.body.appendChild(d);}
+     d.innerHTML='';
+     (items||[]).forEach(x=>{const o=document.createElement('option');o.value=x;d.appendChild(o);});
+     return d;
+    }
+    function actualizarProcedimientosUX(){
+     const area=valorAreaUX();
+     const items=SUGERENCIAS_PROCEDIMIENTO[area]||[];
+     crearDatalist(uxId('procedimientos'),items);
+     const e=document.getElementById(CAMPOS.procedimiento);
+     if(e)e.setAttribute('list',uxId('procedimientos'));
+    }
+    function actualizarAreaLibreUX(){
+     const w=document.getElementById(uxId('areaLibreWrap'));
+     if(!w)return;
+     const otra=texto(areaSelect()?.value)==='__OTRA__';
+     w.style.display=otra?'block':'none';
+    }
+    function botonLimpiarUX(target,fn){
+     const b=document.createElement('button');
+     b.type='button';b.className='btn btn-sm btn-outline-secondary';
+     b.textContent='Limpiar';
+     b.style.cssText='padding:.18rem .55rem;font-size:.78rem;line-height:1.25;';
+     b.addEventListener('click',()=>{fn();marcarDirtyUX();});
+     target.appendChild(b);
+    }
+    function accionesDebajoUX(el,fn){
+     if(!el||document.getElementById(uxId('acciones_'+el.id)))return;
+     const a=document.createElement('div');a.id=uxId('acciones_'+el.id);
+     a.style.cssText='display:flex;gap:.4rem;align-items:center;margin-top:.35rem;flex-wrap:wrap;';
+     botonLimpiarUX(a,fn);
+     el.insertAdjacentElement('afterend',a);
+    }
+    function instalarUX(){
+     const p=document.getElementById('hc_estetica');if(!p||p.dataset.auroEsteticaUXV24==='1')return;
+     p.dataset.auroEsteticaUXV24='1';
+
+     const area=areaSelect();
+     if(area){
+      if(!Array.from(area.options).some(o=>o.value==='__OTRA__')){
+       const o=document.createElement('option');o.value='__OTRA__';o.textContent='Otra área…';area.appendChild(o);
+      }
+      const wrap=document.createElement('div');wrap.id=uxId('areaLibreWrap');
+      wrap.style.cssText='display:none;margin-top:.4rem;';
+      const inp=document.createElement('input');inp.id=uxId('areaLibre');inp.className='form-control';
+      inp.placeholder='Escriba otra área';inp.autocomplete='off';
+      inp.addEventListener('input',()=>{actualizarProcedimientosUX();marcarDirtyUX();});
+      wrap.appendChild(inp);
+      const acciones=document.createElement('div');acciones.style.cssText='margin-top:.35rem;';
+      botonLimpiarUX(acciones,()=>{inp.value='';inp.focus();});
+      wrap.appendChild(acciones);
+      area.insertAdjacentElement('afterend',wrap);
+      area.addEventListener('change',()=>{actualizarAreaLibreUX();actualizarProcedimientosUX();});
+      accionesDebajoUX(area,()=>{setAreaUX('Facial');});
+     }
+
+     const proc=document.getElementById(CAMPOS.procedimiento);
+     if(proc){
+      proc.placeholder='Seleccione una sugerencia o escriba libremente';
+      proc.autocomplete='off';actualizarProcedimientosUX();
+      accionesDebajoUX(proc,()=>{proc.value='';proc.focus();});
+     }
+
+     const ses=document.getElementById(CAMPOS.sesion);
+     if(ses){
+      ses.placeholder='Ej. 3 sesiones o escriba libremente';
+      ses.autocomplete='off';ses.setAttribute('list',uxId('sesiones'));
+      crearDatalist(uxId('sesiones'),SUGERENCIAS_SESION);
+      accionesDebajoUX(ses,()=>{ses.value='';ses.focus();});
+     }
+
+     const con=document.getElementById(CAMPOS.consentimiento);
+     if(con){
+      if(!Array.from(con.options).some(o=>o.value==='')){
+       const o=document.createElement('option');o.value='';o.textContent='— Seleccionar —';con.insertBefore(o,con.firstChild);
+      }
+      accionesDebajoUX(con,()=>{con.value='';con.focus();});
+     }
+
+     [CAMPOS.facial,CAMPOS.corporal,CAMPOS.intima,CAMPOS.evolucion].forEach(id=>{
+      const e=document.getElementById(id);if(e)accionesDebajoUX(e,()=>{e.value='';e.focus();});
+     });
+
+     actualizarAreaLibreUX();actualizarProcedimientosUX();
+    }
+
     function instalar(){
+     instalarUX();
      const p=document.getElementById('hc_estetica');
      if(p&&p.dataset.auroEsteticaDirtyV2!=='1'){
       p.dataset.auroEsteticaDirtyV2='1';
@@ -291,8 +443,8 @@
       s.dataset.auroEsteticaPacienteV2='1';
       s.addEventListener('change',()=>{invalidar('cambio de paciente');limpiar();});
      }
-     if(window.__auroEsteticaEventosV23!=='1'){
-      window.__auroEsteticaEventosV23='1';
+     if(window.__auroEsteticaEventosV24!=='1'){
+      window.__auroEsteticaEventosV24='1';
       window.addEventListener('aurosanax:atencion-seleccionada',alCambiarAtencion);
       window.addEventListener('aurosanax:atencion-limpiada',alCambiarAtencion);
       window.addEventListener('aurosanax:atencion-finalizada',alCambiarAtencion);
@@ -307,7 +459,7 @@
       dirty:estado.dirty,contexto_coincide:coincide(c),cambio_real:cambio(c),
       tiene_registro:!!estado.registro,actualizado_en:estado.registro?.actualizado_en||'',
       ultimo_error:estado.ultimoError,
-      persistencia:'V2.3: identidad estricta por id_atencion; sin fallback por fecha; registros V1 históricos no se modifican'
+      persistencia:'V2.4: conserva identidad estricta V2.3 por id_atencion; UX híbrida aditiva; sin fallback por fecha'
      };
     }
 
@@ -324,5 +476,5 @@
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',instalar,{once:true});
     else instalar();
 
-    console.log('AUROSANAX ESTÉTICA V2.3 instalada · módulo independiente · identidad estricta por atención.');
+    console.log('AUROSANAX ESTÉTICA V2.4 instalada · UX híbrida aditiva · identidad estricta por atención conservada.');
     })();
