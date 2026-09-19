@@ -399,6 +399,7 @@ function instalarCSS(){
 .ac-firma-preparando{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}
 .ac-firma-proceso{background:#eff6ff!important;color:#1d4ed8!important;border:1px solid #bfdbfe!important}
 .ac-firma-firmada{background:#ecfdf5!important;color:#166534!important;border:1px solid #bbf7d0!important}
+.ac-firma-cancelar{background:#fff1f2!important;color:#be123c!important;border:1px solid #fecdd3!important}
 .ac-primary{background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
 .ac-soft{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8}
 .ac-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;margin-bottom:8px}
@@ -675,6 +676,9 @@ function renderHistorial(){
     const proceso=ef.estado==='PROCESO';
     const clase=firmada?' ac-firma-firmada':(preparando?' ac-firma-preparando':(proceso?' ac-firma-proceso':''));
     const textoBoton=firmada?'Ver certificado firmado ✓':(preparando?'Preparando firma…':(proceso?'Firma en proceso…':'Firmar certificado'));
+    const botonCancelar=(preparando||proceso)
+      ? `<button class="ac-btn ac-firma-cancelar" data-accancelarfirma="${esc(c.id_certificado)}">Cancelar firma</button>`
+      : '';
     return `<div class="ac-item">
       <div class="ac-item-top">
         <div>
@@ -684,6 +688,7 @@ function renderHistorial(){
         <div class="ac-actions" style="margin-top:0">
           <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
           <button class="ac-btn ac-soft${clase}" data-acfirmar="${esc(c.id_certificado)}" ${preparando||proceso?'disabled aria-busy="true"':''}>${textoBoton}</button>
+          ${botonCancelar}
         </div>
       </div>
     </div>`;
@@ -691,6 +696,7 @@ function renderHistorial(){
 
   b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
   b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>accionFirmaCertificado(x.dataset.acfirmar));
+  b.querySelectorAll('[data-accancelarfirma]').forEach(x=>x.onclick=()=>cancelarFirmaCertificado(x.dataset.accancelarfirma));
 }
 
 /*
@@ -736,8 +742,94 @@ function documentoFirmableCertificado(id){
     nombre_archivo:'CERTIFICADO_'+idCertificado+'_FIRMADO.pdf',
     registro,
     detalle,
-    html_documento:docHTML(registro)
+    html_documento:documentoHTMLFirmaCertificado(registro)
   };
+}
+
+
+/*
+  CERTIFICADO — DOCUMENTO ORIGINAL PARA FIRMA
+  -------------------------------------------
+  Usa exactamente el mismo docHTML() y estilosImpresion() que el flujo
+  Imprimir / PDF. El motor local recibe un HTML A4 autocontenido y no una
+  representación visual parcial dependiente del CSS de la pantalla ERP.
+*/
+function documentoHTMLFirmaCertificado(registro){
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Certificado médico AUROSANAX</title>
+<style>
+${estilosImpresion()}
+</style>
+</head>
+<body>
+${docHTML(registro)}
+</body>
+</html>`;
+}
+
+/*
+  CANCELACIÓN CERTIFICADO
+  -----------------------
+  Cancela únicamente la solicitud asociada al certificado exacto.
+  La autoridad de cancelación sigue siendo Firma Electrónica / ERP.
+*/
+async function cancelarFirmaCertificado(id){
+  const doc=documentoFirmableCertificado(id);
+  if(!doc.success) return msg('warn',doc.message);
+
+  const motor=window.auroFirmaElectronica;
+  if(!motor) return msg('error','El motor de Firma Electrónica no está disponible.');
+
+  const estadoLocal=estadoFirmaCertificado(id);
+  const idSolicitud=txt(
+    estadoLocal?.id_solicitud||
+    estadoLocal?.solicitud?.id_solicitud||
+    estadoLocal?.documento?.id_solicitud
+  );
+
+  const payload={
+    tipo_documento:'CERTIFICADO',
+    id_documento_origen:doc.id_certificado,
+    id_certificado:doc.id_certificado,
+    id_atencion:doc.id_atencion,
+    id_receta:'',
+    id_solicitud:idSolicitud
+  };
+
+  const cancelar=
+    (typeof motor.cancelarFirmaElectronica==='function' && motor.cancelarFirmaElectronica.bind(motor)) ||
+    (typeof motor.cancelarFirma==='function' && motor.cancelarFirma.bind(motor)) ||
+    (typeof motor.cancelarDocumento==='function' && motor.cancelarDocumento.bind(motor));
+
+  if(!cancelar){
+    return msg('error','La versión instalada de Firma Electrónica no expone el contrato de cancelación.');
+  }
+
+  try{
+    msg('warn','Cancelando firma del certificado…');
+    const r=await cancelar(payload);
+    const estado=txt(r?.estado_firma||r?.estado).toUpperCase();
+    if(r?.success===false) throw new Error(r.message||'No se pudo cancelar la firma.');
+    if(estado && !['CANCELADA','CANCELADO'].includes(estado)){
+      throw new Error('El motor no confirmó la cancelación del certificado.');
+    }
+
+    fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{
+      documento:null,
+      solicitud:null,
+      id_solicitud:'',
+      error:''
+    });
+    msg('warn','Firma del certificado cancelada.');
+    return r;
+  }catch(e){
+    msg('error',e?.message||'No se pudo cancelar la firma del certificado.');
+    return null;
+  }
 }
 
 async function consultarFirmaPersistenteCertificado(id){
@@ -810,6 +902,14 @@ async function accionFirmaCertificado(id){
     await new Promise(resolve=>requestAnimationFrame(resolve));
     fijarEstadoFirmaCertificado(id,'PROCESO');
     const resultado=await motor.firmarDocumento(doc);
+    const idSolicitud=txt(resultado?.id_solicitud||resultado?.solicitud?.id_solicitud);
+    if(idSolicitud){
+      const previo=estadoFirmaCertificado(id);
+      state.firmaCertificados.set(txt(id),Object.assign({},previo,{
+        id_solicitud:idSolicitud,
+        solicitud:resultado?.solicitud||previo.solicitud||null
+      }));
+    }
     const estado=txt(resultado?.estado_firma).toUpperCase();
 
     if(estado==='FIRMADO'){
@@ -1464,6 +1564,7 @@ window.auroCertificados={
   obtenerDocumentoFirmable:(id)=>documentoFirmableCertificado(id),
   prepararFirma:(id)=>prepararFirmaCertificado(id),
   firmarCertificado:(id)=>accionFirmaCertificado(id),
+  cancelarFirmaCertificado:(id)=>cancelarFirmaCertificado(id),
   verCertificadoFirmado:(id)=>verCertificadoFirmado(id),
   consultarFirmaPersistente:(id)=>consultarFirmaPersistenteCertificado(id)
 };
