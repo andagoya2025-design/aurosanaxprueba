@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.1.4
+ Versión: 1.1.5
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.1.4';
+  const VERSION = '1.1.5';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -1404,7 +1404,7 @@
           <p>${esc(d.dieta_cuidados)}</p>
         </section>` : '',
       txt(d.recomendaciones_generales) ? `
-        <section class="ar-section">
+        <section class="ar-section ar-section-recomendaciones">
           <h3>RECOMENDACIONES GENERALES</h3>
           ${recRecomendacionesHTML(d.recomendaciones_generales)}
         </section>` : ''
@@ -1455,13 +1455,21 @@
     </article>`;
   }
 
+  /*
+    AUROSANAX RECOMENDACIONES V1.1.5 — PAGINACIÓN A4 ANTIRREGRESIVA
+    ----------------------------------------------------------------
+    - Corrige el espacio vacío artificial antes de Recomendaciones Generales.
+    - El bloque largo de recomendaciones puede continuar entre páginas.
+    - La firma permanece unida y pasa al flujo natural al final del documento.
+    - No modifica guardado, detalle_json, endpoints, Plan, Diagnósticos ni Sheets.
+  */
   function recEstilosImpresion(){
     return `
 @page{size:A4 portrait;margin:12mm 15mm}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;max-width:100%;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
 body{overflow-x:hidden}
-.ar-paper{width:100%;max-width:100%;min-width:0;min-height:270mm;margin:0;padding:0 0 30mm;background:#fff;position:relative}
+.ar-paper{width:100%;max-width:100%;min-width:0;min-height:270mm;margin:0;padding:0;background:#fff;position:relative}
 .ar-paper,.ar-paper *{min-width:0}
 .ar-paper p,.ar-paper span,.ar-paper b,.ar-paper div{overflow-wrap:anywhere;word-break:normal}
 .ar-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ar-color,#8b1e5a);padding-bottom:9px}
@@ -1477,6 +1485,10 @@ body{overflow-x:hidden}
 .ar-line{font-size:12px;line-height:1.42}
 .ar-line b{display:inline-block;min-width:120px}
 .ar-section,.ar-dx{margin:14px 0;break-inside:avoid;page-break-inside:avoid}
+.ar-section-recomendaciones{break-inside:auto;page-break-inside:auto}
+.ar-section-recomendaciones h3{break-after:avoid;page-break-after:avoid}
+.ar-section-recomendaciones .ar-rec-list{break-inside:auto;page-break-inside:auto}
+.ar-section-recomendaciones .ar-rec-list li{break-inside:avoid;page-break-inside:avoid}
 .ar-section h3,.ar-dx h3{font-size:12px;margin:0 0 6px;font-weight:900}
 .ar-dx-row{font-size:12px;line-height:1.45;margin:2px 0}
 .ar-doc-list{margin:4px 0 7px 18px;padding:0}
@@ -1484,14 +1496,14 @@ body{overflow-x:hidden}
 .ar-rec-list{margin-top:6px}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
 .ar-rec-text{line-height:1.62!important}
-.ar-firma-area{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}
+.ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:16mm;break-inside:avoid;page-break-inside:avoid}
 .ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
 .ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ar-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ar-sign b{font-size:12.4px}
 @media print{
   html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0 0 30mm!important;overflow:visible!important;position:relative!important;transform:none!important}
+  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important}
   .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
   .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
 }`;
