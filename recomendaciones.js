@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.1.5
+ Versión: 1.2.0
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.1.5';
+  const VERSION = '1.2.0';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -38,7 +38,14 @@
     cargando: false,
     guardando: false,
     inicializado: false,
-    tokenCarga: 0
+    tokenCarga: 0,
+    firma:{
+      estado:'SIN_FIRMA',
+      id_solicitud:'',
+      documento:null,
+      error:'',
+      token:0
+    }
   };
 
   const ALERTAS = [
@@ -469,6 +476,10 @@
       .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
+      .auro-rec-btn.firma{background:#6c1d52;color:#fff;border-color:#6c1d52}
+      .auro-rec-btn.firma.ok{background:#166534;color:#fff;border-color:#166534}
+      .auro-rec-btn.firma.proceso{background:#7c3aed;color:#fff;border-color:#7c3aed}
+      .auro-rec-btn.cancelar-firma{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
       .auro-rec-btn{border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:13px;padding:10px 13px;font-weight:850;cursor:pointer}
       .auro-rec-btn.primary{border:0;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
       .auro-rec-btn:disabled{opacity:.5;cursor:not-allowed}
@@ -630,6 +641,8 @@
           <div class="auro-rec-actions">
             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
+            <button type="button" class="auro-rec-btn cancelar-firma" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
+            <button type="button" class="auro-rec-btn firma" id="auroRecBtnFirma" disabled><i class="bi bi-pen me-1"></i> Firmar recomendación</button>
             <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
           </div>
         </div>
@@ -676,6 +689,7 @@
   function limpiar(){
     state.idRecomendacion='';
     state.registro=null;
+    state.firma={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:(state.firma?.token||0)+1};
     setValue('auroRecProximaCita','');
     setValue('auroRecMotivoControl','');
     setValue('auroRecAlertaOtros','');
@@ -989,6 +1003,322 @@
     );
   }
 
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES V1.2.0 — FIRMA ELECTRÓNICA
+     ADHESIÓN ANTIRREGRESIVA
+     ------------------------------------------------------------
+     - Autoridad documental: id_recomendacion + id_atencion exactos.
+     - Usa el mismo backend/cola/motor/documentos_firmados.
+     - No modifica detalle_json ni el contrato de guardado.
+     - El HTML firmado usa EXACTAMENTE recDocumentoHTML() +
+       recEstilosImpresion(), es decir, el A4 V1.1.5 ya validado.
+     - Un documento confirmado como FIRMADO queda protegido contra
+       edición para impedir que el contenido vivo diverja del PDF firmado.
+     ============================================================ */
+
+  function tokenSesionFirma(){
+    try{return txt(sessionStorage.getItem('aurosanax_seguridad_token'));}catch(e){return '';}
+  }
+
+  async function postFirma(accion,data){
+    const base=apiUrl();
+    if(!base) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+    const payload=Object.assign({},data||{},{token:tokenSesionFirma()});
+    const r=await fetch(base,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion,data:payload}),
+      cache:'no-store'
+    });
+    if(!r.ok) throw new Error('El servidor de firma respondió HTTP '+r.status+'.');
+    const j=await r.json();
+    if(!j||j.success!==true) throw new Error(txt(j?.message)||'El servidor no confirmó la operación de firma.');
+    return j;
+  }
+
+  function estadoFirma(){
+    return state.firma||{estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:0};
+  }
+
+  function fijarFirma(estado,extra){
+    state.firma=Object.assign({},estadoFirma(),extra||{},{estado:estado||'SIN_FIRMA'});
+    renderFirma();
+  }
+
+  function recomendacionFirmable(){
+    const ctx=state.contexto||contextoAtencion();
+    const r=state.registro||{};
+    const id=txt(state.idRecomendacion||r.id_recomendacion);
+    const idAtencion=txt(r.id_atencion||ctx.id);
+
+    if(!id) return {success:false,message:'Guarde las recomendaciones antes de firmarlas electrónicamente.'};
+    if(!idAtencion||idAtencion!==txt(ctx.id)) return {success:false,message:'La recomendación no pertenece a la atención actualmente seleccionada.'};
+    if(!tieneContenido(detalleActual())) return {success:false,message:'No existen recomendaciones clínicas para firmar.'};
+
+    const a=ctx.atencion||{};
+    return {
+      success:true,
+      tipo_documento:'RECOMENDACION',
+      id_documento_origen:id,
+      id_documento_clinico:id,
+      id_recomendacion:id,
+      id_receta:'',
+      id_certificado:'',
+      id_atencion:idAtencion,
+      numero_consulta:txt(r.numero_consulta||ctx.numeroConsulta),
+      id_paciente:txt(r.id_paciente||ctx.idPaciente||a.id_paciente),
+      nombre_paciente:txt(r.nombre_paciente||nombrePacienteDesdeContexto(a)),
+      id_historia:txt(r.id_historia||ctx.idHistoria||a.id_historia),
+      id_medico:txt(r.id_medico||ctx.idMedico||a.id_medico),
+      nombre_medico:txt(r.nombre_medico||nombreMedicoDesdeContexto(a)),
+      nombre_archivo:'RECOMENDACION_'+id+'_FIRMADO.pdf',
+      html_documento:`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recomendaciones médicas AUROSANAX</title>
+<style>
+${recEstilosImpresion()}
+</style>
+</head>
+<body>
+${recDocumentoHTML()}
+</body>
+</html>`
+    };
+  }
+
+  function renderFirma(){
+    const f=estadoFirma();
+    const btn=document.getElementById('auroRecBtnFirma');
+    const cancelar=document.getElementById('auroRecBtnCancelarFirma');
+    const ctx=state.contexto||contextoAtencion();
+    const guardada=!!txt(state.idRecomendacion);
+    const e=txt(f.estado).toUpperCase();
+
+    if(btn){
+      btn.classList.remove('ok','proceso');
+      btn.disabled=!ctx.id||!guardada||['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e);
+      if(e==='FIRMADA'||e==='FIRMADO'){
+        btn.disabled=false;
+        btn.classList.add('ok');
+        btn.innerHTML='<i class="bi bi-file-earmark-check me-1"></i> Ver recomendación firmada ✓';
+      }else if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e)){
+        btn.classList.add('proceso');
+        btn.innerHTML='<i class="bi bi-hourglass-split me-1"></i> Firma en proceso…';
+      }else{
+        btn.innerHTML='<i class="bi bi-pen me-1"></i> Firmar recomendación';
+      }
+    }
+
+    if(cancelar){
+      cancelar.hidden=!(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e)&&!!txt(f.id_solicitud));
+      cancelar.disabled=cancelar.hidden;
+    }
+
+    /* Protección documental: si existe PDF firmado persistente, el contenido
+       clínico firmado no puede sobrescribirse con el mismo id_recomendacion. */
+    const firmado=e==='FIRMADA'||e==='FIRMADO';
+    if(firmado){
+      document.querySelectorAll(
+        '#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select'
+      ).forEach(el=>{el.disabled=true;});
+      const guardar=document.getElementById('auroRecBtnGuardar');
+      const agregar=document.getElementById('auroRecBtnAgregarPlan');
+      if(guardar) guardar.disabled=true;
+      if(agregar) agregar.disabled=true;
+    }
+  }
+
+  async function consultarFirmaPersistenteRecomendacion(){
+    const doc=recomendacionFirmable();
+    if(!doc.success) return null;
+    const token=++state.firma.token;
+    try{
+      const r=await postFirma('consultarDocumentosFirmados',{
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:doc.id_recomendacion,
+        id_recomendacion:doc.id_recomendacion,
+        id_atencion:doc.id_atencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      if(token!==state.firma.token) return null;
+      const docs=Array.isArray(r?.documentos)?r.documentos:[];
+      const encontrado=docs.find(x=>
+        txt(x?.tipo_documento).toUpperCase()==='RECOMENDACION' &&
+        txt(x?.id_documento_origen||x?.id_recomendacion)===doc.id_recomendacion &&
+        txt(x?.id_atencion)===doc.id_atencion &&
+        txt(x?.estado_firma).toUpperCase()==='FIRMADO'
+      )||null;
+      if(encontrado){
+        fijarFirma('FIRMADA',{documento:encontrado,id_solicitud:txt(encontrado.id_solicitud),error:''});
+        return encontrado;
+      }
+      fijarFirma('SIN_FIRMA',{documento:null,id_solicitud:'',error:''});
+    }catch(e){
+      console.warn(MODULO+': no se pudo consultar la firma persistente de Recomendaciones.',e);
+      renderFirma();
+    }
+    return null;
+  }
+
+  async function abrirRecomendacionFirmada(){
+    const doc=recomendacionFirmable();
+    if(!doc.success){setMsg(doc.message,'error');return null;}
+    const ventana=window.open('','_blank');
+    if(!ventana){
+      setMsg('Habilite ventanas emergentes para ver la recomendación firmada.','error');
+      return null;
+    }
+    try{
+      ventana.document.title='Cargando recomendación firmada…';
+      ventana.document.body.innerHTML='<p style="font-family:Arial,sans-serif;padding:20px">Cargando recomendación firmada…</p>';
+      const r=await postFirma('obtenerPdfFirmadoPersistente',{
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:doc.id_recomendacion,
+        id_recomendacion:doc.id_recomendacion,
+        id_atencion:doc.id_atencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      const b64=txt(r?.pdf_firmado_base64||r?.archivo_base64).replace(/^data:application\/pdf;base64,/i,'');
+      if(!b64) throw new Error('El servidor no devolvió el PDF firmado de la recomendación.');
+      const bin=atob(b64);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+      ventana.location.replace(url);
+      setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
+      return r;
+    }catch(e){
+      try{ventana.close();}catch(_e){}
+      setMsg(txt(e.message||e),'error');
+      return null;
+    }
+  }
+
+  async function esperarFirmaRecomendacion(idSolicitud,doc,tokenOperacion){
+    while(tokenOperacion===state.firma.token){
+      const r=await postFirma('obtenerEstadoFirmaElectronica',{
+        id_solicitud:idSolicitud,
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:doc.id_recomendacion,
+        id_recomendacion:doc.id_recomendacion,
+        id_atencion:doc.id_atencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      const e=txt(r?.estado_firma).toUpperCase();
+      if(e==='FIRMADO') return r;
+      if(e==='CANCELADA'||e==='CANCELADO') return r;
+      if(e==='ERROR') throw new Error(txt(r?.error)||'El motor local informó un error al firmar la recomendación.');
+      if(e==='EXPIRADA') throw new Error(txt(r?.error)||'La solicitud de firma expiró.');
+      if(!['PENDIENTE','TOMADA'].includes(e)) throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      fijarFirma(e,{id_solicitud:idSolicitud,error:''});
+      await new Promise(resolve=>setTimeout(resolve,2500));
+    }
+    return null;
+  }
+
+  async function firmarRecomendacion(){
+    const f=estadoFirma();
+    if(['FIRMADA','FIRMADO'].includes(txt(f.estado).toUpperCase())) return abrirRecomendacionFirmada();
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(f.estado).toUpperCase())) return;
+
+    const doc=recomendacionFirmable();
+    if(!doc.success){setMsg(doc.message,'error');return null;}
+
+    const tokenOperacion=++state.firma.token;
+    fijarFirma('PREPARANDO',{id_solicitud:'',documento:null,error:''});
+    setMsg('Preparando recomendación para firma electrónica…','info');
+
+    try{
+      const motor=await postFirma('obtenerEstadoFirmaElectronica',{});
+      if(motor?.disponible!==true){
+        throw new Error(
+          motor?.agente_online===false
+            ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+            : 'La firma electrónica no está disponible en este momento.'
+        );
+      }
+
+      const creada=await postFirma('firmarDocumento',doc);
+      if(tokenOperacion!==state.firma.token) return null;
+
+      const idSolicitud=txt(creada?.id_solicitud);
+      const inicial=txt(creada?.estado_firma).toUpperCase();
+
+      if(inicial==='FIRMADO'){
+        fijarFirma('FIRMADA',{id_solicitud,documento:creada,error:''});
+        setMsg('Recomendación firmada electrónicamente.','ok');
+        return creada;
+      }
+
+      if(inicial!=='PENDIENTE'||!idSolicitud) throw new Error('El servidor no creó correctamente la solicitud de firma.');
+
+      fijarFirma('PENDIENTE',{id_solicitud,error:''});
+      setMsg('Recomendación enviada al motor de firma.','info');
+
+      const resultado=await esperarFirmaRecomendacion(idSolicitud,doc,tokenOperacion);
+      if(!resultado) return null;
+      const estado=txt(resultado?.estado_firma).toUpperCase();
+
+      if(estado==='FIRMADO'){
+        const persistido=await consultarFirmaPersistenteRecomendacion();
+        if(!persistido) fijarFirma('FIRMADA',{id_solicitud,documento:resultado,error:''});
+        setMsg('Recomendación firmada electrónicamente.','ok');
+        return resultado;
+      }
+
+      if(['CANCELADA','CANCELADO'].includes(estado)){
+        fijarFirma('SIN_FIRMA',{id_solicitud:'',documento:null,error:''});
+        setMsg('Firma de la recomendación cancelada.','info');
+        return resultado;
+      }
+
+      throw new Error('El servidor no confirmó la firma de la recomendación.');
+    }catch(e){
+      if(tokenOperacion===state.firma.token){
+        fijarFirma('SIN_FIRMA',{id_solicitud:'',documento:null,error:txt(e.message||e)});
+        setMsg('No se pudo firmar: '+txt(e.message||e),'error');
+      }
+      return null;
+    }
+  }
+
+  async function cancelarFirmaRecomendacion(){
+    const f=estadoFirma();
+    const idSolicitud=txt(f.id_solicitud);
+    const doc=recomendacionFirmable();
+    if(!doc.success){setMsg(doc.message,'error');return null;}
+    if(!idSolicitud){setMsg('No existe una solicitud de firma pendiente para cancelar.','error');return null;}
+
+    try{
+      const r=await postFirma('firmarDocumento',{
+        operacion_frontend:'CANCELAR',
+        id_solicitud:idSolicitud,
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:doc.id_recomendacion,
+        id_recomendacion:doc.id_recomendacion,
+        id_atencion:doc.id_atencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      const e=txt(r?.estado_firma).toUpperCase();
+      if(!['CANCELADA','CANCELADO'].includes(e)) throw new Error('El servidor no confirmó la cancelación de la recomendación.');
+      state.firma.token++;
+      fijarFirma('SIN_FIRMA',{id_solicitud:'',documento:null,error:''});
+      setMsg('Firma de la recomendación cancelada.','info');
+      return r;
+    }catch(e){
+      setMsg('No se pudo cancelar la firma: '+txt(e.message||e),'error');
+      return null;
+    }
+  }
+
   function aplicarModo(){
     const ctx=state.contexto || contextoAtencion();
     const editable=ctx.editable === true;
@@ -1021,6 +1351,7 @@
         estado.innerHTML='<i class="bi bi-pencil-square"></i> Atención activa · Editable';
       }
     }
+      renderFirma();
   }
 
   function renderContexto(){
@@ -1088,6 +1419,8 @@
 
       if(registro && registro.id_recomendacion){
         aplicarRegistro(registro);
+        await consultarFirmaPersistenteRecomendacion();
+        if(token !== state.tokenCarga) return null;
 
         let precargadasIndicaciones=false;
         if(ctx.editable && !getValue('auroRecGenerales')){
@@ -1591,6 +1924,8 @@ html,body{background:#dfe3e8}
     const recargarBtn=document.getElementById('auroRecBtnRecargar');
     const vistaBtn=document.getElementById('auroRecBtnVista');
     const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
+    const firmaBtn=document.getElementById('auroRecBtnFirma');
+    const cancelarFirmaBtn=document.getElementById('auroRecBtnCancelarFirma');
 
     if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
       guardarBtn.dataset.auroRec='1';
@@ -1603,6 +1938,14 @@ html,body{background:#dfe3e8}
     if(vistaBtn && vistaBtn.dataset.auroRec!=='1'){
       vistaBtn.dataset.auroRec='1';
       vistaBtn.addEventListener('click',vistaPrevia);
+    }
+    if(firmaBtn && firmaBtn.dataset.auroRec!=='1'){
+      firmaBtn.dataset.auroRec='1';
+      firmaBtn.addEventListener('click',firmarRecomendacion);
+    }
+    if(cancelarFirmaBtn && cancelarFirmaBtn.dataset.auroRec!=='1'){
+      cancelarFirmaBtn.dataset.auroRec='1';
+      cancelarFirmaBtn.addEventListener('click',cancelarFirmaRecomendacion);
     }
     if(agregarPlanBtn && agregarPlanBtn.dataset.auroRec!=='1'){
       agregarPlanBtn.dataset.auroRec='1';
