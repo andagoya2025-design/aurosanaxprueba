@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.3.1
+ Versión: 1.3.2
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.3.1';
+  const VERSION = '1.3.2';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -1620,12 +1620,40 @@ ${recDocumentoHTML()}
       }
 
       state.idRecomendacion=txt(r.id || r.id_recomendacion || data.id_recomendacion);
+
+      /* ==========================================================
+         AUROSANAX RECOMENDACIONES V1.3.2 — TARJETA INMEDIATA
+         ----------------------------------------------------------
+         UX QUIRÚRGICA / ANTIRREGRESIVA:
+         - El servidor ya confirmó el guardado antes de llegar aquí.
+         - Refleja inmediatamente ESA MISMA recomendación confirmada
+           en "Recomendaciones guardadas" sin esperar una segunda
+           lectura de Sheets.
+         - cargar(true) se conserva intacto como verificación y fuente
+           autoritativa posterior.
+         - No inventa IDs: solo actúa si el backend devolvió/conservó
+           un id_recomendacion real.
+         ========================================================== */
+      if(state.idRecomendacion){
+        const ahora=new Date().toISOString();
+        const registroInmediato=Object.assign({},state.registro||{},data,{
+          id_recomendacion:state.idRecomendacion,
+          id_atencion:ctx.id,
+          numero_consulta:txt(state.registro?.numero_consulta || ctx.numeroConsulta),
+          actualizado_en:txt(r.actualizado_en || r.fecha_actualizacion || ahora),
+          creado_en:txt(state.registro?.creado_en || r.creado_en || ahora)
+        });
+        aplicarRegistro(registroInmediato);
+      }
+
       setMsg(r.actualizado ? 'Recomendaciones actualizadas correctamente.' : 'Recomendaciones guardadas correctamente.','ok');
-      await cargar(true);
 
       window.dispatchEvent(new CustomEvent('aurosanax:recomendaciones-guardadas',{
         detail:{id_atencion:ctx.id,id_recomendacion:state.idRecomendacion}
       }));
+
+      /* Confirmación autoritativa: conserva el comportamiento previo. */
+      await cargar(true);
     }catch(e){
       console.error(MODULO+':',e);
       setMsg('No se pudo guardar: '+txt(e.message || e),'error');
