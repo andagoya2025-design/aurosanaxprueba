@@ -4963,7 +4963,7 @@
         </div>
 
 <div class="clinical-panel" id="hc_docs"><div class="clinical-subtitle"><i class="bi bi-folder2-open"></i> Documentos, resultados y archivos</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Laboratorios</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Ecografías / imágenes</label><input type="file" class="form-control" multiple></div><div class="col-md-4"><label class="form-label fw-bold">Fotografías clínicas</label><input type="file" class="form-control" multiple></div><div class="col-md-12"><div class="clinical-note"><i class="bi bi-info-circle me-1"></i> Los archivos clínicos se almacenarán de forma segura y quedarán vinculados a la historia del paciente.</div></div></div></div>
-        <div class="clinical-actions"><button class="btn-soft" data-auro-receta-global="1" aria-pressed="false" onclick="return auroRecetaAccesoPiloto(this)"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
+        <div class="clinical-actions"><button class="btn-soft" data-auro-receta-global="1" aria-pressed="false" onclick="return auroRecetaAccesoPiloto(this)"><i class="bi bi-capsule me-1"></i> Receta</button><button class="btn-soft" onclick="generarPDFConsentimiento()"><i class="bi bi-pen me-1"></i> Consentimiento</button><button class="btn-soft" onclick="abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button><button class="btn-auro" data-auro-historia-global="1" onclick="guardarHistoriaClinicaERP()"><i class="bi bi-save me-1"></i> Guardar historia</button></div>
       </div>
     </section>
 
@@ -5667,6 +5667,43 @@ async function auroRecetaAbrirOficialDesdeIndex(){
   return null;
 }
 
+
+/* ============================================================
+   AUROSANAX INDEX 91 — VISIBILIDAD QUIRÚRGICA DEL GUARDADO GLOBAL
+   Solo presentación. No modifica guardados, atención, IDs, backend,
+   sincronización clínica, navegación ni responsive.
+
+   El botón global Guardar/Actualizar historia se oculta únicamente en:
+   - Obstetricia
+   - Diagnóstico
+   - Plan
+   - Recomendaciones
+   - Certificados
+
+   En los demás módulos conserva exactamente su comportamiento previo.
+============================================================ */
+function auroHistoriaSincronizarVisibilidadGuardadoGlobal(idModulo){
+  const btn = document.querySelector(
+    '#historia .clinical-actions button[data-auro-historia-global="1"]'
+  );
+  if(!btn) return;
+
+  const modulo = String(
+    idModulo || document.querySelector('#historia .clinical-panel.active')?.id || ''
+  ).trim();
+
+  const ocultar = [
+    'hc_obstetricia',
+    'hc_diagnostico',
+    'hc_plan',
+    'hc_recomendaciones',
+    'hc_certificados'
+  ].includes(modulo);
+
+  btn.hidden = ocultar;
+  btn.setAttribute('aria-hidden', ocultar ? 'true' : 'false');
+}
+
 function showClinicalTab(id,btn){
   /*
     Higiene visual del piloto:
@@ -5685,6 +5722,9 @@ function showClinicalTab(id,btn){
   document.getElementById(id)?.classList.add('active');
   document.querySelectorAll('.clinical-tabs button').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
+
+  /* Presentación únicamente: sincroniza el botón global con el módulo activo. */
+  auroHistoriaSincronizarVisibilidadGuardadoGlobal(id);
 
   /* Jerarquía visual superficial: mantiene Historia clínica como título principal
      y muestra como subtítulo la sección clínica activa. No altera datos ni guardado. */
