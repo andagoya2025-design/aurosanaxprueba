@@ -2,6 +2,7 @@
    AUROSANAX ERP - MÓDULO ATENCIONES 
    Archivo: atenciones.js
    Versión: 2.4 contexto maestro enriquecido no invasivo + resumen premium + paginación segura
+   Mejora quirúrgica: PERF 2.5.2 reutiliza snapshot remoto ya confirmado al iniciar atención.
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -896,6 +897,14 @@
         success:coincide,
         estado_remoto:estadoRemoto,
         atencion:atencionRemota,
+        /*
+          AUROSANAX PERF 2.5.2 — SNAPSHOT AUTORITATIVO REUTILIZABLE:
+          Esta misma lectura GET ya contiene la lista remota completa usada para
+          confirmar el estado. Se devuelve únicamente para que el flujo llamador
+          pueda reconstruir el caché sin repetir inmediatamente otro listarAtenciones.
+          No convierte caché/localStorage en autoridad y no sobrevive a otra operación.
+        */
+        atenciones_remotas:remotas,
         message: coincide
           ? 'Estado confirmado en Google Sheets.'
           : 'Google Sheets devolvió un estado distinto al esperado.'
@@ -2140,10 +2149,24 @@
     atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
 
     /*
-      El caché se reconstruye desde la fuente remota ya confirmada.
-      La atención persistida conserva el mismo id_atencion.
+      AUROSANAX PERF 2.5.2 — REUTILIZACIÓN QUIRÚRGICA DE LA MISMA LECTURA:
+      verificarEstadoAtencionRemoto() acaba de confirmar este id_atencion mediante
+      un GET autoritativo de Google Sheets y conserva en atenciones_remotas el mismo
+      snapshot completo. Reutilizarlo aquí evita un segundo listarAtenciones inmediato.
+
+      Blindaje antirregresivo:
+      - Google Sheets sigue siendo la autoridad.
+      - No se introduce TTL ni caché persistente nuevo.
+      - No se elimina cache:'no-store'.
+      - No se toca contextoAtencionEpoch ni los controles de paciente/atención.
+      - Si por compatibilidad no existe el snapshot, se conserva el GET forzado anterior.
     */
-    await cargarAtencionesDesdeSheets(true);
+    if(Array.isArray(confirmacionInicio.atenciones_remotas)){
+      mezclarAtencionesLocalesYSheets(confirmacionInicio.atenciones_remotas);
+      atencionesSheetsCargadas = true;
+    }else{
+      await cargarAtencionesDesdeSheets(true);
+    }
 
     if(cita){
       limpiarCitaSeleccionadaAgenda();
