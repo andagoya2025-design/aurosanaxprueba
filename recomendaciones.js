@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.0
+ Versión: 1.3.0
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -475,6 +475,11 @@
       .auro-rec-dx-name{min-width:0;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
       .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
+      .auro-rec-saved{display:grid;gap:8px}
+      .auro-rec-saved-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;background:#fff}
+      .auro-rec-saved-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
+      .auro-rec-saved-meta{font-size:12px;color:#6b7280;margin-top:4px;overflow-wrap:anywhere}
+      .auro-rec-saved-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
       .auro-rec-btn.firma{background:#6c1d52;color:#fff;border-color:#6c1d52}
       .auro-rec-btn.firma.ok{background:#166534;color:#fff;border-color:#166534}
@@ -516,6 +521,8 @@
         .auro-rec-dx{grid-template-columns:78px minmax(0,1fr);align-items:start}
         .auro-rec-dx-code{width:78px}
         .auro-rec-dx-tag{grid-column:2;width:max-content;max-width:100%;margin-top:-2px}
+        .auro-rec-saved-top{display:grid;grid-template-columns:1fr}
+        .auro-rec-saved-actions{display:grid;grid-template-columns:1fr;width:100%}
       }
     `;
     document.head.appendChild(style);
@@ -638,6 +645,17 @@
             </div>
           </section>
 
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Recomendaciones guardadas</b><small>Documento clínico correspondiente a la atención seleccionada.</small></div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div id="auroRecGuardadas" class="auro-rec-saved">
+                <div class="auro-rec-empty">No existen recomendaciones guardadas para esta atención.</div>
+              </div>
+            </div>
+          </section>
+
           <div class="auro-rec-actions">
             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
@@ -699,6 +717,7 @@
     aplicarChecks('alerta',[]);
     aplicarChecks('infeccion',[]);
     setText('auroRecActualizado','Sin guardar aún');
+    renderRecomendacionGuardada();
   }
 
   function renderDiagnosticos(){
@@ -1001,8 +1020,67 @@
       'auroRecActualizado',
       fechaVisual(registro?.actualizado_en || registro?.creado_en)
     );
+    renderRecomendacionGuardada();
   }
 
+
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES V1.3.0 — TARJETA GUARDADA
+     ADHESIÓN ANTIRREGRESIVA SOBRE FIRMA V1.2.0
+     ------------------------------------------------------------
+     - NO altera el contrato de firma V1.2.0.
+     - NO altera motor, Apps Script, Sheets ni paginación A4 V1.1.5.
+     - La hoja actual conserva una sola fila por id_atencion.
+     - Representa esa fila guardada como tarjeta documental, siguiendo
+       el patrón funcional validado de "Certificados emitidos".
+     ============================================================ */
+
+  function renderRecomendacionGuardada(){
+    const box=document.getElementById('auroRecGuardadas');
+    if(!box) return;
+
+    const r=state.registro||null;
+    const id=txt(state.idRecomendacion||r?.id_recomendacion);
+
+    if(!r||!id){
+      box.innerHTML='<div class="auro-rec-empty">No existen recomendaciones guardadas para esta atención.</div>';
+      return;
+    }
+
+    const f=estadoFirma();
+    const e=txt(f.estado).toUpperCase();
+    const firmada=['FIRMADA','FIRMADO'].includes(e);
+    const proceso=['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e);
+    const textoFirma=firmada
+      ? 'Ver recomendación firmada ✓'
+      : (proceso ? 'Firma en proceso…' : 'Firmar recomendación');
+
+    const cancelar=(proceso && txt(f.id_solicitud))
+      ? `<button type="button" class="auro-rec-btn cancelar-firma" data-auro-rec-cancelar="${esc(id)}"><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>`
+      : '';
+
+    box.innerHTML=`<div class="auro-rec-saved-item">
+      <div class="auro-rec-saved-top">
+        <div>
+          <b>Recomendaciones médicas</b>
+          <div class="auro-rec-saved-meta">${esc(fechaVisual(r.actualizado_en||r.creado_en))} · ${esc(id)}</div>
+        </div>
+        <div class="auro-rec-saved-actions">
+          <button type="button" class="auro-rec-btn" data-auro-rec-abrir="${esc(id)}"><i class="bi bi-folder2-open me-1"></i> Abrir</button>
+          <button type="button" class="auro-rec-btn firma${firmada?' ok':(proceso?' proceso':'')}" data-auro-rec-firmar="${esc(id)}" ${proceso?'disabled aria-busy="true"':''}>${textoFirma}</button>
+          ${cancelar}
+        </div>
+      </div>
+    </div>`;
+
+    box.querySelector('[data-auro-rec-abrir]')?.addEventListener('click',()=>{
+      document.getElementById('auroRecomendacionesApp')?.scrollIntoView({behavior:'smooth',block:'start'});
+      setMsg('Recomendación guardada cargada para revisión.','ok');
+    });
+    box.querySelector('[data-auro-rec-firmar]')?.addEventListener('click',firmarRecomendacion);
+    box.querySelector('[data-auro-rec-cancelar]')?.addEventListener('click',cancelarFirmaRecomendacion);
+  }
 
   /* ============================================================
      AUROSANAX RECOMENDACIONES V1.2.0 — FIRMA ELECTRÓNICA
@@ -1044,6 +1122,7 @@
   function fijarFirma(estado,extra){
     state.firma=Object.assign({},estadoFirma(),extra||{},{estado:estado||'SIN_FIRMA'});
     renderFirma();
+    renderRecomendacionGuardada();
   }
 
   function recomendacionFirmable(){
@@ -1459,6 +1538,8 @@ ${recDocumentoHTML()}
 
       state.idAtencion=ctx.id;
       renderContexto();
+      renderFirma();
+      renderRecomendacionGuardada();
       return registro || null;
     }catch(e){
       console.error(MODULO+':',e);
