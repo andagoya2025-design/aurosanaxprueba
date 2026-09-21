@@ -2,7 +2,7 @@
  AUROSANAX ERP DEMO
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.3.0
+ Versión: 1.3.1
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.3.0';
+  const VERSION = '1.3.1';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -660,7 +660,11 @@
             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn cancelar-firma" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
-            <button type="button" class="auro-rec-btn firma" id="auroRecBtnFirma" disabled><i class="bi bi-pen me-1"></i> Firmar recomendación</button>
+            <!-- V1.3.1 ANTIRREGRESIÓN:
+                 Control técnico original conservado en DOM para no alterar
+                 el contrato de firma V1.2.0. Se oculta visualmente porque la
+                 acción de firma se presenta en "Recomendaciones guardadas". -->
+            <button type="button" class="auro-rec-btn firma" id="auroRecBtnFirma" disabled hidden aria-hidden="true" tabindex="-1"><i class="bi bi-pen me-1"></i> Firmar recomendación</button>
             <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
           </div>
         </div>
@@ -1024,6 +1028,16 @@
   }
 
 
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES V1.3.1 — SIN DUPLICIDAD DE FIRMA
+     ------------------------------------------------------------
+     CORRECCIÓN QUIRÚRGICA / ANTIRREGRESIVA:
+     - La firma queda visible únicamente en "Recomendaciones guardadas".
+     - El botón técnico V1.2.0 se conserva oculto en el DOM para mantener
+       intactas renderFirma(), firmarRecomendacion() y cancelarFirmaRecomendacion().
+     - NO modifica motor, Apps Script, BD, PDF ni paginación A4.
+     ============================================================ */
 
   /* ============================================================
      AUROSANAX RECOMENDACIONES V1.3.0 — TARJETA GUARDADA
