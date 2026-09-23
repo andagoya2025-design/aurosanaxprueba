@@ -1,1334 +1,3377 @@
-/***********************************************************************
- AUROSANAX ERP
- Archivo: ordenes_medicas.js
- Módulo: Órdenes médicas formales por atención
- Versión: 1.4.0 - firma electrónica ORDEN_MEDICA + flujo documental existente intacto
- Fecha: 2026-09-11
- -----------------------------------------------------------------------
- ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
- - NO reemplaza Plan: Plan prepara las indicaciones clínicas.
- - Lee las órdenes visibles del Plan únicamente si pertenecen a la atención exacta.
- - Una emisión formal = una fila en ordenes_medicas.
- - Una fila puede contener múltiples ítems dentro de detalle_json.items.
- - Conserva snapshot documental de paciente, historia, médico, centro e ítems.
- - PDF no se almacena: se reconstruye bajo demanda.
- - No modifica Diagnóstico, Atenciones, Recetas, Certificados ni Documentos.
- - No usa polling ni MutationObserver.
- - Falla cerrado si el contexto clínico es ambiguo o no coincide con Plan.
- - Atención finalizada/cerrada puede abrir/imprimir/corregir documento formal;
-   anulada/cancelada/archivada queda bloqueada.
- - Fecha clínica: YYYY-MM-DD en America/Guayaquil.
- - creado_en / actualizado_en son responsabilidad del backend.
-************************************************************************/
+/* ============================================================
+   AUROSANAX ERP - FIRMA ELECTRÓNICA
+   Archivo destino: firma_electronica.js
+   Versión: 2.1
+   Alcance inicial: RECETA
+   ------------------------------------------------------------
+   CONTRATO ANTIRREGRESIVO:
+   - Mantiene window.auroFirmaElectronica.firmarDocumento(data).
+   - No contiene certificado .p12, clave privada ni contraseña.
+   - No declara una firma válida sin confirmación positiva del backend.
+   - Falla cerrado ante configuración incompleta, sesión inválida o error.
+   - Conserva aislamiento por id_atencion + id_receta.
+   - Evita doble POST/doble firma de la misma receta y mismo contenido.
+   - NO descarga ni abre automáticamente el PDF al terminar la firma.
+   - Conserva funciones explícitas para VER o DESCARGAR el PDF firmado.
+============================================================ */
 (function(){
-'use strict';
+  'use strict';
 
-if(window.auroOrdenesMedicas?.version) return;
+  const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
+  const VERSION = '2.1';
+  const INTERVALO_CONSULTA_MS = 2500;
+  const TIEMPO_MAXIMO_MS = 10 * 60 * 1000;
 
-const VERSION='1.4.0';
-const JSON_VERSION='AUROSANAX_ORDEN_MEDICA_JSON_V1';
+  /* Una sola operación activa por receta+contenido. */
+  const firmasEnCurso = new Map();
 
-const state={
-  idAtencion:'',
-  contexto:null,
-  ordenesEmitidas:[],
-  editandoId:'',
-  guardando:false,
-  token:0,
-  configuracion:{},
-  medicos:[],
-  paciente:null,
-  historia:null,
-  montado:false,
-  firmas:{},
-  firmaTokens:{}
-};
+  /* Resultado confirmado en esta sesión del navegador.
+     La clave incluye la huella del HTML: si la receta cambia, puede firmarse
+     nuevamente; si no cambia, no se genera una firma duplicada. */
+  const firmasConfirmadas = new Map();
+  let ultimoResultadoFirmado = null;
 
-const txt=v=>String(v??'').trim();
-const esc=v=>String(v??'')
-  .replace(/&/g,'&amp;')
-  .replace(/</g,'&lt;')
-  .replace(/>/g,'&gt;')
-  .replace(/"/g,'&quot;')
-  .replace(/'/g,'&#039;');
+  function texto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
 
-const norm=v=>txt(v)
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g,'')
-  .toLowerCase()
-  .replace(/\s+/g,' ')
-  .trim();
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
 
-function apiUrl(){
-  try{
-    if(typeof API_URL!=='undefined'&&API_URL) return txt(API_URL);
-  }catch(e){}
-  return txt(window.API_URL||document.getElementById('appsScriptUrl')?.value);
-}
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(e){
+      return '';
+    }
+  }
 
-async function get(accion,p={}){
-  const b=apiUrl();
-  if(!b) throw Error('API_URL no está definida.');
-  const q=new URLSearchParams({accion,_:Date.now()});
-  Object.entries(p).forEach(([k,v])=>{ if(txt(v)) q.append(k,txt(v)); });
-  const r=await fetch(b+'?'+q.toString(),{cache:'no-store'});
-  if(!r.ok) throw Error('HTTP '+r.status);
-  return r.json();
-}
+  function mensajeProfesional(mensaje, tipo){
+    const txt = texto(mensaje) || 'No fue posible completar la operación de firma electrónica.';
+    const clase = tipo === 'ok' ? 'success' : (tipo === 'warn' ? 'warning' : 'danger');
 
-async function post(accion,data){
-  const b=apiUrl();
-  if(!b) throw Error('API_URL no está definida.');
-  const r=await fetch(b,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({accion,data})
-  });
-  if(!r.ok) throw Error('HTTP '+r.status);
-  return r.json();
-}
-
-function arr(x){
-  return Array.isArray(x)?x:
-    Array.isArray(x?.registros)?x.registros:
-    Array.isArray(x?.data)?x.data:[];
-}
-
-function parse(v){
-  if(v&&typeof v==='object') return v;
-  try{return JSON.parse(txt(v)||'{}');}catch(e){return {};}
-}
-
-function respuestaOk(r){
-  if(r===true) return true;
-  if(!r||typeof r!=='object') return false;
-  if(r.ok===true||r.success===true||r.exito===true) return true;
-  if(txt(r.status).toLowerCase()==='ok') return true;
-  return false;
-}
-
-function activa(){
-  try{
-    const a=window.getAtencionActiva?.();
-    if(a?.id_atencion) return a;
-  }catch(e){}
-  try{
-    const a=window.obtenerContextoAtencionActual?.();
-    if(a?.id_atencion) return a;
-  }catch(e){}
-  return window.atencionesState?.atencionActual||window.currentAttention||window.atencionActual||null;
-}
-
-function idActiva(){
-  try{
-    const x=txt(window.getIdAtencionActiva?.());
-    if(x) return x;
-  }catch(e){}
-  const a=activa();
-  return txt(
-    a?.id_atencion||
-    window.planState?.atencionActual||
-    window.examenFisicoState?.atencionActual||
-    window.auroDiagnosticosState?.atencionActual
-  );
-}
-
-function contexto(){
-  const a=activa()||{};
-  const id=txt(a.id_atencion||idActiva());
-  const estado=norm(a.estado_atencion||a.estado||a.estado_consulta);
-  const bloqueada=/(anulad|cancelad|archivad)/.test(estado);
-
-  return {
-    id,
-    atencion:a,
-    estado,
-    bloqueada,
-    editable:!!id&&!bloqueada,
-    numeroConsulta:txt(a.numero_consulta||a.numero_atencion||a.numero),
-    idPaciente:txt(a.id_paciente),
-    idHistoria:txt(a.id_historia),
-    idMedico:txt(a.id_medico),
-    fechaAtencion:txt(a.fecha_atencion||a.fecha_consulta),
-    horaAtencion:txt(a.hora_atencion||a.hora_consulta)
-  };
-}
-
-function fechaEcuadorISO(){
-  const p=new Intl.DateTimeFormat('en-CA',{
-    timeZone:'America/Guayaquil',
-    year:'numeric',month:'2-digit',day:'2-digit'
-  }).formatToParts(new Date()).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
-  return `${p.year}-${p.month}-${p.day}`;
-}
-
-function fechaVisual(v){
-  const m=txt(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m?`${m[3]}/${m[2]}/${m[1]}`:(txt(v)||'—');
-}
-
-function nombreCompleto(obj){
-  obj=obj||{};
-  return txt(
-    obj.nombre_completo||obj.nombre||
-    [obj.nombres,obj.apellidos].filter(Boolean).join(' ')
-  ).replace(/\s+/g,' ').trim();
-}
-
-function resolverPaciente(ctx){
-  const a=ctx?.atencion||{};
-  const id=txt(ctx?.idPaciente||a.id_paciente);
-  try{
-    if(typeof window.getPacienteActivo==='function'){
-      const p=window.getPacienteActivo();
-      if(p){
-        const pid=txt(p.id_paciente||p.id);
-        if(!id||!pid||pid===id) return p;
+    try{
+      if(typeof window.mostrarToast === 'function'){
+        window.mostrarToast(txt, clase);
+        return;
       }
-    }
-  }catch(e){}
-  const listas=[window.patients,window.pacientes,window.listaPacientes].filter(Array.isArray);
-  for(const lista of listas){
-    const p=lista.find(x=>txt(x.id_paciente||x.id)===id);
-    if(p) return p;
+    }catch(e){}
+
+    alert(txt);
   }
-  return {
-    id_paciente:id,
-    nombre:a.nombre_paciente||a.paciente_nombre||'',
-    numero_documento:a.numero_documento||a.cedula||a.identificacion||'',
-    telefono:a.telefono||a.whatsapp||'',
-    direccion:a.direccion||''
-  };
-}
 
-function resolverHistoria(ctx){
-  const id=txt(ctx?.idHistoria);
-  const listas=[window.historiasClinicas,window.historias,window.listaHistorias].filter(Array.isArray);
-  for(const lista of listas){
-    const h=lista.find(x=>txt(x.id_historia||x.id)===id);
-    if(h) return h;
-  }
-  try{
-    if(window.historiaActual&&txt(window.historiaActual.id_historia||window.historiaActual.id)===id) return window.historiaActual;
-  }catch(e){}
-  try{
-    if(window.currentHistoria&&txt(window.currentHistoria.id_historia||window.currentHistoria.id)===id) return window.currentHistoria;
-  }catch(e){}
-  return {id_historia:id};
-}
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
-function resolverMedico(ctx){
-  const a=ctx?.atencion||{};
-  const id=txt(ctx?.idMedico||a.id_medico);
-  const listas=[state.medicos,window.medicos,window.medicosActivos,window.listaMedicos,window.configuracionMedicos,window.medicosConfiguracion].filter(Array.isArray);
-  let m=null;
-  for(const lista of listas){
-    m=lista.find(x=>txt(x.id_medico||x.id||x.codigo)===id)||null;
-    if(m) break;
-  }
-  return {
-    id_medico:id,
-    nombre:nombreCompleto(m)||txt(a.nombre_medico||a.medico_nombre)||'Profesional tratante',
-    especialidad:txt(m?.especialidad_principal||m?.especialidad||m?.especialidad_medica||a.especialidad||a.medico_especialidad),
-    registro_msp:txt(m?.registro_msp||m?.msp||m?.registro_profesional),
-    registro_senescyt:txt(m?.registro_senescyt||m?.senescyt),
-    email:txt(m?.email||m?.correo),
-    telefono:txt(m?.telefono||m?.whatsapp)
-  };
-}
-
-function configGlobal(){
-  const candidatos=[window.auroConfiguracionCentro,window.configuracionCentro,window.configCentro,window.CONFIG_CENTRO,window.configuracionInstitucional];
-  let c=candidatos.find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
-  if(c.datos&&typeof c.datos==='object') c=c.datos;
-  return c;
-}
-
-function normalizarConfig(c){
-  c=c||{};
-  if(c.datos&&typeof c.datos==='object') c=c.datos;
-  return {
-    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'AUROSANAX',
-    subtitulo:txt(c.subtitulo_clinica||c.descripcion_clinica||c.eslogan_clinica),
-    razon_social:txt(c.razon_social),
-    ruc:txt(c.ruc),
-    direccion:txt(c.direccion_clinica||c.direccion),
-    ciudad:txt(c.ciudad_clinica||c.ciudad)||'Guayaquil',
-    provincia:txt(c.provincia_clinica||c.provincia),
-    pais:txt(c.pais_clinica||c.pais)||'Ecuador',
-    telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
-    email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
-    web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
-    logo:txt(c.logo_url||c.logo_drive_url||c.logo),
-    colorPrincipal:txt(c.color_principal)||'#8b1e5a'
-  };
-}
-
-async function cargarAuxiliares(ctx){
-  state.paciente=resolverPaciente(ctx);
-  state.historia=resolverHistoria(ctx);
-  let cfg=normalizarConfig(configGlobal());
-  try{
-    const remoto=await get('obtenerConfiguracion');
-    cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
-  }catch(e){}
-  state.configuracion=cfg;
-  try{
-    state.medicos=arr(await get('listarMedicosActivos'));
-  }catch(e){
-    state.medicos=[];
-  }
-}
-
-function itemOrdenNormalizado(o){
-  o=o||{};
-  return {
-    orden:txt(o.orden||o.nombre||o.examen||o.procedimiento),
-    cat:txt(o.cat||o.categoria||o.tipo)||'OTROS',
-    obs:txt(o.obs||o.observacion||o.observaciones),
-    codigo_cie10:txt(o.codigo_cie10||o.cie10||o.codigo),
-    diagnostico:txt(o.diagnostico||o.descripcion_diagnostico)
-  };
-}
-
-function claveItem(o){
-  const x=itemOrdenNormalizado(o);
-  return [norm(x.orden),norm(x.cat),norm(x.obs),norm(x.codigo_cie10)].join('|');
-}
-
-function itemsUnicos(lista){
-  const vistos=new Set();
-  const out=[];
-  (Array.isArray(lista)?lista:[]).forEach(o=>{
-    const x=itemOrdenNormalizado(o);
-    if(!x.orden) return;
-    const k=claveItem(x);
-    if(vistos.has(k)) return;
-    vistos.add(k);
-    out.push(x);
-  });
-  return out;
-}
-
-function contextoPlanSeguro(ctx){
-  const id=txt(ctx?.id);
-  const idPlan=txt(window.planState?.atencionActual);
-  const idRender=txt(window.__auroPlanAtencionRenderizada);
-
-  if(!id) return {ok:false,motivo:'No existe una atención clínica seleccionada.'};
-  if(idPlan&&idPlan!==id) return {ok:false,motivo:'El Plan visible pertenece a otra atención.'};
-  if(idRender&&idRender!==id) return {ok:false,motivo:'La consulta dibujada en Plan no coincide con la atención seleccionada.'};
-
-  return {ok:true,id};
-}
-
-function itemsPlanActual(){
-  const ctx=contexto();
-  const ver=contextoPlanSeguro(ctx);
-  if(!ver.ok) return {ok:false,motivo:ver.motivo,items:[]};
-  const lista=Array.isArray(window.ordenesMedicasPlanSeleccionadas)?window.ordenesMedicasPlanSeleccionadas:[];
-  return {ok:true,items:itemsUnicos(lista)};
-}
-
-function datosDocumentoDesdePlan(){
-  const ctx=contexto();
-  const ver=contextoPlanSeguro(ctx);
-  if(!ver.ok) throw Error(ver.motivo);
-  if(ctx.bloqueada) throw Error('La atención está anulada, cancelada o archivada.');
-
-  const plan=itemsPlanActual();
-  if(!plan.ok) throw Error(plan.motivo);
-  if(!plan.items.length) throw Error('No hay órdenes médicas agregadas en el Plan para esta atención.');
-
-  const paciente=resolverPaciente(ctx);
-  const historia=resolverHistoria(ctx);
-  const medico=resolverMedico(ctx);
-  const centro=state.configuracion?.nombre?state.configuracion:normalizarConfig(configGlobal());
-
-  const nombrePaciente=nombreCompleto(paciente)||txt(ctx.atencion?.nombre_paciente||ctx.atencion?.paciente_nombre);
-  const numeroDocumento=txt(paciente?.numero_documento||paciente?.cedula||paciente?.identificacion||ctx.atencion?.numero_documento);
-
-  return {
-    id_atencion:ctx.id,
-    numero_consulta:ctx.numeroConsulta,
-    id_paciente:txt(ctx.idPaciente||paciente?.id_paciente||paciente?.id),
-    nombre_paciente:nombrePaciente,
-    numero_documento:numeroDocumento,
-    id_historia:txt(ctx.idHistoria||historia?.id_historia||historia?.id),
-    id_medico:txt(ctx.idMedico||medico.id_medico),
-    nombre_medico:medico.nombre,
-    especialidad:medico.especialidad,
-    fecha_emision:fechaEcuadorISO(),
-    detalle_json:{
-      version:JSON_VERSION,
-      fecha_emision:fechaEcuadorISO(),
-      id_atencion:ctx.id,
-      numero_consulta:ctx.numeroConsulta,
-      items:plan.items,
-      observaciones_generales:'',
-      paciente:{
-        id_paciente:txt(ctx.idPaciente||paciente?.id_paciente||paciente?.id),
-        nombre:nombrePaciente,
-        numero_documento:numeroDocumento,
-        telefono:txt(paciente?.telefono||paciente?.whatsapp),
-        direccion:txt(paciente?.direccion)
-      },
-      historia:{
-        id_historia:txt(ctx.idHistoria||historia?.id_historia||historia?.id)
-      },
-      medico:{
-        id_medico:txt(ctx.idMedico||medico.id_medico),
-        nombre:medico.nombre,
-        especialidad:medico.especialidad,
-        registro_msp:medico.registro_msp,
-        registro_senescyt:medico.registro_senescyt,
-        email:medico.email,
-        telefono:medico.telefono
-      },
-      centro:centro,
-      origen:'PLAN_CLINICO'
-    },
-    estado:'Emitida',
-    version:1
-  };
-}
-
-function datosDocumentoEmitido(reg){
-  const d=parse(reg?.detalle_json);
-  const items=itemsUnicos(d.items||reg?.items||[]);
-  return {
-    id_orden:txt(reg?.id_orden),
-    id_atencion:txt(reg?.id_atencion||d.id_atencion),
-    numero_consulta:txt(reg?.numero_consulta||d.numero_consulta),
-    id_paciente:txt(reg?.id_paciente||d.paciente?.id_paciente),
-    nombre_paciente:txt(reg?.nombre_paciente||d.paciente?.nombre),
-    numero_documento:txt(reg?.numero_documento||d.paciente?.numero_documento),
-    id_historia:txt(reg?.id_historia||d.historia?.id_historia),
-    id_medico:txt(reg?.id_medico||d.medico?.id_medico),
-    nombre_medico:txt(reg?.nombre_medico||d.medico?.nombre),
-    especialidad:txt(reg?.especialidad||d.medico?.especialidad),
-    fecha_emision:txt(reg?.fecha_emision||d.fecha_emision),
-    estado:txt(reg?.estado)||'Emitida',
-    version:Number(reg?.version||d.version_documento||1)||1,
-    detalle_json:Object.assign({},d,{items})
-  };
-}
-
-function estadoOrdenEsAnulada(r){
-  return /anulad/.test(norm(r?.estado));
-}
-
-function estadoOrdenEsReemplazada(r){
-  return /reemplaz/.test(norm(r?.estado));
-}
-
-function ordenesActivasFormales(){
-  return state.ordenesEmitidas
-    .filter(r=>!estadoOrdenEsAnulada(r)&&!estadoOrdenEsReemplazada(r))
-    .sort((a,b)=>{
-      const va=Number(a?.version||0), vb=Number(b?.version||0);
-      if(vb!==va) return vb-va;
-      return txt(b?.actualizado_en||b?.creado_en||b?.fecha_emision)
-        .localeCompare(txt(a?.actualizado_en||a?.creado_en||a?.fecha_emision));
+    const payload = Object.assign({}, data || {}, {
+      token: tokenSesion()
     });
-}
 
-function ordenActivaFormal(){
-  return ordenesActivasFormales()[0]||null;
-}
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
 
-async function solicitarJustificacionGlobal(opciones={}){
-  if(typeof window.auroSolicitarMotivoCorreccionClinica==='function'){
-    const r=await window.auroSolicitarMotivoCorreccionClinica({excepcional:!!opciones.excepcional});
-    if(!r) return null;
-    const motivo=txt(r.motivo_correccion||r.motivo_correccion_detalle||r.motivo_correccion_tipo);
-    if(motivo.length<3 && !txt(r.motivo_correccion_tipo)) return null;
-    return {
-      motivo_correccion:motivo||txt(r.motivo_correccion_tipo),
-      motivo_correccion_tipo:txt(r.motivo_correccion_tipo),
-      motivo_correccion_detalle:txt(r.motivo_correccion_detalle),
-      correccion_excepcional:txt(r.correccion_excepcional)||'NO'
-    };
-  }
-  const entrada=window.prompt('CORRECCIÓN CLÍNICA - JUSTIFICATIVO OBLIGATORIO\n\nEscriba un motivo breve:');
-  if(entrada===null) return null;
-  const motivo=txt(entrada);
-  if(motivo.length<3){ window.alert('La justificación es obligatoria.'); return null; }
-  return {motivo_correccion:motivo,motivo_correccion_tipo:'Corrección clínica',motivo_correccion_detalle:motivo,correccion_excepcional:'NO'};
-}
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
 
-function solicitarJustificacion(titulo){
-  const motivo=window.prompt(String(titulo||'Justificación obligatoria')+'\n\nEscriba el motivo clínico o administrativo de esta acción:');
-  if(motivo===null) return null;
-  const limpio=txt(motivo);
-  if(limpio.length<3){ window.alert('La justificación es obligatoria y debe tener al menos 3 caracteres.'); return null; }
-  return limpio;
-}
-
-function catalogoOrdenesFormal(){
-  return Array.isArray(window.ORDENES_MEDICAS_AUROSANAX_BASE)
-    ? window.ORDENES_MEDICAS_AUROSANAX_BASE.map(itemOrdenNormalizado).filter(x=>x.orden)
-    : [];
-}
-function categoriasOrdenesFormal(extra=''){
-  const set=new Set(catalogoOrdenesFormal().map(x=>txt(x.cat)).filter(Boolean));
-  if(txt(extra)) set.add(txt(extra));
-  set.add('OTROS');
-  return Array.from(set).sort((a,b)=>a.localeCompare(b,'es'));
-}
-function justificacionTexto(j){
-  return txt(j?.motivo_correccion||j?.motivo_correccion_detalle||j?.motivo_correccion_tipo);
-}
-
-function clonarDocumentoEmitido(reg){
-  const base=datosDocumentoEmitido(reg);
-  const d=parse(base.detalle_json);
-  return Object.assign({},base,{
-    detalle_json:Object.assign({},d,{
-      items:itemsUnicos(d.items||[])
-    })
-  });
-}
-
-function datosCorreccionDesdeDocumento(reg,items,justificacion){
-  const base=clonarDocumentoEmitido(reg);
-  const versionNueva=(Number(base.version)||1)+1;
-  const ahora=new Date().toLocaleString('es-EC',{timeZone:'America/Guayaquil',hour12:false});
-  const motivo=justificacionTexto(justificacion);
-  const detalle=Object.assign({},base.detalle_json,{
-    version:JSON_VERSION,version_documento:versionNueva,correccion_de:txt(reg.id_orden),items:itemsUnicos(items),
-    auditoria_correccion:{
-      motivo,
-      tipo_justificativo:txt(justificacion?.motivo_correccion_tipo),
-      detalle_justificativo:txt(justificacion?.motivo_correccion_detalle),
-      correccion_excepcional:txt(justificacion?.correccion_excepcional)||'NO',
-      id_orden_origen:txt(reg.id_orden),version_origen:Number(reg.version||1)||1,fecha_visual_ecuador:ahora
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la firma electrónica.');
     }
-  });
-  return Object.assign({},base,{
-    id_orden:txt(reg.id_orden),version:versionNueva,estado:'Emitida',detalle_json:detalle,
-    motivo_correccion:motivo,
-    motivo_correccion_tipo:txt(justificacion?.motivo_correccion_tipo),
-    motivo_correccion_detalle:txt(justificacion?.motivo_correccion_detalle),
-    correccion_excepcional:txt(justificacion?.correccion_excepcional)||'NO'
-  });
-}
-
-function instalarCSS(){
-  if(document.getElementById('auroOrdenMedicaCSS')) return;
-  const s=document.createElement('style');
-  s.id='auroOrdenMedicaCSS';
-  s.textContent=`
-#auroOrdenMedicaFormalApp{margin-top:14px;font-family:inherit;color:#1f2937}
-#auroOrdenMedicaFormalApp *{box-sizing:border-box}
-.aom-shell{border:1px solid #ead7e2;border-radius:16px;background:#fff;padding:14px}
-.aom-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.aom-title{font-weight:850;color:#111827;display:flex;align-items:center;gap:8px}
-.aom-meta{font-size:12px;color:#6b7280;margin-top:3px}
-.aom-primary{border:0;border-radius:12px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:white;padding:10px 14px;font-weight:800;display:inline-flex;align-items:center;gap:7px}
-.aom-primary:disabled{opacity:.55;cursor:not-allowed}
-.aom-notice{margin-top:10px;padding:9px 11px;border-radius:11px;font-size:12.5px;background:#f8fafc;border:1px solid #e5e7eb;color:#475569}
-.aom-notice.ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
-.aom-notice.warn{background:#fffbeb;border-color:#fde68a;color:#92400e}
-.aom-notice.err{background:#fef2f2;border-color:#fecaca;color:#991b1b}
-.aom-history{margin-top:12px;border-top:1px solid #f1f5f9;padding-top:12px}
-.aom-history-title{font-size:12px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-bottom:8px}
-.aom-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9}
-.aom-row:last-child{border-bottom:0}
-.aom-row-main{min-width:0}
-.aom-row-main strong{display:block;font-size:13px;overflow-wrap:anywhere}
-.aom-row-main small{display:block;color:#6b7280;margin-top:2px}
-.aom-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.aom-btn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:6px 9px;font-size:12px;font-weight:750}
-.aom-btn:hover{background:#f9fafb}
-.aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
-.aom-btn.firma{border-color:#d8b4fe;color:#6b21a8;background:#faf5ff}.aom-btn.firma.ok{border-color:#86efac;color:#166534;background:#f0fdf4}.aom-btn.firma.proceso{border-color:#fde68a;color:#92400e;background:#fffbeb}
-.aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
-.aom-modal{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.55)}
-.aom-modal-panel{width:min(920px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid #e5e7eb;box-shadow:0 28px 80px rgba(15,23,42,.28);padding:18px}
-.aom-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
-.aom-modal-title{font-size:16px;font-weight:900;color:#111827}
-.aom-modal-close{border:1px solid #d1d5db;background:#fff;border-radius:9px;width:34px;height:34px;font-size:20px;line-height:1}
-.aom-editor-list{display:grid;gap:10px}
-.aom-editor-item{display:grid;grid-template-columns:minmax(0,2fr) minmax(155px,.9fr) minmax(0,1.4fr);gap:9px;padding:12px;border:1px solid #ead7e2;border-radius:15px;background:linear-gradient(135deg,#fff,#fffafd)}
-.aom-editor-item input,.aom-editor-item select,.aom-editor-item textarea{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:9px;font:inherit;background:#fff}
-.aom-editor-item textarea{min-height:42px;resize:vertical}
-.aom-editor-remove{grid-column:1/-1;justify-self:end}
-.aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}
-.aom-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
-.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 48mm;margin:0 auto;font-family:Arial,sans-serif;position:relative}
-.aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--aom-color,#8b1e5a);padding-bottom:10px;margin-bottom:18px}.aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}.aom-logo-wrap{width:60px;height:60px;display:grid;place-items:center;overflow:hidden}.aom-logo{max-width:100%;max-height:100%;object-fit:contain}.aom-doc-date{text-align:right;font-size:11.5px;font-weight:750}
-.aom-doc-brand{font-size:20px;font-weight:950;color:var(--aom-color,#8b1e5a);letter-spacing:.035em}
-.aom-doc-sub{font-size:10.5px;color:#4b5563;line-height:1.45;margin-top:4px}
-.aom-doc-title{text-align:center;font-size:20px;font-weight:900;letter-spacing:.06em;margin:13px 0 18px}
-.aom-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 20px;font-size:12px;margin-bottom:18px}
-.aom-doc-label{color:#6b7280;font-weight:700}
-.aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
-.aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
-.aom-doc-table th{background:#f8fafc;text-align:left}
-.aom-doc-bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
-@media(max-width:760px){
-  .aom-shell{padding:12px}
-  .aom-head{align-items:stretch}
-  .aom-primary{width:100%;justify-content:center}
-  .aom-row{grid-template-columns:1fr}
-  .aom-actions{justify-content:flex-start}
-  .aom-editor-item{grid-template-columns:1fr}
-  .aom-editor-custom{grid-column:auto}
-}
-@media print{.aom-print-toolbar{display:none!important}.aom-paper{box-shadow:none!important;margin:0!important}}
-`;
-  document.head.appendChild(s);
-}
-
-function mountTarget(){
-  const body=document.getElementById('hcOrdenesTableBody');
-  if(!body) return null;
-  return body.closest('.ordenes-medicas-box')||body.parentElement?.parentElement||null;
-}
-
-function montar(){
-  instalarCSS();
-  const target=mountTarget();
-  if(!target) return false;
-  let app=document.getElementById('auroOrdenMedicaFormalApp');
-  if(!app){
-    app=document.createElement('div');
-    app.id='auroOrdenMedicaFormalApp';
-    target.appendChild(app);
+    return json;
   }
-  state.montado=true;
-  render();
-  return true;
-}
 
-function estadoPrimario(){
-  const ctx=contexto();
-  const plan=itemsPlanActual();
-  const activas=ordenesActivasFormales();
-  const activaFormal=activas[0]||null;
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
 
-  if(!ctx.id) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical',nota:'Seleccione una atención clínica.'};
-  if(ctx.bloqueada) return {disabled:true,texto:'Orden médica bloqueada',icono:'bi-lock',nota:'La atención está anulada, cancelada o archivada.'};
-  if(!plan.ok) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-exclamation-triangle',nota:plan.motivo};
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
 
-  if(activas.length>1){
-    return {
-      disabled:true,
-      texto:'Revisar órdenes activas',
-      icono:'bi-exclamation-triangle',
-      nota:`Se detectaron ${activas.length} órdenes formales activas para esta misma atención. No se permitirá otra emisión hasta resolver la duplicidad.`
+  function obtenerBase64Firmado(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  /* Acción EXPLÍCITA: ver. Nunca se llama automáticamente al firmar. */
+  function abrirPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, '_blank', 'noopener');
+    if(!ventana){
+      URL.revokeObjectURL(url);
+      return false;
+    }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+    return true;
+  }
+
+  /* Acción EXPLÍCITA: descargar. Nunca se llama automáticamente al firmar. */
+  function descargarPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto((r && r.nombre_archivo) || nombrePreferido || 'documento_firmado.pdf');
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return true;
+  }
+
+  function validarSolicitud(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = texto(d.tipo_documento).toUpperCase();
+    d.id_atencion = texto(d.id_atencion);
+    d.id_receta = texto(d.id_receta || d.id_documento_clinico);
+    d.html_documento = texto(d.html_documento);
+
+    if(d.tipo_documento !== 'RECETA'){
+      throw new Error('Esta integración de firma está habilitada únicamente para Recetas.');
+    }
+    if(!d.id_atencion) throw new Error('No existe una atención clínica activa para firmar.');
+    if(!d.id_receta) throw new Error('Guarde la receta antes de firmarla electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial de la receta.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(String(valor || ''));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function claveFirma(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return solicitud.id_atencion + '|' + solicitud.id_receta + '|' + huella;
+  }
+
+  async function esperarFirma(idSolicitud, solicitud){
+    const inicio = Date.now();
+
+    while((Date.now() - inicio) < TIEMPO_MAXIMO_MS){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'ERROR'){
+        throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el documento.');
+      }
+      if(valor === 'EXPIRADA'){
+        throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      }
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+
+    throw new Error('La firma no se completó dentro del tiempo permitido. Verifique que el motor de firma esté iniciado.');
+  }
+
+  async function ejecutarFirma(solicitud, clave){
+    const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
+    if(estadoMotor.disponible !== true){
+      throw new Error(
+        estadoMotor.agente_online === false
+          ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+          : 'La firma electrónica no está disponible en este momento.'
+      );
+    }
+
+    const creada = await post('firmarDocumento', solicitud);
+    const estadoInicial = texto(creada.estado_firma).toUpperCase();
+
+    let resultado;
+    if(estadoInicial === 'FIRMADO'){
+      resultado = creada;
+    }else{
+      if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+        throw new Error('El servidor no creó correctamente la solicitud de firma.');
+      }
+      resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
+      throw new Error('El servidor no confirmó un estado de firma válido.');
+    }
+
+    if(!obtenerBase64Firmado(resultado)){
+      throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+    }
+
+    /* Se conserva el PDF firmado en memoria para acciones explícitas posteriores.
+       NO se abre y NO se descarga aquí. */
+    ultimoResultadoFirmado = resultado;
+    firmasConfirmadas.set(clave, resultado);
+
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+      detail:{
+        tipo_documento:solicitud.tipo_documento,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta,
+        id_solicitud:texto(resultado.id_solicitud),
+        estado_firma:'FIRMADO',
+        nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+        sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+        firmado_en:texto(resultado.firmado_en),
+        pdf_disponible:true
+      }
+    }));
+
+    setEstadoBotonesFirma('normal');
+    pintarEstadoFirmaInline('Firma completada correctamente.', 'ok');
+    mensajeProfesional(
+      'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
+      'ok'
+    );
+
+    return resultado;
+  }
+
+  async function firmarDocumento(data){
+    let clave = '';
+    try{
+      const solicitud = validarSolicitud(data);
+      setEstadoBotonesFirma('preparando');
+      pintarEstadoFirmaInline('Preparando firma electrónica…', 'info');
+      clave = await claveFirma(solicitud);
+
+      /* Si el mismo documento ya fue confirmado en esta sesión, no se vuelve
+         a firmar ni se genera otro POST. */
+      if(firmasConfirmadas.has(clave)){
+        const existente = firmasConfirmadas.get(clave);
+        ultimoResultadoFirmado = existente;
+        setEstadoBotonesFirma('normal');
+        pintarEstadoFirmaInline('Esta receta ya está firmada.', 'ok');
+        mensajeProfesional(
+          'Esta misma versión de la receta ya fue firmada. No se generó una firma duplicada.',
+          'warn'
+        );
+        return existente;
+      }
+
+      /* Si hay una firma en curso, todos los clics posteriores reutilizan la
+         misma promesa. Así se evita doble POST incluso con doble clic. */
+      if(firmasEnCurso.has(clave)){
+        mensajeProfesional('La receta ya se está firmando. Espere la confirmación.', 'warn');
+        return firmasEnCurso.get(clave);
+      }
+
+      const operacion = ejecutarFirma(solicitud, clave);
+      firmasEnCurso.set(clave, operacion);
+
+      try{
+        return await operacion;
+      }finally{
+        firmasEnCurso.delete(clave);
+      }
+    }catch(error){
+      if(clave) firmasEnCurso.delete(clave);
+      console.error(MODULO, error);
+      const amable = mensajeErrorAmigable(error);
+      pintarEstadoFirmaInline(amable, 'error');
+      mensajeProfesional(amable, 'error');
+      throw error;
+    }
+  }
+
+  async function obtenerEstado(data){
+    return post('obtenerEstadoFirmaElectronica', data || {});
+  }
+
+  function obtenerUltimoFirmado(){
+    return ultimoResultadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze({
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerEstado:obtenerEstado,
+    abrirPdfFirmado:abrirPdfFirmado,
+    descargarPdfFirmado:descargarPdfFirmado,
+    obtenerUltimoFirmado:obtenerUltimoFirmado
+  });
+})();
+
+/* ============================================================
+   AUROSANAX - OVERRIDE ANTIRREGRESIVO ESTRICTO APPEND-ONLY
+   Fecha: 2026-09-14
+   - Todo el baseline anterior permanece arriba, byte por byte.
+   - El módulo que sigue se carga al final y reemplaza solo la API pública
+     window.auroFirmaElectronica para quitar el timeout artificial.
+   - No elimina funciones ni líneas del baseline.
+============================================================ */
+
+/* ============================================================
+   AUROSANAX ERP - FIRMA ELECTRÓNICA
+   Archivo destino: firma_electronica.js
+   Versión: 2.1
+   Alcance inicial: RECETA
+   ------------------------------------------------------------
+   CONTRATO ANTIRREGRESIVO:
+   - Mantiene window.auroFirmaElectronica.firmarDocumento(data).
+   - No contiene certificado .p12, clave privada ni contraseña.
+   - No declara una firma válida sin confirmación positiva del backend.
+   - Falla cerrado ante configuración incompleta, sesión inválida o error.
+   - Conserva aislamiento por id_atencion + id_receta.
+   - Evita doble POST/doble firma de la misma receta y mismo contenido.
+   - NO descarga ni abre automáticamente el PDF al terminar la firma.
+   - Conserva funciones explícitas para VER o DESCARGAR el PDF firmado.
+============================================================ */
+(function(){
+  'use strict';
+
+  const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
+  const VERSION = '2.2-sin-tiempo';
+  const INTERVALO_CONSULTA_MS = 2500;
+
+  /* Una sola operación activa por receta+contenido. */
+  const firmasEnCurso = new Map();
+
+  /* Resultado confirmado en esta sesión del navegador.
+     La clave incluye la huella del HTML: si la receta cambia, puede firmarse
+     nuevamente; si no cambia, no se genera una firma duplicada. */
+  const firmasConfirmadas = new Map();
+  let ultimoResultadoFirmado = null;
+
+  function texto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(e){
+      return '';
+    }
+  }
+
+  function mensajeProfesional(mensaje, tipo){
+    const txt = texto(mensaje) || 'No fue posible completar la operación de firma electrónica.';
+    const clase = tipo === 'ok' ? 'success' : (tipo === 'warn' ? 'warning' : 'danger');
+
+    try{
+      if(typeof window.mostrarToast === 'function'){
+        window.mostrarToast(txt, clase);
+        return;
+      }
+    }catch(e){}
+
+    alert(txt);
+  }
+
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {
+      token: tokenSesion()
+    });
+
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
+
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
+
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la firma electrónica.');
+    }
+    return json;
+  }
+
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
+
+  function obtenerBase64Firmado(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  /* Acción EXPLÍCITA: ver. Nunca se llama automáticamente al firmar. */
+  function abrirPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, '_blank', 'noopener');
+    if(!ventana){
+      URL.revokeObjectURL(url);
+      return false;
+    }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+    return true;
+  }
+
+  /* Acción EXPLÍCITA: descargar. Nunca se llama automáticamente al firmar. */
+  function descargarPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto((r && r.nombre_archivo) || nombrePreferido || 'documento_firmado.pdf');
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return true;
+  }
+
+  function validarSolicitud(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = texto(d.tipo_documento).toUpperCase();
+    d.id_atencion = texto(d.id_atencion);
+    d.id_receta = texto(d.id_receta || d.id_documento_clinico);
+    d.html_documento = texto(d.html_documento);
+
+    if(d.tipo_documento !== 'RECETA'){
+      throw new Error('Esta integración de firma está habilitada únicamente para Recetas.');
+    }
+    if(!d.id_atencion) throw new Error('No existe una atención clínica activa para firmar.');
+    if(!d.id_receta) throw new Error('Guarde la receta antes de firmarla electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial de la receta.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(String(valor || ''));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function claveFirma(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return solicitud.id_atencion + '|' + solicitud.id_receta + '|' + huella;
+  }
+
+  async function esperarFirma(idSolicitud, solicitud){
+    /* Sin vencimiento artificial: la espera termina solo por FIRMADO, ERROR
+       o por un estado terminal informado explícitamente por el backend. */
+    while(true){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'ERROR'){
+        throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el documento.');
+      }
+      if(valor === 'EXPIRADA'){
+        throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      }
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function ejecutarFirma(solicitud, clave){
+    const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
+    if(estadoMotor.disponible !== true){
+      throw new Error(
+        estadoMotor.agente_online === false
+          ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+          : 'La firma electrónica no está disponible en este momento.'
+      );
+    }
+
+    const creada = await post('firmarDocumento', solicitud);
+    const estadoInicial = texto(creada.estado_firma).toUpperCase();
+
+    let resultado;
+    if(estadoInicial === 'FIRMADO'){
+      resultado = creada;
+    }else{
+      if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+        throw new Error('El servidor no creó correctamente la solicitud de firma.');
+      }
+      resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
+      throw new Error('El servidor no confirmó un estado de firma válido.');
+    }
+
+    if(!obtenerBase64Firmado(resultado)){
+      throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+    }
+
+    /* Se conserva el PDF firmado en memoria para acciones explícitas posteriores.
+       NO se abre y NO se descarga aquí. */
+    ultimoResultadoFirmado = resultado;
+    firmasConfirmadas.set(clave, resultado);
+
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+      detail:{
+        tipo_documento:solicitud.tipo_documento,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta,
+        id_solicitud:texto(resultado.id_solicitud),
+        estado_firma:'FIRMADO',
+        nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+        sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+        firmado_en:texto(resultado.firmado_en),
+        pdf_disponible:true
+      }
+    }));
+
+    mensajeProfesional(
+      'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
+      'ok'
+    );
+
+    return resultado;
+  }
+
+  async function firmarDocumento(data){
+    let clave = '';
+    try{
+      const solicitud = validarSolicitud(data);
+      clave = await claveFirma(solicitud);
+
+      /* Si el mismo documento ya fue confirmado en esta sesión, no se vuelve
+         a firmar ni se genera otro POST. */
+      if(firmasConfirmadas.has(clave)){
+        const existente = firmasConfirmadas.get(clave);
+        ultimoResultadoFirmado = existente;
+        mensajeProfesional(
+          'Esta misma versión de la receta ya fue firmada. No se generó una firma duplicada.',
+          'warn'
+        );
+        return existente;
+      }
+
+      /* Si hay una firma en curso, todos los clics posteriores reutilizan la
+         misma promesa. Así se evita doble POST incluso con doble clic. */
+      if(firmasEnCurso.has(clave)){
+        mensajeProfesional('La receta ya se está firmando. Espere la confirmación.', 'warn');
+        return firmasEnCurso.get(clave);
+      }
+
+      const operacion = ejecutarFirma(solicitud, clave);
+      firmasEnCurso.set(clave, operacion);
+
+      try{
+        return await operacion;
+      }finally{
+        firmasEnCurso.delete(clave);
+      }
+    }catch(error){
+      if(clave) firmasEnCurso.delete(clave);
+      console.error(MODULO, error);
+      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+      throw error;
+    }
+  }
+
+  async function obtenerEstado(data){
+    return post('obtenerEstadoFirmaElectronica', data || {});
+  }
+
+  function obtenerUltimoFirmado(){
+    return ultimoResultadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze({
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerEstado:obtenerEstado,
+    abrirPdfFirmado:abrirPdfFirmado,
+    descargarPdfFirmado:descargarPdfFirmado,
+    obtenerUltimoFirmado:obtenerUltimoFirmado
+  });
+})();
+
+/* AUROSANAX V2.3 - OVERRIDE FINAL REABRIR PDF PENDIENTE */
+/* ============================================================
+   AUROSANAX ERP - FIRMA ELECTRÓNICA
+   Archivo destino: firma_electronica.js
+   Versión: 2.1
+   Alcance inicial: RECETA
+   ------------------------------------------------------------
+   CONTRATO ANTIRREGRESIVO:
+   - Mantiene window.auroFirmaElectronica.firmarDocumento(data).
+   - No contiene certificado .p12, clave privada ni contraseña.
+   - No declara una firma válida sin confirmación positiva del backend.
+   - Falla cerrado ante configuración incompleta, sesión inválida o error.
+   - Conserva aislamiento por id_atencion + id_receta.
+   - Evita doble POST/doble firma de la misma receta y mismo contenido.
+   - NO descarga ni abre automáticamente el PDF al terminar la firma.
+   - Conserva funciones explícitas para VER o DESCARGAR el PDF firmado.
+============================================================ */
+(function(){
+  'use strict';
+
+  const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
+  const VERSION = '2.3-sin-tiempo-reabrir';
+  const INTERVALO_CONSULTA_MS = 2500;
+
+  /* Una sola operación activa por receta+contenido.
+     V2.3: conserva también id_solicitud para REABRIR sin duplicar. */
+  const firmasEnCurso = new Map();
+
+  /* Resultado confirmado en esta sesión del navegador.
+     La clave incluye la huella del HTML: si la receta cambia, puede firmarse
+     nuevamente; si no cambia, no se genera una firma duplicada. */
+  const firmasConfirmadas = new Map();
+  let ultimoResultadoFirmado = null;
+
+  function texto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(e){
+      return '';
+    }
+  }
+
+  function mensajeProfesional(mensaje, tipo){
+    const txt = texto(mensaje) || 'No fue posible completar la operación de firma electrónica.';
+    const clase = tipo === 'ok' ? 'success' : (tipo === 'warn' ? 'warning' : 'danger');
+
+    try{
+      if(typeof window.mostrarToast === 'function'){
+        window.mostrarToast(txt, clase);
+        return;
+      }
+    }catch(e){}
+
+    alert(txt);
+  }
+
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {
+      token: tokenSesion()
+    });
+
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
+
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
+
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la firma electrónica.');
+    }
+    return json;
+  }
+
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
+
+  function obtenerBase64Firmado(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  /* Acción EXPLÍCITA: ver. Nunca se llama automáticamente al firmar. */
+  function abrirPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, '_blank', 'noopener');
+    if(!ventana){
+      URL.revokeObjectURL(url);
+      return false;
+    }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+    return true;
+  }
+
+  /* Acción EXPLÍCITA: descargar. Nunca se llama automáticamente al firmar. */
+  function descargarPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto((r && r.nombre_archivo) || nombrePreferido || 'documento_firmado.pdf');
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return true;
+  }
+
+  function validarSolicitud(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = texto(d.tipo_documento).toUpperCase();
+    d.id_atencion = texto(d.id_atencion);
+    d.id_receta = texto(d.id_receta || d.id_documento_clinico);
+    d.html_documento = texto(d.html_documento);
+
+    if(d.tipo_documento !== 'RECETA'){
+      throw new Error('Esta integración de firma está habilitada únicamente para Recetas.');
+    }
+    if(!d.id_atencion) throw new Error('No existe una atención clínica activa para firmar.');
+    if(!d.id_receta) throw new Error('Guarde la receta antes de firmarla electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial de la receta.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(String(valor || ''));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function claveFirma(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return solicitud.id_atencion + '|' + solicitud.id_receta + '|' + huella;
+  }
+
+  async function esperarFirma(idSolicitud, solicitud){
+    /* Sin vencimiento artificial: la espera termina solo por FIRMADO, ERROR
+       o por un estado terminal informado explícitamente por el backend. */
+    while(true){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'ERROR'){
+        throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el documento.');
+      }
+      if(valor === 'EXPIRADA'){
+        throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      }
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function ejecutarFirma(solicitud, clave){
+    const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
+    if(estadoMotor.disponible !== true){
+      throw new Error(
+        estadoMotor.agente_online === false
+          ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+          : 'La firma electrónica no está disponible en este momento.'
+      );
+    }
+
+    const creada = await post('firmarDocumento', solicitud);
+    const estadoInicial = texto(creada.estado_firma).toUpperCase();
+
+    let resultado;
+    if(estadoInicial === 'FIRMADO'){
+      resultado = creada;
+    }else{
+      if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+        throw new Error('El servidor no creó correctamente la solicitud de firma.');
+      }
+      const activa = firmasEnCurso.get(clave);
+      if(activa) activa.id_solicitud = texto(creada.id_solicitud);
+      resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
+      throw new Error('El servidor no confirmó un estado de firma válido.');
+    }
+
+    if(!obtenerBase64Firmado(resultado)){
+      throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+    }
+
+    /* Se conserva el PDF firmado en memoria para acciones explícitas posteriores.
+       NO se abre y NO se descarga aquí. */
+    ultimoResultadoFirmado = resultado;
+    firmasConfirmadas.set(clave, resultado);
+
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+      detail:{
+        tipo_documento:solicitud.tipo_documento,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta,
+        id_solicitud:texto(resultado.id_solicitud),
+        estado_firma:'FIRMADO',
+        nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+        sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+        firmado_en:texto(resultado.firmado_en),
+        pdf_disponible:true
+      }
+    }));
+
+    mensajeProfesional(
+      'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
+      'ok'
+    );
+
+    return resultado;
+  }
+
+  async function firmarDocumento(data){
+    let clave = '';
+    try{
+      const solicitud = validarSolicitud(data);
+      clave = await claveFirma(solicitud);
+
+      /* Si el mismo documento ya fue confirmado en esta sesión, no se vuelve
+         a firmar ni se genera otro POST. */
+      if(firmasConfirmadas.has(clave)){
+        const existente = firmasConfirmadas.get(clave);
+        ultimoResultadoFirmado = existente;
+        mensajeProfesional(
+          'Esta misma versión de la receta ya fue firmada. No se generó una firma duplicada.',
+          'warn'
+        );
+        return existente;
+      }
+
+      /* Si hay una firma en curso, todos los clics posteriores reutilizan la
+         misma promesa. Así se evita doble POST incluso con doble clic. */
+      if(firmasEnCurso.has(clave)){
+        const activa = firmasEnCurso.get(clave);
+        setEstadoBotonesFirma(texto(activa && activa.id_solicitud) ? 'proceso' : 'preparando');
+        pintarEstadoFirmaInline(
+          texto(activa && activa.id_solicitud)
+            ? 'La firma ya está en proceso. No necesita volver a presionar.'
+            : 'La solicitud se está preparando. Espere un momento.',
+          'info'
+        );
+        return activa && activa.promesa ? activa.promesa : activa;
+      }
+
+      const activa = {promesa:null, id_solicitud:''};
+      const operacion = ejecutarFirma(solicitud, clave);
+      activa.promesa = operacion;
+      firmasEnCurso.set(clave, activa);
+
+      try{
+        return await operacion;
+      }finally{
+        firmasEnCurso.delete(clave);
+      }
+    }catch(error){
+      if(clave) firmasEnCurso.delete(clave);
+      console.error(MODULO, error);
+      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+      throw error;
+    }
+  }
+
+  async function obtenerEstado(data){
+    return post('obtenerEstadoFirmaElectronica', data || {});
+  }
+
+  function obtenerUltimoFirmado(){
+    return ultimoResultadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze({
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerEstado:obtenerEstado,
+    abrirPdfFirmado:abrirPdfFirmado,
+    descargarPdfFirmado:descargarPdfFirmado,
+    obtenerUltimoFirmado:obtenerUltimoFirmado
+  });
+})();
+
+/* ============================================================
+   AUROSANAX V2.4 - OVERRIDE FINAL: REABRIR + CANCELAR
+   Adhesión append-only. Baseline anterior intacto arriba.
+============================================================ */
+/* ============================================================
+   AUROSANAX ERP - FIRMA ELECTRÓNICA
+   Archivo destino: firma_electronica.js
+   Versión: 2.1
+   Alcance inicial: RECETA
+   ------------------------------------------------------------
+   CONTRATO ANTIRREGRESIVO:
+   - Mantiene window.auroFirmaElectronica.firmarDocumento(data).
+   - No contiene certificado .p12, clave privada ni contraseña.
+   - No declara una firma válida sin confirmación positiva del backend.
+   - Falla cerrado ante configuración incompleta, sesión inválida o error.
+   - Conserva aislamiento por id_atencion + id_receta.
+   - Evita doble POST/doble firma de la misma receta y mismo contenido.
+   - NO descarga ni abre automáticamente el PDF al terminar la firma.
+   - Conserva funciones explícitas para VER o DESCARGAR el PDF firmado.
+============================================================ */
+(function(){
+  'use strict';
+
+  const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
+  const VERSION = '2.4-sin-tiempo-reabrir-cancelar';
+  const INTERVALO_CONSULTA_MS = 2500;
+
+  /* Una sola operación activa por receta+contenido.
+     V2.3: conserva también id_solicitud para REABRIR sin duplicar. */
+  const firmasEnCurso = new Map();
+
+  /* Resultado confirmado en esta sesión del navegador.
+     La clave incluye la huella del HTML: si la receta cambia, puede firmarse
+     nuevamente; si no cambia, no se genera una firma duplicada. */
+  const firmasConfirmadas = new Map();
+  let ultimoResultadoFirmado = null;
+  let claveActivaVisible = '';
+  let solicitudActivaVisible = null;
+
+  function texto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(e){
+      return '';
+    }
+  }
+
+  function mensajeProfesional(mensaje, tipo){
+    const txt = texto(mensaje) || 'No fue posible completar la operación de firma electrónica.';
+    const clase = tipo === 'ok' ? 'success' : (tipo === 'warn' ? 'warning' : 'danger');
+
+    try{
+      if(typeof window.mostrarToast === 'function'){
+        window.mostrarToast(txt, clase);
+        return;
+      }
+    }catch(e){}
+
+    alert(txt);
+  }
+
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {
+      token: tokenSesion()
+    });
+
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
+
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
+
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la firma electrónica.');
+    }
+    return json;
+  }
+
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
+
+  function obtenerBase64Firmado(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  /* Acción EXPLÍCITA: ver. Nunca se llama automáticamente al firmar. */
+  function abrirPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, '_blank', 'noopener');
+    if(!ventana){
+      URL.revokeObjectURL(url);
+      return false;
+    }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+    return true;
+  }
+
+  /* Acción EXPLÍCITA: descargar. Nunca se llama automáticamente al firmar. */
+  function descargarPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto((r && r.nombre_archivo) || nombrePreferido || 'documento_firmado.pdf');
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return true;
+  }
+
+
+  function pintarEstadoFirmaInline(mensaje, tipo){
+    const txt = texto(mensaje);
+    botonesFirmaVisibles().forEach(function(firmar){
+      if(!firmar || !firmar.parentNode) return;
+      const contexto = contextoBotonFirma(firmar);
+      let box = firmar.parentNode.querySelector('.auro-firma-estado-inline[data-auro-contexto="' + contexto + '"]');
+      if(!box){
+        box = document.createElement('span');
+        box.className = 'auro-firma-estado-inline';
+        box.setAttribute('data-auro-contexto', contexto);
+        box.setAttribute('role','status');
+        box.setAttribute('aria-live','polite');
+        box.style.display = 'inline-block';
+        box.style.marginLeft = '10px';
+        box.style.padding = '6px 10px';
+        box.style.borderRadius = '999px';
+        box.style.fontSize = '12px';
+        box.style.fontWeight = '700';
+        box.style.verticalAlign = 'middle';
+        const cancelar = asegurarBotonCancelarJuntoA(firmar);
+        (cancelar || firmar).insertAdjacentElement('afterend', box);
+      }
+      if(!txt){
+        box.style.display = 'none';
+        box.textContent = '';
+        return;
+      }
+      box.style.display = 'inline-block';
+      box.textContent = txt;
+      if(tipo === 'ok'){
+        box.style.background = '#dcfce7'; box.style.color = '#166534'; box.style.border = '1px solid #bbf7d0';
+      }else if(tipo === 'warn'){
+        box.style.background = '#fef3c7'; box.style.color = '#92400e'; box.style.border = '1px solid #fde68a';
+      }else if(tipo === 'error'){
+        box.style.background = '#fee2e2'; box.style.color = '#991b1b'; box.style.border = '1px solid #fecaca';
+      }else{
+        box.style.background = '#dbeafe'; box.style.color = '#1e40af'; box.style.border = '1px solid #bfdbfe';
+      }
+    });
+  }
+
+  function setEstadoBotonesFirma(modo){
+    botonesFirmaVisibles().forEach(function(btn){
+      if(!btn) return;
+      if(!btn.dataset.auroFirmaHtmlOriginal){
+        btn.dataset.auroFirmaHtmlOriginal = btn.innerHTML || '';
+        btn.dataset.auroFirmaTitleOriginal = btn.getAttribute('title') || '';
+      }
+      if(modo === 'preparando'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Preparando firma…';
+        btn.title = 'Preparando la solicitud de firma. Espere un momento.';
+      }else if(modo === 'proceso'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firma en proceso…';
+        btn.title = 'La solicitud ya fue enviada. Adobe se abrirá cuando el motor la tome.';
+      }else{
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        btn.style.cursor = 'pointer';
+        if(btn.dataset.auroFirmaHtmlOriginal) btn.innerHTML = btn.dataset.auroFirmaHtmlOriginal;
+        if(btn.dataset.auroFirmaTitleOriginal) btn.title = btn.dataset.auroFirmaTitleOriginal;
+      }
+    });
+  }
+
+  function mensajeErrorAmigable(error){
+    const raw = texto(error && error.message ? error.message : error);
+    const n = normalizarTextoUI(raw);
+    if(n.includes('tiempo de espera') && n.includes('bloqueo')){
+      return 'La firma está atendiendo otra operación. Espere unos segundos y vuelva a intentarlo.';
+    }
+    return raw || 'No fue posible completar la operación de firma electrónica.';
+  }
+
+  function ocultarBotonCancelar(){
+    const btn = document.getElementById('btnCancelarFirmaElectronicaReceta');
+    if(btn) btn.style.display = 'none';
+    claveActivaVisible = '';
+    solicitudActivaVisible = null;
+  }
+
+  function mostrarBotonCancelar(solicitud, clave){
+    claveActivaVisible = clave || '';
+    solicitudActivaVisible = solicitud || null;
+
+    const firmar = document.getElementById('btnFirmaElectronicaReceta');
+    if(!firmar) return;
+
+    let btn = document.getElementById('btnCancelarFirmaElectronicaReceta');
+    if(!btn){
+      btn = document.createElement('button');
+      btn.id = 'btnCancelarFirmaElectronicaReceta';
+      btn.type = 'button';
+      btn.textContent = 'Cancelar firma';
+      btn.title = 'Cancelar la solicitud de firma pendiente sin borrar la receta';
+      btn.style.marginLeft = '8px';
+      btn.style.cursor = 'pointer';
+      firmar.insertAdjacentElement('afterend', btn);
+    }
+
+    btn.onclick = async function(){
+      try{
+        if(!solicitudActivaVisible) return;
+        const confirmar = window.confirm(
+          '¿Cancelar esta solicitud de firma?\n\nLa receta NO se elimina. Solo se cancela la firma pendiente.'
+        );
+        if(!confirmar) return;
+        await cancelarFirmaDocumento(solicitudActivaVisible);
+      }catch(_e){}
     };
+    btn.style.display = '';
   }
 
-  if(activaFormal){
-    return {
-      disabled:false,
-      texto:'Ver orden emitida',
-      icono:'bi-eye',
-      nota:`Ya existe una orden formal activa (${txt(activaFormal.id_orden)} · v${Number(activaFormal.version||1)}). El botón no emitirá otra v1 accidentalmente.`
-    };
+  async function cancelarFirmaDocumento(data){
+    let clave = '';
+    try{
+      const solicitud = validarSolicitud(data);
+      clave = await claveFirma(solicitud);
+      const activa = firmasEnCurso.get(clave);
+
+      if(!activa || !texto(activa.id_solicitud)){
+        mensajeProfesional('No existe una solicitud de firma pendiente para cancelar.', 'warn');
+        return {success:true, estado_firma:'SIN_PENDIENTE'};
+      }
+
+      const respuesta = await post('firmarDocumento', {
+        operacion_frontend:'CANCELAR',
+        id_solicitud:texto(activa.id_solicitud),
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const estado = texto(respuesta.estado_firma).toUpperCase();
+      if(estado !== 'CANCELADA'){
+        throw new Error('El servidor no confirmó la cancelación de la firma.');
+      }
+
+      activa.cancelada = true;
+      firmasEnCurso.delete(clave);
+      ocultarBotonCancelar();
+
+      window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada', {
+        detail:{
+          tipo_documento:solicitud.tipo_documento,
+          id_atencion:solicitud.id_atencion,
+          id_receta:solicitud.id_receta,
+          id_solicitud:texto(respuesta.id_solicitud),
+          estado_firma:'CANCELADA'
+        }
+      }));
+
+      pintarEstadoFirmaInline('Firma cancelada. Puede iniciar una nueva firma.', 'ok');
+      setEstadoBotonesFirma('normal');
+      mensajeProfesional('Firma cancelada. La receta se conserva sin cambios. Puede iniciar una nueva firma.', 'ok');
+      return respuesta;
+    }catch(error){
+      console.error(MODULO, error);
+      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+      throw error;
+    }
   }
 
-  if(!plan.items.length) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical',nota:'Agregue al menos una orden en el Plan.'};
-  return {disabled:false,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical-fill',nota:`Se emitirán ${plan.items.length} ${plan.items.length===1?'orden':'órdenes'} de esta atención.`};
-}
+  function validarSolicitud(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = texto(d.tipo_documento).toUpperCase();
+    d.id_atencion = texto(d.id_atencion);
+    d.id_receta = texto(d.id_receta || d.id_documento_clinico);
+    d.html_documento = texto(d.html_documento);
 
-function render(){
-  const app=document.getElementById('auroOrdenMedicaFormalApp');
-  if(!app) return;
-  const e=estadoPrimario();
-  const emitidas=state.ordenesEmitidas.slice().sort((a,b)=>{
-    const fecha=txt(b.actualizado_en||b.creado_en||b.fecha_emision).localeCompare(txt(a.actualizado_en||a.creado_en||a.fecha_emision));
-    if(fecha!==0) return fecha;
-    return (Number(b.version)||0)-(Number(a.version)||0);
+    if(d.tipo_documento !== 'RECETA'){
+      throw new Error('Esta integración de firma está habilitada únicamente para Recetas.');
+    }
+    if(!d.id_atencion) throw new Error('No existe una atención clínica activa para firmar.');
+    if(!d.id_receta) throw new Error('Guarde la receta antes de firmarla electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial de la receta.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(String(valor || ''));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function claveFirma(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return solicitud.id_atencion + '|' + solicitud.id_receta + '|' + huella;
+  }
+
+  async function esperarFirma(idSolicitud, solicitud){
+    /* Sin vencimiento artificial: la espera termina solo por FIRMADO, ERROR
+       o por un estado terminal informado explícitamente por el backend. */
+    while(true){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'ERROR'){
+        throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el documento.');
+      }
+      if(valor === 'EXPIRADA'){
+        throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      }
+      if(valor === 'CANCELADA') return estado;
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function ejecutarFirma(solicitud, clave){
+    const estadoMotor = await post('obtenerEstadoFirmaElectronica', {});
+    if(estadoMotor.disponible !== true){
+      throw new Error(
+        estadoMotor.agente_online === false
+          ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+          : 'La firma electrónica no está disponible en este momento.'
+      );
+    }
+
+    const creada = await post('firmarDocumento', solicitud);
+    const estadoInicial = texto(creada.estado_firma).toUpperCase();
+
+    let resultado;
+    if(estadoInicial === 'FIRMADO'){
+      resultado = creada;
+    }else{
+      if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+        throw new Error('El servidor no creó correctamente la solicitud de firma.');
+      }
+      const activa = firmasEnCurso.get(clave);
+      if(activa){
+        activa.id_solicitud = texto(creada.id_solicitud);
+        activa.solicitud = solicitud;
+      }
+      mostrarBotonCancelar(solicitud, clave);
+      setEstadoBotonesFirma('proceso');
+      pintarEstadoFirmaInline('Solicitud enviada. Abriendo Adobe…', 'info');
+      resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() === 'CANCELADA'){
+      ocultarBotonCancelar();
+      return resultado;
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
+      throw new Error('El servidor no confirmó un estado de firma válido.');
+    }
+
+    if(!obtenerBase64Firmado(resultado)){
+      throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+    }
+
+    /* Se conserva el PDF firmado en memoria para acciones explícitas posteriores.
+       NO se abre y NO se descarga aquí. */
+    ultimoResultadoFirmado = resultado;
+    firmasConfirmadas.set(clave, resultado);
+    ocultarBotonCancelar();
+
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+      detail:{
+        tipo_documento:solicitud.tipo_documento,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta,
+        id_solicitud:texto(resultado.id_solicitud),
+        estado_firma:'FIRMADO',
+        nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+        sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+        firmado_en:texto(resultado.firmado_en),
+        pdf_disponible:true
+      }
+    }));
+
+    mensajeProfesional(
+      'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
+      'ok'
+    );
+
+    return resultado;
+  }
+
+  async function firmarDocumento(data){
+    let clave = '';
+    try{
+      const solicitud = validarSolicitud(data);
+      clave = await claveFirma(solicitud);
+
+      /* Si el mismo documento ya fue confirmado en esta sesión, no se vuelve
+         a firmar ni se genera otro POST. */
+      if(firmasConfirmadas.has(clave)){
+        const existente = firmasConfirmadas.get(clave);
+        ultimoResultadoFirmado = existente;
+        mensajeProfesional(
+          'Esta misma versión de la receta ya fue firmada. No se generó una firma duplicada.',
+          'warn'
+        );
+        return existente;
+      }
+
+      /* Si hay una firma en curso, todos los clics posteriores reutilizan la
+         misma promesa. Así se evita doble POST incluso con doble clic. */
+      if(firmasEnCurso.has(clave)){
+        const activa = firmasEnCurso.get(clave);
+        if(activa && texto(activa.id_solicitud)){
+          await post('firmarDocumento', {
+            operacion_frontend:'REABRIR',
+            id_solicitud:texto(activa.id_solicitud),
+            id_atencion:solicitud.id_atencion,
+            id_receta:solicitud.id_receta
+          });
+          mensajeProfesional('Se solicitó reabrir el mismo PDF pendiente en Acrobat.', 'warn');
+        }else{
+          mensajeProfesional('La solicitud todavía se está creando. Intente nuevamente en unos segundos.', 'warn');
+        }
+        return activa && activa.promesa ? activa.promesa : activa;
+      }
+
+      const activa = {promesa:null, id_solicitud:'', solicitud:solicitud, cancelada:false};
+      const operacion = ejecutarFirma(solicitud, clave);
+      activa.promesa = operacion;
+      firmasEnCurso.set(clave, activa);
+
+      try{
+        return await operacion;
+      }finally{
+        firmasEnCurso.delete(clave);
+      }
+    }catch(error){
+      if(clave) firmasEnCurso.delete(clave);
+      ocultarBotonCancelar();
+      setEstadoBotonesFirma('normal');
+      console.error(MODULO, error);
+      const amable = mensajeErrorAmigable(error);
+      pintarEstadoFirmaInline(amable, 'error');
+      mensajeProfesional(amable, 'error');
+      throw error;
+    }
+  }
+
+  async function obtenerEstado(data){
+    return post('obtenerEstadoFirmaElectronica', data || {});
+  }
+
+  function obtenerUltimoFirmado(){
+    return ultimoResultadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze({
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    cancelarFirmaDocumento:cancelarFirmaDocumento,
+    obtenerEstado:obtenerEstado,
+    abrirPdfFirmado:abrirPdfFirmado,
+    descargarPdfFirmado:descargarPdfFirmado,
+    obtenerUltimoFirmado:obtenerUltimoFirmado
   });
-  app.innerHTML=`
-    <div class="aom-shell">
-      <div class="aom-head">
-        <div>
-          <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
-          <div class="aom-meta">Una emisión puede contener varias órdenes. Vinculada a la atención exacta.</div>
-        </div>
-        <button type="button" id="auroOrdenMedicaBtnPrincipal" class="aom-primary" ${e.disabled?'disabled':''}>
-          <i class="bi ${esc(e.icono)}"></i> ${esc(e.texto)}
-        </button>
-      </div>
-      <div id="auroOrdenMedicaAviso" class="aom-notice ${e.disabled?'warn':''}">${esc(e.nota)}</div>
-      <div class="aom-history">
-        <div class="aom-history-title">Órdenes emitidas en esta atención</div>
-        ${emitidas.length?emitidas.map(r=>filaHistorial(r)).join(''):'<div class="aom-empty">Todavía no hay órdenes formales emitidas para esta atención.</div>'}
-      </div>
-    </div>`;
-
-  document.getElementById('auroOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
-  app.querySelectorAll('[data-aom-preview]').forEach(b=>b.addEventListener('click',()=>vistaPreviaPorId(b.dataset.aomPreview)));
-  app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
-  app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
-  app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
-  app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>firmarOrdenPorId(b.dataset.aomFirmar)));
-  app.querySelectorAll('[data-aom-cancelar-firma]').forEach(b=>b.addEventListener('click',()=>cancelarFirmaOrdenPorId(b.dataset.aomCancelarFirma)));
-}
+})();
 
 
 /* ============================================================
- * AUROSANAX ORDENES MEDICAS V1.4.0 - FIRMA ELECTRONICA
- * ADHESION QUIRURGICA / ANTIRREGRESIVA
- * - No cambia emisión, edición, anulación, versiones ni detalle_json.
- * - Identidad: ORDEN_MEDICA + id_orden + id_atencion exactos.
- * - Reutiliza el backend/motor AUROSANAX existente.
- * ============================================================ */
-function tokenSesionFirma(){
-  try{return txt(sessionStorage.getItem('aurosanax_seguridad_token'));}catch(e){return '';}
-}
+   AUROSANAX V2.5 - OVERRIDE FINAL ANTIRREGRESIVO
+   PLAN + RECETAS / CANCELAR + POLLING 1s
+   ------------------------------------------------------------
+   - Baseline V2.4 completo permanece intacto arriba.
+   - NO modifica Plan, Recetas, Index ni backend.
+   - Refleja el mismo botón Cancelar firma junto al botón de firma
+     ya existente en Recetas y Plan.
+   - CANCELAR activo solo con solicitud pendiente.
+   - Tras CANCELADA o FIRMADO queda visible pero INACTIVO.
+   - Polling frontend: 2500 ms -> 1000 ms.
+   - No elimina preflight, no duplica POST, no cambia contratos.
+============================================================ */
+/* ============================================================
+   AUROSANAX ERP - FIRMA ELECTRÓNICA
+   Archivo destino: firma_electronica.js
+   Versión: 2.1
+   Alcance inicial: RECETA
+   ------------------------------------------------------------
+   CONTRATO ANTIRREGRESIVO:
+   - Mantiene window.auroFirmaElectronica.firmarDocumento(data).
+   - No contiene certificado .p12, clave privada ni contraseña.
+   - No declara una firma válida sin confirmación positiva del backend.
+   - Falla cerrado ante configuración incompleta, sesión inválida o error.
+   - Conserva aislamiento por id_atencion + id_receta.
+   - Evita doble POST/doble firma de la misma receta y mismo contenido.
+   - NO descarga ni abre automáticamente el PDF al terminar la firma.
+   - Conserva funciones explícitas para VER o DESCARGAR el PDF firmado.
+============================================================ */
+(function(){
+  'use strict';
 
-async function postFirma(accion,data){
-  const b=apiUrl();
-  if(!b) throw Error('No se encontró la conexión segura con el servidor del ERP.');
-  const payload=Object.assign({},data||{},{token:tokenSesionFirma()});
-  const r=await fetch(b,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({accion,data:payload}),
-    cache:'no-store'
-  });
-  if(!r.ok) throw Error('El servidor de firma respondió HTTP '+r.status+'.');
-  const j=await r.json();
-  if(!j||j.success!==true) throw Error(txt(j?.message||j?.error)||'El servidor no confirmó la operación de firma.');
-  return j;
-}
+  const MODULO = 'AUROSANAX FIRMA ELECTRÓNICA';
+  const VERSION = '2.7-ux-inmediata-lock-friendly';
+  const INTERVALO_CONSULTA_MS = 1000;
 
-function firmaOrdenEstado(id){
-  return state.firmas[txt(id)]||{estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-}
+  /* Una sola operación activa por receta+contenido.
+     V2.3: conserva también id_solicitud para REABRIR sin duplicar. */
+  const firmasEnCurso = new Map();
 
-function fijarFirmaOrden(id,estado,extra={}){
-  id=txt(id);
-  if(!id) return;
-  state.firmas[id]=Object.assign({},firmaOrdenEstado(id),extra,{estado:estado||'SIN_FIRMA'});
-  render();
-}
+  /* Resultado confirmado en esta sesión del navegador.
+     La clave incluye la huella del HTML: si la receta cambia, puede firmarse
+     nuevamente; si no cambia, no se genera una firma duplicada. */
+  const firmasConfirmadas = new Map();
+  let ultimoResultadoFirmado = null;
+  let claveActivaVisible = '';
+  let solicitudActivaVisible = null;
 
-function botonesFirmaOrden(r){
-  const id=txt(r?.id_orden);
-  if(!id||estadoOrdenEsAnulada(r)||estadoOrdenEsReemplazada(r)) return '';
-  const f=firmaOrdenEstado(id);
-  const e=txt(f.estado).toUpperCase();
-  if(e==='FIRMADO'||e==='FIRMADA'){
-    return `<button type="button" class="aom-btn firma ok" data-aom-firmar="${esc(id)}"><i class="bi bi-file-earmark-check"></i> Ver orden firmada ✓</button>`;
+  function texto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
   }
-  if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e)){
-    return `<button type="button" class="aom-btn firma proceso" disabled><i class="bi bi-hourglass-split"></i> Firma en proceso…</button>
-      ${txt(f.id_solicitud)?`<button type="button" class="aom-btn danger" data-aom-cancelar-firma="${esc(id)}"><i class="bi bi-x-circle"></i> Cancelar firma</button>`:''}`;
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
   }
-  return `<button type="button" class="aom-btn firma" data-aom-firmar="${esc(id)}"><i class="bi bi-pen"></i> Firmar</button>`;
-}
 
-function ordenFirmablePorId(id){
-  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id))||null;
-  const ctx=contexto();
-  if(!reg) return {success:false,message:'No se encontró la orden médica seleccionada.'};
-  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) return {success:false,message:'Solo una orden médica activa puede enviarse a firma.'};
-  if(!ctx.id||txt(reg.id_atencion)!==txt(ctx.id)) return {success:false,message:'La orden médica no pertenece a la atención actualmente seleccionada.'};
-  const d=datosDocumentoEmitido(reg);
-  return {
-    success:true,
-    registro:reg,
-    tipo_documento:'ORDEN_MEDICA',
-    id_documento_origen:txt(reg.id_orden),
-    id_documento_clinico:txt(reg.id_orden),
-    id_orden:txt(reg.id_orden),
-    id_receta:'',
-    id_certificado:'',
-    id_recomendacion:'',
-    id_atencion:txt(reg.id_atencion),
-    id_paciente:txt(reg.id_paciente),
-    nombre_paciente:txt(reg.nombre_paciente),
-    id_historia:txt(reg.id_historia),
-    id_medico:txt(reg.id_medico),
-    nombre_medico:txt(reg.nombre_medico),
-    nombre_archivo:'ORDEN_MEDICA_'+txt(reg.id_orden)+'_FIRMADO.pdf',
-    html_documento:`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden médica AUROSANAX</title><style>${estilosImpresion()}</style></head><body>${docHTML(d)}</body></html>`
-  };
-}
-
-async function consultarFirmaPersistenteOrden(id){
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success) return null;
-  try{
-    const r=await postFirma('consultarDocumentosFirmados',{
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
-    });
-    const docs=Array.isArray(r?.documentos)?r.documentos:[];
-    const encontrado=docs.find(x=>
-      txt(x?.tipo_documento).toUpperCase()==='ORDEN_MEDICA' &&
-      txt(x?.id_documento_origen||x?.id_orden)===doc.id_orden &&
-      txt(x?.id_atencion)===doc.id_atencion &&
-      txt(x?.estado_firma).toUpperCase()==='FIRMADO'
-    )||null;
-    state.firmas[doc.id_orden]=encontrado
-      ? {estado:'FIRMADO',id_solicitud:txt(encontrado.id_solicitud),documento:encontrado,error:''}
-      : {estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-    return encontrado;
-  }catch(e){
-    console.warn('AUROSANAX Orden Médica: no se pudo consultar firma persistente.',e);
-    return null;
-  }
-}
-
-async function cargarFirmasOrdenes(){
-  const regs=state.ordenesEmitidas.filter(r=>!estadoOrdenEsAnulada(r)&&!estadoOrdenEsReemplazada(r)&&txt(r.id_orden));
-  await Promise.all(regs.map(r=>consultarFirmaPersistenteOrden(r.id_orden)));
-}
-
-async function abrirOrdenFirmada(id){
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success){aviso(doc.message,'err');return null;}
-  const ventana=window.open('','_blank');
-  if(!ventana){aviso('Habilite ventanas emergentes para ver la orden médica firmada.','err');return null;}
-  try{
-    ventana.document.title='Cargando orden médica firmada…';
-    ventana.document.body.innerHTML='<p style="font-family:Arial,sans-serif;padding:20px">Cargando orden médica firmada…</p>';
-    const r=await postFirma('obtenerPdfFirmadoPersistente',{
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
-    });
-    const b64=txt(r?.pdf_firmado_base64||r?.archivo_base64).replace(/^data:application\/pdf;base64,/i,'');
-    if(!b64) throw Error('El servidor no devolvió el PDF firmado de la orden médica.');
-    const bin=atob(b64), bytes=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-    ventana.location.replace(url);
-    setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
-    return r;
-  }catch(e){
-    try{ventana.close();}catch(_e){}
-    aviso('No se pudo abrir la orden firmada: '+txt(e.message||e),'err');
-    return null;
-  }
-}
-
-async function esperarFirmaOrden(idSolicitud,doc,tokenOperacion){
-  while(tokenOperacion===state.firmaTokens[doc.id_orden]){
-    const r=await postFirma('obtenerEstadoFirmaElectronica',{
-      id_solicitud:idSolicitud,
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
-    });
-    const e=txt(r?.estado_firma).toUpperCase();
-    if(['FIRMADO','CANCELADA','CANCELADO'].includes(e)) return r;
-    if(e==='ERROR') throw Error(txt(r?.error)||'El motor local informó un error al firmar la orden médica.');
-    if(e==='EXPIRADA') throw Error(txt(r?.error)||'La solicitud de firma expiró.');
-    if(!['PENDIENTE','TOMADA'].includes(e)) throw Error('El servidor devolvió un estado de firma no reconocido.');
-    state.firmas[doc.id_orden]=Object.assign({},firmaOrdenEstado(doc.id_orden),{estado:e,id_solicitud:idSolicitud,error:''});
-    render();
-    await new Promise(resolve=>setTimeout(resolve,2500));
-  }
-  return null;
-}
-
-async function firmarOrdenPorId(id){
-  const actual=firmaOrdenEstado(id);
-  if(['FIRMADO','FIRMADA'].includes(txt(actual.estado).toUpperCase())) return abrirOrdenFirmada(id);
-  if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(actual.estado).toUpperCase())) return null;
-
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success){aviso(doc.message,'err');return null;}
-
-  const tokenOperacion=(state.firmaTokens[doc.id_orden]||0)+1;
-  state.firmaTokens[doc.id_orden]=tokenOperacion;
-  state.firmas[doc.id_orden]={estado:'PREPARANDO',id_solicitud:'',documento:null,error:''};
-  render();
-  aviso('Preparando orden médica para firma electrónica…');
-
-  try{
-    const motor=await postFirma('obtenerEstadoFirmaElectronica',{});
-    if(motor?.disponible!==true) throw Error(motor?.agente_online===false?'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.':'La firma electrónica no está disponible en este momento.');
-
-    const creada=await postFirma('firmarDocumento',doc);
-    if(tokenOperacion!==state.firmaTokens[doc.id_orden]) return null;
-    const idSolicitud=txt(creada?.id_solicitud);
-    const inicial=txt(creada?.estado_firma).toUpperCase();
-    if(inicial==='FIRMADO'){
-      state.firmas[doc.id_orden]={estado:'FIRMADO',id_solicitud,documento:creada,error:''};
-      render(); aviso('Orden médica firmada electrónicamente.','ok'); return creada;
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(e){
+      return '';
     }
-    if(inicial!=='PENDIENTE'||!idSolicitud) throw Error('El servidor no creó correctamente la solicitud de firma.');
-
-    state.firmas[doc.id_orden]={estado:'PENDIENTE',id_solicitud,documento:null,error:''};
-    render(); aviso('Orden médica enviada al motor de firma.');
-
-    const resultado=await esperarFirmaOrden(idSolicitud,doc,tokenOperacion);
-    if(!resultado) return null;
-    const estado=txt(resultado?.estado_firma).toUpperCase();
-    if(estado==='FIRMADO'){
-      await consultarFirmaPersistenteOrden(doc.id_orden);
-      render(); aviso('Orden médica firmada electrónicamente.','ok'); return resultado;
-    }
-    if(['CANCELADA','CANCELADO'].includes(estado)){
-      state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-      render(); aviso('Firma de la orden médica cancelada.'); return resultado;
-    }
-    throw Error('El servidor no confirmó la firma de la orden médica.');
-  }catch(e){
-    if(tokenOperacion===state.firmaTokens[doc.id_orden]){
-      state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:txt(e.message||e)};
-      render();
-      aviso('No se pudo firmar: '+txt(e.message||e),'err');
-    }
-    return null;
   }
-}
 
-async function cancelarFirmaOrdenPorId(id){
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success){aviso(doc.message,'err');return null;}
-  const f=firmaOrdenEstado(id), idSolicitud=txt(f.id_solicitud);
-  if(!idSolicitud){aviso('No existe una solicitud de firma pendiente para cancelar.','err');return null;}
-  try{
-    const r=await postFirma('firmarDocumento',{
-      operacion_frontend:'CANCELAR',
-      id_solicitud:idSolicitud,
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
+  function mensajeProfesional(mensaje, tipo){
+    const txt = texto(mensaje) || 'No fue posible completar la operación de firma electrónica.';
+    const clase = tipo === 'ok' ? 'success' : (tipo === 'warn' ? 'warning' : 'danger');
+
+    try{
+      if(typeof window.mostrarToast === 'function'){
+        window.mostrarToast(txt, clase);
+        return;
+      }
+    }catch(e){}
+
+    alert(txt);
+  }
+
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {
+      token: tokenSesion()
     });
-    const e=txt(r?.estado_firma).toUpperCase();
-    if(!['CANCELADA','CANCELADO'].includes(e)) throw Error('El servidor no confirmó la cancelación de la orden médica.');
-    state.firmaTokens[doc.id_orden]=(state.firmaTokens[doc.id_orden]||0)+1;
-    state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-    render(); aviso('Firma de la orden médica cancelada.'); return r;
-  }catch(e){
-    aviso('No se pudo cancelar la firma: '+txt(e.message||e),'err');
-    return null;
-  }
-}
 
-function filaHistorial(r){
-  const id=txt(r.id_orden);
-  const d=parse(r.detalle_json);
-  const n=itemsUnicos(d.items||r.items||[]).length;
-  const anulada=estadoOrdenEsAnulada(r);
-  const reemplazada=estadoOrdenEsReemplazada(r);
-  const noEditable=anulada||reemplazada;
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
 
-  return `<div class="aom-row">
-    <div class="aom-row-main">
-      <strong>${esc(id||'Orden médica')}</strong>
-      <small>${esc(fechaVisual(r.fecha_emision))} · ${n} ${n===1?'ítem':'ítems'} · ${esc(r.estado||'Emitida')}${r.version?` · v${esc(r.version)}`:''}</small>
-    </div>
-    <div class="aom-actions">
-      <button type="button" class="aom-btn" data-aom-preview="${esc(id)}"><i class="bi bi-eye"></i> Vista previa</button>
-      ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
-      <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
-      ${botonesFirmaOrden(r)}
-      ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-trash"></i> Eliminar</button>`}
-    </div>
-  </div>`;
-}
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
 
-function aviso(msg,tipo=''){
-  const el=document.getElementById('auroOrdenMedicaAviso');
-  if(!el) return;
-  el.className='aom-notice'+(tipo?' '+tipo:'');
-  el.textContent=msg;
-}
-
-function setGuardando(v){
-  state.guardando=!!v;
-  const b=document.getElementById('auroOrdenMedicaBtnPrincipal');
-  if(b){
-    b.disabled=!!v;
-    if(v) b.innerHTML='<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Guardando...';
-  }
-}
-
-async function accionPrincipal(){
-  if(state.guardando) return;
-  const activas=ordenesActivasFormales();
-  if(activas.length>1){
-    aviso(`Se detectaron ${activas.length} órdenes formales activas para esta atención. No se emitirá otra hasta resolver la duplicidad.`,'err');
-    return;
-  }
-  const activaFormal=activas[0]||null;
-  if(activaFormal) return vistaPreviaPorId(activaFormal.id_orden);
-  return emitir();
-}
-
-async function emitir(){
-  const activas=ordenesActivasFormales();
-  if(activas.length>1){
-    aviso(`Se detectaron ${activas.length} órdenes formales activas para esta atención. Emisión bloqueada para evitar otra duplicidad.`,'err');
-    return;
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la firma electrónica.');
+    }
+    return json;
   }
 
-  const existente=activas[0]||null;
-  if(existente){
-    aviso('Ya existe una orden formal activa para esta atención. Ábrala o edítela; no se emitió otra v1.','warn');
-    vistaPreviaPorId(existente.id_orden);
-    return;
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
   }
 
-  let data;
-  try{data=datosDocumentoDesdePlan();}
-  catch(e){aviso(e.message||'No se pudo preparar la orden.','err');return;}
-
-  if(!confirm(`Se emitirá una orden médica formal con ${data.detalle_json.items.length} ítem(s). ¿Continuar?`)) return;
-
-  setGuardando(true);
-  aviso('Emitiendo orden médica...');
-  try{
-    const r=await post('guardarOrdenMedica',data);
-    if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo guardar la orden.');
-    state.editandoId='';
-    await cargar();
-    aviso('Orden médica emitida correctamente.','ok');
-  }catch(e){
-    aviso('No se pudo emitir la orden: '+(e.message||e),'err');
-  }finally{
-    setGuardando(false);
-    render();
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
   }
-}
 
-function cerrarEditorFormal(){
-  document.getElementById('auroOrdenMedicaEditorModal')?.remove();
-  state.editandoId='';
-}
+  function obtenerBase64Firmado(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
 
-function recogerItemsEditorFormal(modal){
-  return Array.from(modal.querySelectorAll('[data-aom-editor-item]')).map(fila=>{
-    const tipo=txt(fila.querySelector('[data-campo="cat"]')?.value)||'OTROS';
-    const libre=txt(fila.querySelector('[data-campo="cat-libre"]')?.value);
-    return {
-      orden:txt(fila.querySelector('[data-campo="orden"]')?.value),
-      cat:norm(tipo)==='otros'?(libre||'OTROS'):tipo,
-      obs:txt(fila.querySelector('[data-campo="obs"]')?.value),
-      codigo_cie10:txt(fila.dataset.cie10),diagnostico:txt(fila.dataset.diagnostico)
+  /* Acción EXPLÍCITA: ver. Nunca se llama automáticamente al firmar. */
+  function abrirPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, '_blank', 'noopener');
+    if(!ventana){
+      URL.revokeObjectURL(url);
+      return false;
+    }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+    return true;
+  }
+
+  /* Acción EXPLÍCITA: descargar. Nunca se llama automáticamente al firmar. */
+  function descargarPdfFirmado(resultado, nombrePreferido){
+    const r = resultado || ultimoResultadoFirmado;
+    const base64 = obtenerBase64Firmado(r);
+    if(!base64) return false;
+
+    const blob = base64ABlob(base64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto((r && r.nombre_archivo) || nombrePreferido || 'documento_firmado.pdf');
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return true;
+  }
+
+
+  function normalizarTextoUI(valor){
+    return String(valor || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+
+  function botonesFirmaVisibles(){
+    const encontrados = [];
+    const agregar = function(el){
+      if(!el || encontrados.includes(el)) return;
+      encontrados.push(el);
     };
-  }).filter(x=>x.orden);
-}
 
-function opcionesCategoriaEditor(actual=''){
-  const cats=categoriasOrdenesFormal(actual);
-  const catalogCats=new Set(catalogoOrdenesFormal().map(x=>norm(x.cat)));
-  const valorSelect=actual&&catalogCats.has(norm(actual))?actual:'OTROS';
-  return {valorSelect,html:cats.map(c=>`<option value="${esc(c)}" ${norm(c)===norm(valorSelect)?'selected':''}>${esc(c)}</option>`).join('')};
-}
+    agregar(document.getElementById('btnFirmaElectronicaReceta'));
 
-function renderItemEditorFormal(item,index){
-  const x=itemOrdenNormalizado(item);
-  const cats=opcionesCategoriaEditor(x.cat);
-  const catLibre=norm(cats.valorSelect)==='otros'&&norm(x.cat)!=='otros'?x.cat:'';
-  return `<div class="aom-editor-item" data-aom-editor-item="1" data-cie10="${esc(x.codigo_cie10||'')}" data-diagnostico="${esc(x.diagnostico||'')}">
-    <div class="aom-editor-field"><label>Examen / procedimiento</label><input data-campo="orden" list="aomCatalogoOrdenes" value="${esc(x.orden||'')}" autocomplete="off"></div>
-    <div class="aom-editor-field"><label>Tipo de orden</label><select data-campo="cat">${cats.html}</select></div>
-    <div class="aom-editor-field"><label>Observación</label><textarea data-campo="obs">${esc(x.obs||'')}</textarea></div>
-    <div class="aom-editor-field aom-editor-custom" ${norm(cats.valorSelect)==='otros'?'':'style="display:none"'}><label>Otro tipo de orden</label><input data-campo="cat-libre" value="${esc(catLibre)}" placeholder="Escriba otro tipo de orden" autocomplete="off"></div>
-    <div class="aom-editor-hint">Usa el mismo catálogo maestro del Plan. Esta corrección modifica solo el documento formal emitido.</div>
-    <button type="button" class="aom-btn danger aom-editor-remove" data-aom-quitar-item="1"><i class="bi bi-trash"></i> Quitar ítem</button>
-  </div>`;
-}
+    document.querySelectorAll(
+      '[data-auro-receta-action="firma-electronica"]'
+    ).forEach(agregar);
 
-function sincronizarFilaEditorCatalogo(fila){
-  const orden=fila?.querySelector('[data-campo="orden"]');
-  const tipo=fila?.querySelector('[data-campo="cat"]');
-  const libre=fila?.querySelector('[data-campo="cat-libre"]');
-  const custom=fila?.querySelector('.aom-editor-custom');
-  if(!orden||!tipo) return;
-  const exacta=catalogoOrdenesFormal().find(x=>norm(x.orden)===norm(orden.value));
-  if(exacta){ const op=Array.from(tipo.options).find(o=>norm(o.value)===norm(exacta.cat)); if(op) tipo.value=op.value; }
-  const otros=norm(tipo.value)==='otros';
-  if(custom) custom.style.display=otros?'':'none';
-  if(!otros&&libre) libre.value='';
-}
+    /*
+      PLAN:
+      No depende de un ID nuevo ni modifica plan.js/index.
+      Solo reconoce el botón de firma que YA exista dentro del módulo Plan.
+      Se filtra por texto/title para no tocar otros botones.
+    */
+    document.querySelectorAll(
+      '#hc_plan button, #plan button, [data-auro-modulo="plan"] button'
+    ).forEach(function(btn){
+      const etiqueta = normalizarTextoUI(
+        (btn.textContent || '') + ' ' +
+        (btn.getAttribute('title') || '') + ' ' +
+        (btn.getAttribute('aria-label') || '')
+      );
 
-function conectarFilaEditorFormal(fila){
-  if(!fila) return;
-  fila.querySelector('[data-campo="orden"]')?.addEventListener('input',()=>sincronizarFilaEditorCatalogo(fila));
-  fila.querySelector('[data-campo="orden"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
-  fila.querySelector('[data-campo="cat"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
-  fila.querySelector('[data-aom-quitar-item]')?.addEventListener('click',()=>{
-    const modal=fila.closest('#auroOrdenMedicaEditorModal');
-    if((modal?.querySelectorAll('[data-aom-editor-item]').length||0)<=1){ alert('La orden formal debe conservar al menos un ítem.'); return; }
-    fila.remove();
-  });
-  sincronizarFilaEditorCatalogo(fila);
-}
-
-function agregarFilaEditorFormal(modal){
-  const lista=modal?.querySelector('#aomEditorLista'); if(!lista) return;
-  const tmp=document.createElement('div'); tmp.innerHTML=renderItemEditorFormal({orden:'',cat:'OTROS',obs:''},lista.querySelectorAll('[data-aom-editor-item]').length);
-  const fila=tmp.firstElementChild; if(!fila) return; lista.appendChild(fila); conectarFilaEditorFormal(fila); fila.querySelector('[data-campo="orden"]')?.focus();
-}
-
-function editarFormal(id){
-  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id)); if(!reg) return;
-  const ctx=contexto();
-  if(txt(reg.id_atencion)!==txt(ctx.id)){ aviso('La orden solicitada no pertenece a la atención seleccionada.','err'); return; }
-  if(ctx.bloqueada){ aviso('La atención está anulada, cancelada o archivada. No se permite editar la orden.','err'); return; }
-  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)){ aviso('Esta versión es histórica y no puede editarse.','warn'); return; }
-  cerrarEditorFormal(); state.editandoId=txt(reg.id_orden);
-  const data=datosDocumentoEmitido(reg); const items=itemsUnicos(data.detalle_json.items||[]); const catalogo=catalogoOrdenesFormal();
-  const modal=document.createElement('div'); modal.id='auroOrdenMedicaEditorModal'; modal.className='aom-modal';
-  modal.innerHTML=`<div class="aom-modal-panel" role="dialog" aria-modal="true" aria-labelledby="aomEditorTitulo">
-    <div class="aom-modal-head"><div><div id="aomEditorTitulo" class="aom-modal-title">Editar orden médica emitida</div><div class="aom-meta">${esc(data.id_orden)} · v${esc(data.version)}. La corrección crea una nueva versión y conserva la anterior.</div></div><button type="button" class="aom-modal-close" data-aom-cerrar-editor="1">×</button></div>
-    <datalist id="aomCatalogoOrdenes">${catalogo.map(x=>`<option value="${esc(x.orden)}">${esc(x.cat)}</option>`).join('')}</datalist>
-    <div class="aom-editor-toolbar"><span><strong>Editor formal premium.</strong> Mismo catálogo maestro del Plan, sin modificar el Plan.</span><button type="button" class="aom-btn aom-editor-add" data-aom-agregar-item="1"><i class="bi bi-plus-circle"></i> Agregar ítem</button></div>
-    <div class="aom-editor-list" id="aomEditorLista">${items.map(renderItemEditorFormal).join('')}</div>
-    <div class="aom-modal-actions"><button type="button" class="aom-btn" data-aom-cancelar-editor="1">Cancelar</button><button type="button" class="aom-primary" data-aom-guardar-editor="1"><i class="bi bi-shield-check"></i> Guardar corrección</button></div>
-  </div>`;
-  document.body.appendChild(modal);
-  modal.querySelectorAll('[data-aom-editor-item]').forEach(conectarFilaEditorFormal);
-  modal.querySelector('[data-aom-agregar-item]')?.addEventListener('click',()=>agregarFilaEditorFormal(modal));
-  modal.querySelector('[data-aom-cerrar-editor]')?.addEventListener('click',cerrarEditorFormal);
-  modal.querySelector('[data-aom-cancelar-editor]')?.addEventListener('click',cerrarEditorFormal);
-  modal.addEventListener('click',e=>{if(e.target===modal) cerrarEditorFormal();});
-  modal.querySelector('[data-aom-guardar-editor]')?.addEventListener('click',async()=>{
-    const filas=Array.from(modal.querySelectorAll('[data-aom-editor-item]'));
-    const invalida=filas.find(f=>norm(f.querySelector('[data-campo="cat"]')?.value)==='otros'&&!txt(f.querySelector('[data-campo="cat-libre"]')?.value));
-    if(invalida){ alert('Cuando seleccione OTROS debe escribir el tipo de orden médica.'); invalida.querySelector('[data-campo="cat-libre"]')?.focus(); return; }
-    const itemsNuevos=recogerItemsEditorFormal(modal); if(!itemsNuevos.length){alert('La orden formal debe contener al menos un ítem.');return;}
-    const ctxAhora=contexto(); if(txt(ctxAhora.id)!==txt(reg.id_atencion)){alert('La atención seleccionada cambió. No se guardó la corrección.');return;}
-    const justificacion=await solicitarJustificacionGlobal({excepcional:false}); if(!justificacion) return;
-    if(!confirm('Se creará una nueva versión de esta orden y la versión anterior quedará como reemplazada. ¿Continuar?')) return;
-    const dataCorreccion=datosCorreccionDesdeDocumento(reg,itemsNuevos,justificacion); const guardarBtn=modal.querySelector('[data-aom-guardar-editor]'); if(guardarBtn) guardarBtn.disabled=true;
-    try{ const r=await post('editarOrdenMedica',dataCorreccion); if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo editar la orden.'); cerrarEditorFormal(); await cargar(); aviso('Corrección guardada. Se creó una nueva versión y se conservó la anterior.','ok'); }
-    catch(e){ if(guardarBtn) guardarBtn.disabled=false; aviso('No se pudo guardar la corrección: '+(e.message||e),'err'); }
-  });
-}
-
-function vistaPreviaPorId(id){
-  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
-  if(!reg) return;
-
-  const ctx=contexto();
-  if(txt(reg.id_atencion)!==txt(ctx.id)){
-    aviso('La orden solicitada no pertenece a la atención seleccionada.','err');
-    return;
-  }
-
-  imprimirDocumento(datosDocumentoEmitido(reg),false);
-}
-
-/*
-  Compatibilidad antirregresiva:
-  - Se conservan los nombres históricos.
-  - abrir() ahora SOLO muestra vista previa y nunca modifica Plan.
-  - guardarCorreccion() ya no usa el Plan; abre el editor formal controlado.
-*/
-function abrir(id){
-  return vistaPreviaPorId(id);
-}
-
-function guardarCorreccion(){
-  if(!state.editandoId){
-    aviso('Seleccione una orden emitida y use Editar para iniciar una corrección.','warn');
-    return;
-  }
-  return editarFormal(state.editandoId);
-}
-
-async function anular(id){
-  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
-  if(!reg) return;
-
-  const ctx=contexto();
-  if(txt(reg.id_atencion)!==txt(ctx.id)){
-    aviso('La orden no pertenece a la atención seleccionada.','err');
-    return;
-  }
-  if(ctx.bloqueada){
-    aviso('La atención está anulada, cancelada o archivada. No se permite modificar la orden.','err');
-    return;
-  }
-  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) return;
-
-  const justificacion=await solicitarJustificacionGlobal({excepcional:false});
-  if(!justificacion) return;
-  const motivo=justificacionTexto(justificacion);
-
-  if(!confirm(`La orden ${id} no se borrará físicamente. Quedará ANULADA y conservará su trazabilidad. ¿Continuar?`)) return;
-
-  const detalle=parse(reg.detalle_json);
-  const detalleActualizado=Object.assign({},detalle,{
-    auditoria_anulacion:{
-      motivo,
-      tipo_justificativo:txt(justificacion.motivo_correccion_tipo),
-      detalle_justificativo:txt(justificacion.motivo_correccion_detalle),
-      id_orden:txt(reg.id_orden),
-      version:Number(reg.version||1)||1,
-      fecha_visual_ecuador:new Date().toLocaleString('es-EC',{timeZone:'America/Guayaquil',hour12:false})
-    }
-  });
-
-  try{
-    const r=await post('anularOrdenMedica',{
-      id_orden:id,
-      id_atencion:ctx.id,
-      motivo_anulacion:motivo,
-      motivo_correccion_tipo:txt(justificacion.motivo_correccion_tipo),
-      motivo_correccion_detalle:txt(justificacion.motivo_correccion_detalle),
-      correccion_excepcional:txt(justificacion.correccion_excepcional)||'NO',
-      detalle_json:detalleActualizado
+      if(
+        etiqueta.includes('firmar') &&
+        (
+          etiqueta.includes('receta') ||
+          etiqueta.includes('electron')
+        )
+      ){
+        agregar(btn);
+      }
     });
-    if(!respuestaOk(r)) throw Error(txt(r?.error||r?.mensaje||r?.message)||'No se pudo anular.');
-    if(state.editandoId===id) state.editandoId='';
-    await cargar();
-    aviso('Orden anulada. El registro histórico y la justificación se conservaron.','ok');
-  }catch(e){
-    aviso('No se pudo anular la orden: '+(e.message||e),'err');
-  }
-}
 
-function imprimirPorId(id){
-  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
-  if(!reg) return;
-  imprimirDocumento(datosDocumentoEmitido(reg),true);
-}
-
-function docHTML(data){
-  const d=data.detalle_json||{};
-  const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
-  const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
-  const ciudad=txt(centro.ciudad)||'Guayaquil'; const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
-  const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
-  const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
-  const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
-  const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional" onerror="this.parentElement.remove();this.closest('.aom-doc-head')?.classList.add('no-logo')"></div>`:'';
-  return `<article class="aom-paper" style="--aom-color:${esc(color)}">
-    <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'AUROSANAX')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${esc(ciudad)}, ${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
-    <div class="aom-doc-title">ORDEN MÉDICA</div>
-    <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
-    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
-    ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
-    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
-  </article>`;
-}
-
-function estilosImpresion(){
-  return `
-  @page{size:A4 portrait;margin:0}
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:#eef2f7;font-family:Arial,sans-serif;color:#111827}
-  .aom-print-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:center;gap:8px;padding:10px;background:#fff;border-bottom:1px solid #e5e7eb}
-  .aom-print-toolbar button{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer}
-  .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
-  .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
-  ${document.getElementById('auroOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:absolute!important;left:17mm!important;right:17mm!important;bottom:15mm!important}}
-  `;
-}
-
-function imprimirDocumento(data,autoPrint=false){
-  if(!data) return;
-  const w=window.open('','_blank');
-  if(!w){alert('El navegador bloqueó la ventana de impresión.');return;}
-  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden Médica</title><style>${estilosImpresion()}</style></head><body>
-    <div class="aom-print-toolbar"><button class="primary" onclick="window.print()">Imprimir / Guardar PDF</button><button class="secondary" onclick="window.close()">Cerrar</button></div>
-    <div class="aom-view" id="aomView"><div class="aom-stage" id="aomStage">${docHTML(data)}</div></div>
-    <script>(function(){function fit(){var v=document.getElementById('aomView'),s=document.getElementById('aomStage'),p=s&&s.querySelector('.aom-paper');if(!v||!s||!p)return;var mm=p.getBoundingClientRect().width||794;var avail=Math.max(280,v.clientWidth-12);var scale=Math.min(1,avail/mm);s.style.width=mm+'px';s.style.transform='scale('+scale+')';s.style.height=(p.scrollHeight*scale)+'px';}window.addEventListener('load',fit);window.addEventListener('resize',fit);setTimeout(fit,50);})();<\/script>
-  </body></html>`;
-  w.document.open();w.document.write(html);w.document.close();
-  if(autoPrint){
-    w.addEventListener('load',()=>setTimeout(()=>w.print(),180),{once:true});
-  }
-}
-
-async function cargar(){
-  const ctx=contexto();
-  state.contexto=ctx;
-  state.idAtencion=ctx.id;
-  state.editandoId='';
-
-  if(!state.montado) montar();
-  if(!ctx.id){
-    state.ordenesEmitidas=[];
-    render();
-    return [];
+    return encontrados;
   }
 
-  const token=++state.token;
+  function contextoBotonFirma(btn){
+    if(!btn) return 'general';
+    if(
+      btn.closest &&
+      btn.closest('#hc_plan, #plan, [data-auro-modulo="plan"]')
+    ){
+      return 'plan';
+    }
+    if(
+      btn.id === 'btnFirmaElectronicaReceta' ||
+      btn.closest?.('#recetas')
+    ){
+      return 'receta';
+    }
+    return 'general';
+  }
+
+  function asegurarBotonCancelarJuntoA(firmar){
+    if(!firmar || !firmar.parentNode) return null;
+
+    const contexto = contextoBotonFirma(firmar);
+    const selector = '.auro-cancelar-firma-electronica[data-auro-contexto="' + contexto + '"]';
+    let btn = firmar.parentNode.querySelector(selector);
+
+    if(!btn){
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'auro-cancelar-firma-electronica';
+      btn.setAttribute('data-auro-contexto', contexto);
+      btn.textContent = 'Cancelar firma';
+      btn.title = 'Cancelar la solicitud de firma pendiente sin borrar la receta';
+      btn.style.marginLeft = '8px';
+      btn.style.cursor = 'pointer';
+
+      if(contexto === 'receta' && !document.getElementById('btnCancelarFirmaElectronicaReceta')){
+        btn.id = 'btnCancelarFirmaElectronicaReceta';
+      }else if(contexto === 'plan' && !document.getElementById('btnCancelarFirmaElectronicaPlan')){
+        btn.id = 'btnCancelarFirmaElectronicaPlan';
+      }
+
+      firmar.insertAdjacentElement('afterend', btn);
+    }
+
+    btn.onclick = async function(){
+      if(btn.disabled) return;
+
+      try{
+        if(!solicitudActivaVisible) return;
+
+        const confirmar = window.confirm(
+          '¿Cancelar esta solicitud de firma?\n\nLa receta NO se elimina. Solo se cancela la firma pendiente.'
+        );
+        if(!confirmar) return;
+
+        setEstadoBotonesCancelar(false, true);
+        await cancelarFirmaDocumento(solicitudActivaVisible);
+      }catch(_e){
+        if(solicitudActivaVisible){
+          setEstadoBotonesCancelar(true, false);
+        }
+      }
+    };
+
+    return btn;
+  }
+
+  function setEstadoBotonesCancelar(activos, procesando){
+    botonesFirmaVisibles().forEach(function(firmar){
+      const btn = asegurarBotonCancelarJuntoA(firmar);
+      if(!btn) return;
+
+      btn.style.display = '';
+      btn.disabled = !activos;
+      btn.setAttribute(
+        'aria-disabled',
+        activos ? 'false' : 'true'
+      );
+
+      if(procesando){
+        btn.setAttribute('aria-busy','true');
+        btn.textContent = 'Cancelando…';
+        btn.title = 'Cancelando la solicitud de firma pendiente';
+        btn.style.cursor = 'wait';
+      }else{
+        btn.removeAttribute('aria-busy');
+        btn.textContent = 'Cancelar firma';
+        btn.title = activos
+          ? 'Cancelar la solicitud de firma pendiente sin borrar la receta'
+          : 'No existe una solicitud de firma pendiente';
+        btn.style.cursor = activos ? 'pointer' : 'not-allowed';
+      }
+    });
+  }
+
+  function ocultarBotonCancelar(){
+    /*
+      V2.5:
+      No se elimina ni se oculta después de cancelar/firmar.
+      Queda INACTIVO, que es el comportamiento solicitado.
+    */
+    setEstadoBotonesCancelar(false, false);
+    claveActivaVisible = '';
+    solicitudActivaVisible = null;
+  }
+
+  function mostrarBotonCancelar(solicitud, clave){
+    claveActivaVisible = clave || '';
+    solicitudActivaVisible = solicitud || null;
+
+    /*
+      El mismo estado se refleja donde exista el botón de firma:
+      Recetas y/o Plan. No crea una segunda solicitud.
+    */
+    setEstadoBotonesCancelar(true, false);
+  }
+
+  async function cancelarFirmaDocumento(data){
+    let clave = '';
+    try{
+      const solicitud = validarSolicitud(data);
+      clave = await claveFirma(solicitud);
+      const activa = firmasEnCurso.get(clave);
+
+      if(!activa || !texto(activa.id_solicitud)){
+        ocultarBotonCancelar();
+        mensajeProfesional('No existe una solicitud de firma pendiente para cancelar.', 'warn');
+        return {success:true, estado_firma:'SIN_PENDIENTE'};
+      }
+
+      const respuesta = await post('firmarDocumento', {
+        operacion_frontend:'CANCELAR',
+        id_solicitud:texto(activa.id_solicitud),
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const estado = texto(respuesta.estado_firma).toUpperCase();
+      if(estado !== 'CANCELADA'){
+        throw new Error('El servidor no confirmó la cancelación de la firma.');
+      }
+
+      activa.cancelada = true;
+      firmasEnCurso.delete(clave);
+      ocultarBotonCancelar();
+
+      window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada', {
+        detail:{
+          tipo_documento:solicitud.tipo_documento,
+          id_atencion:solicitud.id_atencion,
+          id_receta:solicitud.id_receta,
+          id_solicitud:texto(respuesta.id_solicitud),
+          estado_firma:'CANCELADA'
+        }
+      }));
+
+      mensajeProfesional('Solicitud de firma cancelada. La receta se conserva sin cambios.', 'warn');
+      return respuesta;
+    }catch(error){
+      if(solicitudActivaVisible){
+        setEstadoBotonesCancelar(true, false);
+      }
+      console.error(MODULO, error);
+      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+      throw error;
+    }
+  }
+
+  function validarSolicitud(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = texto(d.tipo_documento).toUpperCase();
+    d.id_atencion = texto(d.id_atencion);
+    d.id_receta = texto(d.id_receta || d.id_documento_clinico);
+    d.html_documento = texto(d.html_documento);
+
+    if(d.tipo_documento !== 'RECETA'){
+      throw new Error('Esta integración de firma está habilitada únicamente para Recetas.');
+    }
+    if(!d.id_atencion) throw new Error('No existe una atención clínica activa para firmar.');
+    if(!d.id_receta) throw new Error('Guarde la receta antes de firmarla electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial de la receta.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(String(valor || ''));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function claveFirma(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return solicitud.id_atencion + '|' + solicitud.id_receta + '|' + huella;
+  }
+
+  async function esperarFirma(idSolicitud, solicitud){
+    /* Sin vencimiento artificial: la espera termina solo por FIRMADO, ERROR
+       o por un estado terminal informado explícitamente por el backend. */
+    while(true){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'ERROR'){
+        throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el documento.');
+      }
+      if(valor === 'EXPIRADA'){
+        throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      }
+      if(valor === 'CANCELADA') return estado;
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function ejecutarFirma(solicitud, clave){
+    // V2.6: se elimina el preflight redundante.
+    // El backend valida disponibilidad/heartbeat del motor al crear la solicitud.
+    const creada = await post('firmarDocumento', solicitud);
+    const estadoInicial = texto(creada.estado_firma).toUpperCase();
+
+    let resultado;
+    if(estadoInicial === 'FIRMADO'){
+      resultado = creada;
+    }else{
+      if(estadoInicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+        throw new Error('El servidor no creó correctamente la solicitud de firma.');
+      }
+      const activa = firmasEnCurso.get(clave);
+      if(activa){
+        activa.id_solicitud = texto(creada.id_solicitud);
+        activa.solicitud = solicitud;
+      }
+      mostrarBotonCancelar(solicitud, clave);
+      resultado = await esperarFirma(texto(creada.id_solicitud), solicitud);
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() === 'CANCELADA'){
+      ocultarBotonCancelar();
+      return resultado;
+    }
+
+    if(texto(resultado.estado_firma).toUpperCase() !== 'FIRMADO'){
+      throw new Error('El servidor no confirmó un estado de firma válido.');
+    }
+
+    if(!obtenerBase64Firmado(resultado)){
+      throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+    }
+
+    /* Se conserva el PDF firmado en memoria para acciones explícitas posteriores.
+       NO se abre y NO se descarga aquí. */
+    ultimoResultadoFirmado = resultado;
+    firmasConfirmadas.set(clave, resultado);
+    ocultarBotonCancelar();
+
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+      detail:{
+        tipo_documento:solicitud.tipo_documento,
+        id_atencion:solicitud.id_atencion,
+        id_receta:solicitud.id_receta,
+        id_solicitud:texto(resultado.id_solicitud),
+        estado_firma:'FIRMADO',
+        nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+        sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+        firmado_en:texto(resultado.firmado_en),
+        pdf_disponible:true
+      }
+    }));
+
+    mensajeProfesional(
+      'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
+      'ok'
+    );
+
+    return resultado;
+  }
+
+
+  function prepararControlesCancelar(){
+    try{
+      setEstadoBotonesCancelar(false, false);
+    }catch(_e){}
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', prepararControlesCancelar, {once:true});
+  }else{
+    prepararControlesCancelar();
+  }
+
+  async function firmarDocumento(data){
+    let clave = '';
+    try{
+      const solicitud = validarSolicitud(data);
+      clave = await claveFirma(solicitud);
+
+      /* Si el mismo documento ya fue confirmado en esta sesión, no se vuelve
+         a firmar ni se genera otro POST. */
+      if(firmasConfirmadas.has(clave)){
+        const existente = firmasConfirmadas.get(clave);
+        ultimoResultadoFirmado = existente;
+        mensajeProfesional(
+          'Esta misma versión de la receta ya fue firmada. No se generó una firma duplicada.',
+          'warn'
+        );
+        return existente;
+      }
+
+      /* Si hay una firma en curso, todos los clics posteriores reutilizan la
+         misma promesa. Así se evita doble POST incluso con doble clic. */
+      if(firmasEnCurso.has(clave)){
+        const activa = firmasEnCurso.get(clave);
+        if(activa && texto(activa.id_solicitud)){
+          await post('firmarDocumento', {
+            operacion_frontend:'REABRIR',
+            id_solicitud:texto(activa.id_solicitud),
+            id_atencion:solicitud.id_atencion,
+            id_receta:solicitud.id_receta
+          });
+          mensajeProfesional('Se solicitó reabrir el mismo PDF pendiente en Acrobat.', 'warn');
+        }else{
+          mensajeProfesional('La solicitud todavía se está creando. Intente nuevamente en unos segundos.', 'warn');
+        }
+        return activa && activa.promesa ? activa.promesa : activa;
+      }
+
+      const activa = {promesa:null, id_solicitud:'', solicitud:solicitud, cancelada:false};
+      const operacion = ejecutarFirma(solicitud, clave);
+      activa.promesa = operacion;
+      firmasEnCurso.set(clave, activa);
+
+      try{
+        return await operacion;
+      }finally{
+        firmasEnCurso.delete(clave);
+      }
+    }catch(error){
+      if(clave) firmasEnCurso.delete(clave);
+      ocultarBotonCancelar();
+      console.error(MODULO, error);
+      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+      throw error;
+    }
+  }
+
+  async function obtenerEstado(data){
+    return post('obtenerEstadoFirmaElectronica', data || {});
+  }
+
+  function obtenerUltimoFirmado(){
+    return ultimoResultadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze({
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    cancelarFirmaDocumento:cancelarFirmaDocumento,
+    obtenerEstado:obtenerEstado,
+    abrirPdfFirmado:abrirPdfFirmado,
+    descargarPdfFirmado:descargarPdfFirmado,
+    obtenerUltimoFirmado:obtenerUltimoFirmado
+  });
+})();
+
+/* ============================================================
+   AUROSANAX V2.8 - PUENTE PERSISTENTE DE DOCUMENTOS FIRMADOS
+   Adhesión append-only / antirregresiva.
+   ------------------------------------------------------------
+   - Conserva íntegra la API efectiva V2.7 anterior.
+   - NO modifica el flujo Firmar / Reabrir / Cancelar.
+   - documentos_firmados pasa a ser la fuente persistente para
+     consultar firmas históricas entre sesiones y dispositivos.
+   - Consulta por IDs clínicos; no usa localStorage como verdad.
+   - Apertura persistente compatible con bloqueo de popups móvil:
+     abre la pestaña en el gesto del usuario antes de esperar red.
+============================================================ */
+(function(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function'){
+    console.error('AUROSANAX FIRMA ELECTRÓNICA V2.8: no se encontró la API V2.7 previa.');
+    return;
+  }
+
+  const VERSION = '2.8-persistente-multidispositivo';
+
+  function texto(valor){
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(_e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(_e){
+      return '';
+    }
+  }
+
+  async function postPersistente(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {
+      token:tokenSesion()
+    });
+
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
+
+    if(!res.ok){
+      throw new Error('El servidor respondió HTTP ' + res.status + '.');
+    }
+
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(
+        texto(json && json.message) ||
+        'No fue posible consultar el documento firmado.'
+      );
+    }
+    return json;
+  }
+
+  function normalizarFiltro(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = texto(d.tipo_documento || 'RECETA').toUpperCase();
+    d.id_firma_documento = texto(d.id_firma_documento);
+    d.id_paciente = texto(d.id_paciente);
+    d.id_atencion = texto(d.id_atencion);
+    d.id_receta = texto(d.id_receta || d.id_documento_clinico);
+
+    if(
+      !d.id_firma_documento &&
+      !d.id_paciente &&
+      !d.id_atencion &&
+      !d.id_receta
+    ){
+      throw new Error('La consulta de firma requiere un identificador clínico.');
+    }
+    return d;
+  }
+
+  async function consultarDocumentosFirmados(data){
+    const d = normalizarFiltro(data);
+    const r = await postPersistente('consultarDocumentosFirmados', d);
+    const documentos = Array.isArray(r.documentos) ? r.documentos : [];
+    return Object.assign({}, r, {
+      documentos:documentos,
+      total:Number(r.total || documentos.length || 0),
+      documento:r.documento || (documentos.length ? documentos[0] : null)
+    });
+  }
+
+  async function obtenerDocumentoFirmado(data){
+    const r = await consultarDocumentosFirmados(data);
+    return r.documento || null;
+  }
+
+  async function obtenerDocumentoFirmadoPorReceta(idAtencion, idReceta){
+    const atencion = texto(idAtencion);
+    const receta = texto(idReceta);
+    if(!atencion || !receta){
+      throw new Error('Se requiere id_atencion + id_receta para consultar la receta firmada.');
+    }
+    return obtenerDocumentoFirmado({
+      tipo_documento:'RECETA',
+      id_atencion:atencion,
+      id_receta:receta
+    });
+  }
+
+  async function obtenerPdfFirmadoPersistente(data){
+    const d = normalizarFiltro(data);
+    if(!d.id_firma_documento && (!d.id_atencion || !d.id_receta)){
+      throw new Error(
+        'Para obtener el PDF firmado se requiere id_firma_documento o id_atencion + id_receta.'
+      );
+    }
+    return postPersistente('obtenerPdfFirmadoPersistente', d);
+  }
+
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
+
+  function base64Pdf(resultado){
+    return texto(resultado && (
+      resultado.pdf_firmado_base64 ||
+      resultado.archivo_base64
+    ));
+  }
+
+  async function abrirPdfFirmadoPersistente(data){
+    /*
+      La ventana se crea ANTES del await. Esto conserva el gesto directo
+      del usuario y reduce bloqueos en Safari/iPhone y navegadores móviles.
+    */
+    const ventana = window.open('', '_blank');
+    if(!ventana){
+      throw new Error(
+        'El navegador bloqueó la nueva pestaña. Habilite ventanas emergentes para ver el PDF firmado.'
+      );
+    }
+
+    try{
+      ventana.document.title = 'Cargando receta firmada…';
+      ventana.document.body.innerHTML =
+        '<p style="font-family:Arial,sans-serif;padding:20px">Cargando PDF firmado…</p>';
+
+      const r = await obtenerPdfFirmadoPersistente(data);
+      const b64 = base64Pdf(r);
+      if(!b64) throw new Error('El servidor no devolvió el PDF firmado.');
+
+      const blob = base64ABlob(b64, 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      ventana.location.replace(url);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+      return r;
+    }catch(error){
+      try{ ventana.close(); }catch(_e){}
+      throw error;
+    }
+  }
+
+  async function descargarPdfFirmadoPersistente(data, nombrePreferido){
+    const r = await obtenerPdfFirmadoPersistente(data);
+    const b64 = base64Pdf(r);
+    if(!b64) throw new Error('El servidor no devolvió el PDF firmado.');
+
+    const blob = base64ABlob(b64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto(
+      r.nombre_archivo || nombrePreferido || 'documento_firmado.pdf'
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return r;
+  }
+
+  const api = Object.assign({}, anterior, {
+    version:VERSION,
+    consultarDocumentosFirmados:consultarDocumentosFirmados,
+    obtenerDocumentoFirmado:obtenerDocumentoFirmado,
+    obtenerDocumentoFirmadoPorReceta:obtenerDocumentoFirmadoPorReceta,
+    obtenerPdfFirmadoPersistente:obtenerPdfFirmadoPersistente,
+    abrirPdfFirmadoPersistente:abrirPdfFirmadoPersistente,
+    descargarPdfFirmadoPersistente:descargarPdfFirmadoPersistente
+  });
+
+  window.auroFirmaElectronica = Object.freeze(api);
+
+  window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-persistente-lista', {
+    detail:{version:VERSION}
+  }));
+})();
+
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.0
+   ESTADOS VISUALES + IDENTIDAD EXACTA DE VERSIÓN FIRMADA
+   ------------------------------------------------------------
+   CORRECCIÓN ANTIRREGRESIVA SOBRE V2.8:
+   - Conserva íntegro todo el baseline V2.1 -> V2.8 anterior.
+   - Sustituye únicamente la adhesión V2.9 final.
+   - Mantiene Firmar / Reabrir / Cancelar / PDF persistente.
+   - Mantiene polling efectivo existente de 1000 ms.
+   - NO añade polling, esperas ni consultas periódicas nuevas.
+   - Corrige la huella documental usando EXACTAMENTE la misma
+     normalización de entrada que usa el motor frontend efectivo:
+     String(...).trim() antes de SHA-256.
+   - Confirma en memoria la versión que acaba de devolver FIRMADO,
+     evitando que una consulta inmediata la reclasifique como nueva.
+   - En recarga/otro dispositivo, documentos_firmados sigue siendo
+     la fuente persistente de verdad.
+============================================================ */
+(function auroFirmaEstadosUniversalesV30(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function') return;
+
+  const VERSION = '3.0-estado-version-firmada';
+  const versionesFirmadasSesion = new Map();
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function emitir(estado, detalle){
+    try{
+      window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-estado', {
+        detail:Object.assign({estado:estado}, detalle || {})
+      }));
+    }catch(_e){}
+  }
+
+  function botonesFirma(){
+    const arr = [];
+    const add = function(el){
+      if(el && !arr.includes(el)) arr.push(el);
+    };
+    add(document.getElementById('btnFirmaElectronicaReceta'));
+    add(document.getElementById('btnFirmaElectronicaPlanReceta'));
+    document.querySelectorAll('[data-auro-receta-action="firma-electronica"]').forEach(add);
+    return arr;
+  }
+
+  function pintar(modo){
+    botonesFirma().forEach(function(btn){
+      if(!btn) return;
+
+      if(!btn.dataset.auroV30HtmlReposo){
+        btn.dataset.auroV30HtmlReposo = btn.innerHTML || '';
+        btn.dataset.auroV30TitleReposo = btn.getAttribute('title') || '';
+      }
+
+      if(modo === 'PREPARANDO'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.setAttribute('data-auro-firma-operativa','PREPARANDO');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Preparando firma…';
+        btn.title = 'Preparando la solicitud de firma. Espere un momento.';
+      }else if(modo === 'PROCESO'){
+        btn.disabled = true;
+        btn.setAttribute('aria-busy','true');
+        btn.setAttribute('data-auro-firma-operativa','PROCESO');
+        btn.style.cursor = 'wait';
+        btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firma en proceso…';
+        btn.title = 'La solicitud de firma está en proceso.';
+      }else{
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        btn.removeAttribute('data-auro-firma-operativa');
+        btn.style.cursor = 'pointer';
+        /*
+          Recetas/Plan siguen siendo propietarios del estado documental
+          de reposo. Este módulo solo publica el estado operativo/documental.
+        */
+      }
+    });
+  }
+
+  async function sha256TextoNormalizado(valor){
+    /*
+      IMPORTANTE:
+      validarSolicitud() del flujo efectivo V2.7 normaliza html_documento
+      mediante texto(), es decir String(...).trim(), ANTES del POST.
+      La identidad documental debe calcularse sobre esa misma cadena.
+    */
+    const normalizado = texto(valor);
+    const datos = new TextEncoder().encode(normalizado);
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function identidadVersion(data){
+    const d = Object.assign({}, data || {});
+    const idAtencion = texto(d.id_atencion);
+    const idReceta = texto(d.id_receta || d.id_documento_clinico);
+    const html = texto(d.html_documento);
+
+    if(!idAtencion || !idReceta || !html) return null;
+
+    const huella = await sha256TextoNormalizado(html);
+    return {
+      id_atencion:idAtencion,
+      id_receta:idReceta,
+      huella:huella,
+      clave:idAtencion + '|' + idReceta + '|' + huella
+    };
+  }
+
+  async function obtenerEstadoVersionDocumento(data){
+    const identidad = await identidadVersion(data);
+
+    if(!identidad){
+      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0};
+    }
+
+    /*
+      Confirmación inmediata:
+      si ESTA MISMA versión acaba de obtener FIRMADO en esta sesión,
+      no se contradice con una consulta persistente que todavía esté
+      propagándose. No genera red, espera ni polling adicional.
+    */
+    if(versionesFirmadasSesion.has(identidad.clave)){
+      const confirmado = versionesFirmadasSesion.get(identidad.clave);
+      return {
+        success:true,
+        estado:'FIRMADA',
+        total_firmas:Number(confirmado.total_firmas || 1),
+        documento:confirmado.documento || null,
+        confirmacion:'SESION'
+      };
+    }
+
+    if(typeof anterior.consultarDocumentosFirmados !== 'function'){
+      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0};
+    }
+
+    const r = await anterior.consultarDocumentosFirmados({
+      tipo_documento:'RECETA',
+      id_atencion:identidad.id_atencion,
+      id_receta:identidad.id_receta
+    });
+
+    const docs = Array.isArray(r && r.documentos) ? r.documentos : [];
+    const firmada = docs.find(function(doc){
+      return texto(doc && doc.sha256_origen).toLowerCase() === identidad.huella;
+    }) || null;
+
+    if(firmada){
+      versionesFirmadasSesion.set(identidad.clave, {
+        documento:firmada,
+        total_firmas:docs.length
+      });
+    }
+
+    return {
+      success:true,
+      estado:firmada ? 'FIRMADA' : (docs.length ? 'NUEVA_VERSION' : 'SIN_FIRMA'),
+      total_firmas:docs.length,
+      documento:firmada,
+      confirmacion:firmada ? 'PERSISTENTE' : ''
+    };
+  }
+
+  async function firmarDocumento(data){
+    const detalle = {
+      tipo_documento:texto(data && data.tipo_documento).toUpperCase(),
+      id_atencion:texto(data && data.id_atencion),
+      id_receta:texto(data && (data.id_receta || data.id_documento_clinico))
+    };
+
+    pintar('PREPARANDO');
+    emitir('PREPARANDO', detalle);
+
+    requestAnimationFrame(function(){
+      pintar('PROCESO');
+      emitir('PROCESO', detalle);
+    });
+
+    try{
+      const resultado = await anterior.firmarDocumento(data);
+      const estado = texto(resultado && resultado.estado_firma).toUpperCase();
+
+      if(estado === 'FIRMADO'){
+        /*
+          Registrar primero la identidad EXACTA de los datos que entraron al
+          flujo de firma. Esto es O(1), local y no añade latencia de red.
+        */
+        const identidad = await identidadVersion(data);
+        if(identidad){
+          versionesFirmadasSesion.set(identidad.clave, {
+            documento:null,
+            total_firmas:1
+          });
+        }
+
+        emitir('FIRMADO', Object.assign({}, detalle, {
+          id_solicitud:texto(resultado && resultado.id_solicitud),
+          sha256_origen:identidad ? identidad.huella : ''
+        }));
+      }else if(estado === 'CANCELADA'){
+        emitir('CANCELADA', detalle);
+      }else{
+        emitir('NORMAL', detalle);
+      }
+
+      return resultado;
+    }catch(error){
+      emitir('ERROR', Object.assign({}, detalle, {
+        message:texto(error && error.message)
+      }));
+      throw error;
+    }finally{
+      pintar('NORMAL');
+      emitir('NORMAL', detalle);
+    }
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
+  }));
+})();
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.1
+   PUENTE ANTIRREGRESIVO PARA CERTIFICADO - ETAPA 2
+   ------------------------------------------------------------
+   - Adhesión append-only sobre el baseline estable V3.0.
+   - RECETA delega íntegramente al motor estable anterior.
+   - CERTIFICADO usa identidad propia:
+       tipo_documento = CERTIFICADO
+       id_documento_origen = id_certificado
+       id_atencion = atención exacta
+       id_receta = vacío
+   - No modifica backend, Drive, Sheets, Index ni certificado.js.
+   - No convierte id_certificado en id_receta.
+   - No declara FIRMADO sin confirmación positiva del backend.
+============================================================ */
+(function auroFirmaCertificadoEtapa2V31(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function'){
+    console.error('AUROSANAX FIRMA 3.1: no se encontró el motor estable anterior.');
+    return;
+  }
+
+  const VERSION = '3.1-certificado-etapa2-antirregresivo';
+  const INTERVALO_CONSULTA_MS = 1000;
+  const certificadosEnCurso = new Map();
+  const certificadosConfirmados = new Map();
+  let ultimoCertificadoFirmado = null;
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(_e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(_e){
+      return '';
+    }
+  }
+
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+
+    const payload = Object.assign({}, data || {}, {token:tokenSesion()});
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
+
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la operación de firma electrónica.');
+    }
+    return json;
+  }
+
+  function validarCertificado(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = 'CERTIFICADO';
+    d.id_atencion = texto(d.id_atencion);
+    d.id_certificado = texto(d.id_certificado || d.id_documento_origen || d.id_documento_clinico);
+    d.id_documento_origen = d.id_certificado;
+    d.id_receta = '';
+    d.html_documento = texto(d.html_documento);
+
+    if(!d.id_atencion) throw new Error('No existe una atención clínica válida para firmar el certificado.');
+    if(!d.id_certificado) throw new Error('Guarde el certificado antes de firmarlo electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial del certificado.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(texto(valor));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function identidadCertificado(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return {
+      huella:huella,
+      clave:'CERTIFICADO|' + solicitud.id_atencion + '|' + solicitud.id_documento_origen + '|' + huella
+    };
+  }
+
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
+  async function esperarFirmaCertificado(idSolicitud, solicitud){
+    while(true){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        tipo_documento:'CERTIFICADO',
+        id_documento_origen:solicitud.id_documento_origen,
+        id_certificado:solicitud.id_certificado,
+        id_atencion:solicitud.id_atencion,
+        id_receta:''
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'CANCELADA') return estado;
+      if(valor === 'ERROR') throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el certificado.');
+      if(valor === 'EXPIRADA') throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function firmarCertificado(data){
+    const solicitud = validarCertificado(data);
+    const identidad = await identidadCertificado(solicitud);
+
+    if(certificadosConfirmados.has(identidad.clave)){
+      ultimoCertificadoFirmado = certificadosConfirmados.get(identidad.clave);
+      return ultimoCertificadoFirmado;
+    }
+
+    if(certificadosEnCurso.has(identidad.clave)){
+      return certificadosEnCurso.get(identidad.clave);
+    }
+
+    const operacion = (async function(){
+      const creada = await post('firmarDocumento', solicitud);
+      const inicial = texto(creada.estado_firma).toUpperCase();
+      let resultado = creada;
+
+      if(inicial !== 'FIRMADO'){
+        if(inicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+          throw new Error('El servidor no creó correctamente la solicitud de firma del certificado.');
+        }
+        resultado = await esperarFirmaCertificado(texto(creada.id_solicitud), solicitud);
+      }
+
+      const final = texto(resultado.estado_firma).toUpperCase();
+      if(final === 'CANCELADA') return resultado;
+      if(final !== 'FIRMADO') throw new Error('El servidor no confirmó un estado de firma válido para el certificado.');
+
+      ultimoCertificadoFirmado = resultado;
+      certificadosConfirmados.set(identidad.clave, resultado);
+
+      try{
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+          detail:{
+            tipo_documento:'CERTIFICADO',
+            id_atencion:solicitud.id_atencion,
+            id_documento_origen:solicitud.id_documento_origen,
+            id_certificado:solicitud.id_certificado,
+            id_receta:'',
+            id_solicitud:texto(resultado.id_solicitud),
+            estado_firma:'FIRMADO',
+            nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+            sha256_origen:identidad.huella,
+            sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+            firmado_en:texto(resultado.firmado_en),
+            pdf_disponible:true
+          }
+        }));
+      }catch(_e){}
+
+      return resultado;
+    })();
+
+    certificadosEnCurso.set(identidad.clave, operacion);
+    try{
+      return await operacion;
+    }finally{
+      certificadosEnCurso.delete(identidad.clave);
+    }
+  }
+
+  async function firmarDocumento(data){
+    const tipo = texto(data && data.tipo_documento).toUpperCase();
+
+    /* Blindaje principal: RECETA conserva exactamente el flujo V3.0/V2.8. */
+    if(tipo === 'RECETA' || !tipo){
+      return anterior.firmarDocumento(data);
+    }
+
+    if(tipo === 'CERTIFICADO'){
+      return firmarCertificado(data);
+    }
+
+    throw new Error('Tipo de documento no habilitado para firma electrónica: ' + tipo + '.');
+  }
+
+  function obtenerUltimoCertificadoFirmado(){
+    return ultimoCertificadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    firmarCertificado:firmarCertificado,
+    obtenerUltimoCertificadoFirmado:obtenerUltimoCertificadoFirmado
+  }));
+
   try{
-    await cargarAuxiliares(ctx);
-    const r=await get('listarOrdenesMedicasPorAtencion',{id_atencion:ctx.id});
-    if(token!==state.token) return [];
-    state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
-    await cargarFirmasOrdenes();
-    const activas=ordenesActivasFormales();
-    if(activas.length>1){
-      render();
-      aviso(`ALERTA: existen ${activas.length} órdenes formales activas en esta atención. Se bloqueó una nueva emisión para proteger la trazabilidad.`,'err');
-      return state.ordenesEmitidas;
-    }
-  }catch(e){
-    if(token!==state.token) return [];
-    state.ordenesEmitidas=[];
-    render();
-    aviso('El módulo está listo, pero el backend de órdenes médicas aún no respondió: '+(e.message||e),'warn');
-    return [];
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-certificado-lista', {
+      detail:{version:VERSION}
+    }));
+  }catch(_e){}
+})();
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.2
+   CERTIFICADO — CANCELACIÓN POR SOLICITUD EXACTA
+   ------------------------------------------------------------
+   ADHESIÓN APPEND-ONLY ANTIRREGRESIVA.
+   - Conserva íntegro el baseline anterior.
+   - RECETA delega sin cambios al motor estable anterior.
+   - CERTIFICADO conserva id_solicitud mientras la firma está activa.
+   - Expone cancelarFirmaCertificado(data).
+   - No modifica PDF, Drive, persistencia ni representación documental.
+============================================================ */
+(function auroFirmaCertificadoCancelacionV32(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function'){
+    console.error('AUROSANAX FIRMA 3.2: no se encontró el motor anterior.');
+    return;
   }
-  render();
-  return state.ordenesEmitidas;
-}
 
-function refrescarEstadoLocal(){
-  if(!state.montado) montar();
-  render();
-}
+  const VERSION = '3.2-certificado-cancelacion-antirregresiva';
+  const INTERVALO_CONSULTA_MS = 1000;
+  const certificadosEnCurso = new Map();
+  const certificadosConfirmados = new Map();
+  let ultimoCertificadoFirmado = null;
 
-function instalarEventos(){
-  if(window.__auroOrdenesMedicasEventos) return;
-  window.__auroOrdenesMedicasEventos=true;
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
 
-  window.addEventListener('aurosanax:plan-cargado',()=>{
-    state.editandoId='';
-    cargar();
-  });
-  window.addEventListener('aurosanax:atencion-seleccionada',cargar);
-  window.addEventListener('aurosanax:atencion-cambiada',cargar);
-  window.addEventListener('aurosanax:consulta-seleccionada',cargar);
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(_e){}
+    if(window.API_URL) return texto(window.API_URL);
+    const input = document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
 
-  document.addEventListener('click',e=>{
-    if(e.target?.closest?.('#hc_plan')){
-      queueMicrotask(refrescarEstadoLocal);
+  function tokenSesion(){
+    try{
+      return texto(sessionStorage.getItem('aurosanax_seguridad_token'));
+    }catch(_e){
+      return '';
     }
-  });
-}
+  }
 
-async function inicializar(){
-  montar();
-  instalarEventos();
-  await cargar();
-  return true;
-}
+  async function post(accion, data){
+    const url = apiUrl();
+    if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
-window.auroOrdenesMedicas={
-  version:VERSION,
-  jsonVersion:JSON_VERSION,
-  estado:state,
-  inicializar,
-  cargar,
-  refrescar:refrescarEstadoLocal,
-  obtenerContexto:contexto,
-  obtenerItemsPlan:()=>itemsPlanActual(),
-  obtenerDatosEmision:()=>datosDocumentoDesdePlan(),
-  construirDocumento:docHTML,
-  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(),false)
-};
+    const payload = Object.assign({}, data || {}, {token:tokenSesion()});
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion, data:payload}),
+      cache:'no-store'
+    });
 
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',()=>inicializar().catch(()=>{}),{once:true});
-}else{
-  inicializar().catch(()=>{});
-}
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP ' + res.status + '.');
+    const json = await res.json();
+    if(!json || json.success !== true){
+      throw new Error(texto(json && json.message) || 'El servidor no confirmó la operación de firma electrónica.');
+    }
+    return json;
+  }
 
+  function validarCertificado(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = 'CERTIFICADO';
+    d.id_atencion = texto(d.id_atencion);
+    d.id_certificado = texto(d.id_certificado || d.id_documento_origen || d.id_documento_clinico);
+    d.id_documento_origen = d.id_certificado;
+    d.id_receta = '';
+    d.html_documento = texto(d.html_documento);
+
+    if(!d.id_atencion) throw new Error('No existe una atención clínica válida para firmar el certificado.');
+    if(!d.id_certificado) throw new Error('Guarde el certificado antes de firmarlo electrónicamente.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial del certificado.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    const datos = new TextEncoder().encode(texto(valor));
+    const hash = await crypto.subtle.digest('SHA-256', datos);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2, '0'); })
+      .join('');
+  }
+
+  async function identidadCertificado(solicitud){
+    const huella = await sha256Texto(solicitud.html_documento);
+    return {
+      huella:huella,
+      clave:'CERTIFICADO|' + solicitud.id_atencion + '|' + solicitud.id_documento_origen + '|' + huella
+    };
+  }
+
+  function esperar(ms){
+    return new Promise(function(resolve){ setTimeout(resolve, ms); });
+  }
+
+  async function esperarFirmaCertificado(idSolicitud, solicitud){
+    while(true){
+      const estado = await post('obtenerEstadoFirmaElectronica', {
+        id_solicitud:idSolicitud,
+        tipo_documento:'CERTIFICADO',
+        id_documento_origen:solicitud.id_documento_origen,
+        id_certificado:solicitud.id_certificado,
+        id_atencion:solicitud.id_atencion,
+        id_receta:''
+      });
+
+      const valor = texto(estado.estado_firma).toUpperCase();
+      if(valor === 'FIRMADO') return estado;
+      if(valor === 'CANCELADA') return estado;
+      if(valor === 'ERROR') throw new Error(texto(estado.error) || 'El motor local informó un error al firmar el certificado.');
+      if(valor === 'EXPIRADA') throw new Error(texto(estado.error) || 'La solicitud de firma expiró. Vuelva a intentarlo.');
+      if(valor !== 'PENDIENTE' && valor !== 'TOMADA'){
+        throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      }
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function firmarCertificado(data){
+    const solicitud = validarCertificado(data);
+    const identidad = await identidadCertificado(solicitud);
+
+    if(certificadosConfirmados.has(identidad.clave)){
+      ultimoCertificadoFirmado = certificadosConfirmados.get(identidad.clave);
+      return ultimoCertificadoFirmado;
+    }
+
+    if(certificadosEnCurso.has(identidad.clave)){
+      const activa = certificadosEnCurso.get(identidad.clave);
+      return activa && activa.promesa ? activa.promesa : activa;
+    }
+
+    const activa = {
+      promesa:null,
+      id_solicitud:'',
+      solicitud:solicitud,
+      cancelada:false
+    };
+
+    const operacion = (async function(){
+      const creada = await post('firmarDocumento', solicitud);
+      const inicial = texto(creada.estado_firma).toUpperCase();
+      let resultado = creada;
+
+      if(inicial !== 'FIRMADO'){
+        if(inicial !== 'PENDIENTE' || !texto(creada.id_solicitud)){
+          throw new Error('El servidor no creó correctamente la solicitud de firma del certificado.');
+        }
+        activa.id_solicitud = texto(creada.id_solicitud);
+        resultado = await esperarFirmaCertificado(activa.id_solicitud, solicitud);
+      }
+
+      const final = texto(resultado.estado_firma).toUpperCase();
+      if(final === 'CANCELADA'){
+        activa.cancelada = true;
+        return resultado;
+      }
+      if(final !== 'FIRMADO') throw new Error('El servidor no confirmó un estado de firma válido para el certificado.');
+
+      ultimoCertificadoFirmado = resultado;
+      certificadosConfirmados.set(identidad.clave, resultado);
+
+      try{
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada', {
+          detail:{
+            tipo_documento:'CERTIFICADO',
+            id_atencion:solicitud.id_atencion,
+            id_documento_origen:solicitud.id_documento_origen,
+            id_certificado:solicitud.id_certificado,
+            id_receta:'',
+            id_solicitud:texto(resultado.id_solicitud),
+            estado_firma:'FIRMADO',
+            nombre_archivo:texto(resultado.nombre_archivo || solicitud.nombre_archivo),
+            sha256_origen:identidad.huella,
+            sha256_pdf_firmado:texto(resultado.sha256_pdf_firmado),
+            firmado_en:texto(resultado.firmado_en),
+            pdf_disponible:true
+          }
+        }));
+      }catch(_e){}
+
+      return resultado;
+    })();
+
+    activa.promesa = operacion;
+    certificadosEnCurso.set(identidad.clave, activa);
+
+    try{
+      return await operacion;
+    }finally{
+      certificadosEnCurso.delete(identidad.clave);
+    }
+  }
+
+  async function cancelarFirmaCertificado(data){
+    const solicitud = validarCertificado(data);
+    const identidad = await identidadCertificado(solicitud);
+    const activa = certificadosEnCurso.get(identidad.clave);
+
+    if(!activa || !texto(activa.id_solicitud)){
+      return {
+        success:true,
+        estado_firma:'SIN_PENDIENTE',
+        tipo_documento:'CERTIFICADO',
+        id_certificado:solicitud.id_certificado,
+        id_documento_origen:solicitud.id_documento_origen,
+        id_atencion:solicitud.id_atencion,
+        id_receta:''
+      };
+    }
+
+    const respuesta = await post('firmarDocumento', {
+      operacion_frontend:'CANCELAR',
+      tipo_documento:'CERTIFICADO',
+      id_solicitud:texto(activa.id_solicitud),
+      id_documento_origen:solicitud.id_documento_origen,
+      id_certificado:solicitud.id_certificado,
+      id_atencion:solicitud.id_atencion,
+      id_receta:''
+    });
+
+    const estado = texto(respuesta.estado_firma).toUpperCase();
+    if(estado !== 'CANCELADA'){
+      throw new Error('El servidor no confirmó la cancelación de la firma del certificado.');
+    }
+
+    activa.cancelada = true;
+
+    try{
+      window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada', {
+        detail:{
+          tipo_documento:'CERTIFICADO',
+          id_atencion:solicitud.id_atencion,
+          id_documento_origen:solicitud.id_documento_origen,
+          id_certificado:solicitud.id_certificado,
+          id_receta:'',
+          id_solicitud:texto(respuesta.id_solicitud || activa.id_solicitud),
+          estado_firma:'CANCELADA'
+        }
+      }));
+    }catch(_e){}
+
+    return respuesta;
+  }
+
+  async function firmarDocumento(data){
+    const tipo = texto(data && data.tipo_documento).toUpperCase();
+
+    if(tipo === 'CERTIFICADO'){
+      return firmarCertificado(data);
+    }
+
+    /* Todo documento ajeno a CERTIFICADO conserva exactamente el motor anterior. */
+    return anterior.firmarDocumento(data);
+  }
+
+  function obtenerUltimoCertificadoFirmado(){
+    return ultimoCertificadoFirmado;
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    firmarCertificado:firmarCertificado,
+    cancelarFirmaCertificado:cancelarFirmaCertificado,
+    obtenerUltimoCertificadoFirmado:obtenerUltimoCertificadoFirmado
+  }));
+})();
+
+
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.3
+   PUENTE PERSISTENTE ANTIRREGRESIVO - VER CERTIFICADO FIRMADO
+   ------------------------------------------------------------
+   - Adhesión append-only sobre el archivo estable actual.
+   - NO modifica Firmar ni Cancelar CERTIFICADO.
+   - NO modifica el flujo persistente de RECETA.
+   - CERTIFICADO se localiza por:
+       tipo_documento = CERTIFICADO
+       id_documento_origen / id_certificado
+       id_atencion exacta
+   - Una vez localizado, reutiliza el lector persistente V2.8 por
+     id_firma_documento; no crea un segundo contrato con Drive/backend.
+============================================================ */
+(function auroFirmaVerCertificadoPersistenteV33(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(
+    !anterior ||
+    typeof anterior.consultarDocumentosFirmados !== 'function' ||
+    typeof anterior.obtenerPdfFirmadoPersistente !== 'function'
+  ){
+    console.error('AUROSANAX FIRMA 3.3: no se encontró el puente persistente estable anterior.');
+    return;
+  }
+
+  const VERSION = '3.3-ver-certificado-firmado-persistente';
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function esCertificado(data){
+    return texto(data && data.tipo_documento).toUpperCase() === 'CERTIFICADO';
+  }
+
+  function identidadCertificado(data){
+    const d = Object.assign({}, data || {});
+    const idCertificado = texto(d.id_certificado || d.id_documento_origen || d.id_documento_clinico);
+    const idAtencion = texto(d.id_atencion);
+    if(!idCertificado) throw new Error('No se encontró el identificador del certificado firmado.');
+    if(!idAtencion) throw new Error('No se encontró la atención del certificado firmado.');
+    return {id_certificado:idCertificado, id_atencion:idAtencion};
+  }
+
+  async function localizarCertificadoFirmado(data){
+    const id = identidadCertificado(data);
+    const r = await anterior.consultarDocumentosFirmados({
+      tipo_documento:'CERTIFICADO',
+      id_documento_origen:id.id_certificado,
+      id_certificado:id.id_certificado,
+      id_atencion:id.id_atencion,
+      id_receta:''
+    });
+
+    const docs = Array.isArray(r && r.documentos) ? r.documentos : [];
+    const doc = docs.find(function(x){
+      const tipo = texto(x && x.tipo_documento).toUpperCase();
+      const origen = texto(x && (x.id_documento_origen || x.id_certificado || x.id_documento_clinico));
+      const atencion = texto(x && x.id_atencion);
+      const estado = texto(x && (x.estado_firma || x.estado)).toUpperCase();
+      return tipo === 'CERTIFICADO' &&
+             origen === id.id_certificado &&
+             atencion === id.id_atencion &&
+             (!estado || estado === 'FIRMADO');
+    }) || null;
+
+    if(!doc) throw new Error('No se encontró el certificado firmado persistido para esta atención.');
+    if(!texto(doc.id_firma_documento)){
+      throw new Error('El registro del certificado firmado no contiene id_firma_documento.');
+    }
+    return doc;
+  }
+
+  async function obtenerPdfFirmadoPersistente(data){
+    if(!esCertificado(data)){
+      return anterior.obtenerPdfFirmadoPersistente(data);
+    }
+    const doc = await localizarCertificadoFirmado(data);
+    return anterior.obtenerPdfFirmadoPersistente({
+      id_firma_documento:texto(doc.id_firma_documento),
+      tipo_documento:'CERTIFICADO'
+    });
+  }
+
+  function base64ABlob(base64, mime){
+    const limpio = texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin = atob(limpio);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type:mime || 'application/pdf'});
+  }
+
+  function base64Pdf(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  async function abrirPdfFirmadoPersistente(data){
+    if(!esCertificado(data)){
+      return anterior.abrirPdfFirmadoPersistente(data);
+    }
+
+    /* Abrir dentro del gesto del usuario para conservar compatibilidad con popups. */
+    const ventana = window.open('', '_blank');
+    if(!ventana){
+      throw new Error('El navegador bloqueó la nueva pestaña. Habilite ventanas emergentes para ver el PDF firmado.');
+    }
+
+    try{
+      ventana.document.title = 'Cargando certificado firmado…';
+      ventana.document.body.innerHTML =
+        '<p style="font-family:Arial,sans-serif;padding:20px">Cargando certificado firmado…</p>';
+
+      const r = await obtenerPdfFirmadoPersistente(data);
+      const b64 = base64Pdf(r);
+      if(!b64) throw new Error('El servidor no devolvió el PDF firmado del certificado.');
+
+      const blob = base64ABlob(b64, 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      ventana.location.replace(url);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+      return r;
+    }catch(error){
+      try{ ventana.close(); }catch(_e){}
+      throw error;
+    }
+  }
+
+  async function descargarPdfFirmadoPersistente(data, nombrePreferido){
+    if(!esCertificado(data)){
+      return anterior.descargarPdfFirmadoPersistente(data, nombrePreferido);
+    }
+
+    const r = await obtenerPdfFirmadoPersistente(data);
+    const b64 = base64Pdf(r);
+    if(!b64) throw new Error('El servidor no devolvió el PDF firmado del certificado.');
+
+    const blob = base64ABlob(b64, 'application/pdf');
+    const url = URL.createObjectURL(blob);
+    const nombre = texto(r.nombre_archivo || nombrePreferido || 'certificado_firmado.pdf');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre.toLowerCase().endsWith('.pdf') ? nombre : nombre + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    return r;
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    obtenerPdfFirmadoPersistente:obtenerPdfFirmadoPersistente,
+    abrirPdfFirmadoPersistente:abrirPdfFirmadoPersistente,
+    descargarPdfFirmadoPersistente:descargarPdfFirmadoPersistente
+  }));
+})();
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.4
+   PUENTE QUIRÚRGICO — CANCELAR FIRMA DE CERTIFICADO
+   ------------------------------------------------------------
+   ADHESIÓN APPEND-ONLY ANTIRREGRESIVA.
+   - Conserva íntegro TODO el baseline V2.1 -> V3.3 anterior.
+   - NO modifica RECETA, PLAN, PDF persistente, Drive ni backend.
+   - Conserva el payload completo del CERTIFICADO mientras la
+     operación está activa para que CANCELAR reutilice EXACTAMENTE
+     la misma identidad documental, aunque certificado.js envíe
+     al cancelar solamente IDs clínicos.
+   - Mantiene cancelarFirmaCertificado(data) como contrato oficial.
+   - Añade aliases de compatibilidad SOLO para CERTIFICADO:
+       cancelarFirmaElectronica(data)
+       cancelarFirma(data)
+       cancelarDocumento(data)
+     sin reemplazar contratos previos para otros documentos.
+   - No declara CANCELADA sin confirmación positiva del backend.
+============================================================ */
+(function auroFirmaCancelarCertificadoV34(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(
+    !anterior ||
+    typeof anterior.firmarDocumento !== 'function' ||
+    typeof anterior.cancelarFirmaCertificado !== 'function'
+  ){
+    console.error('AUROSANAX FIRMA 3.4: no se encontró el contrato estable de certificado V3.2/V3.3.');
+    return;
+  }
+
+  const VERSION = '3.4-cancelar-certificado-puente-quirurgico';
+  const certificadosActivos = new Map();
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function esCertificado(data){
+    const d = data || {};
+    const tipo = texto(d.tipo_documento).toUpperCase();
+    return tipo === 'CERTIFICADO' || !!texto(d.id_certificado || d.id_documento_origen);
+  }
+
+  function normalizarCertificado(data){
+    const d = Object.assign({}, data || {});
+    d.tipo_documento = 'CERTIFICADO';
+    d.id_atencion = texto(d.id_atencion);
+    d.id_certificado = texto(d.id_certificado || d.id_documento_origen || d.id_documento_clinico);
+    d.id_documento_origen = d.id_certificado;
+    d.id_receta = '';
+    if(Object.prototype.hasOwnProperty.call(d, 'html_documento')){
+      d.html_documento = texto(d.html_documento);
+    }
+    return d;
+  }
+
+  function claveCertificado(data){
+    const d = normalizarCertificado(data);
+    if(!d.id_atencion || !d.id_certificado) return '';
+    return d.id_atencion + '|' + d.id_certificado;
+  }
+
+  function combinarConActivo(data){
+    const recibido = normalizarCertificado(data);
+    const clave = claveCertificado(recibido);
+    const activo = clave ? certificadosActivos.get(clave) : null;
+
+    /*
+      El payload activo contiene html_documento y la identidad exacta usada
+      al iniciar la firma. Los valores recibidos al cancelar tienen prioridad
+      para IDs explícitos, pero nunca se pierde el HTML activo requerido por
+      el contrato V3.2 para localizar la solicitud exacta.
+    */
+    return normalizarCertificado(Object.assign({}, activo || {}, recibido, {
+      html_documento:texto(recibido.html_documento || (activo && activo.html_documento))
+    }));
+  }
+
+  async function firmarDocumento(data){
+    if(!esCertificado(data)){
+      return anterior.firmarDocumento(data);
+    }
+
+    const solicitud = normalizarCertificado(data);
+    const clave = claveCertificado(solicitud);
+
+    if(clave){
+      certificadosActivos.set(clave, Object.assign({}, solicitud));
+    }
+
+    try{
+      return await anterior.firmarDocumento(solicitud);
+    }finally{
+      /*
+        El motor V3.2 es la autoridad de estado y conserva internamente la
+        solicitud durante PENDIENTE/TOMADA. Este mapa es solo un puente de
+        parámetros para la llamada de cancelación y no sustituye al backend.
+      */
+      if(clave) certificadosActivos.delete(clave);
+    }
+  }
+
+  async function cancelarFirmaCertificado(data){
+    const solicitud = combinarConActivo(data);
+
+    if(!solicitud.id_atencion){
+      throw new Error('No existe una atención clínica válida para cancelar la firma del certificado.');
+    }
+    if(!solicitud.id_certificado){
+      throw new Error('No se encontró el certificado cuya firma se desea cancelar.');
+    }
+    if(!solicitud.html_documento){
+      throw new Error('No se pudo recuperar la solicitud activa del certificado. Vuelva a iniciar la firma y cancele desde la misma operación.');
+    }
+
+    const respuesta = await anterior.cancelarFirmaCertificado(solicitud);
+    const estado = texto(respuesta && respuesta.estado_firma).toUpperCase();
+
+    if(estado !== 'CANCELADA' && estado !== 'SIN_PENDIENTE'){
+      throw new Error('El servidor no confirmó la cancelación de la firma del certificado.');
+    }
+
+    if(estado === 'CANCELADA'){
+      const clave = claveCertificado(solicitud);
+      if(clave) certificadosActivos.delete(clave);
+    }
+
+    return respuesta;
+  }
+
+  function delegarCancelacionPrevia(nombre, data){
+    const fn = anterior && anterior[nombre];
+    if(typeof fn === 'function') return fn.call(anterior, data);
+    throw new Error('La cancelación solicitada no está disponible para este tipo de documento.');
+  }
+
+  async function cancelarFirmaElectronica(data){
+    if(esCertificado(data)) return cancelarFirmaCertificado(data);
+    return delegarCancelacionPrevia('cancelarFirmaElectronica', data);
+  }
+
+  async function cancelarFirma(data){
+    if(esCertificado(data)) return cancelarFirmaCertificado(data);
+    return delegarCancelacionPrevia('cancelarFirma', data);
+  }
+
+  async function cancelarDocumento(data){
+    if(esCertificado(data)) return cancelarFirmaCertificado(data);
+    return delegarCancelacionPrevia('cancelarDocumento', data);
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    cancelarFirmaCertificado:cancelarFirmaCertificado,
+    cancelarFirmaElectronica:cancelarFirmaElectronica,
+    cancelarFirma:cancelarFirma,
+    cancelarDocumento:cancelarDocumento
+  }));
+
+  try{
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-certificado-cancelacion-lista', {
+      detail:{version:VERSION}
+    }));
+  }catch(_e){}
 })();
