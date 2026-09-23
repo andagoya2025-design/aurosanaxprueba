@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: ordenes_medicas.js
  Módulo: Órdenes médicas formales por atención
- Versión: 1.3.0 - editor premium + justificativo global + documento A4 certificado
+ Versión: 1.4.0 - firma electrónica ORDEN_MEDICA + flujo documental existente intacto
  Fecha: 2026-09-11
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -25,7 +25,7 @@
 
 if(window.auroOrdenesMedicas?.version) return;
 
-const VERSION='1.3.0';
+const VERSION='1.4.0';
 const JSON_VERSION='AUROSANAX_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -39,7 +39,9 @@ const state={
   medicos:[],
   paciente:null,
   historia:null,
-  montado:false
+  montado:false,
+  firmas:{},
+  firmaTokens:{}
 };
 
 const txt=v=>String(v??'').trim();
@@ -540,6 +542,7 @@ function instalarCSS(){
 .aom-btn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:6px 9px;font-size:12px;font-weight:750}
 .aom-btn:hover{background:#f9fafb}
 .aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
+.aom-btn.firma{border-color:#d8b4fe;color:#6b21a8;background:#faf5ff}.aom-btn.firma.ok{border-color:#86efac;color:#166534;background:#f0fdf4}.aom-btn.firma.proceso{border-color:#fde68a;color:#92400e;background:#fffbeb}
 .aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
 .aom-modal{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.55)}
 .aom-modal-panel{width:min(920px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid #e5e7eb;box-shadow:0 28px 80px rgba(15,23,42,.28);padding:18px}
@@ -663,6 +666,250 @@ function render(){
   app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
   app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
+  app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>firmarOrdenPorId(b.dataset.aomFirmar)));
+  app.querySelectorAll('[data-aom-cancelar-firma]').forEach(b=>b.addEventListener('click',()=>cancelarFirmaOrdenPorId(b.dataset.aomCancelarFirma)));
+}
+
+
+/* ============================================================
+ * AUROSANAX ORDENES MEDICAS V1.4.0 - FIRMA ELECTRONICA
+ * ADHESION QUIRURGICA / ANTIRREGRESIVA
+ * - No cambia emisión, edición, anulación, versiones ni detalle_json.
+ * - Identidad: ORDEN_MEDICA + id_orden + id_atencion exactos.
+ * - Reutiliza el backend/motor AUROSANAX existente.
+ * ============================================================ */
+function tokenSesionFirma(){
+  try{return txt(sessionStorage.getItem('aurosanax_seguridad_token'));}catch(e){return '';}
+}
+
+async function postFirma(accion,data){
+  const b=apiUrl();
+  if(!b) throw Error('No se encontró la conexión segura con el servidor del ERP.');
+  const payload=Object.assign({},data||{},{token:tokenSesionFirma()});
+  const r=await fetch(b,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({accion,data:payload}),
+    cache:'no-store'
+  });
+  if(!r.ok) throw Error('El servidor de firma respondió HTTP '+r.status+'.');
+  const j=await r.json();
+  if(!j||j.success!==true) throw Error(txt(j?.message||j?.error)||'El servidor no confirmó la operación de firma.');
+  return j;
+}
+
+function firmaOrdenEstado(id){
+  return state.firmas[txt(id)]||{estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
+}
+
+function fijarFirmaOrden(id,estado,extra={}){
+  id=txt(id);
+  if(!id) return;
+  state.firmas[id]=Object.assign({},firmaOrdenEstado(id),extra,{estado:estado||'SIN_FIRMA'});
+  render();
+}
+
+function botonesFirmaOrden(r){
+  const id=txt(r?.id_orden);
+  if(!id||estadoOrdenEsAnulada(r)||estadoOrdenEsReemplazada(r)) return '';
+  const f=firmaOrdenEstado(id);
+  const e=txt(f.estado).toUpperCase();
+  if(e==='FIRMADO'||e==='FIRMADA'){
+    return `<button type="button" class="aom-btn firma ok" data-aom-firmar="${esc(id)}"><i class="bi bi-file-earmark-check"></i> Ver orden firmada ✓</button>`;
+  }
+  if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e)){
+    return `<button type="button" class="aom-btn firma proceso" disabled><i class="bi bi-hourglass-split"></i> Firma en proceso…</button>
+      ${txt(f.id_solicitud)?`<button type="button" class="aom-btn danger" data-aom-cancelar-firma="${esc(id)}"><i class="bi bi-x-circle"></i> Cancelar firma</button>`:''}`;
+  }
+  return `<button type="button" class="aom-btn firma" data-aom-firmar="${esc(id)}"><i class="bi bi-pen"></i> Firmar</button>`;
+}
+
+function ordenFirmablePorId(id){
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id))||null;
+  const ctx=contexto();
+  if(!reg) return {success:false,message:'No se encontró la orden médica seleccionada.'};
+  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) return {success:false,message:'Solo una orden médica activa puede enviarse a firma.'};
+  if(!ctx.id||txt(reg.id_atencion)!==txt(ctx.id)) return {success:false,message:'La orden médica no pertenece a la atención actualmente seleccionada.'};
+  const d=datosDocumentoEmitido(reg);
+  return {
+    success:true,
+    registro:reg,
+    tipo_documento:'ORDEN_MEDICA',
+    id_documento_origen:txt(reg.id_orden),
+    id_documento_clinico:txt(reg.id_orden),
+    id_orden:txt(reg.id_orden),
+    id_receta:'',
+    id_certificado:'',
+    id_recomendacion:'',
+    id_atencion:txt(reg.id_atencion),
+    id_paciente:txt(reg.id_paciente),
+    nombre_paciente:txt(reg.nombre_paciente),
+    id_historia:txt(reg.id_historia),
+    id_medico:txt(reg.id_medico),
+    nombre_medico:txt(reg.nombre_medico),
+    nombre_archivo:'ORDEN_MEDICA_'+txt(reg.id_orden)+'_FIRMADO.pdf',
+    html_documento:`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden médica AUROSANAX</title><style>${estilosImpresion()}</style></head><body>${docHTML(d)}</body></html>`
+  };
+}
+
+async function consultarFirmaPersistenteOrden(id){
+  const doc=ordenFirmablePorId(id);
+  if(!doc.success) return null;
+  try{
+    const r=await postFirma('consultarDocumentosFirmados',{
+      tipo_documento:'ORDEN_MEDICA',
+      id_documento_origen:doc.id_orden,
+      id_orden:doc.id_orden,
+      id_atencion:doc.id_atencion
+    });
+    const docs=Array.isArray(r?.documentos)?r.documentos:[];
+    const encontrado=docs.find(x=>
+      txt(x?.tipo_documento).toUpperCase()==='ORDEN_MEDICA' &&
+      txt(x?.id_documento_origen||x?.id_orden)===doc.id_orden &&
+      txt(x?.id_atencion)===doc.id_atencion &&
+      txt(x?.estado_firma).toUpperCase()==='FIRMADO'
+    )||null;
+    state.firmas[doc.id_orden]=encontrado
+      ? {estado:'FIRMADO',id_solicitud:txt(encontrado.id_solicitud),documento:encontrado,error:''}
+      : {estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
+    return encontrado;
+  }catch(e){
+    console.warn('AUROSANAX Orden Médica: no se pudo consultar firma persistente.',e);
+    return null;
+  }
+}
+
+async function cargarFirmasOrdenes(){
+  const regs=state.ordenesEmitidas.filter(r=>!estadoOrdenEsAnulada(r)&&!estadoOrdenEsReemplazada(r)&&txt(r.id_orden));
+  await Promise.all(regs.map(r=>consultarFirmaPersistenteOrden(r.id_orden)));
+}
+
+async function abrirOrdenFirmada(id){
+  const doc=ordenFirmablePorId(id);
+  if(!doc.success){aviso(doc.message,'err');return null;}
+  const ventana=window.open('','_blank');
+  if(!ventana){aviso('Habilite ventanas emergentes para ver la orden médica firmada.','err');return null;}
+  try{
+    ventana.document.title='Cargando orden médica firmada…';
+    ventana.document.body.innerHTML='<p style="font-family:Arial,sans-serif;padding:20px">Cargando orden médica firmada…</p>';
+    const r=await postFirma('obtenerPdfFirmadoPersistente',{
+      tipo_documento:'ORDEN_MEDICA',
+      id_documento_origen:doc.id_orden,
+      id_orden:doc.id_orden,
+      id_atencion:doc.id_atencion
+    });
+    const b64=txt(r?.pdf_firmado_base64||r?.archivo_base64).replace(/^data:application\/pdf;base64,/i,'');
+    if(!b64) throw Error('El servidor no devolvió el PDF firmado de la orden médica.');
+    const bin=atob(b64), bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    ventana.location.replace(url);
+    setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
+    return r;
+  }catch(e){
+    try{ventana.close();}catch(_e){}
+    aviso('No se pudo abrir la orden firmada: '+txt(e.message||e),'err');
+    return null;
+  }
+}
+
+async function esperarFirmaOrden(idSolicitud,doc,tokenOperacion){
+  while(tokenOperacion===state.firmaTokens[doc.id_orden]){
+    const r=await postFirma('obtenerEstadoFirmaElectronica',{
+      id_solicitud:idSolicitud,
+      tipo_documento:'ORDEN_MEDICA',
+      id_documento_origen:doc.id_orden,
+      id_orden:doc.id_orden,
+      id_atencion:doc.id_atencion
+    });
+    const e=txt(r?.estado_firma).toUpperCase();
+    if(['FIRMADO','CANCELADA','CANCELADO'].includes(e)) return r;
+    if(e==='ERROR') throw Error(txt(r?.error)||'El motor local informó un error al firmar la orden médica.');
+    if(e==='EXPIRADA') throw Error(txt(r?.error)||'La solicitud de firma expiró.');
+    if(!['PENDIENTE','TOMADA'].includes(e)) throw Error('El servidor devolvió un estado de firma no reconocido.');
+    state.firmas[doc.id_orden]=Object.assign({},firmaOrdenEstado(doc.id_orden),{estado:e,id_solicitud:idSolicitud,error:''});
+    render();
+    await new Promise(resolve=>setTimeout(resolve,2500));
+  }
+  return null;
+}
+
+async function firmarOrdenPorId(id){
+  const actual=firmaOrdenEstado(id);
+  if(['FIRMADO','FIRMADA'].includes(txt(actual.estado).toUpperCase())) return abrirOrdenFirmada(id);
+  if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(actual.estado).toUpperCase())) return null;
+
+  const doc=ordenFirmablePorId(id);
+  if(!doc.success){aviso(doc.message,'err');return null;}
+
+  const tokenOperacion=(state.firmaTokens[doc.id_orden]||0)+1;
+  state.firmaTokens[doc.id_orden]=tokenOperacion;
+  state.firmas[doc.id_orden]={estado:'PREPARANDO',id_solicitud:'',documento:null,error:''};
+  render();
+  aviso('Preparando orden médica para firma electrónica…');
+
+  try{
+    const motor=await postFirma('obtenerEstadoFirmaElectronica',{});
+    if(motor?.disponible!==true) throw Error(motor?.agente_online===false?'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.':'La firma electrónica no está disponible en este momento.');
+
+    const creada=await postFirma('firmarDocumento',doc);
+    if(tokenOperacion!==state.firmaTokens[doc.id_orden]) return null;
+    const idSolicitud=txt(creada?.id_solicitud);
+    const inicial=txt(creada?.estado_firma).toUpperCase();
+    if(inicial==='FIRMADO'){
+      state.firmas[doc.id_orden]={estado:'FIRMADO',id_solicitud,documento:creada,error:''};
+      render(); aviso('Orden médica firmada electrónicamente.','ok'); return creada;
+    }
+    if(inicial!=='PENDIENTE'||!idSolicitud) throw Error('El servidor no creó correctamente la solicitud de firma.');
+
+    state.firmas[doc.id_orden]={estado:'PENDIENTE',id_solicitud,documento:null,error:''};
+    render(); aviso('Orden médica enviada al motor de firma.');
+
+    const resultado=await esperarFirmaOrden(idSolicitud,doc,tokenOperacion);
+    if(!resultado) return null;
+    const estado=txt(resultado?.estado_firma).toUpperCase();
+    if(estado==='FIRMADO'){
+      await consultarFirmaPersistenteOrden(doc.id_orden);
+      render(); aviso('Orden médica firmada electrónicamente.','ok'); return resultado;
+    }
+    if(['CANCELADA','CANCELADO'].includes(estado)){
+      state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
+      render(); aviso('Firma de la orden médica cancelada.'); return resultado;
+    }
+    throw Error('El servidor no confirmó la firma de la orden médica.');
+  }catch(e){
+    if(tokenOperacion===state.firmaTokens[doc.id_orden]){
+      state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:txt(e.message||e)};
+      render();
+      aviso('No se pudo firmar: '+txt(e.message||e),'err');
+    }
+    return null;
+  }
+}
+
+async function cancelarFirmaOrdenPorId(id){
+  const doc=ordenFirmablePorId(id);
+  if(!doc.success){aviso(doc.message,'err');return null;}
+  const f=firmaOrdenEstado(id), idSolicitud=txt(f.id_solicitud);
+  if(!idSolicitud){aviso('No existe una solicitud de firma pendiente para cancelar.','err');return null;}
+  try{
+    const r=await postFirma('firmarDocumento',{
+      operacion_frontend:'CANCELAR',
+      id_solicitud:idSolicitud,
+      tipo_documento:'ORDEN_MEDICA',
+      id_documento_origen:doc.id_orden,
+      id_orden:doc.id_orden,
+      id_atencion:doc.id_atencion
+    });
+    const e=txt(r?.estado_firma).toUpperCase();
+    if(!['CANCELADA','CANCELADO'].includes(e)) throw Error('El servidor no confirmó la cancelación de la orden médica.');
+    state.firmaTokens[doc.id_orden]=(state.firmaTokens[doc.id_orden]||0)+1;
+    state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
+    render(); aviso('Firma de la orden médica cancelada.'); return r;
+  }catch(e){
+    aviso('No se pudo cancelar la firma: '+txt(e.message||e),'err');
+    return null;
+  }
 }
 
 function filaHistorial(r){
@@ -682,6 +929,7 @@ function filaHistorial(r){
       <button type="button" class="aom-btn" data-aom-preview="${esc(id)}"><i class="bi bi-eye"></i> Vista previa</button>
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
+      ${botonesFirmaOrden(r)}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-trash"></i> Eliminar</button>`}
     </div>
   </div>`;
@@ -1014,6 +1262,7 @@ async function cargar(){
     const r=await get('listarOrdenesMedicasPorAtencion',{id_atencion:ctx.id});
     if(token!==state.token) return [];
     state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
+    await cargarFirmasOrdenes();
     const activas=ordenesActivasFormales();
     if(activas.length>1){
       render();
