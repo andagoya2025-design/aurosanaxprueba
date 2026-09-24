@@ -2075,7 +2075,20 @@
       if(clave) firmasEnCurso.delete(clave);
       ocultarBotonCancelar();
       console.error(MODULO, error);
-      mensajeProfesional(error && error.message ? error.message : String(error || ''), 'error');
+
+      /* V3.6: este falso negativo se verifica en la capa final persistente
+         antes de mostrarlo. Los demás errores conservan su aviso normal. */
+      const mensajeError = error && error.message
+        ? String(error.message)
+        : String(error || '');
+
+      if(
+        mensajeError !==
+        'La firma fue procesada, pero el servidor no devolvió el PDF firmado.'
+      ){
+        mensajeProfesional(mensajeError, 'error');
+      }
+
       throw error;
     }
   }
@@ -3470,48 +3483,25 @@
 
 /* ============================================================
    AUROSANAX FIRMA ELECTRÓNICA 3.6
-   CONFIRMACIÓN ANTIRREGRESIVA DE RECETA FIRMADA PERSISTENTE
-   ------------------------------------------------------------
-   ADHESIÓN APPEND-ONLY.
-   OBJETIVO ÚNICO:
-   - Evitar el falso negativo:
-     "La firma fue procesada, pero el servidor no devolvió el PDF firmado."
-     cuando la RECETA ya quedó FIRMADA y su PDF persistente está disponible.
-   BLINDAJE:
-   - NO altera motor local, Adobe, SCRIB, Drive ni base de datos.
-   - NO modifica las versiones históricas anteriores.
-   - NO oculta errores distintos.
-   - NO convierte PENDIENTE/CANCELADA/ERROR en FIRMADO.
-   - Solo recupera el PDF persistente de la MISMA id_atencion + id_receta.
-   - Si el PDF persistente tampoco aparece, conserva el error original.
-============================================================ */
-(function auroFirmaConfirmacionPersistenteV36(){
+   CONCILIACIÓN ANTIRREGRESIVA DEL PDF PERSISTENTE DE RECETA
+   ============================================================ */
+(function auroFirmaConciliacionPersistenteV36(){
   'use strict';
 
   const anterior = window.auroFirmaElectronica;
-  if(
-    !anterior ||
-    typeof anterior.firmarDocumento !== 'function' ||
-    typeof anterior.obtenerPdfFirmadoPersistente !== 'function'
-  ){
-    console.error('AUROSANAX FIRMA 3.6: no se encontró el contrato estable anterior.');
+  if(!anterior ||
+     typeof anterior.firmarDocumento !== 'function' ||
+     typeof anterior.obtenerPdfFirmadoPersistente !== 'function'){
+    console.error('AUROSANAX FIRMA 3.6: contrato estable anterior no disponible.');
     return;
   }
 
-  const VERSION = '3.6-confirmacion-receta-pdf-persistente';
+  const VERSION = '3.6-receta-pdf-persistente-sin-falso-aviso';
   const ERROR_BASE64 =
     'La firma fue procesada, pero el servidor no devolvió el PDF firmado.';
 
   function texto(v){
     return String(v === null || v === undefined ? '' : v).trim();
-  }
-
-  function esReceta(data){
-    return texto(data && data.tipo_documento).toUpperCase() === 'RECETA';
-  }
-
-  function tieneIdentidadReceta(data){
-    return !!(texto(data && data.id_atencion) && texto(data && data.id_receta));
   }
 
   function base64Firmado(r){
@@ -3522,34 +3512,19 @@
     return new Promise(function(resolve){ setTimeout(resolve, ms); });
   }
 
-  async function recuperarPdfPersistenteReceta_(solicitud){
-    /*
-      Ventana corta de conciliación:
-      el índice persistente puede quedar disponible unos instantes después
-      de que el flujo inmediato ya informó FIRMADO.
-    */
-    let ultimoError = null;
-
+  async function recuperarPersistente(solicitud){
     for(let intento = 0; intento < 5; intento++){
-      if(intento > 0) await esperar(400);
-
+      if(intento) await esperar(400);
       try{
-        const persistente = await anterior.obtenerPdfFirmadoPersistente({
+        const r = await anterior.obtenerPdfFirmadoPersistente({
           tipo_documento:'RECETA',
           id_atencion:texto(solicitud.id_atencion),
-          id_receta:texto(solicitud.id_receta)
+          id_receta:texto(solicitud.id_receta || solicitud.id_documento_clinico)
         });
-
-        if(base64Firmado(persistente)){
-          return persistente;
-        }
-      }catch(error){
-        ultimoError = error;
-      }
+        if(base64Firmado(r)) return r;
+      }catch(_e){}
     }
-
-    if(ultimoError) throw ultimoError;
-    throw new Error(ERROR_BASE64);
+    return null;
   }
 
   async function firmarDocumento(data){
@@ -3559,55 +3534,56 @@
       return await anterior.firmarDocumento(solicitud);
     }catch(error){
       const mensaje = texto(error && error.message);
+      const tipo = texto(solicitud.tipo_documento).toUpperCase();
+      const idAtencion = texto(solicitud.id_atencion);
+      const idReceta = texto(solicitud.id_receta || solicitud.id_documento_clinico);
 
-      /*
-        Intervención quirúrgica:
-        SOLO intercepta el falso negativo exacto, SOLO para RECETA y
-        SOLO cuando existe identidad clínica suficiente para consultar
-        exactamente el mismo documento persistente.
-      */
       if(
         mensaje !== ERROR_BASE64 ||
-        !esReceta(solicitud) ||
-        !tieneIdentidadReceta(solicitud)
+        tipo !== 'RECETA' ||
+        !idAtencion ||
+        !idReceta
       ){
         throw error;
       }
 
-      let persistente;
-      try{
-        persistente = await recuperarPdfPersistenteReceta_(solicitud);
-      }catch(_errorPersistente){
-        /* Si no se logra demostrar persistencia, se conserva el error original. */
+      const persistente = await recuperarPersistente(solicitud);
+      if(!persistente){
+        /* Si no se demuestra el PDF persistente, el error sigue siendo real. */
+        try{
+          if(typeof window.mostrarToast === 'function'){
+            window.mostrarToast(ERROR_BASE64, 'danger');
+          }else{
+            alert(ERROR_BASE64);
+          }
+        }catch(_e){}
         throw error;
       }
 
       const resultado = Object.assign({}, persistente, {
-        estado_firma:'FIRMADO',
-        id_atencion:texto(persistente.id_atencion || solicitud.id_atencion),
-        id_receta:texto(persistente.id_receta || solicitud.id_receta),
-        tipo_documento:'RECETA'
+        tipo_documento:'RECETA',
+        id_atencion:idAtencion,
+        id_receta:idReceta,
+        estado_firma:'FIRMADO'
       });
 
       try{
         window.dispatchEvent(new CustomEvent(
           'aurosanax:firma-electronica-completada',
-          {
-            detail:{
-              tipo_documento:'RECETA',
-              id_atencion:resultado.id_atencion,
-              id_receta:resultado.id_receta,
-              id_solicitud:texto(resultado.id_solicitud),
-              estado_firma:'FIRMADO',
-              nombre_archivo:texto(resultado.nombre_archivo),
-              sha256_pdf_firmado:texto(
-                resultado.sha256_pdf_firmado || resultado.sha256_firmado
-              ),
-              firmado_en:texto(resultado.firmado_en),
-              pdf_disponible:true,
-              origen_confirmacion:'PDF_PERSISTENTE'
-            }
-          }
+          {detail:{
+            tipo_documento:'RECETA',
+            id_atencion:idAtencion,
+            id_receta:idReceta,
+            id_solicitud:texto(resultado.id_solicitud),
+            estado_firma:'FIRMADO',
+            nombre_archivo:texto(resultado.nombre_archivo),
+            sha256_pdf_firmado:texto(
+              resultado.sha256_pdf_firmado || resultado.sha256_firmado
+            ),
+            firmado_en:texto(resultado.firmado_en),
+            pdf_disponible:true,
+            origen_confirmacion:'PDF_PERSISTENTE'
+          }}
         ));
       }catch(_e){}
 
@@ -3619,11 +3595,5 @@
     version:VERSION,
     firmarDocumento:firmarDocumento
   }));
-
-  try{
-    window.dispatchEvent(new CustomEvent(
-      'aurosanax:firma-electronica-confirmacion-persistente-lista',
-      {detail:{version:VERSION}}
-    ));
-  }catch(_e){}
 })();
+
