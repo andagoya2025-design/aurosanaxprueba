@@ -5190,6 +5190,18 @@
     setVal('recIndicaciones', recetaListaParaFormulario(receta.indicaciones || ''));
     setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones || receta.observaciones || ''));
     if(!receta.id_atencion) receta.id_atencion = obtenerIdAtencionActivaSeguro();
+
+    /*
+      AUROSANAX RECETAS 3.17 - PREPARACIÓN RÁPIDA DE RECETA HISTÓRICA
+      ---------------------------------------------------------------
+      Cambio mínimo y aislado: al cargar una receta YA GUARDADA desde el
+      historial, prepara en memoria el mismo documento firmable que V3.16
+      ya prepara después de guardar. No guarda, no modifica Plan, no escribe
+      storage/Sheets y conserva las validaciones id_atencion + id_receta +
+      actualizado_en antes de reutilizar la caché al presionar Firmar.
+    */
+    auroRecetaPrepararFirmaRapidaPostGuardado_(receta);
+
     actualizarBotonGuardarReceta();
     auroRecetaActualizarCabeceraClinicaPremium();
     auroRecetaEditorRenderDesdeCampo(true);
