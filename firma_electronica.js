@@ -3375,3 +3375,95 @@
     }));
   }catch(_e){}
 })();
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.5
+   ENRUTAMIENTO LOCAL MULTIDISPOSITIVO
+   ------------------------------------------------------------
+   ADHESIÓN APPEND-ONLY ANTIRREGRESIVA.
+   - Conserva íntegro TODO el baseline V2.1 -> V3.4 anterior.
+   - Antes de CREAR una firma consulta el motor de ESTA computadora.
+   - Obtiene /health -> id_equipo y lo envía como id_equipo_destino.
+   - Falla de forma segura si no existe motor local: nunca crea una
+     solicitud sin destino que pueda ser tomada por otra computadora.
+   - No modifica RECETA/CERTIFICADO/RECOMENDACION, PDF, Drive,
+     cancelación, persistencia ni backend.
+============================================================ */
+(function auroFirmaEnrutamientoLocalV35(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento !== 'function'){
+    console.error('AUROSANAX FIRMA 3.5: no se encontró el contrato estable V3.4.');
+    return;
+  }
+
+  const VERSION = '3.5-enrutamiento-local-multidispositivo';
+  const HEALTH_URL = 'http://127.0.0.1:8080/health';
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  async function obtenerEquipoLocal_(){
+    const controlador = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const temporizador = controlador ? setTimeout(() => controlador.abort(), 2500) : null;
+
+    try{
+      const respuesta = await fetch(HEALTH_URL, {
+        method:'GET',
+        cache:'no-store',
+        signal:controlador ? controlador.signal : undefined
+      });
+
+      if(!respuesta.ok){
+        throw new Error('El motor local respondió HTTP ' + respuesta.status + '.');
+      }
+
+      const salud = await respuesta.json();
+      const idEquipo = texto(salud && salud.id_equipo);
+
+      if(!salud || salud.success !== true || !idEquipo){
+        throw new Error('El motor local no devolvió una identidad de equipo válida.');
+      }
+
+      return idEquipo;
+    }catch(error){
+      throw new Error(
+        'No se pudo identificar esta computadora para la firma electrónica. ' +
+        'Verifique que el motor AUROSANAX esté iniciado en esta misma PC. ' +
+        (error && error.name === 'AbortError'
+          ? 'El diagnóstico local no respondió a tiempo.'
+          : texto(error && error.message))
+      );
+    }finally{
+      if(temporizador) clearTimeout(temporizador);
+    }
+  }
+
+  async function firmarDocumento(data){
+    const solicitud = Object.assign({}, data || {});
+
+    /*
+      Se fija SIEMPRE el destino al equipo local inmediatamente antes
+      de delegar al contrato estable. Así todos los tipos documentales
+      soportados por el baseline heredan el mismo aislamiento por PC.
+    */
+    const idEquipo = await obtenerEquipoLocal_();
+    solicitud.id_equipo_destino = idEquipo;
+    solicitud.id_equipo_origen = idEquipo;
+
+    return anterior.firmarDocumento(solicitud);
+  }
+
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    obtenerEquipoLocal:obtenerEquipoLocal_
+  }));
+
+  try{
+    window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-multidispositivo-lista', {
+      detail:{version:VERSION}
+    }));
+  }catch(_e){}
+})();
