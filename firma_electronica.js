@@ -3397,36 +3397,44 @@
     return;
   }
 
-  const VERSION = '3.7-enrutamiento-local-cache-caliente';
+  const VERSION = '3.8-ruta-rapida-id-pc-antirregresiva';
   const HEALTH_URL = 'http://127.0.0.1:8080/health';
 
   function texto(v){
     return String(v === null || v === undefined ? '' : v).trim();
   }
 
-  /* V3.7: identidad local caliente y reutilizable.
-     Evita repetir /health antes de cada firma cuando esta PC ya fue validada. */
-  let equipoLocalCache_ = '';
-  let equipoLocalCacheEn_ = 0;
-  let equipoLocalPromesa_ = null;
-  const EQUIPO_LOCAL_TTL_MS_ = 60 * 1000;
+  /*
+    V3.8 RUTA RÁPIDA ANTIRREGRESIVA:
+    conserva el ID independiente por computadora, pero evita que el clic
+    de Firmar tenga que esperar siempre un /health nuevo.
+    El ID se precarga y se reutiliza brevemente; si no existe caché válida,
+    se valida localmente antes de delegar al flujo estable.
+  */
+  let idEquipoCache_ = '';
+  let idEquipoCacheEn_ = 0;
+  let promesaEquipo_ = null;
+  const TTL_EQUIPO_MS_ = 5 * 60 * 1000;
 
-  async function obtenerEquipoLocalRed_(){
+  async function consultarEquipoLocal_(){
     const controlador = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const temporizador = controlador ? setTimeout(() => controlador.abort(), 1200) : null;
+    const temporizador = controlador ? setTimeout(() => controlador.abort(), 1500) : null;
     try{
       const respuesta = await fetch(HEALTH_URL, {
-        method:'GET', cache:'no-store',
+        method:'GET',
+        cache:'no-store',
         signal:controlador ? controlador.signal : undefined
       });
-      if(!respuesta.ok) throw new Error('El motor local respondió HTTP ' + respuesta.status + '.');
+      if(!respuesta.ok){
+        throw new Error('El motor local respondió HTTP ' + respuesta.status + '.');
+      }
       const salud = await respuesta.json();
       const idEquipo = texto(salud && salud.id_equipo);
       if(!salud || salud.success !== true || !idEquipo){
         throw new Error('El motor local no devolvió una identidad de equipo válida.');
       }
-      equipoLocalCache_ = idEquipo;
-      equipoLocalCacheEn_ = Date.now();
+      idEquipoCache_ = idEquipo;
+      idEquipoCacheEn_ = Date.now();
       return idEquipo;
     }catch(error){
       throw new Error(
@@ -3442,22 +3450,26 @@
   }
 
   async function obtenerEquipoLocal_(){
-    if(equipoLocalCache_ && (Date.now()-equipoLocalCacheEn_) < EQUIPO_LOCAL_TTL_MS_){
-      return equipoLocalCache_;
+    if(idEquipoCache_ && (Date.now() - idEquipoCacheEn_) < TTL_EQUIPO_MS_){
+      return idEquipoCache_;
     }
-    if(equipoLocalPromesa_) return equipoLocalPromesa_;
-    equipoLocalPromesa_ = obtenerEquipoLocalRed_();
-    try{ return await equipoLocalPromesa_; }
-    finally{ equipoLocalPromesa_ = null; }
+    if(promesaEquipo_) return promesaEquipo_;
+    promesaEquipo_ = consultarEquipoLocal_();
+    try{
+      return await promesaEquipo_;
+    }finally{
+      promesaEquipo_ = null;
+    }
   }
 
-  function precalentarEquipoLocal_(){
+  function precargarEquipoLocal_(){
     obtenerEquipoLocal_().catch(function(){});
   }
+
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', precalentarEquipoLocal_, {once:true});
+    document.addEventListener('DOMContentLoaded', precargarEquipoLocal_, {once:true});
   }else{
-    setTimeout(precalentarEquipoLocal_, 0);
+    setTimeout(precargarEquipoLocal_, 0);
   }
 
   async function firmarDocumento(data){
