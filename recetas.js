@@ -5439,6 +5439,35 @@
         auroRecetaPrepararFirmaRapidaPostGuardado_(registroFirmaRapida || null);
 
         /*
+          AUROSANAX RECETAS 3.18 - ACTIVACIÓN POST-GUARDADO SIN PDF
+          ---------------------------------------------------------
+          Corrección quirúrgica del cuello de botella observado:
+          una receta NUEVA, ya confirmada por el backend, no debe depender de
+          pulsar "PDF / imprimir" para dejar disponible la firma.
+
+          Blindaje antirregresivo:
+          - Solo adelanta el estado visual inmediato para una receta NUEVA.
+          - Las correcciones/versiones históricas conservan la comparación
+            persistente de huella antes de decidir FIRMADA/NUEVA_VERSION.
+          - No abre PDF, no firma, no modifica Plan, Sheets, Drive ni backend.
+          - Precalienta únicamente la identidad local del equipo cuando la API
+            de Firma Electrónica la expone; cualquier fallo queda silencioso y
+            el clic de Firmar conserva toda la validación estable.
+        */
+        if(!estabaEditando){
+          try{ auroRecetaSincronizarEstadoFirmaVisual(); }catch(e){}
+        }
+
+        if(
+          window.auroFirmaElectronica &&
+          typeof window.auroFirmaElectronica.obtenerEquipoLocal === 'function'
+        ){
+          try{
+            Promise.resolve(window.auroFirmaElectronica.obtenerEquipoLocal()).catch(function(){});
+          }catch(e){}
+        }
+
+        /*
           Firma versionada 3.14:
           después de guardar una corrección se invalida la caché persistente y
           se compara la huella del documento ACTUAL con todas sus firmas.
