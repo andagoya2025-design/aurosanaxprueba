@@ -5446,9 +5446,34 @@
           Con cambios reales => Firmar nueva versión.
         */
         auroRecetaFirmaPersistenteInvalidar(r.id_atencion, r.id_receta);
-        setTimeout(function(){
-          auroRecetaSincronizarFirmaPersistenteActual(true);
-          auroRecetaSincronizarHistorialFirmasPersistentes(true);
+
+        /*
+          AUROSANAX RECETAS 3.18 - POST-GUARDADO CANÓNICO ANTIRREGRESIVO
+          --------------------------------------------------------------
+          Corrección quirúrgica del único caso observado:
+          después de editar y guardar una receta, ejecutar automáticamente
+          la preparación canónica que V3.17 ya usa al cambiar de atención
+          (equivalente a la preparación que antes terminaba ocurriendo al
+          pulsar PDF receta), sin abrir PDF y sin tocar motor, Plan ni firmas.
+
+          La sincronización persistente se conserva como respaldo si la
+          preparación canónica no estuviera disponible por cualquier motivo.
+        */
+        setTimeout(async function(){
+          const idAtencionGuardada = String(r.id_atencion || '').trim();
+          try{
+            if(typeof auroRecetaPrepararFirmaCanonicaPorAtencion === 'function'){
+              await auroRecetaPrepararFirmaCanonicaPorAtencion(idAtencionGuardada);
+            }else{
+              await auroRecetaSincronizarFirmaPersistenteActual(true);
+            }
+          }catch(e){
+            try{ await auroRecetaSincronizarFirmaPersistenteActual(true); }catch(_e){}
+          }
+
+          try{
+            await auroRecetaSincronizarHistorialFirmasPersistentes(true);
+          }catch(e){}
         }, 0);
       }else{
         actualizarBotonGuardarReceta();
@@ -6450,31 +6475,6 @@
   */
   let auroRecetaFirmaRapidaPostGuardadoCache = null;
 
-  function auroRecetaDocumentoDesdeRegistroFirmaRapida_(registro){
-    if(!registro) return null;
-
-    const r = recetaGuardadaAFormatoPreview(registro);
-    const idReceta = String(registro.id_receta || '').trim();
-    const idAtencion = String(registro.id_atencion || '').trim();
-
-    if(!idReceta || !idAtencion) return null;
-
-    return {
-      success:true,
-      tipo_documento:'RECETA',
-      id_documento_clinico:idReceta,
-      id_receta:idReceta,
-      id_atencion:idAtencion,
-      id_paciente:String(registro.id_paciente || r.id_paciente || r.paciente?.id_paciente || '').trim(),
-      id_historia:String(registro.id_historia || r.id_historia || '').trim(),
-      id_medico:String(registro.id_medico || r.id_medico || '').trim(),
-      nombre_archivo:'RECETA_' + idReceta + '_FIRMADA.pdf',
-      html_documento:construirHTMLRecetaPacienteDobleA4(
-        auroRecetaPrepararDatosParaRepresentacion(r)
-      )
-    };
-  }
-
   function auroRecetaPrepararFirmaRapidaPostGuardado_(registroGuardado){
     const registro = registroGuardado || auroRecetaRegistroFirmableActual();
     if(!registro){
@@ -6482,47 +6482,37 @@
       return null;
     }
 
-    /*
-      AUROSANAX RECETAS 3.18 - HISTÓRICO RÁPIDO ANTIRREGRESIVO
-      Construye la caché desde el registro histórico exacto recibido.
-      No modifica persistencia, Plan, PDF ni transporte de firma.
-    */
-    const documento = auroRecetaDocumentoDesdeRegistroFirmaRapida_(registro);
+    const documento = auroRecetaDocumentoFirmableActual();
     if(!documento || !documento.success){
       auroRecetaFirmaRapidaPostGuardadoCache = null;
       return documento;
+    }
+
+    if(
+      String(documento.id_atencion || '').trim() !== String(registro.id_atencion || '').trim() ||
+      String(documento.id_receta || '').trim() !== String(registro.id_receta || '').trim()
+    ){
+      auroRecetaFirmaRapidaPostGuardadoCache = null;
+      return null;
     }
 
     auroRecetaFirmaRapidaPostGuardadoCache = {
       id_atencion:String(registro.id_atencion || '').trim(),
       id_receta:String(registro.id_receta || '').trim(),
       actualizado_en:String(registro.actualizado_en || '').trim(),
-      preparado_en_ms:Date.now(),
       documento:documento
     };
     return documento;
   }
 
   function auroRecetaDocumentoParaFirmaRapida_(){
-    const cache = auroRecetaFirmaRapidaPostGuardadoCache;
-    const idAtencionActiva = String(obtenerIdAtencionActivaSeguro() || '').trim();
-    const idRecetaEdicion = String(recetaEditandoId || '').trim();
-
-    if(
-      cache && cache.documento && cache.documento.success &&
-      (Date.now() - Number(cache.preparado_en_ms || 0)) <= 30000 &&
-      cache.id_atencion === idAtencionActiva &&
-      (!idRecetaEdicion || cache.id_receta === idRecetaEdicion)
-    ){
-      return cache.documento;
-    }
-
     const registro = auroRecetaRegistroFirmableActual();
     if(!registro){
       auroRecetaFirmaRapidaPostGuardadoCache = null;
       return auroRecetaDocumentoFirmableActual();
     }
 
+    const cache = auroRecetaFirmaRapidaPostGuardadoCache;
     if(
       cache && cache.documento && cache.documento.success &&
       cache.id_atencion === String(registro.id_atencion || '').trim() &&
