@@ -5449,15 +5449,10 @@
 
         /*
           AUROSANAX RECETAS 3.18 - POST-GUARDADO CANÓNICO ANTIRREGRESIVO
-          --------------------------------------------------------------
-          Corrección quirúrgica del único caso observado:
-          después de editar y guardar una receta, ejecutar automáticamente
-          la preparación canónica que V3.17 ya usa al cambiar de atención
-          (equivalente a la preparación que antes terminaba ocurriendo al
-          pulsar PDF receta), sin abrir PDF y sin tocar motor, Plan ni firmas.
-
-          La sincronización persistente se conserva como respaldo si la
-          preparación canónica no estuviera disponible por cualquier motivo.
+          ----------------------------------------------------------------
+          Después de guardar una receta, reutiliza silenciosamente la misma
+          preparación canónica que ya funciona al cambiar de atención.
+          No abre PDF, no firma automáticamente y no modifica el motor.
         */
         setTimeout(async function(){
           const idAtencionGuardada = String(r.id_atencion || '').trim();
