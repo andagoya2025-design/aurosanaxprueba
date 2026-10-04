@@ -1674,6 +1674,51 @@
     });
   }
 
+  /* =====================================================
+     AUROSANAX RECETAS - BLINDAJE QUIRÚRGICO DE CANTIDAD
+     ---------------------------------------------------------
+     - Recetas sigue siendo la fuente de verdad durante una corrección.
+     - Si la cantidad ya existe en Recetas, NO se sobrescribe.
+     - Si cantidad está vacía y el Plan seguro de la MISMA atención
+       contiene ese dato para el medicamento correspondiente, se completa
+       únicamente `cantidad` antes de persistir.
+     - No modifica medicamento, presentación, vía, frecuencia, duración,
+       indicaciones, continuo, Plan, PDF, firma, IDs ni backend.
+  ===================================================== */
+  function auroRecetaBlindarCantidadDesdePlan(listaActual, listaPlan){
+    const actual = Array.isArray(listaActual) ? listaActual : [];
+    const plan = Array.isArray(listaPlan) ? listaPlan : [];
+    if(!actual.length || !plan.length) return actual;
+
+    function claveMedicamento(m){
+      const x = normalizarMedicamentoRecetaObjeto(m || {});
+      return [x.med, x.pres, x.via]
+        .map(recetaNormalizarPlano)
+        .filter(Boolean)
+        .join('|');
+    }
+
+    return actual.map(function(item, index){
+      if(!item || typeof item !== 'object' || item.texto) return item;
+
+      const actualNorm = normalizarMedicamentoRecetaObjeto(item);
+      if(String(actualNorm.cantidad || '').trim()) return item;
+
+      const clave = claveMedicamento(actualNorm);
+      const candidato = plan.find(function(m){
+        return clave && claveMedicamento(m) === clave;
+      }) || plan[index] || null;
+
+      if(!candidato) return item;
+
+      const planNorm = normalizarMedicamentoRecetaObjeto(candidato);
+      const cantidadPlan = String(planNorm.cantidad || '').trim();
+      if(!cantidadPlan) return item;
+
+      return Object.assign({}, item, {cantidad:cantidadPlan});
+    });
+  }
+
   function medicamentoRecetaParaGuardarJSON(textoFormulario){
     const actual = String(textoFormulario || '').trim();
     const medsPlan = recetaMedicamentosPlanActualesSeguros();
@@ -1683,7 +1728,8 @@
         let listaActual = JSON.parse(actual);
         if(!Array.isArray(listaActual)) listaActual = [listaActual];
 
-        const blindada = auroRecetaBlindarIndicacionesDesdePlan(listaActual, medsPlan);
+        const conCantidad = auroRecetaBlindarCantidadDesdePlan(listaActual, medsPlan);
+        const blindada = auroRecetaBlindarIndicacionesDesdePlan(conCantidad, medsPlan);
         return JSON.stringify(blindada);
       }catch(e){
         return actual;
