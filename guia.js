@@ -2,7 +2,7 @@
 ======================================================================
 AUROSANAX — guia.js
 ASISTENTE CONTEXTUAL PREMIUM DEL ERP
-Versión 1.3.4 · asistente inteligente · antirregresivo
+Versión 1.3.5 · Historia Clínica contextual · antirregresivo
 ======================================================================
 
 CONTRATO ANTIRREGRESIVO
@@ -23,7 +23,7 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.3.4';
+  const VERSION='1.3.5';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
@@ -411,15 +411,34 @@ CONTRATO ANTIRREGRESIVO
         tipo:'ok',titulo:esEdicion?'Paciente actualizado':'Paciente registrado',
         resumen:esEdicion?'Los cambios fueron confirmados en la base de datos clínica AUROSANAX.':'El nuevo paciente fue confirmado correctamente en la base de datos clínica AUROSANAX.',
         siguiente:desdeAgenda?'Continúe el flujo de la cita desde Agenda.':'Abra la historia clínica del paciente para continuar.',
-        detalle:'Este asistente orienta el flujo de trabajo. No crea historias clínicas, no inicia atenciones y no modifica información médica.',
+        detalle:'Antes de crear la primera atención, el paciente debe tener una Historia Clínica. La guía solo orienta: no crea historias, no inicia atenciones y no modifica información médica.',
         expandible:true,expandida:false,ocultable:true
       });
     }catch(error){console.warn('AUROSANAX GUÍA: no se pudo mostrar la orientación de Pacientes.',error);}
   }
 
+  function recibirHistoriaCreada(evento){
+    try{
+      const d=evento&&evento.detail&&typeof evento.detail==='object'?evento.detail:{};
+      const idHistoria=texto(d.id_historia,'');
+      const idPaciente=texto(d.id_paciente,'');
+      if(!idHistoria || !idPaciente)return;
+      if(preferencias.activa===false)return;
+      montar('historia',null,{
+        tipo:'ok',
+        titulo:'Historia clínica creada',
+        resumen:'La Historia Clínica del paciente quedó confirmada correctamente en la base de datos clínica AUROSANAX.',
+        siguiente:'Ya puede crear la primera atención del paciente.',
+        detalle:'Flujo recomendado: Paciente → Historia Clínica → Atención. El asistente únicamente orienta y no crea atenciones ni modifica información clínica.',
+        expandible:true,expandida:false,ocultable:true
+      });
+    }catch(error){console.warn('AUROSANAX GUÍA: no se pudo mostrar la orientación de Historia Clínica.',error);}
+  }
+
   window.addEventListener('resize',function(){if(posicionUsuario)aplicarPosicionUsuario();});
   window.addEventListener('aurosanax:guia-contexto',recibirContexto);
   window.addEventListener('aurosanax:paciente-confirmado',recibirPacienteConfirmado);
+  window.addEventListener('aurosanax:historia-creada',recibirHistoriaCreada);
 
   function asegurarAsistenteDisponible(){
     if(mounts.size)return;
