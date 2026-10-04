@@ -2,7 +2,7 @@
 ======================================================================
 AUROSANAX — guia.js
 ASISTENTE CONTEXTUAL PREMIUM DEL ERP
-Versión 1.2.0 · flotante, ocultable, no clínico, no persistente
+Versión 1.3.0 · flotante, movible, ocultable, responsive, no clínico, no persistente
 ======================================================================
 
 CONTRATO ANTIRREGRESIVO
@@ -23,11 +23,12 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.2.0';
+  const VERSION='1.3.0';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
   let activo='';
+  let posicionUsuario=null;
 
   function texto(v,f){
     const t=String(v==null?'':v).trim();
@@ -68,6 +69,7 @@ CONTRATO ANTIRREGRESIVO
         width:min(380px,calc(100vw - 36px));
         pointer-events:none;
         font:inherit;
+        max-height:calc(100vh - 106px);
       }
       .auro-guia-card,.auro-guia-launcher{box-sizing:border-box;font:inherit}
       .auro-guia-card{
@@ -85,6 +87,7 @@ CONTRATO ANTIRREGRESIVO
       .auro-guia-card[data-tipo="warning"]{border-color:rgba(245,158,11,.55)}
       .auro-guia-top{
         display:flex;align-items:flex-start;gap:10px;
+        cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
         padding:14px 14px 11px;
         background:linear-gradient(120deg,rgba(192,38,211,.13),rgba(236,72,153,.08));
       }
@@ -104,6 +107,7 @@ CONTRATO ANTIRREGRESIVO
         font-size:20px;line-height:1;display:grid;place-items:center;
       }
       .auro-guia-close:hover{background:#fff;color:#831843}
+      .auro-guia-top:active{cursor:grabbing}
       .auro-guia-body{padding:12px 14px 14px}
       .auro-guia-summary{margin:0;color:#4b5563;font-size:13.5px;line-height:1.45}
       .auro-guia-next{
@@ -132,7 +136,7 @@ CONTRATO ANTIRREGRESIVO
       .auro-guia-dot{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.18)}
       @keyframes auroGuiaEntrada{from{opacity:0;transform:translateY(-7px) scale(.985)}to{opacity:1;transform:none}}
       @media(max-width:700px){
-        #${HOST_ID}{top:auto;right:10px;bottom:12px;width:min(360px,calc(100vw - 20px))}
+        #${HOST_ID}{top:calc(env(safe-area-inset-top,0px) + 74px);right:10px;bottom:auto;width:min(360px,calc(100vw - 20px));max-height:calc(100vh - 96px)}
         .auro-guia-card{border-radius:16px}
         .auro-guia-top{padding:12px}
         .auro-guia-body{padding:11px 12px 12px}
@@ -152,6 +156,67 @@ CONTRATO ANTIRREGRESIVO
       document.body.appendChild(h);
     }
     return h;
+  }
+
+  function posicionPredeterminada(h){
+    h.style.left='auto';
+    h.style.bottom='auto';
+    h.style.right=window.matchMedia('(max-width:700px)').matches?'10px':'18px';
+    h.style.top=window.matchMedia('(max-width:700px)').matches
+      ?'calc(env(safe-area-inset-top,0px) + 74px)'
+      :'88px';
+    posicionUsuario=null;
+  }
+
+  function limitarPosicion(h,left,top){
+    const margen=8;
+    const r=h.getBoundingClientRect();
+    const ancho=r.width||Math.min(380,window.innerWidth-20);
+    const alto=Math.min(r.height||80,window.innerHeight-(margen*2));
+    return {
+      left:Math.max(margen,Math.min(left,window.innerWidth-ancho-margen)),
+      top:Math.max(margen,Math.min(top,window.innerHeight-alto-margen))
+    };
+  }
+
+  function aplicarPosicionUsuario(){
+    const h=document.getElementById(HOST_ID);
+    if(!h || !posicionUsuario)return;
+    const p=limitarPosicion(h,posicionUsuario.left,posicionUsuario.top);
+    h.style.right='auto';h.style.bottom='auto';
+    h.style.left=p.left+'px';h.style.top=p.top+'px';
+    posicionUsuario=p;
+  }
+
+  function activarArrastre(r){
+    const asa=r.nodes.card.querySelector('.auro-guia-top');
+    if(!asa || asa.dataset.auroDrag==='1')return;
+    asa.dataset.auroDrag='1';
+    let drag=null;
+
+    asa.addEventListener('pointerdown',function(e){
+      if(e.button!=null && e.button!==0)return;
+      if(e.target && e.target.closest && e.target.closest('button'))return;
+      const h=host(), rect=h.getBoundingClientRect();
+      drag={id:e.pointerId,dx:e.clientX-rect.left,dy:e.clientY-rect.top};
+      try{asa.setPointerCapture(e.pointerId);}catch(_e){}
+      e.preventDefault();
+    });
+    asa.addEventListener('pointermove',function(e){
+      if(!drag || drag.id!==e.pointerId)return;
+      const h=host();
+      const p=limitarPosicion(h,e.clientX-drag.dx,e.clientY-drag.dy);
+      h.style.right='auto';h.style.bottom='auto';
+      h.style.left=p.left+'px';h.style.top=p.top+'px';
+      posicionUsuario=p;
+      e.preventDefault();
+    });
+    function terminar(e){
+      if(!drag || (e.pointerId!=null && drag.id!==e.pointerId))return;
+      drag=null;
+    }
+    asa.addEventListener('pointerup',terminar);
+    asa.addEventListener('pointercancel',terminar);
   }
 
   function crearNodo(id){
@@ -227,9 +292,10 @@ CONTRATO ANTIRREGRESIVO
     if(!r){
       const nodes=crearNodo(clave);
       r={id:clave,nodes,config:normalizar(config),expandida:false,oculta:false};
+      activarArrastre(r);
       nodes.toggle.addEventListener('click',function(){r.expandida=!r.expandida;pintar(r);});
       nodes.close.addEventListener('click',function(){r.oculta=true;pintar(r);});
-      nodes.launcher.addEventListener('click',function(){ocultarOtros(clave);activo=clave;r.oculta=false;pintar(r);});
+      nodes.launcher.addEventListener('click',function(){ocultarOtros(clave);activo=clave;r.oculta=false;posicionPredeterminada(h);pintar(r);});
       h.append(nodes.card,nodes.launcher);
       mounts.set(clave,r);
     }else{
@@ -306,8 +372,29 @@ CONTRATO ANTIRREGRESIVO
     }
   }
 
+  window.addEventListener('resize',function(){ if(posicionUsuario) aplicarPosicionUsuario(); });
+
   window.addEventListener('aurosanax:guia-contexto',recibirContexto);
   window.addEventListener('aurosanax:paciente-confirmado',recibirPacienteConfirmado);
+
+  function asegurarAsistenteDisponible(){
+    if(mounts.size)return;
+    montar('inicio',null,{
+      tipo:'neutral',
+      titulo:'Asistente AUROSANAX',
+      resumen:'El asistente está disponible para orientarle durante el uso del ERP.',
+      siguiente:'Seleccione el módulo en el que desea trabajar.',
+      detalle:'La guía es únicamente visual y de orientación. No guarda, crea, firma, finaliza ni modifica información clínica.',
+      expandible:true,
+      ocultable:true
+    });
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',asegurarAsistenteDisponible,{once:true});
+  }else{
+    setTimeout(asegurarAsistenteDisponible,0);
+  }
 
   window.AurosanaxGuia=Object.freeze({
     __auroGuiaMotor:true,
