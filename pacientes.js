@@ -204,6 +204,13 @@ function auroInyectarEstiloAccionesPacientes(){
     .cardx{
       overflow:visible;
     }
+
+    .auro-paciente-reciente{
+      outline:2px solid rgba(217,70,239,.55);
+      outline-offset:-2px;
+      background:linear-gradient(90deg,rgba(250,232,255,.92),rgba(255,255,255,.98)) !important;
+      box-shadow:0 10px 28px rgba(162,28,175,.12);
+    }
   `;
   document.head.appendChild(style);
 }
@@ -489,6 +496,21 @@ function auroNormalizarBusquedaPacientes(valor){
     .trim();
 }
 
+let auroPacienteRecienConfirmadoId = '';
+let auroPacienteRecienConfirmadoHasta = 0;
+
+function auroDestacarPacienteRecienConfirmado(idPaciente){
+  auroPacienteRecienConfirmadoId = String(idPaciente || '').trim();
+  auroPacienteRecienConfirmadoHasta = auroPacienteRecienConfirmadoId ? (Date.now() + 30000) : 0;
+  try{ patientPage = 1; }catch(_e){}
+}
+
+function auroPacienteEstaDestacado(idPaciente){
+  return !!auroPacienteRecienConfirmadoId &&
+         Date.now() < auroPacienteRecienConfirmadoHasta &&
+         String(idPaciente || '').trim() === auroPacienteRecienConfirmadoId;
+}
+
 function renderPatients(){
   auroInyectarEstiloAccionesPacientes();
   const q=auroNormalizarBusquedaPacientes(document.getElementById('patientSearch')?.value||'');
@@ -504,6 +526,10 @@ function renderPatients(){
     const txt=auroNormalizarBusquedaPacientes([p.nombre,p.cedula,p.telefono,p.email,p.servicio,p.ciudad].join(' '));
     return (!q || txt.includes(q)) && (!f || p.servicio===f);
   }).sort((a,b)=>{
+    const aDestacado = auroPacienteEstaDestacado(a.id_paciente || a.id || '');
+    const bDestacado = auroPacienteEstaDestacado(b.id_paciente || b.id || '');
+    if(aDestacado !== bDestacado) return aDestacado ? -1 : 1;
+
     const ta = Number(a.ultima_atencion_ts || 0);
     const tb = Number(b.ultima_atencion_ts || 0);
     if(ta && tb && ta !== tb) return tb - ta;
@@ -531,7 +557,7 @@ function renderPatients(){
   if(nextBtn) nextBtn.disabled = patientPage >= totalPages;
 
   document.getElementById('patientsBody').innerHTML = visibleRows.map((p,i)=>`
-    <tr>
+    <tr class="${auroPacienteEstaDestacado(p.id_paciente || p.id || '') ? 'auro-paciente-reciente' : ''}">
       <td><b>${p.nombre}</b><br><small class="text-muted">${p.email}</small></td>
       <td>${p.cedula}</td>
       <td>${p.telefono}</td>
@@ -545,7 +571,7 @@ function renderPatients(){
   `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">Sin pacientes</td></tr>';
 
   document.getElementById('patientsMobile').innerHTML = visibleRows.map(p=>`
-    <div class="mobile-card">
+    <div class="mobile-card ${auroPacienteEstaDestacado(p.id_paciente || p.id || '') ? 'auro-paciente-reciente' : ''}">
       <div class="mobile-card-top"><b>${p.nombre}</b>${badgeEstado(p.estado)}</div>
       <div class="line"><span>Cédula</span><span>${p.cedula}</span></div>
       <div class="line"><span>Teléfono</span><span>${p.telefono}</span></div>
@@ -1211,6 +1237,9 @@ async function savePatient(){
         : auroBuscarPacienteCreadoParaCita(null, pacienteSheet);
 
       if(pacienteConfirmadoGuia && pacienteConfirmadoGuia.id_paciente){
+        auroDestacarPacienteRecienConfirmado(pacienteConfirmadoGuia.id_paciente);
+        renderPatients();
+
         try{
           window.dispatchEvent(new CustomEvent('aurosanax:paciente-confirmado', {
             detail:{
@@ -1235,7 +1264,7 @@ async function savePatient(){
           );
           if(vinculo.ok){
             auroLimpiarContextoPacienteDesdeAgenda();
-            alert('Paciente registrado y vinculado correctamente a la cita.');
+            alert('Paciente registrado y vinculado correctamente a la cita en la base de datos clínica AUROSANAX.');
           }else{
             console.warn('AUROSANAX PACIENTES: paciente guardado, vínculo de cita pendiente.', vinculo);
             alert('El paciente fue guardado, pero no se pudo confirmar automáticamente el vínculo con la cita. Actualice Agenda antes de continuar.');
@@ -1247,12 +1276,16 @@ async function savePatient(){
       }
     }, 1200);
 
-    if(!contextoAgenda){
-      alert(esEdicion ? 'Paciente actualizado correctamente.' : 'Paciente enviado a Google Sheets correctamente.');
+    if(!contextoAgenda && !(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true)){
+      alert(
+        esEdicion
+          ? 'Paciente actualizado correctamente en la base de datos clínica AUROSANAX.'
+          : 'Paciente registrado correctamente en la base de datos clínica AUROSANAX.'
+      );
     }
   }catch(error){
     console.error(error);
-    alert('No se pudo guardar en Google Sheets. Revise la conexión o la implementación del Apps Script.');
+    alert('No se pudo guardar en la base de datos clínica AUROSANAX. Revise la conexión e intente nuevamente.');
   }
 }
 
