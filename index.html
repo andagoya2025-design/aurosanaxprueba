@@ -9244,8 +9244,20 @@ async function guardarHistoriaClinicaERP(){
     ===================================================== */
 
     const fechaGuardadoUX = auroHistoriaFechaHoraVisualAhora();
-    const atencionFinalUX = auroHistoriaAtencionResumen();
-    const moduloGuardadoUX = auroHistoriaModuloActivo();
+
+    /*
+      AUROSANAX - BLINDAJE ASÍNCRONO DE CONTEXTO DE GUARDADO
+      ------------------------------------------------------
+      El guardado debe finalizar con el mismo módulo y la misma atención
+      desde los que fue iniciado, aunque el profesional navegue a otra
+      pestaña clínica mientras el POST continúa en segundo plano.
+
+      No volver a leer aquí la pestaña/atención visibles: hacerlo después
+      del await mezclaría el contexto de origen con el contexto visual
+      actual y podría atribuir la actualización al módulo equivocado.
+    */
+    const atencionFinalUX = atencionUX;
+    const moduloGuardadoUX = moduloGuardadoUXInicial;
 
     /* La fecha se registra únicamente para la pestaña desde la que se guardó. */
     auroHistoriaGuardarActualizacionConsulta(atencionFinalUX, fechaGuardadoUX, moduloGuardadoUX);
@@ -12770,8 +12782,6 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 <script src="pacientes.js?v=20260918_sync1"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
 <script src="agenda.js?v=20260918_sync1"></script>
-<!-- AUROSANAX — Motor visual de guía contextual · no clínico / no persistente -->
-<script src="guia.js?v=20261003_fase1"></script>
 <script id="auro-erp-inicio-despues-seguridad">
   /* AUROSANAX: preparar el ERP, pero no cargar datos antes de validar la sesión. */
   window.__auroErpInicializacionPromesa = null;
