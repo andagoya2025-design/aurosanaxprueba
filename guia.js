@@ -2,7 +2,7 @@
 ======================================================================
 AUROSANAX — guia.js
 ASISTENTE CONTEXTUAL PREMIUM DEL ERP
-Versión 1.3.0 · flotante, movible, ocultable, responsive, no clínico, no persistente
+Versión 1.3.1 · ajuste visual antirregresivo
 ======================================================================
 
 CONTRATO ANTIRREGRESIVO
@@ -23,7 +23,7 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.3.0';
+  const VERSION='1.3.1';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
@@ -56,6 +56,10 @@ CONTRATO ANTIRREGRESIVO
     };
   }
 
+  function esMovil(){
+    return window.matchMedia('(max-width:700px)').matches;
+  }
+
   function inyectarEstilos(){
     if(document.getElementById(STYLE_ID)) return;
     const s=document.createElement('style');
@@ -63,13 +67,13 @@ CONTRATO ANTIRREGRESIVO
     s.textContent=`
       #${HOST_ID}{
         position:fixed;
-        top:88px;
+        top:150px;
         right:18px;
         z-index:2147482000;
-        width:min(380px,calc(100vw - 36px));
+        width:min(340px,calc(100vw - 36px));
         pointer-events:none;
         font:inherit;
-        max-height:calc(100vh - 106px);
+        max-height:calc(100vh - 168px);
       }
       .auro-guia-card,.auro-guia-launcher{box-sizing:border-box;font:inherit}
       .auro-guia-card{
@@ -86,60 +90,67 @@ CONTRATO ANTIRREGRESIVO
       .auro-guia-card[data-tipo="ok"]{border-color:rgba(16,185,129,.48)}
       .auro-guia-card[data-tipo="warning"]{border-color:rgba(245,158,11,.55)}
       .auro-guia-top{
-        display:flex;align-items:flex-start;gap:10px;
+        display:flex;align-items:flex-start;gap:9px;
         cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
-        padding:14px 14px 11px;
+        padding:12px 12px 10px;
         background:linear-gradient(120deg,rgba(192,38,211,.13),rgba(236,72,153,.08));
       }
       .auro-guia-icon{
-        width:34px;height:34px;flex:0 0 34px;border-radius:11px;
+        width:32px;height:32px;flex:0 0 32px;border-radius:10px;
         display:grid;place-items:center;
         background:linear-gradient(135deg,#c026d3,#ec4899);
         color:#fff;font-weight:900;box-shadow:0 7px 18px rgba(192,38,211,.28);
       }
       .auro-guia-card[data-tipo="ok"] .auro-guia-icon{background:linear-gradient(135deg,#059669,#10b981)}
       .auro-guia-copy{min-width:0;flex:1}
-      .auro-guia-brand{font-size:11px;font-weight:900;letter-spacing:.055em;text-transform:uppercase;color:#9d174d}
-      .auro-guia-title{margin:2px 0 0;font-size:16px;font-weight:850;line-height:1.2;color:#3b174f}
+      .auro-guia-brand{font-size:10.5px;font-weight:900;letter-spacing:.055em;text-transform:uppercase;color:#9d174d}
+      .auro-guia-title{margin:2px 0 0;font-size:15px;font-weight:850;line-height:1.2;color:#3b174f}
       .auro-guia-close{
         pointer-events:auto;appearance:none;border:0;background:rgba(255,255,255,.82);
-        color:#6b7280;width:32px;height:32px;border-radius:10px;cursor:pointer;
-        font-size:20px;line-height:1;display:grid;place-items:center;
+        color:#6b7280;width:30px;height:30px;border-radius:9px;cursor:pointer;
+        font-size:19px;line-height:1;display:grid;place-items:center;
       }
       .auro-guia-close:hover{background:#fff;color:#831843}
       .auro-guia-top:active{cursor:grabbing}
-      .auro-guia-body{padding:12px 14px 14px}
-      .auro-guia-summary{margin:0;color:#4b5563;font-size:13.5px;line-height:1.45}
+      .auro-guia-body{padding:11px 12px 12px}
+      .auro-guia-summary{margin:0;color:#4b5563;font-size:13px;line-height:1.42}
       .auro-guia-next{
-        margin:10px 0 0;padding:10px 11px;border-radius:12px;
+        margin:9px 0 0;padding:9px 10px;border-radius:11px;
         background:linear-gradient(135deg,rgba(217,70,239,.12),rgba(236,72,153,.09));
-        color:#701a75;font-size:13.5px;font-weight:800;line-height:1.35
+        color:#701a75;font-size:13px;font-weight:800;line-height:1.34
       }
       .auro-guia-detail{
-        margin:10px 0 0;padding-top:10px;border-top:1px solid rgba(148,163,184,.22);
-        color:#64748b;font-size:12.5px;line-height:1.45
+        margin:9px 0 0;padding-top:9px;border-top:1px solid rgba(148,163,184,.22);
+        color:#64748b;font-size:12.25px;line-height:1.42
       }
-      .auro-guia-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}
+      .auro-guia-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
       .auro-guia-btn{
         appearance:none;border:1px solid rgba(192,38,211,.24);background:#fff;color:#86198f;
-        min-height:36px;padding:7px 11px;border-radius:10px;font:inherit;font-size:12.5px;
+        min-height:34px;padding:6px 10px;border-radius:10px;font:inherit;font-size:12px;
         font-weight:800;cursor:pointer
       }
       .auro-guia-btn:hover{background:#fdf4ff}
       .auro-guia-launcher{
-        pointer-events:auto;margin-left:auto;display:none;align-items:center;gap:7px;
+        pointer-events:auto;margin-left:auto;display:none;align-items:center;gap:6px;
         border:1px solid rgba(217,70,239,.38);background:linear-gradient(135deg,#c026d3,#ec4899);
-        color:#fff;border-radius:999px;padding:9px 13px;box-shadow:0 12px 32px rgba(162,28,175,.24);
-        font-weight:850;font-size:12.5px;cursor:pointer
+        color:#fff;border-radius:999px;padding:7px 10px;box-shadow:0 10px 26px rgba(162,28,175,.22);
+        font-weight:850;font-size:11.5px;cursor:pointer;white-space:nowrap
       }
       .auro-guia-launcher.is-visible{display:flex}
-      .auro-guia-dot{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.18)}
+      .auro-guia-dot{width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.18)}
       @keyframes auroGuiaEntrada{from{opacity:0;transform:translateY(-7px) scale(.985)}to{opacity:1;transform:none}}
       @media(max-width:700px){
-        #${HOST_ID}{top:calc(env(safe-area-inset-top,0px) + 74px);right:10px;bottom:auto;width:min(360px,calc(100vw - 20px));max-height:calc(100vh - 96px)}
+        #${HOST_ID}{
+          top:calc(env(safe-area-inset-top,0px) + 74px);
+          right:10px;
+          bottom:auto;
+          width:min(360px,calc(100vw - 20px));
+          max-height:calc(100vh - 96px)
+        }
         .auro-guia-card{border-radius:16px}
         .auro-guia-top{padding:12px}
         .auro-guia-body{padding:11px 12px 12px}
+        .auro-guia-launcher{padding:8px 11px;font-size:12px}
       }
       @media(prefers-reduced-motion:reduce){.auro-guia-card{animation:none}}
     `;
@@ -161,17 +172,17 @@ CONTRATO ANTIRREGRESIVO
   function posicionPredeterminada(h){
     h.style.left='auto';
     h.style.bottom='auto';
-    h.style.right=window.matchMedia('(max-width:700px)').matches?'10px':'18px';
-    h.style.top=window.matchMedia('(max-width:700px)').matches
+    h.style.right=esMovil()?'10px':'18px';
+    h.style.top=esMovil()
       ?'calc(env(safe-area-inset-top,0px) + 74px)'
-      :'88px';
+      :'150px';
     posicionUsuario=null;
   }
 
   function limitarPosicion(h,left,top){
     const margen=8;
     const r=h.getBoundingClientRect();
-    const ancho=r.width||Math.min(380,window.innerWidth-20);
+    const ancho=r.width||Math.min(esMovil()?360:340,window.innerWidth-20);
     const alto=Math.min(r.height||80,window.innerHeight-(margen*2));
     return {
       left:Math.max(margen,Math.min(left,window.innerWidth-ancho-margen)),
@@ -294,7 +305,7 @@ CONTRATO ANTIRREGRESIVO
       r={id:clave,nodes,config:normalizar(config),expandida:false,oculta:false};
       activarArrastre(r);
       nodes.toggle.addEventListener('click',function(){r.expandida=!r.expandida;pintar(r);});
-      nodes.close.addEventListener('click',function(){r.oculta=true;pintar(r);});
+      nodes.close.addEventListener('click',function(){r.oculta=true;posicionPredeterminada(h);pintar(r);});
       nodes.launcher.addEventListener('click',function(){ocultarOtros(clave);activo=clave;r.oculta=false;posicionPredeterminada(h);pintar(r);});
       h.append(nodes.card,nodes.launcher);
       mounts.set(clave,r);
@@ -324,7 +335,7 @@ CONTRATO ANTIRREGRESIVO
   function ocultar(id){
     const r=mounts.get(texto(id,''));
     if(!r)return false;
-    r.oculta=true;pintar(r);return true;
+    r.oculta=true;posicionPredeterminada(host());pintar(r);return true;
   }
 
   function desmontar(id){
@@ -365,6 +376,7 @@ CONTRATO ANTIRREGRESIVO
           :'Abra la historia clínica del paciente para continuar.',
         detalle:'Este asistente orienta el flujo de trabajo. No crea historias clínicas, no inicia atenciones y no modifica información médica.',
         expandible:true,
+        expandida:false,
         ocultable:true
       });
     }catch(error){
@@ -372,7 +384,9 @@ CONTRATO ANTIRREGRESIVO
     }
   }
 
-  window.addEventListener('resize',function(){ if(posicionUsuario) aplicarPosicionUsuario(); });
+  window.addEventListener('resize',function(){
+    if(posicionUsuario) aplicarPosicionUsuario();
+  });
 
   window.addEventListener('aurosanax:guia-contexto',recibirContexto);
   window.addEventListener('aurosanax:paciente-confirmado',recibirPacienteConfirmado);
@@ -386,6 +400,7 @@ CONTRATO ANTIRREGRESIVO
       siguiente:'Seleccione el módulo en el que desea trabajar.',
       detalle:'La guía es únicamente visual y de orientación. No guarda, crea, firma, finaliza ni modifica información clínica.',
       expandible:true,
+      expandida:false,
       ocultable:true
     });
   }
