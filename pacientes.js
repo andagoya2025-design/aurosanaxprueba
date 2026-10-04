@@ -1195,6 +1195,35 @@ async function savePatient(){
        */
       await cargarPacientesDesdeSheets();
 
+      /*
+       * AUROSANAX GUÍA — EVENTO INFORMATIVO POST-CONFIRMACIÓN
+       * -----------------------------------------------------
+       * Se emite SOLO después de releer la fuente real.
+       * No crea, modifica ni abre Historia/Atención y no depende de guia.js.
+       * Si la guía no está cargada, Pacientes conserva exactamente su flujo.
+       */
+      const pacienteConfirmadoGuia = esEdicion
+        ? (Array.isArray(patients)
+            ? patients.find(function(p){
+                return String(p?.id_paciente || p?.id || '').trim() === String(editingPatientId || '').trim();
+              }) || null
+            : null)
+        : auroBuscarPacienteCreadoParaCita(null, pacienteSheet);
+
+      if(pacienteConfirmadoGuia && pacienteConfirmadoGuia.id_paciente){
+        try{
+          window.dispatchEvent(new CustomEvent('aurosanax:paciente-confirmado', {
+            detail:{
+              id_paciente:String(pacienteConfirmadoGuia.id_paciente || '').trim(),
+              operacion:esEdicion ? 'edicion' : 'alta',
+              origen:contextoAgenda && contextoAgenda.id_cita ? 'agenda' : 'pacientes'
+            }
+          }));
+        }catch(errorGuiaPaciente){
+          console.warn('AUROSANAX PACIENTES: no se pudo informar a la guía contextual.', errorGuiaPaciente);
+        }
+      }
+
       /* Solo Agenda: intenta vincular ESTA cita después de confirmar el
          paciente en la fuente real. El resto de guardados no entra aquí. */
       if(contextoAgenda && contextoAgenda.id_cita){
