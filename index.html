@@ -8096,14 +8096,24 @@ function auroHistoriaFormatearFechaPorModulo(valor, idModulo){
 }
 
 function auroHistoriaRegistroHistoriaActual(){
+  const idPacienteActual = String(
+    document.getElementById('hcPacienteSelect')?.value || ''
+  ).trim();
+
+  const perteneceAlPacienteActual = function(historia){
+    if(!historia || typeof historia !== 'object') return false;
+    const idPacienteHistoria = String(historia.id_paciente || '').trim();
+    return !!idPacienteActual && idPacienteHistoria === idPacienteActual;
+  };
+
   try{
-    if(window.historiaActual && typeof window.historiaActual === 'object'){
+    if(perteneceAlPacienteActual(window.historiaActual)){
       return window.historiaActual;
     }
   }catch(e){}
 
   try{
-    if(window.currentHistoria && typeof window.currentHistoria === 'object'){
+    if(perteneceAlPacienteActual(window.currentHistoria)){
       return window.currentHistoria;
     }
   }catch(e){}
