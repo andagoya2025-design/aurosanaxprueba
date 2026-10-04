@@ -1,22 +1,20 @@
 /*
 ======================================================================
 AUROSANAX — guia.js
-MOTOR DE GUÍA CONTEXTUAL / ASISTENTE AUROSANAX
-Versión 1.1.0 · motor visual + contrato central de eventos
+ASISTENTE CONTEXTUAL PREMIUM DEL ERP
+Versión 1.2.0 · flotante, ocultable, no clínico, no persistente
 ======================================================================
 
 CONTRATO ANTIRREGRESIVO
 - Presentación y capacitación únicamente.
 - NO guarda datos clínicos.
 - NO crea pacientes, historias, citas ni atenciones.
-- NO modifica id_paciente, id_historia, id_cita ni id_atencion.
-- NO realiza fetch, POST, consultas a Sheets ni llamadas de persistencia.
-- NO firma, NO finaliza atenciones, NO dispara botones propietarios.
-- NO reemplaza la lógica de Agenda, Pacientes, Historia, Atenciones o módulos clínicos.
-- Si este archivo falla o no carga, el ERP debe continuar funcionando.
-- Las ayudas ocupan espacio propio: no usan position:fixed ni superposición.
-- Diseñado para ser liviano, responsive y utilizable por toque, mouse y teclado.
-- Los módulos informan HECHOS ya confirmados; la guía solo los traduce a orientación.
+- NO modifica IDs clínicos.
+- NO realiza fetch, POST, consultas ni persistencia.
+- NO firma, NO finaliza atenciones y NO dispara botones propietarios.
+- Los módulos informan hechos ya confirmados; la guía solo orienta.
+- Si este archivo falla o no carga, el ERP conserva su flujo propietario.
+- Todo el CSS está encapsulado en auro-guia-*.
 ======================================================================
 */
 (function auroGuiaBootstrap(window, document){
@@ -25,214 +23,281 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION = '1.1.0';
-  const ROOT_CLASS = 'auro-guia';
-  const STYLE_ID = 'auroGuiaStyles';
-  const mounts = new Map();
+  const VERSION='1.2.0';
+  const STYLE_ID='auroGuiaStyles';
+  const HOST_ID='auroGuiaFloatingHost';
+  const mounts=new Map();
+  let activo='';
 
-  function texto(valor, fallback){
-    const t = String(valor == null ? '' : valor).trim();
-    return t || String(fallback || '').trim();
+  function texto(v,f){
+    const t=String(v==null?'':v).trim();
+    return t || String(f||'').trim();
   }
 
-  function tipo(valor){
-    const t = String(valor || 'info').trim().toLowerCase();
-    return ['info','ok','warning','neutral'].includes(t) ? t : 'info';
+  function tipo(v){
+    const t=String(v||'info').trim().toLowerCase();
+    return ['info','ok','warning','neutral'].includes(t)?t:'info';
   }
 
-  function normalizar(config){
-    const c = config && typeof config === 'object' ? config : {};
+  function normalizar(c){
+    c=c&&typeof c==='object'?c:{};
     return {
-      tipo: tipo(c.tipo),
-      titulo: texto(c.titulo, 'Asistente AUROSANAX'),
-      resumen: texto(c.resumen, ''),
-      detalle: texto(c.detalle, ''),
-      siguiente: texto(c.siguiente, ''),
-      expandible: c.expandible !== false,
-      expandida: c.expandida === true,
-      ocultable: c.ocultable !== false,
-      etiquetaAbrir: texto(c.etiquetaAbrir, 'Ver guía'),
-      etiquetaCerrar: texto(c.etiquetaCerrar, 'Ocultar guía')
+      tipo:tipo(c.tipo),
+      titulo:texto(c.titulo,'Asistente AUROSANAX'),
+      resumen:texto(c.resumen,''),
+      detalle:texto(c.detalle,''),
+      siguiente:texto(c.siguiente,''),
+      expandible:c.expandible!==false,
+      expandida:c.expandida===true,
+      ocultable:c.ocultable!==false,
+      etiquetaAbrir:texto(c.etiquetaAbrir,'Más información'),
+      etiquetaCerrar:texto(c.etiquetaCerrar,'Ver menos')
     };
   }
 
   function inyectarEstilos(){
     if(document.getElementById(STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
-      .${ROOT_CLASS}{
-        --auro-guia-bg:#fff;--auro-guia-border:rgba(15,23,42,.12);
-        --auro-guia-text:#172033;--auro-guia-muted:#5f6b7a;
-        --auro-guia-accent:#a21caf;--auro-guia-accent-soft:rgba(162,28,175,.08);
-        --auro-guia-ok:#16794b;--auro-guia-warning:#9a6700;
-        box-sizing:border-box;width:100%;min-width:0;margin:.65rem 0;
-        padding:.78rem .85rem;border:1px solid var(--auro-guia-border);
-        border-radius:14px;background:var(--auro-guia-bg);color:var(--auro-guia-text);
-        font:inherit;line-height:1.35;position:relative;overflow-wrap:anywhere;
-        word-break:normal;contain:layout style;
+    const s=document.createElement('style');
+    s.id=STYLE_ID;
+    s.textContent=`
+      #${HOST_ID}{
+        position:fixed;
+        top:88px;
+        right:18px;
+        z-index:2147482000;
+        width:min(380px,calc(100vw - 36px));
+        pointer-events:none;
+        font:inherit;
       }
-      .${ROOT_CLASS},.${ROOT_CLASS} *{box-sizing:border-box}
-      .${ROOT_CLASS}[hidden]{display:none!important}
-      .${ROOT_CLASS}__head{display:flex;align-items:flex-start;justify-content:space-between;gap:.65rem;min-width:0}
-      .${ROOT_CLASS}__copy{min-width:0;flex:1 1 auto}
-      .${ROOT_CLASS}__eyebrow{display:flex;align-items:center;gap:.4rem;margin:0 0 .18rem;font-size:.78rem;font-weight:700;color:var(--auro-guia-muted)}
-      .${ROOT_CLASS}__dot{width:.5rem;height:.5rem;border-radius:999px;flex:0 0 auto;background:var(--auro-guia-accent)}
-      .${ROOT_CLASS}[data-tipo="ok"] .${ROOT_CLASS}__dot{background:var(--auro-guia-ok)}
-      .${ROOT_CLASS}[data-tipo="warning"] .${ROOT_CLASS}__dot{background:var(--auro-guia-warning)}
-      .${ROOT_CLASS}[data-tipo="neutral"] .${ROOT_CLASS}__dot{background:var(--auro-guia-muted)}
-      .${ROOT_CLASS}__title{margin:0;font-size:.96rem;font-weight:750;line-height:1.25}
-      .${ROOT_CLASS}__summary{margin:.22rem 0 0;color:var(--auro-guia-muted);font-size:.9rem}
-      .${ROOT_CLASS}__next{margin:.55rem 0 0;padding:.5rem .62rem;border-radius:10px;background:var(--auro-guia-accent-soft);font-size:.88rem;font-weight:650}
-      .${ROOT_CLASS}__detail{margin:.6rem 0 0;padding-top:.6rem;border-top:1px solid var(--auro-guia-border);color:var(--auro-guia-muted);font-size:.88rem}
-      .${ROOT_CLASS}__actions{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.58rem}
-      .${ROOT_CLASS}__button{appearance:none;border:1px solid var(--auro-guia-border);background:#fff;color:var(--auro-guia-text);min-height:38px;padding:.42rem .68rem;border-radius:9px;font:inherit;font-size:.84rem;font-weight:650;cursor:pointer;touch-action:manipulation}
-      .${ROOT_CLASS}__button:focus-visible{outline:3px solid rgba(162,28,175,.2);outline-offset:2px}
-      .${ROOT_CLASS}__button--quiet{color:var(--auro-guia-muted)}
-      @media(max-width:480px){
-        .${ROOT_CLASS}{margin:.55rem 0;padding:.72rem;border-radius:12px}
-        .${ROOT_CLASS}__head{gap:.45rem}
-        .${ROOT_CLASS}__title{font-size:.94rem}
-        .${ROOT_CLASS}__summary,.${ROOT_CLASS}__detail,.${ROOT_CLASS}__next{font-size:.87rem}
-        .${ROOT_CLASS}__actions{display:grid;grid-template-columns:minmax(0,1fr)}
-        .${ROOT_CLASS}__button{width:100%;min-height:44px;text-align:center}
+      .auro-guia-card,.auro-guia-launcher{box-sizing:border-box;font:inherit}
+      .auro-guia-card{
+        pointer-events:auto;
+        width:100%;
+        color:#172033;
+        background:linear-gradient(145deg,#ffffff 0%,#fff7fd 100%);
+        border:1px solid rgba(217,70,239,.34);
+        border-radius:18px;
+        box-shadow:0 18px 55px rgba(76,29,149,.20),0 5px 18px rgba(162,28,175,.13);
+        overflow:hidden;
+        animation:auroGuiaEntrada .22s ease-out;
       }
-      @media(prefers-reduced-motion:reduce){
-        .${ROOT_CLASS},.${ROOT_CLASS} *{scroll-behavior:auto!important;transition:none!important;animation:none!important}
-      }`;
-    document.head.appendChild(style);
+      .auro-guia-card[data-tipo="ok"]{border-color:rgba(16,185,129,.48)}
+      .auro-guia-card[data-tipo="warning"]{border-color:rgba(245,158,11,.55)}
+      .auro-guia-top{
+        display:flex;align-items:flex-start;gap:10px;
+        padding:14px 14px 11px;
+        background:linear-gradient(120deg,rgba(192,38,211,.13),rgba(236,72,153,.08));
+      }
+      .auro-guia-icon{
+        width:34px;height:34px;flex:0 0 34px;border-radius:11px;
+        display:grid;place-items:center;
+        background:linear-gradient(135deg,#c026d3,#ec4899);
+        color:#fff;font-weight:900;box-shadow:0 7px 18px rgba(192,38,211,.28);
+      }
+      .auro-guia-card[data-tipo="ok"] .auro-guia-icon{background:linear-gradient(135deg,#059669,#10b981)}
+      .auro-guia-copy{min-width:0;flex:1}
+      .auro-guia-brand{font-size:11px;font-weight:900;letter-spacing:.055em;text-transform:uppercase;color:#9d174d}
+      .auro-guia-title{margin:2px 0 0;font-size:16px;font-weight:850;line-height:1.2;color:#3b174f}
+      .auro-guia-close{
+        pointer-events:auto;appearance:none;border:0;background:rgba(255,255,255,.82);
+        color:#6b7280;width:32px;height:32px;border-radius:10px;cursor:pointer;
+        font-size:20px;line-height:1;display:grid;place-items:center;
+      }
+      .auro-guia-close:hover{background:#fff;color:#831843}
+      .auro-guia-body{padding:12px 14px 14px}
+      .auro-guia-summary{margin:0;color:#4b5563;font-size:13.5px;line-height:1.45}
+      .auro-guia-next{
+        margin:10px 0 0;padding:10px 11px;border-radius:12px;
+        background:linear-gradient(135deg,rgba(217,70,239,.12),rgba(236,72,153,.09));
+        color:#701a75;font-size:13.5px;font-weight:800;line-height:1.35
+      }
+      .auro-guia-detail{
+        margin:10px 0 0;padding-top:10px;border-top:1px solid rgba(148,163,184,.22);
+        color:#64748b;font-size:12.5px;line-height:1.45
+      }
+      .auro-guia-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}
+      .auro-guia-btn{
+        appearance:none;border:1px solid rgba(192,38,211,.24);background:#fff;color:#86198f;
+        min-height:36px;padding:7px 11px;border-radius:10px;font:inherit;font-size:12.5px;
+        font-weight:800;cursor:pointer
+      }
+      .auro-guia-btn:hover{background:#fdf4ff}
+      .auro-guia-launcher{
+        pointer-events:auto;margin-left:auto;display:none;align-items:center;gap:7px;
+        border:1px solid rgba(217,70,239,.38);background:linear-gradient(135deg,#c026d3,#ec4899);
+        color:#fff;border-radius:999px;padding:9px 13px;box-shadow:0 12px 32px rgba(162,28,175,.24);
+        font-weight:850;font-size:12.5px;cursor:pointer
+      }
+      .auro-guia-launcher.is-visible{display:flex}
+      .auro-guia-dot{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.18)}
+      @keyframes auroGuiaEntrada{from{opacity:0;transform:translateY(-7px) scale(.985)}to{opacity:1;transform:none}}
+      @media(max-width:700px){
+        #${HOST_ID}{top:auto;right:10px;bottom:12px;width:min(360px,calc(100vw - 20px))}
+        .auro-guia-card{border-radius:16px}
+        .auro-guia-top{padding:12px}
+        .auro-guia-body{padding:11px 12px 12px}
+      }
+      @media(prefers-reduced-motion:reduce){.auro-guia-card{animation:none}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function host(){
+    inyectarEstilos();
+    let h=document.getElementById(HOST_ID);
+    if(!h){
+      h=document.createElement('div');
+      h.id=HOST_ID;
+      h.setAttribute('aria-live','polite');
+      document.body.appendChild(h);
+    }
+    return h;
   }
 
   function crearNodo(id){
-    const root=document.createElement('section');
-    root.className=ROOT_CLASS;
-    root.dataset.auroGuiaId=id;
-    root.setAttribute('aria-label','Asistente AUROSANAX');
+    const card=document.createElement('section');
+    card.className='auro-guia-card';
+    card.dataset.auroGuiaId=id;
+    card.setAttribute('aria-label','Asistente AUROSANAX');
 
-    const head=document.createElement('div'); head.className=`${ROOT_CLASS}__head`;
-    const copy=document.createElement('div'); copy.className=`${ROOT_CLASS}__copy`;
-    const eyebrow=document.createElement('div'); eyebrow.className=`${ROOT_CLASS}__eyebrow`;
-    const dot=document.createElement('span'); dot.className=`${ROOT_CLASS}__dot`; dot.setAttribute('aria-hidden','true');
-    const brand=document.createElement('span'); brand.textContent='Asistente AUROSANAX';
-    eyebrow.append(dot,brand);
+    const top=document.createElement('div'); top.className='auro-guia-top';
+    const icon=document.createElement('div'); icon.className='auro-guia-icon'; icon.textContent='A';
+    const copy=document.createElement('div'); copy.className='auro-guia-copy';
+    const brand=document.createElement('div'); brand.className='auro-guia-brand'; brand.textContent='Asistente AUROSANAX';
+    const title=document.createElement('h3'); title.className='auro-guia-title';
+    const close=document.createElement('button'); close.type='button'; close.className='auro-guia-close'; close.setAttribute('aria-label','Ocultar asistente'); close.textContent='×';
+    copy.append(brand,title); top.append(icon,copy,close);
 
-    const title=document.createElement('h3'); title.className=`${ROOT_CLASS}__title`;
-    const summary=document.createElement('p'); summary.className=`${ROOT_CLASS}__summary`;
-    const next=document.createElement('div'); next.className=`${ROOT_CLASS}__next`;
-    const detail=document.createElement('div'); detail.className=`${ROOT_CLASS}__detail`;
-    const actions=document.createElement('div'); actions.className=`${ROOT_CLASS}__actions`;
-    const toggle=document.createElement('button'); toggle.type='button'; toggle.className=`${ROOT_CLASS}__button`; toggle.setAttribute('aria-expanded','false');
-    const hide=document.createElement('button'); hide.type='button'; hide.className=`${ROOT_CLASS}__button ${ROOT_CLASS}__button--quiet`; hide.textContent='Ocultar';
+    const body=document.createElement('div'); body.className='auro-guia-body';
+    const summary=document.createElement('p'); summary.className='auro-guia-summary';
+    const next=document.createElement('div'); next.className='auro-guia-next';
+    const detail=document.createElement('div'); detail.className='auro-guia-detail';
+    const actions=document.createElement('div'); actions.className='auro-guia-actions';
+    const toggle=document.createElement('button'); toggle.type='button'; toggle.className='auro-guia-btn'; toggle.setAttribute('aria-expanded','false');
+    actions.append(toggle); body.append(summary,next,detail,actions);
+    card.append(top,body);
 
-    actions.append(toggle,hide);
-    copy.append(eyebrow,title,summary,next,detail,actions);
-    head.append(copy); root.append(head);
-    return {root,title,summary,next,detail,actions,toggle,hide};
+    const launcher=document.createElement('button');
+    launcher.type='button';
+    launcher.className='auro-guia-launcher';
+    launcher.innerHTML='<span class="auro-guia-dot" aria-hidden="true"></span><span>Asistente AUROSANAX</span>';
+    launcher.setAttribute('aria-label','Mostrar Asistente AUROSANAX');
+
+    return {card,title,summary,next,detail,actions,toggle,close,launcher};
   }
 
-  function resolverContenedor(contenedor){
-    if(typeof contenedor==='string'){
-      try{return document.querySelector(contenedor);}catch(_e){return null;}
-    }
-    return contenedor && contenedor.nodeType===1 ? contenedor : null;
+  function ocultarOtros(id){
+    mounts.forEach(function(r,k){
+      if(k!==id){
+        r.nodes.card.style.display='none';
+        r.nodes.launcher.classList.remove('is-visible');
+      }
+    });
   }
 
   function pintar(r){
     const c=r.config,n=r.nodes;
-    n.root.dataset.tipo=c.tipo;
+    n.card.dataset.tipo=c.tipo;
     n.title.textContent=c.titulo;
     n.summary.textContent=c.resumen; n.summary.hidden=!c.resumen;
-    n.next.textContent=c.siguiente ? `Siguiente paso: ${c.siguiente}` : ''; n.next.hidden=!c.siguiente;
+    n.next.textContent=c.siguiente?'Siguiente paso: '+c.siguiente:''; n.next.hidden=!c.siguiente;
     n.detail.textContent=c.detalle; n.detail.hidden=!c.detalle || !r.expandida;
-    n.toggle.textContent=r.expandida ? c.etiquetaCerrar : c.etiquetaAbrir;
+    n.toggle.textContent=r.expandida?c.etiquetaCerrar:c.etiquetaAbrir;
     n.toggle.setAttribute('aria-expanded',r.expandida?'true':'false');
     n.toggle.hidden=!c.expandible || !c.detalle;
-    n.hide.hidden=!c.ocultable;
-    n.actions.hidden=n.toggle.hidden && n.hide.hidden;
-    n.root.hidden=r.oculta===true;
+    n.actions.hidden=n.toggle.hidden;
+
+    if(r.oculta){
+      n.card.style.display='none';
+      n.launcher.classList.add('is-visible');
+    }else{
+      n.card.style.display='';
+      n.launcher.classList.remove('is-visible');
+    }
   }
 
-  function montar(id,contenedor,config){
+  function montar(id,_contenedor,config){
     const clave=texto(id,'');
-    const destino=resolverContenedor(contenedor);
-    if(!clave || !destino) return null;
-    inyectarEstilos();
+    if(!clave) return null;
+    const h=host();
+    ocultarOtros(clave);
+    activo=clave;
 
     let r=mounts.get(clave);
-    if(r && r.nodes.root && r.nodes.root.isConnected){
-      if(r.nodes.root.parentElement!==destino) destino.appendChild(r.nodes.root);
-      r.config=normalizar(config); r.expandida=r.config.expandida; r.oculta=false; pintar(r);
-      return r.nodes.root;
+    if(!r){
+      const nodes=crearNodo(clave);
+      r={id:clave,nodes,config:normalizar(config),expandida:false,oculta:false};
+      nodes.toggle.addEventListener('click',function(){r.expandida=!r.expandida;pintar(r);});
+      nodes.close.addEventListener('click',function(){r.oculta=true;pintar(r);});
+      nodes.launcher.addEventListener('click',function(){ocultarOtros(clave);activo=clave;r.oculta=false;pintar(r);});
+      h.append(nodes.card,nodes.launcher);
+      mounts.set(clave,r);
+    }else{
+      r.config=normalizar(config);
+      r.expandida=r.config.expandida;
+      r.oculta=false;
     }
-
-    const nodes=crearNodo(clave);
-    r={id:clave,nodes,config:normalizar(config),expandida:false,oculta:false};
-    r.expandida=r.config.expandida;
-    nodes.toggle.addEventListener('click',function(){r.expandida=!r.expandida;pintar(r);});
-    nodes.hide.addEventListener('click',function(){r.oculta=true;pintar(r);});
-    destino.appendChild(nodes.root); mounts.set(clave,r); pintar(r);
-    return nodes.root;
+    pintar(r);
+    return r.nodes.card;
   }
 
   function actualizar(id,config){
     const r=mounts.get(texto(id,''));
     if(!r) return false;
+    ocultarOtros(r.id); activo=r.id;
     r.config=normalizar(Object.assign({},r.config,config||{}));
-    r.oculta=false; pintar(r); return true;
+    r.oculta=false;pintar(r);return true;
   }
 
-  function mostrar(id){const r=mounts.get(texto(id,''));if(!r)return false;r.oculta=false;pintar(r);return true;}
-  function ocultar(id){const r=mounts.get(texto(id,''));if(!r)return false;r.oculta=true;pintar(r);return true;}
+  function mostrar(id){
+    const r=mounts.get(texto(id,''));
+    if(!r)return false;
+    ocultarOtros(r.id);activo=r.id;r.oculta=false;pintar(r);return true;
+  }
+
+  function ocultar(id){
+    const r=mounts.get(texto(id,''));
+    if(!r)return false;
+    r.oculta=true;pintar(r);return true;
+  }
+
   function desmontar(id){
     const clave=texto(id,''),r=mounts.get(clave);
     if(!r)return false;
-    if(r.nodes.root&&r.nodes.root.parentNode)r.nodes.root.parentNode.removeChild(r.nodes.root);
-    mounts.delete(clave);return true;
+    r.nodes.card.remove();r.nodes.launcher.remove();mounts.delete(clave);
+    if(activo===clave) activo='';
+    return true;
   }
 
-  /*
-   * CONTRATO CENTRAL PARA TODO EL ERP.
-   * Cualquier módulo puede informar un hecho ya confirmado mediante
-   * aurosanax:guia-contexto. La guía solo pinta; nunca ejecuta la acción.
-   */
   function recibirContexto(evento){
     try{
-      const d=evento && evento.detail && typeof evento.detail==='object' ? evento.detail : {};
+      const d=evento&&evento.detail&&typeof evento.detail==='object'?evento.detail:{};
       const id=texto(d.id,'');
-      const contenedor=d.contenedor;
-      if(!id || !contenedor) return;
-      montar(id,contenedor,d.config||{});
+      if(!id)return;
+      montar(id,null,d.config||{});
     }catch(error){
       console.warn('AUROSANAX GUÍA: contexto ignorado de forma segura.',error);
     }
   }
 
-  /*
-   * PRIMER CONECTOR: PACIENTES.
-   * Solo responde a la confirmación post-relectura emitida por pacientes.js.
-   */
   function recibirPacienteConfirmado(evento){
     try{
-      const d=evento && evento.detail && typeof evento.detail==='object' ? evento.detail : {};
-      const idPaciente=texto(d.id_paciente,'');
-      if(!idPaciente) return;
-
-      const pantalla=document.getElementById('pacientes');
-      if(!pantalla) return;
+      const d=evento&&evento.detail&&typeof evento.detail==='object'?evento.detail:{};
+      if(!texto(d.id_paciente,''))return;
 
       const esEdicion=String(d.operacion||'')==='edicion';
       const desdeAgenda=String(d.origen||'')==='agenda';
 
-      montar('pacientes',pantalla,{
+      montar('pacientes',null,{
         tipo:'ok',
-        titulo:esEdicion ? 'Paciente actualizado' : 'Paciente registrado',
+        titulo:esEdicion?'Paciente actualizado':'Paciente registrado',
         resumen:esEdicion
-          ? 'Los datos del paciente fueron confirmados en la fuente del ERP.'
-          : 'El paciente fue confirmado en la fuente del ERP.',
+          ?'Los cambios fueron confirmados en la base de datos clínica AUROSANAX.'
+          :'El nuevo paciente fue confirmado correctamente en la base de datos clínica AUROSANAX.',
         siguiente:desdeAgenda
-          ? 'Regrese a Agenda y continúe con el flujo de la cita.'
-          : 'Abra la historia clínica del paciente para continuar.',
-        detalle:'La guía es informativa: no crea Historia Clínica, no inicia Atención y no modifica datos clínicos.',
+          ?'Continúe el flujo de la cita desde Agenda.'
+          :'Abra la historia clínica del paciente para continuar.',
+        detalle:'Este asistente orienta el flujo de trabajo. No crea historias clínicas, no inicia atenciones y no modifica información médica.',
         expandible:true,
         ocultable:true
       });
@@ -247,11 +312,7 @@ CONTRATO ANTIRREGRESIVO
   window.AurosanaxGuia=Object.freeze({
     __auroGuiaMotor:true,
     version:VERSION,
-    montar,
-    actualizar,
-    mostrar,
-    ocultar,
-    desmontar
+    montar,actualizar,mostrar,ocultar,desmontar
   });
 
 })(window,document);
