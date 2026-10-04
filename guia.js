@@ -2,7 +2,7 @@
 ======================================================================
 AUROSANAX — guia.js
 ASISTENTE CONTEXTUAL PREMIUM DEL ERP
-Versión 1.3.2 · avatar compacto final · antirregresivo
+Versión 1.3.3 · robot móvil · antirregresivo
 ======================================================================
 
 CONTRATO ANTIRREGRESIVO
@@ -23,7 +23,7 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.3.2';
+  const VERSION='1.3.3';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
@@ -108,12 +108,14 @@ CONTRATO ANTIRREGRESIVO
         pointer-events:auto;display:none;margin-left:auto;width:46px;height:46px;padding:0;
         align-items:center;justify-content:center;border:1px solid rgba(217,70,239,.42);
         background:linear-gradient(135deg,#a21caf,#ec4899);color:#fff;border-radius:50%;
-        box-shadow:0 10px 28px rgba(162,28,175,.27);font-weight:900;font-size:17px;cursor:pointer;
+        box-shadow:0 10px 28px rgba(162,28,175,.27);cursor:grab;
         touch-action:none;user-select:none;-webkit-user-select:none
       }
       .auro-guia-launcher.is-visible{display:flex}
+      .auro-guia-launcher:active{cursor:grabbing}
       .auro-guia-launcher:hover{transform:translateY(-1px);box-shadow:0 13px 32px rgba(162,28,175,.31)}
-      .auro-guia-launcher-mark{line-height:1}
+      .auro-guia-robot{width:29px;height:29px;display:block;pointer-events:none}
+      .auro-guia-robot *{pointer-events:none}
       @keyframes auroGuiaEntrada{from{opacity:0;transform:translateY(-7px) scale(.985)}to{opacity:1;transform:none}}
 
       @media(max-width:700px){
@@ -184,6 +186,61 @@ CONTRATO ANTIRREGRESIVO
     asa.addEventListener('pointerup',terminar); asa.addEventListener('pointercancel',terminar);
   }
 
+
+  function activarArrastreLauncher(r){
+    const launcher=r.nodes.launcher;
+    if(!launcher || launcher.dataset.auroDrag==='1')return;
+    launcher.dataset.auroDrag='1';
+    let drag=null;
+    const UMBRAL=6;
+
+    launcher.addEventListener('pointerdown',function(e){
+      if(e.button!=null && e.button!==0)return;
+      const h=host(), rect=h.getBoundingClientRect();
+      drag={
+        id:e.pointerId,
+        inicioX:e.clientX,
+        inicioY:e.clientY,
+        dx:e.clientX-rect.left,
+        dy:e.clientY-rect.top,
+        movido:false
+      };
+      try{launcher.setPointerCapture(e.pointerId);}catch(_e){}
+      e.preventDefault();
+    });
+
+    launcher.addEventListener('pointermove',function(e){
+      if(!drag || drag.id!==e.pointerId)return;
+      if(!drag.movido && (Math.abs(e.clientX-drag.inicioX)>=UMBRAL || Math.abs(e.clientY-drag.inicioY)>=UMBRAL)){
+        drag.movido=true;
+      }
+      if(!drag.movido)return;
+      const h=host(), p=limitarPosicion(h,e.clientX-drag.dx,e.clientY-drag.dy);
+      h.style.right='auto';h.style.bottom='auto';
+      h.style.left=p.left+'px';h.style.top=p.top+'px';
+      posicionUsuario=p;
+      e.preventDefault();
+    });
+
+    function terminar(e){
+      if(!drag || (e.pointerId!=null && drag.id!==e.pointerId))return;
+      const fueArrastre=drag.movido;
+      drag=null;
+      if(!fueArrastre){
+        ocultarOtros(r.id);
+        activo=r.id;
+        r.oculta=false;
+        posicionPredeterminada(host());
+        pintar(r);
+      }
+      if(e && e.preventDefault)e.preventDefault();
+    }
+
+    launcher.addEventListener('pointerup',terminar);
+    launcher.addEventListener('pointercancel',function(){drag=null;});
+    launcher.addEventListener('click',function(e){e.preventDefault();});
+  }
+
   function crearNodo(id){
     const card=document.createElement('section'); card.className='auro-guia-card'; card.dataset.auroGuiaId=id; card.setAttribute('aria-label','Asistente AUROSANAX');
     const top=document.createElement('div'); top.className='auro-guia-top';
@@ -204,8 +261,8 @@ CONTRATO ANTIRREGRESIVO
 
     const launcher=document.createElement('button');
     launcher.type='button'; launcher.className='auro-guia-launcher';
-    launcher.innerHTML='<span class="auro-guia-launcher-mark" aria-hidden="true">A</span>';
-    launcher.setAttribute('aria-label','Abrir Asistente AUROSANAX');
+    launcher.innerHTML='<svg class="auro-guia-robot" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5V2.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="2.5" r="1.5" fill="currentColor"/><rect x="6" y="7" width="20" height="17" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="15" r="2" fill="currentColor"/><circle cx="20" cy="15" r="2" fill="currentColor"/><path d="M11.5 20c1.2 1 2.7 1.5 4.5 1.5s3.3-.5 4.5-1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 14H3.5v5H6M26 14h2.5v5H26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    launcher.setAttribute('aria-label','Abrir o mover Asistente AUROSANAX');
     launcher.setAttribute('title','Asistente AUROSANAX');
     return {card,title,summary,next,detail,actions,toggle,close,launcher};
   }
@@ -237,9 +294,9 @@ CONTRATO ANTIRREGRESIVO
       const nodes=crearNodo(clave);
       r={id:clave,nodes,config:normalizar(config),expandida:false,oculta:false};
       activarArrastre(r);
+      activarArrastreLauncher(r);
       nodes.toggle.addEventListener('click',function(){r.expandida=!r.expandida;pintar(r);});
       nodes.close.addEventListener('click',function(){r.oculta=true;posicionPredeterminada(h);pintar(r);});
-      nodes.launcher.addEventListener('click',function(){ocultarOtros(clave);activo=clave;r.oculta=false;posicionPredeterminada(h);pintar(r);});
       h.append(nodes.card,nodes.launcher);mounts.set(clave,r);
     }else{
       r.config=normalizar(config);r.expandida=r.config.expandida;r.oculta=false;
