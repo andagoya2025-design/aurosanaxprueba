@@ -3072,13 +3072,12 @@
       return {success:true, modo:'edicion', id_receta:idExistente};
     }
 
-    /* Segundo clic: guarda la corrección de la MISMA receta. */
-    if(typeof window.sincronizarPlanConReceta === 'function'){
-      window.sincronizarPlanConReceta();
-    }else if(typeof sincronizarPlanConReceta === 'function'){
-      sincronizarPlanConReceta();
-    }
-
+    /*
+      Segundo clic: guarda la corrección de la MISMA receta.
+      La receta en edición es la fuente de verdad en este punto:
+      no se resincroniza desde Plan antes de guardar para no sobrescribir
+      los medicamentos que el profesional acaba de corregir en Recetas.
+    */
     auroRecetaEditorRenderDesdeCampo(true);
     const resultado = await window.guardarRecetaERP();
 
