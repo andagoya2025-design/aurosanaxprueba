@@ -209,7 +209,7 @@
       font-weight:900;
     }
 
-    .auro-patient-context.auro-patient-context-mobile{
+    .auro-patient-context-mobile{
       display:none;
     }
 
@@ -8096,24 +8096,14 @@ function auroHistoriaFormatearFechaPorModulo(valor, idModulo){
 }
 
 function auroHistoriaRegistroHistoriaActual(){
-  const idPacienteActual = String(
-    document.getElementById('hcPacienteSelect')?.value || ''
-  ).trim();
-
-  const perteneceAlPacienteActual = function(historia){
-    if(!historia || typeof historia !== 'object') return false;
-    const idPacienteHistoria = String(historia.id_paciente || '').trim();
-    return !!idPacienteActual && idPacienteHistoria === idPacienteActual;
-  };
-
   try{
-    if(perteneceAlPacienteActual(window.historiaActual)){
+    if(window.historiaActual && typeof window.historiaActual === 'object'){
       return window.historiaActual;
     }
   }catch(e){}
 
   try{
-    if(perteneceAlPacienteActual(window.currentHistoria)){
+    if(window.currentHistoria && typeof window.currentHistoria === 'object'){
       return window.currentHistoria;
     }
   }catch(e){}
@@ -9380,7 +9370,8 @@ async function guardarHistoriaClinicaERP(){
         {
           detail: {
             id_historia: editingHistoryId,
-            id_paciente: idPaciente
+            id_paciente: idPaciente,
+            operacion: esEdicion ? 'edicion' : 'alta'
           }
         }
       ));
