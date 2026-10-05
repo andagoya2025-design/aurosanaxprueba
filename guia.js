@@ -23,7 +23,7 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.3.6';
+  const VERSION='1.3.7';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
@@ -536,6 +536,58 @@ CONTRATO ANTIRREGRESIVO
     observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
   }
 
+  /* ============================================================
+     AUROSANAX GUÍA 1.3.7 — ORIENTACIÓN AL ENTRAR A DIAGNÓSTICO
+     - Solo observa el DOM y el contexto ya disponible en el ERP.
+     - NO consulta backend, NO guarda y NO modifica datos clínicos.
+     - NO agrega CIE-10, NO aplica protocolos y NO dispara botones.
+  ============================================================ */
+  let diagnosticoPantallaActivaAnterior=false;
+
+  function orientarEntradaDiagnostico(){
+    try{
+      if(preferencias.activa===false)return;
+      const pantalla=document.getElementById('hc_diagnostico');
+      if(!pantalla || !pantalla.classList.contains('active'))return;
+
+      const seleccionados=document.getElementById('hcDxSeleccionadosBody');
+      const tieneDiagnostico=!!(seleccionados && seleccionados.querySelector('tr') && !seleccionados.querySelector('.diagnostico-empty'));
+
+      montar('diagnostico',null,{
+        tipo:tieneDiagnostico?'ok':'info',
+        titulo:tieneDiagnostico?'Diagnóstico en revisión':'Asistente de Diagnóstico',
+        resumen:tieneDiagnostico
+          ?'Hay al menos un diagnóstico CIE-10 visible en esta atención. Revise el diagnóstico y el protocolo sugerido antes de continuar.'
+          :'Revise la información clínica registrada y utilice el buscador CIE-10 para agregar el diagnóstico que corresponda.',
+        siguiente:tieneDiagnostico
+          ?'Confirme los cambios del diagnóstico y continúe con Plan únicamente cuando corresponda.'
+          :'Busque por código o nombre, agregue el CIE-10 correspondiente y confirme el diagnóstico.',
+        detalle:'El asistente solo orienta: no agrega diagnósticos, no guarda cambios, no aplica protocolos y no modifica Plan ni Recetas.',
+        expandible:true,expandida:false,ocultable:true
+      });
+    }catch(error){console.warn('AUROSANAX GUÍA: no se pudo mostrar la orientación de Diagnóstico.',error);}
+  }
+
+  function observarEntradaDiagnostico(){
+    const pantalla=document.getElementById('hc_diagnostico');
+    if(!pantalla)return;
+    diagnosticoPantallaActivaAnterior=pantalla.classList.contains('active');
+    const observer=new MutationObserver(function(){
+      const activaAhora=pantalla.classList.contains('active');
+      if(activaAhora && !diagnosticoPantallaActivaAnterior) window.setTimeout(orientarEntradaDiagnostico,180);
+      diagnosticoPantallaActivaAnterior=activaAhora;
+    });
+    observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
+  }
+
+  function refrescarGuiaDiagnosticoSiActiva(){
+    const pantalla=document.getElementById('hc_diagnostico');
+    if(!pantalla || !pantalla.classList.contains('active'))return;
+    window.setTimeout(orientarEntradaDiagnostico,120);
+  }
+
+  window.addEventListener('aurosanax:diagnosticos-actualizados',refrescarGuiaDiagnosticoSiActiva);
+
   window.addEventListener('resize',function(){if(posicionUsuario)aplicarPosicionUsuario();});
   window.addEventListener('aurosanax:guia-contexto',recibirContexto);
   window.addEventListener('aurosanax:paciente-confirmado',recibirPacienteConfirmado);
@@ -562,11 +614,13 @@ CONTRATO ANTIRREGRESIVO
     document.addEventListener('DOMContentLoaded',function(){
       asegurarAsistenteDisponible();
       observarEntradaHistoria();
+      observarEntradaDiagnostico();
     },{once:true});
   }else{
     setTimeout(function(){
       asegurarAsistenteDisponible();
       observarEntradaHistoria();
+      observarEntradaDiagnostico();
     },0);
   }
 
