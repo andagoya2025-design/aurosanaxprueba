@@ -23,7 +23,7 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.3.8';
+  const VERSION='1.3.9';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
@@ -537,12 +537,50 @@ CONTRATO ANTIRREGRESIVO
   }
 
   /* ============================================================
-     AUROSANAX GUÍA 1.3.7 — ORIENTACIÓN AL ENTRAR A DIAGNÓSTICO
-     - Solo observa el DOM y el contexto ya disponible en el ERP.
-     - NO consulta backend, NO guarda y NO modifica datos clínicos.
-     - NO agrega CIE-10, NO aplica protocolos y NO dispara botones.
+     AUROSANAX GUÍA 1.3.9 — DIAGNÓSTICO CONTEXTUAL ANTIRREGRESIVO
+     - SOLO LECTURA / ORIENTACIÓN.
+     - Lee exclusivamente estado público y DOM ya renderizado por Diagnóstico.
+     - El guardado confirmado se reconoce SOLO por el evento propietario
+       aurosanax:diagnostico-abierto-guardado.
+     - NO consulta backend, NO guarda, NO agrega CIE-10, NO aplica protocolos,
+       NO dispara botones y NO modifica Plan ni Recetas.
   ============================================================ */
   let diagnosticoPantallaActivaAnterior=false;
+  let diagnosticoObserverEstado=null;
+  let diagnosticoRefrescoPendiente=null;
+  const diagnosticoConfirmadosPorAtencion=new Map();
+
+  function estadoPublicoDiagnostico(){
+    try{
+      return window.auroDiagnosticos && typeof window.auroDiagnosticos.obtenerEstado==='function'
+        ? (window.auroDiagnosticos.obtenerEstado()||{}) : {};
+    }catch(_e){ return {}; }
+  }
+
+  function contextoVisualDiagnostico(){
+    const estado=estadoPublicoDiagnostico();
+    const idAtencion=texto(estado.atencionActual || window.auroAtencionSeleccionadaId || '','');
+    const diagnosticos=Array.isArray(estado.diagnosticos)?estado.diagnosticos:[];
+    const contexto=document.getElementById('auroDxContextoSuperior');
+    const contextoTexto=texto(contexto&&contexto.textContent,'').toLowerCase();
+    const historica=contextoTexto.includes('consulta histórica') || contextoTexto.includes('solo lectura');
+    return {
+      estado,
+      idAtencion,
+      diagnosticos,
+      total:diagnosticos.length,
+      editando:estado.edicionDiagnosticoAbierto===true,
+      correccionHistorica:estado.correccionClinicaActiva===true,
+      historica
+    };
+  }
+
+  function recordarDiagnosticoConfirmado(ctx){
+    if(!ctx || !ctx.idAtencion || ctx.editando || ctx.correccionHistorica)return;
+    if(!diagnosticoConfirmadosPorAtencion.has(ctx.idAtencion)){
+      diagnosticoConfirmadosPorAtencion.set(ctx.idAtencion,ctx.total);
+    }
+  }
 
   function orientarEntradaDiagnostico(){
     try{
@@ -550,47 +588,79 @@ CONTRATO ANTIRREGRESIVO
       const pantalla=document.getElementById('hc_diagnostico');
       if(!pantalla || !pantalla.classList.contains('active'))return;
 
-      const seleccionados=document.getElementById('hcDxSeleccionadosBody');
-      const tieneDiagnostico=!!(seleccionados && seleccionados.querySelector('tr') && !seleccionados.querySelector('.diagnostico-empty'));
+      const ctx=contextoVisualDiagnostico();
+      recordarDiagnosticoConfirmado(ctx);
+
+      if(ctx.historica){
+        montar('diagnostico',null,{
+          tipo:ctx.correccionHistorica?'warning':'neutral',
+          titulo:ctx.correccionHistorica?'Corrección diagnóstica habilitada':'Diagnóstico histórico · Solo lectura',
+          resumen:ctx.correccionHistorica
+            ?'Está trabajando sobre una corrección clínica de una atención finalizada. El diagnóstico original permanece protegido hasta confirmar la corrección.'
+            :'Esta atención está finalizada y su diagnóstico se encuentra protegido en modo de solo lectura.',
+          siguiente:ctx.correccionHistorica
+            ?'Revise cuidadosamente los cambios y utilice “Guardar corrección” únicamente cuando corresponda.'
+            :'Revise la información registrada. Para modificarla debe utilizar el flujo protegido de corrección clínica.',
+          detalle:'El asistente solo orienta y no habilita correcciones, no guarda y no modifica información clínica.',
+          expandible:true,expandida:false,ocultable:true
+        });
+        return;
+      }
+
+      if(ctx.editando){
+        montar('diagnostico',null,{
+          tipo:'warning',
+          titulo:'Diagnóstico en edición',
+          resumen:'Hay cambios de diagnóstico en preparación. Agregar, modificar o eliminar un CIE-10 todavía no significa que el cambio esté guardado.',
+          siguiente:'Revise los CIE-10 y, para confirmarlos, utilice “Guardar cambios del diagnóstico”, ubicado en la parte superior del módulo.',
+          detalle:'Hasta recibir la confirmación del guardado, el asistente no presenta estos cambios como persistidos. También puede cancelar la edición para restaurar el diagnóstico guardado.',
+          expandible:true,expandida:false,ocultable:true
+        });
+        return;
+      }
 
       montar('diagnostico',null,{
-        tipo:tieneDiagnostico?'ok':'info',
-        titulo:tieneDiagnostico?'Diagnóstico en revisión':'Asistente de Diagnóstico',
-        resumen:tieneDiagnostico
-          ?'Hay al menos un diagnóstico CIE-10 visible en esta atención. Revise el diagnóstico y el protocolo sugerido antes de continuar.'
-          :'Revise la información clínica registrada y utilice el buscador CIE-10 para agregar el diagnóstico que corresponda.',
-        siguiente:tieneDiagnostico
-          ?'Confirme los cambios del diagnóstico y continúe con Plan únicamente cuando corresponda.'
-          :'Busque por código o nombre, agregue el CIE-10 correspondiente y confirme el diagnóstico.',
+        tipo:ctx.total?'ok':'info',
+        titulo:ctx.total?'Diagnóstico registrado':'Asistente de Diagnóstico',
+        resumen:ctx.total
+          ?'Esta atención tiene un diagnóstico confirmado. Puede revisarlo o utilizar “Editar diagnóstico” si necesita modificarlo.'
+          :'Esta atención no tiene diagnósticos registrados. Revise la información clínica antes de agregar el CIE-10 que corresponda.',
+        siguiente:ctx.total
+          ?'Revise el protocolo clínico sugerido y continúe con Plan cuando corresponda.'
+          :'Utilice “Agregar diagnóstico”, seleccione el CIE-10 correspondiente y confirme los cambios con el botón de guardado ubicado en la parte superior.',
         detalle:'El asistente solo orienta: no agrega diagnósticos, no guarda cambios, no aplica protocolos y no modifica Plan ni Recetas.',
         expandible:true,expandida:false,ocultable:true
       });
     }catch(error){console.warn('AUROSANAX GUÍA: no se pudo mostrar la orientación de Diagnóstico.',error);}
   }
 
+  function programarRefrescoDiagnostico(ms){
+    if(diagnosticoRefrescoPendiente)window.clearTimeout(diagnosticoRefrescoPendiente);
+    diagnosticoRefrescoPendiente=window.setTimeout(function(){
+      diagnosticoRefrescoPendiente=null;
+      orientarEntradaDiagnostico();
+    },Number(ms)||80);
+  }
+
   function observarEntradaDiagnostico(){
     const pantalla=document.getElementById('hc_diagnostico');
     if(!pantalla)return;
     diagnosticoPantallaActivaAnterior=pantalla.classList.contains('active');
-    const observer=new MutationObserver(function(){
+
+    const observerEntrada=new MutationObserver(function(){
       const activaAhora=pantalla.classList.contains('active');
-      if(activaAhora && !diagnosticoPantallaActivaAnterior) window.setTimeout(orientarEntradaDiagnostico,180);
+      if(activaAhora && !diagnosticoPantallaActivaAnterior) programarRefrescoDiagnostico(180);
       diagnosticoPantallaActivaAnterior=activaAhora;
     });
-    observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
-  }
+    observerEntrada.observe(pantalla,{attributes:true,attributeFilter:['class']});
 
-  function refrescarGuiaDiagnosticoSiActiva(){
-    const pantalla=document.getElementById('hc_diagnostico');
-    if(!pantalla || !pantalla.classList.contains('active'))return;
-    window.setTimeout(orientarEntradaDiagnostico,120);
-  }
-
-  function estadoPublicoDiagnostico(){
-    try{
-      return window.auroDiagnosticos && typeof window.auroDiagnosticos.obtenerEstado==='function'
-        ? (window.auroDiagnosticos.obtenerEstado()||{}) : {};
-    }catch(_e){ return {}; }
+    if(!diagnosticoObserverEstado){
+      diagnosticoObserverEstado=new MutationObserver(function(){
+        if(!pantalla.classList.contains('active'))return;
+        programarRefrescoDiagnostico(70);
+      });
+      diagnosticoObserverEstado.observe(pantalla,{childList:true,subtree:true,characterData:true});
+    }
   }
 
   function recibirDiagnosticoGuardado(evento){
@@ -602,26 +672,46 @@ CONTRATO ANTIRREGRESIVO
       const idEvento=texto(d.id_atencion,'');
       const idActual=texto(estado.atencionActual || window.auroAtencionSeleccionadaId || '','');
       if(!idEvento || !idActual || idEvento!==idActual)return;
+
       const total=Array.isArray(d.diagnosticos)?d.diagnosticos.length:(Array.isArray(estado.diagnosticos)?estado.diagnosticos.length:0);
+      const previo=diagnosticoConfirmadosPorAtencion.has(idEvento)
+        ? diagnosticoConfirmadosPorAtencion.get(idEvento)
+        : null;
+      const sinCambios=d.sin_cambios===true;
+
+      let titulo,resumen,siguiente;
+      if(sinCambios){
+        titulo='Diagnóstico verificado';
+        resumen='El guardado fue confirmado y no había cambios nuevos en el diagnóstico de esta atención.';
+        siguiente=total?'Revise el protocolo clínico sugerido y continúe con Plan cuando corresponda.':'Agregue un diagnóstico si clínicamente corresponde antes de continuar.';
+      }else if(total===0){
+        titulo='Atención sin diagnóstico registrado';
+        resumen='La eliminación fue confirmada y esta atención quedó actualmente sin diagnósticos registrados.';
+        siguiente='Si clínicamente corresponde, utilice “Agregar diagnóstico” y confirme el nuevo CIE-10 con el botón de guardado ubicado en la parte superior.';
+      }else if(previo===0){
+        titulo='Diagnóstico guardado';
+        resumen='El primer diagnóstico de esta atención quedó confirmado correctamente.';
+        siguiente='Revise el protocolo clínico sugerido y continúe con Plan cuando corresponda.';
+      }else{
+        titulo='Diagnóstico actualizado';
+        resumen='Los cambios del diagnóstico de esta atención quedaron confirmados correctamente.';
+        siguiente='Revise el protocolo clínico sugerido y continúe con Plan cuando corresponda.';
+      }
+
+      diagnosticoConfirmadosPorAtencion.set(idEvento,total);
       montar('diagnostico',null,{
-        tipo:'ok',
-        titulo:total?'Diagnóstico guardado':'Diagnóstico actualizado',
-        resumen:total
-          ?'El diagnóstico de esta atención quedó confirmado correctamente.'
-          :'El guardado fue confirmado y esta atención quedó sin diagnósticos registrados.',
-        siguiente:total
-          ?'Revise el protocolo clínico sugerido y continúe con Plan cuando corresponda.'
-          :'Si corresponde, agregue un nuevo CIE-10 y confirme nuevamente el diagnóstico.',
-        detalle:'La confirmación proviene del guardado validado por Diagnóstico. El asistente solo orienta: no guarda, no aplica protocolos y no modifica Plan ni Recetas.',
+        tipo:total?'ok':(sinCambios?'neutral':'warning'),
+        titulo,
+        resumen,
+        siguiente,
+        detalle:'La orientación se actualiza únicamente después de la confirmación emitida por Diagnóstico. El asistente no guarda, no aplica protocolos y no modifica Plan ni Recetas.',
         expandible:true,expandida:false,ocultable:true
       });
     }catch(error){console.warn('AUROSANAX GUÍA: se ignoró de forma segura un guardado de Diagnóstico.',error);}
   }
 
   function refrescarGuiaPorCambioAtencion(){
-    const pantalla=document.getElementById('hc_diagnostico');
-    if(!pantalla || !pantalla.classList.contains('active'))return;
-    window.setTimeout(orientarEntradaDiagnostico,160);
+    programarRefrescoDiagnostico(160);
   }
 
   document.addEventListener('aurosanax:diagnostico-abierto-guardado',recibirDiagnosticoGuardado);
