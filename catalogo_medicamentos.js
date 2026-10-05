@@ -2,8 +2,8 @@
  AUROSANAX ERP
  Archivo: catalogo_medicamentos.js
  Módulo: Catálogo Maestro de Medicamentos
- Versión: 1.4.0
- Fecha: 2026-09-04
+ Versión: 1.4.1
+ Fecha: 2026-10-05
 
  OBJETIVO ANTIRREGRESIVO
  - Conservar EXACTAMENTE los 15 medicamentos base actuales de plan.js.
@@ -457,7 +457,7 @@
             med:'Metformina',
             principio_activo:'Metformina',
             denominaciones_comerciales:[],
-            nombres_alternativos:['Metformin'],
+            nombres_alternativos:['Metformin','Metfomina'],
             forma_farmaceutica:'Sólido oral',
             concentracion:'500 mg - 1.000 mg',
             pres:'500 mg - 1.000 mg sólido oral',
@@ -487,7 +487,7 @@
             med:'Medroxiprogesterona',
             principio_activo:'Medroxiprogesterona',
             denominaciones_comerciales:[],
-            nombres_alternativos:['Acetato de medroxiprogesterona'],
+            nombres_alternativos:['Acetato de medroxiprogesterona','Depo-Provera','Depoprovera'],
             forma_farmaceutica:'Tableta / inyectable',
             concentracion:'según presentación registrada',
             pres:'tableta / inyectable',
@@ -1464,7 +1464,7 @@
             med:'Boric acid vaginal',
             principio_activo:'Boric acid vaginal',
             denominaciones_comerciales:[],
-            nombres_alternativos:[],
+            nombres_alternativos:['Ácido bórico','Acido borico','Ácido bórico vaginal'],
             forma_farmaceutica:'Cápsula vaginal',
             concentracion:'según presentación registrada',
             pres:'cápsula vaginal',
@@ -4502,7 +4502,91 @@
             frec:'según diagnóstico/protocolo clínico',
             dur:'según diagnóstico y evolución',
             ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+        },
+
+        /* ============================================================
+           AMPLIACIÓN QUIRÚRGICA v1.4.1
+           - Medicamentos observados en uso clínico del ERP y ausentes
+             del catálogo maestro al momento de la auditoría.
+           - Sin dosis, frecuencia ni duración universales inventadas.
+           - No modifica persistencia, Plan, Recetas ni Protocolos.
+        ============================================================ */
+
+        {
+            cat:'GINECOLOGÍA',
+            med:'Policresuleno',
+            principio_activo:'Policresuleno',
+            denominaciones_comerciales:[],
+            nombres_alternativos:[],
+            forma_farmaceutica:'Según presentación registrada',
+            concentracion:'según presentación registrada',
+            pres:'según presentación registrada',
+            via:'Según presentación',
+            frec:'según diagnóstico/protocolo clínico',
+            dur:'según diagnóstico y evolución',
+            ind:'Verificar presentación, dosis, contraindicaciones e interacciones antes de prescribir'
+        },
+
+        {
+            cat:'GINECOLOGÍA',
+            med:'Policresuleno + clorhidrato de cinchocaína',
+            principio_activo:'Policresuleno + clorhidrato de cinchocaína',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Policresuleno + cinchocaína','Policresuleno + clorhidrato de cinchocaina'],
+            forma_farmaceutica:'Según presentación registrada',
+            concentracion:'según presentación registrada',
+            pres:'según presentación registrada',
+            via:'Según presentación',
+            frec:'según diagnóstico/protocolo clínico',
+            dur:'según diagnóstico y evolución',
+            ind:'Verificar composición, presentación, dosis, contraindicaciones e interacciones antes de prescribir'
+        },
+
+        {
+            cat:'HEMATOLOGÍA',
+            med:'Etamsilato',
+            principio_activo:'Etamsilato',
+            denominaciones_comerciales:[],
+            nombres_alternativos:[],
+            forma_farmaceutica:'Según presentación registrada',
+            concentracion:'según presentación registrada',
+            pres:'según presentación registrada',
+            via:'Según presentación',
+            frec:'según diagnóstico/protocolo clínico',
+            dur:'según diagnóstico y evolución',
+            ind:'Verificar presentación, dosis, contraindicaciones e interacciones antes de prescribir'
+        },
+
+        {
+            cat:'ANTIINFECCIOSOS',
+            med:'Itraconazol',
+            principio_activo:'Itraconazol',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Itraconazole'],
+            forma_farmaceutica:'Según presentación registrada',
+            concentracion:'según presentación registrada',
+            pres:'según presentación registrada',
+            via:'Según presentación',
+            frec:'según diagnóstico/protocolo clínico',
+            dur:'según diagnóstico y evolución',
+            ind:'Verificar presentación, dosis, contraindicaciones e interacciones antes de prescribir'
+        },
+
+        {
+            cat:'UROLOGÍA',
+            med:'Flavoxato',
+            principio_activo:'Flavoxato',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Flavoxate'],
+            forma_farmaceutica:'Según presentación registrada',
+            concentracion:'según presentación registrada',
+            pres:'según presentación registrada',
+            via:'Según presentación',
+            frec:'según diagnóstico/protocolo clínico',
+            dur:'según diagnóstico y evolución',
+            ind:'Verificar presentación, dosis, contraindicaciones e interacciones antes de prescribir'
         }
+
     ];
 
     function texto(valor){
@@ -4691,7 +4775,7 @@
 
     window.AUROSANAX_CATALOGO_MEDICAMENTOS = {
 
-        version:'1.4.0',
+        version:'1.4.1',
 
         obtenerTodos:function(){
             return window.MEDICAMENTOS_AUROSANAX_BASE.slice();
