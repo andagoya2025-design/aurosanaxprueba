@@ -2,7 +2,7 @@
 ======================================================================
 AUROSANAX — guia.js
 ASISTENTE CONTEXTUAL PREMIUM DEL ERP
-Versión 1.3.5 · Historia Clínica contextual · antirregresivo
+Versión 1.3.6 · Orientación de entrada a Historia Clínica · antirregresivo
 ======================================================================
 
 CONTRATO ANTIRREGRESIVO
@@ -23,7 +23,7 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.3.5';
+  const VERSION='1.3.6';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
@@ -435,6 +435,100 @@ CONTRATO ANTIRREGRESIVO
     }catch(error){console.warn('AUROSANAX GUÍA: no se pudo mostrar la orientación de Historia Clínica.',error);}
   }
 
+  /* ============================================================
+     AUROSANAX GUÍA 1.3.6 — ORIENTACIÓN AL ENTRAR A HISTORIA
+     - Solo observa el contexto ya disponible en el ERP.
+     - NO consulta backend, NO guarda y NO modifica datos clínicos.
+     - Solo abre la guía si hay paciente seleccionado SIN Historia Clínica.
+  ============================================================ */
+  let historiaPantallaActivaAnterior=false;
+
+  function idPacienteHistoriaActual(){
+    const selector=document.getElementById('hcPacienteSelect');
+    return texto(
+      (selector&&selector.value) ||
+      window.activePatientId ||
+      '',
+      ''
+    );
+  }
+
+  function pacienteTieneHistoriaConfirmada(idPaciente){
+    const id=texto(idPaciente,'');
+    if(!id)return false;
+
+    const candidatas=[
+      window.historiaActual,
+      window.currentHistoria
+    ];
+
+    for(let i=0;i<candidatas.length;i+=1){
+      const h=candidatas[i];
+      if(!h || typeof h!=='object')continue;
+      const hp=texto(h.id_paciente || h.idPaciente,'');
+      const hi=texto(h.id_historia || h.idHistoria || h.id,'');
+      if(hp===id && hi)return true;
+    }
+
+    const listas=[
+      window.historiasClinicas,
+      window.historias_clinicas
+    ];
+
+    for(let i=0;i<listas.length;i+=1){
+      const lista=listas[i];
+      if(!Array.isArray(lista))continue;
+      const encontrada=lista.some(function(h){
+        if(!h || typeof h!=='object')return false;
+        const hp=texto(h.id_paciente || h.idPaciente,'');
+        const hi=texto(h.id_historia || h.idHistoria || h.id,'');
+        return hp===id && !!hi;
+      });
+      if(encontrada)return true;
+    }
+
+    return false;
+  }
+
+  function orientarEntradaHistoria(){
+    try{
+      if(preferencias.activa===false)return;
+
+      const pantalla=document.getElementById('historia');
+      if(!pantalla || !pantalla.classList.contains('active'))return;
+
+      const idPaciente=idPacienteHistoriaActual();
+      if(!idPaciente)return;
+      if(pacienteTieneHistoriaConfirmada(idPaciente))return;
+
+      montar('historia',null,{
+        tipo:'warning',
+        titulo:'Primero crea la Historia Clínica',
+        resumen:'Antes de iniciar una atención, completa y guarda Datos generales y Antecedentes para generar el ID de Historia Clínica.',
+        siguiente:'Datos generales → Antecedentes → Guardar historia.',
+        detalle:'Cuando la Historia Clínica quede confirmada, podrás crear la primera atención y continuar con los siguientes módulos. El asistente solo orienta: no guarda, no crea atenciones y no modifica información clínica.',
+        expandible:true,expandida:false,ocultable:true
+      });
+    }catch(error){console.warn('AUROSANAX GUÍA: no se pudo mostrar la orientación inicial de Historia Clínica.',error);}
+  }
+
+  function observarEntradaHistoria(){
+    const pantalla=document.getElementById('historia');
+    if(!pantalla)return;
+
+    historiaPantallaActivaAnterior=pantalla.classList.contains('active');
+
+    const observer=new MutationObserver(function(){
+      const activaAhora=pantalla.classList.contains('active');
+      if(activaAhora && !historiaPantallaActivaAnterior){
+        window.setTimeout(orientarEntradaHistoria,180);
+      }
+      historiaPantallaActivaAnterior=activaAhora;
+    });
+
+    observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
+  }
+
   window.addEventListener('resize',function(){if(posicionUsuario)aplicarPosicionUsuario();});
   window.addEventListener('aurosanax:guia-contexto',recibirContexto);
   window.addEventListener('aurosanax:paciente-confirmado',recibirPacienteConfirmado);
@@ -457,8 +551,17 @@ CONTRATO ANTIRREGRESIVO
     }
   }
 
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',asegurarAsistenteDisponible,{once:true});
-  else setTimeout(asegurarAsistenteDisponible,0);
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',function(){
+      asegurarAsistenteDisponible();
+      observarEntradaHistoria();
+    },{once:true});
+  }else{
+    setTimeout(function(){
+      asegurarAsistenteDisponible();
+      observarEntradaHistoria();
+    },0);
+  }
 
   window.AurosanaxGuia=Object.freeze({
     __auroGuiaMotor:true,version:VERSION,montar,actualizar,mostrar,ocultar,desmontar
