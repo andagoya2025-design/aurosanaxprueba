@@ -2,7 +2,7 @@
  AUROSANAX ERP
  Archivo: catalogo_medicamentos.js
  Módulo: Catálogo Maestro de Medicamentos
- Versión: 1.4.1
+ Versión: 1.4.2
  Fecha: 2026-10-05
 
  OBJETIVO ANTIRREGRESIVO
@@ -487,7 +487,7 @@
             med:'Medroxiprogesterona',
             principio_activo:'Medroxiprogesterona',
             denominaciones_comerciales:[],
-            nombres_alternativos:['Acetato de medroxiprogesterona','Depo-Provera','Depoprovera'],
+            nombres_alternativos:['Acetato de medroxiprogesterona','Depo-Provera','Depoprovera','Medro xiprogesterona'],
             forma_farmaceutica:'Tableta / inyectable',
             concentracion:'según presentación registrada',
             pres:'tableta / inyectable',
@@ -4587,6 +4587,78 @@
             ind:'Verificar presentación, dosis, contraindicaciones e interacciones antes de prescribir'
         }
 
+,
+        {
+            cat:'GINECOLOGÍA / NUTRICIÓN',
+            med:'Myo & D-Chiro Inositol',
+            principio_activo:'Myo-inositol + D-chiro-inositol',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Myo & D','Myo D','D-Chiro Inositol','Chio Inositol','Myo Inositol'],
+            forma_farmaceutica:'Cápsula / polvo',
+            concentracion:'según presentación registrada',
+            pres:'cápsula / polvo',
+            via:'VO',
+            frec:'según indicación clínica',
+            dur:'según indicación y seguimiento',
+            ind:'Seleccionar presentación y pauta según valoración clínica'
+        },
+        {
+            cat:'ANTIINFECCIOSOS',
+            med:'Nitazoxanida',
+            principio_activo:'Nitazoxanida',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Nitazoxanide'],
+            forma_farmaceutica:'Tableta / suspensión',
+            concentracion:'según presentación registrada',
+            pres:'tableta / suspensión',
+            via:'VO',
+            frec:'según diagnóstico/protocolo clínico',
+            dur:'según diagnóstico y evolución',
+            ind:'Verificar dosis, contraindicaciones e interacciones antes de prescribir'
+        },
+        {
+            cat:'GINECOLOGÍA / NUTRICIÓN',
+            med:'Aceite de onagra',
+            principio_activo:'Aceite de onagra',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Onagra oil','Evening primrose oil'],
+            forma_farmaceutica:'Cápsula',
+            concentracion:'según presentación registrada',
+            pres:'cápsula',
+            via:'VO',
+            frec:'según objetivo clínico y formulación',
+            dur:'según objetivo clínico y seguimiento',
+            ind:'Verificar composición, presentación, contraindicaciones e interacciones'
+        },
+        {
+            cat:'MEDICINA GENERAL',
+            med:'Ácido ursodesoxicólico',
+            principio_activo:'Ácido ursodesoxicólico',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Ursodeoxycholic acid','Ursodiol','Acido ursodexocidocolico'],
+            forma_farmaceutica:'Tableta / cápsula',
+            concentracion:'según presentación registrada',
+            pres:'tableta / cápsula',
+            via:'VO',
+            frec:'según diagnóstico/protocolo clínico',
+            dur:'según diagnóstico y evolución',
+            ind:'Verificar dosis, indicación, contraindicaciones e interacciones antes de prescribir'
+        },
+        {
+            cat:'GINECOLOGÍA',
+            med:'Colágeno vaginal',
+            principio_activo:'Colágeno',
+            denominaciones_comerciales:[],
+            nombres_alternativos:['Colágeno gel vaginal','Colageno gel vaginal'],
+            forma_farmaceutica:'Gel vaginal',
+            concentracion:'según presentación registrada',
+            pres:'gel vaginal',
+            via:'Vaginal',
+            frec:'según indicación clínica',
+            dur:'según indicación y evolución',
+            ind:'Seleccionar presentación y pauta según valoración clínica'
+        }
+
     ];
 
     function texto(valor){
@@ -4600,6 +4672,53 @@
             .toLowerCase()
             .replace(/\s+/g,' ')
             .trim();
+    }
+
+
+    /* BÚSQUEDA TOLERANTE v1.4.2 — solo recuperación, nunca prescripción */
+    const ALIASES_BUSQUEDA_AUROSANAX = {
+        'metformina':['metfomina'],
+        'medroxiprogesterona':['depo-provera','depoprovera','medro xiprogesterona'],
+        'acido borico':['boric acid vaginal'],
+        'omega 3':['omega','omega-3'],
+        'acido ascorbico':['vitamina c'],
+        'myo-inositol + d-chiro-inositol':['myo & d','myo d','d chiro inositol','chio inositol','myo inositol'],
+        'dulcamara':['dulcama'],
+        'acido ursodesoxicolico':['acido ursodexocidocolico']
+    };
+
+    function distanciaLevenshtein(a,b){
+        a=normalizar(a); b=normalizar(b);
+        const prev=Array.from({length:b.length+1},(_,i)=>i), curr=new Array(b.length+1);
+        for(let i=1;i<=a.length;i++){
+            curr[0]=i;
+            for(let j=1;j<=b.length;j++){
+                const c=a[i-1]===b[j-1]?0:1;
+                curr[j]=Math.min(curr[j-1]+1,prev[j]+1,prev[j-1]+c);
+            }
+            for(let j=0;j<=b.length;j++) prev[j]=curr[j];
+        }
+        return prev[b.length];
+    }
+
+    function terminosBusquedaMedicamento(m){
+        const clave=normalizar(m.principio_activo||m.med);
+        return [
+            m.med,m.principio_activo,m.pres,m.forma_farmaceutica,m.concentracion,m.cat,
+            ...(m.denominaciones_comerciales||[]),...(m.nombres_alternativos||[]),
+            ...(ALIASES_BUSQUEDA_AUROSANAX[clave]||[]),
+            ...((m.variantes||[]).flatMap(v=>[v.pres,v.forma_farmaceutica,v.concentracion,...(v.vias_compatibles||[])]))
+        ].map(normalizar).filter(Boolean);
+    }
+
+    function coincideBusqueda(m,q){
+        const ts=terminosBusquedaMedicamento(m);
+        if(ts.some(t=>t.includes(q))) return true;
+        if(q.length<4) return false;
+        return ts.some(t=>t.split(/[^a-z0-9]+/).filter(Boolean).some(p=>{
+            if(Math.abs(p.length-q.length)>2) return false;
+            return distanciaLevenshtein(p,q) <= (q.length<=5?1:2);
+        }));
     }
 
     function arrayTexto(valor){
@@ -4775,7 +4894,7 @@
 
     window.AUROSANAX_CATALOGO_MEDICAMENTOS = {
 
-        version:'1.4.1',
+        version:'1.4.2',
 
         obtenerTodos:function(){
             return window.MEDICAMENTOS_AUROSANAX_BASE.slice();
@@ -4810,27 +4929,7 @@
             }
 
             return window.MEDICAMENTOS_AUROSANAX_BASE.filter(function(m){
-
-                const textoBusqueda = [
-                    m.med,
-                    m.principio_activo,
-                    m.pres,
-                    m.forma_farmaceutica,
-                    m.concentracion,
-                    m.cat,
-                    ...(m.denominaciones_comerciales || []),
-                    ...(m.nombres_alternativos || []),
-                    ...((m.variantes || []).flatMap(function(v){
-                        return [
-                            v.pres,
-                            v.forma_farmaceutica,
-                            v.concentracion,
-                            ...(v.vias_compatibles || [])
-                        ];
-                    }))
-                ].join(' ');
-
-                return normalizar(textoBusqueda).includes(q);
+                return coincideBusqueda(m,q);
             });
         }
     };
