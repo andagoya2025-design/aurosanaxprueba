@@ -424,12 +424,13 @@ CONTRATO ANTIRREGRESIVO
       const idPaciente=texto(d.id_paciente,'');
       if(!idHistoria || !idPaciente)return;
       if(preferencias.activa===false)return;
+      const esEdicion=String(d.operacion||'')==='edicion';
       montar('historia',null,{
         tipo:'ok',
-        titulo:'Historia clínica creada',
-        resumen:'La Historia Clínica del paciente quedó confirmada correctamente en la base de datos clínica AUROSANAX.',
-        siguiente:'Ya puede crear la primera atención del paciente.',
-        detalle:'Flujo recomendado: Paciente → Historia Clínica → Atención. El asistente únicamente orienta y no crea atenciones ni modifica información clínica.',
+        titulo:esEdicion?'Historia clínica actualizada':'Historia clínica creada',
+        resumen:esEdicion?'Los cambios de la Historia Clínica quedaron guardados correctamente en la base de datos clínica AUROSANAX.':'La Historia Clínica del paciente quedó confirmada correctamente en la base de datos clínica AUROSANAX.',
+        siguiente:esEdicion?'Puede continuar con el flujo clínico del paciente.':'Ya puede crear la primera atención del paciente.',
+        detalle:esEdicion?'La actualización fue confirmada por el módulo propietario. El asistente únicamente orienta y no modifica información clínica.':'Flujo recomendado: Paciente → Historia Clínica → Atención. El asistente únicamente orienta y no crea atenciones ni modifica información clínica.',
         expandible:true,expandida:false,ocultable:true
       });
     }catch(error){console.warn('AUROSANAX GUÍA: no se pudo mostrar la orientación de Historia Clínica.',error);}
