@@ -2,7 +2,7 @@
 ======================================================================
 AUROSANAX — guia.js
 ASISTENTE CONTEXTUAL PREMIUM DEL ERP
-Versión 1.3.6 · Orientación de entrada a Historia Clínica · antirregresivo
+Versión 1.3.8 · Diagnóstico confirmado por evento · antirregresivo
 ======================================================================
 
 CONTRATO ANTIRREGRESIVO
@@ -23,7 +23,7 @@ CONTRATO ANTIRREGRESIVO
   if(!window || !document) return;
   if(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true) return;
 
-  const VERSION='1.3.7';
+  const VERSION='1.3.8';
   const STYLE_ID='auroGuiaStyles';
   const HOST_ID='auroGuiaFloatingHost';
   const mounts=new Map();
@@ -586,7 +586,49 @@ CONTRATO ANTIRREGRESIVO
     window.setTimeout(orientarEntradaDiagnostico,120);
   }
 
-  window.addEventListener('aurosanax:diagnosticos-actualizados',refrescarGuiaDiagnosticoSiActiva);
+  function estadoPublicoDiagnostico(){
+    try{
+      return window.auroDiagnosticos && typeof window.auroDiagnosticos.obtenerEstado==='function'
+        ? (window.auroDiagnosticos.obtenerEstado()||{}) : {};
+    }catch(_e){ return {}; }
+  }
+
+  function recibirDiagnosticoGuardado(evento){
+    try{
+      const pantalla=document.getElementById('hc_diagnostico');
+      if(!pantalla || !pantalla.classList.contains('active'))return;
+      const d=evento&&evento.detail&&typeof evento.detail==='object'?evento.detail:{};
+      const estado=estadoPublicoDiagnostico();
+      const idEvento=texto(d.id_atencion,'');
+      const idActual=texto(estado.atencionActual || window.auroAtencionSeleccionadaId || '','');
+      if(!idEvento || !idActual || idEvento!==idActual)return;
+      const total=Array.isArray(d.diagnosticos)?d.diagnosticos.length:(Array.isArray(estado.diagnosticos)?estado.diagnosticos.length:0);
+      montar('diagnostico',null,{
+        tipo:'ok',
+        titulo:total?'Diagnóstico guardado':'Diagnóstico actualizado',
+        resumen:total
+          ?'El diagnóstico de esta atención quedó confirmado correctamente.'
+          :'El guardado fue confirmado y esta atención quedó sin diagnósticos registrados.',
+        siguiente:total
+          ?'Revise el protocolo clínico sugerido y continúe con Plan cuando corresponda.'
+          :'Si corresponde, agregue un nuevo CIE-10 y confirme nuevamente el diagnóstico.',
+        detalle:'La confirmación proviene del guardado validado por Diagnóstico. El asistente solo orienta: no guarda, no aplica protocolos y no modifica Plan ni Recetas.',
+        expandible:true,expandida:false,ocultable:true
+      });
+    }catch(error){console.warn('AUROSANAX GUÍA: se ignoró de forma segura un guardado de Diagnóstico.',error);}
+  }
+
+  function refrescarGuiaPorCambioAtencion(){
+    const pantalla=document.getElementById('hc_diagnostico');
+    if(!pantalla || !pantalla.classList.contains('active'))return;
+    window.setTimeout(orientarEntradaDiagnostico,160);
+  }
+
+  document.addEventListener('aurosanax:diagnostico-abierto-guardado',recibirDiagnosticoGuardado);
+  ['aurosanax:atencion-iniciada','aurosanax:atencion-seleccionada','aurosanax:atencion-actualizada'].forEach(function(nombre){
+    window.addEventListener(nombre,refrescarGuiaPorCambioAtencion);
+    document.addEventListener(nombre,refrescarGuiaPorCambioAtencion);
+  });
 
   window.addEventListener('resize',function(){if(posicionUsuario)aplicarPosicionUsuario();});
   window.addEventListener('aurosanax:guia-contexto',recibirContexto);
