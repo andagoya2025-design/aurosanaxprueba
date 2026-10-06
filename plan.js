@@ -212,6 +212,10 @@ const AURO_PLAN_VIAS_COMPLETAS = {
     'VIA NASAL': 'Vía nasal'
 };
 
+const AURO_PLAN_CANTIDADES_RAPIDAS = [
+    '1','2','3','5','7','10','14','20','21','28','30','60','90'
+];
+
 const AURO_PLAN_FRECUENCIAS_RAPIDAS = [
     'Dosis única',
     'Cada 4 horas',
@@ -935,6 +939,13 @@ function auroPlanInstalarAyudasMedicamentos(){
     auroPlanInstalarAccesoViaLibreRapido();
 
     auroPlanInstalarDatalist(
+        'hcMedCantidad',
+        'auroPlanCantidadesLista',
+        AURO_PLAN_CANTIDADES_RAPIDAS,
+        'Ej.: 30'
+    );
+
+    auroPlanInstalarDatalist(
         'hcMedFrecuencia',
         'auroPlanFrecuenciasLista',
         AURO_PLAN_FRECUENCIAS_RAPIDAS,
@@ -948,7 +959,9 @@ function auroPlanInstalarAyudasMedicamentos(){
         'Ej.: 7 días'
     );
 
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedBusqueda', 'medicamento');
     auroPlanInstalarLimpiezaRapidaCampo('hcMedPresentacion', 'presentación');
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedCantidad', 'cantidad');
     auroPlanInstalarLimpiezaRapidaCampo('hcMedFrecuencia', 'frecuencia');
     auroPlanInstalarLimpiezaRapidaCampo('hcMedDuracion', 'duración');
     auroPlanInstalarLimpiezaRapidaCampo('hcMedIndicaciones', 'indicaciones');
