@@ -763,21 +763,37 @@
     async function cargarDatosIniciales(conservarMensaje){
       if(!conservarMensaje) limpiarStatus();
       document.getElementById('loadingSlots').classList.add('show');
-      try{
-        const resultados = await Promise.allSettled([
-          apiGet('listarDisponibilidad'),
-          apiGet('listarMedicosActivos'),
-          apiGet('listarCitas'),
-          apiGet('listarPacientes')
-        ]);
 
-        disponibilidad = resultados[0].status === 'fulfilled' && Array.isArray(resultados[0].value) ? resultados[0].value : [];
-        medicos = resultados[1].status === 'fulfilled' && Array.isArray(resultados[1].value) ? resultados[1].value : [];
-        citas = resultados[2].status === 'fulfilled' && Array.isArray(resultados[2].value) ? resultados[2].value : [];
-        pacientes = resultados[3].status === 'fulfilled' && Array.isArray(resultados[3].value) ? resultados[3].value : [];
+      try{
+        // AUROSANAX - CARGA PROGRESIVA DEL FORMULARIO
+        // Médicos se muestran apenas llegan. Las lecturas necesarias para
+        // disponibilidad y validaciones continúan en paralelo sin eliminarse.
+        const cargaMedicos = apiGet('listarMedicosActivos');
+        const cargaDisponibilidad = apiGet('listarDisponibilidad');
+        const cargaCitas = apiGet('listarCitas');
+        const cargaPacientes = apiGet('listarPacientes');
+
+        const resultadoMedicos = await Promise.allSettled([cargaMedicos]);
+        medicos = resultadoMedicos[0].status === 'fulfilled' && Array.isArray(resultadoMedicos[0].value)
+          ? resultadoMedicos[0].value
+          : [];
 
         renderMedicos();
-        await cargarServiciosMedico();
+
+        // Con el médico ya visible/seleccionado, iniciar inmediatamente sus servicios.
+        const cargaServicios = cargarServiciosMedico();
+
+        const restantes = await Promise.allSettled([
+          cargaDisponibilidad,
+          cargaCitas,
+          cargaPacientes
+        ]);
+
+        disponibilidad = restantes[0].status === 'fulfilled' && Array.isArray(restantes[0].value) ? restantes[0].value : [];
+        citas = restantes[1].status === 'fulfilled' && Array.isArray(restantes[1].value) ? restantes[1].value : [];
+        pacientes = restantes[2].status === 'fulfilled' && Array.isArray(restantes[2].value) ? restantes[2].value : [];
+
+        await cargaServicios;
         sincronizarMiniDesdeInput();
         renderHorasDisponibles();
       }catch(e){
@@ -1534,16 +1550,15 @@
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
-      // Configuración institucional y datos de agenda se cargan en paralelo.
-      // Ninguna de las dos cargas depende de la otra para comenzar.
+      // Configuración institucional y datos del formulario comienzan juntos.
+      // Ninguna carga bloquea innecesariamente el inicio de la otra.
       const cargaConfiguracion = cargarConfiguracionCentroFormulario();
-      const cargaAgenda = cargarDatosIniciales();
+      const cargaFormulario = cargarDatosIniciales();
 
       actualizarResumenSeleccion();
       actualizarEspecialidadMedico();
 
-      // Esperar ambas sin convertir una en requisito previo de la otra.
-      await Promise.allSettled([cargaConfiguracion, cargaAgenda]);
+      await Promise.allSettled([cargaConfiguracion, cargaFormulario]);
     });
   </script>
 </body>
