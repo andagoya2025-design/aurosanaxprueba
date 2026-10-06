@@ -785,19 +785,27 @@
         // Con el médico ya visible/seleccionado, iniciar inmediatamente sus servicios.
         const cargaServicios = cargarServiciosMedico();
 
+        // AUROSANAX - CALENDARIO MÓVIL PRIORITARIO
+        // La disponibilidad ya venía cargándose en paralelo. Apenas termina,
+        // pintar el calendario sin esperar citas, pacientes ni servicios.
+        // Esas cargas continúan intactas en segundo plano para sus validaciones.
+        const resultadoDisponibilidad = await Promise.allSettled([cargaDisponibilidad]);
+        disponibilidad = resultadoDisponibilidad[0].status === 'fulfilled' && Array.isArray(resultadoDisponibilidad[0].value)
+          ? resultadoDisponibilidad[0].value
+          : [];
+
+        sincronizarMiniDesdeInput();
+        renderHorasDisponibles();
+
         const restantes = await Promise.allSettled([
-          cargaDisponibilidad,
           cargaCitas,
           cargaPacientes
         ]);
 
-        disponibilidad = restantes[0].status === 'fulfilled' && Array.isArray(restantes[0].value) ? restantes[0].value : [];
-        citas = restantes[1].status === 'fulfilled' && Array.isArray(restantes[1].value) ? restantes[1].value : [];
-        pacientes = restantes[2].status === 'fulfilled' && Array.isArray(restantes[2].value) ? restantes[2].value : [];
+        citas = restantes[0].status === 'fulfilled' && Array.isArray(restantes[0].value) ? restantes[0].value : [];
+        pacientes = restantes[1].status === 'fulfilled' && Array.isArray(restantes[1].value) ? restantes[1].value : [];
 
         await cargaServicios;
-        sincronizarMiniDesdeInput();
-        renderHorasDisponibles();
       }catch(e){
         console.error(e);
         setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> No se pudieron cargar los horarios. ' + e.message);
