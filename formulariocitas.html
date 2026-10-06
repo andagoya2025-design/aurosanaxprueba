@@ -683,7 +683,9 @@
           iso === today ? 'today' : ''
         ].join(' ');
         const texto = disponible ? total + ' hora' + (total === 1 ? '' : 's') : 'sin hora';
-        html += `<div class="${css}"><span class="num">${day}</span><span class="qty">${texto}</span></div>`;
+        html += disponible
+          ? `<div class="${css}" role="button" tabindex="0" onclick="seleccionarDiaMini('${iso}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();seleccionarDiaMini('${iso}');}"><span class="num">${day}</span><span class="qty">${texto}</span></div>`
+          : `<div class="${css}"><span class="num">${day}</span><span class="qty">${texto}</span></div>`;
       }
       grid.innerHTML = html;
     }
