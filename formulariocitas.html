@@ -1534,11 +1534,16 @@
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
-      await cargarConfiguracionCentroFormulario();
+      // Configuración institucional y datos de agenda se cargan en paralelo.
+      // Ninguna de las dos cargas depende de la otra para comenzar.
+      const cargaConfiguracion = cargarConfiguracionCentroFormulario();
+      const cargaAgenda = cargarDatosIniciales();
 
       actualizarResumenSeleccion();
       actualizarEspecialidadMedico();
-      cargarDatosIniciales();
+
+      // Esperar ambas sin convertir una en requisito previo de la otra.
+      await Promise.allSettled([cargaConfiguracion, cargaAgenda]);
     });
   </script>
 </body>
