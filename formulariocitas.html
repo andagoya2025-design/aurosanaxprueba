@@ -24,6 +24,19 @@
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,#fff7fb,#f8fafc);color:var(--text);min-height:100vh}
     .page{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:22px}
+    /* AUROSANAX - PRIVACIDAD FORMULARIO: bloque aislado, sin alterar lógica clínica/agenda */
+    .privacy-box{margin-top:14px;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:#fff}
+    .privacy-check{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.45;color:var(--text)}
+    .privacy-check input{margin-top:3px;flex:0 0 auto}
+    .privacy-link{border:0;background:transparent;padding:0;color:var(--primary);font-weight:800;text-decoration:underline;cursor:pointer}
+    .privacy-error{border-color:#fecaca;background:#fff7f7}
+    .privacy-modal{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.55)}
+    .privacy-modal.open{display:flex}
+    .privacy-card{width:min(620px,100%);max-height:85vh;overflow:auto;background:#fff;border-radius:20px;padding:22px;box-shadow:0 25px 70px rgba(15,23,42,.28)}
+    .privacy-card h4{margin:0 0 12px;color:var(--primary);font-weight:900}
+    .privacy-card p{font-size:14px;line-height:1.55;margin:0 0 10px}
+    .privacy-close{width:100%;margin-top:8px;border:0;border-radius:12px;padding:11px 14px;background:var(--primary);color:#fff;font-weight:800}
+    #citaForm.reserva-completada > #privacyBox{display:none!important}
     .shell{width:min(1180px,100%);display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start}
     .hero{border-radius:28px;padding:28px;background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff;box-shadow:0 25px 70px rgba(139,30,90,.22);position:sticky;top:20px;overflow:hidden;height:fit-content}
     .hero:after{content:"";position:absolute;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.13);right:-90px;top:-80px}
@@ -351,6 +364,13 @@
             Al reservar, el horario queda apartado y deja de estar disponible para otros pacientes. Secretaría revisará los datos y confirmará los detalles por WhatsApp.
           </div>
 
+          <div id="privacyBox" class="privacy-box">
+            <label class="privacy-check" for="acepta_privacidad">
+              <input id="acepta_privacidad" type="checkbox" onchange="if(this.checked){document.getElementById('privacyBox')?.classList.remove('privacy-error')}">
+              <span>He leído y acepto el tratamiento de mis datos personales para gestionar mi solicitud de cita, conforme al <button type="button" class="privacy-link" onclick="abrirAvisoPrivacidad(event)">Aviso de Privacidad de AurosanaxMedic</button>.</span>
+            </label>
+          </div>
+
           <div id="statusBox" class="status"></div>
 
           <div id="formMainActions" class="d-flex gap-2 flex-wrap mt-4">
@@ -358,7 +378,20 @@
             <button type="button" class="btn-line" onclick="cargarDatosIniciales()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
           </div>
         </form>
+
+        <div id="privacyModal" class="privacy-modal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle" onclick="cerrarAvisoPrivacidadFondo(event)">
+          <div class="privacy-card">
+            <h4 id="privacyTitle">Aviso de Privacidad de AurosanaxMedic</h4>
+            <p><b>Responsable del tratamiento:</b> Dra. Aurora Andagoya Murillo, profesional de la salud.</p>
+            <p>Los datos ingresados en este formulario se utilizan para identificar al paciente, gestionar la solicitud de cita, coordinar la atención y comunicarse respecto de la reserva.</p>
+            <p>La información será tratada de forma confidencial y únicamente para las finalidades relacionadas con la gestión de la cita y la atención correspondiente, conforme a la normativa ecuatoriana aplicable sobre protección de datos personales.</p>
+            <p>El titular puede ejercer los derechos reconocidos por la normativa de protección de datos a través de los canales oficiales de atención de AurosanaxMedic.</p>
+            <button type="button" class="privacy-close" onclick="cerrarAvisoPrivacidad()">Cerrar</button>
+          </div>
+        </div>
+
         <div class="demo" id="pieCentroFormulario">Formulario web de citas</div>
+        <div class="demo">© 2026 AurosanaxMedic · Privacidad y protección de datos</div>
       </main>
     </div>
   </div>
@@ -785,27 +818,19 @@
         // Con el médico ya visible/seleccionado, iniciar inmediatamente sus servicios.
         const cargaServicios = cargarServiciosMedico();
 
-        // AUROSANAX - CALENDARIO MÓVIL PRIORITARIO
-        // La disponibilidad ya venía cargándose en paralelo. Apenas termina,
-        // pintar el calendario sin esperar citas, pacientes ni servicios.
-        // Esas cargas continúan intactas en segundo plano para sus validaciones.
-        const resultadoDisponibilidad = await Promise.allSettled([cargaDisponibilidad]);
-        disponibilidad = resultadoDisponibilidad[0].status === 'fulfilled' && Array.isArray(resultadoDisponibilidad[0].value)
-          ? resultadoDisponibilidad[0].value
-          : [];
-
-        sincronizarMiniDesdeInput();
-        renderHorasDisponibles();
-
         const restantes = await Promise.allSettled([
+          cargaDisponibilidad,
           cargaCitas,
           cargaPacientes
         ]);
 
-        citas = restantes[0].status === 'fulfilled' && Array.isArray(restantes[0].value) ? restantes[0].value : [];
-        pacientes = restantes[1].status === 'fulfilled' && Array.isArray(restantes[1].value) ? restantes[1].value : [];
+        disponibilidad = restantes[0].status === 'fulfilled' && Array.isArray(restantes[0].value) ? restantes[0].value : [];
+        citas = restantes[1].status === 'fulfilled' && Array.isArray(restantes[1].value) ? restantes[1].value : [];
+        pacientes = restantes[2].status === 'fulfilled' && Array.isArray(restantes[2].value) ? restantes[2].value : [];
 
         await cargaServicios;
+        sincronizarMiniDesdeInput();
+        renderHorasDisponibles();
       }catch(e){
         console.error(e);
         setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> No se pudieron cargar los horarios. ' + e.message);
@@ -1164,6 +1189,36 @@
       return p ? soloDigitos(p.whatsapp || p.telefono || p.celular || '') : '';
     }
 
+    /* AUROSANAX - PRIVACIDAD: validación independiente y aditiva.
+       No modifica cédula, teléfono, identidad, duplicidad, disponibilidad ni guardado. */
+    function abrirAvisoPrivacidad(event){
+      if(event){ event.preventDefault(); event.stopPropagation(); }
+      const modal = document.getElementById('privacyModal');
+      if(modal) modal.classList.add('open');
+    }
+
+    function cerrarAvisoPrivacidad(){
+      const modal = document.getElementById('privacyModal');
+      if(modal) modal.classList.remove('open');
+    }
+
+    function cerrarAvisoPrivacidadFondo(event){
+      if(event && event.target && event.target.id === 'privacyModal') cerrarAvisoPrivacidad();
+    }
+
+    function validarAceptacionPrivacidad(){
+      const check = document.getElementById('acepta_privacidad');
+      const box = document.getElementById('privacyBox');
+      if(check && check.checked){
+        if(box) box.classList.remove('privacy-error');
+        return true;
+      }
+      if(box) box.classList.add('privacy-error');
+      setStatus('err','<i class="bi bi-shield-lock me-1"></i> Para continuar, lea y acepte el tratamiento de sus datos personales.');
+      if(box) box.scrollIntoView({behavior:'smooth', block:'center'});
+      return false;
+    }
+
     function validarFormularioAntesDeEnviar(data){
       limpiarErroresCampos();
       const errores = [];
@@ -1413,6 +1468,7 @@
         observaciones: document.getElementById('observaciones').value.trim()
       };
 
+      if(!validarAceptacionPrivacidad()) return;
       if(!validarFormularioAntesDeEnviar(data)) return;
 
       const identidadInicial = validarIdentidadDocumentoLocal(data);
