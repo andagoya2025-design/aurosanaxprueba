@@ -1117,19 +1117,7 @@
       const a = normalizarNombreIdentidad(nombreRegistrado);
       const b = normalizarNombreIdentidad(nombreIngresado);
 
-      // Coincidencia conservadora: primer nombre y dos apellidos iguales.
-      // Se admiten nombres intermedios adicionales u omitidos.
-      // Con menos de tres palabras se mantiene la coincidencia exacta.
-      const partesA = a.split(' ').filter(Boolean);
-      const partesB = b.split(' ').filter(Boolean);
-      const nombresCompatibles = a === b || (
-        partesA.length >= 3 && partesB.length >= 3 &&
-        partesA[0] === partesB[0] &&
-        partesA[partesA.length - 2] === partesB[partesB.length - 2] &&
-        partesA[partesA.length - 1] === partesB[partesB.length - 1]
-      );
-
-      if(a && b && !nombresCompatibles){
+      if(a && b && a !== b){
         return {
           ok:false,
           paciente:existente,
