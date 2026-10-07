@@ -1107,24 +1107,72 @@
       return pacientes.find(p => documentoPacienteLocal(p) === doc) || null;
     }
 
+    /* AUROSANAX - REFORMA ANTIRREGRESIVA DE IDENTIDAD
+       - La cédula continúa siendo la llave primaria de identidad.
+       - No revela el nombre maestro en mensajes públicos.
+       - Tolera omisiones seguras, pero nunca sustituciones de palabras.
+       - No modifica el paciente maestro ni el flujo de agenda/guardado.
+    */
+    function tokensNombreIdentidad(valor){
+      const n = normalizarNombreIdentidad(valor);
+      return n ? n.split(' ').filter(Boolean) : [];
+    }
+
+    function esSubsecuenciaIdentidad(ingresados, registrados){
+      if(!ingresados.length || !registrados.length) return false;
+      let j = 0;
+      for(const token of registrados){
+        if(token === ingresados[j]) j++;
+        if(j === ingresados.length) return true;
+      }
+      return false;
+    }
+
+    function nombreCompatibleConPaciente(nombreIngresado, paciente){
+      const nombresMaestro = tokensNombreIdentidad(paciente?.nombres || '');
+      const apellidosMaestro = tokensNombreIdentidad(paciente?.apellidos || '');
+      const ingresados = tokensNombreIdentidad(nombreIngresado);
+
+      // Si el maestro no está estructurado en nombres/apellidos, conservar
+      // comparación estricta como respaldo seguro.
+      if(!nombresMaestro.length || !apellidosMaestro.length){
+        const maestro = normalizarNombreIdentidad(nombrePacienteLocal(paciente));
+        return !!(maestro && normalizarNombreIdentidad(nombreIngresado) === maestro);
+      }
+
+      // El primer nombre registrado es obligatorio y no puede sustituirse.
+      if(!ingresados.length || ingresados[0] !== nombresMaestro[0]) return false;
+
+      // Probar cada punto posible donde empiezan los apellidos ingresados.
+      // Los nombres posteriores pueden omitirse, siempre manteniendo orden.
+      // Los apellidos deben comenzar por el primer token del apellido maestro;
+      // se permite omitir únicamente la parte final del apellido compuesto.
+      for(let corte = 1; corte < ingresados.length; corte++){
+        const nombresIngresados = ingresados.slice(0, corte);
+        const apellidosIngresados = ingresados.slice(corte);
+        if(!apellidosIngresados.length) continue;
+        if(apellidosIngresados[0] !== apellidosMaestro[0]) continue;
+        if(apellidosIngresados.length > apellidosMaestro.length) continue;
+
+        const prefijoApellidos = apellidosIngresados.every((t, i) => t === apellidosMaestro[i]);
+        if(!prefijoApellidos) continue;
+        if(!esSubsecuenciaIdentidad(nombresIngresados, nombresMaestro)) continue;
+
+        return true;
+      }
+      return false;
+    }
+
     function validarIdentidadDocumentoLocal(data){
       const existente = buscarPacientePorDocumentoLocal(data?.numero_documento);
       if(!existente) return {ok:true, paciente:null};
 
-      const nombreRegistrado = nombrePacienteLocal(existente);
       const nombreIngresado = String(data?.nombre_completo || '').trim();
-
-      const a = normalizarNombreIdentidad(nombreRegistrado);
-      const b = normalizarNombreIdentidad(nombreIngresado);
-
-      if(a && b && a !== b){
+      if(!nombreCompatibleConPaciente(nombreIngresado, existente)){
         return {
           ok:false,
           paciente:existente,
-          mensaje:
-            'La cédula ingresada ya pertenece a otro paciente registrado: <b>' +
-            nombreRegistrado.replace(/</g,'&lt;').replace(/>/g,'&gt;') +
-            '</b>. Verifique la cédula o los nombres antes de continuar.'
+          mensaje:'Los datos ingresados no coinciden con el registro existente. Verifique su número de cédula y sus nombres y apellidos.'
         };
       }
 
