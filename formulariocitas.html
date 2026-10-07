@@ -340,8 +340,9 @@
                 <div class="micro-help">10 dígitos, sin espacios ni guiones.</div>
               </div>
               <div class="col-md-6">
-                <label class="form-label">Nombres completos *</label>
-                <input id="nombre_completo" class="form-control" required autocomplete="name" placeholder="Nombre y apellido">
+                <label class="form-label">Nombres y apellidos *</label>
+                <input id="nombre_completo" class="form-control" required autocomplete="name" placeholder="Ej. María Fernanda Pérez López">
+                <div class="micro-help">Escríbalos como constan en su cédula: primero nombres y luego apellidos.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">WhatsApp / teléfono *</label>
@@ -390,8 +391,7 @@
           </div>
         </div>
 
-        <div class="demo" id="pieCentroFormulario">Formulario web de citas</div>
-        <div class="demo">© 2026 AurosanaxMedic · Privacidad y protección de datos</div>
+        <div class="demo" id="pieCentroFormulario">© 2026 AurosanaxMedic · Formulario web de citas · Privacidad y protección de datos</div>
       </main>
     </div>
   </div>
@@ -537,7 +537,7 @@
       if(nombreEl) nombreEl.textContent = nombre;
       if(tituloEl) tituloEl.textContent = 'Agenda tu cita | ' + nombre;
       document.title = 'Agenda tu cita | ' + nombre;
-      if(pieEl) pieEl.textContent = nombre + ' · Formulario web de citas';
+      if(pieEl) pieEl.textContent = '© 2026 ' + nombre + ' · Formulario web de citas · Privacidad y protección de datos';
 
       mostrarContactoCentro('centroDireccion', direccion);
       mostrarContactoCentro('centroEmail', email);
