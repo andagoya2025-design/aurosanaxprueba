@@ -340,8 +340,9 @@
                 <div class="micro-help">10 dígitos, sin espacios ni guiones.</div>
               </div>
               <div class="col-md-6">
-                <label class="form-label">Nombres completos *</label>
-                <input id="nombre_completo" class="form-control" required autocomplete="name" placeholder="Nombre y apellido">
+                <label class="form-label">Nombres y apellidos *</label>
+                <input id="nombre_completo" class="form-control" required autocomplete="name" placeholder="Ej. María Fernanda Pérez López">
+                <div class="micro-help">Escríbalos como constan en su cédula: primero nombres y luego apellidos.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">WhatsApp / teléfono *</label>
@@ -390,8 +391,7 @@
           </div>
         </div>
 
-        <div class="demo" id="pieCentroFormulario">Formulario web de citas</div>
-        <div class="demo">© 2026 AurosanaxMedic · Privacidad y protección de datos</div>
+        <div class="demo" id="pieCentroFormulario">© 2026 AurosanaxMedic · Formulario web de citas · Privacidad y protección de datos</div>
       </main>
     </div>
   </div>
@@ -537,7 +537,7 @@
       if(nombreEl) nombreEl.textContent = nombre;
       if(tituloEl) tituloEl.textContent = 'Agenda tu cita | ' + nombre;
       document.title = 'Agenda tu cita | ' + nombre;
-      if(pieEl) pieEl.textContent = nombre + ' · Formulario web de citas';
+      if(pieEl) pieEl.textContent = '© 2026 ' + nombre + ' · Formulario web de citas · Privacidad y protección de datos';
 
       mostrarContactoCentro('centroDireccion', direccion);
       mostrarContactoCentro('centroEmail', email);
@@ -1107,29 +1107,6 @@
       return pacientes.find(p => documentoPacienteLocal(p) === doc) || null;
     }
 
-    /* Acepta segundos nombres adicionales sin relajar cédula ni apellidos.
-       Si el nombre registrado tiene menos de 3 palabras, exige igualdad exacta:
-       no es posible separar con seguridad nombres y apellidos. */
-    function nombresIdentidadCompatibles(nombreRegistrado, nombreIngresado){
-      const registrado = normalizarNombreIdentidad(nombreRegistrado);
-      const ingresado = normalizarNombreIdentidad(nombreIngresado);
-      if(!registrado || !ingresado) return false;
-      if(registrado === ingresado) return true;
-      const a = registrado.split(' ');
-      const b = ingresado.split(' ');
-      if(a.length < 3 || b.length <= a.length) return false;
-      if(a[0] !== b[0]) return false;
-      if(a[a.length - 2] !== b[b.length - 2] || a[a.length - 1] !== b[b.length - 1]) return false;
-      // Los nombres intermedios ya registrados deben mantenerse en el mismo orden.
-      const intermediosRegistrados = a.slice(1, -2);
-      const intermediosIngresados = b.slice(1, -2);
-      let i = 0;
-      for(const palabra of intermediosIngresados){
-        if(palabra === intermediosRegistrados[i]) i++;
-      }
-      return i === intermediosRegistrados.length;
-    }
-
     function validarIdentidadDocumentoLocal(data){
       const existente = buscarPacientePorDocumentoLocal(data?.numero_documento);
       if(!existente) return {ok:true, paciente:null};
@@ -1140,7 +1117,19 @@
       const a = normalizarNombreIdentidad(nombreRegistrado);
       const b = normalizarNombreIdentidad(nombreIngresado);
 
-      if(a && b && !nombresIdentidadCompatibles(nombreRegistrado, nombreIngresado)){
+      // Coincidencia conservadora: primer nombre y dos apellidos iguales.
+      // Se admiten nombres intermedios adicionales u omitidos.
+      // Con menos de tres palabras se mantiene la coincidencia exacta.
+      const partesA = a.split(' ').filter(Boolean);
+      const partesB = b.split(' ').filter(Boolean);
+      const nombresCompatibles = a === b || (
+        partesA.length >= 3 && partesB.length >= 3 &&
+        partesA[0] === partesB[0] &&
+        partesA[partesA.length - 2] === partesB[partesB.length - 2] &&
+        partesA[partesA.length - 1] === partesB[partesB.length - 1]
+      );
+
+      if(a && b && !nombresCompatibles){
         return {
           ok:false,
           paciente:existente,
