@@ -1046,9 +1046,19 @@
       const c = soloDigitos(cedula);
       if(!/^\d{10}$/.test(c)) return false;
 
+      /*
+        AUROSANAX - VALIDACIÓN NUI/CÉDULA ECUADOR ACTUALIZADA
+        Ajuste quirúrgico:
+        - Conserva 10 dígitos y módulo 10.
+        - Admite códigos territoriales 01-24 y 30 (consulados/exterior).
+        - Admite tercer dígito 6 para cédulas/NUI de extranjeros reportadas
+          por Gobierno Electrónico, evitando la antigua restricción < 6.
+        - No admite tercer dígito 7, 8 o 9 en este campo de cédula/NUI.
+      */
       const provincia = parseInt(c.substring(0, 2), 10);
       const tercerDigito = parseInt(c[2], 10);
-      if(provincia < 1 || provincia > 24 || tercerDigito >= 6) return false;
+      const provinciaValida = (provincia >= 1 && provincia <= 24) || provincia === 30;
+      if(!provinciaValida || tercerDigito > 6) return false;
 
       let suma = 0;
       for(let i = 0; i < 9; i++){
