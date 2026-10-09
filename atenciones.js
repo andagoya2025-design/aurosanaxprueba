@@ -592,7 +592,7 @@
 
   function horaActual(){
     const d = new Date();
-    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
   }
 
   function fechaHora(){
@@ -621,11 +621,11 @@
     if(!hora) return '—';
     const s = String(hora);
     if(s.includes('T')){
-      const hhmm = s.slice(11,16);
-      return hhmm || '—';
+      const horaCompleta = s.slice(11,19);
+      return horaCompleta || '—';
     }
     if(/^\d{1,2}:\d{2}/.test(s)){
-      return s.slice(0,5);
+      return /^\d{1,2}:\d{2}:\d{2}/.test(s) ? s.slice(0,8) : s.slice(0,5);
     }
     return s;
   }
