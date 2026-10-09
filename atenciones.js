@@ -1000,6 +1000,13 @@
         }
       };
 
+      /* En edición/finalización, fecha y hora originales son inmutables.
+         La fila maestra en Sheets conserva sus celdas y formatos nativos. */
+      if(accionAtencion === 'editarAtencion'){
+        delete payload.data.fecha_atencion;
+        delete payload.data.hora_atencion;
+      }
+
       const res = await fetch(API_URL, {
         method: 'POST',
         mode: 'no-cors',
