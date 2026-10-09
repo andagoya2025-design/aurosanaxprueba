@@ -764,9 +764,20 @@
         }
 
         const data = await res.json();
+        // Solo una lista remota válida puede reemplazar la caché local.
+        // Script 65 devuelve un arreglo; se admite {success:true,data:[...]}.
+        if(data && !Array.isArray(data) && data.success === false){
+          throw new Error(data.message || 'Script 65 devolvió un error al listar atenciones');
+        }
         const remotas = Array.isArray(data)
           ? data
-          : (Array.isArray(data?.data) ? data.data : []);
+          : (data && data.success === true && Array.isArray(data.data) ? data.data : null);
+        if(!remotas || remotas.some(a => !a || typeof a !== 'object' || Array.isArray(a))){
+          throw new Error('Formato inesperado de listarAtenciones; se conserva la caché local');
+        }
+        if(remotas.some(a => !String(a.id_atencion || '').trim())){
+          throw new Error('La respuesta de listarAtenciones no contiene identificadores válidos');
+        }
 
         const sincronizadas = mezclarAtencionesLocalesYSheets(remotas);
         atencionesSheetsCargadas = true;
@@ -822,9 +833,15 @@
       }
 
       const data = await res.json();
+      if(data && !Array.isArray(data) && data.success === false){
+        throw new Error(data.message || 'Script 65 devolvió un error al consultar la atención');
+      }
       const remotas = Array.isArray(data)
         ? data
-        : (Array.isArray(data?.data) ? data.data : []);
+        : (data && data.success === true && Array.isArray(data.data) ? data.data : null);
+      if(!remotas){
+        throw new Error('Formato inesperado de listarAtenciones');
+      }
 
       const atencion = remotas
         .map(normalizar)
