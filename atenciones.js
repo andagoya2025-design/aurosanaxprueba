@@ -1,7 +1,8 @@
 /* =====================================================
-   IASYN ERP - MÓDULO ATENCIONES 
+   AUROSANAX ERP - MÓDULO ATENCIONES 
    Archivo: atenciones.js
    Versión: 2.4 contexto maestro enriquecido no invasivo + resumen premium + paginación segura
+   Mejora quirúrgica: PERF 2.5.2 reutiliza snapshot remoto ya confirmado al iniciar atención.
    Objetivo:
    - Agregar historial de atenciones dentro de Historia Clínica.
    - Permitir iniciar y finalizar atención por paciente.
@@ -13,7 +14,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'IASYN_ATENCIONES_V2_0_MOBILE_CARDS';
+  const MODULO = 'AUROSANAX_ATENCIONES_V2_0_MOBILE_CARDS';
   const STORAGE_KEY = 'aurosanax_atenciones_local_v1';
 
   let atencionActivaId = '';
@@ -24,23 +25,32 @@
   */
   let contextoAtencionEpoch = 0;
   let consultasVisible = true;
+
+  /*
+    AUROSANAX BLINDAJE TRANSACCIONAL DE INTERFAZ:
+    - Evita doble ejecución accidental de Iniciar / Finalizar.
+    - Solo vive en memoria; no persiste ni modifica datos clínicos.
+    - El backend y la confirmación autoritativa siguen siendo los dueños del estado real.
+  */
+  let creandoAtencion = false;
+  let finalizandoAtencion = false;
+
   let atencionesSheetsCargadas = false;
   let atencionesSheetsCargando = false;
+  let atencionesSheetsPromesa = null;
+
+  /*
+    AUROSANAX ATENCIONES — TRANSACCIONES LOCALES PENDIENTES
+    Solo protege una atención recién creada mientras se confirma su existencia
+    en Google Sheets. Una lectura remota exitosa sigue siendo la autoridad.
+  */
+  const atencionesPendientesPersistencia = new Set();
+
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
   let consultasPaginaActual = 1;
   const CONSULTAS_POR_PAGINA = 10;
   const RECETAS_STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
-
-  /*
-    IASYN - BLINDAJE ANTIDUPLICIDAD
-    Estos locks son de ejecución, no de persistencia:
-    - impiden doble clic/reentrada mientras se crea una atención;
-    - impiden doble finalización simultánea;
-    - no cambian IDs, eventos, storage keys ni contratos heredados.
-  */
-  let creandoAtencionEnCurso = false;
-  let finalizandoAtencionEnCurso = false;
 
   /* Catálogo único de médicos: se consulta desde Configuración mediante Apps Script. */
   let medicosActivosAtenciones = [];
@@ -48,6 +58,40 @@
   let medicosActivosCargando = null;
 
   function $(id){ return document.getElementById(id); }
+
+  function auroEmitirEstadoProcesoAtencion(nombre, detalle){
+    try{
+      window.dispatchEvent(new CustomEvent(nombre, {
+        detail:Object.assign({
+          id_paciente:String(idPacienteActivo ? idPacienteActivo() : '').trim(),
+          id_atencion:String(atencionActivaId || '').trim()
+        }, detalle || {})
+      }));
+    }catch(error){
+      console.warn(MODULO, 'No se pudo emitir estado de proceso de atención.', error);
+    }
+  }
+
+  function auroActualizarBotonesProcesoAtencion(){
+    const btnIniciar = $('btnIniciarAtencion');
+    const btnFinalizar = $('btnFinalizarAtencion');
+
+    if(btnIniciar && creandoAtencion){
+      btnIniciar.disabled = true;
+      btnIniciar.style.opacity = '0.72';
+      btnIniciar.style.cursor = 'wait';
+      btnIniciar.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Iniciando…';
+    }
+
+    if(btnFinalizar && finalizandoAtencion){
+      btnFinalizar.disabled = true;
+      btnFinalizar.style.opacity = '0.72';
+      btnFinalizar.style.cursor = 'wait';
+      btnFinalizar.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Finalizando…';
+    }
+  }
 
   function inyectarEstilosAtenciones(){
     if(document.getElementById('auroAtencionesResponsiveCSS')) return;
@@ -548,7 +592,7 @@
 
   function horaActual(){
     const d = new Date();
-    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
   }
 
   function fechaHora(){
@@ -577,11 +621,11 @@
     if(!hora) return '—';
     const s = String(hora);
     if(s.includes('T')){
-      const hhmm = s.slice(11,16);
-      return hhmm || '—';
+      const horaCompleta = s.slice(11,19);
+      return horaCompleta || '—';
     }
     if(/^\d{1,2}:\d{2}/.test(s)){
-      return s.slice(0,5);
+      return /^\d{1,2}:\d{2}:\d{2}/.test(s) ? s.slice(0,8) : s.slice(0,5);
     }
     return s;
   }
@@ -651,32 +695,37 @@
   }
 
   function mezclarAtencionesLocalesYSheets(remotas){
-    const locales = leerLocal().map(normalizar);
+    const remotasNormalizadas = (Array.isArray(remotas) ? remotas : [])
+      .map(normalizar)
+      .filter(function(a){
+        return !!String(a.id_atencion || '').trim();
+      });
+
     const mapa = new Map();
 
     /*
-      AUROSANAX FIX:
-      localStorage es solo respaldo temporal.
-      Google Sheets es la fuente principal y sobrescribe la copia local.
+      AUROSANAX BLINDAJE DE AUTORIDAD REMOTA:
+      - Una lectura GET exitosa de Google Sheets gobierna existencia y estado.
+      - localStorage es caché, no autoridad.
+      - Solo se conserva temporalmente una atención local cuyo id_atencion
+        está marcado como creación pendiente de confirmación.
+      - Si una atención fue borrada en Sheets y no está pendiente, desaparece
+        del caché en el siguiente refresco remoto exitoso.
     */
-    locales.forEach(item => {
-      const a = normalizar(item || {});
-      if(a.id_atencion){
-        mapa.set(String(a.id_atencion), a);
+    remotasNormalizadas.forEach(function(a){
+      mapa.set(String(a.id_atencion), a);
+    });
+
+    leerLocal().map(normalizar).forEach(function(local){
+      const id = String(local.id_atencion || '').trim();
+      if(!id || !atencionesPendientesPersistencia.has(id)) return;
+
+      if(!mapa.has(id)){
+        mapa.set(id, local);
       }
     });
 
-    (Array.isArray(remotas) ? remotas : []).forEach(item => {
-      const a = normalizar(item || {});
-      if(a.id_atencion){
-        mapa.set(
-          String(a.id_atencion),
-          Object.assign({}, mapa.get(String(a.id_atencion)) || {}, a)
-        );
-      }
-    });
-
-    const mezcladas = Array.from(mapa.values()).sort((a,b) => {
+    const sincronizadas = Array.from(mapa.values()).sort((a,b) => {
       const na = Number(a.numero_consulta || 0);
       const nb = Number(b.numero_consulta || 0);
       if(na !== nb) return nb - na;
@@ -684,38 +733,205 @@
         .localeCompare(String(a.fecha_atencion + ' ' + a.hora_atencion));
     });
 
-    guardarLocal(mezcladas);
-    return mezcladas;
+    guardarLocal(sincronizadas);
+    return sincronizadas;
   }
 
-  async function cargarAtencionesDesdeSheets(forzar){
-    try{
-      if(atencionesSheetsCargando) return leerLocal();
-      if(atencionesSheetsCargadas && !forzar) return leerLocal();
+  function cargarAtencionesDesdeSheets(forzar){
+    if(atencionesSheetsPromesa){
+      return atencionesSheetsPromesa;
+    }
 
-      if(typeof API_URL === 'undefined' || !API_URL){
+    if(atencionesSheetsCargadas && !forzar){
+      return Promise.resolve(leerLocal());
+    }
+
+    if(typeof API_URL === 'undefined' || !API_URL){
+      return Promise.resolve(leerLocal());
+    }
+
+    atencionesSheetsCargando = true;
+
+    atencionesSheetsPromesa = (async function(){
+      try{
+        const res = await fetch(
+          API_URL + '?accion=listarAtenciones&_=' + Date.now(),
+          { method:'GET', cache:'no-store' }
+        );
+
+        if(!res.ok){
+          throw new Error('Error HTTP ' + res.status);
+        }
+
+        const data = await res.json();
+        // Solo una lista remota válida puede reemplazar la caché local.
+        // Script 65 devuelve un arreglo; se admite {success:true,data:[...]}.
+        if(data && !Array.isArray(data) && data.success === false){
+          throw new Error(data.message || 'Script 65 devolvió un error al listar atenciones');
+        }
+        const remotas = Array.isArray(data)
+          ? data
+          : (data && data.success === true && Array.isArray(data.data) ? data.data : null);
+        if(!remotas || remotas.some(a => !a || typeof a !== 'object' || Array.isArray(a))){
+          throw new Error('Formato inesperado de listarAtenciones; se conserva la caché local');
+        }
+        if(remotas.some(a => !String(a.id_atencion || '').trim())){
+          throw new Error('La respuesta de listarAtenciones no contiene identificadores válidos');
+        }
+
+        const sincronizadas = mezclarAtencionesLocalesYSheets(remotas);
+        atencionesSheetsCargadas = true;
+        return sincronizadas;
+
+      }catch(error){
+        console.warn(
+          MODULO,
+          'No se pudieron cargar atenciones desde Google Sheets.',
+          error
+        );
         return leerLocal();
+
+      }finally{
+        atencionesSheetsCargando = false;
+        atencionesSheetsPromesa = null;
+      }
+    })();
+
+    return atencionesSheetsPromesa;
+  }
+
+  async function obtenerAtencionRemotaPorId(idAtencion){
+    try{
+      const id = String(idAtencion || '').trim();
+      if(!id){
+        return {
+          success:false,
+          atencion:null,
+          message:'No se recibió un id_atencion válido para consultar.'
+        };
       }
 
-      atencionesSheetsCargando = true;
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return {
+          success:false,
+          atencion:null,
+          message:'API_URL no está definida en index.html'
+        };
+      }
 
-      const res = await fetch(API_URL + '?accion=listarAtenciones&_=' + Date.now());
+      const res = await fetch(
+        API_URL + '?accion=listarAtenciones&_=' + Date.now(),
+        { method:'GET', cache:'no-store' }
+      );
+
+      if(!res.ok){
+        return {
+          success:false,
+          atencion:null,
+          message:'Error HTTP ' + res.status
+        };
+      }
+
       const data = await res.json();
-      const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+      if(data && !Array.isArray(data) && data.success === false){
+        throw new Error(data.message || 'Script 65 devolvió un error al consultar la atención');
+      }
+      const remotas = Array.isArray(data)
+        ? data
+        : (data && data.success === true && Array.isArray(data.data) ? data.data : null);
+      if(!remotas){
+        throw new Error('Formato inesperado de listarAtenciones');
+      }
 
-      const mezcladas = mezclarAtencionesLocalesYSheets(remotas);
-      atencionesSheetsCargadas = true;
-      atencionesSheetsCargando = false;
+      const atencion = remotas
+        .map(normalizar)
+        .find(function(item){
+          return String(item.id_atencion || '').trim() === id;
+        }) || null;
 
-      return mezcladas;
-
+      return {
+        success:!!atencion,
+        atencion:atencion,
+        message:atencion
+          ? 'Atención localizada en Google Sheets.'
+          : 'La atención no apareció en Google Sheets.'
+      };
     }catch(error){
-      atencionesSheetsCargando = false;
-      console.warn(MODULO, 'No se pudieron cargar atenciones desde Google Sheets.', error);
-      return leerLocal();
+      console.warn(MODULO, 'No se pudo consultar la atención remota.', error);
+      return {
+        success:false,
+        atencion:null,
+        message:error.message || String(error)
+      };
     }
   }
 
+  /*
+    AUROSANAX FIX ANTIRREGRESIVO - CONFIRMACIÓN REMOTA DE ESTADO:
+    Verifica una atención directamente contra Google Sheets sin mezclar
+    la respuesta con localStorage. Se usa para no confirmar una finalización
+    basándose en el estado local del navegador.
+  */
+  async function verificarEstadoAtencionRemoto(idAtencion, estadoEsperado){
+    try{
+      const id = String(idAtencion || '').trim();
+      const esperado = String(estadoEsperado || '').trim();
+
+      if(!id){
+        return { success:false, message:'No se recibió un id_atencion válido para verificar.' };
+      }
+
+      if(typeof API_URL === 'undefined' || !API_URL){
+        return { success:false, message:'API_URL no está definida en index.html' };
+      }
+
+      const res = await fetch(
+        API_URL + '?accion=listarAtenciones&_=' + Date.now(),
+        { method:'GET', cache:'no-store' }
+      );
+      const data = await res.json();
+      const remotas = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.data) ? data.data : []);
+
+      const atencionRemota = remotas
+        .map(normalizar)
+        .find(function(item){
+          return String(item.id_atencion || '').trim() === id;
+        });
+
+      if(!atencionRemota){
+        return {
+          success:false,
+          message:'La atención no apareció en la lectura remota de Google Sheets.'
+        };
+      }
+
+      const estadoRemoto = String(atencionRemota.estado_atencion || '').trim();
+      const coincide = estadoRemoto.toLowerCase() === esperado.toLowerCase();
+
+      return {
+        success:coincide,
+        estado_remoto:estadoRemoto,
+        atencion:atencionRemota,
+        /*
+          AUROSANAX PERF 2.5.2 — SNAPSHOT AUTORITATIVO REUTILIZABLE:
+          Esta misma lectura GET ya contiene la lista remota completa usada para
+          confirmar el estado. Se devuelve únicamente para que el flujo llamador
+          pueda reconstruir el caché sin repetir inmediatamente otro listarAtenciones.
+          No convierte caché/localStorage en autoridad y no sobrevive a otra operación.
+        */
+        atenciones_remotas:remotas,
+        message: coincide
+          ? 'Estado confirmado en Google Sheets.'
+          : 'Google Sheets devolvió un estado distinto al esperado.'
+      };
+
+    }catch(error){
+      console.warn(MODULO, 'No se pudo confirmar el estado remoto de la atención.', error);
+      return { success:false, message:error.message };
+    }
+  }
 
   async function enviarAtencionGoogleSheets(atencion, accion){
     try{
@@ -728,12 +944,6 @@
         ? 'editarAtencion'
         : 'guardarAtencion';
 
-      /*
-        IASYN 2 · BLINDAJE HISTORIA ↔ PACIENTE
-        Solo bloquea cuando existe evidencia explícita de que la historia
-        pertenece a otro paciente. Si la pertenencia no puede determinarse
-        todavía, conserva el flujo heredado y permite vinculación posterior.
-      */
       const idPacienteEnvio = String(
         atencion.id_paciente || idPacienteActivo() || ''
       ).trim();
@@ -752,17 +962,36 @@
         };
       }
 
+      /*
+        AUROSANAX BLINDAJE id_cita:
+        En una edición/finalización, una copia local antigua con id_cita vacío
+        no puede borrar un vínculo de cita ya persistido. id_cita sigue siendo
+        opcional: si nunca existió, permanece vacío.
+      */
+      let idCitaEnvio = String(atencion.id_cita || '').trim();
+
+      if(accionAtencion === 'editarAtencion' && !idCitaEnvio){
+        const lecturaRemota = await obtenerAtencionRemotaPorId(atencion.id_atencion);
+        const idCitaRemota = String(
+          lecturaRemota?.atencion?.id_cita || ''
+        ).trim();
+
+        if(idCitaRemota){
+          idCitaEnvio = idCitaRemota;
+        }
+      }
+
       const payload = {
         accion: accionAtencion,
         data: {
           id_atencion: atencion.id_atencion || '',
           numero_consulta: Number(atencion.numero_consulta || siguienteConsulta(atencion.id_paciente || idPacienteActivo()) || 1),
           id_paciente: atencion.id_paciente || '',
-          id_cita: atencion.id_cita || '',
+          id_cita: idCitaEnvio,
           id_historia: atencion.id_historia || obtenerIdHistoriaActual(atencion.id_paciente) || '',
           id_medico: atencion.id_medico || '',
-          fecha_atencion: atencion.fecha_atencion || fechaHoyISO(),
-          hora_atencion: atencion.hora_atencion || horaActual(),
+          fecha_atencion: accionAtencion === 'guardarAtencion' ? (atencion.fecha_atencion || fechaHoyISO()) : (atencion.fecha_atencion ?? ''),
+          hora_atencion: accionAtencion === 'guardarAtencion' ? (atencion.hora_atencion || horaActual()) : (atencion.hora_atencion ?? ''),
           tipo_atencion: atencion.tipo_atencion || '',
           estado_atencion: atencion.estado_atencion || 'Abierta',
           creado_por: atencion.creado_por || usuarioActual(),
@@ -771,9 +1000,9 @@
         }
       };
 
-      // IASYN 2 · BLINDAJE ANTIRREGRESIVO: la edición nunca modifica
-      // la fecha ni la hora clínica originales de la atención.
-      if (accionAtencion === 'editarAtencion') {
+      /* En edición/finalización, fecha y hora originales son inmutables.
+         La fila maestra en Sheets conserva sus celdas y formatos nativos. */
+      if(accionAtencion === 'editarAtencion'){
         delete payload.data.fecha_atencion;
         delete payload.data.hora_atencion;
       }
@@ -798,12 +1027,65 @@
     }
   }
 
-
   function pacienteActivo(){
     try{
       if(typeof window.getPacienteActivo === 'function') return window.getPacienteActivo();
     }catch(e){}
     return null;
+  }
+
+  /*
+    AUROSANAX MENSAJE QUIRÚRGICO:
+    Resuelve únicamente el nombre descriptivo de un paciente ya cargado.
+    No modifica selección, IDs, contexto clínico, localStorage ni backend.
+  */
+  function nombrePacientePorIdAtenciones(idPaciente){
+    const id = String(idPaciente || '').trim();
+    if(!id) return 'Paciente no identificado';
+
+    try{
+      const activo = pacienteActivo();
+      if(
+        activo &&
+        String(activo.id_paciente || activo.id || '').trim() === id
+      ){
+        const nombreActivo = String(
+          activo.nombre_completo ||
+          activo.nombre ||
+          ((activo.nombres || '') + ' ' + (activo.apellidos || ''))
+        ).replace(/\s+/g,' ').trim();
+
+        if(nombreActivo) return nombreActivo;
+      }
+
+      /*
+        pacientes.js mantiene el catálogo oficial en "patients".
+        Se consulta solo en lectura y por coincidencia exacta de id_paciente.
+      */
+      if(typeof patients !== 'undefined' && Array.isArray(patients)){
+        const encontrado = patients.find(function(p){
+          return String(p.id_paciente || p.id || '').trim() === id;
+        }) || null;
+
+        if(encontrado){
+          const nombre = String(
+            encontrado.nombre_completo ||
+            encontrado.nombre ||
+            ((encontrado.nombres || '') + ' ' + (encontrado.apellidos || ''))
+          ).replace(/\s+/g,' ').trim();
+
+          if(nombre) return nombre;
+        }
+      }
+    }catch(error){
+      console.warn(
+        MODULO,
+        'No se pudo resolver el nombre del paciente para el aviso de atención abierta.',
+        error
+      );
+    }
+
+    return id;
   }
 
   function idPacienteActivo(){
@@ -1013,7 +1295,7 @@
   }
 
   function usuarioActual(){
-    return 'IASYN ERP';
+    return 'AUROSANAX ERP';
   }
 
   function idNuevo(){
@@ -1036,8 +1318,8 @@
       id_cita: a.id_cita || '',
       id_historia: a.id_historia || '',
       id_medico: a.id_medico || '',
-      fecha_atencion: a.fecha_atencion || fechaHoyISO(),
-      hora_atencion: a.hora_atencion || horaActual(),
+      fecha_atencion: a.fecha_atencion ?? '',
+      hora_atencion: a.hora_atencion ?? '',
       tipo_atencion: a.tipo_atencion || '',
       estado_atencion: a.estado_atencion || 'Abierta',
       creado_por: a.creado_por || usuarioActual(),
@@ -1072,6 +1354,68 @@
     return atencionesPaciente(idPaciente).find(a => String(a.estado_atencion).toLowerCase() === 'abierta') || null;
   }
 
+  function atencionesAbiertasPaciente(idPaciente){
+    return atencionesPaciente(idPaciente).filter(function(a){
+      return String(a.estado_atencion || '').toLowerCase() === 'abierta';
+    });
+  }
+
+  function atencionesAbiertasMedico(idMedico){
+    const id = String(idMedico || '').trim();
+    if(!id) return [];
+
+    return leerLocal()
+      .map(normalizar)
+      .filter(function(a){
+        return String(a.id_medico || '').trim() === id &&
+          String(a.estado_atencion || '').toLowerCase() === 'abierta';
+      });
+  }
+
+  function atencionAbiertaActiva(idPaciente){
+    const id = String(idPaciente || idPacienteActivo() || '').trim();
+    if(!id || !atencionActivaId) return null;
+
+    const a = leerLocal().map(normalizar).find(function(item){
+      return String(item.id_atencion || '') === String(atencionActivaId || '') &&
+        String(item.id_paciente || '').trim() === id &&
+        String(item.estado_atencion || '').toLowerCase() === 'abierta';
+    });
+
+    return a || null;
+  }
+
+  /*
+    AUROSANAX BLINDAJE ANTIRREGRESIVO — FINALIZAR POR CONTEXTO EXACTO:
+    El botón real Finalizar solo se habilita cuando la atención actualmente
+    seleccionada (atencionActivaId) pertenece al paciente visible y está Abierta.
+    La existencia de otra atención abierta del mismo paciente NO habilita este botón.
+  */
+  function auroActualizarBotonFinalizarPorContexto(idPaciente){
+    const btnFinalizar = $('btnFinalizarAtencion');
+    if(!btnFinalizar) return;
+
+    const id = String(idPaciente || idPacienteActivo() || '').trim();
+    const abiertaSeleccionada = id ? atencionAbiertaActiva(id) : null;
+    const disponible = !!abiertaSeleccionada;
+
+    if(finalizandoAtencion){
+      btnFinalizar.disabled = true;
+      btnFinalizar.style.opacity = '0.72';
+      btnFinalizar.style.cursor = 'wait';
+      btnFinalizar.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Finalizando…';
+      return;
+    }
+
+    btnFinalizar.disabled = !disponible;
+    btnFinalizar.style.opacity = disponible ? '1' : '0.55';
+    btnFinalizar.style.cursor = disponible ? 'pointer' : 'not-allowed';
+    btnFinalizar.innerHTML = disponible
+      ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
+      : '<i class="bi bi-lock me-1"></i> Cerrada ✓';
+  }
+
   function siguienteConsulta(idPaciente){
     return atencionesPaciente(idPaciente).reduce((m,a) => Math.max(m, Number(a.numero_consulta || 0)), 0) + 1;
   }
@@ -1093,12 +1437,6 @@
     ).trim();
   }
 
-  /*
-    IASYN 2 · PERTENENCIA HISTORIA/PACIENTE
-    true  = se pudo demostrar pertenencia.
-    false = existe evidencia de que pertenece a otro paciente.
-    null  = no hay información suficiente; no se inventa una conclusión.
-  */
   function auroEstadoPertenenciaHistoria(idHistoria, idPaciente){
     idHistoria = String(idHistoria || '').trim();
     idPaciente = String(idPaciente || '').trim();
@@ -1135,8 +1473,8 @@
           if(existe) return true;
 
           /*
-            Solo se rechaza cuando la fuente oficial del paciente está cargada
-            y contiene historias, pero la historia candidata no aparece allí.
+            Si la fuente oficial del paciente está disponible y la historia no
+            aparece allí, existe evidencia suficiente para rechazarla.
           */
           if(historiasPaciente.length) return false;
         }
@@ -1162,10 +1500,10 @@
   function obtenerIdHistoriaActual(idPacienteEsperado){
     try{
       /*
-        IASYN 2 · BLINDAJE DE CONTEXTO
-        Una referencia residual de historia solo se hereda cuando puede
-        demostrarse que corresponde al paciente esperado.
-        Ante duda se deja vacío y la vinculación posterior sigue disponible.
+        AUROSANAX BLINDAJE DE CONTEXTO:
+        Una historia residual solo puede heredarse al crear/guardar una atención
+        si puede demostrarse que pertenece al paciente esperado.
+        Ante duda se devuelve vacío; nunca se reutiliza una historia de otro paciente.
       */
       const idPaciente = String(
         idPacienteEsperado || idPacienteActivo() || ''
@@ -1248,6 +1586,89 @@
   }
 
 
+  /*
+    AUROSANAX V30 — BLINDAJE ANTIRREGRESIVO DE CONTEXTO
+    ---------------------------------------------------
+    Devuelve la atención que gobierna actualmente el contexto visual.
+    No activa, no finaliza y no modifica persistencia.
+  */
+  function auroAtencionActivaRegistro(){
+    const id = String(atencionActivaId || '').trim();
+    if(!id) return null;
+
+    return leerLocal()
+      .map(normalizar)
+      .find(function(item){
+        return String(item.id_atencion || '').trim() === id;
+      }) || null;
+  }
+
+  /*
+    Limpieza VISUAL selectiva de módulos dependientes de una atención.
+
+    IMPORTANTE:
+    - No toca Antecedentes porque pertenecen a Historia Clínica y no a una
+      consulta individual.
+    - No borra localStorage, Google Sheets ni registros persistidos.
+    - Se utiliza únicamente cuando existe una transición clínica REAL:
+      atención A -> B, atención -> finalizada/sin atención, cambio real de
+      paciente o historia nueva.
+  */
+  function auroLimpiarCamposContextoAtencion(){
+    [
+      'hc_anamnesis',
+      'hc_examen',
+      'hc_gineco',
+      'hc_obstetricia',
+      'hc_estetica',
+      'hc_diagnostico',
+      'hc_plan',
+      'hc_docs'
+    ].forEach(function(panelId){
+      const panel = document.getElementById(panelId);
+      if(!panel) return;
+
+      panel.querySelectorAll('input, textarea, select').forEach(function(el){
+        if(el.type === 'checkbox' || el.type === 'radio'){
+          el.checked = false;
+          return;
+        }
+
+        if(el.tagName === 'SELECT'){
+          el.selectedIndex = 0;
+          return;
+        }
+
+        if(!el.readOnly && !el.disabled){
+          el.value = '';
+        }
+      });
+
+      panel.querySelectorAll('[contenteditable="true"]').forEach(function(el){
+        el.innerHTML = '';
+      });
+    });
+
+    /*
+      Se ocultan únicamente cajas de datos previos dependientes del contexto
+      de consulta. No se elimina ningún dato persistido.
+    */
+    [
+      'auroExamenFisicoPrevioBox',
+      'auroDiagnosticosPreviosBox'
+    ].forEach(function(id){
+      const box = document.getElementById(id);
+      if(box){
+        box.style.display = 'none';
+        const contenido = box.querySelector(
+          '.auro-previos-content, .auro-previos-body, [data-previos-content]'
+        );
+        if(contenido) contenido.innerHTML = '';
+      }
+    });
+  }
+
+
   function auroInvalidarContextoAtencion(opciones){
     opciones = opciones || {};
 
@@ -1284,7 +1705,12 @@
       [
         'auroLimpiarPlanVisualAntesDeCambiarAtencion',
         'auroLimpiarDiagnosticos',
-        'auroExamenFisicoLimpiarFormulario'
+        'auroExamenFisicoLimpiarFormulario',
+        'auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada',
+        'limpiarFormularioGinecologia',
+        'limpiarFormularioObstetricia',
+        'limpiarFormularioEstetica',
+        'limpiarFormularioDocumentos'
       ].forEach(function(nombre){
         try{
           if(typeof window[nombre] === 'function') window[nombre]();
@@ -1308,6 +1734,14 @@
       }catch(error){
         console.warn('AUROSANAX ATENCIONES: no se pudo limpiar Examen Físico.', error);
       }
+
+      /*
+        Fallback visual antirregresivo:
+        si algún módulo no expone limpiador público o todavía no terminó de
+        inicializarse, se eliminan únicamente los campos VISUALES dependientes
+        de la atención. Antecedentes queda expresamente fuera.
+      */
+      auroLimpiarCamposContextoAtencion();
     }
 
     window.dispatchEvent(new CustomEvent('aurosanax:atencion-limpiada', {
@@ -1357,6 +1791,23 @@
       console.warn(
         'AUROSANAX ATENCIONES: se bloqueó una atención de otro paciente.',
         { idPacienteVisible, idPaciente, idAtencion }
+      );
+      return false;
+    }
+
+    const idHistoria = String(a.id_historia || '').trim();
+    if(
+      idHistoria &&
+      idPaciente &&
+      auroEstadoPertenenciaHistoria(idHistoria, idPaciente) === false
+    ){
+      console.warn(
+        'AUROSANAX ATENCIONES: se bloqueó una historia clínica de otro paciente.',
+        { idPaciente, idHistoria, idAtencion }
+      );
+      alert(
+        'La atención seleccionada contiene una historia clínica que no corresponde ' +
+        'al paciente activo. Se bloqueó la activación para proteger el contexto clínico.'
       );
       return false;
     }
@@ -1484,30 +1935,13 @@
     return true;
   }
 
-  async function crearAtencion(){
-    if(creandoAtencionEnCurso){
-      return null;
-    }
-
-    creandoAtencionEnCurso = true;
-    const btnIniciarLock = $('btnIniciarAtencion');
-    if(btnIniciarLock) btnIniciarLock.disabled = true;
-
-    try{
-      const p = pacienteActivo();
-      const idPaciente = idPacienteActivo();
+  async function crearAtencionBase(){
+    const p = pacienteActivo();
+    const idPaciente = idPacienteActivo();
 
     if(!p || !idPaciente){
       alert('Seleccione primero un paciente desde Pacientes o Historia Clínica.');
       return null;
-    }
-
-    const abierta = atencionAbierta(idPaciente);
-    if(abierta){
-      atencionActivaId = abierta.id_atencion;
-      renderAtencionesPaciente();
-      alert('Este paciente ya tiene una atención abierta.');
-      return abierta;
     }
 
     /*
@@ -1577,6 +2011,75 @@
       idMedico = idMedicoRegistro(seleccionado);
     }
 
+    /*
+      AUROSANAX BLINDAJE DE SESIÓN:
+      Se refresca primero la fuente persistente para no decidir con una copia
+      local antigua. Un mismo médico puede conservar varias atenciones abiertas,
+      pero solo una queda activa en pantalla.
+    */
+    await cargarAtencionesDesdeSheets(true);
+
+    /*
+      AUROSANAX REGLA CLÍNICA — UNA SOLA ABIERTA POR PACIENTE:
+      El ERP puede conservar varias atenciones abiertas de distintos pacientes,
+      incluso para el mismo médico. Lo que se bloquea es una segunda atención
+      Abierta para el mismo id_paciente.
+    */
+    const abiertasPaciente = atencionesAbiertasPaciente(idPaciente);
+
+    if(abiertasPaciente.length){
+      const abiertaPaciente = abiertasPaciente
+        .slice()
+        .sort(function(a,b){
+          return Number(b.numero_consulta || 0) - Number(a.numero_consulta || 0);
+        })[0];
+
+      alert(
+        'Este paciente ya tiene una atención abierta' +
+        (abiertaPaciente.numero_consulta
+          ? ' (consulta #' + abiertaPaciente.numero_consulta + ')'
+          : '') +
+        '. Continúe o finalice esa atención antes de iniciar una nueva.'
+      );
+
+      return null;
+    }
+
+    const abiertasMismoMedico = atencionesAbiertasMedico(idMedico);
+    if(abiertasMismoMedico.length){
+      const activaMismoMedico = abiertasMismoMedico.find(function(a){
+        return String(a.id_atencion || '') === String(atencionActivaId || '');
+      }) || abiertasMismoMedico[0];
+
+      /*
+        AUROSANAX MENSAJE QUIRÚRGICO:
+        En este punto las atenciones abiertas del médico pertenecen a otros
+        pacientes, porque el mismo paciente ya fue bloqueado arriba.
+      */
+      const detalleAbiertas = abiertasMismoMedico.map(function(a){
+        const idPacienteAbierto = String(a.id_paciente || '').trim();
+        const nombrePacienteAbierto = nombrePacientePorIdAtenciones(idPacienteAbierto);
+        const numeroConsulta = Number(a.numero_consulta || 0);
+        const idAtencionAbierta = String(a.id_atencion || '').trim() || 'Sin ID';
+
+        return '• Paciente: ' + nombrePacienteAbierto +
+          '\n  Consulta: ' + (numeroConsulta ? '#' + numeroConsulta : 'Sin número') +
+          '\n  ID atención: ' + idAtencionAbierta;
+      }).join('\n\n');
+
+      const continuar = confirm(
+        'El médico seleccionado ya tiene ' + abiertasMismoMedico.length +
+        ' atención' + (abiertasMismoMedico.length === 1 ? '' : 'es') +
+        ' abierta' + (abiertasMismoMedico.length === 1 ? '' : 's') + '.\n\n' +
+        detalleAbiertas + '\n\n' +
+        'Las atenciones abiertas corresponden a otros pacientes.\n' +
+        'Aceptar: mantenerlas abiertas e iniciar esta nueva atención.\n' +
+        'Cancelar: no crear otra atención; puede usar Ver o Finalizar.'
+      );
+
+      if(!continuar) return null;
+    }
+
     const num = siguienteConsulta(idPaciente);
 
     const nueva = normalizar({
@@ -1596,6 +2099,7 @@
     });
 
     const lista = leerLocal();
+    atencionesPendientesPersistencia.add(String(nueva.id_atencion || '').trim());
     lista.unshift(nueva);
     guardarLocal(lista);
 
@@ -1616,6 +2120,7 @@
         return String(item.id_atencion || '') !== String(nueva.id_atencion || '');
       });
       guardarLocal(listaRollback);
+      atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
       renderAtencionesPaciente();
 
       alert(
@@ -1626,6 +2131,67 @@
       return null;
     }
 
+    /*
+      El POST usa mode:'no-cors', por lo que el navegador no puede interpretar
+      el JSON de respuesta del backend. Se confirma por GET la existencia del
+      id_atencion exacto antes de activar contexto clínico.
+    */
+    const confirmacionInicio = await verificarEstadoAtencionRemoto(
+      nueva.id_atencion,
+      'Abierta'
+    );
+
+    if(!confirmacionInicio || !confirmacionInicio.success){
+      const listaRollback = leerLocal().filter(function(item){
+        return String(item.id_atencion || '') !== String(nueva.id_atencion || '');
+      });
+
+      guardarLocal(listaRollback);
+      atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
+
+      /*
+        Reconstrucción autoritativa del caché después de un rechazo/no confirmación.
+        Si la API no responde, cargarAtencionesDesdeSheets conserva el fallback local
+        sin inventar persistencia.
+      */
+      await cargarAtencionesDesdeSheets(true);
+      renderAtencionesPaciente();
+
+      alert(
+        'La nueva atención no fue confirmada en Google Sheets. ' +
+        'No se activó la consulta para evitar una atención fantasma o duplicada.'
+      );
+      return null;
+    }
+
+    const nuevaConfirmada = normalizar(Object.assign(
+      {},
+      nueva,
+      confirmacionInicio.atencion || {}
+    ));
+
+    atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
+
+    /*
+      AUROSANAX PERF 2.5.2 — REUTILIZACIÓN QUIRÚRGICA DE LA MISMA LECTURA:
+      verificarEstadoAtencionRemoto() acaba de confirmar este id_atencion mediante
+      un GET autoritativo de Google Sheets y conserva en atenciones_remotas el mismo
+      snapshot completo. Reutilizarlo aquí evita un segundo listarAtenciones inmediato.
+
+      Blindaje antirregresivo:
+      - Google Sheets sigue siendo la autoridad.
+      - No se introduce TTL ni caché persistente nuevo.
+      - No se elimina cache:'no-store'.
+      - No se toca contextoAtencionEpoch ni los controles de paciente/atención.
+      - Si por compatibilidad no existe el snapshot, se conserva el GET forzado anterior.
+    */
+    if(Array.isArray(confirmacionInicio.atenciones_remotas)){
+      mezclarAtencionesLocalesYSheets(confirmacionInicio.atenciones_remotas);
+      atencionesSheetsCargadas = true;
+    }else{
+      await cargarAtencionesDesdeSheets(true);
+    }
+
     if(cita){
       limpiarCitaSeleccionadaAgenda();
     }
@@ -1634,38 +2200,69 @@
       La atención recién creada se activa mediante el mismo motor utilizado
       por el botón Ver. Así ningún módulo conserva el contexto anterior.
     */
-    sincronizarContextoAtencion(nueva, {
+    sincronizarContextoAtencion(nuevaConfirmada, {
       motivo:'atencion_creada',
       emitirIniciada:true
     });
 
-      renderAtencionesPaciente();
-      return nueva;
+    renderAtencionesPaciente();
+    return nuevaConfirmada;
+  }
+
+  async function crearAtencion(){
+    if(creandoAtencion) return null;
+
+    creandoAtencion = true;
+    auroActualizarBotonesProcesoAtencion();
+    auroEmitirEstadoProcesoAtencion('aurosanax:atencion-iniciando');
+
+    try{
+      return await crearAtencionBase();
     }finally{
-      creandoAtencionEnCurso = false;
-      renderAtencionesPaciente();
+      creandoAtencion = false;
+      auroEmitirEstadoProcesoAtencion('aurosanax:atencion-inicio-fin');
+
+      /*
+        No se fuerza un render clínico completo.
+        Solo se restaura el estado visual de botones con la fuente actual.
+      */
+      const btnIniciar = $('btnIniciarAtencion');
+      if(btnIniciar){
+        btnIniciar.disabled = false;
+        btnIniciar.style.opacity = '1';
+        btnIniciar.style.cursor = 'pointer';
+        btnIniciar.innerHTML = '<i class="bi bi-play-circle me-1"></i> Iniciar';
+      }
+
+      auroActualizarBotonesProcesoAtencion();
     }
   }
 
-  async function finalizarAtencion(){
-    if(finalizandoAtencionEnCurso){
-      return;
-    }
-
-    finalizandoAtencionEnCurso = true;
-    const btnFinalizarLock = $('btnFinalizarAtencion');
-    if(btnFinalizarLock) btnFinalizarLock.disabled = true;
-
-    try{
-      const idPaciente = idPacienteActivo();
+  async function finalizarAtencionBase(){
+    const idPaciente = idPacienteActivo();
     if(!idPaciente){
       alert('Seleccione primero un paciente.');
       return;
     }
 
-    const abierta = atencionAbierta(idPaciente);
+    const abiertas = atencionesAbiertasPaciente(idPaciente);
+    const abierta = atencionAbiertaActiva(idPaciente);
+
+    /*
+      BLINDAJE CRÍTICO:
+      Nunca se sustituye silenciosamente la atención seleccionada por otra
+      atención abierta del mismo paciente. Para finalizar, el id_atencion
+      seleccionado debe ser exactamente una atención Abierta.
+    */
     if(!abierta){
-      alert('No hay atención abierta para finalizar.');
+      if(abiertas.length){
+        alert(
+          'La consulta seleccionada no es una atención abierta. ' +
+          'Pulse Ver en la atención abierta que desea finalizar y vuelva a intentarlo.'
+        );
+      }else{
+        alert('No hay atención abierta para finalizar.');
+      }
       return;
     }
 
@@ -1673,27 +2270,59 @@
 
     const lista = leerLocal();
     const idx = lista.findIndex(a => String(a.id_atencion) === String(abierta.id_atencion));
+    const baseFinalizacion = idx >= 0 ? lista[idx] : abierta;
 
-    let atencionFinalizada = null;
-
-    if(idx >= 0){
-      atencionFinalizada = Object.assign({}, lista[idx], {
-        numero_consulta: Number(lista[idx].numero_consulta || abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
-        estado_atencion: 'Finalizada',
-        actualizado_en: fechaHora()
-      });
-
-      lista[idx] = atencionFinalizada;
-      guardarLocal(lista);
-    }else{
-      atencionFinalizada = Object.assign({}, abierta, {
-        numero_consulta: Number(abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
-        estado_atencion: 'Finalizada',
-        actualizado_en: fechaHora()
-      });
-    }
+    const atencionFinalizada = Object.assign({}, baseFinalizacion, {
+      numero_consulta: Number(baseFinalizacion.numero_consulta || abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
+      estado_atencion: 'Finalizada',
+      actualizado_en: fechaHora()
+    });
 
     const idFinalizada = String(atencionFinalizada?.id_atencion || abierta.id_atencion || '').trim();
+
+    /*
+      AUROSANAX FIX ANTIRREGRESIVO:
+      No se altera localStorage ni se limpia el contexto clínico antes de que
+      Google Sheets confirme que ESTE mismo id_atencion quedó Finalizada.
+    */
+    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
+
+    if(!resultado || !resultado.success){
+      alert(
+        'No se pudo enviar la finalización a Google Sheets. ' +
+        'La atención permanece abierta en este equipo para evitar un cierre falso.'
+      );
+      return;
+    }
+
+    const verificacion = await verificarEstadoAtencionRemoto(
+      idFinalizada,
+      'Finalizada'
+    );
+
+    if(!verificacion || !verificacion.success){
+      const estadoRemoto = String(verificacion?.estado_remoto || '').trim();
+      alert(
+        'La finalización no fue confirmada en la base de datos.' +
+        (estadoRemoto ? ' Estado remoto actual: ' + estadoRemoto + '.' : '') +
+        ' La atención permanece abierta en este equipo.'
+      );
+      return;
+    }
+
+    const atencionConfirmada = Object.assign(
+      {},
+      baseFinalizacion,
+      verificacion.atencion || atencionFinalizada,
+      { estado_atencion:'Finalizada' }
+    );
+
+    if(idx >= 0){
+      lista[idx] = atencionConfirmada;
+    }else{
+      lista.unshift(atencionConfirmada);
+    }
+    guardarLocal(lista);
 
     auroInvalidarContextoAtencion({
       idAnterior:idFinalizada,
@@ -1705,16 +2334,36 @@
 
     renderAtencionesPaciente();
 
-    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
+    auroEmitirEstadoProcesoAtencion('aurosanax:atencion-finalizada', {
+      id_paciente:idPaciente,
+      id_atencion:idFinalizada,
+      estado:'Finalizada',
+      confirmado:true
+    });
 
-      if(resultado && resultado.success){
-        alert('Atención finalizada y enviada a Google Sheets.');
-      }else{
-        alert('Atención finalizada localmente, pero no se pudo enviar a Google Sheets. Revise Apps Script o conexión.');
-      }
+    alert('Atención finalizada y confirmada en Google Sheets.');
+  }
+
+  async function finalizarAtencion(){
+    if(finalizandoAtencion) return;
+
+    finalizandoAtencion = true;
+    auroActualizarBotonesProcesoAtencion();
+    auroEmitirEstadoProcesoAtencion('aurosanax:atencion-finalizando');
+
+    try{
+      await finalizarAtencionBase();
     }finally{
-      finalizandoAtencionEnCurso = false;
+      finalizandoAtencion = false;
+      auroEmitirEstadoProcesoAtencion('aurosanax:atencion-finalizacion-fin');
+
+      /*
+        Restauración visual sin alterar el estado clínico.
+        Si la atención quedó finalizada, renderAtencionesPaciente() ya habrá
+        deshabilitado correctamente el botón real.
+      */
       renderAtencionesPaciente();
+      auroActualizarBotonesProcesoAtencion();
     }
   }
 
@@ -1737,12 +2386,11 @@
       };
     }
 
-    if(auroEstadoPertenenciaHistoria(idHistoria, idPaciente) === false){
+    const estadoHistoria = auroEstadoPertenenciaHistoria(idHistoria, idPaciente);
+    if(estadoHistoria === false){
       return {
         success:false,
-        message:
-          'La historia clínica seleccionada pertenece a otro paciente. ' +
-          'Se bloqueó la vinculación automática.'
+        message:'La historia clínica recibida pertenece a otro paciente.'
       };
     }
 
@@ -1762,10 +2410,27 @@
     );
 
     if(idx < 0){
-      idx = lista.findIndex(a =>
-        String(a.id_paciente || '').trim() === idPaciente &&
-        String(a.estado_atencion || '').toLowerCase() === 'abierta'
-      );
+      const abiertasPaciente = lista
+        .map((a, index) => ({a, index}))
+        .filter(x =>
+          String(x.a.id_paciente || '').trim() === idPaciente &&
+          String(x.a.estado_atencion || '').toLowerCase() === 'abierta'
+        );
+
+      /*
+        Con varias atenciones abiertas del mismo paciente no se adivina cuál
+        debe recibir la historia. La selección activa debe decidirlo.
+      */
+      if(abiertasPaciente.length === 1){
+        idx = abiertasPaciente[0].index;
+      }else if(abiertasPaciente.length > 1){
+        return {
+          success:false,
+          message:
+            'Hay varias atenciones abiertas para este paciente. ' +
+            'Seleccione primero la atención correcta antes de vincular la historia.'
+        };
+      }
     }
 
     if(idx < 0){
@@ -2389,10 +3054,10 @@
     }
 
     /*
-      IASYN 2 · BLINDAJE VISUAL ADITIVO
-      1. Reutiliza el puente ya expuesto por Vista Integral.
-      2. Si todavía no existe por orden de carga, usa el MISMO visor oficial
-         de Recetas. No crea un motor paralelo ni cambia id_receta.
+      BLINDAJE VISUAL ADITIVO:
+      Prioriza el puente ya existente de Vista Integral. Si por orden de carga
+      ese puente todavía no está disponible, usa directamente el MISMO visor
+      oficial de recetas. No crea otro motor ni modifica la receta.
     */
     if(
       window.AurosanaxVistaIntegral &&
@@ -2570,6 +3235,13 @@
       emitirIniciada:false,
       idAnterior:String(atencionActivaId || '').trim()
     });
+
+    /*
+      Refresco visual localizado:
+      el botón Finalizar refleja inmediatamente la atención recién seleccionada
+      sin esperar otro render general.
+    */
+    auroActualizarBotonFinalizarPorContexto(idPacienteAtencion);
   }
 
   function asegurarBloque(){
@@ -2654,7 +3326,7 @@
     }
 
     const arr = atencionesPaciente(idPaciente);
-    const abierta = atencionAbierta(idPaciente);
+    const abierta = atencionAbiertaActiva(idPaciente) || atencionAbierta(idPaciente);
 
     if(btnToggleConsultas){
       btnToggleConsultas.disabled = false;
@@ -2665,50 +3337,82 @@
 
 
     if(btnIniciar){
-      btnIniciar.disabled = !!abierta || creandoAtencionEnCurso;
-      btnIniciar.style.opacity = (abierta || creandoAtencionEnCurso) ? '0.55' : '1';
-      btnIniciar.style.cursor = (abierta || creandoAtencionEnCurso) ? 'not-allowed' : 'pointer';
-      if(creandoAtencionEnCurso){
-        btnIniciar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Iniciando...';
+      /*
+        Puede haber varias atenciones abiertas. Iniciar permanece disponible;
+        crearAtencion() exige confirmación explícita cuando el mismo médico
+        ya tiene una consulta abierta.
+
+        BLINDAJE UI:
+        durante una creación en curso se bloquea únicamente el botón para
+        impedir doble clic; no cambia la política clínica existente.
+      */
+      if(creandoAtencion){
+        btnIniciar.disabled = true;
+        btnIniciar.style.opacity = '0.72';
+        btnIniciar.style.cursor = 'wait';
+        btnIniciar.innerHTML =
+          '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Iniciando…';
       }else{
-        btnIniciar.innerHTML = '<i class="bi bi-play-circle me-1"></i> Iniciar';
+        const tieneAbiertaPaciente = atencionesAbiertasPaciente(idPaciente).length > 0;
+
+        btnIniciar.disabled = tieneAbiertaPaciente;
+        btnIniciar.style.opacity = tieneAbiertaPaciente ? '0.55' : '1';
+        btnIniciar.style.cursor = tieneAbiertaPaciente ? 'not-allowed' : 'pointer';
+        btnIniciar.innerHTML = tieneAbiertaPaciente
+          ? '<i class="bi bi-lock me-1"></i> Atención abierta'
+          : '<i class="bi bi-play-circle me-1"></i> Iniciar';
       }
     }
 
     if(btnFinalizar){
-      btnFinalizar.disabled = !abierta || finalizandoAtencionEnCurso;
-      btnFinalizar.style.opacity = (abierta && !finalizandoAtencionEnCurso) ? '1' : '0.55';
-      btnFinalizar.style.cursor = (abierta && !finalizandoAtencionEnCurso) ? 'pointer' : 'not-allowed';
-      btnFinalizar.innerHTML = finalizandoAtencionEnCurso
-        ? '<i class="bi bi-hourglass-split me-1"></i> Finalizando...'
-        : (abierta
-          ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
-          : '<i class="bi bi-lock me-1"></i> Cerrada ✓');
+      auroActualizarBotonFinalizarPorContexto(idPaciente);
     }
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '') + ' · Vista integral activa';
 
     if(activaBox){
-      /* ==========================================================
-         IASYN 2 — SINCRONIZACIÓN VISUAL ANTIRREGRESIVA
-         ----------------------------------------------------------
-         - La atención seleccionada explícitamente (atencionActivaId)
-           gobierna la representación visual.
-         - Un render posterior NO puede sustituirla por otra atención
-           abierta del mismo paciente.
-         - Solo cuando no existe selección explícita se muestra la
-           atención abierta como referencia visual.
-         - La hora se formatea únicamente para presentación; no cambia
-           el valor almacenado ni el payload clínico.
-         ========================================================== */
-      if(!atencionActivaId && abierta){
+      /*
+        AUROSANAX SINCRONIZACIÓN VISUAL ANTIRREGRESIVA:
+        La atención seleccionada explícitamente por el usuario gobierna la caja
+        de detalle. Un render tardío NO puede sustituirla por otra atención
+        abierta del mismo paciente.
+
+        Prioridad:
+        1. atencionActivaId exacta del paciente visible.
+        2. Si no hay selección activa, mostrar la atención abierta como referencia.
+        3. Si no hay selección ni abierta, mostrar estado sin consulta abierta.
+
+        Alcance:
+        - Solo presentación.
+        - No cambia id_atencion, contexto clínico, localStorage ni backend.
+        - No altera Iniciar, Finalizar, Plan, Diagnóstico, Recetas ni Examen Físico.
+      */
+      const idSeleccionada = String(atencionActivaId || '').trim();
+
+      if(idSeleccionada){
+        const seleccionada = arr.find(function(item){
+          return String(item.id_atencion || '').trim() === idSeleccionada &&
+            String(item.id_paciente || '').trim() === String(idPaciente || '').trim();
+        }) || null;
+
+        if(seleccionada){
+          renderDetalleAtencion(seleccionada);
+        }
+        /*
+          Si existe id_atencion activo pero todavía no aparece en este render,
+          NO se cae a otra atención abierta. Se conserva la caja actual hasta
+          que la fuente correspondiente esté disponible.
+        */
+      }else if(abierta){
+        const totalAbiertasPaciente = atencionesAbiertasPaciente(idPaciente).length;
         activaBox.style.display = 'block';
         activaBox.innerHTML =
           '<div class="auro-atencion-status abierta">' +
-          '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) + '<br>' +
+          '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) +
+          (totalAbiertasPaciente > 1 ? ' · ' + safe(totalAbiertasPaciente) + ' abiertas' : '') + '<br>' +
           '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(horaVisualAtencion(abierta.hora_atencion || '—')) + '</span>' +
           '</div>';
-      }else if(!atencionActivaId){
+      }else{
         activaBox.style.display = 'block';
         activaBox.innerHTML =
           '<div class="auro-atencion-status cerrada">' +
@@ -2882,36 +3586,53 @@
       });
       envolverFuncion('seleccionarPacienteHistoria', function(){
         /*
-          AUROSANAX PASO 1 - INVALIDACIÓN QUIRÚRGICA AL CAMBIAR PACIENTE
-          ---------------------------------------------------------------
-          Al cambiar el paciente de Historia Clínica, la atención anterior
-          deja de ser válida inmediatamente. Se notifica el mismo evento
-          público ya utilizado por Atenciones para limpieza de contexto.
+          AUROSANAX V30 — CAMBIO REAL DE PACIENTE
+          ---------------------------------------
+          seleccionarPacienteHistoria() también puede ejecutarse durante
+          refrescos o reselecciones del MISMO paciente. Esos casos NO son una
+          transición clínica y no deben expulsar al profesional de la atención.
 
-          Alcance:
-          - No borra datos guardados.
-          - No modifica Google Sheets, IDs, endpoints ni localStorage.
-          - No cambia el flujo Iniciar / Ver / Finalizar.
-          - Solo invalida el contexto temporal de la atención anterior.
+          Solo se invalida cuando la atención activa pertenece a un paciente
+          distinto del paciente visible, o cuando ya no puede demostrarse que
+          el contexto anterior siga perteneciendo al paciente visible.
+
+          No se borra persistencia.
         */
+        const atencionAnterior = auroAtencionActivaRegistro();
         const idAtencionAnterior = String(atencionActivaId || '').trim();
+        const idPacienteAnterior = String(atencionAnterior?.id_paciente || '').trim();
+        const idPacienteNuevo = String(idPacienteActivo() || '').trim();
+
+        const mismoPacienteDemostrado = Boolean(
+          idAtencionAnterior &&
+          idPacienteAnterior &&
+          idPacienteNuevo &&
+          idPacienteAnterior === idPacienteNuevo
+        );
 
         consultasPaginaActual = 1;
 
-        auroInvalidarContextoAtencion({
-          idAnterior:idAtencionAnterior,
-          idNueva:'',
-          idPaciente:String(idPacienteActivo() || '').trim(),
-          motivo:'cambio_paciente_historia',
-          limpiarVisual:true
-        });
+        if(!mismoPacienteDemostrado && idAtencionAnterior){
+          auroInvalidarContextoAtencion({
+            idAnterior:idAtencionAnterior,
+            idNueva:'',
+            idPaciente:idPacienteNuevo,
+            motivo:'cambio_paciente_historia',
+            limpiarVisual:true
+          });
 
-        const box = $('auroAtencionActivaBox');
-        if(box){
-          box.style.display = 'none';
-          box.innerHTML = '';
+          const box = $('auroAtencionActivaBox');
+          if(box){
+            box.style.display = 'none';
+            box.innerHTML = '';
+          }
         }
 
+        /*
+          Refresco permitido:
+          actualizar el historial no modifica por sí mismo el contexto clínico.
+          Si era el mismo paciente, atencionActivaId permanece intacto.
+        */
         setTimeout(function(){
           cargarAtencionesDesdeSheets(true).then(renderAtencionesPaciente);
         },100);
@@ -2925,6 +3646,12 @@
       });
 
       envolverFuncion('abrirHistoriaPaciente', function(){
+        /*
+          CONTRATO INTENCIONAL:
+          abrir una Historia Clínica desde su flujo oficial deja la historia
+          SIN atención seleccionada hasta que el profesional pulse Ver.
+          Por eso esta ruta sí invalida incluso si el paciente coincide.
+        */
         const idAtencionAnterior = String(atencionActivaId || '').trim();
         consultasPaginaActual = 1;
 
@@ -2964,6 +3691,7 @@
   function auroLimpiarCamposModulosConsultaNueva(){
     [
       'hc_antecedentes',
+      'hc_anamnesis',
       'hc_examen',
       'hc_gineco',
       'hc_obstetricia',
@@ -3055,6 +3783,7 @@
       'auroLimpiarPlanVisualAntesDeCambiarAtencion',
       'auroLimpiarDiagnosticos',
       'auroExamenFisicoLimpiarFormulario',
+      'auroHistoriaLimpiarAnamnesisSinAtencionSeleccionada',
       'limpiarFormularioGinecologia',
       'limpiarFormularioObstetricia',
       'limpiarFormularioEstetica',
@@ -3110,6 +3839,8 @@
       atencionActivaId = '';
       atencionesSheetsCargadas = false;
       atencionesSheetsCargando = false;
+      atencionesSheetsPromesa = null;
+      atencionesPendientesPersistencia.clear();
       consultasPaginaActual = 1;
 
       return cargarAtencionesDesdeSheets(true).then(function(lista){
@@ -3171,12 +3902,6 @@
   };
   window.iniciarAtencionActual = crearAtencion;
   window.finalizarAtencionActual = finalizarAtencion;
-
-  /* IASYN: alias moderno; se conservan los globals legacy por compatibilidad. */
-  window.iasynAtenciones = Object.assign(window.iasynAtenciones || {}, {
-    crearAtencion: crearAtencion,
-    finalizarAtencion: finalizarAtencion
-  });
   window.seleccionarAtencion = seleccionarAtencion;
   window.sincronizarContextoAtencion = sincronizarContextoAtencion;
   window.getAtencionActiva = function(){
@@ -3421,11 +4146,6 @@
       const idPacienteVisible = String(idPacienteActivo() || '').trim();
       const idHistoriaContexto = String(atencion.id_historia || '').trim();
 
-      /*
-        IASYN 2 · CONTEXTO CLÍNICO AISLADO
-        Nunca entrega a Plan/Recetas/Diagnóstico/Examen una atención que
-        contradiga el paciente visible o una historia demostrablemente ajena.
-      */
       if(
         idPacienteVisible &&
         idPacienteContexto &&
@@ -3472,6 +4192,11 @@
         servicio_origen: String(servicio.servicio_origen || '').trim(),
         servicio_confirmado: Boolean(servicio.servicio_confirmado),
 
+        /*
+          Especialidad clínica visible:
+          prioriza la del servicio cuando existe; de lo contrario usa
+          la especialidad principal configurada del médico.
+        */
         especialidad_atencion: String(
           servicio.especialidad_servicio_solicitado ||
           medico.especialidad_medico ||
@@ -3547,6 +4272,8 @@
       paciente_activo: idPacienteActivo(),
       sheets_cargadas: atencionesSheetsCargadas,
       sheets_cargando: atencionesSheetsCargando,
+      sheets_promesa_activa: Boolean(atencionesSheetsPromesa),
+      atenciones_pendientes_persistencia: atencionesPendientesPersistencia.size,
       recetas_sheets_cargadas: recetasSheetsCargadas,
       recetas_sheets_cargando: recetasSheetsCargando,
       recetas_locales: leerRecetasLocales().length,
@@ -3570,8 +4297,8 @@
 ===================================================== */
 
 /* ============================================================
-   IASYN 2 - VISTA INTEGRAL DE LA ATENCIÓN
-   Versión: 1.24.0 - port quirúrgico antirregresivo y portable
+   AUROSANAX ERP - VISTA INTEGRAL DE LA ATENCIÓN
+   Versión: 1.2.0 - refinamiento premium quirúrgico y responsive
 
    ALCANCE ESTRICTO:
    - Solo lectura y presentación.
@@ -3582,7 +4309,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'IASYN2_VISTA_INTEGRAL_V1_24_PORT_ANTIRREGRESIVO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_PLAN_ESTRUCTURA_CANONICA_ANTIRREGRESIVO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -4814,10 +5541,10 @@
     if(!pares.length) return '';
 
     /*
-      IASYN 2 · VISTA INTEGRAL V1.24
-      Estructura visual canónica de Plan.
-      Solo muestra categorías propias del Plan con contenido real.
-      Medicamentos/Recetas y Diagnósticos conservan su módulo documental.
+      V1.22 — ESTRUCTURA VISUAL CANÓNICA DE PLAN
+      Solo se presentan categorías clínicas propias del módulo Plan cuando
+      contienen información real. Medicamentos/receta y diagnósticos no se
+      representan aquí para evitar duplicidad con sus módulos documentales.
     */
     const grupos = {
       planTerapeutico:[],
@@ -4838,7 +5565,7 @@
 
       if(esBanderaInternaPlan) return;
 
-      /* Evita duplicidad documental dentro de Vista Integral. */
+      /* No duplicar receta/medicamentos ni diagnósticos dentro de Plan. */
       if(
         n.includes('medicamento') ||
         n.includes('receta') ||
@@ -4866,7 +5593,6 @@
           anchoCompleto:true
         };
       });
-
       return '<div class="avi-subgroup avi-plan-block"><h5>'+esc(titulo)+'</h5>'+
         paresHTMLClinico(valores,'avi-plan-prose')+
       '</div>';
@@ -4882,13 +5608,21 @@
     ].filter(Boolean).join('');
   }
 
-  /* ============================================================
-     IASYN 2 · PLAN PERSISTIDO PARA VISTA INTEGRAL
-     - GET de solo lectura por la misma id_atencion.
-     - Valida atención + paciente + historia.
-     - DOM actual queda como render temprano/fallback.
-     - Nunca hace POST ni modifica Plan.
-  ============================================================ */
+  /*
+    AUROSANAX V1.21 — FUENTE CANÓNICA DEL PLAN PARA VISTA INTEGRAL
+    ----------------------------------------------------------------
+    Problema corregido:
+    - capturarPanel('hc_plan') depende del DOM actualmente hidratado.
+    - una atención histórica puede tener plan_terapeutico persistido aunque el
+      DOM todavía no lo exponga al momento de construir Vista Integral.
+
+    Solución:
+    - la Vista Integral sigue usando el DOM como render temprano/fallback;
+    - inmediatamente consulta el lector público de plan.js, que hace GET sobre
+      buscarPlanPorAtencion;
+    - valida id_atencion + paciente + historia antes de pintar;
+    - nunca guarda, nunca modifica Plan, nunca hace POST.
+  */
   function valorPlanPersistido(plan){
     const claves = Array.prototype.slice.call(arguments,1);
     for(const k of claves){
@@ -4898,7 +5632,8 @@
     return '';
   }
 
-  function bloquePlanPersistidoLista(titulo,valor){
+  function bloquePlanPersistidoLista(titulo,valor,opciones){
+    opciones = opciones || {};
     const limpio = limpiarTextoClinico(valor);
     if(!limpio) return '';
 
@@ -4921,8 +5656,15 @@
     '</div>';
   }
 
-  function planPersistidoHTMLVistaIntegral(plan){
+  function planPersistidoHTMLVistaIntegral(plan,opciones){
+    opciones = opciones || {};
     plan = plan || {};
+
+    /*
+      Contrato visual V1.22:
+      mostrar únicamente los ítems propios de Plan que tengan contenido real.
+      No repetir medicamentos/receta ni diagnósticos dentro de esta sección.
+    */
     const bloques = [];
 
     const tratamiento = valorPlanPersistido(
@@ -5027,48 +5769,6 @@
     '</div>';
   }
 
-  function registrosRespuestaVistaIntegral(respuesta){
-    if(Array.isArray(respuesta)) return respuesta;
-    if(Array.isArray(respuesta?.registros)) return respuesta.registros;
-    if(Array.isArray(respuesta?.data)) return respuesta.data;
-    if(respuesta?.data && typeof respuesta.data === 'object') return [respuesta.data];
-    if(respuesta?.registro && typeof respuesta.registro === 'object') return [respuesta.registro];
-    if(respuesta && typeof respuesta === 'object' && !respuesta.success && !respuesta.message){
-      return [respuesta];
-    }
-    return [];
-  }
-
-  async function getSoloLecturaVistaIntegral(accion,parametros){
-    try{
-      if(typeof API_URL === 'undefined' || !API_URL) return null;
-
-      const qs = new URLSearchParams();
-      qs.set('accion',accion);
-
-      Object.entries(parametros || {}).forEach(function(par){
-        const clave = par[0];
-        const valor = par[1];
-        if(valor !== undefined && valor !== null && texto(valor)){
-          qs.set(clave,texto(valor));
-        }
-      });
-
-      qs.set('_',Date.now());
-
-      const res = await fetch(API_URL+'?'+qs.toString(),{
-        method:'GET',
-        cache:'no-store'
-      });
-
-      if(!res.ok) return null;
-      return await res.json();
-    }catch(error){
-      console.warn(MODULO,'No se pudo completar lectura documental '+accion+'.',error);
-      return null;
-    }
-  }
-
   function validarPlanPersistidoVistaIntegral(plan,atencion,idAtencion){
     if(!plan || typeof plan !== 'object') return false;
 
@@ -5090,7 +5790,7 @@
     return Boolean(texto(plan.id_plan) || idPlanAtencion);
   }
 
-  async function completarPlanVistaIntegral(idAtencion,atencion){
+  async function completarPlanVistaIntegral(idAtencion,atencion,hayRecetas){
     const id = texto(idAtencion);
     if(!id) return;
 
@@ -5107,21 +5807,10 @@
       if(typeof window.buscarPlanClinicoPorAtencionDesdeSheets === 'function'){
         plan = await window.buscarPlanClinicoPorAtencionDesdeSheets(id);
       }else{
-        const respuesta = await getSoloLecturaVistaIntegral(
+        plan = await getSoloLecturaVistaIntegral(
           'buscarPlanPorAtencion',
           {id_atencion:id}
         );
-
-        if(respuesta && typeof respuesta === 'object' && !Array.isArray(respuesta)){
-          const candidatos = registrosRespuestaVistaIntegral(respuesta);
-          plan = candidatos.find(function(r){
-            return texto(r?.id_atencion) === id || texto(r?.id_plan);
-          }) || (
-            texto(respuesta.id_atencion) || texto(respuesta.id_plan)
-              ? respuesta
-              : null
-          );
-        }
       }
     }catch(error){
       console.warn(MODULO,'No se pudo leer el Plan persistido de la atención.',error);
@@ -5145,7 +5834,10 @@
     );
 
     if(slotPlan){
-      const htmlPlan = planPersistidoHTMLVistaIntegral(plan);
+      const htmlPlan = planPersistidoHTMLVistaIntegral(plan,{
+        omitirMedicamentos:Boolean(hayRecetas)
+      });
+
       slotPlan.innerHTML = seccion(
         'Plan','bi-list-check',htmlPlan,true
       );
@@ -5336,6 +6028,11 @@
       }catch(_){}
     }
 
+    /*
+      Fallback DOM permitido únicamente cuando el DOM pertenece exactamente
+      a la misma atención que se está representando. Una Vista Integral
+      histórica nunca debe tomar diagnósticos visibles de otra consulta.
+    */
     if(!activo || activo !== esperado) return [];
 
     const panel = document.getElementById('hc_diagnostico');
@@ -5359,7 +6056,7 @@
       if(vistos.has(clave)) return;
       vistos.add(clave);
 
-      const principal = /\bprincipal\b/i.test(textoItem);
+      let principal = /\bprincipal\b/i.test(textoItem);
       let tipo = '';
       if(/\bdefinitiv[oa]\b/i.test(textoItem)) tipo = 'Definitivo';
       else if(/\bpresuntiv[oa]\b/i.test(textoItem)) tipo = 'Presuntivo';
@@ -5389,6 +6086,13 @@
   function diagnosticosRecetaHTML(receta,idAtencion){
     receta = receta || {};
 
+    /*
+      PRIORIDAD ANTIRREGRESIVA:
+      1. Diagnósticos estructurados guardados con la propia receta.
+      2. Diagnósticos del DOM/estado SOLO si la atención activa coincide exactamente.
+      3. Campo histórico singular de la propia receta como compatibilidad final.
+      Todo es lectura; no se modifica Recetas, Diagnóstico, Plan ni persistencia.
+    */
     let diagnosticos = diagnosticosRecetaNormalizados(receta.diagnosticos);
 
     if(!diagnosticos.length){
@@ -5438,6 +6142,14 @@
     const recetas = recetasPorAtencion(idAtencion);
     if(!recetas.length) return '';
 
+    /*
+      La receta dentro de Vista Integral representa el documento farmacológico.
+      Las indicaciones generales históricas guardadas en r.indicaciones pueden
+      provenir de versiones antiguas del flujo Plan -> Receta. Para no atribuirlas
+      al tratamiento farmacológico sin certeza, V1.21 puede separarlas de la
+      tarjeta de Receta y conservarlas en "Indicaciones complementarias".
+      No se borra ni modifica ningún dato.
+    */
     const indicacionesPlan = new Set(
       capturarPanel('hc_plan')
         .filter(p=>norm(p.etiqueta).includes('indicacion'))
@@ -5475,10 +6187,71 @@
     }).join('')+'</div>';
   }
 
-  /* ============================================================
-     IASYN 2 · DOCUMENTOS PERSISTIDOS EN VISTA INTEGRAL
-     Solo lectura por id_atencion.
-  ============================================================ */
+
+  function registrosRespuestaVistaIntegral(respuesta){
+    if(Array.isArray(respuesta)) return respuesta;
+    if(Array.isArray(respuesta?.registros)) return respuesta.registros;
+    if(Array.isArray(respuesta?.data)) return respuesta.data;
+    if(respuesta?.data && typeof respuesta.data === 'object') return [respuesta.data];
+    if(respuesta && typeof respuesta === 'object' && !respuesta.success && !respuesta.message){
+      return [respuesta];
+    }
+    return [];
+  }
+
+  async function getSoloLecturaVistaIntegral(accion,parametros){
+    try{
+      if(typeof API_URL === 'undefined' || !API_URL) return null;
+
+      const qs = new URLSearchParams();
+      qs.set('accion',accion);
+      Object.entries(parametros || {}).forEach(function(par){
+        const clave = par[0];
+        const valor = par[1];
+        if(valor !== undefined && valor !== null && texto(valor)){
+          qs.set(clave,texto(valor));
+        }
+      });
+      qs.set('_',Date.now());
+
+      const res = await fetch(API_URL+'?'+qs.toString(),{
+        method:'GET',
+        cache:'no-store'
+      });
+      if(!res.ok) return null;
+      return await res.json();
+    }catch(error){
+      console.warn(MODULO,'No se pudo completar lectura documental '+accion+'.',error);
+      return null;
+    }
+  }
+
+  function etiquetaDocumentoVistaIntegral(clave){
+    const mapa = {
+      recomendacion:'Recomendación',
+      recomendaciones:'Recomendaciones',
+      indicaciones:'Indicaciones',
+      seguimiento:'Seguimiento',
+      control:'Control',
+      signos_alarma:'Signos de alarma',
+      cuidados:'Cuidados',
+      observaciones:'Observaciones',
+      detalle:'Detalle',
+      motivo:'Motivo',
+      tipo_certificado:'Tipo de certificado',
+      fecha_emision:'Fecha de emisión',
+      fecha_desde:'Desde',
+      fecha_hasta:'Hasta',
+      dias_reposo:'Días de reposo',
+      reposo_dias:'Días de reposo',
+      diagnostico:'Diagnóstico',
+      diagnostico_cie10:'CIE-10',
+      cie10:'CIE-10',
+      estado:'Estado'
+    };
+    return mapa[clave] || '';
+  }
+
   function recomendacionParesVistaIntegral(registro){
     registro = registro || {};
     const d = parseJSON(registro.detalle_json,{}) || {};
@@ -5500,12 +6273,17 @@
         }
         return '';
       }).filter(Boolean);
-
       const otros = limpiarTextoClinico(bloque.otros || '');
       if(otros) textos.push(otros);
       return textos.join(' · ');
     }
 
+    /*
+      Esquema REAL del módulo Recomendaciones 1.1.0:
+      seguimiento, signos_alerta, signos_infeccion,
+      dieta_cuidados y recomendaciones_generales.
+      Se conserva solo lectura y no se inventan campos.
+    */
     const seguimiento = d.seguimiento || {};
     agregar('Próxima cita', fechaDocumentoVistaIntegral(seguimiento.proxima_cita));
     agregar('Motivo de control', seguimiento.motivo);
@@ -5513,11 +6291,6 @@
     agregar('Signos de infección', seleccionadosTexto(d.signos_infeccion));
     agregar('Dieta y cuidados', d.dieta_cuidados);
     agregar('Recomendaciones generales', d.recomendaciones_generales);
-
-    /* Compatibilidad con registros históricos simples. */
-    agregar('Recomendaciones', registro.recomendaciones || registro.recomendacion);
-    agregar('Indicaciones', registro.indicaciones);
-    agregar('Observaciones', registro.observaciones);
 
     return deduplicarPares(salida);
   }
@@ -5527,6 +6300,11 @@
     const pares = recomendacionParesVistaIntegral(registro);
     if(!pares.length) return '';
     return paresHTMLClinico(pares,'avi-document-grid avi-document-prose');
+  }
+
+  function objetoDetalleCertificado(detalle,clave){
+    const v = detalle?.[clave];
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
   }
 
   function primerDatoCertificado(){
@@ -5541,9 +6319,25 @@
     const raw = texto(valor);
     if(!raw) return '';
 
-    /* Fecha civil: no se reinterpreta zona horaria. */
+    /*
+      Fecha civil: se toma YYYY-MM-DD sin reinterpretar zona horaria.
+      Evita cambiar accidentalmente el día de nacimiento/emisión.
+    */
     const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if(m) return m[3]+'/'+m[2]+'/'+m[1];
+
+    return raw;
+  }
+
+  function horaDocumentoVistaIntegral(valor){
+    const raw = texto(valor);
+    if(!raw) return '';
+
+    let m = raw.match(/^(?:1899-\d{2}-\d{2}T)?(\d{2}):(\d{2})/);
+    if(m) return m[1]+':'+m[2];
+
+    m = raw.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+    if(m) return m[1]+':'+m[2];
 
     return raw;
   }
@@ -5556,59 +6350,52 @@
     const med = d.medico || {};
     const centro = d.centro || {};
     const dx = Array.isArray(d.diagnosticos) ? d.diagnosticos : [];
-    const dias = Number(d.dias_reposo || registro.dias_reposo || 0);
+    const dias = Number(d.dias_reposo || 0);
 
     const nombrePaciente = primerDatoCertificado(
-      pac.nombre,pac.nombre_completo,
-      registro.nombre_paciente,registro.paciente_nombre
+      pac.nombre, pac.nombre_completo,
+      registro.nombre_paciente, registro.paciente_nombre
     );
     const documentoPaciente = primerDatoCertificado(
-      pac.numero_documento,pac.cedula,pac.documento,
+      pac.numero_documento, pac.cedula, pac.documento,
       registro.numero_documento
     );
     const numeroHistoria = primerDatoCertificado(
-      hist.numero_historia,hist.id_historia,registro.id_historia
+      hist.numero_historia, hist.id_historia, registro.id_historia
+    );
+    const fechaNacimiento = fechaDocumentoVistaIntegral(
+      primerDatoCertificado(pac.fecha_nacimiento,pac.nacimiento)
     );
     const numeroConsulta = primerDatoCertificado(
-      registro.numero_consulta,d.numero_consulta
+      registro.numero_consulta, d.numero_consulta
     );
 
     const nombreMedico = primerDatoCertificado(
-      med.nombre,med.nombre_completo,registro.nombre_medico
+      med.nombre, med.nombre_completo, registro.nombre_medico
     );
     const especialidad = primerDatoCertificado(
-      med.especialidad,med.especialidad_principal,registro.especialidad
+      med.especialidad, med.especialidad_principal, registro.especialidad
     );
     const registroMsp = primerDatoCertificado(
-      med.registro_msp,med.msp,med.registro_profesional
+      med.registro_msp, med.msp, med.registro_profesional
     );
     const registroSenescyt = primerDatoCertificado(
-      med.registro_senescyt,med.senescyt
+      med.registro_senescyt, med.senescyt
     );
 
-    /*
-      Portabilidad:
-      se prioriza identidad persistida del propio documento.
-      No se introduce dependencia con el repositorio donante.
-    */
     const nombreCentro = primerDatoCertificado(
-      centro.nombre,centro.nombre_clinica,centro.nombre_centro,
-      centro.nombre_comercial,centro.razon_social,'Centro médico'
+      centro.nombre, centro.nombre_clinica, centro.nombre_centro,
+      centro.nombre_comercial, centro.razon_social, 'AUROSANAX'
     );
     const ciudad = primerDatoCertificado(
-      centro.ciudad,centro.ciudad_clinica
+      centro.ciudad, centro.ciudad_clinica, 'Guayaquil'
     );
-    const fecha = fechaDocumentoVistaIntegral(
-      primerDatoCertificado(registro.fecha_emision,d.fecha_emision)
-    );
-
     const ubicacion = [
       primerDatoCertificado(centro.direccion,centro.direccion_clinica),
       primerDatoCertificado(centro.ciudad,centro.ciudad_clinica),
       primerDatoCertificado(centro.provincia,centro.provincia_clinica),
       primerDatoCertificado(centro.pais,centro.pais_clinica)
     ].filter(Boolean).join(' · ');
-
     const contactoCentro = [
       primerDatoCertificado(centro.telefono,centro.whatsapp),
       primerDatoCertificado(centro.email,centro.correo),
@@ -5618,6 +6405,9 @@
     const tipo = primerDatoCertificado(
       registro.tipo_certificado,d.tipo_certificado,'Certificado médico'
     );
+    const fecha = fechaDocumentoVistaIntegral(
+      primerDatoCertificado(registro.fecha_emision,d.fecha_emision)
+    );
 
     const dxHtml = dx.length
       ? dx.map(function(x){
@@ -5626,16 +6416,7 @@
           return '<div class="avi-cert-dx-row"><b>'+esc(codigo || 'S/C')+'</b>'+
             (desc ? ' · '+esc(desc) : '')+'</div>';
         }).join('')
-      : (
-          primerDatoCertificado(registro.diagnostico,registro.diagnostico_cie10)
-            ? '<div class="avi-cert-dx-row">'+
-                esc([
-                  primerDatoCertificado(registro.diagnostico_cie10),
-                  primerDatoCertificado(registro.diagnostico)
-                ].filter(Boolean).join(' · '))+
-              '</div>'
-            : ''
-        );
+      : '';
 
     const reposo = dias > 0
       ? '<div class="avi-cert-reposo">'+
@@ -5656,7 +6437,7 @@
           '<strong>'+esc(nombreCentro)+'</strong>'+
           (especialidad ? '<small>'+esc(especialidad)+'</small>' : '')+
         '</div>'+
-        '<div>'+esc([ciudad,fecha].filter(Boolean).join(' · '))+'</div>'+
+        '<div>'+esc(ciudad)+(fecha ? ' · '+esc(fecha) : '')+'</div>'+
       '</div>'+
       '<h4 class="avi-cert-official-title">'+esc(tipo.toUpperCase())+'</h4>'+
       '<div class="avi-cert-official-body">'+
@@ -5666,12 +6447,17 @@
           (numeroHistoria ? ', número de historia clínica <b>'+esc(numeroHistoria)+'</b>' : '')+
           (numeroConsulta ? ', en la consulta <b>#'+esc(numeroConsulta)+'</b>' : '')+
           (nombreMedico ? ', atendida por <b>'+esc(nombreMedico)+'</b>' : '')+'.</p>'+
+        (fechaNacimiento ? '<div class="avi-cert-line"><b>FECHA DE NACIMIENTO:</b> '+esc(fechaNacimiento)+'</div>' : '')+
+        (especialidad ? '<div class="avi-cert-line"><b>ESPECIALIDAD:</b> '+esc(especialidad)+'</div>' : '')+
         (d.resumen_clinico ? '<div class="avi-cert-line"><b>RESUMEN CLÍNICO:</b> '+esc(d.resumen_clinico)+'</div>' : '')+
+        (d.actividad_laboral ? '<div class="avi-cert-line"><b>ACTIVIDAD LABORAL:</b> '+esc(d.actividad_laboral)+'</div>' : '')+
+        (d.contacto ? '<div class="avi-cert-line"><b>NÚMERO DE CONTACTO:</b> '+esc(d.contacto)+'</div>' : '')+
+        (d.institucion_empresa ? '<div class="avi-cert-line"><b>INSTITUCIÓN / EMPRESA:</b> '+esc(d.institucion_empresa)+'</div>' : '')+
+        (d.direccion_trabajo ? '<div class="avi-cert-line"><b>DIRECCIÓN DE TRABAJO:</b> '+esc(d.direccion_trabajo)+'</div>' : '')+
         (dxHtml ? '<div class="avi-cert-dx"><b>DIAGNÓSTICO(S) CIE-10:</b>'+dxHtml+'</div>' : '')+
+        (d.contingencia ? '<div class="avi-cert-line"><b>TIPO DE CONTINGENCIA:</b> '+esc(String(d.contingencia).toUpperCase())+'</div>' : '')+
         reposo+
-        (d.observaciones || registro.observaciones
-          ? '<p class="avi-cert-observaciones"><b>OBSERVACIONES:</b> '+esc(d.observaciones || registro.observaciones)+'</p>'
-          : '')+
+        (d.observaciones ? '<p class="avi-cert-observaciones"><b>OBSERVACIONES:</b> '+esc(d.observaciones)+'</p>' : '')+
       '</div>'+
       '<div class="avi-cert-footer">'+
         '<div class="avi-cert-center">'+
@@ -5736,9 +6522,7 @@
     );
     if(idActivoActual !== id) return;
 
-    const slot = overlayActual.querySelector(
-      '[data-avi-documentos="'+CSS.escape(id)+'"]'
-    );
+    const slot = overlayActual.querySelector('[data-avi-documentos="'+CSS.escape(id)+'"]');
     if(!slot) return;
 
     const recomendacionLista = registrosRespuestaVistaIntegral(resultados[0]);
@@ -5764,15 +6548,24 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.0-iasyn2-antirregresivo';
+    const CSS_VERSION = '1.24.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
-    if(existente && existente.dataset?.version === CSS_VERSION) return;
-    if(existente) existente.remove();
+    /*
+      BLINDAJE RESPONSIVE VERSIONADO:
+      Si el navegador conserva CSS de una versión anterior de Vista Integral,
+      se sustituye únicamente ese style propietario. Esto evita que iPhone
+      siga aplicando la antigua receta en tarjetas después de actualizar JS.
+      No toca estilos globales, módulos clínicos ni persistencia.
+    */
+    if(existente){
+      if(texto(existente.dataset?.auroVistaVersion) === CSS_VERSION) return;
+      existente.remove();
+    }
 
     const s = document.createElement('style');
     s.id = 'auroVistaIntegralCSS';
-    s.dataset.version = CSS_VERSION;
+    s.dataset.auroVistaVersion = CSS_VERSION;
     s.textContent = `
       /* ============================================================
          AUROSANAX VISTA INTEGRAL ÉLITE - SOLO PRESENTACIÓN
@@ -5999,6 +6792,69 @@
       .avi-subgroup{
         border-top:1px dashed #e7eaf0;padding-top:11px;
       }
+      .avi-plan-slot{
+        display:block!important;
+        min-width:0!important;
+        box-sizing:border-box!important;
+        clear:both;
+      }
+      .avi-plan-slot>.avi-section{
+        display:block;
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+      }
+      .avi-plan-slot .avi-section-body{
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+      }
+
+      .avi-plan-block{
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+        min-width:0;
+      }
+      .avi-plan-block:first-child{
+        border-top:0;
+        padding-top:0;
+      }
+      .avi-plan-block>h5{
+        margin:0 0 8px;
+        color:#5a1740;
+        font-size:12px;
+        line-height:1.3;
+        font-weight:900;
+      }
+      .avi-plan-content,
+      .avi-plan-prose{
+        width:100%;
+        max-width:100%;
+        min-width:0;
+        box-sizing:border-box;
+      }
+      .avi-plan-content .avi-clean-list{
+        margin:0;
+        padding-left:20px;
+      }
+      .avi-plan-text{
+        margin:0;
+        color:#1f2937;
+        font-size:12.2px;
+        line-height:1.5;
+        white-space:pre-wrap;
+        overflow-wrap:anywhere;
+      }
+      .avi-plan-prose .avi-line{
+        grid-column:1/-1;
+        width:100%;
+        max-width:100%;
+        box-sizing:border-box;
+      }
+      .avi-plan-prose .avi-line>b:empty{
+        display:none;
+      }
     /* Antecedentes: presentación clínica compacta, sin alterar datos */
 
     .avi-dx-grid{
@@ -6174,62 +7030,7 @@
         margin-top:11px;border-top:1px solid #e5e7eb;padding-top:10px;
         background:#fcfdff;
       }
-      /* ============================================================
-         IASYN 2 · VISTA INTEGRAL V1.24 — BLOQUES DOCUMENTALES
-         Solo presentación; no altera contratos clínicos.
-      ============================================================ */
-      .avi-plan-slot{
-        display:block!important;
-        min-width:0!important;
-        box-sizing:border-box!important;
-        clear:both;
-      }
-      .avi-plan-slot>.avi-section,
-      .avi-plan-slot .avi-section-body{
-        display:block;
-        width:100%;
-        max-width:100%;
-        min-width:0;
-        box-sizing:border-box;
-      }
-      .avi-plan-block{
-        width:100%;
-        max-width:100%;
-        box-sizing:border-box;
-        min-width:0;
-      }
-      .avi-plan-block:first-child{border-top:0;padding-top:0}
-      .avi-plan-block>h5{
-        margin:0 0 8px;
-        color:#5a1740;
-        font-size:12px;
-        line-height:1.3;
-        font-weight:900;
-      }
-      .avi-plan-content,.avi-plan-prose{
-        width:100%;
-        max-width:100%;
-        min-width:0;
-        box-sizing:border-box;
-      }
-      .avi-plan-content .avi-clean-list{margin:0;padding-left:20px}
-      .avi-plan-text{
-        margin:0;
-        color:#1f2937;
-        font-size:12.2px;
-        line-height:1.5;
-        white-space:pre-wrap;
-        overflow-wrap:anywhere;
-      }
-      .avi-plan-prose .avi-line{
-        grid-column:1/-1;
-        width:100%;
-        max-width:100%;
-        box-sizing:border-box;
-      }
-      .avi-plan-prose .avi-line>b:empty{display:none}
-
-      /* Receta asociada: documento clínico completo, no una mini tarjeta. */
+      /* Receta asociada: documento de lectura, sin límite de hoja A4. */
       .avi-rx-list,
       .avi-rx-card,
       .avi-rx-card .avi-rx-table-wrap,
@@ -6328,6 +7129,7 @@
         white-space:nowrap;
       }
 
+
       .avi-document-list{display:grid;gap:14px}
       .avi-document-grid{grid-template-columns:1fr}
       .avi-document-prose .avi-line{grid-column:1/-1}
@@ -6348,11 +7150,8 @@
         box-shadow:0 8px 24px rgba(15,23,42,.05);
       }
       .avi-cert-official-head{
-        display:grid;
-        grid-template-columns:minmax(0,1fr) auto;
-        gap:16px;
-        align-items:center;
-        padding-bottom:10px;
+        display:grid;grid-template-columns:minmax(0,1fr) auto;
+        gap:16px;align-items:center;padding-bottom:10px;
         border-bottom:2px solid #8b1e5a;
       }
       .avi-cert-official-head strong{
@@ -6365,21 +7164,17 @@
         text-align:right;font-size:10.5px;font-weight:800;color:#374151;
       }
       .avi-cert-official-title{
-        margin:22px 0 24px;
-        text-align:center;
-        color:#111827;
-        font-size:18px;
-        font-weight:950;
-        letter-spacing:.04em;
+        margin:22px 0 24px;text-align:center;
+        color:#111827;font-size:18px;font-weight:950;letter-spacing:.04em;
       }
       .avi-cert-official-body p{
-        margin:0 0 12px;
-        font-size:12.4px;
-        line-height:1.64;
-        text-align:justify;
-        text-justify:inter-word;
+        margin:0 0 12px;font-size:12.4px;line-height:1.64;
+        text-align:justify;text-justify:inter-word;
       }
-      .avi-cert-line{margin:6px 0;font-size:12.1px;line-height:1.5}
+      .avi-cert-line{
+        margin:6px 0;font-size:12.1px;line-height:1.5;
+      }
+      .avi-cert-line b{color:#2b1623}
       .avi-cert-dx{margin:15px 0 16px;font-size:12.1px;line-height:1.5}
       .avi-cert-dx>b{display:block;margin-bottom:5px}
       .avi-cert-dx-row{margin-top:2px}
@@ -6390,7 +7185,7 @@
       .avi-cert-footer{
         display:grid;
         grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-        gap:56px;
+        gap:48px;
         align-items:end;
         margin-top:46px;
         padding-top:10px;
@@ -6401,7 +7196,7 @@
         color:#64748b;
         font-size:9.7px;
         line-height:1.5;
-        padding:0 0 22px 0;
+        padding-bottom:6px;
         max-width:100%;
         overflow-wrap:anywhere;
       }
@@ -6420,7 +7215,10 @@
         flex:1 1 auto;
         min-height:66px;
       }
-      .avi-cert-sign-line{border-top:1px solid #111;margin:0 0 7px}
+      .avi-cert-sign-line{
+        border-top:1px solid #111;
+        margin:0 0 7px;
+      }
       .avi-cert-sign b{display:block;font-size:12px}
       .avi-cert-sign span,.avi-cert-sign small{display:block;margin-top:2px}
 
@@ -6440,71 +7238,18 @@
           padding-top:6px;
           min-height:0;
         }
-        .avi-cert-center{order:1;padding-bottom:0}
+        .avi-cert-center{
+          order:1;
+          padding-bottom:0;
+        }
         .avi-cert-sign{
           order:2;
           width:100%;
           min-height:154px;
         }
-        .avi-cert-sign::before{min-height:84px}
-
-        /*
-          Receta · scroll horizontal nativo multidispositivo.
-          Mantiene la tabla documental y limita el scroll al wrapper.
-        */
-        .avi-overlay .avi-section,
-        .avi-overlay .avi-section-body,
-        .avi-overlay .avi-rx-card,
-        .avi-overlay .avi-rx-table-wrap{
-          min-width:0!important;
-          max-width:100%!important;
-          box-sizing:border-box!important;
+        .avi-cert-sign::before{
+          min-height:84px;
         }
-        .avi-overlay .avi-rx-card{overflow:visible!important}
-        .avi-overlay .avi-rx-table-wrap{
-          position:relative!important;
-          display:block!important;
-          width:100%!important;
-          max-width:100%!important;
-          min-width:0!important;
-          overflow-x:auto!important;
-          overflow-y:hidden!important;
-          -webkit-overflow-scrolling:touch!important;
-          overscroll-behavior-x:contain;
-          scrollbar-width:thin;
-          touch-action:auto!important;
-        }
-        .avi-overlay .avi-rx-table{
-          display:table!important;
-          width:820px!important;
-          min-width:820px!important;
-          max-width:none!important;
-          table-layout:fixed!important;
-          border-collapse:collapse!important;
-          transform:none!important;
-          margin:0!important;
-        }
-        .avi-overlay .avi-rx-table thead{display:table-header-group!important}
-        .avi-overlay .avi-rx-table tbody{display:table-row-group!important}
-        .avi-overlay .avi-rx-table tr{display:table-row!important}
-        .avi-overlay .avi-rx-table th,
-        .avi-overlay .avi-rx-table td{
-          display:table-cell!important;
-          min-width:0!important;
-          text-align:left!important;
-          white-space:normal!important;
-        }
-        .avi-overlay .avi-rx-table td::before{content:none!important}
-        .avi-overlay .avi-rx-table th:nth-child(1),
-        .avi-overlay .avi-rx-table td:nth-child(1){width:58px!important}
-        .avi-overlay .avi-rx-table th:nth-child(2),
-        .avi-overlay .avi-rx-table td:nth-child(2){width:205px!important}
-        .avi-overlay .avi-rx-table th:nth-child(3),
-        .avi-overlay .avi-rx-table td:nth-child(3){width:190px!important}
-        .avi-overlay .avi-rx-table th:nth-child(4),
-        .avi-overlay .avi-rx-table td:nth-child(4){width:92px!important}
-        .avi-overlay .avi-rx-table th:nth-child(5),
-        .avi-overlay .avi-rx-table td:nth-child(5){width:275px!important}
       }
 
       .avi-loading{padding:34px;text-align:center;color:#64748b;font-weight:750}
@@ -6573,6 +7318,81 @@
         .avi-rx-head .avi-btn{width:100%;min-height:41px}
         .avi-chip{font-size:9.3px;padding:4px 7px}
         .avi-rx-card{padding:11px;border-radius:16px}
+        .avi-rx-meta-compact{grid-template-columns:1fr}
+        .avi-rx-dx-row{display:grid;grid-template-columns:1fr}
+        .avi-rx-dx-tags{justify-content:flex-start}
+
+        /*
+          RECETA RESPONSIVE MÓVIL — SOLO PRESENTACIÓN.
+          Conserva exactamente la tabla profesional de escritorio y habilita
+          desplazamiento horizontal táctil únicamente dentro de la receta.
+          No altera datos, columnas, guardado, IDs ni el resto de Vista Integral.
+        */
+        /*
+          RECETA · SCROLL HORIZONTAL NATIVO MULTIDISPOSITIVO
+          iPhone / iPad / Android / Safari / Chrome / WebView.
+          Corrección exclusivamente CSS:
+          - los contenedores padres pueden encogerse (min-width:0);
+          - la tabla conserva ancho documental mayor que la pantalla;
+          - el wrapper es quien recibe el desplazamiento horizontal nativo;
+          - el scroll vertical general de Vista Integral permanece intacto.
+        */
+        .avi-overlay .avi-section,
+        .avi-overlay .avi-section-body,
+        .avi-overlay .avi-rx-card,
+        .avi-overlay .avi-rx-table-wrap{
+          min-width:0!important;
+          max-width:100%!important;
+          box-sizing:border-box!important;
+        }
+        .avi-overlay .avi-rx-card{
+          overflow:visible!important;
+        }
+        .avi-overlay .avi-rx-table-wrap{
+          position:relative!important;
+          display:block!important;
+          width:100%!important;
+          max-width:100%!important;
+          min-width:0!important;
+          overflow-x:auto!important;
+          overflow-y:hidden!important;
+          -webkit-overflow-scrolling:touch!important;
+          overscroll-behavior-x:contain;
+          scrollbar-width:thin;
+          touch-action:auto!important;
+        }
+        .avi-overlay .avi-rx-table{
+          display:table!important;
+          width:820px!important;
+          min-width:820px!important;
+          max-width:none!important;
+          table-layout:fixed!important;
+          border-collapse:collapse!important;
+          transform:none!important;
+          margin:0!important;
+        }
+        .avi-overlay .avi-rx-table thead{display:table-header-group!important}
+        .avi-overlay .avi-rx-table tbody{display:table-row-group!important}
+        .avi-overlay .avi-rx-table tr{display:table-row!important}
+        .avi-overlay .avi-rx-table th,
+        .avi-overlay .avi-rx-table td{
+          display:table-cell!important;
+          min-width:0!important;
+          text-align:left!important;
+          white-space:normal!important;
+        }
+        .avi-overlay .avi-rx-table td::before{content:none!important}
+
+        .avi-overlay .avi-rx-table th:nth-child(1),
+        .avi-overlay .avi-rx-table td:nth-child(1){width:58px!important}
+        .avi-overlay .avi-rx-table th:nth-child(2),
+        .avi-overlay .avi-rx-table td:nth-child(2){width:205px!important}
+        .avi-overlay .avi-rx-table th:nth-child(3),
+        .avi-overlay .avi-rx-table td:nth-child(3){width:190px!important}
+        .avi-overlay .avi-rx-table th:nth-child(4),
+        .avi-overlay .avi-rx-table td:nth-child(4){width:92px!important}
+        .avi-overlay .avi-rx-table th:nth-child(5),
+        .avi-overlay .avi-rx-table td:nth-child(5){width:275px!important}
       }
 
       @media(max-width:430px){
@@ -6633,11 +7453,50 @@
         .avi-body > .avi-overview-block,
         .avi-body > .avi-clinical-divider,
         .avi-body > .avi-section,
-        .avi-body > .avi-line{
+        .avi-body > .avi-line,
+        .avi-body > .avi-plan-slot,
+        .avi-body > [data-avi-documentos]{
           width:min(1120px,calc(100% - 36px));
           margin-left:auto;
           margin-right:auto;
           box-sizing:border-box;
+        }
+
+        /*
+          CONTINUIDAD DOCUMENTAL:
+          Recomendaciones y Certificados quedan dentro de la misma hoja clínica
+          visual de Vista Integral, con el mismo ancho y jerarquía del documento.
+          El slot no crea un segundo visor ni una fuente de datos paralela.
+        */
+        .avi-body > [data-avi-documentos]{
+          background:#fff;
+          margin-top:0;
+          margin-bottom:0;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section{
+          width:100%;
+          margin:0;
+          border:0;
+          border-radius:0;
+          box-shadow:none;
+          border-bottom:1px solid #e8ebef;
+          background:#fff;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section summary{
+          padding:12px 42px 10px;
+          font-size:13.5px;
+          color:#3f1630;
+          background:#fff!important;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section[open] summary{
+          border-bottom:1px solid #f0e4eb;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section .avi-section-body{
+          padding:14px 42px 22px;
+        }
+        .avi-body > [data-avi-documentos] > .avi-section:last-child{
+          border-radius:0 0 10px 10px;
+          padding-bottom:18px;
         }
 
         .avi-body > .avi-overview-block:first-child{
@@ -6820,48 +7679,6 @@
           padding-top:80px;
         }
       }
-
-      /* IASYN 2 · continuidad de la hoja clínica en escritorio (V1.24). */
-      @media(min-width:981px){
-        .avi-body > .avi-plan-slot,
-        .avi-body > [data-avi-documentos]{
-          width:min(1120px,calc(100% - 36px));
-          margin-left:auto;
-          margin-right:auto;
-          box-sizing:border-box;
-        }
-
-        .avi-body > [data-avi-documentos]{
-          background:#fff;
-          margin-top:0;
-          margin-bottom:0;
-        }
-        .avi-body > [data-avi-documentos] > .avi-section{
-          width:100%;
-          margin:0;
-          border:0;
-          border-radius:0;
-          box-shadow:none;
-          border-bottom:1px solid #e8ebef;
-          background:#fff;
-        }
-        .avi-body > [data-avi-documentos] > .avi-section summary{
-          padding:12px 42px 10px;
-          font-size:13.5px;
-          color:#3f1630;
-          background:#fff!important;
-        }
-        .avi-body > [data-avi-documentos] > .avi-section[open] summary{
-          border-bottom:1px solid #f0e4eb;
-        }
-        .avi-body > [data-avi-documentos] > .avi-section .avi-section-body{
-          padding:14px 42px 22px;
-        }
-        .avi-body > [data-avi-documentos] > .avi-section:last-child{
-          border-radius:0 0 10px 10px;
-          padding-bottom:18px;
-        }
-      }
     `;
     document.head.appendChild(s);
   }
@@ -6959,20 +7776,15 @@
       diagnosticosVistaHTML(),true
     );
 
+    const hayRecetasAsociadas = recetasPorAtencion(idAtencion).length > 0;
+
     const planInicial = seccion(
       'Plan','bi-list-check',
-      planHTML(),true
+      planHTML({ omitirMedicamentos:hayRecetasAsociadas }),true
     );
 
-    /*
-      Slot V1.24:
-      el Plan del DOM aparece inmediatamente y luego se reemplaza únicamente
-      por el Plan persistido de esta misma id_atencion si la lectura lo valida.
-    */
     const plan =
-      '<div class="avi-plan-slot" data-avi-plan="'+esc(idAtencion)+'">'+
-        planInicial+
-      '</div>';
+      '<div class="avi-plan-slot" data-avi-plan="'+esc(idAtencion)+'">'+planInicial+'</div>';
 
     const indicacionesLegacyInicial = seccion(
       'Indicaciones complementarias','bi-card-text',
@@ -7006,26 +7818,33 @@
           '</section>'
         : '')+
       '<div class="avi-clinical-divider"><span>Resumen clínico de la consulta</span></div>'+
-      anamnesis+
-      antecedentes+
-      examen+
-      obstetricia+
-      diagnosticos+
-      plan+
-      indicacionesLegacy+
-      recetas+
+      anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+indicacionesLegacy+recetas+
       '<div data-avi-documentos="'+esc(idAtencion)+'"></div>';
 
     /*
-      Enriquecimientos asíncronos son SOLO GET y se descartan si cambia la
-      atención activa. Nunca escriben en Plan, Recomendaciones ni Certificados.
+      Recomendaciones y Certificados se enriquecen después del render inicial
+      mediante GET de solo lectura y se aceptan únicamente si la atención
+      sigue siendo exactamente la misma. No bloquean Vista Integral.
     */
-    completarPlanVistaIntegral(idAtencion,a);
+    /*
+      V1.21: el Plan persistido se enriquece por GET exacto de id_atencion.
+      La respuesta tardía se descarta si cambió la atención.
+    */
+    completarPlanVistaIntegral(
+      idAtencion,
+      a,
+      hayRecetasAsociadas
+    );
+
     completarDocumentosVistaIntegral(idAtencion);
 
     const contextBox = overlay.querySelector('[data-avi-contexto]');
     if(contextBox) contextBox.innerHTML = encabezadoContexto(a);
 
+    /*
+      Cabecera clínica: utiliza únicamente datos ya disponibles en memoria.
+      No consulta ni modifica backend y no cambia el contexto de la atención.
+    */
     const p = pacienteActual();
     const nombreCabecera =
       nombrePaciente(p) ||
@@ -7040,12 +7859,8 @@
         : {};
     }catch(_){}
 
-    const medicoCabecera = texto(
-      ctxCabecera.nombre_medico || a?.nombre_medico || a?.id_medico
-    );
-    const especialidadCabecera = texto(
-      ctxCabecera.especialidad_atencion || ctxCabecera.especialidad_medico
-    );
+    const medicoCabecera = texto(ctxCabecera.nombre_medico || a?.nombre_medico || a?.id_medico);
+    const especialidadCabecera = texto(ctxCabecera.especialidad_atencion || ctxCabecera.especialidad_medico);
 
     const pacienteBox = overlay.querySelector('[data-avi-paciente]');
     if(pacienteBox) pacienteBox.textContent = nombreCabecera;
@@ -7059,9 +7874,7 @@
     }
 
     const idTecnicoBox = overlay.querySelector('[data-avi-id-tecnico]');
-    if(idTecnicoBox){
-      idTecnicoBox.textContent = 'ID atención · ' + texto(a.id_atencion || idAtencion);
-    }
+    if(idTecnicoBox) idTecnicoBox.textContent = 'ID atención · ' + texto(a.id_atencion || idAtencion);
 
     body.querySelectorAll('[data-avi-rx]').forEach(btn=>{
       btn.addEventListener('click',()=>{
@@ -7207,7 +8020,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.24.0-iasyn2-port-antirregresivo',
+    version:'1.22.0-plan-estructura-canonica-antirregresivo',
     abrir,
     cerrar,
     abrirReceta,
