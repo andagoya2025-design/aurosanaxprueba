@@ -6469,8 +6469,8 @@
     return candidatas.length ? candidatas[candidatas.length - 1] : null;
   }
 
-  function auroRecetaDocumentoFirmableActual(){
-    const registro = auroRecetaRegistroFirmableActual();
+  function auroRecetaDocumentoFirmableActual(registroPreparado){
+    const registro = registroPreparado || auroRecetaRegistroFirmableActual();
     if(!registro){
       return {
         success:false,
@@ -6584,6 +6584,7 @@
 
   const auroRecetaFirmasSesion = new Map();
   let auroRecetaFirmaEnCurso = null;
+  let auroRecetaPreparacionFirmaEnCurso = false;
 
   function auroRecetaClaveBaseFirma(documento){
     if(!documento || !documento.success) return '';
@@ -6683,11 +6684,57 @@
       return null;
     }
 
-    const documento = auroRecetaDocumentoParaFirmaRapida_();
-
-    if(!documento.success){
+    /*
+      AUROSANAX - AJUSTE QUIRÚRGICO ANTIRREGRESIVO
+      Firma directa independiente del botón PDF.
+      Consulta diagnósticos por la MISMA id_atencion antes de construir HTML.
+      No reutiliza el HTML de la caché rápida postguardado para firmar.
+      No modifica Plan, backend ni persistencia clínica.
+    */
+    if(auroRecetaPreparacionFirmaEnCurso || auroRecetaFirmaEnCurso){
       mostrarMensajeReceta(
-        '<i class="bi bi-exclamation-triangle me-1"></i> ' + safe(documento.message),
+        '<i class="bi bi-hourglass-split me-1"></i> Ya existe una firma electrónica en preparación o proceso. Espere a que termine.',
+        'error'
+      );
+      return null;
+    }
+    auroRecetaPreparacionFirmaEnCurso = true;
+    let documento;
+    try{
+      const registro = auroRecetaRegistroFirmableActual();
+      if(!registro){
+        documento = auroRecetaDocumentoFirmableActual();
+      }else{
+        const idAtencion = String(registro.id_atencion || '').trim();
+        const registroCompleto = {...registro};
+        if(idAtencion){
+          const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion, true);
+          const completos = auroRecetaDiagnosticosNormalizados(lista);
+          if(completos.length){
+            registroCompleto.diagnosticos = completos;
+          }else if(!Array.isArray(registroCompleto.diagnosticos) || !registroCompleto.diagnosticos.length){
+            throw new Error('No se pudieron verificar los diagnósticos de la atención. No se inició la firma.');
+          }
+        }
+        if(String(obtenerIdAtencionActivaSeguro() || '').trim() !== idAtencion){
+          throw new Error('La atención cambió mientras se preparaba la firma. Vuelva a intentarlo.');
+        }
+        documento = auroRecetaDocumentoFirmableActual(registroCompleto);
+      }
+    }catch(error){
+      mostrarMensajeReceta(
+        '<i class="bi bi-shield-exclamation me-1"></i> ' +
+        safe(error?.message || 'No fue posible preparar la receta para firmar.'),
+        'error'
+      );
+      return null;
+    }finally{
+      auroRecetaPreparacionFirmaEnCurso = false;
+    }
+
+    if(!documento || !documento.success){
+      mostrarMensajeReceta(
+        '<i class="bi bi-exclamation-triangle me-1"></i> ' + safe(documento?.message || 'No fue posible preparar la receta.'),
         'error'
       );
       auroRecetaSincronizarEstadoFirmaVisual();
