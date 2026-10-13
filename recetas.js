@@ -6668,6 +6668,21 @@
     const btn = el('btnFirmaElectronicaReceta');
     if(!btn) return;
 
+    // 3.19: La consulta persistente es autoritativa. El reflejo síncrono
+    // de sesión no puede borrar un botón ya vinculado a un PDF existente.
+    if(
+      btn.classList.contains('auro-receta-firma-persistente-reflejo') &&
+      (btn.getAttribute('data-auro-firma-estado') === 'FIRMADO' ||
+       btn.getAttribute('data-auro-firma-estado') === 'FIRMADO_VERSION_ANTERIOR')
+    ){
+      const actual = auroRecetaRegistroFirmableActual();
+      const atencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
+      const contexto = String(btn.getAttribute('data-auro-firma-contexto') || '');
+      if(actual && contexto === [atencion,String(actual.id_receta || '').trim()].join('|')) return;
+      btn.classList.remove('auro-receta-firma-persistente-reflejo');
+      btn.removeAttribute('data-auro-firma-contexto');
+    }
+
     const documento = auroRecetaDocumentoFirmableActual();
     if(!documento || !documento.success){
       auroRecetaPintarBotonFirmaNormal(btn);
@@ -7273,6 +7288,7 @@
       const auxiliar = el('btnFirmaNuevaVersionRecetaAux');
       if(auxiliar) auxiliar.remove();
       btn.classList.remove('auro-receta-firma-persistente-reflejo');
+      btn.removeAttribute('data-auro-firma-contexto');
       btn.disabled = true;
       btn.setAttribute('data-auro-firma-estado','EDICION_PENDIENTE');
       btn.title = 'Guarde la corrección antes de firmar una nueva versión';
@@ -7318,6 +7334,12 @@
         documento,
         false
       );
+      // Diagnóstico seguro: no incluye nombres, diagnóstico ni contenido médico.
+      console.info('AUROSANAX RECETA firma persistente 3.19', {
+        firmas_encontradas:docs.length,
+        coincide_version_actual:!!docVersionActual,
+        tiene_id_firma:docs.some(function(d){return !!String(d?.id_firma_documento || '').trim();})
+      });
 
       // Después de las consultas asíncronas, no pintar resultados de otra receta.
       const vigente = auroRecetaRegistroFirmableActual();
@@ -7343,6 +7365,7 @@
 
       if(docVersionActual){
         auroRecetaPintarBotonFirmaConfirmada(btn);
+        btn.setAttribute('data-auro-firma-contexto',[idAtencion,idReceta].join('|'));
         btn.classList.add('auro-receta-firma-persistente-reflejo');
         btn.title = 'Ver esta versión firmada de la receta';
         btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓';
@@ -7356,6 +7379,7 @@
         };
       }else if(firmaHistorica){
         auroRecetaPintarBotonFirmaConfirmada(btn);
+        btn.setAttribute('data-auro-firma-contexto',[idAtencion,idReceta].join('|'));
         btn.classList.add('auro-receta-firma-persistente-reflejo');
         btn.setAttribute('data-auro-firma-estado','FIRMADO_VERSION_ANTERIOR');
         btn.title = 'Abrir PDF firmado existente. La versión actual no coincide con la huella de esa firma.';
@@ -7385,6 +7409,7 @@
         };
       }else{
         btn.classList.remove('auro-receta-firma-persistente-reflejo');
+        btn.removeAttribute('data-auro-firma-contexto');
         btn.disabled = false;
         btn.removeAttribute('aria-busy');
         btn.removeAttribute('data-auro-firma-estado');
