@@ -6506,6 +6506,39 @@
   }
 
   /*
+    AUROSANAX FIRMA 3.17 - FUENTE DOCUMENTAL CANÓNICA (LECTURA)
+    Firma y reconocimiento persistente comparten EXACTAMENTE el mismo HTML.
+    No guarda diagnósticos, no pulsa PDF, no altera el Plan ni la receta.
+    No se admite firma/reconocimiento de otra atención durante la espera.
+  */
+  async function auroRecetaDocumentoFirmableSincronizado_(){
+    const registro = auroRecetaRegistroFirmableActual();
+    if(!registro) return auroRecetaDocumentoFirmableActual();
+    const idAtencion = String(registro.id_atencion || '').trim();
+    const idReceta = String(registro.id_receta || '').trim();
+    if(!idAtencion || !idReceta) return auroRecetaDocumentoFirmableActual(registro);
+
+    const copia = {...registro};
+    const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion, true);
+    const diagnosticos = auroRecetaDiagnosticosNormalizados(lista);
+    if(diagnosticos.length){
+      copia.diagnosticos = diagnosticos;
+    }else if(!Array.isArray(copia.diagnosticos) || !copia.diagnosticos.length){
+      throw new Error('No se pudieron verificar los diagnósticos de la atención.');
+    }
+    if(String(obtenerIdAtencionActivaSeguro() || '').trim() !== idAtencion){
+      throw new Error('La atención cambió durante la verificación de firma.');
+    }
+    const vigente = auroRecetaRegistroFirmableActual();
+    if(!vigente || String(vigente.id_receta || '').trim() !== idReceta ||
+       String(vigente.id_atencion || '').trim() !== idAtencion ||
+       String(vigente.actualizado_en || '') !== String(registro.actualizado_en || '')){
+      throw new Error('La receta cambió durante la verificación de firma.');
+    }
+    return auroRecetaDocumentoFirmableActual(copia);
+  }
+
+  /*
     AUROSANAX RECETAS 3.16 - CACHÉ RÁPIDA EXCLUSIVA DE FIRMA
     ---------------------------------------------------------
     V3.15 aceleró correctamente el documento post-guardado, pero reutilizaba
@@ -6701,26 +6734,7 @@
     auroRecetaPreparacionFirmaEnCurso = true;
     let documento;
     try{
-      const registro = auroRecetaRegistroFirmableActual();
-      if(!registro){
-        documento = auroRecetaDocumentoFirmableActual();
-      }else{
-        const idAtencion = String(registro.id_atencion || '').trim();
-        const registroCompleto = {...registro};
-        if(idAtencion){
-          const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion, true);
-          const completos = auroRecetaDiagnosticosNormalizados(lista);
-          if(completos.length){
-            registroCompleto.diagnosticos = completos;
-          }else if(!Array.isArray(registroCompleto.diagnosticos) || !registroCompleto.diagnosticos.length){
-            throw new Error('No se pudieron verificar los diagnósticos de la atención. No se inició la firma.');
-          }
-        }
-        if(String(obtenerIdAtencionActivaSeguro() || '').trim() !== idAtencion){
-          throw new Error('La atención cambió mientras se preparaba la firma. Vuelva a intentarlo.');
-        }
-        documento = auroRecetaDocumentoFirmableActual(registroCompleto);
-      }
+      documento = await auroRecetaDocumentoFirmableSincronizado_();
     }catch(error){
       mostrarMensajeReceta(
         '<i class="bi bi-shield-exclamation me-1"></i> ' +
@@ -6877,6 +6891,12 @@
         nunca deja “Firmada ✓” sobre el nuevo contexto.
       */
       auroRecetaSincronizarEstadoFirmaVisual();
+      // La confirmación persistente es la autoridad, no el HTML sin sincronizar.
+      if(!auroRecetaPreparacionFirmaEnCurso){
+        auroRecetaSincronizarFirmaPersistenteActual(true).catch(function(e){
+          console.warn('AUROSANAX FIRMA 3.17: refresco de firma pendiente', e);
+        });
+      }
     }
   }
 
@@ -7266,12 +7286,25 @@
       return null;
     }
 
-    const documento = auroRecetaDocumentoFirmableActual();
+    // No comparar la firma completa contra HTML con diagnósticos desactualizados.
+    // La misma función prepara el HTML utilizado para la firma real.
+    let documento;
+    try{
+      documento = await auroRecetaDocumentoFirmableSincronizado_();
+    }catch(error){
+      console.warn('AUROSANAX FIRMA 3.17: no se pudo verificar versión documental', error);
+      // Estado indeterminado: nunca ofrecer firmar otra versión por una falla de lectura.
+      btn.disabled = true;
+      btn.title = 'No se pudo verificar la versión firmada. Reintente la consulta.';
+      btn.innerHTML = '<i class="bi bi-shield-exclamation"></i> Verificación pendiente';
+      return null;
+    }
     if(!documento || !documento.success) return null;
 
     const idAtencion = String(documento.id_atencion || '').trim();
     const idReceta = String(documento.id_receta || '').trim();
     if(!idAtencion || !idReceta) return null;
+    const registroVerificadoEn = String(auroRecetaRegistroFirmableActual()?.actualizado_en || '');
 
     try{
       const docs = await auroRecetaObtenerFirmasPersistentes(
@@ -7284,14 +7317,15 @@
         false
       );
 
-      const actual = auroRecetaDocumentoFirmableActual();
+      // Después de las consultas asíncronas, no pintar resultados de otra receta.
+      const vigente = auroRecetaRegistroFirmableActual();
       if(
-        !actual || !actual.success ||
-        String(actual.id_atencion || '').trim() !== idAtencion ||
-        String(actual.id_receta || '').trim() !== idReceta
-      ){
-        return docVersionActual;
-      }
+        !vigente ||
+        String(obtenerIdAtencionActivaSeguro() || '').trim() !== idAtencion ||
+        String(vigente.id_atencion || '').trim() !== idAtencion ||
+        String(vigente.id_receta || '').trim() !== idReceta ||
+        String(vigente.actualizado_en || '') !== String(registroVerificadoEn || '')
+      ) return null;
 
       if(docVersionActual){
         auroRecetaPintarBotonFirmaConfirmada(btn);
