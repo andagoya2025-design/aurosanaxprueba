@@ -7270,6 +7270,8 @@
       Primero se guarda la corrección y después se evalúa la versión persistida.
     */
     if(recetaModoTrabajo === 'edicion'){
+      const auxiliar = el('btnFirmaNuevaVersionRecetaAux');
+      if(auxiliar) auxiliar.remove();
       btn.classList.remove('auro-receta-firma-persistente-reflejo');
       btn.disabled = true;
       btn.setAttribute('data-auro-firma-estado','EDICION_PENDIENTE');
@@ -7327,6 +7329,18 @@
         String(vigente.actualizado_en || '') !== String(registroVerificadoEn || '')
       ) return null;
 
+      // Si hay firma persistente, nunca ocultar el PDF histórico por una
+      // diferencia de hash. La diferencia NO acredita que la versión actual
+      // esté firmada; por eso se distingue expresamente la versión anterior.
+      const firmaHistorica = !docVersionActual && docs.length
+        ? docs.find(function(d){ return String(d?.id_firma_documento || '').trim(); }) || docs[0]
+        : null;
+      const btnVersionNuevaId = 'btnFirmaNuevaVersionRecetaAux';
+      let btnVersionNueva = el(btnVersionNuevaId);
+      if(docVersionActual || !firmaHistorica){
+        if(btnVersionNueva) btnVersionNueva.remove();
+      }
+
       if(docVersionActual){
         auroRecetaPintarBotonFirmaConfirmada(btn);
         btn.classList.add('auro-receta-firma-persistente-reflejo');
@@ -7338,6 +7352,35 @@
             idReceta,
             String(docVersionActual.id_firma_documento || '').trim()
           );
+          return false;
+        };
+      }else if(firmaHistorica){
+        auroRecetaPintarBotonFirmaConfirmada(btn);
+        btn.classList.add('auro-receta-firma-persistente-reflejo');
+        btn.setAttribute('data-auro-firma-estado','FIRMADO_VERSION_ANTERIOR');
+        btn.title = 'Abrir PDF firmado existente. La versión actual no coincide con la huella de esa firma.';
+        btn.innerHTML = '<i class="bi bi-file-earmark-check"></i> Ver receta firmada (anterior)';
+        btn.onclick = function(ev){
+          ev?.preventDefault?.();
+          auroRecetaVerPdfFirmadoPersistente(idReceta, String(firmaHistorica.id_firma_documento || '').trim());
+          return false;
+        };
+        // Acción independiente para una nueva versión: nunca reemplaza
+        // ni esconde el acceso al documento firmado anterior.
+        if(!btnVersionNueva){
+          btnVersionNueva = document.createElement('button');
+          btnVersionNueva.id = btnVersionNuevaId;
+          btnVersionNueva.type = 'button';
+          btnVersionNueva.className = 'btn-soft';
+          btn.insertAdjacentElement('afterend',btnVersionNueva);
+        }
+        btnVersionNueva.disabled = false;
+        btnVersionNueva.title = 'Solo si realmente modificó la receta y necesita firmar la nueva versión';
+        btnVersionNueva.innerHTML = '<i class="bi bi-patch-check"></i> Firmar nueva versión';
+        btnVersionNueva.onclick = function(ev){
+          ev?.preventDefault?.();
+          if(!window.confirm('Existe un PDF firmado anterior. La versión actual no coincide exactamente con esa firma. ¿Desea iniciar una firma nueva?')) return false;
+          auroRecetaFirmarElectronicaActual();
           return false;
         };
       }else{
