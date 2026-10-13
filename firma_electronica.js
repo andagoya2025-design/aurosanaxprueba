@@ -3659,3 +3659,79 @@
     ));
   }catch(_e){}
 })();
+
+/* ============================================================
+   AUROSANAX FIRMA ELECTRONICA 3.7
+   COMPATIBILIDAD DE CONSULTA PERSISTENTE DE RECETAS
+   - No altera el proceso de firma ni registra nuevas firmas.
+   - Normaliza respuestas {documentos}, {documento} y {data}.
+   - Si la consulta exacta no devuelve documentos, intenta buscar
+     por atencion y verifica estrictamente la identidad de receta.
+   - Nunca convierte REVISION, PENDIENTE o ERROR en FIRMADO.
+============================================================ */
+(function auroFirmaConsultaRecetasV37(){
+  'use strict';
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.consultarDocumentosFirmados !== 'function'){
+    console.error('AUROSANAX FIRMA 3.7: API persistente no disponible.');
+    return;
+  }
+  const texto = v => String(v == null ? '' : v).trim();
+  function lista(r){
+    const candidatos = [r, r && r.data, r && r.resultado];
+    const vistos = new Set();
+    const out = [];
+    for(const c of candidatos){
+      if(!c || typeof c !== 'object') continue;
+      const grupos = [c.documentos, c.documento, c.registros];
+      for(const grupo of grupos){
+        for(const doc of Array.isArray(grupo) ? grupo : (grupo && typeof grupo === 'object' ? [grupo] : [])){
+          if(!doc || typeof doc !== 'object') continue;
+          const clave = texto(doc.id_firma_documento) || JSON.stringify(doc);
+          if(vistos.has(clave)) continue;
+          vistos.add(clave);
+          out.push(doc);
+        }
+      }
+    }
+    return out;
+  }
+  function esMismaReceta(doc, atencion, receta){
+    const tipo = texto(doc.tipo_documento || 'RECETA').toUpperCase();
+    const a = texto(doc.id_atencion);
+    const r = texto(doc.id_receta || doc.id_documento_clinico || doc.id_documento_origen);
+    // En búsqueda ampliada ambos identificadores son obligatorios.
+    return tipo === 'RECETA' && a === atencion && r === receta;
+  }
+  async function consultarDocumentosFirmados(data){
+    const d = Object.assign({}, data || {});
+    if(texto(d.tipo_documento).toUpperCase() !== 'RECETA' || !texto(d.id_atencion) || !texto(d.id_receta)){
+      return anterior.consultarDocumentosFirmados(d);
+    }
+    const atencion = texto(d.id_atencion), receta = texto(d.id_receta);
+    const respuesta = await anterior.consultarDocumentosFirmados(d);
+    const exactos = lista(respuesta).filter(x => {
+      const a = texto(x.id_atencion), r = texto(x.id_receta || x.id_documento_clinico || x.id_documento_origen);
+      return (!a || a === atencion) && (!r || r === receta) && texto(x.tipo_documento || 'RECETA').toUpperCase() === 'RECETA';
+    });
+    if(exactos.length){
+      return Object.assign({}, respuesta, {documentos:exactos, documento:exactos[0], total:exactos.length});
+    }
+    // Compatibilidad con índices antiguos que no filtran por id_receta.
+    // El resultado ampliado se admite SOLO si acredita ambas identidades.
+    try{
+      const ampliada = await anterior.consultarDocumentosFirmados({tipo_documento:'RECETA', id_atencion:atencion});
+      const seguros = lista(ampliada).filter(x => esMismaReceta(x, atencion, receta));
+      if(seguros.length){
+        return Object.assign({}, respuesta, {documentos:seguros, documento:seguros[0], total:seguros.length});
+      }
+    }catch(error){
+      console.warn('AUROSANAX FIRMA 3.7: búsqueda ampliada no disponible', error && error.message);
+    }
+    return Object.assign({}, respuesta, {documentos:[], documento:null, total:0});
+  }
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:'3.7-consulta-receta-persistente',
+    consultarDocumentosFirmados:consultarDocumentosFirmados
+  }));
+})();
