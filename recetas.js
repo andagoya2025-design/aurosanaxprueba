@@ -6505,6 +6505,30 @@
     };
   }
 
+  /* AUROSANAX 3.24: UNA sola preparación clínica para firmar y verificar.
+     La consulta solo lee diagnósticos; no guarda ni modifica recetas.
+     Ante ausencia de diagnósticos verificables se falla cerrado. */
+  async function auroRecetaDocumentoFirmableVerificado_(registro, forzarDiagnosticos){
+    const base = registro || auroRecetaRegistroFirmableActual();
+    if(!base) return auroRecetaDocumentoFirmableActual();
+    const idAtencion = String(base.id_atencion || '').trim();
+    const idReceta = String(base.id_receta || '').trim();
+    if(!idAtencion || !idReceta) return auroRecetaDocumentoFirmableActual(base);
+    const completos = auroRecetaDiagnosticosNormalizados(
+      await auroRecetaConsultarDiagnosticosAtencion(idAtencion, !!forzarDiagnosticos)
+    );
+    const actualizado = {...base};
+    if(completos.length){
+      actualizado.diagnosticos = completos;
+    }else if(!Array.isArray(actualizado.diagnosticos) || !actualizado.diagnosticos.length){
+      throw new Error('No se pudieron verificar los diagnósticos de la atención.');
+    }
+    if(String(obtenerIdAtencionActivaSeguro() || '').trim() !== idAtencion){
+      throw new Error('La atención cambió mientras se verificaba la receta.');
+    }
+    return auroRecetaDocumentoFirmableActual(actualizado);
+  }
+
   /*
     AUROSANAX RECETAS 3.16 - CACHÉ RÁPIDA EXCLUSIVA DE FIRMA
     ---------------------------------------------------------
@@ -6732,26 +6756,9 @@
     auroRecetaPreparacionFirmaEnCurso = true;
     let documento;
     try{
-      const registro = auroRecetaRegistroFirmableActual();
-      if(!registro){
-        documento = auroRecetaDocumentoFirmableActual();
-      }else{
-        const idAtencion = String(registro.id_atencion || '').trim();
-        const registroCompleto = {...registro};
-        if(idAtencion){
-          const lista = await auroRecetaConsultarDiagnosticosAtencion(idAtencion, true);
-          const completos = auroRecetaDiagnosticosNormalizados(lista);
-          if(completos.length){
-            registroCompleto.diagnosticos = completos;
-          }else if(!Array.isArray(registroCompleto.diagnosticos) || !registroCompleto.diagnosticos.length){
-            throw new Error('No se pudieron verificar los diagnósticos de la atención. No se inició la firma.');
-          }
-        }
-        if(String(obtenerIdAtencionActivaSeguro() || '').trim() !== idAtencion){
-          throw new Error('La atención cambió mientras se preparaba la firma. Vuelva a intentarlo.');
-        }
-        documento = auroRecetaDocumentoFirmableActual(registroCompleto);
-      }
+      documento = await auroRecetaDocumentoFirmableVerificado_(
+        auroRecetaRegistroFirmableActual(), true
+      );
     }catch(error){
       mostrarMensajeReceta(
         '<i class="bi bi-shield-exclamation me-1"></i> ' +
@@ -7321,10 +7328,17 @@
         idReceta,
         !!forzar
       );
-      const docVersionActual = await auroRecetaBuscarFirmaDeVersionActual(
-        documento,
-        false
-      );
+      /* Usar exactamente la misma preparación clínica que al firmar.
+         Si la verificación falla, no se etiqueta falsamente una versión. */
+      let documentoVerificado = documento;
+      if(docs.length){
+        documentoVerificado = await auroRecetaDocumentoFirmableVerificado_(
+          auroRecetaRegistroFirmableActual(), false
+        );
+      }
+      const docVersionActual = docs.length
+        ? await auroRecetaBuscarFirmaDeVersionActual(documentoVerificado, false)
+        : null;
 
       const actual = auroRecetaDocumentoFirmableActual();
       if(
@@ -7441,7 +7455,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'3.23 reconciliacion persistente antirregresiva 2026-10-14',
+    version:'3.24 preparacion clinica unificada antirregresiva 2026-10-14',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
