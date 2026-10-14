@@ -1,8 +1,8 @@
 /***********************************************************************
- AUROSANAX ERP
+ IASYN ERP
  Archivo: ordenes_medicas.js
  Módulo: Órdenes médicas formales por atención
- Versión: 1.4.0 - firma electrónica ORDEN_MEDICA + flujo documental existente intacto
+ Versión: 1.3.0 - editor premium + justificativo global + documento A4 certificado
  Fecha: 2026-09-11
  -----------------------------------------------------------------------
  ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -12,8 +12,10 @@
  - Una fila puede contener múltiples ítems dentro de detalle_json.items.
  - Conserva snapshot documental de paciente, historia, médico, centro e ítems.
  - PDF no se almacena: se reconstruye bajo demanda.
+ - V1.4.0: firma directa por backend, aislada del motor exclusivo de Recetas.
+ - Bloquea emisión si falla verificación del historial remoto.
  - No modifica Diagnóstico, Atenciones, Recetas, Certificados ni Documentos.
- - No usa polling ni MutationObserver.
+ - Polling solo para estado de firma; no usa MutationObserver.
  - Falla cerrado si el contexto clínico es ambiguo o no coincide con Plan.
  - Atención finalizada/cerrada puede abrir/imprimir/corregir documento formal;
    anulada/cancelada/archivada queda bloqueada.
@@ -23,10 +25,10 @@
 (function(){
 'use strict';
 
-if(window.auroOrdenesMedicas?.version) return;
+if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.0';
-const JSON_VERSION='AUROSANAX_ORDEN_MEDICA_JSON_V1';
+const VERSION='1.4.0-IASYN-FIRMA-ORDEN-MEDICA-CANDIDATA';
+const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
   idAtencion:'',
@@ -40,8 +42,11 @@ const state={
   paciente:null,
   historia:null,
   montado:false,
-  firmas:{},
-  firmaTokens:{}
+  cargaFallida:true,
+  firmasPorDocumento:{},
+  firmaProcesos:new Map(),
+  firmaConsultaToken:0,
+  ultimoAviso:null
 };
 
 const txt=v=>String(v??'').trim();
@@ -66,11 +71,28 @@ function apiUrl(){
   return txt(window.API_URL||document.getElementById('appsScriptUrl')?.value);
 }
 
+function tokenSesionIASYN(){
+  try{
+    const seguridad=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+    if(seguridad&&typeof seguridad.obtenerToken==='function'){
+      const t=txt(seguridad.obtenerToken());
+      if(t) return t;
+    }
+  }catch(e){}
+  try{
+    return txt(sessionStorage.getItem('iasyn_seguridad_token')||'');
+  }catch(e){
+    return '';
+  }
+}
+
 async function get(accion,p={}){
   const b=apiUrl();
   if(!b) throw Error('API_URL no está definida.');
   const q=new URLSearchParams({accion,_:Date.now()});
   Object.entries(p).forEach(([k,v])=>{ if(txt(v)) q.append(k,txt(v)); });
+  const token=tokenSesionIASYN();
+  if(token&&!q.has('token')) q.append('token',token);
   const r=await fetch(b+'?'+q.toString(),{cache:'no-store'});
   if(!r.ok) throw Error('HTTP '+r.status);
   return r.json();
@@ -79,10 +101,13 @@ async function get(accion,p={}){
 async function post(accion,data){
   const b=apiUrl();
   if(!b) throw Error('API_URL no está definida.');
+  const payload=Object.assign({},data||{});
+  const token=tokenSesionIASYN();
+  if(token&&!txt(payload.token)&&!txt(payload.session_token)) payload.token=token;
   const r=await fetch(b,{
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({accion,data})
+    body:JSON.stringify({accion,data:payload})
   });
   if(!r.ok) throw Error('HTTP '+r.status);
   return r.json();
@@ -248,14 +273,14 @@ function normalizarConfig(c){
   c=c||{};
   if(c.datos&&typeof c.datos==='object') c=c.datos;
   return {
-    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'AUROSANAX',
+    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'IASYN',
     subtitulo:txt(c.subtitulo_clinica||c.descripcion_clinica||c.eslogan_clinica),
     razon_social:txt(c.razon_social),
     ruc:txt(c.ruc),
     direccion:txt(c.direccion_clinica||c.direccion),
-    ciudad:txt(c.ciudad_clinica||c.ciudad)||'Guayaquil',
+    ciudad:txt(c.ciudad_clinica||c.ciudad),
     provincia:txt(c.provincia_clinica||c.provincia),
-    pais:txt(c.pais_clinica||c.pais)||'Ecuador',
+    pais:txt(c.pais_clinica||c.pais),
     telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
     email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
     web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
@@ -287,7 +312,10 @@ function itemOrdenNormalizado(o){
     cat:txt(o.cat||o.categoria||o.tipo)||'OTROS',
     obs:txt(o.obs||o.observacion||o.observaciones),
     codigo_cie10:txt(o.codigo_cie10||o.cie10||o.codigo),
-    diagnostico:txt(o.diagnostico||o.descripcion_diagnostico)
+    diagnostico:txt(o.diagnostico||o.descripcion_diagnostico),
+    id_diagnostico:txt(o.id_diagnostico),
+    id_protocolo:txt(o.id_protocolo),
+    origen:txt(o.origen)
   };
 }
 
@@ -466,8 +494,8 @@ function solicitarJustificacion(titulo){
 }
 
 function catalogoOrdenesFormal(){
-  return Array.isArray(window.ORDENES_MEDICAS_AUROSANAX_BASE)
-    ? window.ORDENES_MEDICAS_AUROSANAX_BASE.map(itemOrdenNormalizado).filter(x=>x.orden)
+  return Array.isArray(window.ORDENES_MEDICAS_IASYN_BASE)
+    ? window.ORDENES_MEDICAS_IASYN_BASE.map(itemOrdenNormalizado).filter(x=>x.orden)
     : [];
 }
 function categoriasOrdenesFormal(extra=''){
@@ -515,12 +543,12 @@ function datosCorreccionDesdeDocumento(reg,items,justificacion){
 }
 
 function instalarCSS(){
-  if(document.getElementById('auroOrdenMedicaCSS')) return;
+  if(document.getElementById('iasynOrdenMedicaCSS')) return;
   const s=document.createElement('style');
-  s.id='auroOrdenMedicaCSS';
+  s.id='iasynOrdenMedicaCSS';
   s.textContent=`
-#auroOrdenMedicaFormalApp{margin-top:14px;font-family:inherit;color:#1f2937}
-#auroOrdenMedicaFormalApp *{box-sizing:border-box}
+#iasynOrdenMedicaFormalApp{margin-top:14px;font-family:inherit;color:#1f2937}
+#iasynOrdenMedicaFormalApp *{box-sizing:border-box}
 .aom-shell{border:1px solid #ead7e2;border-radius:16px;background:#fff;padding:14px}
 .aom-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .aom-title{font-weight:850;color:#111827;display:flex;align-items:center;gap:8px}
@@ -542,7 +570,6 @@ function instalarCSS(){
 .aom-btn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:6px 9px;font-size:12px;font-weight:750}
 .aom-btn:hover{background:#f9fafb}
 .aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
-.aom-btn.firma{border-color:#d8b4fe;color:#6b21a8;background:#faf5ff}.aom-btn.firma.ok{border-color:#86efac;color:#166534;background:#f0fdf4}.aom-btn.firma.proceso{border-color:#fde68a;color:#92400e;background:#fffbeb}
 .aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
 .aom-modal{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.55)}
 .aom-modal-panel{width:min(920px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid #e5e7eb;box-shadow:0 28px 80px rgba(15,23,42,.28);padding:18px}
@@ -591,10 +618,10 @@ function montar(){
   instalarCSS();
   const target=mountTarget();
   if(!target) return false;
-  let app=document.getElementById('auroOrdenMedicaFormalApp');
+  let app=document.getElementById('iasynOrdenMedicaFormalApp');
   if(!app){
     app=document.createElement('div');
-    app.id='auroOrdenMedicaFormalApp';
+    app.id='iasynOrdenMedicaFormalApp';
     target.appendChild(app);
   }
   state.montado=true;
@@ -610,6 +637,7 @@ function estadoPrimario(){
 
   if(!ctx.id) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical',nota:'Seleccione una atención clínica.'};
   if(ctx.bloqueada) return {disabled:true,texto:'Orden médica bloqueada',icono:'bi-lock',nota:'La atención está anulada, cancelada o archivada.'};
+  if(state.cargaFallida) return {disabled:true,texto:'Verificando órdenes médicas',icono:'bi-lock',nota:'No se pudo confirmar el historial de órdenes. La emisión permanece bloqueada para evitar duplicados.'};
   if(!plan.ok) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-exclamation-triangle',nota:plan.motivo};
 
   if(activas.length>1){
@@ -635,7 +663,7 @@ function estadoPrimario(){
 }
 
 function render(){
-  const app=document.getElementById('auroOrdenMedicaFormalApp');
+  const app=document.getElementById('iasynOrdenMedicaFormalApp');
   if(!app) return;
   const e=estadoPrimario();
   const emitidas=state.ordenesEmitidas.slice().sort((a,b)=>{
@@ -650,266 +678,28 @@ function render(){
           <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
           <div class="aom-meta">Una emisión puede contener varias órdenes. Vinculada a la atención exacta.</div>
         </div>
-        <button type="button" id="auroOrdenMedicaBtnPrincipal" class="aom-primary" ${e.disabled?'disabled':''}>
+        <button type="button" id="iasynOrdenMedicaBtnPrincipal" class="aom-primary" ${e.disabled?'disabled':''}>
           <i class="bi ${esc(e.icono)}"></i> ${esc(e.texto)}
         </button>
       </div>
-      <div id="auroOrdenMedicaAviso" class="aom-notice ${e.disabled?'warn':''}">${esc(e.nota)}</div>
+      <div id="iasynOrdenMedicaAviso" class="aom-notice ${e.disabled?'warn':''}">${esc(e.nota)}</div>
       <div class="aom-history">
         <div class="aom-history-title">Órdenes emitidas en esta atención</div>
         ${emitidas.length?emitidas.map(r=>filaHistorial(r)).join(''):'<div class="aom-empty">Todavía no hay órdenes formales emitidas para esta atención.</div>'}
       </div>
     </div>`;
 
-  document.getElementById('auroOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
+  document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
+  if(state.ultimoAviso){
+    const a=document.getElementById('iasynOrdenMedicaAviso');
+    if(a){a.className='aom-notice '+state.ultimoAviso.tipo;a.textContent=state.ultimoAviso.mensaje;}
+  }
   app.querySelectorAll('[data-aom-preview]').forEach(b=>b.addEventListener('click',()=>vistaPreviaPorId(b.dataset.aomPreview)));
   app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
   app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
-  app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>firmarOrdenPorId(b.dataset.aomFirmar)));
-  app.querySelectorAll('[data-aom-cancelar-firma]').forEach(b=>b.addEventListener('click',()=>cancelarFirmaOrdenPorId(b.dataset.aomCancelarFirma)));
-}
-
-
-/* ============================================================
- * AUROSANAX ORDENES MEDICAS V1.4.0 - FIRMA ELECTRONICA
- * ADHESION QUIRURGICA / ANTIRREGRESIVA
- * - No cambia emisión, edición, anulación, versiones ni detalle_json.
- * - Identidad: ORDEN_MEDICA + id_orden + id_atencion exactos.
- * - Reutiliza el backend/motor AUROSANAX existente.
- * ============================================================ */
-function tokenSesionFirma(){
-  try{return txt(sessionStorage.getItem('aurosanax_seguridad_token'));}catch(e){return '';}
-}
-
-async function postFirma(accion,data){
-  const b=apiUrl();
-  if(!b) throw Error('No se encontró la conexión segura con el servidor del ERP.');
-  const payload=Object.assign({},data||{},{token:tokenSesionFirma()});
-  const r=await fetch(b,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({accion,data:payload}),
-    cache:'no-store'
-  });
-  if(!r.ok) throw Error('El servidor de firma respondió HTTP '+r.status+'.');
-  const j=await r.json();
-  if(!j||j.success!==true) throw Error(txt(j?.message||j?.error)||'El servidor no confirmó la operación de firma.');
-  return j;
-}
-
-function firmaOrdenEstado(id){
-  return state.firmas[txt(id)]||{estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-}
-
-function fijarFirmaOrden(id,estado,extra={}){
-  id=txt(id);
-  if(!id) return;
-  state.firmas[id]=Object.assign({},firmaOrdenEstado(id),extra,{estado:estado||'SIN_FIRMA'});
-  render();
-}
-
-function botonesFirmaOrden(r){
-  const id=txt(r?.id_orden);
-  if(!id||estadoOrdenEsAnulada(r)||estadoOrdenEsReemplazada(r)) return '';
-  const f=firmaOrdenEstado(id);
-  const e=txt(f.estado).toUpperCase();
-  if(e==='FIRMADO'||e==='FIRMADA'){
-    return `<button type="button" class="aom-btn firma ok" data-aom-firmar="${esc(id)}"><i class="bi bi-file-earmark-check"></i> Ver orden firmada ✓</button>`;
-  }
-  if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e)){
-    return `<button type="button" class="aom-btn firma proceso" disabled><i class="bi bi-hourglass-split"></i> Firma en proceso…</button>
-      ${txt(f.id_solicitud)?`<button type="button" class="aom-btn danger" data-aom-cancelar-firma="${esc(id)}"><i class="bi bi-x-circle"></i> Cancelar firma</button>`:''}`;
-  }
-  return `<button type="button" class="aom-btn firma" data-aom-firmar="${esc(id)}"><i class="bi bi-pen"></i> Firmar</button>`;
-}
-
-function ordenFirmablePorId(id){
-  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id))||null;
-  const ctx=contexto();
-  if(!reg) return {success:false,message:'No se encontró la orden médica seleccionada.'};
-  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) return {success:false,message:'Solo una orden médica activa puede enviarse a firma.'};
-  if(!ctx.id||txt(reg.id_atencion)!==txt(ctx.id)) return {success:false,message:'La orden médica no pertenece a la atención actualmente seleccionada.'};
-  const d=datosDocumentoEmitido(reg);
-  return {
-    success:true,
-    registro:reg,
-    tipo_documento:'ORDEN_MEDICA',
-    id_documento_origen:txt(reg.id_orden),
-    id_documento_clinico:txt(reg.id_orden),
-    id_orden:txt(reg.id_orden),
-    id_receta:'',
-    id_certificado:'',
-    id_recomendacion:'',
-    id_atencion:txt(reg.id_atencion),
-    id_paciente:txt(reg.id_paciente),
-    nombre_paciente:txt(reg.nombre_paciente),
-    id_historia:txt(reg.id_historia),
-    id_medico:txt(reg.id_medico),
-    nombre_medico:txt(reg.nombre_medico),
-    nombre_archivo:'ORDEN_MEDICA_'+txt(reg.id_orden)+'_FIRMADO.pdf',
-    html_documento:`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden médica AUROSANAX</title><style>${estilosImpresion()}</style></head><body>${docHTML(d)}</body></html>`
-  };
-}
-
-async function consultarFirmaPersistenteOrden(id){
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success) return null;
-  try{
-    const r=await postFirma('consultarDocumentosFirmados',{
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
-    });
-    const docs=Array.isArray(r?.documentos)?r.documentos:[];
-    const encontrado=docs.find(x=>
-      txt(x?.tipo_documento).toUpperCase()==='ORDEN_MEDICA' &&
-      txt(x?.id_documento_origen||x?.id_orden)===doc.id_orden &&
-      txt(x?.id_atencion)===doc.id_atencion &&
-      txt(x?.estado_firma).toUpperCase()==='FIRMADO'
-    )||null;
-    state.firmas[doc.id_orden]=encontrado
-      ? {estado:'FIRMADO',id_solicitud:txt(encontrado.id_solicitud),documento:encontrado,error:''}
-      : {estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-    return encontrado;
-  }catch(e){
-    console.warn('AUROSANAX Orden Médica: no se pudo consultar firma persistente.',e);
-    return null;
-  }
-}
-
-async function cargarFirmasOrdenes(){
-  const regs=state.ordenesEmitidas.filter(r=>!estadoOrdenEsAnulada(r)&&!estadoOrdenEsReemplazada(r)&&txt(r.id_orden));
-  await Promise.all(regs.map(r=>consultarFirmaPersistenteOrden(r.id_orden)));
-}
-
-async function abrirOrdenFirmada(id){
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success){aviso(doc.message,'err');return null;}
-  const ventana=window.open('','_blank');
-  if(!ventana){aviso('Habilite ventanas emergentes para ver la orden médica firmada.','err');return null;}
-  try{
-    ventana.document.title='Cargando orden médica firmada…';
-    ventana.document.body.innerHTML='<p style="font-family:Arial,sans-serif;padding:20px">Cargando orden médica firmada…</p>';
-    const r=await postFirma('obtenerPdfFirmadoPersistente',{
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
-    });
-    const b64=txt(r?.pdf_firmado_base64||r?.archivo_base64).replace(/^data:application\/pdf;base64,/i,'');
-    if(!b64) throw Error('El servidor no devolvió el PDF firmado de la orden médica.');
-    const bin=atob(b64), bytes=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-    ventana.location.replace(url);
-    setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
-    return r;
-  }catch(e){
-    try{ventana.close();}catch(_e){}
-    aviso('No se pudo abrir la orden firmada: '+txt(e.message||e),'err');
-    return null;
-  }
-}
-
-async function esperarFirmaOrden(idSolicitud,doc,tokenOperacion){
-  while(tokenOperacion===state.firmaTokens[doc.id_orden]){
-    const r=await postFirma('obtenerEstadoFirmaElectronica',{
-      id_solicitud:idSolicitud,
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
-    });
-    const e=txt(r?.estado_firma).toUpperCase();
-    if(['FIRMADO','CANCELADA','CANCELADO'].includes(e)) return r;
-    if(e==='ERROR') throw Error(txt(r?.error)||'El motor local informó un error al firmar la orden médica.');
-    if(e==='EXPIRADA') throw Error(txt(r?.error)||'La solicitud de firma expiró.');
-    if(!['PENDIENTE','TOMADA'].includes(e)) throw Error('El servidor devolvió un estado de firma no reconocido.');
-    state.firmas[doc.id_orden]=Object.assign({},firmaOrdenEstado(doc.id_orden),{estado:e,id_solicitud:idSolicitud,error:''});
-    render();
-    await new Promise(resolve=>setTimeout(resolve,2500));
-  }
-  return null;
-}
-
-async function firmarOrdenPorId(id){
-  const actual=firmaOrdenEstado(id);
-  if(['FIRMADO','FIRMADA'].includes(txt(actual.estado).toUpperCase())) return abrirOrdenFirmada(id);
-  if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(actual.estado).toUpperCase())) return null;
-
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success){aviso(doc.message,'err');return null;}
-
-  const tokenOperacion=(state.firmaTokens[doc.id_orden]||0)+1;
-  state.firmaTokens[doc.id_orden]=tokenOperacion;
-  state.firmas[doc.id_orden]={estado:'PREPARANDO',id_solicitud:'',documento:null,error:''};
-  render();
-  aviso('Preparando orden médica para firma electrónica…');
-
-  try{
-    const motor=await postFirma('obtenerEstadoFirmaElectronica',{});
-    if(motor?.disponible!==true) throw Error(motor?.agente_online===false?'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.':'La firma electrónica no está disponible en este momento.');
-
-    const creada=await postFirma('firmarDocumento',doc);
-    if(tokenOperacion!==state.firmaTokens[doc.id_orden]) return null;
-    const idSolicitud=txt(creada?.id_solicitud);
-    const inicial=txt(creada?.estado_firma).toUpperCase();
-    if(inicial==='FIRMADO'){
-      state.firmas[doc.id_orden]={estado:'FIRMADO',id_solicitud,documento:creada,error:''};
-      render(); aviso('Orden médica firmada electrónicamente.','ok'); return creada;
-    }
-    if(inicial!=='PENDIENTE'||!idSolicitud) throw Error('El servidor no creó correctamente la solicitud de firma.');
-
-    state.firmas[doc.id_orden]={estado:'PENDIENTE',id_solicitud,documento:null,error:''};
-    render(); aviso('Orden médica enviada al motor de firma.');
-
-    const resultado=await esperarFirmaOrden(idSolicitud,doc,tokenOperacion);
-    if(!resultado) return null;
-    const estado=txt(resultado?.estado_firma).toUpperCase();
-    if(estado==='FIRMADO'){
-      await consultarFirmaPersistenteOrden(doc.id_orden);
-      render(); aviso('Orden médica firmada electrónicamente.','ok'); return resultado;
-    }
-    if(['CANCELADA','CANCELADO'].includes(estado)){
-      state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-      render(); aviso('Firma de la orden médica cancelada.'); return resultado;
-    }
-    throw Error('El servidor no confirmó la firma de la orden médica.');
-  }catch(e){
-    if(tokenOperacion===state.firmaTokens[doc.id_orden]){
-      state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:txt(e.message||e)};
-      render();
-      aviso('No se pudo firmar: '+txt(e.message||e),'err');
-    }
-    return null;
-  }
-}
-
-async function cancelarFirmaOrdenPorId(id){
-  const doc=ordenFirmablePorId(id);
-  if(!doc.success){aviso(doc.message,'err');return null;}
-  const f=firmaOrdenEstado(id), idSolicitud=txt(f.id_solicitud);
-  if(!idSolicitud){aviso('No existe una solicitud de firma pendiente para cancelar.','err');return null;}
-  try{
-    const r=await postFirma('firmarDocumento',{
-      operacion_frontend:'CANCELAR',
-      id_solicitud:idSolicitud,
-      tipo_documento:'ORDEN_MEDICA',
-      id_documento_origen:doc.id_orden,
-      id_orden:doc.id_orden,
-      id_atencion:doc.id_atencion
-    });
-    const e=txt(r?.estado_firma).toUpperCase();
-    if(!['CANCELADA','CANCELADO'].includes(e)) throw Error('El servidor no confirmó la cancelación de la orden médica.');
-    state.firmaTokens[doc.id_orden]=(state.firmaTokens[doc.id_orden]||0)+1;
-    state.firmas[doc.id_orden]={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:''};
-    render(); aviso('Firma de la orden médica cancelada.'); return r;
-  }catch(e){
-    aviso('No se pudo cancelar la firma: '+txt(e.message||e),'err');
-    return null;
-  }
+  app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>solicitarFirmaOrden(b.dataset.aomFirmar)));
+  app.querySelectorAll('[data-aom-ver-firmado]').forEach(b=>b.addEventListener('click',()=>verOrdenFirmada(b.dataset.aomVerFirmado)));
 }
 
 function filaHistorial(r){
@@ -919,6 +709,9 @@ function filaHistorial(r){
   const anulada=estadoOrdenEsAnulada(r);
   const reemplazada=estadoOrdenEsReemplazada(r);
   const noEditable=anulada||reemplazada;
+  const firmado=!!state.firmasPorDocumento[id];
+  const proceso=state.firmaProcesos.get(id);
+  const firmando=!!proceso;
 
   return `<div class="aom-row">
     <div class="aom-row-main">
@@ -929,14 +722,16 @@ function filaHistorial(r){
       <button type="button" class="aom-btn" data-aom-preview="${esc(id)}"><i class="bi bi-eye"></i> Vista previa</button>
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
-      ${botonesFirmaOrden(r)}
-      ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-trash"></i> Eliminar</button>`}
+      ${firmado?`<button type="button" class="aom-btn" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Ver firmado</button>`:''}
+      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar'}</button>`:''}
+      ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
   </div>`;
 }
 
 function aviso(msg,tipo=''){
-  const el=document.getElementById('auroOrdenMedicaAviso');
+  state.ultimoAviso={mensaje:txt(msg),tipo:txt(tipo)};
+  const el=document.getElementById('iasynOrdenMedicaAviso');
   if(!el) return;
   el.className='aom-notice'+(tipo?' '+tipo:'');
   el.textContent=msg;
@@ -944,7 +739,7 @@ function aviso(msg,tipo=''){
 
 function setGuardando(v){
   state.guardando=!!v;
-  const b=document.getElementById('auroOrdenMedicaBtnPrincipal');
+  const b=document.getElementById('iasynOrdenMedicaBtnPrincipal');
   if(b){
     b.disabled=!!v;
     if(v) b.innerHTML='<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Guardando...';
@@ -964,6 +759,10 @@ async function accionPrincipal(){
 }
 
 async function emitir(){
+  if(state.cargaFallida){
+    aviso('No se confirmó el historial remoto de órdenes. Emisión bloqueada para evitar duplicados.','err');
+    return;
+  }
   const activas=ordenesActivasFormales();
   if(activas.length>1){
     aviso(`Se detectaron ${activas.length} órdenes formales activas para esta atención. Emisión bloqueada para evitar otra duplicidad.`,'err');
@@ -1000,7 +799,7 @@ async function emitir(){
 }
 
 function cerrarEditorFormal(){
-  document.getElementById('auroOrdenMedicaEditorModal')?.remove();
+  document.getElementById('iasynOrdenMedicaEditorModal')?.remove();
   state.editandoId='';
 }
 
@@ -1012,7 +811,11 @@ function recogerItemsEditorFormal(modal){
       orden:txt(fila.querySelector('[data-campo="orden"]')?.value),
       cat:norm(tipo)==='otros'?(libre||'OTROS'):tipo,
       obs:txt(fila.querySelector('[data-campo="obs"]')?.value),
-      codigo_cie10:txt(fila.dataset.cie10),diagnostico:txt(fila.dataset.diagnostico)
+      codigo_cie10:txt(fila.dataset.cie10),
+      diagnostico:txt(fila.dataset.diagnostico),
+      id_diagnostico:txt(fila.dataset.idDiagnostico),
+      id_protocolo:txt(fila.dataset.idProtocolo),
+      origen:txt(fila.dataset.origen)
     };
   }).filter(x=>x.orden);
 }
@@ -1028,7 +831,7 @@ function renderItemEditorFormal(item,index){
   const x=itemOrdenNormalizado(item);
   const cats=opcionesCategoriaEditor(x.cat);
   const catLibre=norm(cats.valorSelect)==='otros'&&norm(x.cat)!=='otros'?x.cat:'';
-  return `<div class="aom-editor-item" data-aom-editor-item="1" data-cie10="${esc(x.codigo_cie10||'')}" data-diagnostico="${esc(x.diagnostico||'')}">
+  return `<div class="aom-editor-item" data-aom-editor-item="1" data-cie10="${esc(x.codigo_cie10||'')}" data-diagnostico="${esc(x.diagnostico||'')}" data-id-diagnostico="${esc(x.id_diagnostico||'')}" data-id-protocolo="${esc(x.id_protocolo||'')}" data-origen="${esc(x.origen||'')}">
     <div class="aom-editor-field"><label>Examen / procedimiento</label><input data-campo="orden" list="aomCatalogoOrdenes" value="${esc(x.orden||'')}" autocomplete="off"></div>
     <div class="aom-editor-field"><label>Tipo de orden</label><select data-campo="cat">${cats.html}</select></div>
     <div class="aom-editor-field"><label>Observación</label><textarea data-campo="obs">${esc(x.obs||'')}</textarea></div>
@@ -1057,7 +860,7 @@ function conectarFilaEditorFormal(fila){
   fila.querySelector('[data-campo="orden"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
   fila.querySelector('[data-campo="cat"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
   fila.querySelector('[data-aom-quitar-item]')?.addEventListener('click',()=>{
-    const modal=fila.closest('#auroOrdenMedicaEditorModal');
+    const modal=fila.closest('#iasynOrdenMedicaEditorModal');
     if((modal?.querySelectorAll('[data-aom-editor-item]').length||0)<=1){ alert('La orden formal debe conservar al menos un ítem.'); return; }
     fila.remove();
   });
@@ -1078,7 +881,7 @@ function editarFormal(id){
   if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)){ aviso('Esta versión es histórica y no puede editarse.','warn'); return; }
   cerrarEditorFormal(); state.editandoId=txt(reg.id_orden);
   const data=datosDocumentoEmitido(reg); const items=itemsUnicos(data.detalle_json.items||[]); const catalogo=catalogoOrdenesFormal();
-  const modal=document.createElement('div'); modal.id='auroOrdenMedicaEditorModal'; modal.className='aom-modal';
+  const modal=document.createElement('div'); modal.id='iasynOrdenMedicaEditorModal'; modal.className='aom-modal';
   modal.innerHTML=`<div class="aom-modal-panel" role="dialog" aria-modal="true" aria-labelledby="aomEditorTitulo">
     <div class="aom-modal-head"><div><div id="aomEditorTitulo" class="aom-modal-title">Editar orden médica emitida</div><div class="aom-meta">${esc(data.id_orden)} · v${esc(data.version)}. La corrección crea una nueva versión y conserva la anterior.</div></div><button type="button" class="aom-modal-close" data-aom-cerrar-editor="1">×</button></div>
     <datalist id="aomCatalogoOrdenes">${catalogo.map(x=>`<option value="${esc(x.orden)}">${esc(x.cat)}</option>`).join('')}</datalist>
@@ -1199,13 +1002,13 @@ function docHTML(data){
   const d=data.detalle_json||{};
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
-  const ciudad=txt(centro.ciudad)||'Guayaquil'; const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
+  const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
   const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional" onerror="this.parentElement.remove();this.closest('.aom-doc-head')?.classList.add('no-logo')"></div>`:'';
   return `<article class="aom-paper" style="--aom-color:${esc(color)}">
-    <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'AUROSANAX')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${esc(ciudad)}, ${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
+    <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
     <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
@@ -1223,7 +1026,7 @@ function estilosImpresion(){
   .aom-print-toolbar button{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer}
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
-  ${document.getElementById('auroOrdenMedicaCSS')?.textContent||''}
+  ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
   @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:absolute!important;left:17mm!important;right:17mm!important;bottom:15mm!important}}
   `;
 }
@@ -1252,6 +1055,8 @@ async function cargar(){
   if(!state.montado) montar();
   if(!ctx.id){
     state.ordenesEmitidas=[];
+    state.firmasPorDocumento={};
+    state.cargaFallida=true;
     render();
     return [];
   }
@@ -1261,8 +1066,10 @@ async function cargar(){
     await cargarAuxiliares(ctx);
     const r=await get('listarOrdenesMedicasPorAtencion',{id_atencion:ctx.id});
     if(token!==state.token) return [];
+    if(!Array.isArray(r)&&!Array.isArray(r?.registros)&&!Array.isArray(r?.data)) throw Error('Respuesta del historial inválida o incompleta.');
     state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
-    await cargarFirmasOrdenes();
+    state.cargaFallida=false;
+    await sincronizarFirmasOrdenes(ctx.id,token);
     const activas=ordenesActivasFormales();
     if(activas.length>1){
       render();
@@ -1272,6 +1079,7 @@ async function cargar(){
   }catch(e){
     if(token!==state.token) return [];
     state.ordenesEmitidas=[];
+    state.cargaFallida=true;
     render();
     aviso('El módulo está listo, pero el backend de órdenes médicas aún no respondió: '+(e.message||e),'warn');
     return [];
@@ -1286,8 +1094,8 @@ function refrescarEstadoLocal(){
 }
 
 function instalarEventos(){
-  if(window.__auroOrdenesMedicasEventos) return;
-  window.__auroOrdenesMedicasEventos=true;
+  if(window.__iasynOrdenesMedicasEventos) return;
+  window.__iasynOrdenesMedicasEventos=true;
 
   window.addEventListener('aurosanax:plan-cargado',()=>{
     state.editandoId='';
@@ -1311,9 +1119,170 @@ async function inicializar(){
   return true;
 }
 
-window.auroOrdenesMedicas={
+/* Firma de órdenes: ruta independiente de la validación exclusiva de RECETA.
+ * Candidato sujeto a verificación del contrato Apps Script ORDEN_MEDICA.
+ * Nunca se informa éxito sin confirmación remota FIRMADO.
+ */
+async function postFirmaOrden(accion,data){
+  const r=await post(accion,data);
+  if(!r||r.success===false||r.ok===false) throw Error(txt(r?.message||r?.error)||'El servidor rechazó '+accion+'.');
+  return r;
+}
+function firmaOrdenExacta(doc,id,version){
+  const origen=txt(doc?.id_documento_origen||doc?.id_orden||doc?.id_orden_medica);
+  const tipo=txt(doc?.tipo_documento).toUpperCase();
+  const estado=txt(doc?.estado_firma||doc?.estado).toUpperCase();
+  let detalle={};
+  try{detalle=JSON.parse(txt(doc?.detalle_json)||'{}');}catch(_e){}
+  const v=Number(doc?.version_documento||detalle.version_documento||doc?.version||0);
+  return tipo==='ORDEN_MEDICA' && origen===txt(id) && estado==='FIRMADO' && v===Number(version);
+}
+async function consultarFirmaOrden(reg){
+  const id=txt(reg.id_orden);
+  const version=datosDocumentoEmitido(reg).version;
+  const r=await postFirmaOrden('consultarDocumentosFirmados',{
+    tipo_documento:'ORDEN_MEDICA',id_documento_origen:id,id_orden:id,
+    id_atencion:txt(reg.id_atencion),version_documento:version
+  });
+  const docs=Array.isArray(r.documentos)?r.documentos:[];
+  return docs.find(x=>firmaOrdenExacta(x,id,version))||null;
+}
+async function sincronizarFirmasOrdenes(idAtencion,tokenCarga){
+  const t=++state.firmaConsultaToken;
+  const nuevas={};
+  for(const reg of state.ordenesEmitidas){
+    if(tokenCarga!==state.token||t!==state.firmaConsultaToken) return;
+    try{
+      const firmada=await consultarFirmaOrden(reg);
+      if(firmada) nuevas[txt(reg.id_orden)]=firmada;
+    }catch(e){
+      // No inventar estado FIRMADO ante fallo de red/servidor.
+      console.warn('IASYN Órdenes: no se pudo consultar la firma.',e);
+    }
+  }
+  if(tokenCarga===state.token&&t===state.firmaConsultaToken&&txt(idAtencion)===txt(state.idAtencion)){
+    state.firmasPorDocumento=nuevas;
+  }
+}
+async function solicitarFirmaOrden(id){
+  id=txt(id);
+  if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
+  try{
+    const solicitud=prepararSolicitudFirmaOrden(id);
+    if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
+    // La consulta remota previa evita una firma duplicada tras recargar el navegador.
+    const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
+    const existente=await consultarFirmaOrden(reg);
+    if(existente){
+      state.firmasPorDocumento[id]=existente;
+      render();
+      return aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
+    }
+    if(!window.confirm('¿Firmar electrónicamente esta versión de la orden médica?')) return;
+    const proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false};
+    state.firmaProcesos.set(id,proceso);
+    render();
+    aviso('Enviando orden médica para una firma electrónica…');
+    const r=await postFirmaOrden('firmarDocumento',solicitud);
+    if(txt(r.estado_firma).toUpperCase()==='FIRMADO'){
+      const firmada=await consultarFirmaOrden(reg);
+      if(!firmada) throw Error('El servidor indicó FIRMADO, pero no se confirmó el documento archivado.');
+      state.firmasPorDocumento[id]=firmada;
+      aviso('Orden médica firmada y archivada.','ok');
+      return;
+    }
+    proceso.id_solicitud=txt(r.id_solicitud);
+    if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud.');
+    aviso('Solicitud creada. Firme el PDF en Adobe y guárdelo.');
+    const inicio=Date.now();
+    while(Date.now()-inicio<35*60*1000){
+      await new Promise(resolve=>setTimeout(resolve,2000));
+      const estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});
+      const valor=txt(estado.estado_firma||estado.estado).toUpperCase();
+      if(valor==='FIRMADO'){
+        const firmada=await consultarFirmaOrden(reg);
+        if(!firmada) throw Error('La firma fue reportada, pero aún no se pudo confirmar su archivo para esta versión.');
+        state.firmasPorDocumento[id]=firmada;
+        aviso('Orden médica firmada electrónicamente y archivada.','ok');
+        return;
+      }
+      if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
+      if(valor==='TOMADA') aviso('Adobe está abierto. Firme la orden y guarde el PDF.');
+    }
+    throw Error('La firma sigue pendiente. Consulte nuevamente el estado antes de intentar otra firma.');
+  }catch(e){
+    aviso('No se completó la firma: '+txt(e?.message||e),'err');
+  }finally{
+    state.firmaProcesos.delete(id);
+    render();
+  }
+}
+async function verOrdenFirmada(id){
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
+  if(!reg||txt(reg.id_atencion)!==txt(contexto().id)) return aviso('Orden no válida para la atención actual.','err');
+  const ventana=window.open('','_blank');
+  try{
+    const r=await postFirmaOrden('obtenerDocumentoFirmado',{
+      tipo_documento:'ORDEN_MEDICA',id_documento_origen:txt(id),id_orden:txt(id),
+      id_atencion:txt(reg.id_atencion),version_documento:datosDocumentoEmitido(reg).version
+    });
+    if(!txt(r.pdf_firmado_base64)) throw Error('No se recibió el PDF firmado.');
+    const bin=atob(r.pdf_firmado_base64);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    if(ventana) ventana.location.href=url; else window.open(url,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),120000);
+  }catch(e){
+    if(ventana) ventana.close();
+    aviso('No se pudo abrir el PDF firmado: '+txt(e?.message||e),'err');
+  }
+}
+
+function prepararSolicitudFirmaOrden(id){
+  if(state.cargaFallida) throw Error('No se ha verificado el historial remoto de órdenes.');
+  const ctx=contexto();
+  if(!ctx.id || ctx.bloqueada) throw Error('No hay una atención válida para firmar.');
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
+  if(!reg) throw Error('La orden no existe en el historial cargado.');
+  if(txt(reg.id_atencion)!==ctx.id) throw Error('La orden pertenece a otra atención.');
+  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) throw Error('No se puede firmar una versión anulada o reemplazada.');
+  const d=datosDocumentoEmitido(reg);
+  if(!d.id_orden||!d.id_paciente||!d.id_historia||!d.id_medico||!Number.isSafeInteger(d.version)||d.version<1){
+    throw Error('La orden no tiene identidad clínica y versión completas.');
+  }
+  if(ctx.idPaciente&&ctx.idPaciente!==d.id_paciente) throw Error('La identidad del paciente no coincide con la atención.');
+  if(ctx.idHistoria&&ctx.idHistoria!==d.id_historia) throw Error('La historia clínica no coincide con la atención.');
+  if(ctx.idMedico&&ctx.idMedico!==d.id_medico) throw Error('El médico no coincide con la atención.');
+  if(!itemsUnicos(d.detalle_json.items||[]).length) throw Error('La orden no contiene indicaciones.');
+  const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+docHTML(d)+'</body></html>';
+  return Object.freeze({
+    tipo_documento:'ORDEN_MEDICA',
+    id_documento_origen:d.id_orden,
+    id_orden:d.id_orden,
+    id_orden_medica:d.id_orden,
+    id_receta:'',
+    id_atencion:d.id_atencion,
+    id_paciente:d.id_paciente,
+    nombre_paciente:d.nombre_paciente,
+    id_historia:d.id_historia,
+    id_medico:d.id_medico,
+    nombre_medico:d.nombre_medico,
+    numero_consulta:d.numero_consulta,
+    nombre_archivo:`ORDEN_MEDICA_${d.numero_consulta||'CONSULTA'}_${d.id_orden}_V${d.version}.pdf`,
+    version_documento:d.version,
+    firmas_requeridas:1,
+    html_documento:html
+  });
+}
+
+window.IASYN_ORDENES_MEDICAS={
   version:VERSION,
   jsonVersion:JSON_VERSION,
+  firmaElectronicaHabilitada:true,
+  firmar:solicitarFirmaOrden,
+  verFirmado:verOrdenFirmada,
+  prepararSolicitudFirma:prepararSolicitudFirmaOrden,
   estado:state,
   inicializar,
   cargar,
