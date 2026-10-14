@@ -6930,7 +6930,7 @@
 
     if(!forzar && auroRecetaFirmasPersistentesCache.has(clave)){
       const cache = auroRecetaFirmasPersistentesCache.get(clave);
-      return Array.isArray(cache) ? cache : (cache ? [cache] : []);
+      if(Array.isArray(cache) && cache.length) return cache;
     }
 
     if(auroRecetaFirmasPersistentesEnCurso.has(clave)){
@@ -6939,28 +6939,40 @@
 
     const consulta = (async function(){
       try{
-        const respuesta = await window.auroFirmaElectronica.consultarDocumentosFirmados({
-          tipo_documento:'RECETA',
-          id_atencion:atencion,
-          id_receta:receta
-        });
-
-        const documentos = Array.isArray(respuesta?.documentos)
-          ? respuesta.documentos
-          : [];
-
-        const validos = documentos.filter(function(doc){
-          if(!doc) return false;
-          const idAtencionDoc = String(doc.id_atencion || '').trim();
-          const idRecetaDoc = String(
-            doc.id_receta || doc.id_documento_origen || ''
-          ).trim();
-
-          if(idAtencionDoc && idAtencionDoc !== atencion) return false;
-          if(idRecetaDoc && idRecetaDoc !== receta) return false;
-          return String(doc.estado_firma || '').trim().toUpperCase() === 'FIRMADO';
-        });
-
+        // Consultar primero con ambos identificadores; si el proveedor no
+        // soporta el filtro de receta, reintentar por atención y filtrar aquí.
+        const api = window.auroFirmaElectronica.consultarDocumentosFirmados;
+        const consultas = [
+          {tipo_documento:'RECETA', id_atencion:atencion, id_receta:receta},
+          {tipo_documento:'RECETA', id_atencion:atencion}
+        ];
+        let validos = [];
+        let ultimoError = null;
+        for(const filtros of consultas){
+          try{
+            const respuesta = await api(filtros);
+            const documentos = Array.isArray(respuesta?.documentos)
+              ? respuesta.documentos
+              : (Array.isArray(respuesta?.data?.documentos) ? respuesta.data.documentos :
+                (Array.isArray(respuesta) ? respuesta : []));
+            validos = documentos.filter(function(doc){
+              if(!doc) return false;
+              const idAtencionDoc = String(doc.id_atencion || '').trim();
+              const idRecetaDoc = String(doc.id_receta || doc.id_documento_origen || doc.id_documento_clinico || '').trim();
+              // Nunca asociar a otra receta ni a otra atención.
+              if(idAtencionDoc !== atencion || idRecetaDoc !== receta) return false;
+              return String(doc.estado_firma || doc.estado || '').trim().toUpperCase() === 'FIRMADO' &&
+                !!String(doc.drive_file_id || doc.archivo_url || '').trim();
+            });
+            if(validos.length) break;
+          }catch(error){ ultimoError = error; }
+        }
+        // No almacenar consultas fallidas o vacías: una firma reciente debe
+        // aparecer en el próximo refresco, incluso en otro dispositivo.
+        if(!validos.length){
+          if(ultimoError) console.warn('AUROSANAX: consulta de firmas no disponible',ultimoError);
+          return [];
+        }
         auroRecetaFirmasPersistentesCache.set(clave, validos);
         return validos;
       }finally{
