@@ -3735,3 +3735,65 @@
     consultarDocumentosFirmados:consultarDocumentosFirmados
   }));
 })();
+
+
+/* ============================================================
+   AUROSANAX FIRMA ELECTRÓNICA 3.8
+   COMPATIBILIDAD SHA-256 DE RECETAS — SOLO LECTURA
+   - Preserva firma, cancelación y PDFs persistentes.
+   - Acepta hash de HTML original o HTML trim(), exclusivamente
+     para consultar la identidad de una versión ya firmada.
+   - Exige FIRMADO y ambos identificadores cuando consten.
+   - No inventa firmas, no escribe en Apps Script ni en Sheets.
+   - El módulo Recetas que calcule por su cuenta la huella debe
+     usar esta API para aprovechar la compatibilidad.
+============================================================ */
+(function auroFirmaCompatibilidadShaV38(){
+  'use strict';
+  const anterior = window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.consultarDocumentosFirmados !== 'function') return;
+  const texto = v => String(v == null ? '' : v).trim();
+  async function sha256(valor){
+    const bytes = new TextEncoder().encode(String(valor == null ? '' : valor));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2,'0')).join('');
+  }
+  async function obtenerEstadoVersionDocumento(data){
+    const d = Object.assign({}, data || {});
+    const atencion = texto(d.id_atencion);
+    const receta = texto(d.id_receta || d.id_documento_clinico);
+    const html = String(d.html_documento == null ? '' : d.html_documento);
+    if(!atencion || !receta || !html.trim()){
+      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0, documento:null};
+    }
+    const [original, normalizado] = await Promise.all([sha256(html), sha256(html.trim())]);
+    const respuesta = await anterior.consultarDocumentosFirmados({
+      tipo_documento:'RECETA', id_atencion:atencion, id_receta:receta
+    });
+    const docs = Array.isArray(respuesta && respuesta.documentos) ? respuesta.documentos : [];
+    const validos = docs.filter(doc => {
+      if(!doc || typeof doc !== 'object') return false;
+      const tipo = texto(doc.tipo_documento || 'RECETA').toUpperCase();
+      const idA = texto(doc.id_atencion);
+      const idR = texto(doc.id_receta || doc.id_documento_clinico || doc.id_documento_origen);
+      return tipo === 'RECETA' && (!idA || idA === atencion) &&
+        (!idR || idR === receta) && texto(doc.estado_firma).toUpperCase() === 'FIRMADO';
+    });
+    const exacto = validos.find(doc => {
+      const hash = texto(doc.sha256_origen).toLowerCase();
+      return hash && (hash === original || hash === normalizado);
+    }) || null;
+    return {
+      success:true,
+      estado:exacto ? 'FIRMADA' : (validos.length ? 'NUEVA_VERSION' : 'SIN_FIRMA'),
+      total_firmas:validos.length,
+      documento:exacto,
+      documentos_historicos:validos,
+      coincidencia_sha:exacto ? (texto(exacto.sha256_origen).toLowerCase() === original ? 'ORIGINAL' : 'TRIM') : ''
+    };
+  }
+  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
+    version:'3.8-compatibilidad-sha-recetas',
+    obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
+  }));
+})();
