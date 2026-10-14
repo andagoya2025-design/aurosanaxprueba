@@ -7359,8 +7359,12 @@
         btn.classList.add('auro-receta-firma-persistente-reflejo');
         btn.setAttribute('data-auro-firma-atencion', idAtencion);
         btn.setAttribute('data-auro-firma-receta', idReceta);
-        btn.title = docVersionActual ? 'Ver esta versión firmada de la receta' : 'Ver PDF firmado archivado; la huella del HTML actual es diferente';
-        btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓';
+        btn.title = docVersionActual
+          ? 'Ver esta versión firmada de la receta'
+          : 'Ver firma histórica archivada; la versión actual no coincide con su huella SHA-256';
+        btn.innerHTML = docVersionActual
+          ? '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓'
+          : '<i class="bi bi-clock-history"></i> Ver firma histórica';
         btn.onclick = function(ev){
           ev?.preventDefault?.();
           auroRecetaVerPdfFirmadoPersistente(
