@@ -6631,6 +6631,20 @@
     btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Firmada ✓';
   }
 
+  /* V3.23: reconciliación diferida y agrupada. El estado de sesión
+     no es fuente suficiente para negar una firma ya archivada. */
+  let auroRecetaReconciliacionFirmaPendiente = null;
+  function auroRecetaSolicitarReconciliacionFirma(){
+    if(auroRecetaReconciliacionFirmaPendiente !== null) return;
+    auroRecetaReconciliacionFirmaPendiente = setTimeout(function(){
+      auroRecetaReconciliacionFirmaPendiente = null;
+      if(recetaModoTrabajo === 'edicion') return;
+      auroRecetaSincronizarFirmaPersistenteActual(false).catch(function(e){
+        console.warn('AUROSANAX: no se pudo reconciliar firma persistente',e);
+      });
+    }, 0);
+  }
+
   function auroRecetaSincronizarEstadoFirmaVisual(){
     const btn = el('btnFirmaElectronicaReceta');
     if(!btn) return;
@@ -6672,6 +6686,9 @@
     }
 
     auroRecetaPintarBotonFirmaNormal(btn);
+    // Tras pintar estado provisional, consultar la fuente persistente.
+    // Nunca se firma, guarda ni modifica nada en este recorrido.
+    if(recetaModoTrabajo !== 'edicion') auroRecetaSolicitarReconciliacionFirma();
   }
 
   function auroRecetaAbrirPdfFirmadoSeguro(resultado, documento){
@@ -7314,6 +7331,7 @@
         !actual || !actual.success ||
         String(actual.id_atencion || '').trim() !== idAtencion ||
         String(actual.id_receta || '').trim() !== idReceta ||
+        String(actual.html_documento || '') !== String(documento.html_documento || '') ||
         recetaModoTrabajo === 'edicion'
       ){
         return docVersionActual;
@@ -7423,7 +7441,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'3.22 reflejo firma persistente antirregresivo 2026-10-14',
+    version:'3.23 reconciliacion persistente antirregresiva 2026-10-14',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
