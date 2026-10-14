@@ -6939,15 +6939,21 @@
 
     const consulta = (async function(){
       try{
-        const respuesta = await window.auroFirmaElectronica.consultarDocumentosFirmados({
-          tipo_documento:'RECETA',
-          id_atencion:atencion,
-          id_receta:receta
+        // Consulta exacta primero; ciertos motores devuelven un resultado vacío
+        // cuando reciben simultáneamente ambos filtros, aun existiendo la firma.
+        const api = window.auroFirmaElectronica.consultarDocumentosFirmados;
+        const respuesta = await api({
+          tipo_documento:'RECETA', id_atencion:atencion, id_receta:receta
         });
-
-        const documentos = Array.isArray(respuesta?.documentos)
-          ? respuesta.documentos
-          : [];
+        let documentos = Array.isArray(respuesta?.documentos) ? respuesta.documentos : [];
+        if(!documentos.length){
+          const alternativa = await api({tipo_documento:'RECETA', id_atencion:atencion});
+          documentos = Array.isArray(alternativa?.documentos) ? alternativa.documentos : [];
+        }
+        if(!documentos.length){
+          const alternativa = await api({tipo_documento:'RECETA', id_receta:receta});
+          documentos = Array.isArray(alternativa?.documentos) ? alternativa.documentos : [];
+        }
 
         const validos = documentos.filter(function(doc){
           if(!doc) return false;
@@ -7318,13 +7324,10 @@
         btn.removeAttribute('aria-busy');
         btn.removeAttribute('data-auro-firma-estado');
 
-        if(docs.length){
-          btn.title = 'La receta fue corregida. Firmar la nueva versión guardada';
-          btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar nueva versión';
-        }else{
-          btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
-          btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
-        }
+        // Esta rama se ejecuta únicamente si no hay firma persistente.
+        // Nunca anunciar una nueva versión sin evidencia de cambio real.
+        btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
+        btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
 
         btn.onclick = function(ev){
           ev?.preventDefault?.();
@@ -7399,7 +7402,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'3.0 editor tabulado espejo del PDF oficial',
+    version:'3.21 auditoria consulta persistente 2026-10-14',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
@@ -7411,6 +7414,16 @@
     obtenerDocumentoFirmableActual:auroRecetaDocumentoFirmableActual,
     firmarElectronicaActual:auroRecetaFirmarElectronicaActual,
     obtenerFirmaPersistenteActual:auroRecetaSincronizarFirmaPersistenteActual,
+    diagnosticarFirmaActual:async function(){
+      const d=auroRecetaDocumentoFirmableActual();
+      if(!d || !d.success) return {version:this.version, documentoDisponible:false};
+      const docs=await auroRecetaObtenerFirmasPersistentes(d.id_atencion,d.id_receta,true);
+      const exacta=await auroRecetaBuscarFirmaDeVersionActual(d,false);
+      const btn=el('btnFirmaElectronicaReceta');
+      return {version:this.version,id_atencion:d.id_atencion,id_receta:d.id_receta,
+        firmasEncontradas:docs.length,versionExacta:!!exacta,
+        textoBoton:btn?.textContent?.trim()||'',estadoBoton:btn?.getAttribute('data-auro-firma-estado')||''};
+    },
     sincronizarFirmasPersistentesHistorial:auroRecetaSincronizarHistorialFirmasPersistentes,
     verPdfFirmadoPersistente:auroRecetaVerPdfFirmadoPersistente,
     descargarPdfFirmadoPersistente:auroRecetaDescargarPdfFirmadoPersistente
