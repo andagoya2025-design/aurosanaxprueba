@@ -3770,7 +3770,21 @@
     const respuesta = await anterior.consultarDocumentosFirmados({
       tipo_documento:'RECETA', id_atencion:atencion, id_receta:receta
     });
-    const docs = Array.isArray(respuesta && respuesta.documentos) ? respuesta.documentos : [];
+    let docs = Array.isArray(respuesta && respuesta.documentos) ? respuesta.documentos : [];
+    /* Algunos backends no combinan correctamente ambos filtros. Reintentar
+       SOLO si no hay resultados, y volver a aislar por ambos identificadores. */
+    if(!docs.length){
+      const porAtencion = await anterior.consultarDocumentosFirmados({
+        tipo_documento:'RECETA', id_atencion:atencion
+      });
+      docs = Array.isArray(porAtencion && porAtencion.documentos) ? porAtencion.documentos : [];
+    }
+    if(!docs.length){
+      const porReceta = await anterior.consultarDocumentosFirmados({
+        tipo_documento:'RECETA', id_receta:receta
+      });
+      docs = Array.isArray(porReceta && porReceta.documentos) ? porReceta.documentos : [];
+    }
     const validos = docs.filter(doc => {
       if(!doc || typeof doc !== 'object') return false;
       const tipo = texto(doc.tipo_documento || 'RECETA').toUpperCase();
