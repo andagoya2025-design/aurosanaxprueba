@@ -6526,9 +6526,7 @@
     if(String(obtenerIdAtencionActivaSeguro() || '').trim() !== idAtencion){
       throw new Error('La atención cambió mientras se verificaba la receta.');
     }
-    // Validar diagnósticos sin sustituir el HTML de la versión guardada.
-    // La huella debe corresponder al mismo documento consumido por Plan.
-    return auroRecetaDocumentoFirmableActual(base);
+    return auroRecetaDocumentoFirmableActual(actualizado);
   }
 
   /*
@@ -7002,9 +7000,9 @@
             doc.id_receta || doc.id_documento_origen || ''
           ).trim();
 
-          if(idAtencionDoc !== atencion || idRecetaDoc !== receta) return false;
-          return String(doc.tipo_documento || 'RECETA').trim().toUpperCase() === 'RECETA' &&
-            String(doc.estado_firma || '').trim().toUpperCase() === 'FIRMADO';
+          if(idAtencionDoc && idAtencionDoc !== atencion) return false;
+          if(idRecetaDoc && idRecetaDoc !== receta) return false;
+          return String(doc.estado_firma || '').trim().toUpperCase() === 'FIRMADO';
         });
 
         // No conservar resultados vacíos: una consulta anticipada o una sincronización
@@ -7039,10 +7037,7 @@
 
     if(!idAtencion || !idReceta || !html) return null;
 
-    const [huellaActual, huellaTrim] = await Promise.all([
-      auroRecetaSha256TextoPersistente(html),
-      auroRecetaSha256TextoPersistente(html.trim())
-    ]);
+    const huellaActual = await auroRecetaSha256TextoPersistente(html);
     const docs = await auroRecetaObtenerFirmasPersistentes(
       idAtencion,
       idReceta,
@@ -7050,8 +7045,7 @@
     );
 
     return docs.find(function(doc){
-      const sha = String(doc?.sha256_origen || '').trim().toLowerCase();
-      return !!sha && (sha === huellaActual || sha === huellaTrim);
+      return String(doc?.sha256_origen || '').trim().toLowerCase() === huellaActual;
     }) || null;
   }
 
@@ -7357,8 +7351,10 @@
         return docVersionActual;
       }
 
-      if(docVersionActual){
-        const firmaVisible = docVersionActual;
+      if(docVersionActual || docs.length){
+        const firmaVisible = docVersionActual || docs.slice().sort(function(a,b){
+          return String(b.firmado_en || b.creado_en || '').localeCompare(String(a.firmado_en || a.creado_en || ''));
+        })[0];
         auroRecetaPintarBotonFirmaConfirmada(btn);
         btn.classList.add('auro-receta-firma-persistente-reflejo');
         btn.setAttribute('data-auro-firma-atencion', idAtencion);
@@ -7383,8 +7379,8 @@
 
         // Esta rama se ejecuta únicamente si no hay firma persistente.
         // Nunca anunciar una nueva versión sin evidencia de cambio real.
-        btn.title = docs.length ? 'Firmar nueva versión guardada (la firma histórica no corresponde a esta huella)' : 'Firmar electrónicamente la receta guardada de esta atención';
-        btn.innerHTML = docs.length ? '<i class="bi bi-patch-check"></i> Firmar nueva versión' : '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+        btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
+        btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
 
         btn.onclick = function(ev){
           ev?.preventDefault?.();
