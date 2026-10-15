@@ -3712,7 +3712,7 @@
     const respuesta = await anterior.consultarDocumentosFirmados(d);
     const exactos = lista(respuesta).filter(x => {
       const a = texto(x.id_atencion), r = texto(x.id_receta || x.id_documento_clinico || x.id_documento_origen);
-      return (!a || a === atencion) && (!r || r === receta) && texto(x.tipo_documento || 'RECETA').toUpperCase() === 'RECETA';
+      return a === atencion && r === receta && texto(x.tipo_documento || 'RECETA').toUpperCase() === 'RECETA';
     });
     if(exactos.length){
       return Object.assign({}, respuesta, {documentos:exactos, documento:exactos[0], total:exactos.length});
@@ -3776,8 +3776,8 @@
       const tipo = texto(doc.tipo_documento || 'RECETA').toUpperCase();
       const idA = texto(doc.id_atencion);
       const idR = texto(doc.id_receta || doc.id_documento_clinico || doc.id_documento_origen);
-      return tipo === 'RECETA' && (!idA || idA === atencion) &&
-        (!idR || idR === receta) && texto(doc.estado_firma).toUpperCase() === 'FIRMADO';
+      return tipo === 'RECETA' && idA === atencion &&
+        idR === receta && texto(doc.estado_firma).toUpperCase() === 'FIRMADO';
     });
     const exacto = validos.find(doc => {
       const hash = texto(doc.sha256_origen).toLowerCase();
@@ -3795,106 +3795,5 @@
   window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
     version:'3.8-compatibilidad-sha-recetas',
     obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
-  }));
-})();
-
-/* ============================================================
-   AUROSANAX FIRMA ELECTRÓNICA 3.9 — CONTROL DOCUMENTAL ESTRICTO
-   Adhesión antirregresiva al módulo íntegro 2.1–3.8.
-   - Una sola autoridad para el estado documental de RECETA.
-   - Identidad clínica exacta, estado FIRMADO, SHA-256 original/trim.
-   - No confunde una firma histórica con la versión actual.
-   - No cambia flujos de firmar, cancelar, certificados o PDFs.
-   - Diagnóstico explícito de diferencias de contenido sin alterar datos.
-============================================================ */
-(function auroFirmaEstadoDocumentalEstrictoV39(){
-  'use strict';
-  const anterior = window.auroFirmaElectronica;
-  if(!anterior || typeof anterior.consultarDocumentosFirmados !== 'function') return;
-  const texto = v => String(v == null ? '' : v).trim();
-  const estado = v => texto(v).toUpperCase();
-  const hashValido = v => /^[a-f0-9]{64}$/i.test(texto(v));
-
-  async function sha256(valor){
-    const bytes = new TextEncoder().encode(String(valor == null ? '' : valor));
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2,'0')).join('');
-  }
-
-  function mismaReceta(doc, atencion, receta){
-    if(!doc || typeof doc !== 'object') return false;
-    const tipo = estado(doc.tipo_documento);
-    const a = texto(doc.id_atencion);
-    const r = texto(doc.id_receta || doc.id_documento_clinico || doc.id_documento_origen);
-    // Un registro sin ambos identificadores NO acredita pertenencia a esta receta.
-    return tipo === 'RECETA' && a === atencion && r === receta &&
-      estado(doc.estado_firma) === 'FIRMADO';
-  }
-
-  async function obtenerEstadoVersionDocumento(data){
-    const d = Object.assign({}, data || {});
-    const atencion = texto(d.id_atencion);
-    const receta = texto(d.id_receta || d.id_documento_clinico);
-    const html = String(d.html_documento == null ? '' : d.html_documento);
-    if(!atencion || !receta || !html.trim()){
-      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0,
-        documento:null, motivo:'IDENTIDAD_O_HTML_INCOMPLETO'};
-    }
-
-    const [original, normalizado] = await Promise.all([sha256(html), sha256(html.trim())]);
-    // Errores de red/servidor se propagan: jamás convertirlos en SIN_FIRMA.
-    const respuesta = await anterior.consultarDocumentosFirmados({
-      tipo_documento:'RECETA', id_atencion:atencion, id_receta:receta
-    });
-    if(!respuesta || respuesta.success !== true){
-      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0,
-        documento:null, motivo:'CONSULTA_NO_CONFIRMADA'};
-    }
-    const docs = Array.isArray(respuesta.documentos) ? respuesta.documentos : [];
-    const validos = docs.filter(doc => mismaReceta(doc, atencion, receta));
-    const exacto = validos.find(doc => {
-      const h = texto(doc.sha256_origen).toLowerCase();
-      return hashValido(h) && (h === original || h === normalizado);
-    }) || null;
-    const ambiguos = docs.filter(doc => doc && estado(doc.estado_firma) === 'FIRMADO' &&
-      !mismaReceta(doc, atencion, receta));
-    // Sin registros inequívocos, la presencia de registros ambiguos no prueba SIN_FIRMA.
-    if(!validos.length && ambiguos.length){
-      return {success:false, estado:'NO_DISPONIBLE', total_firmas:0,
-        documento:null, motivo:'REGISTROS_SIN_IDENTIDAD_CLINICA_COMPLETA',
-        registros_ambiguos:ambiguos.length};
-    }
-    return {
-      success:true,
-      estado:exacto ? 'FIRMADA' : (validos.length ? 'NUEVA_VERSION' : 'SIN_FIRMA'),
-      total_firmas:validos.length,
-      documento:exacto,
-      documentos_historicos:validos,
-      coincidencia_sha:exacto ? (texto(exacto.sha256_origen).toLowerCase() === original ? 'ORIGINAL' : 'TRIM') : '',
-      sha256_documento_actual:normalizado,
-      motivo:exacto ? 'VERSION_FIRMADA_VERIFICADA' : (validos.length ? 'SHA_ACTUAL_NO_COINCIDE' : 'SIN_FIRMAS_REGISTRADAS')
-    };
-  }
-
-  async function diagnosticarVersionesReceta(documentoGuardado, documentoVerificado){
-    const [guardado, verificado] = await Promise.all([
-      obtenerEstadoVersionDocumento(documentoGuardado),
-      obtenerEstadoVersionDocumento(documentoVerificado)
-    ]);
-    return {
-      guardado:guardado, verificado:verificado,
-      misma_identidad: texto(documentoGuardado && documentoGuardado.id_atencion) === texto(documentoVerificado && documentoVerificado.id_atencion) &&
-        texto(documentoGuardado && documentoGuardado.id_receta) === texto(documentoVerificado && documentoVerificado.id_receta),
-      mismo_html: String(documentoGuardado && documentoGuardado.html_documento || '') ===
-        String(documentoVerificado && documentoVerificado.html_documento || ''),
-      requiere_revision_construccion_documento:guardado.estado !== verificado.estado ||
-        guardado.sha256_documento_actual !== verificado.sha256_documento_actual
-    };
-  }
-
-  window.auroFirmaElectronica = Object.freeze(Object.assign({}, anterior, {
-    version:'3.9-estado-documental-estricto-antirregresivo',
-    obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento,
-    diagnosticarVersionesReceta:diagnosticarVersionesReceta
   }));
 })();
