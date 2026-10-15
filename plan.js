@@ -6393,17 +6393,91 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     const anterior = document.getElementById(BTN_HISTORICO_ID);
     if(anterior) anterior.remove();
   }
-  function pintarVisorHistorico(resultado){
-    /*
-      PLAN 40.2 - CORRECCIÓN VISUAL DEL BOTÓN DUPLICADO.
-      PLAN mantiene un solo botón principal para FIRMADA/NUEVA_VERSION.
-      No crea un segundo botón histórico en la barra de PLAN.
-      El historial y sus acciones Ver PDF firmado / Descargar firmado
-      permanecen en el módulo RECETAS (historial persistente).
-      No modifica estado documental, firma, SHA, backend ni guardado.
-    */
-    ocultarVisorHistorico();
+  // PLAN 40.3: un botón visible; conservar ambas acciones si hay firma histórica.
+  let firmaHistoricaDisponible = null;
+  let menuFirmaHistorica = null;
+  function cerrarMenuFirmaHistorica(){
+    if(menuFirmaHistorica){ menuFirmaHistorica.remove(); menuFirmaHistorica = null; }
   }
+  function pintarVisorHistorico(resultado){
+    ocultarVisorHistorico();
+    cerrarMenuFirmaHistorica();
+    firmaHistoricaDisponible = null;
+    if(!resultado || resultado.estado !== 'NUEVA_VERSION' || operativo || estaEditandoReceta()) return;
+    const documento = obtenerDocumentoGuardadoActual();
+    const d = documento && documento.documento && typeof documento.documento === 'object'
+      ? documento.documento : documento;
+    const atencion = String(d?.id_atencion || '').trim();
+    const receta = String(d?.id_receta || '').trim();
+    if(!atencion || !receta) return;
+    const historicos = Array.isArray(resultado.documentos_historicos) ? resultado.documentos_historicos : [];
+    const firma = historicos.find(function(doc){
+      if(!doc || typeof doc !== 'object') return false;
+      const a = String(doc.id_atencion || '').trim();
+      const r = String(doc.id_receta || doc.id_documento_clinico || doc.id_documento_origen || '').trim();
+      return a === atencion && r === receta &&
+        String(doc.tipo_documento || 'RECETA').trim().toUpperCase() === 'RECETA' &&
+        String(doc.estado_firma || '').trim().toUpperCase() === 'FIRMADO' &&
+        !!String(doc.id_firma_documento || '').trim();
+    });
+    if(!firma || typeof window.auroRecetas?.verPdfFirmadoPersistente !== 'function') return;
+    firmaHistoricaDisponible = {
+      atencion:atencion, receta:receta,
+      firma:String(firma.id_firma_documento).trim()
+    };
+    const principal = btn();
+    if(principal){
+      principal.innerHTML = '<i class="bi bi-patch-check me-1"></i> Receta con firma anterior ▾';
+      principal.title = 'Elegir entre ver el PDF firmado anterior y firmar la nueva versión';
+    }
+  }
+  // Captura el clic únicamente cuando existe firma histórica comprobada.
+  // El botón original sigue firmando directamente en los demás estados.
+  document.addEventListener('click', function(ev){
+    const principal = ev.target?.closest?.('#' + BTN_ID);
+    if(!principal || principal.getAttribute('data-auro-estado-documental') !== 'NUEVA_VERSION' ||
+       !firmaHistoricaDisponible || operativo || estaEditandoReceta()) return;
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    if(menuFirmaHistorica){ cerrarMenuFirmaHistorica(); return; }
+    const identidad = firmaHistoricaDisponible;
+    const menu = document.createElement('div');
+    menu.setAttribute('role','menu');
+    menu.style.cssText = 'position:absolute;z-index:99999;background:white;color:#333;border:1px solid #ddd;border-radius:8px;padding:6px;box-shadow:0 5px 18px #0002;min-width:230px;';
+    const rect = principal.getBoundingClientRect();
+    menu.style.left = (rect.left + window.scrollX) + 'px';
+    menu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    const ver = document.createElement('button');
+    ver.type = 'button';
+    ver.className = principal.className;
+    ver.style.cssText = 'display:block;width:100%;margin:3px 0;';
+    ver.textContent = 'Ver receta firmada anterior';
+    ver.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();cerrarMenuFirmaHistorica();
+      const actual = obtenerDocumentoGuardadoActual();
+      const d = actual && actual.documento && typeof actual.documento === 'object' ? actual.documento : actual;
+      if(estaEditandoReceta() || String(d?.id_atencion||'').trim()!==identidad.atencion ||
+         String(d?.id_receta||'').trim()!==identidad.receta) return;
+      window.auroRecetas.verPdfFirmadoPersistente(identidad.receta, identidad.firma);
+    });
+    const firmar = document.createElement('button');
+    firmar.type = 'button';
+    firmar.className = principal.className;
+    firmar.style.cssText = 'display:block;width:100%;margin:3px 0;';
+    firmar.textContent = 'Firmar nueva versión';
+    firmar.addEventListener('click',function(e){
+      e.preventDefault();e.stopPropagation();cerrarMenuFirmaHistorica();
+      const actual = obtenerDocumentoGuardadoActual();
+      const d = actual && actual.documento && typeof actual.documento === 'object' ? actual.documento : actual;
+      if(estaEditandoReceta() || String(d?.id_atencion||'').trim()!==identidad.atencion ||
+         String(d?.id_receta||'').trim()!==identidad.receta) return;
+      if(typeof window.auroRecetas?.firmarElectronicaActual === 'function')
+        window.auroRecetas.firmarElectronicaActual();
+    });
+    menu.append(ver,firmar);
+    document.body.appendChild(menu);
+    menuFirmaHistorica = menu;
+  },true);
 
   function pintarDocumento(estado){
     const b = btn();
