@@ -3712,7 +3712,7 @@
     const respuesta = await anterior.consultarDocumentosFirmados(d);
     const exactos = lista(respuesta).filter(x => {
       const a = texto(x.id_atencion), r = texto(x.id_receta || x.id_documento_clinico || x.id_documento_origen);
-      return a === atencion && r === receta && texto(x.tipo_documento || 'RECETA').toUpperCase() === 'RECETA';
+      return (!a || a === atencion) && (!r || r === receta) && texto(x.tipo_documento || 'RECETA').toUpperCase() === 'RECETA';
     });
     if(exactos.length){
       return Object.assign({}, respuesta, {documentos:exactos, documento:exactos[0], total:exactos.length});
@@ -3776,8 +3776,8 @@
       const tipo = texto(doc.tipo_documento || 'RECETA').toUpperCase();
       const idA = texto(doc.id_atencion);
       const idR = texto(doc.id_receta || doc.id_documento_clinico || doc.id_documento_origen);
-      return tipo === 'RECETA' && idA === atencion &&
-        idR === receta && texto(doc.estado_firma).toUpperCase() === 'FIRMADO';
+      return tipo === 'RECETA' && (!idA || idA === atencion) &&
+        (!idR || idR === receta) && texto(doc.estado_firma).toUpperCase() === 'FIRMADO';
     });
     const exacto = validos.find(doc => {
       const hash = texto(doc.sha256_origen).toLowerCase();
