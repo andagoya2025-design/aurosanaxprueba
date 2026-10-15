@@ -6399,6 +6399,18 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   function cerrarMenuFirmaHistorica(){
     if(menuFirmaHistorica){ menuFirmaHistorica.remove(); menuFirmaHistorica = null; }
   }
+  // Cerrar solo el menú flotante al hacer clic fuera de él (incluye cambio de módulo).
+  // No interviene en la firma, la receta ni los botones originales.
+  document.addEventListener('click', function(ev){
+    if(!menuFirmaHistorica) return;
+    const destino = ev.target;
+    if(menuFirmaHistorica.contains(destino) || destino?.closest?.('#' + BTN_ID)) return;
+    cerrarMenuFirmaHistorica();
+  }, true);
+  // Cerrar también cuando la navegación se realiza mediante historial o URL.
+  window.addEventListener('hashchange', cerrarMenuFirmaHistorica);
+  window.addEventListener('popstate', cerrarMenuFirmaHistorica);
+
   function pintarVisorHistorico(resultado){
     ocultarVisorHistorico();
     cerrarMenuFirmaHistorica();
