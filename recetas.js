@@ -6634,7 +6634,7 @@
     btn.removeAttribute('aria-busy');
     btn.removeAttribute('data-auro-firma-estado');
     btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
-    btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+    btn.innerHTML = docs.length ? '<i class="bi bi-patch-check"></i> Firmar nueva versión' : '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
   }
 
   function auroRecetaPintarBotonFirmaEnCurso(btn){
@@ -7000,8 +7000,8 @@
             doc.id_receta || doc.id_documento_origen || ''
           ).trim();
 
-          if(idAtencionDoc && idAtencionDoc !== atencion) return false;
-          if(idRecetaDoc && idRecetaDoc !== receta) return false;
+          // Aislamiento documental obligatorio: no aceptar registros sin ambos IDs.
+          if(idAtencionDoc !== atencion || idRecetaDoc !== receta) return false;
           return String(doc.estado_firma || '').trim().toUpperCase() === 'FIRMADO';
         });
 
@@ -7038,6 +7038,7 @@
     if(!idAtencion || !idReceta || !html) return null;
 
     const huellaActual = await auroRecetaSha256TextoPersistente(html);
+    const huellaTrim = await auroRecetaSha256TextoPersistente(html.trim());
     const docs = await auroRecetaObtenerFirmasPersistentes(
       idAtencion,
       idReceta,
@@ -7045,7 +7046,8 @@
     );
 
     return docs.find(function(doc){
-      return String(doc?.sha256_origen || '').trim().toLowerCase() === huellaActual;
+      const sha = String(doc?.sha256_origen || '').trim().toLowerCase();
+      return sha && (sha === huellaActual || sha === huellaTrim);
     }) || null;
   }
 
@@ -7328,24 +7330,12 @@
         idReceta,
         !!forzar
       );
-      /* Usar exactamente la misma preparación clínica que al firmar.
-         Si la verificación falla, no se etiqueta falsamente una versión. */
-      // Preparar siempre la versión verificada, aunque la caché de firmas esté vacía.
-      const documentoVerificado = await auroRecetaDocumentoFirmableVerificado_(
-        auroRecetaRegistroFirmableActual(), true
-      );
-      // Estado único: la autoridad es Firma Electrónica y su SHA-256.
-      // Un PDF histórico no demuestra que la versión actual siga firmada.
-      const firmaApi = window.auroFirmaElectronica;
-      if(!firmaApi || typeof firmaApi.obtenerEstadoVersionDocumento !== 'function'){
-        return null; // Fallar cerrado: nunca afirmar firma sin verificarla.
-      }
-      const estadoVersion = await firmaApi.obtenerEstadoVersionDocumento(documentoVerificado);
-      if(!estadoVersion || estadoVersion.success !== true){
-        return null;
-      }
-      const docVersionActual = estadoVersion.estado === 'FIRMADA'
-        ? (estadoVersion.documento || null) : null;
+      /* Contrato rector: Recetas decide el estado de SU versión guardada.
+         No regenerar diagnósticos al consultar: cambia el HTML y puede
+         ocultar una firma histórica válida de la versión persistida. */
+      const docVersionActual = docs.length
+        ? await auroRecetaBuscarFirmaDeVersionActual(documento, false)
+        : null;
 
       const actual = auroRecetaDocumentoFirmableActual();
       if(
@@ -7364,7 +7354,7 @@
         btn.classList.add('auro-receta-firma-persistente-reflejo');
         btn.setAttribute('data-auro-firma-atencion', idAtencion);
         btn.setAttribute('data-auro-firma-receta', idReceta);
-        btn.title = 'Ver esta versión firmada de la receta';
+        btn.title = 'Ver el PDF firmado de esta versión exacta de la receta';
         btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓';
         btn.onclick = function(ev){
           ev?.preventDefault?.();
@@ -7381,13 +7371,16 @@
         btn.disabled = false;
         btn.removeAttribute('aria-busy');
         btn.removeAttribute('data-auro-firma-estado');
-        const nuevaVersion = estadoVersion.estado === 'NUEVA_VERSION';
-        btn.title = nuevaVersion
-          ? 'La versión guardada no coincide con las firmas históricas; firmar nueva versión'
+
+        // Solo hay nueva versión si existen firmas previas de ESTA receta,
+        // pero ninguna coincide con el SHA de su HTML guardado.
+        btn.title = docs.length
+          ? 'Firmar la nueva versión guardada; las firmas anteriores se conservan'
           : 'Firmar electrónicamente la receta guardada de esta atención';
-        btn.innerHTML = nuevaVersion
+        btn.innerHTML = docs.length
           ? '<i class="bi bi-patch-check"></i> Firmar nueva versión'
           : '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
+
         btn.onclick = function(ev){
           ev?.preventDefault?.();
           auroRecetaFirmarElectronicaActual();
@@ -7477,6 +7470,15 @@
     },
     firmarElectronicaActual:auroRecetaFirmarElectronicaActual,
     obtenerFirmaPersistenteActual:auroRecetaSincronizarFirmaPersistenteActual,
+    obtenerEstadoFirmaVersionActual:async function(){
+      const d = auroRecetaDocumentoFirmableActual();
+      if(!d || !d.success) return {success:true,estado:'RECETA_NO_GUARDADA',documento:null};
+      const docs = await auroRecetaObtenerFirmasPersistentes(d.id_atencion,d.id_receta,true);
+      const exacta = docs.length ? await auroRecetaBuscarFirmaDeVersionActual(d,false) : null;
+      return {success:true,estado:exacta?'FIRMADA':(docs.length?'NUEVA_VERSION':'SIN_FIRMA'),
+        documento:exacta,total_firmas:docs.length,id_atencion:d.id_atencion,id_receta:d.id_receta};
+    },
+
     diagnosticarFirmaActual:async function(){
       const d=auroRecetaDocumentoFirmableActual();
       if(!d || !d.success) return {version:this.version, documentoDisponible:false};
