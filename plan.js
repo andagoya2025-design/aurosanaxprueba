@@ -6360,26 +6360,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     }
   }
 
-  // Extrae una identidad documental consistente de ambas formas admitidas por la API.
-  function identidadDocumento(resultado){
-    const d = resultado && resultado.documento && typeof resultado.documento === 'object'
-      ? resultado.documento : resultado;
-    return {
-      id_atencion: String(d?.id_atencion || '').trim(),
-      id_receta: String(d?.id_receta || '').trim()
-    };
-  }
-
-  function pintarEstadoNoVerificado(){
-    const b = btn();
-    if(!b || operativo) return;
-    b.disabled = true;
-    b.setAttribute('data-auro-estado-documental', 'NO_VERIFICADO');
-    b.style.cursor = 'not-allowed';
-    b.title = 'No se pudo comprobar la versión firmable. Actualice la consulta antes de firmar.';
-    b.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> Firma no verificada';
-  }
-
   function pintarRecetaNoGuardada(){
     const b = btn();
     if(!b || operativo) return;
@@ -6414,44 +6394,15 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     if(anterior) anterior.remove();
   }
   function pintarVisorHistorico(resultado){
+    /*
+      PLAN 40.2 - CORRECCIÓN VISUAL DEL BOTÓN DUPLICADO.
+      PLAN mantiene un solo botón principal para FIRMADA/NUEVA_VERSION.
+      No crea un segundo botón histórico en la barra de PLAN.
+      El historial y sus acciones Ver PDF firmado / Descargar firmado
+      permanecen en el módulo RECETAS (historial persistente).
+      No modifica estado documental, firma, SHA, backend ni guardado.
+    */
     ocultarVisorHistorico();
-    if(!resultado || resultado.estado !== 'NUEVA_VERSION' || operativo || estaEditandoReceta()) return;
-    const documento = obtenerDocumentoGuardadoActual();
-    const d = documento && documento.documento && typeof documento.documento === 'object'
-      ? documento.documento : documento;
-    const atencion = String(d?.id_atencion || '').trim();
-    const receta = String(d?.id_receta || '').trim();
-    if(!atencion || !receta) return;
-    const historicos = Array.isArray(resultado.documentos_historicos) ? resultado.documentos_historicos : [];
-    const firma = historicos.find(function(doc){
-      if(!doc || typeof doc !== 'object') return false;
-      const a = String(doc.id_atencion || '').trim();
-      const r = String(doc.id_receta || doc.id_documento_clinico || doc.id_documento_origen || '').trim();
-      return a === atencion && r === receta &&
-        String(doc.tipo_documento || 'RECETA').trim().toUpperCase() === 'RECETA' &&
-        String(doc.estado_firma || '').trim().toUpperCase() === 'FIRMADO' &&
-        !!String(doc.id_firma_documento || '').trim();
-    });
-    const principal = btn();
-    if(!firma || !principal || !principal.parentNode ||
-       typeof window.auroRecetas?.verPdfFirmadoPersistente !== 'function') return;
-    const visor = document.createElement('button');
-    visor.id = BTN_HISTORICO_ID;
-    visor.type = 'button';
-    visor.className = principal.className;
-    visor.innerHTML = '<i class="bi bi-file-earmark-check me-1"></i> Ver receta firmada anterior';
-    visor.title = 'Abrir únicamente el PDF firmado archivado; no certifica la versión actual';
-    visor.addEventListener('click', function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      const actual = obtenerDocumentoGuardadoActual();
-      const v = actual && actual.documento && typeof actual.documento === 'object'
-        ? actual.documento : actual;
-      if(estaEditandoReceta() || String(v?.id_atencion || '').trim() !== atencion ||
-         String(v?.id_receta || '').trim() !== receta) return;
-      window.auroRecetas.verPdfFirmadoPersistente(receta, String(firma.id_firma_documento).trim());
-    });
-    principal.parentNode.insertBefore(visor, principal.nextSibling);
   }
 
   function pintarDocumento(estado){
@@ -6518,8 +6469,8 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     const verificado = await window.auroRecetas.obtenerDocumentoFirmableVerificadoActual();
     if(!verificado || verificado.success === false ||
        !String(verificado.html_documento || '').trim() ||
-       String(verificado.id_atencion || '').trim() !== identidadDocumento(documento).id_atencion ||
-       String(verificado.id_receta || '').trim() !== identidadDocumento(documento).id_receta){
+       String(verificado.id_atencion || '').trim() !== String(documento.id_atencion || '').trim() ||
+       String(verificado.id_receta || '').trim() !== String(documento.id_receta || '').trim()){
       return {success:false, estado:'NO_DISPONIBLE', motivo:'DOCUMENTO_VERIFICADO_NO_COINCIDE'};
     }
     return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(verificado);
@@ -6549,12 +6500,9 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         pintarVisorHistorico(r);
       }else{
         ocultarVisorHistorico();
-        pintarEstadoNoVerificado();
       }
       return r;
     }catch(error){
-      ocultarVisorHistorico();
-      pintarEstadoNoVerificado();
       console.warn('AUROSANAX PLAN 37.3: estado de firma no disponible', error);
       return null;
     }
@@ -6649,11 +6597,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return;
     }
 
-    if(b.getAttribute('data-auro-estado-documental') === 'NO_VERIFICADO'){
-      ev.preventDefault();
-      ev.stopImmediatePropagation();
-      return;
-    }
     if(b.getAttribute('data-auro-estado-documental') !== 'FIRMADA') return;
 
     ev.preventDefault();
@@ -6665,7 +6608,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         doc && doc.success &&
         typeof window.auroRecetas?.verPdfFirmadoPersistente === 'function'
       ){
-        window.auroRecetas.verPdfFirmadoPersistente(identidadDocumento(doc).id_receta);
+        window.auroRecetas.verPdfFirmadoPersistente(doc.id_receta);
       }
     }catch(error){
       console.error('AUROSANAX PLAN 37.3 - VER FIRMA', error);
