@@ -385,6 +385,19 @@ function instalarCSS(){
 .ac-field label{display:block;font-size:12px;font-weight:800;color:#4b5563;margin-bottom:5px}
 .ac-field input,.ac-field select,.ac-field textarea{width:100%;border:1px solid #d1d5db;border-radius:12px;padding:10px 11px;font:inherit}
 .ac-field textarea{min-height:92px;resize:vertical}
+.ac-editor-toolbar{display:flex;justify-content:flex-end;margin-top:6px}
+.ac-expand-btn{border:1px solid #d9c6df;border-radius:9px;background:#fff;color:#854b91;padding:6px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.ac-expand-btn:hover{background:#faf3fc}
+.ac-expand-backdrop{position:fixed;inset:0;z-index:2147483000;background:rgba(31,24,39,.58);display:flex;align-items:center;justify-content:center;padding:20px}
+.ac-expand-dialog{width:min(850px,96vw);max-height:94vh;display:flex;flex-direction:column;background:#fff;border-radius:18px;padding:22px;box-shadow:0 22px 75px #0004}
+.ac-expand-dialog h3{margin:0;color:#514258;font-size:19px}
+.ac-expand-hint{margin:5px 0 12px;color:#777;font-size:12px}
+.ac-expand-textarea{width:100%;min-height:250px;height:min(62vh,640px);resize:vertical;box-sizing:border-box;border:1px solid #b9a9c3;border-radius:12px;padding:16px;font:16px/1.65 inherit;text-align:justify;white-space:pre-wrap}
+.ac-expand-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:15px}
+.ac-expand-actions button{border-radius:10px;padding:10px 18px;cursor:pointer;font:inherit;border:1px solid #d5c7db;background:#fff}
+.ac-expand-actions .ac-expand-apply{background:#9554a1;color:#fff;border-color:#9554a1;font-weight:700}
+@media(max-width:700px){.ac-expand-dialog{padding:14px}.ac-expand-backdrop{padding:8px}.ac-expand-textarea{height:60vh}}
+@media print{.ac-expand-backdrop{display:none!important}}
 .ac-dx{display:grid;gap:8px}
 .ac-dx label{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #ead7e2;border-radius:12px;background:linear-gradient(135deg,#fff,#fff9fc);min-height:46px;cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
 .ac-dx label:hover{border-color:#d9a7c3;box-shadow:0 5px 14px rgba(139,30,90,.06)}
@@ -412,7 +425,7 @@ function instalarCSS(){
 .ac-error{background:#fef2f2;color:#991b1b}
 .ac-warn{background:#fffbeb;color:#92400e}
 .ac-preview{margin-top:14px;overflow:auto;background:#eef1f4;border-radius:16px;padding:18px}
-.ac-paper{width:210mm;min-height:297mm;background:#fff;margin:auto;padding:15mm 17mm 42mm;box-shadow:0 8px 28px rgba(0,0,0,.12);transform-origin:top center;position:relative}
+.ac-paper{width:210mm;min-height:297mm;display:flex;flex-direction:column;background:#fff;margin:auto;padding:15mm 17mm 17mm;box-shadow:0 8px 28px rgba(0,0,0,.12);transform-origin:top center;position:relative}
 .ac-doc-head{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ac-color,#8b1e5a);padding-bottom:10px}
 .ac-logo-wrap{width:60px;height:60px;display:grid;place-items:center;border-radius:12px;overflow:hidden}
 .ac-logo-wrap:empty{display:none}
@@ -431,7 +444,7 @@ function instalarCSS(){
 .ac-dx-doc-row{font-size:12.1px;line-height:1.45}
 .ac-reposo{margin-top:16px;break-inside:avoid;page-break-inside:avoid}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
-.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:20mm;break-inside:avoid;page-break-inside:avoid}
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:auto;padding-top:20mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}
 .ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
 .ac-contact-row span{flex:1;min-width:0}
@@ -546,10 +559,10 @@ function html(){
 
             <div class="ac-field"><label>Número de contacto</label><input id="acContacto" inputmode="tel"></div>
             <div class="ac-field"><label>Institución / Empresa</label><input id="acEmpresa"></div>
-            <div class="ac-field full"><label>Resumen clínico</label><textarea id="acResumen"></textarea></div>
+            <div class="ac-field full"><label>Resumen clínico</label><textarea id="acResumen"></textarea><div class="ac-editor-toolbar"><button type="button" class="ac-expand-btn" data-ac-expand="acResumen">⛶ Ampliar editor</button></div></div>
             <div class="ac-field"><label>Actividad laboral</label><input id="acActividad"></div>
             <div class="ac-field"><label>Dirección de trabajo</label><input id="acDireccionTrabajo"></div>
-            <div class="ac-field full"><label>Observaciones / extensión de reposo</label><textarea id="acObservaciones"></textarea></div>
+            <div class="ac-field full"><label>Observaciones / extensión de reposo</label><textarea id="acObservaciones"></textarea><div class="ac-editor-toolbar"><button type="button" class="ac-expand-btn" data-ac-expand="acObservaciones">⛶ Ampliar editor</button></div></div>
           </div>
 
           <div class="ac-actions">
@@ -645,6 +658,35 @@ function msg(t,s){
 function v(id){return txt(document.getElementById(id)?.value);}
 function sv(id,x){const e=document.getElementById(id);if(e)e.value=x??'';}
 
+function abrirEditorAmpliado(id){
+  const origen=document.getElementById(id);
+  if(!origen || document.getElementById('acExpandBackdrop')) return;
+  const titulo=id==='acResumen'?'Resumen clínico':'Observaciones / extensión de reposo';
+  const backdrop=document.createElement('div');
+  backdrop.id='acExpandBackdrop';
+  backdrop.className='ac-expand-backdrop';
+  backdrop.innerHTML=`<div class="ac-expand-dialog" role="dialog" aria-modal="true" aria-labelledby="acExpandTitle">
+    <h3 id="acExpandTitle">${titulo}</h3>
+    <p class="ac-expand-hint">Edición ampliada · el texto se aplica al editor original solo al confirmar.</p>
+    <textarea id="acExpandText" class="ac-expand-textarea" aria-label="${titulo}"></textarea>
+    <div class="ac-expand-actions"><button type="button" data-ac-cancel>Cancelar</button><button type="button" class="ac-expand-apply" data-ac-apply>Aplicar texto</button></div>
+  </div>`;
+  document.body.appendChild(backdrop);
+  const editor=backdrop.querySelector('#acExpandText');
+  editor.value=origen.value;
+  const cerrar=()=>{document.removeEventListener('keydown',tecla);backdrop.remove();origen.focus();};
+  const tecla=e=>{if(e.key==='Escape'){e.preventDefault();cerrar();}};
+  document.addEventListener('keydown',tecla);
+  backdrop.querySelector('[data-ac-cancel]').addEventListener('click',cerrar);
+  backdrop.querySelector('[data-ac-apply]').addEventListener('click',()=>{
+    origen.value=editor.value;
+    origen.dispatchEvent(new Event('input',{bubbles:true}));
+    cerrar();
+  });
+  backdrop.addEventListener('click',e=>{if(e.target===backdrop)cerrar();});
+  editor.focus();
+}
+
 function eventos(){
   document.getElementById('acDias')?.addEventListener('input',()=>{
     const d=Number(v('acDias')||0);
@@ -662,6 +704,7 @@ function eventos(){
   document.getElementById('acVista')?.addEventListener('click',()=>vista(false));
   document.getElementById('acImprimir')?.addEventListener('click',()=>vista(true));
   document.getElementById('acNuevo')?.addEventListener('click',nuevo);
+  document.querySelectorAll('#auroCertificadosApp [data-ac-expand]').forEach(btn=>{btn.addEventListener('click',()=>abrirEditorAmpliado(btn.getAttribute('data-ac-expand')));});
 }
 
 function calcularHasta(){
@@ -1453,7 +1496,9 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:0;
+  min-height:273mm;
+  display:flex;
+  flex-direction:column;
   margin:0;
   padding:0;
   background:#fff;
@@ -1496,7 +1541,8 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:22mm;
   align-items:end;
-  margin-top:20mm;
+  margin-top:auto;
+  padding-top:20mm;
   break-inside:avoid;
   page-break-inside:avoid;
 }
@@ -1531,7 +1577,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:0!important;
+    min-height:273mm!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
@@ -1577,7 +1623,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:0!important}
+.auro-cert-preview-sheet>.ac-paper{min-height:273mm!important}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1615,7 +1661,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0 0!important;position:relative!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:273mm!important;margin:0!important;padding:0 0!important;position:relative!important;transform:none!important}
 }
 </style>
 </head>
