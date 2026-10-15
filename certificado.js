@@ -422,15 +422,16 @@ function instalarCSS(){
 .ac-doc-date{text-align:right;font-size:11.5px;font-weight:750}
 .ac-paper h1{text-align:center;font-size:19px;margin:22px 0 26px;letter-spacing:.045em}
 .ac-paper p{font-size:12.3px;line-height:1.62;text-align:justify;margin:0 0 12px}
+.ac-cert-line{white-space:pre-line;overflow-wrap:anywhere}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
 .ac-cert-line{font-size:12.1px;line-height:1.42}
 .ac-cert-line b:first-child{display:inline-block;min-width:150px}
 .ac-dx-doc{margin:14px 0 16px}
 .ac-dx-doc-title{font-size:12.1px;font-weight:900;margin-bottom:5px}
 .ac-dx-doc-row{font-size:12.1px;line-height:1.45}
-.ac-reposo{margin-top:16px}
+.ac-reposo{margin-top:16px;break-inside:avoid;page-break-inside:avoid}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
-.ac-firma-area{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:1fr 1fr;gap:22mm;align-items:end;margin-top:0}
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:20mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}
 .ac-sign{text-align:center;font-size:11.5px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
@@ -1234,7 +1235,9 @@ function abrir(id){
   sv('acDireccionTrabajo',d.direccion_trabajo);
   sv('acObservaciones',d.observaciones);
 
+  const idAbierto=state.editandoId;
   setTimeout(()=>{
+    if(state.editandoId!==idAbierto) return;
     const cod=new Set((d.diagnosticos||[]).map(x=>txt(x.codigo_cie10)));
     document.querySelectorAll('[data-acdx]').forEach(x=>{
       const dx=state.diagnosticos[Number(x.dataset.acdx)];
@@ -1242,7 +1245,16 @@ function abrir(id){
     });
   },0);
 
-  msg('ok','Certificado cargado para revisión.');
+  // ANTIRREGRESIÓN: el documento abierto se dibuja desde el registro
+  // persistido, nunca desde datos() (que reconstruye médico/centro actuales).
+  // Esto no altera el documento firmado ni el contrato de firma electrónica.
+  const preview=document.getElementById('acPreview');
+  if(preview){
+    preview.innerHTML=docHTML(c);
+    preview.style.display='block';
+    preview.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  msg('ok','Certificado cargado y vista preliminar actualizada.');
 }
 
 function nuevo(){
@@ -1262,7 +1274,7 @@ function nuevo(){
   document.querySelectorAll('[data-acdx]').forEach(x=>x.checked=true);
 
   const preview=document.getElementById('acPreview');
-  if(preview) preview.style.display='none';
+  if(preview){ preview.innerHTML=''; preview.style.display='none'; }
 
   msg('','');
 }
@@ -1326,7 +1338,17 @@ function docHTML(data){
   const fecha=d.fecha_emision||data.fecha_emision||hoy();
 
   const ubicacion=[cfg.direccion,cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(' · ');
-  const contactoCentro=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
+  // Iconos decorativos sin dependencias externas; los datos se leen de la configuración existente.
+  const iconoContacto=(tipo)=>{
+    const rutas={
+      ubicacion:'<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+      telefono:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.8L7.1 10a16 16 0 0 0 6.9 6.9l1.5-1.9a2 2 0 0 1 1.8-.6l3 .5a2 2 0 0 1 1.7 2Z"/>',
+      correo:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/>',
+      web:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>'
+    };
+    return `<svg class="ac-contact-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${rutas[tipo]||''}</svg>`;
+  };
+  const lineaContacto=(tipo,valor)=>valor?`<div class="ac-contact-row">${iconoContacto(tipo)}<span>${esc(valor)}</span></div>`:'';
 
   const logo=cfg.logo
     ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(cfg.logo)}" alt="Logo institucional" onerror="this.parentElement.style.display='none'"></div>`
@@ -1392,8 +1414,10 @@ function docHTML(data){
 
     <div class="ac-firma-area">
       <div class="ac-centro-contacto">
-        ${ubicacion?`<div>${esc(ubicacion)}</div>`:''}
-        ${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}
+        ${lineaContacto('ubicacion',ubicacion)}
+        ${lineaContacto('correo',cfg.email)}
+        ${lineaContacto('telefono',cfg.telefono)}
+        ${lineaContacto('web',cfg.web)}
         ${cfg.razon_social?`<div>${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
       </div>
 
@@ -1426,9 +1450,9 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:270mm;
+  min-height:0;
   margin:0;
-  padding:0 0 30mm 0;
+  padding:0;
   background:#fff;
   overflow:visible;
   position:relative;
@@ -1439,6 +1463,8 @@ body{overflow-x:hidden}
   word-break:normal;
 }
 .ac-doc-head{
+  break-inside:avoid;
+  page-break-inside:avoid;
   display:grid;
   grid-template-columns:auto minmax(0,1fr) auto;
   gap:12px;
@@ -1454,27 +1480,27 @@ body{overflow-x:hidden}
 h1{text-align:center;font-size:19px;margin:24px 0 27px;letter-spacing:.045em}
 p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
-.ac-cert-line{font-size:12px;line-height:1.42}
+.ac-cert-line{font-size:12px;line-height:1.6;white-space:pre-line;text-align:justify;margin-bottom:7px}
 .ac-cert-line b:first-child{display:inline-block;min-width:150px}
 .ac-dx-doc{margin:14px 0 16px}
 .ac-dx-doc-title{font-size:12px;font-weight:900;margin-bottom:5px}
-.ac-dx-doc-row{font-size:12px;line-height:1.45}
-.ac-reposo{margin-top:16px}
+.ac-dx-doc-row{font-size:12px;line-height:1.55;break-inside:avoid}
+.ac-reposo{margin-top:16px;break-inside:avoid;page-break-inside:avoid}
 .ac-reposo-row{font-size:12.1px;line-height:1.5;margin-top:4px}
 .ac-firma-area{
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
+  position:relative;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:22mm;
   align-items:end;
-  margin-top:0;
+  margin-top:20mm;
   break-inside:avoid;
   page-break-inside:avoid;
 }
 .ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
+.ac-contact-row span{flex:1;min-width:0}
+.ac-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
 .ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
@@ -1502,9 +1528,9 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:273mm!important;
+    min-height:0!important;
     margin:0!important;
-    padding:0 0 30mm 0!important;
+    padding:0!important;
     overflow:visible!important;
     position:relative!important;
     transform:none!important;
@@ -1513,7 +1539,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-  .ac-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+  .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1548,7 +1574,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:273mm!important}
+.auro-cert-preview-sheet>.ac-paper{min-height:0!important}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1586,7 +1612,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:273mm!important;margin:0!important;padding:0 0 30mm 0!important;position:relative!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0 0!important;position:relative!important;transform:none!important}
 }
 </style>
 </head>
