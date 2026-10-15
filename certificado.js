@@ -433,6 +433,9 @@ function instalarCSS(){
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
 .ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:20mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}
+.ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
+.ac-contact-row span{flex:1;min-width:0}
+.ac-contact-icon{display:block;width:12px!important;height:12px!important;min-width:12px;max-width:12px;min-height:12px;max-height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
 .ac-sign{text-align:center;font-size:11.5px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
@@ -1346,7 +1349,7 @@ function docHTML(data){
       correo:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/>',
       web:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>'
     };
-    return `<svg class="ac-contact-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${rutas[tipo]||''}</svg>`;
+    return `<svg class="ac-contact-icon" aria-hidden="true" width="12" height="12" style="display:block;width:12px!important;height:12px!important;min-width:12px;max-width:12px;flex:0 0 12px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${rutas[tipo]||''}</svg>`;
   };
   const lineaContacto=(tipo,valor)=>valor?`<div class="ac-contact-row">${iconoContacto(tipo)}<span>${esc(valor)}</span></div>`:'';
 
