@@ -6360,6 +6360,26 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     }
   }
 
+  // Extrae una identidad documental consistente de ambas formas admitidas por la API.
+  function identidadDocumento(resultado){
+    const d = resultado && resultado.documento && typeof resultado.documento === 'object'
+      ? resultado.documento : resultado;
+    return {
+      id_atencion: String(d?.id_atencion || '').trim(),
+      id_receta: String(d?.id_receta || '').trim()
+    };
+  }
+
+  function pintarEstadoNoVerificado(){
+    const b = btn();
+    if(!b || operativo) return;
+    b.disabled = true;
+    b.setAttribute('data-auro-estado-documental', 'NO_VERIFICADO');
+    b.style.cursor = 'not-allowed';
+    b.title = 'No se pudo comprobar la versión firmable. Actualice la consulta antes de firmar.';
+    b.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> Firma no verificada';
+  }
+
   function pintarRecetaNoGuardada(){
     const b = btn();
     if(!b || operativo) return;
@@ -6498,8 +6518,8 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     const verificado = await window.auroRecetas.obtenerDocumentoFirmableVerificadoActual();
     if(!verificado || verificado.success === false ||
        !String(verificado.html_documento || '').trim() ||
-       String(verificado.id_atencion || '').trim() !== String(documento.id_atencion || '').trim() ||
-       String(verificado.id_receta || '').trim() !== String(documento.id_receta || '').trim()){
+       String(verificado.id_atencion || '').trim() !== identidadDocumento(documento).id_atencion ||
+       String(verificado.id_receta || '').trim() !== identidadDocumento(documento).id_receta){
       return {success:false, estado:'NO_DISPONIBLE', motivo:'DOCUMENTO_VERIFICADO_NO_COINCIDE'};
     }
     return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(verificado);
@@ -6529,9 +6549,12 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         pintarVisorHistorico(r);
       }else{
         ocultarVisorHistorico();
+        pintarEstadoNoVerificado();
       }
       return r;
     }catch(error){
+      ocultarVisorHistorico();
+      pintarEstadoNoVerificado();
       console.warn('AUROSANAX PLAN 37.3: estado de firma no disponible', error);
       return null;
     }
@@ -6626,6 +6649,11 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return;
     }
 
+    if(b.getAttribute('data-auro-estado-documental') === 'NO_VERIFICADO'){
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      return;
+    }
     if(b.getAttribute('data-auro-estado-documental') !== 'FIRMADA') return;
 
     ev.preventDefault();
@@ -6637,7 +6665,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         doc && doc.success &&
         typeof window.auroRecetas?.verPdfFirmadoPersistente === 'function'
       ){
-        window.auroRecetas.verPdfFirmadoPersistente(doc.id_receta);
+        window.auroRecetas.verPdfFirmadoPersistente(identidadDocumento(doc).id_receta);
       }
     }catch(error){
       console.error('AUROSANAX PLAN 37.3 - VER FIRMA', error);
