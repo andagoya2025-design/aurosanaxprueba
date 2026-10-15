@@ -6665,27 +6665,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
       return {success:true, estado:'RECETA_NO_GUARDADA'};
     }
 
-    /* La comprobación debe usar el MISMO HTML clínico que utiliza la firma.
-       Nunca usar el HTML preliminar si la preparación verificada está disponible. */
-    let verificado = documento;
-    if(typeof window.auroRecetas.obtenerDocumentoFirmableVerificadoActual === 'function'){
-      try{
-        const candidato = await window.auroRecetas.obtenerDocumentoFirmableVerificadoActual();
-        const base = documento.documento && typeof documento.documento === 'object' ? documento.documento : documento;
-        const v = candidato && candidato.documento && typeof candidato.documento === 'object' ? candidato.documento : candidato;
-        if(!v || v.success === false ||
-           String(v.id_atencion || '').trim() !== String(base.id_atencion || '').trim() ||
-           String(v.id_receta || '').trim() !== String(base.id_receta || '').trim() ||
-           !String(v.html_documento || '').trim()){
-          return {success:false,estado:'NO_DISPONIBLE',motivo:'VERIFICACION_CLINICA_INVALIDA'};
-        }
-        verificado = v;
-      }catch(error){
-        console.error('AUROSANAX: no se pudo verificar la versión clínica',error);
-        return {success:false,estado:'NO_DISPONIBLE',motivo:'ERROR_VERIFICACION_CLINICA'};
-      }
-    }
-    return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(verificado);
+    return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(documento);
   }
 
   async function sincronizar(){
@@ -6703,8 +6683,21 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     }
 
     try{
+      // Guardar la identidad y el HTML usados para consultar la firma.
+      // Nunca pintar el resultado de otra receta o de una edición posterior.
+      const documentoConsultado = obtenerDocumentoGuardadoActual();
       const r = await obtenerEstadoPersistente();
       if(miSecuencia !== secuencia || operativo) return r;
+      const documentoVigente = obtenerDocumentoGuardadoActual();
+      if(!documentoConsultado || !documentoVigente ||
+         String(documentoConsultado.id_atencion || '') !== String(documentoVigente.id_atencion || '') ||
+         String(documentoConsultado.id_receta || '') !== String(documentoVigente.id_receta || '') ||
+         String(documentoConsultado.html_documento || '') !== String(documentoVigente.html_documento || '') ||
+         estaEditandoReceta()){
+        // Un evento posterior volverá a sincronizar; no mostrar un estado obsoleto.
+        if(estaEditandoReceta()) pintarEdicion();
+        return r;
+      }
       if(r && r.success) pintarDocumento(r.estado);
       return r;
     }catch(error){
@@ -6874,6 +6867,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     if(!document.hidden && !operativo) sincronizar();
   });
 
+  // API pública de solo lectura: revalidación manual y desde eventos del ERP.
   window.auroPlanSincronizarEstadoFirmaReceta = sincronizar;
 
   if(document.readyState === 'loading'){
