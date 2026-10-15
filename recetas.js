@@ -7037,7 +7037,12 @@
 
     if(!idAtencion || !idReceta || !html) return null;
 
-    const huellaActual = await auroRecetaSha256TextoPersistente(html);
+    // Mismas dos huellas que Firma Electrónica 06 v3.8: HTML original
+    // y trim() exterior. No normalizar el contenido clínico ni hashes guardados.
+    const huellas = await Promise.all([
+      auroRecetaSha256TextoPersistente(html),
+      auroRecetaSha256TextoPersistente(html.trim())
+    ]);
     const docs = await auroRecetaObtenerFirmasPersistentes(
       idAtencion,
       idReceta,
@@ -7045,7 +7050,8 @@
     );
 
     return docs.find(function(doc){
-      return String(doc?.sha256_origen || '').trim().toLowerCase() === huellaActual;
+      const hash = String(doc?.sha256_origen || '').trim().toLowerCase();
+      return hash && huellas.includes(hash);
     }) || null;
   }
 
@@ -7360,7 +7366,9 @@
         btn.setAttribute('data-auro-firma-atencion', idAtencion);
         btn.setAttribute('data-auro-firma-receta', idReceta);
         btn.title = docVersionActual ? 'Ver esta versión firmada de la receta' : 'Ver PDF firmado archivado; la huella del HTML actual es diferente';
-        btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓';
+        btn.innerHTML = docVersionActual
+          ? '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓'
+          : '<i class="bi bi-file-earmark-pdf"></i> Ver receta firmada anterior';
         btn.onclick = function(ev){
           ev?.preventDefault?.();
           auroRecetaVerPdfFirmadoPersistente(
