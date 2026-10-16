@@ -451,7 +451,8 @@ function instalarCSS(){
 .ac-contact-row span{flex:1;min-width:0}
 .ac-contact-icon{display:block;width:12px!important;height:12px!important;min-width:12px;max-width:12px;min-height:12px;max-height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
 .ac-sign{text-align:center;font-size:11.5px}
-.ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
+.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:-14px}
+.ac-sign-details{padding-top:14px}
 .ac-sign b{font-size:12.5px}
 
 .ac-toast-zone{
@@ -1470,11 +1471,13 @@ function docHTML(data){
 
       <div class="ac-sign">
         <div class="ac-sign-line"></div>
-        <b>${esc(med.nombre||'Profesional tratante')}</b>
-        ${med.especialidad?`<br><span>${esc(med.especialidad)}</span>`:''}
-        ${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}
-        ${med.email?`<br><span>${esc(med.email)}</span>`:''}
-        <br><span>Firma y sello</span>
+        <div class="ac-sign-details">
+          <b>${esc(med.nombre||'Profesional tratante')}</b>
+          ${med.especialidad?`<br><span>${esc(med.especialidad)}</span>`:''}
+          ${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}
+          ${med.email?`<br><span>${esc(med.email)}</span>`:''}
+          <br><span>Firma y sello</span>
+        </div>
       </div>
     </div>
   </div>`;
@@ -1553,7 +1556,8 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
 .ac-contact-row span{flex:1;min-width:0}
 .ac-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
 .ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
-.ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
+.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:-14px}
+.ac-sign-details{padding-top:14px}
 .ac-sign b{font-size:12.4px}
 
 /*
