@@ -446,12 +446,12 @@ function instalarCSS(){
 .ac-reposo{margin-top:16px;break-inside:avoid;page-break-inside:avoid}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
 .ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:start;margin-top:auto;padding-top:20mm;break-inside:avoid;page-break-inside:avoid}
-.ac-centro-contacto{position:relative;top:14px;font-size:10.5px;color:#475569;line-height:1.45}
+.ac-centro-contacto{position:relative;top:35px;font-size:10.5px;color:#475569;line-height:1.45}
 .ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
 .ac-contact-row span{flex:1;min-width:0}
 .ac-contact-icon{display:block;width:12px!important;height:12px!important;min-width:12px;max-width:12px;min-height:12px;max-height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
 .ac-sign{text-align:center;font-size:11.5px}
-.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:-14px}
+.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:-7px}
 .ac-sign-details{padding-top:0}
 .ac-sign b{font-size:12.5px}
 
@@ -1551,12 +1551,12 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   break-inside:avoid;
   page-break-inside:avoid;
 }
-.ac-centro-contacto{position:relative;top:14px;font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ac-centro-contacto{position:relative;top:35px;font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
 .ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
 .ac-contact-row span{flex:1;min-width:0}
 .ac-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
 .ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
-.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:-14px}
+.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:-7px}
 .ac-sign-details{padding-top:0}
 .ac-sign b{font-size:12.4px}
 
