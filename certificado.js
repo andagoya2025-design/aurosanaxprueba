@@ -294,9 +294,9 @@ function normalizarConfig(c){
     razon_social:txt(c.razon_social),
     ruc:txt(c.ruc),
     direccion:txt(c.direccion_clinica||c.direccion),
-    ciudad:txt(c.ciudad_clinica||c.ciudad)||'Guayaquil',
+    ciudad:txt(c.ciudad_clinica||c.ciudad),
     provincia:txt(c.provincia_clinica||c.provincia),
-    pais:txt(c.pais_clinica||c.pais)||'Ecuador',
+    pais:txt(c.pais_clinica||c.pais),
     telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
     email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
     web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
@@ -436,6 +436,7 @@ function instalarCSS(){
 .ac-paper h1{text-align:center;font-size:19px;margin:22px 0 26px;letter-spacing:.045em}
 .ac-paper p{font-size:12.3px;line-height:1.62;text-align:justify;margin:0 0 12px}
 .ac-cert-line{white-space:pre-line;overflow-wrap:anywhere}
+.ac-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.62}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
 .ac-cert-line{font-size:12.1px;line-height:1.42}
 .ac-cert-line b:first-child{display:inline-block;min-width:150px}
@@ -444,7 +445,7 @@ function instalarCSS(){
 .ac-dx-doc-row{font-size:12.1px;line-height:1.45}
 .ac-reposo{margin-top:16px;break-inside:avoid;page-break-inside:avoid}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
-.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:auto;padding-top:20mm;break-inside:avoid;page-break-inside:avoid}
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:start;margin-top:auto;padding-top:20mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}
 .ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
 .ac-contact-row span{flex:1;min-width:0}
@@ -1379,7 +1380,7 @@ function docHTML(data){
 
   const centro=txt(cfg.nombre)||'AUROSANAX';
   const color=txt(cfg.colorPrincipal)||'#8b1e5a';
-  const ciudad=txt(cfg.ciudad)||'Guayaquil';
+  const ciudad=txt(cfg.ciudad);
   const tipo=txt(data.tipo_certificado||d.tipo_certificado||'Certificado médico').toUpperCase();
   const fecha=d.fecha_emision||data.fecha_emision||hoy();
 
@@ -1424,7 +1425,7 @@ function docHTML(data){
         <div class="ac-brand">${esc(centro)}</div>
         ${(med.especialidad||cfg.subtitulo)?`<div class="ac-brand-sub">${esc(med.especialidad||cfg.subtitulo)}</div>`:''}
       </div>
-      <div class="ac-doc-date">${esc(ciudad)}, ${esc(fechaVisual(fecha))}</div>
+      <div class="ac-doc-date">${ciudad?`${esc(ciudad)}, `:''}${esc(fechaVisual(fecha))}</div>
     </div>
 
     <h1>${esc(tipo)}</h1>
@@ -1456,7 +1457,7 @@ function docHTML(data){
 
     ${reposo}
 
-    ${d.observaciones?`<p style="margin-top:16px"><b>OBSERVACIONES:</b> ${esc(d.observaciones)}</p>`:''}
+    ${d.observaciones?`<p class="ac-observaciones" style="margin-top:16px"><b>OBSERVACIONES:</b> ${esc(d.observaciones)}</p>`:''}
 
     <div class="ac-firma-area">
       <div class="ac-centro-contacto">
@@ -1529,6 +1530,7 @@ h1{text-align:center;font-size:19px;margin:24px 0 27px;letter-spacing:.045em}
 p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
 .ac-cert-line{font-size:12px;line-height:1.6;white-space:pre-line;text-align:justify;margin-bottom:7px}
+.ac-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.6}
 .ac-cert-line b:first-child{display:inline-block;min-width:150px}
 .ac-dx-doc{margin:14px 0 16px}
 .ac-dx-doc-title{font-size:12px;font-weight:900;margin-bottom:5px}
@@ -1540,7 +1542,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:22mm;
-  align-items:end;
+  align-items:start;
   margin-top:auto;
   padding-top:20mm;
   break-inside:avoid;
