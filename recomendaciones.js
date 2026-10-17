@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.3.2';
+  const VERSION = '1.3.3-REVISION';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -1226,15 +1226,17 @@ ${recDocumentoHTML()}
   }
 
   async function consultarFirmaPersistenteRecomendacion(){
-    const doc=recomendacionFirmable();
-    if(!doc.success) return null;
+    const ctx=state.contexto||contextoAtencion();
+    const id=txt(state.idRecomendacion||state.registro?.id_recomendacion);
+    const idAtencion=txt(state.registro?.id_atencion||ctx.id);
+    if(!id||!idAtencion||idAtencion!==txt(ctx.id)) return null;
     const token=++state.firma.token;
     try{
       const r=await postFirma('consultarDocumentosFirmados',{
         tipo_documento:'RECOMENDACION',
-        id_documento_origen:doc.id_recomendacion,
-        id_recomendacion:doc.id_recomendacion,
-        id_atencion:doc.id_atencion,
+        id_documento_origen:id,
+        id_recomendacion:id,
+        id_atencion:idAtencion,
         id_receta:'',
         id_certificado:''
       });
@@ -1242,8 +1244,8 @@ ${recDocumentoHTML()}
       const docs=Array.isArray(r?.documentos)?r.documentos:[];
       const encontrado=docs.find(x=>
         txt(x?.tipo_documento).toUpperCase()==='RECOMENDACION' &&
-        txt(x?.id_documento_origen||x?.id_recomendacion)===doc.id_recomendacion &&
-        txt(x?.id_atencion)===doc.id_atencion &&
+        txt(x?.id_documento_origen||x?.id_recomendacion)===id &&
+        txt(x?.id_atencion)===idAtencion &&
         txt(x?.estado_firma).toUpperCase()==='FIRMADO'
       )||null;
       if(encontrado){
@@ -1414,7 +1416,7 @@ ${recDocumentoHTML()}
 
   function aplicarModo(){
     const ctx=state.contexto || contextoAtencion();
-    const editable=ctx.editable === true;
+    const editable=ctx.editable === true && !['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase());
     const app=document.getElementById('auroRecomendacionesApp');
     if(app) app.classList.toggle('auro-rec-readonly',!editable);
 
@@ -1593,6 +1595,11 @@ ${recDocumentoHTML()}
       return;
     }
 
+    if(['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase())){
+      setMsg('La recomendación ya está firmada y no se puede sobrescribir.','error');
+      return;
+    }
+
     if(!ctx.editable){
       setMsg('La consulta seleccionada es histórica y está protegida contra edición.','error');
       return;
@@ -1661,7 +1668,7 @@ ${recDocumentoHTML()}
       state.guardando=false;
       if(btn){
         const ctxActual=contextoAtencion();
-        btn.disabled=!(ctxActual.editable && ctxActual.id);
+        btn.disabled=!(ctxActual.editable && ctxActual.id) || ['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase());
         btn.innerHTML='<i class="bi bi-save2 me-1"></i> Guardar recomendaciones';
       }
     }
@@ -1793,10 +1800,29 @@ ${recDocumentoHTML()}
   function recRecomendacionesHTML(texto){
     const raw=txt(texto);
     if(!raw) return '';
-    const items=raw.split(/\r?\n+/).map(x=>x.trim()).filter(Boolean);
-    return items.length>1
-      ? `<ul class="ar-doc-list ar-rec-list">${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
-      : `<p class="ar-rec-text">${esc(raw)}</p>`;
+    // Preservar párrafos; solo convertir en viñetas las líneas que ya las contienen.
+    return raw.split(/\n\s*\n/).map(parrafo=>{
+      const lineas=parrafo.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+      if(!lineas.length) return '';
+      const lista=lineas.every(x=>/^(?:[-*•]|\d+[.)])\s+/.test(x));
+      return lista
+        ? `<ul class="ar-doc-list ar-rec-list">${lineas.map(x=>`<li>${esc(x.replace(/^(?:[-*•]|\d+[.)])\s+/,''))}</li>`).join('')}</ul>`
+        : `<p class="ar-rec-text">${lineas.map(esc).join('<br>')}</p>`;
+    }).join('');
+  }
+
+  // SVG autónomos: la impresión y el motor de firma no dependen de Bootstrap Icons.
+  function recIconoContacto(tipo){
+    const rutas={
+      ubicacion:'<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+      telefono:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.8L7.1 10a16 16 0 0 0 6.9 6.9l1.5-1.9a2 2 0 0 1 1.8-.6l3 .5a2 2 0 0 1 1.7 2Z"/>',
+      correo:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/>',
+      web:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>'
+    };
+    return `<svg class="ar-contact-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${rutas[tipo]||''}</svg>`;
+  }
+  function recLineaContacto(tipo,valor){
+    return valor ? `<div class="ar-contact-row">${recIconoContacto(tipo)}<span>${esc(valor)}</span></div>` : '';
   }
 
   function recDocumentoHTML(){
@@ -1826,7 +1852,6 @@ ${recDocumentoHTML()}
 
     const ubicacion=[cfg.direccion,[cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(', ')]
       .filter(Boolean).join(' · ');
-    const contacto=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
     const registros=[
       medico.registro_msp ? 'MSP: '+medico.registro_msp : '',
       medico.registro_senescyt ? 'SENESCYT: '+medico.registro_senescyt : ''
@@ -1895,9 +1920,11 @@ ${recDocumentoHTML()}
 
       <footer class="ar-firma-area">
         <div class="ar-centro-contacto">
-          ${ubicacion?`<div>${esc(ubicacion)}</div>`:''}
-          ${contacto?`<div>${esc(contacto)}</div>`:''}
-          ${cfg.razon_social?`<div>${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
+          ${recLineaContacto('ubicacion',ubicacion)}
+          ${recLineaContacto('correo',cfg.email)}
+          ${recLineaContacto('telefono',cfg.telefono)}
+          ${recLineaContacto('web',cfg.web)}
+          ${cfg.razon_social?`<div class="ar-contact-legal">${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
         </div>
         <div class="ar-sign">
           <div class="ar-sign-line"></div>
@@ -1953,7 +1980,11 @@ body{overflow-x:hidden}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
 .ar-rec-text{line-height:1.62!important}
 .ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:16mm;break-inside:avoid;page-break-inside:avoid}
-.ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ar-centro-contacto{padding-top:8px;font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ar-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
+.ar-contact-row span{flex:1;min-width:0}
+.ar-contact-icon{display:block;width:12px;height:12px;flex:0 0 12px;color:var(--ar-color,#8b1e5a);margin-top:1px}
+.ar-contact-legal{margin-top:4px}
 .ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ar-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ar-sign b{font-size:12.4px}
