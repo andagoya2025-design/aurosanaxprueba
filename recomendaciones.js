@@ -1892,7 +1892,7 @@ ${recDocumentoHTML()}
     ].filter(Boolean).join('');
 
     return `<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
-      <header class="ar-doc-head">
+      <header class="ar-doc-head${logo ? '' : ' ar-doc-head-no-logo'}">
         ${logo}
         <div>
           <div class="ar-brand">${esc(cfg.nombre)}</div>
@@ -1952,10 +1952,11 @@ ${recDocumentoHTML()}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;max-width:100%;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
 body{overflow-x:hidden}
-.ar-paper{width:100%;max-width:100%;min-width:0;min-height:270mm;margin:0;padding:0;background:#fff;position:relative}
+.ar-paper{width:100%;max-width:100%;min-width:0;min-height:273mm;display:flex;flex-direction:column;margin:0;padding:0;background:#fff;position:relative}
 .ar-paper,.ar-paper *{min-width:0}
 .ar-paper p,.ar-paper span,.ar-paper b,.ar-paper div{overflow-wrap:anywhere;word-break:normal}
 .ar-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ar-color,#8b1e5a);padding-bottom:9px}
+.ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto}
 .ar-logo-wrap{width:55px;height:55px;display:grid;place-items:center;border-radius:10px;overflow:hidden}
 .ar-logo{max-width:100%;max-height:100%;object-fit:contain}
 .ar-brand{font-size:18.5px;font-weight:950;color:var(--ar-color,#8b1e5a);letter-spacing:.035em}
@@ -1979,7 +1980,7 @@ body{overflow-x:hidden}
 .ar-rec-list{margin-top:6px}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
 .ar-rec-text{line-height:1.62!important}
-.ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:16mm;break-inside:avoid;page-break-inside:avoid}
+.ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:start;margin-top:auto;padding-top:24mm;break-inside:avoid;page-break-inside:avoid}
 .ar-centro-contacto{padding-top:8px;font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
 .ar-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
 .ar-contact-row span{flex:1;min-width:0}
@@ -1990,8 +1991,9 @@ body{overflow-x:hidden}
 .ar-sign b{font-size:12.4px}
 @media print{
   html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important}
+  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important;break-inside:auto!important;page-break-inside:auto!important}
   .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
+  .ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto!important}
   .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
 }`;
   }
