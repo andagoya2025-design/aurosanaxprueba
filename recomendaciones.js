@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.3.3-REVISION';
+  const VERSION = '1.3.4-FASE1-CERTIFICADOS-CANDIDATO';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -34,6 +34,8 @@
     idRecomendacion: '',
     contexto: null,
     diagnosticos: [],
+    configuracionImpresion: null,
+    medicosImpresion: [],
     registro: null,
     cargando: false,
     guardando: false,
@@ -1502,7 +1504,8 @@ ${recDocumentoHTML()}
       const [registro, contextoEnriquecido] = await Promise.all([
         apiGet('buscarRecomendacionPorAtencion',{id_atencion:ctx.id}),
         enriquecerContextoDesdeServidor(ctx),
-        cargarDiagnosticos(ctx.id)
+        cargarDiagnosticos(ctx.id),
+        recCargarDatosImpresion()
       ]).then(resultados => [resultados[0], resultados[1]]);
 
       if(token !== state.tokenCarga) return null;
@@ -1688,8 +1691,11 @@ ${recDocumentoHTML()}
      - La impresión real no hereda el zoom visual del dispositivo.
      ============================================================ */
 
+  /* FASE 1: fuente institucional equivalente a Certificados.
+     No altera datos clínicos, guardado ni firmas existentes. */
   function recConfigInstitucional(){
     const candidatos=[
+      state.configuracionImpresion,
       window.auroConfiguracionCentro,
       window.configuracionCentro,
       window.configCentro,
@@ -1698,22 +1704,42 @@ ${recDocumentoHTML()}
     ];
     let c=candidatos.find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
     if(c.datos&&typeof c.datos==='object') c=c.datos;
-
     return {
-      nombre:primerTexto(c.nombre_clinica,c.nombre_centro,c.nombre_comercial,c.razon_social,'AurosanaxMedic'),
-      subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica,'Ginecología y Obstetricia'),
+      nombre:primerTexto(c.nombre_clinica,c.nombre_centro,c.nombre_comercial,c.razon_social,'AUROSANAX'),
+      subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica),
       razon_social:txt(c.razon_social),
       ruc:txt(c.ruc),
       direccion:primerTexto(c.direccion_clinica,c.direccion),
-      ciudad:primerTexto(c.ciudad_clinica,c.ciudad,'Guayaquil'),
+      ciudad:primerTexto(c.ciudad_clinica,c.ciudad),
       provincia:primerTexto(c.provincia_clinica,c.provincia),
-      pais:primerTexto(c.pais_clinica,c.pais,'Ecuador'),
+      pais:primerTexto(c.pais_clinica,c.pais),
       telefono:primerTexto(c.telefono_clinica,c.whatsapp_clinica,c.telefono,c.whatsapp),
       email:primerTexto(c.email_clinica,c.correo_clinica,c.email,c.correo),
       web:primerTexto(c.sitio_web_clinica,c.web_clinica,c.web),
       logo:primerTexto(c.logo_url,c.logo_drive_url,c.logo),
       colorPrincipal:primerTexto(c.color_principal,'#8b1e5a')
     };
+  }
+
+  async function recCargarDatosImpresion(){
+    // Mismo origen que Certificados: obtenerConfiguracion + listarMedicosActivos.
+    // Una falla no debe bloquear la consulta clínica ni la firma.
+    const [config,medicos]=await Promise.allSettled([
+      apiGet('obtenerConfiguracion'),
+      apiGet('listarMedicosActivos')
+    ]);
+    if(config.status==='fulfilled' && config.value && typeof config.value==='object'){
+      const c=config.value;
+      const datos=(c.datos&&typeof c.datos==='object')?c.datos:c;
+      const globales=[window.auroConfiguracionCentro,window.configuracionCentro,window.configCentro,window.CONFIG_CENTRO,window.configuracionInstitucional]
+        .find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
+      state.configuracionImpresion=Object.assign({},globales,datos);
+    }
+    if(medicos.status==='fulfilled'){
+      const r=medicos.value;
+      const lista=Array.isArray(r)?r:(Array.isArray(r?.data)?r.data:(Array.isArray(r?.medicos)?r.medicos:(Array.isArray(r?.registros)?r.registros:[])));
+      if(lista.length) state.medicosImpresion=lista;
+    }
   }
 
   function recNombreCompleto(obj){
@@ -1756,28 +1782,24 @@ ${recDocumentoHTML()}
 
   function recMedicoImpresion(ctx){
     const a=ctx?.atencion||{};
-    const id=txt(a.id_medico);
+    const id=txt(ctx?.idMedico||a.id_medico);
     const listas=[
+      state.medicosImpresion,
       window.medicos,
       window.medicosActivos,
       window.listaMedicos,
       window.configuracionMedicos,
       window.medicosConfiguracion
     ].filter(Array.isArray);
-
     let m=null;
     for(const lista of listas){
       m=lista.find(x=>txt(x?.id_medico||x?.id||x?.codigo)===id)||null;
       if(m) break;
     }
-
     m=m||{};
     return {
       nombre:recNombreCompleto(m)||nombreMedicoDesdeContexto(a)||'Profesional tratante',
-      especialidad:primerTexto(
-        m.especialidad_principal,m.especialidad,m.especialidad_medica,
-        a.especialidad,a.medico_especialidad,'Ginecología y Obstetricia'
-      ),
+      especialidad:primerTexto(m.especialidad_principal,m.especialidad,m.especialidad_medica,a.especialidad,a.medico_especialidad),
       registro_msp:primerTexto(m.registro_msp,m.msp,m.registro_profesional),
       registro_senescyt:primerTexto(m.registro_senescyt,m.senescyt),
       email:primerTexto(m.email,m.correo)
