@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.11';
+const VERSION='1.3.12';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -417,6 +417,8 @@ function instalarCSS(){
 .ac-soft{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8}
 .ac-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;margin-bottom:8px}
 .ac-item:last-child{margin-bottom:0}
+.ac-item.ac-item-abierto{border-color:#c98caf;background:#fff9fc}
+.ac-btn.ac-abierto{background:#ecfdf5;color:#166534;border:1px solid #86efac}
 .ac-item-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
 .ac-meta{font-size:12px;color:#6b7280;margin-top:4px}
 .ac-empty{padding:20px;text-align:center;color:#6b7280;border:1px dashed #d1d5db;border-radius:12px}
@@ -814,14 +816,15 @@ function renderHistorial(){
     const botonCancelar=(preparando||proceso)
       ? `<button class="ac-btn ac-firma-cancelar" data-accancelarfirma="${esc(c.id_certificado)}">Cancelar firma</button>`
       : '';
-    return `<div class="ac-item">
+    const abierto=txt(state.editandoId)===txt(c.id_certificado);
+    return `<div class="ac-item${abierto?' ac-item-abierto':''}">
       <div class="ac-item-top">
         <div>
           <b>${esc(c.tipo_certificado||d.tipo_certificado||'Certificado')}</b>
           <div class="ac-meta">${esc(fechaVisual(c.fecha_emision||d.fecha_emision))} · ${esc(c.id_certificado)}</div>
         </div>
         <div class="ac-actions" style="margin-top:0">
-          <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
+          <button class="ac-btn ${abierto?'ac-abierto':'ac-soft'}" data-aceditar="${esc(c.id_certificado)}" ${abierto?'aria-current="true"':''}>${abierto?'Abierto ✓':'Abrir'}</button>
           <button class="ac-btn ac-soft${clase}" data-acfirmar="${esc(c.id_certificado)}" ${preparando||proceso?'disabled aria-busy="true"':''}>${textoBoton}</button>
           ${botonCancelar}
         </div>
@@ -1269,6 +1272,7 @@ function abrir(id){
 
   const d=parse(c.detalle_json);
   state.editandoId=txt(c.id_certificado);
+  renderHistorial();
 
   sv('acTipo',c.tipo_certificado||d.tipo_certificado);
   sv('acFecha',c.fecha_emision||d.fecha_emision);
@@ -1307,6 +1311,7 @@ function abrir(id){
 
 function nuevo(){
   state.editandoId='';
+  renderHistorial();
   ['acEmpresa','acResumen','acActividad','acDireccionTrabajo','acObservaciones'].forEach(x=>sv(x,''));
 
   const p=state.paciente||{};
