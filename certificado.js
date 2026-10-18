@@ -435,11 +435,10 @@ function instalarCSS(){
 .ac-doc-date{text-align:right;font-size:11.5px;font-weight:750}
 .ac-paper h1{text-align:center;font-size:19px;margin:22px 0 26px;letter-spacing:.045em}
 .ac-paper p{font-size:12.3px;line-height:1.62;text-align:justify;margin:0 0 12px}
-.ac-paper p.ac-cert-intro{text-align:justify!important;text-align-last:left;hyphens:auto;-webkit-hyphens:auto}
 .ac-cert-line{white-space:pre-line;overflow-wrap:anywhere}
 .ac-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.62}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
-.ac-cert-line{font-size:12.1px;line-height:1.42}
+.ac-cert-line{font-size:12.1px;line-height:1.42;text-align:justify}
 .ac-cert-line b:first-child{display:inline-block;min-width:150px}
 .ac-dx-doc{margin:14px 0 16px}
 .ac-dx-doc-title{font-size:12.1px;font-weight:900;margin-bottom:5px}
@@ -1432,7 +1431,7 @@ function docHTML(data){
 
     <h1>${esc(tipo)}</h1>
 
-    <p class="ac-cert-intro" lang="es">
+    <p>
       Por medio del presente certifico haber atendido al/la paciente
       <b>${esc(pac.nombre||'Paciente')}</b>, con documento de identidad
       <b>${esc(pac.numero_documento||'—')}</b>, número de historia clínica
@@ -1532,7 +1531,6 @@ body{overflow-x:hidden}
 .ac-doc-date{text-align:right;font-size:11px;font-weight:750;white-space:normal}
 h1{text-align:center;font-size:19px;margin:24px 0 27px;letter-spacing:.045em}
 p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
-.ac-paper p.ac-cert-intro{text-align:justify!important;text-align-last:left;hyphens:auto;-webkit-hyphens:auto}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
 .ac-cert-line{font-size:12px;line-height:1.6;white-space:pre-line;text-align:justify;margin-bottom:7px}
 .ac-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.6}
