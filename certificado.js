@@ -902,20 +902,6 @@ ${estilosImpresion()}
 </head>
 <body>
 ${docHTML(registro)}
-<script>
-/* IASYN 2: clasificación visual, sin tocar el contenido ni el flujo de firma. */
-(function(){
-  function clasificar(){
-    var hoja=document.querySelector('.ac-paper');
-    if(!hoja) return;
-    var alto=hoja.getBoundingClientRect().height;
-    var contenido=hoja.scrollHeight;
-    if(contenido>alto+2) hoja.classList.add('ac-iasyn-multipagina');
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',clasificar,{once:true});
-  else clasificar();
-})();
-<\/script>
 </body>
 </html>`;
 }
@@ -1609,10 +1595,6 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
-  /* IASYN 2: ajustes exclusivamente para documentos largos detectados en Chromium. */
-  .ac-paper.ac-iasyn-multipagina .ac-firma-area{padding-top:8mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
-  .ac-paper.ac-iasyn-multipagina .ac-cert-line,
-  .ac-paper.ac-iasyn-multipagina .ac-observaciones{orphans:2;widows:2}
 }`;
 }
 
@@ -1700,20 +1682,6 @@ html,body{background:#dfe3e8}
   <main class="auro-cert-preview-stage">
     <div class="auro-cert-preview-sheet" id="auroCertPreviewSheet">${htmlDoc}</div>
   </main>
-<script>
-/* IASYN 2: clasificación visual, sin tocar el contenido ni el flujo de firma. */
-(function(){
-  function clasificar(){
-    var hoja=document.querySelector('.ac-paper');
-    if(!hoja) return;
-    var alto=hoja.getBoundingClientRect().height;
-    var contenido=hoja.scrollHeight;
-    if(contenido>alto+2) hoja.classList.add('ac-iasyn-multipagina');
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',clasificar,{once:true});
-  else clasificar();
-})();
-<\/script>
 <script>
 (function(){
   function ajustar(){
