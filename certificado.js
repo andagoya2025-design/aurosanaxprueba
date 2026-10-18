@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.12';
+const VERSION='1.3.11';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -417,8 +417,6 @@ function instalarCSS(){
 .ac-soft{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8}
 .ac-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;margin-bottom:8px}
 .ac-item:last-child{margin-bottom:0}
-.ac-item.ac-item-abierto{border-color:#c98caf;background:#fff9fc}
-.ac-btn.ac-abierto{background:#ecfdf5;color:#166534;border:1px solid #86efac}
 .ac-item-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
 .ac-meta{font-size:12px;color:#6b7280;margin-top:4px}
 .ac-empty{padding:20px;text-align:center;color:#6b7280;border:1px dashed #d1d5db;border-radius:12px}
@@ -816,15 +814,14 @@ function renderHistorial(){
     const botonCancelar=(preparando||proceso)
       ? `<button class="ac-btn ac-firma-cancelar" data-accancelarfirma="${esc(c.id_certificado)}">Cancelar firma</button>`
       : '';
-    const abierto=txt(state.editandoId)===txt(c.id_certificado);
-    return `<div class="ac-item${abierto?' ac-item-abierto':''}">
+    return `<div class="ac-item">
       <div class="ac-item-top">
         <div>
           <b>${esc(c.tipo_certificado||d.tipo_certificado||'Certificado')}</b>
           <div class="ac-meta">${esc(fechaVisual(c.fecha_emision||d.fecha_emision))} · ${esc(c.id_certificado)}</div>
         </div>
         <div class="ac-actions" style="margin-top:0">
-          <button class="ac-btn ${abierto?'ac-abierto':'ac-soft'}" data-aceditar="${esc(c.id_certificado)}" ${abierto?'aria-current="true"':''}>${abierto?'Abierto ✓':'Abrir'}</button>
+          <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
           <button class="ac-btn ac-soft${clase}" data-acfirmar="${esc(c.id_certificado)}" ${preparando||proceso?'disabled aria-busy="true"':''}>${textoBoton}</button>
           ${botonCancelar}
         </div>
@@ -905,6 +902,20 @@ ${estilosImpresion()}
 </head>
 <body>
 ${docHTML(registro)}
+<script>
+/* IASYN 2: clasificación visual, sin tocar el contenido ni el flujo de firma. */
+(function(){
+  function clasificar(){
+    var hoja=document.querySelector('.ac-paper');
+    if(!hoja) return;
+    var alto=hoja.getBoundingClientRect().height;
+    var contenido=hoja.scrollHeight;
+    if(contenido>alto+2) hoja.classList.add('ac-iasyn-multipagina');
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',clasificar,{once:true});
+  else clasificar();
+})();
+<\/script>
 </body>
 </html>`;
 }
@@ -1272,7 +1283,6 @@ function abrir(id){
 
   const d=parse(c.detalle_json);
   state.editandoId=txt(c.id_certificado);
-  renderHistorial();
 
   sv('acTipo',c.tipo_certificado||d.tipo_certificado);
   sv('acFecha',c.fecha_emision||d.fecha_emision);
@@ -1311,7 +1321,6 @@ function abrir(id){
 
 function nuevo(){
   state.editandoId='';
-  renderHistorial();
   ['acEmpresa','acResumen','acActividad','acDireccionTrabajo','acObservaciones'].forEach(x=>sv(x,''));
 
   const p=state.paciente||{};
@@ -1600,6 +1609,10 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
+  /* IASYN 2: ajustes exclusivamente para documentos largos detectados en Chromium. */
+  .ac-paper.ac-iasyn-multipagina .ac-firma-area{padding-top:8mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
+  .ac-paper.ac-iasyn-multipagina .ac-cert-line,
+  .ac-paper.ac-iasyn-multipagina .ac-observaciones{orphans:2;widows:2}
 }`;
 }
 
@@ -1687,6 +1700,20 @@ html,body{background:#dfe3e8}
   <main class="auro-cert-preview-stage">
     <div class="auro-cert-preview-sheet" id="auroCertPreviewSheet">${htmlDoc}</div>
   </main>
+<script>
+/* IASYN 2: clasificación visual, sin tocar el contenido ni el flujo de firma. */
+(function(){
+  function clasificar(){
+    var hoja=document.querySelector('.ac-paper');
+    if(!hoja) return;
+    var alto=hoja.getBoundingClientRect().height;
+    var contenido=hoja.scrollHeight;
+    if(contenido>alto+2) hoja.classList.add('ac-iasyn-multipagina');
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',clasificar,{once:true});
+  else clasificar();
+})();
+<\/script>
 <script>
 (function(){
   function ajustar(){
