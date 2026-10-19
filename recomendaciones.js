@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.3.4-FASE1-CERTIFICADOS-CANDIDATO';
+  const VERSION = '1.3.5-EDITORES-PAGINACION-A4-ANTIRREGRESIVA';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -466,7 +466,22 @@
       .auro-rec-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
       .auro-rec-field label{display:block;font-size:12px;font-weight:850;color:#374151;margin-bottom:6px}
       .auro-rec-field input,.auro-rec-field textarea,.auro-rec-field select{width:100%;border:1px solid #dbe1e8;border-radius:13px;padding:10px 11px;font:inherit;color:#111827;background:#fff}
-      .auro-rec-field textarea{min-height:110px;resize:vertical;line-height:1.45}
+      .auro-rec-field textarea{min-height:110px;resize:vertical;line-height:1.55}
+      #auroRecDieta,#auroRecGenerales{text-align:justify;white-space:pre-wrap}
+      .auro-rec-expand-row{display:flex;justify-content:flex-end;margin:6px 0 7px}
+      .auro-rec-expand-btn{border:1px solid #e5b7d0;background:#fff7fb;color:#8b1e5a;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:800;cursor:pointer}
+      .auro-rec-expand-btn:disabled{opacity:.5;cursor:not-allowed}
+      .auro-rec-expand-dialog{width:min(1000px,96vw);max-height:94vh;padding:0;border:0;border-radius:18px;box-shadow:0 20px 70px #0005}
+      .auro-rec-expand-dialog::backdrop{background:rgba(17,24,39,.65)}
+      .auro-rec-expand-panel{padding:18px;display:grid;gap:11px;background:#fff}
+      .auro-rec-expand-panel h3{margin:0;font-size:18px;color:#374151}
+      .auro-rec-expand-help{font-size:12px;color:#64748b}
+      .auro-rec-expand-text{width:100%;min-height:52vh;max-height:69vh;resize:vertical;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font:15px/1.62 Arial,sans-serif;text-align:justify;white-space:pre-wrap;color:#111827}
+      .auro-rec-expand-actions{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+      .auro-rec-expand-actions button{border:1px solid #ded5dd;border-radius:10px;padding:9px 16px;background:#fff;color:#475569;font-weight:800;cursor:pointer}
+      .auro-rec-expand-actions .aplicar{background:linear-gradient(135deg,#8b1e5a,#c23b83);border-color:#8b1e5a;color:#fff}
+      @media(max-width:640px){.auro-rec-expand-panel{padding:12px}.auro-rec-expand-text{min-height:55vh;font-size:16px}}
+
       .auro-rec-field input:focus,.auro-rec-field textarea:focus,.auro-rec-field select:focus{outline:none;border-color:#c23b83;box-shadow:0 0 0 3px rgba(194,59,131,.12)}
       .auro-rec-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
       .auro-rec-check{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid #edf0f3;border-radius:13px;background:#fff;min-height:44px;font-size:13px;font-weight:650;line-height:1.3}
@@ -625,6 +640,7 @@
             <div class="auro-rec-card-body">
               <div class="auro-rec-field">
                 <label for="auroRecDieta">Dieta / cuidados recomendados</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecDieta">⛶ Ampliar editor</button></div>
                 <textarea id="auroRecDieta" placeholder="Ej.: hidratación, dieta, reposo relativo, higiene, cuidados del procedimiento..."></textarea>
               </div>
             </div>
@@ -637,6 +653,7 @@
             <div class="auro-rec-card-body">
               <div class="auro-rec-field">
                 <label for="auroRecGenerales">Recomendaciones para el paciente</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecGenerales">⛶ Ampliar editor</button></div>
                 <textarea id="auroRecGenerales" style="min-height:180px" placeholder="Escriba las recomendaciones finales de esta atención."></textarea>
                 <div style="margin-top:10px;display:flex;justify-content:flex-end">
                   <button type="button" class="auro-rec-btn" id="auroRecBtnAgregarPlan">
@@ -695,6 +712,59 @@
 
   function getValue(id){
     return txt(document.getElementById(id)?.value);
+  }
+
+  /* V1.3.5 — Edición ampliada estrictamente local, sin persistencia automática.
+     La atención y el estado de firma se revalidan al aplicar. */
+  function ampliarEditorRecomendaciones(id){
+    if(!['auroRecDieta','auroRecGenerales'].includes(id)) return;
+    const origen=document.getElementById(id);
+    const contextoInicial=state.contexto||contextoAtencion();
+    const idInicial=txt(contextoInicial?.id);
+    const firmado=['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase());
+    if(!origen || origen.disabled || !contextoInicial?.editable || firmado || !idInicial) return;
+    const titulo=id==='auroRecDieta'?'Dieta / cuidados recomendados':'Recomendaciones para el paciente';
+    const dialog=document.createElement('dialog');
+    dialog.className='auro-rec-expand-dialog';
+    const panel=document.createElement('div');
+    panel.className='auro-rec-expand-panel';
+    const encabezado=document.createElement('h3');
+    encabezado.textContent=titulo;
+    const ayuda=document.createElement('div');
+    ayuda.className='auro-rec-expand-help';
+    ayuda.textContent='Edición ampliada · el texto se aplica al editor original solo al confirmar. Aplicar no guarda en el servidor.';
+    const campo=document.createElement('textarea');
+    campo.className='auro-rec-expand-text';
+    campo.value=origen.value;
+    campo.setAttribute('aria-label',titulo);
+    const acciones=document.createElement('div');
+    acciones.className='auro-rec-expand-actions';
+    const cancelar=document.createElement('button');
+    cancelar.type='button'; cancelar.textContent='Cancelar';
+    const aplicar=document.createElement('button');
+    aplicar.type='button'; aplicar.className='aplicar'; aplicar.textContent='Aplicar texto';
+    acciones.append(cancelar,aplicar);
+    panel.append(encabezado,ayuda,campo,acciones);
+    dialog.append(panel);
+    document.body.append(dialog);
+    const cerrar=()=>{ if(dialog.open && typeof dialog.close==='function') dialog.close(); else dialog.remove(); };
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    cancelar.addEventListener('click',cerrar);
+    aplicar.addEventListener('click',()=>{
+      const contextoActual=contextoAtencion();
+      if(txt(contextoActual.id)!==idInicial || !contextoActual.editable ||
+         ['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase()) || origen.disabled){
+        cerrar();
+        setMsg('La atención o el estado de firma cambió. No se aplicó el texto.','error');
+        return;
+      }
+      origen.value=campo.value;
+      origen.dispatchEvent(new Event('input',{bubbles:true}));
+      cerrar();
+      origen.focus();
+    });
+    if(typeof dialog.showModal==='function') dialog.showModal();
+    else {dialog.setAttribute('open','');campo.focus();}
   }
 
   function checksSeleccionados(tipo){
@@ -1433,6 +1503,7 @@ ${recDocumentoHTML()}
 
     const agregarPlan=document.getElementById('auroRecBtnAgregarPlan');
     if(agregarPlan) agregarPlan.disabled=!editable || !ctx.id;
+    document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{btn.disabled=!editable || !ctx.id;});
 
     const estado=document.getElementById('auroRecEstado');
     if(estado){
@@ -1847,6 +1918,45 @@ ${recDocumentoHTML()}
     return valor ? `<div class="ar-contact-row">${recIconoContacto(tipo)}<span>${esc(valor)}</span></div>` : '';
   }
 
+  /* V1.3.5 — Medición real en un documento A4 aislado.
+     Una sola hoja: se devuelve HTML sin modificar. Cuando el contenido
+     natural supera 273 mm, se habilita paginación fluida para hojas 2+.
+     Sin persistencia, red ni modificaciones del motor de firma. */
+  function recPaginacionInteligente(html){
+    let marco=null;
+    try{
+      marco=document.createElement('iframe');
+      marco.setAttribute('aria-hidden','true');
+      marco.setAttribute('tabindex','-1');
+      marco.style.cssText='position:fixed;left:-10000px;top:0;width:180mm;height:273mm;visibility:hidden;pointer-events:none;border:0';
+      document.body.appendChild(marco);
+      const d=marco.contentDocument;
+      if(!d) return html;
+      // Medir sin min-height ni desplazamiento automático del pie.
+      const css=recEstilosImpresion();
+      d.open();
+      d.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'+css+
+        '.ar-paper{display:block!important;min-height:0!important}.ar-firma-area{margin-top:0!important}'+
+        '</style></head><body>'+html+'</body></html>');
+      d.close();
+      const papel=d.querySelector('.ar-paper');
+      if(!papel) return html;
+      const regla=d.createElement('div');
+      regla.style.cssText='position:absolute;width:1mm;height:1mm;visibility:hidden';
+      d.body.appendChild(regla);
+      const pxmm=regla.getBoundingClientRect().height||3.779527559;
+      const altura=papel.getBoundingClientRect().height;
+      // Margen pequeño de seguridad ante diferencias de redondeo de impresión.
+      const variasPaginas=altura>(273-2)*pxmm;
+      return variasPaginas
+        ? html.replace('<article class="ar-paper"','<article class="ar-paper ar-multipagina"')
+        : html;
+    }catch(error){
+      console.warn(MODULO+': medición A4 no disponible; se conserva impresión original.',error);
+      return html;
+    }finally{if(marco) marco.remove();}
+  }
+
   function recDocumentoHTML(){
     const ctx=state.contexto||contextoAtencion();
     const a=ctx.atencion||{};
@@ -1902,9 +2012,9 @@ ${recDocumentoHTML()}
           ${d.signos_infeccion?.otros?`<p>${esc(d.signos_infeccion.otros)}</p>`:''}
         </section>` : '',
       txt(d.dieta_cuidados) ? `
-        <section class="ar-section">
+        <section class="ar-section ar-section-dieta">
           <h3>DIETA Y CUIDADOS</h3>
-          <p>${esc(d.dieta_cuidados)}</p>
+          ${recRecomendacionesHTML(d.dieta_cuidados)}
         </section>` : '',
       txt(d.recomendaciones_generales) ? `
         <section class="ar-section ar-section-recomendaciones">
@@ -1913,7 +2023,7 @@ ${recDocumentoHTML()}
         </section>` : ''
     ].filter(Boolean).join('');
 
-    return `<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
+    return recPaginacionInteligente(`<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
       <header class="ar-doc-head${logo ? '' : ' ar-doc-head-no-logo'}">
         ${logo}
         <div>
@@ -1957,7 +2067,7 @@ ${recDocumentoHTML()}
           <br><span>Firma y sello</span>
         </div>
       </footer>
-    </article>`;
+    </article>`);
   }
 
   /*
@@ -2001,7 +2111,14 @@ body{overflow-x:hidden}
 .ar-doc-list li{font-size:12px;line-height:1.48;margin:2px 0}
 .ar-rec-list{margin-top:6px}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
-.ar-rec-text{line-height:1.62!important}
+.ar-rec-text{line-height:1.62!important;text-align:justify;orphans:3;widows:3}
+/* Solo multipágina: liberar la fragmentación, nunca el diseño A4 de una hoja. */
+.ar-paper.ar-multipagina{display:block;min-height:0}
+.ar-paper.ar-multipagina .ar-section-dieta,
+.ar-paper.ar-multipagina .ar-section-recomendaciones{break-inside:auto;page-break-inside:auto}
+.ar-paper.ar-multipagina .ar-section-dieta h3,
+.ar-paper.ar-multipagina .ar-section-recomendaciones h3{break-after:avoid-page;page-break-after:avoid}
+.ar-paper.ar-multipagina .ar-firma-area{margin-top:10mm;padding-top:9mm;break-inside:avoid;page-break-inside:avoid}
 .ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:start;margin-top:auto;padding-top:24mm;break-inside:avoid;page-break-inside:avoid}
 .ar-centro-contacto{padding-top:8px;font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
 .ar-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
@@ -2014,6 +2131,8 @@ body{overflow-x:hidden}
 @media print{
   html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important;break-inside:auto!important;page-break-inside:auto!important}
+  .ar-paper.ar-multipagina{display:block!important;min-height:0!important}
+  .ar-paper.ar-multipagina .ar-firma-area{margin-top:10mm!important;padding-top:9mm!important}
   .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
   .ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto!important}
   .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
@@ -2125,6 +2244,12 @@ html,body{background:#dfe3e8}
       cancelarFirmaBtn.dataset.auroRec='1';
       cancelarFirmaBtn.addEventListener('click',cancelarFirmaRecomendacion);
     }
+    document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{
+      if(btn.dataset.auroRecExpandBound==='1') return;
+      btn.dataset.auroRecExpandBound='1';
+      btn.addEventListener('click',()=>ampliarEditorRecomendaciones(btn.dataset.auroRecExpand));
+    });
+
     if(agregarPlanBtn && agregarPlanBtn.dataset.auroRec!=='1'){
       agregarPlanBtn.dataset.auroRec='1';
       agregarPlanBtn.addEventListener('click',agregarIndicacionesPlanManualmente);
