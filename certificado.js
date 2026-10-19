@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.11';
+const VERSION='1.3.12-AUROSANAX-ABIERTO-VISUAL';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -415,6 +415,8 @@ function instalarCSS(){
 .ac-firma-cancelar{background:#fff1f2!important;color:#be123c!important;border:1px solid #fecdd3!important}
 .ac-primary{background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
 .ac-soft{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8}
+/* Selección visual del certificado: independiente de firma, PDF y persistencia. */
+#acHistorial .ac-btn.ac-abierto{background:#8b1e5a;color:#fff;border:1px solid #8b1e5a;box-shadow:0 3px 10px rgba(139,30,90,.16)}
 .ac-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;margin-bottom:8px}
 .ac-item:last-child{margin-bottom:0}
 .ac-item-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
@@ -794,6 +796,17 @@ function fijarEstadoFirmaCertificado(id,estado,extra={}){
   renderHistorial();
 }
 
+/* Se actualiza únicamente el botón Abrir, sin reconstruir ni consultar el historial. */
+function actualizarBotonesCertificadoAbierto(){
+  const elegido=txt(state.editandoId);
+  document.querySelectorAll('#acHistorial [data-aceditar]').forEach(b=>{
+    const activo=!!elegido && txt(b.dataset.aceditar)===elegido;
+    b.classList.toggle('ac-abierto',activo);
+    b.textContent=activo?'Abierto ✓':'Abrir';
+    b.setAttribute('aria-pressed',activo?'true':'false');
+  });
+}
+
 function renderHistorial(){
   const b=document.getElementById('acHistorial');
   if(!b) return;
@@ -829,6 +842,7 @@ function renderHistorial(){
     </div>`;
   }).join('');
 
+  actualizarBotonesCertificadoAbierto();
   b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
   b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>accionFirmaCertificado(x.dataset.acfirmar));
   b.querySelectorAll('[data-accancelarfirma]').forEach(x=>x.onclick=()=>cancelarFirmaCertificado(x.dataset.accancelarfirma));
@@ -1269,6 +1283,7 @@ function abrir(id){
 
   const d=parse(c.detalle_json);
   state.editandoId=txt(c.id_certificado);
+  actualizarBotonesCertificadoAbierto();
 
   sv('acTipo',c.tipo_certificado||d.tipo_certificado);
   sv('acFecha',c.fecha_emision||d.fecha_emision);
@@ -1307,6 +1322,7 @@ function abrir(id){
 
 function nuevo(){
   state.editandoId='';
+  actualizarBotonesCertificadoAbierto();
   ['acEmpresa','acResumen','acActividad','acDireccionTrabajo','acObservaciones'].forEach(x=>sv(x,''));
 
   const p=state.paciente||{};
