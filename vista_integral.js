@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_6_RECOMENDACIONES_COMPLETAS';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_8_ORDENES_DOCUMENTALES';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -1679,20 +1679,56 @@
       if(/anulad|reemplaz|eliminad/i.test(norm(reg.estado))) return;
       const clave=texto(reg.id_orden);
       if(vistos.has(clave)) return;
-      const det=parseJSON(reg.detalle_json,{}) || {};
-      const items=Array.isArray(det.items) ? det.items : [];
-      const lineas=items.map(function(item){
-        if(typeof item==='string') return limpiarTextoClinico(item);
-        if(!item || typeof item!=='object') return '';
-        return limpiarTextoClinico(item.orden || item.nombre || item.examen || item.procedimiento || item.descripcion || item.texto || item.nombre_examen || '');
-      }).filter(Boolean);
-      if(!lineas.length) return;
+      const d=parseJSON(reg.detalle_json,{}) || {};
+      const items=(Array.isArray(d.items)?d.items:[]).map(function(x){
+        if(typeof x==='string') return {orden:limpiarTextoClinico(x),cat:'',obs:''};
+        if(!x || typeof x!=='object') return null;
+        return {
+          orden:limpiarTextoClinico(x.orden||x.nombre||x.examen||x.procedimiento||x.descripcion||x.texto||x.nombre_examen),
+          cat:limpiarTextoClinico(x.cat||x.categoria),
+          obs:limpiarTextoClinico(x.obs||x.observacion||x.observaciones),
+          cie:limpiarTextoClinico(x.codigo_cie10),
+          diagnostico:limpiarTextoClinico(x.diagnostico)
+        };
+      }).filter(x=>x&&x.orden);
+      if(!items.length) return;
       vistos.add(clave);
-      tarjetas.push('<div class="avi-plan-content avi-orden-formal"><p class="avi-plan-text"><b>Orden '+esc(clave)+'</b>'+ 
-        (reg.fecha_emision?' · '+esc(fechaVisual(reg.fecha_emision)):'')+'</p>'+ 
-        '<ul class="avi-clean-list">'+lineas.map(function(t){return '<li>'+esc(t)+'</li>';}).join('')+'</ul></div>');
+      const centro=d.centro||{};
+      const medico=d.medico||{};
+      const paciente=d.paciente||{};
+      const historia=d.historia||{};
+      const nombreCentro=primero(centro,['nombre','nombre_clinica','nombre_centro','nombre_comercial','razon_social'])||'AUROSANAX';
+      const especialidad=primero(medico,['especialidad'])||texto(reg.especialidad||atencion?.especialidad_atencion||atencion?.especialidad);
+      const nombreMedico=primero(medico,['nombre'])||texto(reg.nombre_medico||atencion?.nombre_medico);
+      const direccion=[primero(centro,['direccion','direccion_clinica']),primero(centro,['ciudad','ciudad_clinica']),primero(centro,['provincia','provincia_clinica']),primero(centro,['pais','pais_clinica'])].filter(Boolean).join(' · ');
+      const contacto=[primero(centro,['telefono','telefono_clinica']),primero(centro,['email','correo']),primero(centro,['web','sitio_web'])].filter(Boolean).join(' · ');
+      const datos=[
+        ['Paciente',texto(reg.nombre_paciente||paciente.nombre)],
+        ['Identificación',texto(reg.numero_documento||paciente.numero_documento)],
+        ['Historia clínica',texto(reg.id_historia||historia.numero_historia||historia.id_historia)],
+        ['Consulta',texto(reg.numero_consulta||d.numero_consulta||atencion?.numero_consulta)],
+        ['ID orden',clave],['Versión',texto(reg.version||'1')]
+      ];
+      const dx=(Array.isArray(d.diagnosticos)?d.diagnosticos:[]).filter(x=>x&&(x.codigo_cie10||x.descripcion));
+      tarjetas.push('<article class="avi-orden-formal avi-orden-documento">'+
+        '<header class="avi-orden-head"><strong>'+esc(nombreCentro)+'</strong><span>'+esc(fechaVisual(reg.fecha_emision||d.fecha_emision))+'</span></header>'+
+        '<h4 class="avi-orden-title">ORDEN MÉDICA</h4>'+
+        '<div class="avi-orden-datos">'+datos.filter(x=>x[1]).map(function(x){return '<div><b>'+esc(x[0])+':</b> '+esc(x[1])+'</div>';}).join('')+'</div>'+
+        (dx.length?'<div class="avi-orden-dx"><b>DIAGNÓSTICOS DE LA ATENCIÓN</b>'+dx.map(x=>'<div>'+esc([x.codigo_cie10,x.descripcion].filter(Boolean).join(' — '))+'</div>').join('')+'</div>':'')+
+        '<div class="avi-orden-tabla-wrap"><table class="avi-orden-tabla"><thead><tr><th>N.º</th><th>Examen / procedimiento</th><th>Categoría</th><th>Observación</th></tr></thead><tbody>'+
+        items.map(function(x,i){return '<tr><td>'+esc(i+1)+'</td><td><b>'+esc(x.orden)+'</b>'+(x.cie?'<div>CIE-10: '+esc(x.cie)+(x.diagnostico?' · '+esc(x.diagnostico):'')+'</div>':'')+'</td><td>'+esc(x.cat)+'</td><td>'+esc(x.obs)+'</td></tr>';}).join('')+'</tbody></table></div>'+
+        (texto(d.observaciones_generales)?'<p class="avi-orden-observaciones"><b>Observaciones:</b> '+esc(d.observaciones_generales)+'</p>':'')+
+        '<footer class="avi-orden-pie"><div class="avi-orden-centro">'+
+        (direccion?'<div>'+esc(direccion)+'</div>':'')+(contacto?'<div>'+esc(contacto)+'</div>':'')+
+        (centro.razon_social?'<div>'+esc(centro.razon_social)+(centro.ruc?' · RUC '+esc(centro.ruc):'')+'</div>':'')+
+        '<div>Estado documental: '+esc(reg.estado||'Emitida')+' · Versión '+esc(reg.version||1)+'</div></div>'+
+        '<div class="avi-orden-firma"><div class="avi-orden-firma-line"></div><b>'+esc(nombreMedico||'Profesional tratante')+'</b>'+
+        (especialidad?'<span>'+esc(especialidad)+'</span>':'')+
+        (medico.registro_msp?'<span>Registro MSP/ACESS: '+esc(medico.registro_msp)+'</span>':'')+
+        (medico.registro_senescyt?'<span>Registro SENESCYT: '+esc(medico.registro_senescyt)+'</span>':'')+
+        '<small>Firma y sello</small></div></footer></article>');
     });
-    return tarjetas.length ? '<div class="avi-subgroup avi-plan-block" data-avi-ordenes-formales><h5>Órdenes médicas emitidas</h5>'+tarjetas.join('')+'</div>' : '';
+    return tarjetas.length?'<div class="avi-subgroup avi-plan-block" data-avi-ordenes-formales><h5>Órdenes médicas emitidas · Exámenes y procedimientos</h5>'+tarjetas.join('')+'</div>':'';
   }
   function incluirOrdenesEnPlanVista(overlay,id){
     if(!overlay || texto(overlay.dataset.aviAtencion)!==id) return;
@@ -2241,10 +2277,32 @@
     }).join('');
   }
 
-  function recomendacionRegistroHTML(registro){
+  function recomendacionRegistroHTML(registro,atencion,configuracion){
     if(!registro || !texto(registro.id_atencion)) return '';
     const d=parseJSON(registro.detalle_json,{}) || {};
     const bloques=[];
+    // Datos documentales originales: misma atención y configuración institucional de lectura.
+    atencion=atencion||{};
+    let cfg=configuracion&&typeof configuracion==='object' ? configuracion : {};
+    if(cfg.datos&&typeof cfg.datos==='object') cfg=cfg.datos;
+    const centroGuardado=d.centro&&typeof d.centro==='object' ? d.centro : {};
+    cfg=Object.assign({},cfg,centroGuardado);
+    const campoConfig=function(){ return primerDatoCertificado.apply(null,Array.from(arguments).map(function(k){return cfg[k];})); };
+    const institucion=campoConfig('nombre_clinica','nombre_centro','nombre_comercial','razon_social')||'AUROSANAX';
+    const ubicacion=[
+      campoConfig('direccion_clinica','direccion'),
+      [campoConfig('ciudad_clinica','ciudad'),campoConfig('provincia_clinica','provincia'),campoConfig('pais_clinica','pais')].filter(Boolean).join(', ')
+    ].filter(Boolean).join(' · ');
+    const nombreMedico=primerDatoCertificado(d?.medico?.nombre,registro.nombre_medico,atencion.nombre_medico);
+    const especialidad=primerDatoCertificado(d?.medico?.especialidad,registro.especialidad,atencion.especialidad_atencion,atencion.especialidad);
+    const registroMsp=primerDatoCertificado(d?.medico?.registro_msp,d?.medico?.msp);
+    const registroSenescyt=primerDatoCertificado(d?.medico?.registro_senescyt);
+    const contacto=[
+      ubicacion,
+      campoConfig('email_clinica','correo_clinica','email','correo'),
+      campoConfig('telefono_clinica','whatsapp_clinica','telefono','whatsapp'),
+      campoConfig('sitio_web_clinica','web_clinica','web')
+    ].filter(Boolean);
     const nombresAlerta={
       fiebre:'Fiebre que no cede',dolor:'Dolor intenso o que no cede',
       sangrado:'Sangrado anormal o abundante',dificultad_respiratoria:'Dificultad respiratoria',
@@ -2287,12 +2345,25 @@
     if(texto(d.recomendaciones_generales)) bloques.push('<section class="avi-rec-section"><h5>RECOMENDACIONES GENERALES</h5>'+parrafosRecomendacionVistaIntegral(d.recomendaciones_generales)+'</section>');
     if(!bloques.some(Boolean)) return '';
     return '<article class="avi-rec-page">'+
-      '<header class="avi-rec-head"><strong>AUROSANAX</strong>'+
+      '<header class="avi-rec-head"><strong>'+esc(institucion)+'</strong>'+
       '<span>'+esc(fecha?fechaDocumentoVistaIntegral(fecha):'')+'</span></header>'+
       '<h4 class="avi-rec-title">RECOMENDACIONES MÉDICAS</h4>'+
       (campos?'<div class="avi-rec-meta">'+campos+'</div>':'')+
       '<div class="avi-rec-docid">Documento · '+esc(registro.id_recomendacion)+'</div>'+
       bloques.filter(Boolean).join('')+
+      '<footer class="avi-rec-footer">'+
+        '<div class="avi-rec-centro">'+
+          contacto.map(function(v){return '<div>'+esc(v)+'</div>';}).join('')+
+          (cfg.razon_social?'<div>'+esc(cfg.razon_social)+(cfg.ruc?' · RUC '+esc(cfg.ruc):'')+'</div>':'')+
+        '</div>'+
+        '<div class="avi-rec-firma"><div class="avi-rec-firma-line"></div>'+
+          (nombreMedico?'<b>'+esc(nombreMedico)+'</b>':'')+
+          (especialidad?'<span>'+esc(especialidad)+'</span>':'')+
+          (registroMsp?'<span>MSP: '+esc(registroMsp)+'</span>':'')+
+          (registroSenescyt?'<span>SENESCYT: '+esc(registroSenescyt)+'</span>':'')+
+          '<small>Firma y sello</small>'+
+        '</div>'+
+      '</footer>'+
       '</article>';
   }
 
@@ -2505,7 +2576,8 @@
     // su propio id_recomendacion. El lector singular ocultaba los posteriores.
     const resultados = await Promise.all([
       getSoloLecturaVistaIntegral('listarRecomendacionesPorAtencion',{id_atencion:id}),
-      getSoloLecturaVistaIntegral('listarCertificadosPorAtencion',{id_atencion:id})
+      getSoloLecturaVistaIntegral('listarCertificadosPorAtencion',{id_atencion:id}),
+      getSoloLecturaVistaIntegral('obtenerConfiguracion',{})
     ]);
 
     const overlayActual = document.getElementById('auroVistaIntegralOverlay');
@@ -2548,7 +2620,7 @@
 
     const recomendaciones = seccion(
       'Recomendaciones','bi-heart-pulse',
-      recomendacionesRegistros.map(recomendacionRegistroHTML).filter(Boolean).join(''),false
+      recomendacionesRegistros.map(function(r){return recomendacionRegistroHTML(r,atencionPorId(id),resultados[2]);}).filter(Boolean).join(''),false
     );
 
     const certificadosHTML = seccion(
@@ -2560,7 +2632,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.3';
+    const CSS_VERSION = '1.24.5';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3149,12 +3221,58 @@
 
       /* Recomendaciones: lectura con jerarquía documental equivalente al visor oficial.
          Se limita a esta tarjeta y no modifica estilos de los demás apartados. */
+      /* Órdenes médicas: documento íntegro de solo lectura, hoja flexible. */
+      .avi-orden-documento{display:flex;flex-direction:column;box-sizing:border-box;
+        width:100%;max-width:210mm;min-height:297mm;margin:14px auto 20px;
+        padding:15mm 17mm 17mm;background:#fff;color:#111827;
+        border:1px solid #dfe3e8;border-radius:3px;overflow:visible!important}
+      .avi-orden-head{display:flex;justify-content:space-between;gap:12px;align-items:center;
+        padding-bottom:10px;border-bottom:2.5px solid #8b1e5a;font-size:11px}
+      .avi-orden-head strong{color:#8b1e5a;font-size:18px}
+      .avi-orden-title{text-align:center;font-size:19px;margin:22px 0 24px;letter-spacing:.04em}
+      .avi-orden-datos{display:grid;grid-template-columns:1fr 1fr;gap:9px 16px;font-size:12px;margin-bottom:16px}
+      .avi-orden-dx{font-size:12px;line-height:1.5;margin:0 0 16px}
+      .avi-orden-dx>b{display:block;margin-bottom:5px}
+      .avi-orden-tabla-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+      .avi-orden-tabla{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:auto}
+      .avi-orden-tabla th,.avi-orden-tabla td{border:1px solid #dfe3e8;text-align:left;padding:8px;vertical-align:top;overflow-wrap:anywhere}
+      .avi-orden-tabla th{background:#f8f0f5;font-weight:800}
+      .avi-orden-tabla td:first-child{text-align:center}
+      .avi-orden-observaciones{font-size:12px;line-height:1.6;white-space:pre-wrap;margin:15px 0;text-align:justify}
+      .avi-orden-pie{display:grid;grid-template-columns:1fr 1fr;align-items:end;gap:22mm;
+        margin-top:auto;padding-top:24mm;break-inside:avoid;page-break-inside:avoid}
+      .avi-orden-centro{font-size:10px;line-height:1.5;color:#475569;overflow-wrap:anywhere}
+      .avi-orden-firma{display:flex;flex-direction:column;text-align:center;justify-content:flex-end;font-size:11px}
+      .avi-orden-firma-line{border-top:1px solid #111;margin-bottom:7px}
+      .avi-orden-firma span,.avi-orden-firma small{margin-top:3px}
+      @media(max-width:760px){
+        .avi-orden-documento{min-height:0;padding:17px 12px 24px;border-radius:9px}
+        .avi-orden-title{font-size:16px}.avi-orden-datos{grid-template-columns:1fr}
+        .avi-orden-tabla{min-width:620px}.avi-orden-pie{grid-template-columns:1fr;gap:24px;padding-top:28px}
+      }
       .avi-rec-page{
         width:100%;max-width:210mm;margin:0 auto;padding:15mm 17mm 17mm;
         background:#fff;color:#111827;box-sizing:border-box;
         border:1px solid #e3e6ec;border-radius:3px;
         font-family:Arial,Helvetica,sans-serif;
       }
+      .avi-rec-page{
+        min-height:297mm;display:flex;flex-direction:column;
+        overflow:visible!important;max-height:none!important;
+      }
+      .avi-rec-footer{
+        display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+        gap:22mm;align-items:end;margin-top:auto;
+        padding-top:24mm;min-height:120px;
+        break-inside:avoid;page-break-inside:avoid;
+      }
+      .avi-rec-centro{font-size:10.2px;line-height:1.55;color:#475569;overflow-wrap:anywhere}
+      .avi-rec-centro>div{margin-bottom:5px}
+      .avi-rec-firma{display:flex;flex-direction:column;justify-content:flex-end;
+        text-align:center;font-size:11px;min-height:110px}
+      .avi-rec-firma-line{border-top:1px solid #111;margin-bottom:7px}
+      .avi-rec-firma b{font-size:12px}
+      .avi-rec-firma span,.avi-rec-firma small{margin-top:3px}
       .avi-rec-head{display:flex;justify-content:space-between;gap:16px;
         align-items:center;border-bottom:2.5px solid #8b1e5a;padding-bottom:10px}
       .avi-rec-head strong{color:#8b1e5a;font-size:18px;letter-spacing:.035em}
@@ -3172,7 +3290,9 @@
       .avi-rec-list{margin:5px 0 12px 21px;padding:0}
       .avi-rec-list li{font-size:12.2px;line-height:1.58;margin:4px 0;overflow-wrap:anywhere}
       @media(max-width:760px){
-        .avi-rec-page{padding:17px 14px 24px;border-radius:9px}
+        .avi-rec-page{padding:17px 14px 24px;border-radius:9px;min-height:0}
+        .avi-rec-footer{grid-template-columns:1fr;gap:20px;padding-top:24px;min-height:0}
+        .avi-rec-firma{min-height:125px}
         .avi-rec-title{font-size:16px!important}
         .avi-rec-text{text-align:left}
       }
@@ -4098,7 +4218,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.6-recomendaciones-completas',
+    version:'1.22.8-ordenes-documentales',
     abrir,
     cerrar,
     abrirReceta,
