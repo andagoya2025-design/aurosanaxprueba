@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.2-IASYN-DIAGNOSTICOS-PDF-ANTIRREGRESIVA';
+const VERSION='1.4.1-IASYN-CIE10-ANTIRREGRESIVO-PRESENTACION-CANDIDATA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -46,7 +46,13 @@ const state={
   firmasPorDocumento:{},
   firmaProcesos:new Map(),
   firmaConsultaToken:0,
-  ultimoAviso:null
+  ultimoAviso:null,
+  diagnosticos:[],
+  diagnosticosAtencion:'',
+  diagnosticosCargando:false,
+  diagnosticosVerificados:false,
+  diagnosticosError:'',
+  diagnosticosToken:0
 };
 
 const txt=v=>String(v??'').trim();
@@ -273,7 +279,7 @@ function normalizarConfig(c){
   c=c||{};
   if(c.datos&&typeof c.datos==='object') c=c.datos;
   return {
-    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'IASYN',
+    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'',
     subtitulo:txt(c.subtitulo_clinica||c.descripcion_clinica||c.eslogan_clinica),
     razon_social:txt(c.razon_social),
     ruc:txt(c.ruc),
@@ -295,7 +301,9 @@ async function cargarAuxiliares(ctx){
   let cfg=normalizarConfig(configGlobal());
   try{
     const remoto=await get('obtenerConfiguracion');
-    cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
+    const respuesta=remoto?.configuracion||remoto?.datos||remoto?.data||remoto||{};
+    const remota=respuesta&&typeof respuesta==='object'&&!Array.isArray(respuesta)?respuesta:{};
+    cfg=normalizarConfig(Object.assign({},configGlobal(),remota));
   }catch(e){}
   state.configuracion=cfg;
   try{
@@ -319,72 +327,6 @@ function itemOrdenNormalizado(o){
   };
 }
 
-/* V1.4.2 — DIAGNÓSTICOS EN ÓRDENES MÉDICAS.
- * Fuente: listarDiagnosticosPorAtencion, igual que Certificados.
- * La lista se incorpora exclusivamente al snapshot de una NUEVA emisión.
- * No altera documentos anteriores, versiones ni ningún contrato de firma.
- */
-function normalizarDiagnosticoOrden(d){
-  d=d||{};
-  return {
-    id_diagnostico:txt(d.id_diagnostico||d.id),
-    codigo_cie10:txt(d.codigo_cie10||d.cie10||d.codigo),
-    descripcion:txt(d.descripcion||d.diagnostico||d.descripcion_diagnostico||d.nombre),
-    principal:d.principal===true || /^(si|sí|true|1)$/i.test(txt(d.principal)),
-    tipo_diagnostico:txt(d.tipo_diagnostico||d.tipo)
-  };
-}
-
-function diagnosticosUnicosOrden(lista){
-  const vistos=new Set();
-  return (Array.isArray(lista)?lista:[]).map(normalizarDiagnosticoOrden).filter(d=>{
-    if(!d.codigo_cie10 && !d.descripcion) return false;
-    const clave=d.id_diagnostico||[norm(d.codigo_cie10),norm(d.descripcion)].join('|');
-    if(vistos.has(clave)) return false;
-    vistos.add(clave);
-    return true;
-  });
-}
-
-function codigoCie10VisualOrden(codigo){
-  const raw=txt(codigo).toUpperCase();
-  if(raw==='N720') return 'N72';
-  if(raw.includes('.') || /^[A-Z][0-9]{2}$/.test(raw)) return raw;
-  return /^[A-Z][0-9]{3,}$/.test(raw)?raw.slice(0,3)+'.'+raw.slice(3):raw;
-}
-
-async function cargarDiagnosticosParaEmision(idAtencion){
-  const id=txt(idAtencion);
-  if(!id) throw Error('No se identificó la atención de los diagnósticos.');
-  let registros=[];
-  let filtradoServidor=false;
-  try{
-    const r=await get('listarDiagnosticosPorAtencion',{id_atencion:id});
-    if(!Array.isArray(r) && !Array.isArray(r?.registros) && !Array.isArray(r?.data)) throw Error('Respuesta diagnóstica no reconocida.');
-    registros=arr(r);
-    filtradoServidor=true;
-  }catch(errorPrincipal){
-    try{
-      const r=await get('listarDiagnosticos');
-      if(!Array.isArray(r) && !Array.isArray(r?.registros) && !Array.isArray(r?.data)) throw Error('Respuesta diagnóstica no reconocida.');
-      registros=arr(r);
-    }catch(errorAlterno){
-      throw Error('No se pudo verificar Diagnóstico. La orden médica no fue emitida.');
-    }
-  }
-  /* La consulta por atención puede devolver registros sin repetir id_atencion,
-   * como sucede en Certificados. Si incluyen un ID diferente, se bloquea.
-   * La consulta general sí debe filtrarse obligatoriamente por ID. */
-  if(filtradoServidor){
-    if(registros.some(d=>txt(d.id_atencion) && txt(d.id_atencion)!==id)){
-      throw Error('Diagnóstico devolvió registros de otra atención. Se canceló la emisión.');
-    }
-  }else{
-    registros=registros.filter(d=>txt(d.id_atencion)===id);
-  }
-  return diagnosticosUnicosOrden(registros);
-}
-
 function claveItem(o){
   const x=itemOrdenNormalizado(o);
   return [norm(x.orden),norm(x.cat),norm(x.obs),norm(x.codigo_cie10)].join('|');
@@ -402,6 +344,73 @@ function itemsUnicos(lista){
     out.push(x);
   });
   return out;
+}
+
+/* CIE-10: solo registros persistidos y activos de la atención exacta. */
+function normalizarDiagnosticoOrden(d){
+  d=d||{};
+  const estado=norm(d.estado||'Activo');
+  if(['inactivo','inactiva','anulado','anulada','eliminado','eliminada'].includes(estado)) return null;
+  const codigo=txt(d.codigo_cie10||d.diagnostico_cie10||d.cie10||d.codigo).toUpperCase();
+  const descripcion=txt(d.descripcion||d.diagnostico||d.nombre||d.detalle);
+  if(!codigo&&!descripcion) return null;
+  return {
+    id_diagnostico:txt(d.id_diagnostico),
+    codigo_cie10:codigo,
+    descripcion,
+    principal:d.principal===true||d.principal===1||['si','sí','true','1'].includes(norm(d.principal)),
+    tipo_diagnostico:txt(d.tipo_diagnostico||d.tipo)
+  };
+}
+function diagnosticosUnicosOrden(lista){
+  const vistos=new Set();
+  const salida=[];
+  (Array.isArray(lista)?lista:[]).forEach(d=>{
+    const x=normalizarDiagnosticoOrden(d);
+    if(!x) return;
+    const k=norm(x.codigo_cie10)+'|'+norm(x.descripcion);
+    if(vistos.has(k)) return;
+    vistos.add(k);salida.push(x);
+  });
+  if(salida.length&&!salida.some(x=>x.principal)) salida[0].principal=true;
+  return salida.sort((a,b)=>Number(b.principal)-Number(a.principal));
+}
+async function consultarDiagnosticosPersistidos(id){
+  id=txt(id);
+  if(!id) throw Error('No existe una atención para consultar los diagnósticos.');
+  const r=await get('listarDiagnosticosPorAtencion',{id_atencion:id});
+  if(r?.success===false||r?.ok===false) throw Error(txt(r.message||r.error)||'La consulta de diagnósticos fue rechazada.');
+  if(!Array.isArray(r)&&!Array.isArray(r?.data)&&!Array.isArray(r?.registros)) throw Error('Respuesta inválida al consultar diagnósticos CIE-10.');
+  const lista=arr(r);
+  if(lista.some(d=>txt(d.id_atencion)&&txt(d.id_atencion)!==id)) throw Error('La respuesta contiene diagnósticos de otra atención.');
+  return diagnosticosUnicosOrden(lista);
+}
+async function cargarDiagnosticosOrden(id){
+  id=txt(id);
+  const token=++state.diagnosticosToken;
+  state.diagnosticos=[];
+  state.diagnosticosAtencion=id;
+  state.diagnosticosVerificados=false;
+  state.diagnosticosCargando=!!id;
+  state.diagnosticosError='';
+  render();
+  if(!id){state.diagnosticosCargando=false;return [];}
+  try{
+    const lista=await consultarDiagnosticosPersistidos(id);
+    if(token!==state.diagnosticosToken||id!==txt(contexto().id)) return [];
+    state.diagnosticos=lista;
+    state.diagnosticosVerificados=true;
+    return lista;
+  }catch(e){
+    if(token===state.diagnosticosToken){state.diagnosticosError=txt(e.message||e);}
+    return [];
+  }finally{
+    if(token===state.diagnosticosToken){state.diagnosticosCargando=false;render();}
+  }
+}
+function bloqueDiagnosticosOrden(lista){
+  const dx=diagnosticosUnicosOrden(lista);
+  return `<section class="aom-diagnosticos"><div class="aom-diagnosticos-title">DIAGNÓSTICOS CIE-10</div>${dx.length?`<ol>${dx.map(x=>`<li><strong>${esc(x.codigo_cie10||'Sin código')}</strong>${x.descripcion?' — '+esc(x.descripcion):''}${x.principal?' <span>(Principal)</span>':''}${x.tipo_diagnostico?' · '+esc(x.tipo_diagnostico):''}</li>`).join('')}</ol>`:'<div>Sin diagnósticos CIE-10 registrados en esta atención.</div>'}</section>`;
 }
 
 function contextoPlanSeguro(ctx){
@@ -561,13 +570,9 @@ function solicitarJustificacion(titulo){
 }
 
 function catalogoOrdenesFormal(){
-  // El formulario principal define ORDENES_MEDICAS_BASE como const en index.
-  // Una declaración global `const` no es propiedad de window.
-  const principal=(typeof ORDENES_MEDICAS_BASE!=='undefined' && Array.isArray(ORDENES_MEDICAS_BASE))
-    ? ORDENES_MEDICAS_BASE : null;
-  const respaldo=Array.isArray(window.ORDENES_MEDICAS_IASYN_BASE)
-    ? window.ORDENES_MEDICAS_IASYN_BASE : [];
-  return (principal||respaldo).map(itemOrdenNormalizado).filter(x=>x.orden);
+  return Array.isArray(window.ORDENES_MEDICAS_IASYN_BASE)
+    ? window.ORDENES_MEDICAS_IASYN_BASE.map(itemOrdenNormalizado).filter(x=>x.orden)
+    : [];
 }
 function categoriasOrdenesFormal(extra=''){
   const set=new Set(catalogoOrdenesFormal().map(x=>txt(x.cat)).filter(Boolean));
@@ -584,7 +589,8 @@ function clonarDocumentoEmitido(reg){
   const d=parse(base.detalle_json);
   return Object.assign({},base,{
     detalle_json:Object.assign({},d,{
-      items:itemsUnicos(d.items||[])
+      items:itemsUnicos(d.items||[]),
+      diagnosticos:diagnosticosUnicosOrden(d.diagnosticos||[])
     })
   });
 }
@@ -620,6 +626,13 @@ function instalarCSS(){
   s.textContent=`
 #iasynOrdenMedicaFormalApp{margin-top:14px;font-family:inherit;color:#1f2937}
 #iasynOrdenMedicaFormalApp *{box-sizing:border-box}
+.aom-dx-live{border:1px solid #ead7e2;border-radius:12px;background:#fffafd;padding:10px 12px;margin-bottom:12px;font-size:12px}
+.aom-dx-live>strong{color:#8b1e5a}
+.aom-dx-error{color:#991b1b;margin-top:5px}
+.aom-diagnosticos{margin:8px 0 14px;padding:9px 12px;border:1px solid #ead7e2;border-radius:8px;font-size:11.5px;break-inside:avoid}
+.aom-diagnosticos-title{font-weight:800;color:#8b1e5a;margin-bottom:6px}
+.aom-diagnosticos ol{margin:0;padding-left:18px}.aom-diagnosticos li{margin:3px 0}
+
 .aom-shell{border:1px solid #ead7e2;border-radius:16px;background:#fff;padding:14px}
 .aom-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .aom-title{font-weight:850;color:#111827;display:flex;align-items:center;gap:8px}
@@ -652,20 +665,19 @@ function instalarCSS(){
 .aom-editor-item input,.aom-editor-item select,.aom-editor-item textarea{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:9px;font:inherit;background:#fff}
 .aom-editor-item textarea{min-height:42px;resize:vertical}
 .aom-editor-remove{grid-column:1/-1;justify-self:end}
-.aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}.aom-editor-search{position:relative;min-width:0}.aom-editor-sugerencias{position:absolute;z-index:15;top:100%;left:0;right:0;max-height:220px;overflow:auto;background:#fff;border:1px solid #d1d5db;border-radius:10px;box-shadow:0 12px 25px rgba(15,23,42,.16)}.aom-editor-sugerencias[hidden]{display:none!important}.aom-editor-sugerencia{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f1f5f9;background:#fff;padding:9px 11px;font:inherit;color:#111827;cursor:pointer}.aom-editor-sugerencia:hover,.aom-editor-sugerencia:focus{background:#fdf2f8}.aom-editor-sugerencia small{display:block;font-size:11px;color:#64748b;margin-top:2px}.aom-editor-sugerencias-vacio{padding:9px 11px;font-size:12px;color:#64748b}
+.aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}
 .aom-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
-.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 48mm;margin:0 auto;font-family:Arial,sans-serif;position:relative}
+.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 15mm;margin:0 auto;font-family:Arial,sans-serif;position:relative;display:flex;flex-direction:column}
 .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--aom-color,#8b1e5a);padding-bottom:10px;margin-bottom:18px}.aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}.aom-logo-wrap{width:60px;height:60px;display:grid;place-items:center;overflow:hidden}.aom-logo{max-width:100%;max-height:100%;object-fit:contain}.aom-doc-date{text-align:right;font-size:11.5px;font-weight:750}
 .aom-doc-brand{font-size:20px;font-weight:950;color:var(--aom-color,#8b1e5a);letter-spacing:.035em}
 .aom-doc-sub{font-size:10.5px;color:#4b5563;line-height:1.45;margin-top:4px}
 .aom-doc-title{text-align:center;font-size:20px;font-weight:900;letter-spacing:.06em;margin:13px 0 18px}
 .aom-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 20px;font-size:12px;margin-bottom:18px}
 .aom-doc-label{color:#6b7280;font-weight:700}
-.aom-doc-diagnosticos{margin:0 0 14px;font-size:11.5px;line-height:1.5;break-inside:avoid;page-break-inside:avoid}.aom-doc-diagnosticos strong{display:block;color:#374151;margin-bottom:5px}.aom-doc-diagnosticos .aom-dx-line{margin:2px 0;overflow-wrap:anywhere}
 .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
-.aom-doc-table th{background:#f8fafc;text-align:left}
-.aom-doc-bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-doc-table th{background:#f8fafc;text-align:left}.aom-doc-table thead{display:table-header-group}.aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}.aom-doc-head,.aom-doc-grid,.aom-doc-sign{break-inside:avoid;page-break-inside:avoid}
+.aom-doc-bottom{position:static;margin-top:auto;padding-top:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px} .aom-contact-row{display:flex;align-items:flex-start;gap:7px;margin:4px 0;min-width:0}.aom-contact-row span{min-width:0;overflow-wrap:anywhere}.aom-contact-icon{display:block;flex:0 0 13px;width:13px;height:13px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-contact-legal{margin-top:6px;font-size:9px}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -745,6 +757,7 @@ function render(){
   });
   app.innerHTML=`
     <div class="aom-shell">
+      <div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong>${state.diagnosticosCargando?'<div>Consultando diagnósticos CIE-10 guardados…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?bloqueDiagnosticosOrden(state.diagnosticos):`<div class="aom-dx-error">${esc(state.diagnosticosError||'Diagnósticos pendientes de verificación.')}</div>`}</div>
       <div class="aom-head">
         <div>
           <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
@@ -848,22 +861,24 @@ async function emitir(){
     return;
   }
 
-  let data;
   const idEmision=txt(contexto().id);
+  if(!idEmision) return aviso('No existe una atención activa.','err');
+  if(state.diagnosticosCargando) return aviso('Espere a que termine la verificación de diagnósticos.','warn');
+  let data;
   try{
-    const diagnosticos=await cargarDiagnosticosParaEmision(idEmision);
-    if(txt(contexto().id)!==idEmision || txt(state.idAtencion)!==idEmision){
-      throw Error('Cambió la atención mientras se consultaban los diagnósticos.');
-    }
+    // Refrescar desde la fuente oficial al emitir; no usar un caché potencialmente obsoleto.
+    const diagnosticos=await consultarDiagnosticosPersistidos(idEmision);
+    if(txt(contexto().id)!==idEmision||txt(state.idAtencion)!==idEmision) throw Error('Cambió la atención durante la consulta de diagnósticos.');
+    state.diagnosticos=diagnosticos;
+    state.diagnosticosAtencion=idEmision;
+    state.diagnosticosVerificados=true;
+    state.diagnosticosError='';
     data=datosDocumentoDesdePlan(diagnosticos);
-  }catch(e){aviso(e.message||'No se pudo preparar la orden.','err');return;}
+  }catch(e){aviso('No se pudo verificar CIE-10: '+(e.message||e),'err');return;}
 
   if(!confirm(`Se emitirá una orden médica formal con ${data.detalle_json.items.length} ítem(s). ¿Continuar?`)) return;
-  if(txt(contexto().id)!==idEmision || txt(state.idAtencion)!==idEmision){
-    aviso('Cambió la atención antes de emitir. No se guardó la orden.','err');
-    return;
-  }
 
+  if(txt(contexto().id)!==idEmision) return aviso('Cambió la atención. Emisión cancelada.','err');
   setGuardando(true);
   aviso('Emitiendo orden médica...');
   try{
@@ -914,7 +929,7 @@ function renderItemEditorFormal(item,index){
   const cats=opcionesCategoriaEditor(x.cat);
   const catLibre=norm(cats.valorSelect)==='otros'&&norm(x.cat)!=='otros'?x.cat:'';
   return `<div class="aom-editor-item" data-aom-editor-item="1" data-cie10="${esc(x.codigo_cie10||'')}" data-diagnostico="${esc(x.diagnostico||'')}" data-id-diagnostico="${esc(x.id_diagnostico||'')}" data-id-protocolo="${esc(x.id_protocolo||'')}" data-origen="${esc(x.origen||'')}">
-    <div class="aom-editor-field"><label>Examen / procedimiento</label><div class="aom-editor-search"><input data-campo="orden" value="${esc(x.orden||'')}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"><div class="aom-editor-sugerencias" data-aom-sugerencias="1" role="listbox" hidden></div></div></div>
+    <div class="aom-editor-field"><label>Examen / procedimiento</label><input data-campo="orden" list="aomCatalogoOrdenes" value="${esc(x.orden||'')}" autocomplete="off"></div>
     <div class="aom-editor-field"><label>Tipo de orden</label><select data-campo="cat">${cats.html}</select></div>
     <div class="aom-editor-field"><label>Observación</label><textarea data-campo="obs">${esc(x.obs||'')}</textarea></div>
     <div class="aom-editor-field aom-editor-custom" ${norm(cats.valorSelect)==='otros'?'':'style="display:none"'}><label>Otro tipo de orden</label><input data-campo="cat-libre" value="${esc(catLibre)}" placeholder="Escriba otro tipo de orden" autocomplete="off"></div>
@@ -936,63 +951,11 @@ function sincronizarFilaEditorCatalogo(fila){
   if(!otros&&libre) libre.value='';
 }
 
-/* Selector de edición: sugerencias visibles del catálogo maestro, sin modificar emisión ni firma. */
 function conectarFilaEditorFormal(fila){
   if(!fila) return;
-  const entrada=fila.querySelector('[data-campo="orden"]');
-  const categoria=fila.querySelector('[data-campo="cat"]');
-  const lista=fila.querySelector('[data-aom-sugerencias]');
-  function cerrarSugerencias(){
-    if(lista){lista.hidden=true;lista.replaceChildren();}
-    if(entrada) entrada.setAttribute('aria-expanded','false');
-  }
-  function mostrarSugerencias(){
-    if(!entrada||!lista) return;
-    const q=norm(entrada.value);
-    const catalogo=catalogoOrdenesFormal();
-    const coincidencias=catalogo.filter(x=>!q||norm(x.orden).includes(q)).slice(0,35);
-    lista.replaceChildren();
-    if(!catalogo.length){
-      const msg=document.createElement('div');msg.className='aom-editor-sugerencias-vacio';
-      msg.textContent='El catálogo maestro no está disponible en esta pantalla.';
-      lista.appendChild(msg);
-    }else if(!coincidencias.length){
-      const msg=document.createElement('div');msg.className='aom-editor-sugerencias-vacio';
-      msg.textContent='Sin coincidencias. Puede escribir el examen manualmente.';
-      lista.appendChild(msg);
-    }else{
-      coincidencias.forEach(x=>{
-        const btn=document.createElement('button');btn.type='button';btn.className='aom-editor-sugerencia';
-        btn.setAttribute('role','option');
-        const nombre=document.createElement('span');nombre.textContent=x.orden;btn.appendChild(nombre);
-        const tipo=document.createElement('small');tipo.textContent=x.cat;btn.appendChild(tipo);
-        btn.addEventListener('mousedown',e=>e.preventDefault());
-        btn.addEventListener('click',()=>{
-          entrada.value=x.orden;
-          if(categoria){
-            const op=Array.from(categoria.options).find(o=>norm(o.value)===norm(x.cat));
-            if(op) categoria.value=op.value;
-          }
-          sincronizarFilaEditorCatalogo(fila);
-          cerrarSugerencias();entrada.focus();
-        });
-        lista.appendChild(btn);
-      });
-    }
-    lista.hidden=false;entrada.setAttribute('aria-expanded','true');
-  }
-  entrada?.addEventListener('focus',mostrarSugerencias);
-  entrada?.addEventListener('input',()=>{sincronizarFilaEditorCatalogo(fila);mostrarSugerencias();});
-  entrada?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
-  entrada?.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){cerrarSugerencias();return;}
-    if(e.key==='ArrowDown'&&!lista?.hidden){e.preventDefault();lista.querySelector('button')?.focus();}
-  });
-  lista?.addEventListener('keydown',e=>{if(e.key==='Escape'){cerrarSugerencias();entrada?.focus();}});
-  fila.addEventListener('focusout',e=>{
-    if(!fila.contains(e.relatedTarget)) cerrarSugerencias();
-  });
-  categoria?.addEventListener('change',()=>{sincronizarFilaEditorCatalogo(fila);cerrarSugerencias();});
+  fila.querySelector('[data-campo="orden"]')?.addEventListener('input',()=>sincronizarFilaEditorCatalogo(fila));
+  fila.querySelector('[data-campo="orden"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
+  fila.querySelector('[data-campo="cat"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
   fila.querySelector('[data-aom-quitar-item]')?.addEventListener('click',()=>{
     const modal=fila.closest('#iasynOrdenMedicaEditorModal');
     if((modal?.querySelectorAll('[data-aom-editor-item]').length||0)<=1){ alert('La orden formal debe conservar al menos un ítem.'); return; }
@@ -1132,53 +1095,153 @@ function imprimirPorId(id){
   imprimirDocumento(datosDocumentoEmitido(reg),true);
 }
 
+
+ function iconoInstitucional(tipo){
+   const trazos={
+     ubicacion:'<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+     correo:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+     telefono:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.1 10a16 16 0 0 0 6.9 6.9l1.6-1.9a2 2 0 0 1 1.7-.6l3 .5a2 2 0 0 1 1.7 2Z"/>',
+     web:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>'
+   };
+   return '<svg class="aom-contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(trazos[tipo]||'')+'</svg>';
+ }
+ function filaContactoInstitucional(tipo,valor){
+   return txt(valor)?'<div class="aom-contact-row">'+iconoInstitucional(tipo)+'<span>'+esc(valor)+'</span></div>':'';
+ }
+
 function docHTML(data){
   const d=data.detalle_json||{};
+  // Documento emitido: preservar la instantánea institucional original.
+  // No sustituir datos históricos con cambios posteriores de Configuración del Centro.
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
-  const diagnosticos=diagnosticosUnicosOrden(d.diagnosticos||[]);
   const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
-  const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
+  const contactoInstitucional=filaContactoInstitucional('ubicacion',ubicacion)+filaContactoInstitucional('correo',centro.email)+filaContactoInstitucional('telefono',centro.telefono)+filaContactoInstitucional('web',centro.web);
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
-  const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional" onerror="this.parentElement.remove();this.closest('.aom-doc-head')?.classList.add('no-logo')"></div>`:'';
+  const logoSeguro=/^https?:\/\//i.test(logo)||/^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(logo);
+  const logoHtml=logoSeguro?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt=""></div>`:'';
   return `<article class="aom-paper" style="--aom-color:${esc(color)}">
-    <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
+    <header class="aom-doc-head${logoSeguro?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'Centro médico')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
-    ${diagnosticos.length?`<section class="aom-doc-diagnosticos"><strong>DIAGNÓSTICOS DE LA ATENCIÓN</strong>${diagnosticos.map(dx=>`<div class="aom-dx-line">${dx.codigo_cie10?`<b>${esc(codigoCie10VisualOrden(dx.codigo_cie10))}</b>${dx.descripcion?' — ':''}`:''}${esc(dx.descripcion)}</div>`).join('')}</section>`:''}
+    ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
     <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
-    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
+    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoInstitucional}${centro.razon_social?`<div class="aom-contact-legal">${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
   </article>`;
 }
 
 function estilosImpresion(){
+  /* HTML autocontenido y estático: sin scripts, fuentes externas ni CSS de la interfaz ERP. */
   return `
-  @page{size:A4 portrait;margin:0}
+  @page{size:A4 portrait;margin:12mm 15mm}
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:#eef2f7;font-family:Arial,sans-serif;color:#111827}
+  html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827}
+  .aom-paper{width:100%;min-height:272mm;margin:0;padding:0;position:relative;display:flex;flex-direction:column;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
+  .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid #8b1e5a;padding-bottom:10px;margin-bottom:18px;break-inside:avoid}
+  .aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}
+  .aom-logo-wrap{width:60px;height:60px;display:block;overflow:hidden}
+  .aom-logo{max-width:60px;max-height:60px;object-fit:contain}
+  .aom-doc-brand{font-size:19px;font-weight:900;color:#8b1e5a;overflow-wrap:anywhere}
+  .aom-doc-sub{font-size:10.5px;color:#4b5563;margin-top:4px}
+  .aom-doc-date{text-align:right;font-size:11px;font-weight:700}
+  .aom-doc-title{text-align:center;font-size:19px;font-weight:900;letter-spacing:.04em;margin:13px 0 18px}
+  .aom-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 20px;font-size:12px;margin-bottom:18px;break-inside:avoid}
+  .aom-doc-label{color:#6b7280;font-weight:700}
+  .aom-diagnosticos{margin:7px 0 12px;padding:7px 9px;border:1px solid #ead7e2;border-radius:7px;font-size:9.5px;line-height:1.4;break-inside:avoid}
+  .aom-diagnosticos-title{font-size:9.5px;font-weight:800;color:#8b1e5a;margin-bottom:4px}
+  .aom-diagnosticos ol{margin:0;padding-left:17px}
+  .aom-diagnosticos li{font-size:9.5px;line-height:1.4;margin:2px 0}
+  .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
+  .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top;overflow-wrap:anywhere}
+  .aom-doc-table th{background:#f8fafc;text-align:left}
+  .aom-doc-table thead{display:table-header-group}
+  .aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
+  .aom-doc-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
+  .aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.55;overflow-wrap:anywhere}
+  .aom-doc-center-contact>div{margin-top:3px}
+  .aom-doc-sign{text-align:center;font-size:11.2px;line-height:1.3;break-inside:avoid}
+  .aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}
+  .aom-doc-sign strong{font-size:12.2px}
+     .aom-contact-row{display:flex;align-items:flex-start;gap:7px;margin:4px 0;min-width:0}.aom-contact-row span{min-width:0;overflow-wrap:anywhere}.aom-contact-icon{display:block;flex:0 0 13px;width:13px;height:13px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-contact-legal{margin-top:6px;font-size:9px}
   .aom-print-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:center;gap:8px;padding:10px;background:#fff;border-bottom:1px solid #e5e7eb}
   .aom-print-toolbar button{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer}
-  .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
-  .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
-  ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:absolute!important;left:17mm!important;right:17mm!important;bottom:15mm!important}}
-  `;
+  .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}
+  .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
+  .aom-view{padding:18px;overflow:auto;background:#eef2f7;min-height:calc(100vh - 60px)}
+  .aom-stage{margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
+  .aom-stage .aom-paper{width:100%;min-height:273mm}
+  @media print{
+    html,body{background:#fff!important;overflow:visible!important}
+    .aom-print-toolbar{display:none!important}
+    .aom-view{padding:0!important;overflow:visible!important;background:#fff!important}
+    .aom-stage{zoom:1!important;transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
+    .aom-paper{min-height:272mm!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important}
+    .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}
+  }`;
+}
+
+/* Firma IASYN: solo HTML estático, sin scripts ni atributos de eventos. */
+async function resolverLogoFirmaOrden(data){
+  const cfg=data?.detalle_json?.centro||{};
+  const fuente=txt(cfg.logo||state.configuracion?.logo);
+  if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(fuente)) return fuente;
+  try{
+    const r=await postFirmaOrden('obtenerLogoInstitucionalFirma',{});
+    const imagen=txt(r?.data_url);
+    if(r?.disponible && /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(imagen)) return imagen;
+  }catch(e){console.warn('IASYN Órdenes: logo no incrustado',e);}
+  if(fuente) throw Error('No se pudo incrustar el logotipo institucional para firma. Verifique Configuración del Centro.');
+  return '';
+}
+
+async function htmlFirmaOrden(data){
+  const logo=await resolverLogoFirmaOrden(data);
+  const detalle=Object.assign({},data.detalle_json||{});
+  detalle.centro=Object.assign({},detalle.centro||{}, {logo});
+  const copia=Object.assign({},data,{detalle_json:detalle});
+  const cuerpo=docHTML(copia).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
+  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+cuerpo+'</body></html>';
 }
 
 function imprimirDocumento(data,autoPrint=false){
   if(!data) return;
   const w=window.open('','_blank');
   if(!w){alert('El navegador bloqueó la ventana de impresión.');return;}
+  // Apertura inmediata: no esperar al backend para mostrar el visor.
   const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden Médica</title><style>${estilosImpresion()}</style></head><body>
     <div class="aom-print-toolbar"><button class="primary" onclick="window.print()">Imprimir / Guardar PDF</button><button class="secondary" onclick="window.close()">Cerrar</button></div>
     <div class="aom-view" id="aomView"><div class="aom-stage" id="aomStage">${docHTML(data)}</div></div>
-    <script>(function(){function fit(){var v=document.getElementById('aomView'),s=document.getElementById('aomStage'),p=s&&s.querySelector('.aom-paper');if(!v||!s||!p)return;var mm=p.getBoundingClientRect().width||794;var avail=Math.max(280,v.clientWidth-12);var scale=Math.min(1,avail/mm);s.style.width=mm+'px';s.style.transform='scale('+scale+')';s.style.height=(p.scrollHeight*scale)+'px';}window.addEventListener('load',fit);window.addEventListener('resize',fit);setTimeout(fit,50);})();<\/script>
+    <script>(function(){function fit(){var v=document.getElementById('aomView'),s=document.getElementById('aomStage');if(!v||!s)return;var natural=s.offsetWidth||794;var available=Math.max(1,v.clientWidth-2);var scale=Math.min(1,available/natural);s.style.zoom=String(scale);s.style.transform='none';s.style.height='auto';}window.addEventListener('load',fit);window.addEventListener('resize',fit);setTimeout(fit,50);})();<\/script>
   </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
+  // El PDF firmado ya obtiene el logo como data URL del backend. Reutilizar
+  // esa misma fuente solo en el visor, sin modificar htmlFirmaOrden ni su motor.
+  const cargarLogo=async()=>{
+    try{
+      const logo=await resolverLogoFirmaOrden(data);
+      if(!logo||w.closed) return;
+      const doc=w.document;
+      const header=doc.querySelector('.aom-doc-head');
+      if(!header) return;
+      let wrap=header.querySelector('.aom-logo-wrap');
+      if(!wrap){
+        wrap=doc.createElement('div');wrap.className='aom-logo-wrap';
+        wrap.appendChild(doc.createElement('img'));
+        header.insertBefore(wrap,header.firstChild);
+      }
+      const img=wrap.querySelector('img');
+      img.className='aom-logo';img.alt='Logotipo institucional';img.src=logo;
+      header.classList.remove('no-logo');
+    }catch(e){console.warn('IASYN Órdenes: no se pudo cargar el logo del visor',e);}
+  };
+  const logoListo=cargarLogo();
   if(autoPrint){
-    w.addEventListener('load',()=>setTimeout(()=>w.print(),180),{once:true});
+    w.addEventListener('load',()=>{
+      void Promise.race([logoListo,new Promise(resolve=>setTimeout(resolve,1800))])
+        .then(()=>{if(!w.closed) w.print();});
+    },{once:true});
   }
 }
 
@@ -1186,6 +1249,7 @@ async function cargar(){
   const ctx=contexto();
   state.contexto=ctx;
   state.idAtencion=ctx.id;
+  void cargarDiagnosticosOrden(ctx.id);
   state.editandoId='';
 
   if(!state.montado) montar();
@@ -1304,7 +1368,7 @@ async function solicitarFirmaOrden(id){
   id=txt(id);
   if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
   try{
-    const solicitud=prepararSolicitudFirmaOrden(id);
+    const solicitud=await prepararSolicitudFirmaOrden(id);
     if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
     // La consulta remota previa evita una firma duplicada tras recargar el navegador.
     const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
@@ -1375,7 +1439,7 @@ async function verOrdenFirmada(id){
   }
 }
 
-function prepararSolicitudFirmaOrden(id){
+async function prepararSolicitudFirmaOrden(id){
   if(state.cargaFallida) throw Error('No se ha verificado el historial remoto de órdenes.');
   const ctx=contexto();
   if(!ctx.id || ctx.bloqueada) throw Error('No hay una atención válida para firmar.');
@@ -1391,7 +1455,7 @@ function prepararSolicitudFirmaOrden(id){
   if(ctx.idHistoria&&ctx.idHistoria!==d.id_historia) throw Error('La historia clínica no coincide con la atención.');
   if(ctx.idMedico&&ctx.idMedico!==d.id_medico) throw Error('El médico no coincide con la atención.');
   if(!itemsUnicos(d.detalle_json.items||[]).length) throw Error('La orden no contiene indicaciones.');
-  const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+docHTML(d)+'</body></html>';
+  const html=await htmlFirmaOrden(d);
   return Object.freeze({
     tipo_documento:'ORDEN_MEDICA',
     id_documento_origen:d.id_orden,
@@ -1422,12 +1486,14 @@ window.IASYN_ORDENES_MEDICAS={
   estado:state,
   inicializar,
   cargar,
-  refrescar:refrescarEstadoLocal,
+    refrescar:refrescarEstadoLocal,
+    cargarDiagnosticos:()=>cargarDiagnosticosOrden(contexto().id),
+    obtenerDiagnosticos:()=>state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?diagnosticosUnicosOrden(state.diagnosticos):[],
   obtenerContexto:contexto,
   obtenerItemsPlan:()=>itemsPlanActual(),
-  obtenerDatosEmision:()=>datosDocumentoDesdePlan(),
+  obtenerDatosEmision:()=>datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?state.diagnosticos:[]),
   construirDocumento:docHTML,
-  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(),false)
+  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?state.diagnosticos:[]),false)
 };
 
 if(document.readyState==='loading'){
