@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_2_PLAN_ORDENES_INTERCONSULTA_VISUAL';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_3_CONTADORES_Y_CABECERA';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -226,6 +226,8 @@
     ].filter(Boolean).join(' · ');
     const chips=overlayEsperado.querySelector('[data-avi-contexto]');
     if(chips) chips.innerHTML=encabezadoContexto(a);
+    const numeroCab=overlayEsperado.querySelector('[data-avi-numero-consulta]');
+    if(numeroCab) numeroCab.textContent=texto(a.numero_consulta) ? 'Consulta N.º '+texto(a.numero_consulta) : '';
     slot.textContent='';
   }
 
@@ -1266,6 +1268,47 @@
     }).join('')+'</div>';
   }
 
+  /* Contadores visuales por clase REAL de registro. No cuentan contenedores. */
+  function contarRegistrosVisiblesVistaIntegral(titulo,contenido){
+    const plantilla=document.createElement('template');
+    plantilla.innerHTML=String(contenido || '');
+    const base=plantilla.content;
+    const contar=selector=>base.querySelectorAll(selector).length;
+    const seccionNorm=norm(titulo);
+    if(seccionNorm.includes('antecedentes')){
+      return contar('.avi-ant-card') || contar('.avi-line');
+    }
+    if(seccionNorm.includes('diagnostico')){
+      return contar('.avi-dx-card') || contar('.avi-line');
+    }
+    if(seccionNorm.includes('certificados')) return contar('.avi-cert-page');
+    if(seccionNorm === 'recetas') return contar('.avi-rx-card');
+    if(seccionNorm === 'plan'){
+      // Cada apartado clínico cuenta una vez; cada orden formal, una vez.
+      return contar('.avi-plan-block:not([data-avi-ordenes-formales])') +
+        contar('.avi-orden-formal') +
+        (contar('[data-avi-ordenes-formales]') && !contar('.avi-orden-formal') ? 1 : 0);
+    }
+    return contar('.avi-line') || contar('.avi-med-card');
+  }
+
+  function actualizarContadorPlanVistaIntegral(slot){
+    const sec=slot?.querySelector('.avi-section');
+    if(!sec) return;
+    const contenido=sec.querySelector('.avi-section-body')?.innerHTML || '';
+    const total=contarRegistrosVisiblesVistaIntegral('Plan',contenido);
+    const label=sec.querySelector('.avi-section-label');
+    if(!label) return;
+    let contador=label.querySelector('.avi-section-count');
+    if(!total){contador?.remove();return;}
+    if(!contador){
+      contador=document.createElement('small');
+      contador.className='avi-section-count';
+      label.appendChild(contador);
+    }
+    contador.textContent=String(total);
+  }
+
   function seccion(titulo, icono, contenido, abierta){
     if(!texto(contenido)) return '';
 
@@ -1274,10 +1317,9 @@
       contador exclusivamente visual calculado sobre el HTML ya renderizado.
       No modifica datos, IDs, guardado ni relaciones clínicas.
     */
-    const coincidencias = String(contenido || '').match(
-      /class="[^"]*(?:avi-line|avi-med-card|avi-rx-card)[^"]*"/g
-    ) || [];
-    const totalVisual = coincidencias.length;
+    // Contar elementos semánticos exactos, no coincidencias parciales de clases.
+    // Antes «avi-lines» se confundía con «avi-line», sumando 1 extra.
+    const totalVisual = contarRegistrosVisiblesVistaIntegral(titulo,contenido);
     const contador = totalVisual
       ? '<small class="avi-section-count">'+totalVisual+'</small>'
       : '';
@@ -1645,7 +1687,7 @@
       }).filter(Boolean);
       if(!lineas.length) return;
       vistos.add(clave);
-      tarjetas.push('<div class="avi-plan-content"><p class="avi-plan-text"><b>Orden '+esc(clave)+'</b>'+ 
+      tarjetas.push('<div class="avi-plan-content avi-orden-formal"><p class="avi-plan-text"><b>Orden '+esc(clave)+'</b>'+ 
         (reg.fecha_emision?' · '+esc(fechaVisual(reg.fecha_emision)):'')+'</p>'+ 
         '<ul class="avi-clean-list">'+lineas.map(function(t){return '<li>'+esc(t)+'</li>';}).join('')+'</ul></div>');
     });
@@ -1662,6 +1704,7 @@
     if(!body) return;
     body.querySelector('[data-avi-ordenes-formales]')?.remove();
     body.insertAdjacentHTML('beforeend',html);
+    actualizarContadorPlanVistaIntegral(slot);
   }
   async function completarOrdenesFormalesVista(idAtencion,atencion,overlayEsperado){
     const id=texto(idAtencion);
@@ -2496,6 +2539,11 @@
       }
       .avi-head h3{
         margin:0;color:#2f1526;font-size:21px;line-height:1.2;font-weight:950;
+      }
+      .avi-numero-consulta:not(:empty){
+        display:inline-block;vertical-align:middle;margin-left:9px;padding:5px 10px;
+        border-radius:10px;background:#fdf2f8;border:1px solid #f2cde0;
+        color:#86165a;font-size:12px;font-weight:900;white-space:nowrap;
       }
       .avi-head-patient{
         margin-top:5px;color:#111827;font-size:15px;font-weight:950;
@@ -3728,6 +3776,8 @@
 
     const contextBox = overlay.querySelector('[data-avi-contexto]');
     if(contextBox) contextBox.innerHTML = encabezadoContexto(a);
+    const numeroCab = overlay.querySelector('[data-avi-numero-consulta]');
+    if(numeroCab) numeroCab.textContent = texto(a.numero_consulta) ? 'Consulta N.º '+texto(a.numero_consulta) : '';
 
     /*
       Cabecera clínica: utiliza únicamente datos ya disponibles en memoria.
@@ -3811,7 +3861,7 @@
             '<div class="avi-head-icon"><i class="bi bi-file-medical-fill"></i></div>'+
             '<div class="avi-head-copy">'+
               '<span class="avi-head-kicker">Historia clínica · Vista de consulta</span>'+
-              '<h3>Vista integral de la atención</h3>'+
+                     '<h3>Vista integral de la atención <span class="avi-numero-consulta" data-avi-numero-consulta></span></h3>'+
               '<div class="avi-head-patient" data-avi-paciente>Paciente</div>'+
               '<div class="avi-head-subcontext" data-avi-subcontexto></div>'+
               '<p class="avi-technical-id" data-avi-id-tecnico>ID atención · '+esc(id)+'</p>'+
@@ -3911,7 +3961,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.2-plan-ordenes-interconsulta-visual',
+    version:'1.22.3-contadores-y-cabecera',
     abrir,
     cerrar,
     abrirReceta,
