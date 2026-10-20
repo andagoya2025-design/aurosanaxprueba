@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_PLAN_ESTRUCTURA_CANONICA_ANTIRREGRESIVO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_1_IDENTIDAD_FASE1_ANTIRREGRESIVO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -127,6 +127,108 @@
     return {};
   }
 
+  /* FASE 1 — Identidad de consulta: nunca reutilizar otro paciente activo. */
+  function idPacienteRegistro(p){
+    return texto(p?.id_paciente || p?.paciente_id || p?.id);
+  }
+
+  function pacienteLocalPorAtencion(atencion){
+    const esperado = texto(atencion?.id_paciente);
+    if(!esperado) return {};
+    const listas = [window.patients,window.pacientes,window.listaPacientes,window.pacientesData];
+    for(const lista of listas){
+      if(!Array.isArray(lista)) continue;
+      const encontrado = lista.find(p=>idPacienteRegistro(p) === esperado);
+      if(encontrado) return encontrado;
+    }
+    const activo = pacienteActual();
+    return idPacienteRegistro(activo) === esperado ? activo : {};
+  }
+
+  function contextoSeguroPorAtencion(atencion){
+    let ctx = null;
+    try{
+      ctx = typeof window.obtenerContextoAtencionActual === 'function'
+        ? window.obtenerContextoAtencionActual() : null;
+    }catch(_){}
+    const id = texto(atencion?.id_atencion);
+    if(!id || texto(ctx?.id_atencion) !== id) return {};
+    if(texto(ctx?.id_paciente) && texto(ctx.id_paciente) !== texto(atencion?.id_paciente)) return {};
+    if(texto(ctx?.id_historia) && texto(atencion?.id_historia) &&
+       texto(ctx.id_historia) !== texto(atencion.id_historia)) return {};
+    return ctx;
+  }
+
+  function registrosOficiales(respuesta){
+    if(Array.isArray(respuesta)) return respuesta;
+    if(respuesta?.success === false) throw new Error(texto(respuesta.message || respuesta.error || 'Respuesta API fallida'));
+    for(const clave of ['data','datos','registros','resultado','result','items','lista']){
+      if(Array.isArray(respuesta?.[clave])) return respuesta[clave];
+    }
+    throw new Error('Formato de registros no reconocido');
+  }
+
+  async function consultarColeccionOficial(accion){
+    const base = texto((typeof API_URL !== 'undefined' && API_URL) ||
+      window.API_URL || window.APP_SCRIPT_URL ||
+      document.getElementById('appsScriptUrl')?.value ||
+      window.AUROSANAX_SEGURIDAD?.configuracion?.apiUrl ||
+      window.AUROSANAX_SEGURIDAD?.config?.apiUrl);
+    if(!base) throw new Error('URL de Apps Script no disponible');
+    const q = new URLSearchParams({accion,_:String(Date.now())});
+    const res = await fetch(base+'?'+q.toString(),{method:'GET',cache:'no-store',redirect:'follow'});
+    if(!res.ok) throw new Error('Error HTTP '+res.status);
+    return registrosOficiales(await res.json());
+  }
+
+  /* Se enriquece exclusivamente la cabecera sin alterar formularios ni la atención activa.
+     El dato remoto manda; si falla, no se simula confirmación persistente. */
+  async function completarIdentidadOficialVista(idAtencion,overlayEsperado){
+    const id = texto(idAtencion);
+    const slot = overlayEsperado?.querySelector('[data-avi-fuente-identidad]');
+    if(!slot || !id) return;
+    const [atR,pacR] = await Promise.allSettled([
+      consultarColeccionOficial('listarAtenciones'),
+      consultarColeccionOficial('listarPacientes')
+    ]);
+    if(document.getElementById('auroVistaIntegralOverlay') !== overlayEsperado ||
+       texto(overlayEsperado.dataset.aviAtencion) !== id) return;
+    if(atR.status !== 'fulfilled' || pacR.status !== 'fulfilled'){
+      slot.textContent='Identidad pendiente de verificación en registros persistidos.';
+      return;
+    }
+    const a = atR.value.find(x=>texto(x?.id_atencion) === id);
+    if(!a || !texto(a.id_paciente)){
+      slot.textContent='Atención no verificada en el registro persistido.';
+      return;
+    }
+    const p = pacR.value.find(x=>idPacienteRegistro(x) === texto(a.id_paciente));
+    if(!p){
+      slot.textContent='Paciente de esta atención no verificado en el registro persistido.';
+      return;
+    }
+    const actual = atencionPorId(id);
+    if(actual && texto(actual.id_paciente) && texto(actual.id_paciente) !== texto(a.id_paciente)){
+      slot.textContent='Inconsistencia entre atención local y atención persistida. Revisión requerida.';
+      return;
+    }
+    const datosP=overlayEsperado.querySelector('[data-avi-datos-paciente]');
+    const datosA=overlayEsperado.querySelector('[data-avi-datos-atencion]');
+    if(datosP) datosP.innerHTML=datosPacienteHTML(a,p);
+    if(datosA) datosA.innerHTML=datosAtencionHTML(a);
+    const cab=overlayEsperado.querySelector('[data-avi-paciente]');
+    if(cab) cab.textContent=nombrePaciente(p) || texto(a.id_paciente);
+    const sub=overlayEsperado.querySelector('[data-avi-subcontexto]');
+    const ctx=contextoSeguroPorAtencion(a);
+    if(sub) sub.textContent=[
+      texto(a.nombre_medico || ctx.nombre_medico || a.id_medico),
+      texto(a.especialidad_atencion || a.especialidad || ctx.especialidad_atencion || ctx.especialidad_medico)
+    ].filter(Boolean).join(' · ');
+    const chips=overlayEsperado.querySelector('[data-avi-contexto]');
+    if(chips) chips.innerHTML=encabezadoContexto(a);
+    slot.textContent='Identidad y atención verificadas en registros persistidos.';
+  }
+
   function nombrePaciente(p){
     return texto(
       p.nombre_completo ||
@@ -166,8 +268,8 @@
     '</div>';
   }
 
-  function datosPacienteHTML(atencion){
-    const p = pacienteActual();
+  function datosPacienteHTML(atencion,pacienteVerificado){
+    const p = pacienteVerificado || pacienteLocalPorAtencion(atencion);
     const nacimiento = primero(p,['fecha_nacimiento','nacimiento','fechaNacimiento']);
     const edad = primero(p,['edad']) || calcularEdad(nacimiento);
     const nombre =
@@ -192,12 +294,7 @@
   }
 
   function datosAtencionHTML(a){
-    let ctx = {};
-    try{
-      ctx = typeof window.obtenerContextoAtencionActual === 'function'
-        ? (window.obtenerContextoAtencionActual() || {})
-        : {};
-    }catch(_){}
+    const ctx = contextoSeguroPorAtencion(a);
 
     return [
       dato('Consulta',a?.numero_consulta ? '#'+a.numero_consulta : ''),
@@ -205,8 +302,8 @@
       dato('Hora',horaVisual(a?.hora_atencion)),
       dato('Tipo',a?.tipo_atencion),
       dato('Estado',a?.estado_atencion),
-      dato('Médico',ctx.nombre_medico || a?.nombre_medico || a?.id_medico,'avi-col-2'),
-      dato('Especialidad',ctx.especialidad_atencion || ctx.especialidad_medico,'avi-col-2'),
+      dato('Médico',a?.nombre_medico || ctx.nombre_medico || a?.id_medico,'avi-col-2'),
+      dato('Especialidad',a?.especialidad_atencion || a?.especialidad || ctx.especialidad_atencion || ctx.especialidad_medico,'avi-col-2'),
       dato('ID atención',a?.id_atencion,'avi-col-2 avi-id-card'),
       dato('ID historia',a?.id_historia,'avi-col-2 avi-id-card'),
       dato('ID cita',a?.id_cita || '')
@@ -2250,7 +2347,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.25.0-premium';
+    const CSS_VERSION = '1.24.0';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3381,46 +3478,6 @@
           padding-top:80px;
         }
       }
-
-      /* AUROSANAX VISTA INTEGRAL PREMIUM 1.25 — mejora exclusivamente visual.
-         No cambia recopilación clínica, IDs, firmas, recetas ni eventos. */
-      .avi-overlay .avi-shell{border-color:#e9d4e0;box-shadow:0 32px 90px rgba(23,29,43,.37)}
-      .avi-overlay .avi-head{border-bottom:1px solid #ead5e2}
-      .avi-overlay .avi-head h3{letter-spacing:-.025em}
-      .avi-overlay .avi-head-patient{letter-spacing:-.012em}
-      .avi-overlay .avi-toolbar{gap:9px}
-      .avi-overlay .avi-toolbar .avi-btn:focus-visible,
-      .avi-overlay .avi-close:focus-visible,
-      .avi-overlay .avi-section summary:focus-visible{outline:3px solid #f9a8d4;outline-offset:3px}
-      .avi-overlay .avi-chip{font-variant-numeric:tabular-nums}
-      .avi-overlay .avi-section summary{min-height:48px}
-      .avi-overlay .avi-section-label{line-height:1.35}
-      .avi-overlay .avi-rx-card{border-color:#e8cedd;background:#fff}
-      .avi-overlay .avi-rx-card .avi-rx-head{gap:10px}
-      .avi-overlay .avi-rx-card .avi-btn-primary{min-height:36px}
-      .avi-overlay .avi-cert-page{border-color:#e8d5df;background:#fff}
-      .avi-overlay .avi-cert-official-body p,
-      .avi-overlay .avi-cert-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.65}
-      .avi-overlay .avi-plan-text,
-      .avi-overlay .avi-note p{overflow-wrap:anywhere;line-height:1.58}
-      @media(min-width:981px){
-        .avi-overlay .avi-body{background:linear-gradient(90deg,#e5e9ef,#f0f2f6 50%,#e5e9ef)}
-        .avi-overlay .avi-body > .avi-overview-block:first-child{border-top:3px solid #a9286c}
-        .avi-overlay .avi-overview-block,
-        .avi-overlay .avi-section,
-        .avi-overlay .avi-body > [data-avi-documentos]{border-left:1px solid #e3e6ed;border-right:1px solid #e3e6ed}
-        .avi-overlay .avi-data b{line-height:1.48}
-        .avi-overlay .avi-section[open] > summary{box-shadow:inset 3px 0 0 #a9286c}
-        .avi-overlay .avi-rx-card{border-radius:13px;padding:17px}
-      }
-      @media(max-width:980px){
-        .avi-overlay .avi-shell{border-radius:17px}
-        .avi-overlay .avi-section summary{min-height:44px}
-        .avi-overlay .avi-rx-card .avi-btn-primary{width:100%;justify-content:center}
-      }
-      @media(prefers-reduced-motion:reduce){
-        .avi-overlay .avi-btn,.avi-overlay .avi-close,.avi-overlay .avi-chevron{transition:none!important}
-      }
     `;
     document.head.appendChild(s);
   }
@@ -3550,15 +3607,16 @@
       (datosPaciente
         ? '<section class="avi-overview-block">'+
             '<h4 class="avi-group-title"><i class="bi bi-person-vcard"></i> Datos personales</h4>'+
-            '<div class="avi-data-grid">'+datosPaciente+'</div>'+
+            '<div class="avi-data-grid" data-avi-datos-paciente>'+datosPaciente+'</div>'+
           '</section>'
         : '')+
       (datosAtencion
         ? '<section class="avi-overview-block">'+
             '<h4 class="avi-group-title"><i class="bi bi-clipboard2-pulse"></i> Datos de la atención</h4>'+
-            '<div class="avi-data-grid">'+datosAtencion+'</div>'+
+            '<div class="avi-data-grid" data-avi-datos-atencion>'+datosAtencion+'</div>'+
           '</section>'
         : '')+
+      '<div data-avi-fuente-identidad style="font-size:11px;color:#64748b;padding:4px 12px">Verificando identidad persistida…</div>'+
       '<div class="avi-clinical-divider"><span>Resumen clínico de la consulta</span></div>'+
       anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+indicacionesLegacy+recetas+
       '<div data-avi-documentos="'+esc(idAtencion)+'"></div>';
@@ -3587,22 +3645,17 @@
       Cabecera clínica: utiliza únicamente datos ya disponibles en memoria.
       No consulta ni modifica backend y no cambia el contexto de la atención.
     */
-    const p = pacienteActual();
+    const p = pacienteLocalPorAtencion(a);
     const nombreCabecera =
       nombrePaciente(p) ||
       primero(a,['nombre_paciente','paciente_nombre']) ||
       texto(a?.id_paciente) ||
       'Paciente';
 
-    let ctxCabecera = {};
-    try{
-      ctxCabecera = typeof window.obtenerContextoAtencionActual === 'function'
-        ? (window.obtenerContextoAtencionActual() || {})
-        : {};
-    }catch(_){}
+    const ctxCabecera = contextoSeguroPorAtencion(a);
 
-    const medicoCabecera = texto(ctxCabecera.nombre_medico || a?.nombre_medico || a?.id_medico);
-    const especialidadCabecera = texto(ctxCabecera.especialidad_atencion || ctxCabecera.especialidad_medico);
+    const medicoCabecera = texto(a?.nombre_medico || ctxCabecera.nombre_medico || a?.id_medico);
+    const especialidadCabecera = texto(a?.especialidad_atencion || a?.especialidad || ctxCabecera.especialidad_atencion || ctxCabecera.especialidad_medico);
 
     const pacienteBox = overlay.querySelector('[data-avi-paciente]');
     if(pacienteBox) pacienteBox.textContent = nombreCabecera;
@@ -3614,6 +3667,13 @@
         especialidadCabecera
       ].filter(Boolean).join(' · ');
     }
+
+    /* Verificación asíncrona de los dos primeros apartados exclusivamente. */
+    completarIdentidadOficialVista(idAtencion,overlay).catch(error=>{
+      if(document.getElementById('auroVistaIntegralOverlay') !== overlay) return;
+      const slot = overlay.querySelector('[data-avi-fuente-identidad]');
+      if(slot) slot.textContent='No se pudo verificar identidad persistida: '+texto(error?.message);
+    });
 
     const idTecnicoBox = overlay.querySelector('[data-avi-id-tecnico]');
     if(idTecnicoBox) idTecnicoBox.textContent = 'ID atención · ' + texto(a.id_atencion || idAtencion);
@@ -3655,6 +3715,7 @@
     const o = document.createElement('div');
     o.id = 'auroVistaIntegralOverlay';
     o.className = 'avi-overlay';
+    o.dataset.aviAtencion = id;
     o.innerHTML =
       '<div class="avi-shell" role="dialog" aria-modal="true" aria-label="Vista integral de la atención">'+
         '<div class="avi-head">'+
@@ -3762,7 +3823,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.0-plan-estructura-canonica-antirregresivo',
+    version:'1.22.1-identidad-consulta-fase1-antirregresivo',
     abrir,
     cerrar,
     abrirReceta,
