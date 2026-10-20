@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_5_RECOMENDACIONES_DOCUMENTALES';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_6_RECOMENDACIONES_COMPLETAS';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -1282,6 +1282,7 @@
       return contar('.avi-dx-card') || contar('.avi-line');
     }
     if(seccionNorm.includes('certificados')) return contar('.avi-cert-page');
+    if(seccionNorm.includes('recomendaciones')) return contar('.avi-rec-page');
     if(seccionNorm === 'recetas') return contar('.avi-rx-card');
     if(seccionNorm === 'plan'){
       // Cada apartado clínico cuenta una vez; cada orden formal, una vez.
@@ -2284,12 +2285,13 @@
     bloques.push(bloqueSeleccionados('SIGNOS DE INFECCIÓN',d.signos_infeccion,nombresInfeccion));
     if(texto(d.dieta_cuidados)) bloques.push('<section class="avi-rec-section"><h5>DIETA Y CUIDADOS</h5>'+parrafosRecomendacionVistaIntegral(d.dieta_cuidados)+'</section>');
     if(texto(d.recomendaciones_generales)) bloques.push('<section class="avi-rec-section"><h5>RECOMENDACIONES GENERALES</h5>'+parrafosRecomendacionVistaIntegral(d.recomendaciones_generales)+'</section>');
-    if(!bloques.some(Boolean) && !campos) return '';
+    if(!bloques.some(Boolean)) return '';
     return '<article class="avi-rec-page">'+
       '<header class="avi-rec-head"><strong>AUROSANAX</strong>'+
       '<span>'+esc(fecha?fechaDocumentoVistaIntegral(fecha):'')+'</span></header>'+
       '<h4 class="avi-rec-title">RECOMENDACIONES MÉDICAS</h4>'+
       (campos?'<div class="avi-rec-meta">'+campos+'</div>':'')+
+      '<div class="avi-rec-docid">Documento · '+esc(registro.id_recomendacion)+'</div>'+
       bloques.filter(Boolean).join('')+
       '</article>';
   }
@@ -2499,13 +2501,16 @@
     );
     if(idActivo !== id) return;
 
+    // La fuente oficial de Recomendaciones es PLURAL: cada documento tiene
+    // su propio id_recomendacion. El lector singular ocultaba los posteriores.
     const resultados = await Promise.all([
-      getSoloLecturaVistaIntegral('buscarRecomendacionPorAtencion',{id_atencion:id}),
+      getSoloLecturaVistaIntegral('listarRecomendacionesPorAtencion',{id_atencion:id}),
       getSoloLecturaVistaIntegral('listarCertificadosPorAtencion',{id_atencion:id})
     ]);
 
     const overlayActual = document.getElementById('auroVistaIntegralOverlay');
-    if(!overlayActual) return;
+    if(!overlayActual || overlayActual !== overlay ||
+       texto(overlayActual.dataset.aviAtencion) !== id) return;
 
     const idActivoActual = texto(
       typeof window.getIdAtencionActiva === 'function'
@@ -2517,10 +2522,25 @@
     const slot = overlayActual.querySelector('[data-avi-documentos="'+CSS.escape(id)+'"]');
     if(!slot) return;
 
-    const recomendacionLista = registrosRespuestaVistaIntegral(resultados[0]);
-    const recomendacion = recomendacionLista.find(function(r){
-      return texto(r?.id_atencion) === id && texto(r?.id_recomendacion);
-    }) || null;
+    const vistosRecomendaciones = new Set();
+    const recomendacionesRegistros = registrosRespuestaVistaIntegral(resultados[0])
+      .filter(function(r){
+        if(texto(r?.id_atencion) !== id || !texto(r?.id_recomendacion)) return false;
+        const ip=texto(r?.id_paciente), ih=texto(r?.id_historia);
+        const at=atencionPorId(id);
+        if(ip && texto(at?.id_paciente) && ip !== texto(at.id_paciente)) return false;
+        if(ih && texto(at?.id_historia) && ih !== texto(at.id_historia)) return false;
+        const estado=norm(r.estado || 'Activo');
+        if(['anulado','anulada','eliminado','eliminada','inactivo','inactiva'].includes(estado)) return false;
+        const clave=texto(r.id_recomendacion);
+        if(vistosRecomendaciones.has(clave)) return false;
+        vistosRecomendaciones.add(clave);
+        return true;
+      })
+      .sort(function(a,b){
+        return texto(a.creado_en || a.fecha_atencion || '').localeCompare(
+          texto(b.creado_en || b.fecha_atencion || ''));
+      });
 
     const certificados = registrosRespuestaVistaIntegral(resultados[1]).filter(function(r){
       return texto(r?.id_atencion) === id && texto(r?.id_certificado);
@@ -2528,7 +2548,7 @@
 
     const recomendaciones = seccion(
       'Recomendaciones','bi-heart-pulse',
-      recomendacionRegistroHTML(recomendacion),false
+      recomendacionesRegistros.map(recomendacionRegistroHTML).filter(Boolean).join(''),false
     );
 
     const certificadosHTML = seccion(
@@ -2540,7 +2560,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.2';
+    const CSS_VERSION = '1.24.3';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3143,6 +3163,7 @@
         letter-spacing:.05em;margin:22px 0 23px!important;color:#111827!important}
       .avi-rec-meta{font-size:12px;line-height:1.55;margin:12px 0 16px;display:grid;gap:5px}
       .avi-rec-meta b{font-weight:850}
+      .avi-rec-docid{font-size:10px;color:#64748b;margin:0 0 12px;overflow-wrap:anywhere}
       .avi-rec-section{margin:16px 0 18px}
       .avi-rec-section h5{font-size:12px;font-weight:900;margin:0 0 9px;
         color:#222!important;letter-spacing:.015em}
@@ -4077,7 +4098,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.5-recomendaciones-documentales',
+    version:'1.22.6-recomendaciones-completas',
     abrir,
     cerrar,
     abrirReceta,
