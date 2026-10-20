@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_4_CERTIFICADO_VISUAL';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_5_RECOMENDACIONES_DOCUMENTALES';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -2224,11 +2224,74 @@
     return deduplicarPares(salida);
   }
 
+  /* Recomendaciones oficiales: visualización documental de solo lectura.
+     Replica secciones y tratamiento de párrafos del visor recomendaciones.js,
+     sin consultar estado de edición ni modificar contenido persistido. */
+  function parrafosRecomendacionVistaIntegral(valor){
+    const raw=texto(valor).replace(/\r\n?/g,'\n');
+    if(!raw) return '';
+    return raw.split(/\n\s*\n/).map(function(parrafo){
+      const lineas=parrafo.split('\n').map(function(x){return x.trim();}).filter(Boolean);
+      if(!lineas.length) return '';
+      const todasVinetas=lineas.every(function(x){return /^(?:[-*•]|\d+[.)])\s+/.test(x);});
+      return todasVinetas
+        ? '<ul class="avi-rec-list">'+lineas.map(function(x){return '<li>'+esc(x.replace(/^(?:[-*•]|\d+[.)])\s+/,''))+'</li>';}).join('')+'</ul>'
+        : '<p class="avi-rec-text">'+lineas.map(esc).join('<br>')+'</p>';
+    }).join('');
+  }
+
   function recomendacionRegistroHTML(registro){
     if(!registro || !texto(registro.id_atencion)) return '';
-    const pares = recomendacionParesVistaIntegral(registro);
-    if(!pares.length) return '';
-    return paresHTMLClinico(pares,'avi-document-grid avi-document-prose');
+    const d=parseJSON(registro.detalle_json,{}) || {};
+    const bloques=[];
+    const nombresAlerta={
+      fiebre:'Fiebre que no cede',dolor:'Dolor intenso o que no cede',
+      sangrado:'Sangrado anormal o abundante',dificultad_respiratoria:'Dificultad respiratoria',
+      vomito:'Vómitos persistentes',diarrea:'Diarrea persistente',
+      mareo_desmayo:'Mareo intenso o desmayo',deterioro_general:'Deterioro del estado general'
+    };
+    const nombresInfeccion={
+      fiebre_infeccion:'Fiebre o escalofríos',dolor_local:'Dolor local en aumento',
+      enrojecimiento:'Enrojecimiento progresivo',inflamacion:'Inflamación importante',
+      secrecion:'Secreción anormal o purulenta',mal_olor:'Mal olor',
+      calor_local:'Aumento de calor local'
+    };
+    function bloqueSeleccionados(titulo,bloque,nombres){
+      bloque=bloque || {};
+      const lista=(Array.isArray(bloque.seleccionados)?bloque.seleccionados:[])
+        .map(function(x){
+          if(typeof x==='string') return nombres[x] || x;
+          if(x && typeof x==='object'){
+            const clave=texto(x.id || x.clave || x.valor || x.key);
+            return nombres[clave] || texto(x.texto || x.descripcion || x.nombre || x.label || clave);
+          }
+          return '';
+        }).filter(function(x){return !!texto(x);});
+      const otro=texto(bloque.otros);
+      if(!lista.length && !otro) return '';
+      return '<section class="avi-rec-section"><h5>'+esc(titulo)+'</h5>'+
+        (lista.length?'<ul class="avi-rec-list">'+lista.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>':'')+
+        (otro?parrafosRecomendacionVistaIntegral(otro):'')+'</section>';
+    }
+    const fecha=texto(registro.fecha_atencion || registro.fecha_emision || '');
+    const seguimiento=d.seguimiento || {};
+    const campos=[
+      fecha?'<div><b>Fecha:</b> '+esc(fechaDocumentoVistaIntegral(fecha))+'</div>':'',
+      seguimiento.proxima_cita?'<div><b>PRÓXIMO CONTROL:</b> '+esc(fechaDocumentoVistaIntegral(seguimiento.proxima_cita))+'</div>':'',
+      seguimiento.motivo?'<div><b>MOTIVO DEL CONTROL:</b> '+esc(seguimiento.motivo)+'</div>':''
+    ].filter(Boolean).join('');
+    bloques.push(bloqueSeleccionados('SIGNOS DE ALERTA',d.signos_alerta,nombresAlerta));
+    bloques.push(bloqueSeleccionados('SIGNOS DE INFECCIÓN',d.signos_infeccion,nombresInfeccion));
+    if(texto(d.dieta_cuidados)) bloques.push('<section class="avi-rec-section"><h5>DIETA Y CUIDADOS</h5>'+parrafosRecomendacionVistaIntegral(d.dieta_cuidados)+'</section>');
+    if(texto(d.recomendaciones_generales)) bloques.push('<section class="avi-rec-section"><h5>RECOMENDACIONES GENERALES</h5>'+parrafosRecomendacionVistaIntegral(d.recomendaciones_generales)+'</section>');
+    if(!bloques.some(Boolean) && !campos) return '';
+    return '<article class="avi-rec-page">'+
+      '<header class="avi-rec-head"><strong>AUROSANAX</strong>'+
+      '<span>'+esc(fecha?fechaDocumentoVistaIntegral(fecha):'')+'</span></header>'+
+      '<h4 class="avi-rec-title">RECOMENDACIONES MÉDICAS</h4>'+
+      (campos?'<div class="avi-rec-meta">'+campos+'</div>':'')+
+      bloques.filter(Boolean).join('')+
+      '</article>';
   }
 
   function objetoDetalleCertificado(detalle,clave){
@@ -2477,7 +2540,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.1';
+    const CSS_VERSION = '1.24.2';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3064,6 +3127,34 @@
       }
 
 
+      /* Recomendaciones: lectura con jerarquía documental equivalente al visor oficial.
+         Se limita a esta tarjeta y no modifica estilos de los demás apartados. */
+      .avi-rec-page{
+        width:100%;max-width:210mm;margin:0 auto;padding:15mm 17mm 17mm;
+        background:#fff;color:#111827;box-sizing:border-box;
+        border:1px solid #e3e6ec;border-radius:3px;
+        font-family:Arial,Helvetica,sans-serif;
+      }
+      .avi-rec-head{display:flex;justify-content:space-between;gap:16px;
+        align-items:center;border-bottom:2.5px solid #8b1e5a;padding-bottom:10px}
+      .avi-rec-head strong{color:#8b1e5a;font-size:18px;letter-spacing:.035em}
+      .avi-rec-head span{color:#374151;font-size:11px}
+      .avi-rec-title{font-size:18px!important;line-height:1.3;text-align:center;
+        letter-spacing:.05em;margin:22px 0 23px!important;color:#111827!important}
+      .avi-rec-meta{font-size:12px;line-height:1.55;margin:12px 0 16px;display:grid;gap:5px}
+      .avi-rec-meta b{font-weight:850}
+      .avi-rec-section{margin:16px 0 18px}
+      .avi-rec-section h5{font-size:12px;font-weight:900;margin:0 0 9px;
+        color:#222!important;letter-spacing:.015em}
+      .avi-rec-text{font-size:12.2px;line-height:1.65;text-align:justify;
+        text-justify:inter-word;margin:0 0 12px;overflow-wrap:anywhere}
+      .avi-rec-list{margin:5px 0 12px 21px;padding:0}
+      .avi-rec-list li{font-size:12.2px;line-height:1.58;margin:4px 0;overflow-wrap:anywhere}
+      @media(max-width:760px){
+        .avi-rec-page{padding:17px 14px 24px;border-radius:9px}
+        .avi-rec-title{font-size:16px!important}
+        .avi-rec-text{text-align:left}
+      }
       .avi-document-list{display:grid;gap:14px}
       .avi-document-grid{grid-template-columns:1fr}
       .avi-document-prose .avi-line{grid-column:1/-1}
@@ -3986,7 +4077,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.4-certificado-visual',
+    version:'1.22.5-recomendaciones-documentales',
     abrir,
     cerrar,
     abrirReceta,
