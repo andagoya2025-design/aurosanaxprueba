@@ -2250,7 +2250,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.0';
+    const CSS_VERSION = '1.25.0-premium';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3380,6 +3380,46 @@
           background:#fff;
           padding-top:80px;
         }
+      }
+
+      /* AUROSANAX VISTA INTEGRAL PREMIUM 1.25 — mejora exclusivamente visual.
+         No cambia recopilación clínica, IDs, firmas, recetas ni eventos. */
+      .avi-overlay .avi-shell{border-color:#e9d4e0;box-shadow:0 32px 90px rgba(23,29,43,.37)}
+      .avi-overlay .avi-head{border-bottom:1px solid #ead5e2}
+      .avi-overlay .avi-head h3{letter-spacing:-.025em}
+      .avi-overlay .avi-head-patient{letter-spacing:-.012em}
+      .avi-overlay .avi-toolbar{gap:9px}
+      .avi-overlay .avi-toolbar .avi-btn:focus-visible,
+      .avi-overlay .avi-close:focus-visible,
+      .avi-overlay .avi-section summary:focus-visible{outline:3px solid #f9a8d4;outline-offset:3px}
+      .avi-overlay .avi-chip{font-variant-numeric:tabular-nums}
+      .avi-overlay .avi-section summary{min-height:48px}
+      .avi-overlay .avi-section-label{line-height:1.35}
+      .avi-overlay .avi-rx-card{border-color:#e8cedd;background:#fff}
+      .avi-overlay .avi-rx-card .avi-rx-head{gap:10px}
+      .avi-overlay .avi-rx-card .avi-btn-primary{min-height:36px}
+      .avi-overlay .avi-cert-page{border-color:#e8d5df;background:#fff}
+      .avi-overlay .avi-cert-official-body p,
+      .avi-overlay .avi-cert-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.65}
+      .avi-overlay .avi-plan-text,
+      .avi-overlay .avi-note p{overflow-wrap:anywhere;line-height:1.58}
+      @media(min-width:981px){
+        .avi-overlay .avi-body{background:linear-gradient(90deg,#e5e9ef,#f0f2f6 50%,#e5e9ef)}
+        .avi-overlay .avi-body > .avi-overview-block:first-child{border-top:3px solid #a9286c}
+        .avi-overlay .avi-overview-block,
+        .avi-overlay .avi-section,
+        .avi-overlay .avi-body > [data-avi-documentos]{border-left:1px solid #e3e6ed;border-right:1px solid #e3e6ed}
+        .avi-overlay .avi-data b{line-height:1.48}
+        .avi-overlay .avi-section[open] > summary{box-shadow:inset 3px 0 0 #a9286c}
+        .avi-overlay .avi-rx-card{border-radius:13px;padding:17px}
+      }
+      @media(max-width:980px){
+        .avi-overlay .avi-shell{border-radius:17px}
+        .avi-overlay .avi-section summary{min-height:44px}
+        .avi-overlay .avi-rx-card .avi-btn-primary{width:100%;justify-content:center}
+      }
+      @media(prefers-reduced-motion:reduce){
+        .avi-overlay .avi-btn,.avi-overlay .avi-close,.avi-overlay .avi-chevron{transition:none!important}
       }
     `;
     document.head.appendChild(s);
