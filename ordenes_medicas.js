@@ -648,7 +648,7 @@ function instalarCSS(){
 .aom-editor-item input,.aom-editor-item select,.aom-editor-item textarea{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:9px;font:inherit;background:#fff}
 .aom-editor-item textarea{min-height:42px;resize:vertical}
 .aom-editor-remove{grid-column:1/-1;justify-self:end}
-.aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}
+.aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}.aom-editor-search{position:relative;min-width:0}.aom-editor-sugerencias{position:absolute;z-index:15;top:100%;left:0;right:0;max-height:220px;overflow:auto;background:#fff;border:1px solid #d1d5db;border-radius:10px;box-shadow:0 12px 25px rgba(15,23,42,.16)}.aom-editor-sugerencias[hidden]{display:none!important}.aom-editor-sugerencia{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f1f5f9;background:#fff;padding:9px 11px;font:inherit;color:#111827;cursor:pointer}.aom-editor-sugerencia:hover,.aom-editor-sugerencia:focus{background:#fdf2f8}.aom-editor-sugerencia small{display:block;font-size:11px;color:#64748b;margin-top:2px}.aom-editor-sugerencias-vacio{padding:9px 11px;font-size:12px;color:#64748b}
 .aom-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
 .aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 48mm;margin:0 auto;font-family:Arial,sans-serif;position:relative}
 .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--aom-color,#8b1e5a);padding-bottom:10px;margin-bottom:18px}.aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}.aom-logo-wrap{width:60px;height:60px;display:grid;place-items:center;overflow:hidden}.aom-logo{max-width:100%;max-height:100%;object-fit:contain}.aom-doc-date{text-align:right;font-size:11.5px;font-weight:750}
@@ -910,7 +910,7 @@ function renderItemEditorFormal(item,index){
   const cats=opcionesCategoriaEditor(x.cat);
   const catLibre=norm(cats.valorSelect)==='otros'&&norm(x.cat)!=='otros'?x.cat:'';
   return `<div class="aom-editor-item" data-aom-editor-item="1" data-cie10="${esc(x.codigo_cie10||'')}" data-diagnostico="${esc(x.diagnostico||'')}" data-id-diagnostico="${esc(x.id_diagnostico||'')}" data-id-protocolo="${esc(x.id_protocolo||'')}" data-origen="${esc(x.origen||'')}">
-    <div class="aom-editor-field"><label>Examen / procedimiento</label><input data-campo="orden" list="aomCatalogoOrdenes" value="${esc(x.orden||'')}" autocomplete="off"></div>
+    <div class="aom-editor-field"><label>Examen / procedimiento</label><div class="aom-editor-search"><input data-campo="orden" value="${esc(x.orden||'')}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false"><div class="aom-editor-sugerencias" data-aom-sugerencias="1" role="listbox" hidden></div></div></div>
     <div class="aom-editor-field"><label>Tipo de orden</label><select data-campo="cat">${cats.html}</select></div>
     <div class="aom-editor-field"><label>Observación</label><textarea data-campo="obs">${esc(x.obs||'')}</textarea></div>
     <div class="aom-editor-field aom-editor-custom" ${norm(cats.valorSelect)==='otros'?'':'style="display:none"'}><label>Otro tipo de orden</label><input data-campo="cat-libre" value="${esc(catLibre)}" placeholder="Escriba otro tipo de orden" autocomplete="off"></div>
@@ -932,11 +932,63 @@ function sincronizarFilaEditorCatalogo(fila){
   if(!otros&&libre) libre.value='';
 }
 
+/* Selector de edición: sugerencias visibles del catálogo maestro, sin modificar emisión ni firma. */
 function conectarFilaEditorFormal(fila){
   if(!fila) return;
-  fila.querySelector('[data-campo="orden"]')?.addEventListener('input',()=>sincronizarFilaEditorCatalogo(fila));
-  fila.querySelector('[data-campo="orden"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
-  fila.querySelector('[data-campo="cat"]')?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
+  const entrada=fila.querySelector('[data-campo="orden"]');
+  const categoria=fila.querySelector('[data-campo="cat"]');
+  const lista=fila.querySelector('[data-aom-sugerencias]');
+  function cerrarSugerencias(){
+    if(lista){lista.hidden=true;lista.replaceChildren();}
+    if(entrada) entrada.setAttribute('aria-expanded','false');
+  }
+  function mostrarSugerencias(){
+    if(!entrada||!lista) return;
+    const q=norm(entrada.value);
+    const catalogo=catalogoOrdenesFormal();
+    const coincidencias=catalogo.filter(x=>!q||norm(x.orden).includes(q)).slice(0,35);
+    lista.replaceChildren();
+    if(!catalogo.length){
+      const msg=document.createElement('div');msg.className='aom-editor-sugerencias-vacio';
+      msg.textContent='El catálogo maestro no está disponible en esta pantalla.';
+      lista.appendChild(msg);
+    }else if(!coincidencias.length){
+      const msg=document.createElement('div');msg.className='aom-editor-sugerencias-vacio';
+      msg.textContent='Sin coincidencias. Puede escribir el examen manualmente.';
+      lista.appendChild(msg);
+    }else{
+      coincidencias.forEach(x=>{
+        const btn=document.createElement('button');btn.type='button';btn.className='aom-editor-sugerencia';
+        btn.setAttribute('role','option');
+        const nombre=document.createElement('span');nombre.textContent=x.orden;btn.appendChild(nombre);
+        const tipo=document.createElement('small');tipo.textContent=x.cat;btn.appendChild(tipo);
+        btn.addEventListener('mousedown',e=>e.preventDefault());
+        btn.addEventListener('click',()=>{
+          entrada.value=x.orden;
+          if(categoria){
+            const op=Array.from(categoria.options).find(o=>norm(o.value)===norm(x.cat));
+            if(op) categoria.value=op.value;
+          }
+          sincronizarFilaEditorCatalogo(fila);
+          cerrarSugerencias();entrada.focus();
+        });
+        lista.appendChild(btn);
+      });
+    }
+    lista.hidden=false;entrada.setAttribute('aria-expanded','true');
+  }
+  entrada?.addEventListener('focus',mostrarSugerencias);
+  entrada?.addEventListener('input',()=>{sincronizarFilaEditorCatalogo(fila);mostrarSugerencias();});
+  entrada?.addEventListener('change',()=>sincronizarFilaEditorCatalogo(fila));
+  entrada?.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){cerrarSugerencias();return;}
+    if(e.key==='ArrowDown'&&!lista?.hidden){e.preventDefault();lista.querySelector('button')?.focus();}
+  });
+  lista?.addEventListener('keydown',e=>{if(e.key==='Escape'){cerrarSugerencias();entrada?.focus();}});
+  fila.addEventListener('focusout',e=>{
+    if(!fila.contains(e.relatedTarget)) cerrarSugerencias();
+  });
+  categoria?.addEventListener('change',()=>{sincronizarFilaEditorCatalogo(fila);cerrarSugerencias();});
   fila.querySelector('[data-aom-quitar-item]')?.addEventListener('click',()=>{
     const modal=fila.closest('#iasynOrdenMedicaEditorModal');
     if((modal?.querySelectorAll('[data-aom-editor-item]').length||0)<=1){ alert('La orden formal debe conservar al menos un ítem.'); return; }
