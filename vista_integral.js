@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_1_IDENTIDAD_FASE1_ANTIRREGRESIVO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_3_ANAMNESIS_R2_SEGURA_ANTIRREGRESIVO';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -1140,6 +1140,138 @@
         '<p>'+valorClinicoVisualHTML(p.valor)+'</p>'+
       '</div>';
     }).join('')+'</div>';
+  }
+
+  /* ============================================================
+     FASE 2 — ANAMNESIS POR id_atencion, exclusivamente lectura.
+     Fuente: buscarAnamnesisPorAtencion (anamnesis.js 3.6.18-R2).
+     No se lee el DOM como fuente clínica para esta sección.
+     No toca el motor de guardado, autosave ni selección de plantillas.
+  ============================================================ */
+  function parsearObjetoAnamnesisVista(valor){
+    if(valor && typeof valor === 'object' && !Array.isArray(valor)) return valor;
+    if(typeof valor !== 'string' || !valor.trim()) return {};
+    try{
+      const v = JSON.parse(valor);
+      return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    }catch(_){ return {}; }
+  }
+
+  function registroAnamnesisRespuestaVista(r){
+    if(r?.success === false) throw new Error(texto(r?.message || r?.error || 'Error del servidor'));
+    const candidatos = [r?.data,r?.anamnesis,r?.registro,r?.resultado,r];
+    for(const x of candidatos){
+      if(x && typeof x === 'object' && !Array.isArray(x) && texto(x.id_atencion)) return x;
+    }
+    return null;
+  }
+
+  function etiquetaControlAnamnesisVista(clave){
+    let s = texto(clave).replace(/^(id:|name:|question:|index:)/,'');
+    // Identificadores técnicos conocidos de Anamnesis, solo presentación.
+    const mapa = {
+      hcMotivoConsulta:'Motivo de consulta',hcEnfermedadActual:'Enfermedad actual',
+      ginSintDescripcion:'Descripción ginecológica',obsSintOtros:'Otros síntomas obstétricos',
+      obsSintDescripcion:'Descripción obstétrica',
+      ginSintDolorPelvico:'Dolor pélvico',ginSintSangrado:'Sangrado anormal',
+      ginSintLeucorrea:'Leucorrea',ginSintPrurito:'Prurito',ginSintDisuria:'Disuria',
+      ginSintDispareunia:'Dispareunia',ginSintAmenorrea:'Amenorrea',
+      ginSintDismenorrea:'Dismenorrea',ginSintMasa:'Sensación de masa',
+      ginSintSequedad:'Sequedad vaginal',ginSintIncontinencia:'Incontinencia',
+      ginSintMenopausia:'Síntomas menopáusicos',
+      obsSintSangrado:'Sangrado vaginal',obsSintPerdidaLiquido:'Pérdida de líquido',
+      obsSintDolorPelvico:'Dolor pélvico',obsSintContracciones:'Contracciones',
+      obsSintCefalea:'Cefalea',obsSintFosfenos:'Fosfenos',obsSintTinnitus:'Tinnitus',
+      obsSintEpigastralgia:'Epigastralgia',obsSintDisuria:'Disuria'
+    };
+    if(mapa[s]) return mapa[s];
+    if(s.startsWith('auroDyn_')) s=s.slice('auroDyn_'.length);
+    s=s.replace(/:(?:on|si|sí|no)$/i,'').replace(/[_-]+/g,' ')
+      .replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g,'$1 $2').trim();
+    return s ? s.charAt(0).toUpperCase()+s.slice(1) : '';
+  }
+
+  function anamnesisPersistidaHTMLVista(r){
+    const pares=[];
+    const agregar=(etiqueta,valor)=>{
+      const limpio=limpiarTextoClinico(valor);
+      if(limpio && !esVacio(limpio)) pares.push({etiqueta,valor:limpio,
+        anchoCompleto:limpio.length>120 || /motivo|enfermedad|descripci[oó]n/i.test(etiqueta)});
+    };
+    agregar('Motivo de consulta',r.motivo_consulta);
+    agregar('Enfermedad actual',r.enfermedad_actual);
+    const controles=parsearObjetoAnamnesisVista(r.controles_json);
+    Object.entries(controles).forEach(([clave,item])=>{
+      if(!item || typeof item !== 'object' || Array.isArray(item)) return;
+      if(item.cabecera_contexto === true || item.cabecera_contexto === 'true') return;
+      const id=texto(clave).replace(/^(id:|name:|question:)/,'');
+      if(/^(hcMotivoConsulta|hcEnfermedadActual|auroPlantillaAnamnesisSelect)$/i.test(id)) return;
+      if(/^(hcFecha|hcMedico|hcEspecialidad|hcTipoAtencion)$/i.test(id)) return;
+      if(/plantilla|fecha.atencion|nombre.medico|especialidad|tipo.consulta/i.test(id)) return;
+      const tipo=norm(item.tipo);
+      if((tipo==='checkbox' || tipo==='radio') && item.checked !== true) return;
+      const valor=texto(item.valor);
+      if(!valor || (tipo==='checkbox' && norm(valor)==='on')){
+        if(tipo==='checkbox' && item.checked===true) agregar(etiquetaControlAnamnesisVista(clave),'Sí');
+        return;
+      }
+      agregar(etiquetaControlAnamnesisVista(clave),valor);
+    });
+    // No presentar una sección clínica si el registro solo contiene metadatos.
+    if(!pares.length) return '';
+    return paresHTMLClinico(deduplicarPares(pares),'avi-anamnesis-grid');
+  }
+
+  async function completarAnamnesisVistaIntegral(idAtencion,atencion,overlayEsperado,slotEsperado){
+    const id=texto(idAtencion);
+    if(!id || !slotEsperado) return;
+    if(!texto(atencion?.id_paciente)){
+      slotEsperado.innerHTML='<div class="avi-line avi-span-full" role="status">'+
+        '<b>Anamnesis pendiente de verificación</b><p>La atención no tiene identidad de paciente verificable.</p></div>';
+      return;
+    }
+    // Token por render: descarta GET de una renderización anterior del mismo id.
+    const solicitud=String(Number(overlayEsperado.dataset.aviAnamnesisSolicitud || 0)+1);
+    overlayEsperado.dataset.aviAnamnesisSolicitud=solicitud;
+    const vigente=()=>document.getElementById('auroVistaIntegralOverlay')===overlayEsperado &&
+      texto(overlayEsperado.dataset?.aviAtencion)===id &&
+      overlayEsperado.dataset?.aviAnamnesisSolicitud===solicitud && slotEsperado.isConnected &&
+      texto(window.getIdAtencionActiva?.())===id;
+    try{
+      const base=texto((typeof API_URL !== 'undefined' && API_URL) ||
+        window.API_URL || window.APP_SCRIPT_URL ||
+        document.getElementById('appsScriptUrl')?.value ||
+        window.AUROSANAX_SEGURIDAD?.configuracion?.apiUrl ||
+        window.AUROSANAX_SEGURIDAD?.config?.apiUrl);
+      if(!base) throw new Error('API no disponible');
+      const url=new URL(base,window.location?.href);
+      url.searchParams.set('accion','buscarAnamnesisPorAtencion');
+      url.searchParams.set('action','buscarAnamnesisPorAtencion');
+      url.searchParams.set('id_atencion',id);
+      url.searchParams.set('_',String(Date.now()));
+      const respuesta=await fetch(url.toString(),{method:'GET',cache:'no-store',redirect:'follow'});
+      if(!respuesta.ok) throw new Error('HTTP '+respuesta.status);
+      const registro=registroAnamnesisRespuestaVista(await respuesta.json());
+      if(!vigente()) return;
+      if(!registro){slotEsperado.innerHTML='';return;}
+      if(texto(registro.id_atencion)!==id) throw new Error('Identificador de atención incompatible');
+      if(texto(registro.id_paciente) && texto(registro.id_paciente)!==texto(atencion.id_paciente))
+        throw new Error('Paciente incompatible con la atención');
+      if(texto(registro.id_historia) && texto(atencion.id_historia) &&
+        texto(registro.id_historia)!==texto(atencion.id_historia))
+        throw new Error('Historia incompatible con la atención');
+      if(!vigente()) return;
+      const contenido=anamnesisPersistidaHTMLVista(registro);
+      slotEsperado.innerHTML=contenido
+        ? seccion('Anamnesis','bi-clipboard2-pulse',contenido,true)
+        : '';
+    }catch(error){
+      if(!vigente()) return;
+      console.warn(MODULO,'Anamnesis persistida no verificable.',error);
+      slotEsperado.innerHTML='<div class="avi-line avi-span-full" role="status">'+
+        '<b>Anamnesis pendiente de verificación</b><p>No se pudo confirmar la lectura '+
+        'de Anamnesis para esta atención. No se muestran datos locales ni editables.</p></div>';
+    }
   }
 
   function anamnesisVistaHTML(){
@@ -3550,10 +3682,8 @@
       return;
     }
 
-    const anamnesis = seccion(
-      'Anamnesis','bi-clipboard2-pulse',
-      anamnesisVistaHTML(),true
-    );
+    // Solo se rellena después de GET oficial; nunca desde el DOM editable.
+    const anamnesis = '<div data-avi-anamnesis="'+esc(idAtencion)+'"></div>';
 
     const antecedentes = seccion(
       'Antecedentes de la historia clínica','bi-clock-history',
@@ -3637,6 +3767,9 @@
     );
 
     completarDocumentosVistaIntegral(idAtencion);
+
+    const slotAnamnesis=body.querySelector('[data-avi-anamnesis]');
+    completarAnamnesisVistaIntegral(idAtencion,a,overlay,slotAnamnesis);
 
     const contextBox = overlay.querySelector('[data-avi-contexto]');
     if(contextBox) contextBox.innerHTML = encabezadoContexto(a);
@@ -3823,7 +3956,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.1-identidad-consulta-fase1-antirregresivo',
+    version:'1.22.3-identidad-anamnesis-r2-segura-antirregresivo',
     abrir,
     cerrar,
     abrirReceta,
