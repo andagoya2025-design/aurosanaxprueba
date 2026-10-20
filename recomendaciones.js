@@ -26,7 +26,7 @@
   }
 
   const MODULO = 'AUROSANAX RECOMENDACIONES';
-  const VERSION = '1.3.5-EDITORES-PAGINACION-A4-ANTIRREGRESIVA';
+  const VERSION = '1.3.6-MULTIPLES-ANTIRREGRESIVA-SOBRE-1.3.5';
   const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
   const state = {
@@ -37,6 +37,8 @@
     configuracionImpresion: null,
     medicosImpresion: [],
     registro: null,
+    registros: [],
+    modoNuevo: false,
     cargando: false,
     guardando: false,
     inicializado: false,
@@ -494,6 +496,8 @@
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
       .auro-rec-saved{display:grid;gap:8px}
       .auro-rec-saved-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;background:#fff}
+      .auro-rec-saved-item.activo{border-color:#c23b83;background:#fff8fc}
+      .auro-rec-btn.nuevo{border-color:#c23b83;color:#8b1e5a;background:#fff7fb}
       .auro-rec-saved-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
       .auro-rec-saved-meta{font-size:12px;color:#6b7280;margin-top:4px;overflow-wrap:anywhere}
       .auro-rec-saved-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
@@ -666,7 +670,7 @@
 
           <section class="auro-rec-card">
             <div class="auro-rec-card-head">
-              <div><b>Recomendaciones guardadas</b><small>Documento clínico correspondiente a la atención seleccionada.</small></div>
+              <div><b>Recomendaciones guardadas</b><small>Historial de documentos independientes de la atención seleccionada.</small></div>
             </div>
             <div class="auro-rec-card-body">
               <div id="auroRecGuardadas" class="auro-rec-saved">
@@ -676,7 +680,8 @@
           </section>
 
           <div class="auro-rec-actions">
-            <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
+            <button type="button" class="auro-rec-btn nuevo" id="auroRecBtnNueva"><i class="bi bi-plus-circle me-1"></i> Nueva recomendación</button>
+             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn cancelar-firma" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
             <!-- V1.3.1 ANTIRREGRESIÓN:
@@ -783,6 +788,7 @@
   function limpiar(){
     state.idRecomendacion='';
     state.registro=null;
+    state.modoNuevo=false;
     state.firma={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:(state.firma?.token||0)+1};
     setValue('auroRecProximaCita','');
     setValue('auroRecMotivoControl','');
@@ -1122,50 +1128,108 @@
        el patrón funcional validado de "Certificados emitidos".
      ============================================================ */
 
+  /* V1.3.6: historial independiente. La firma se muestra con su estado
+     comprobado únicamente para el documento seleccionado; nunca se presupone
+     la firma de otros registros. La UI heredada permanece intacta. */
   function renderRecomendacionGuardada(){
     const box=document.getElementById('auroRecGuardadas');
     if(!box) return;
-
-    const r=state.registro||null;
-    const id=txt(state.idRecomendacion||r?.id_recomendacion);
-
-    if(!r||!id){
+    const registros=Array.isArray(state.registros)?state.registros:[];
+    const seleccionado=txt(state.idRecomendacion);
+    if(!registros.length){
       box.innerHTML='<div class="auro-rec-empty">No existen recomendaciones guardadas para esta atención.</div>';
       return;
     }
-
     const f=estadoFirma();
     const e=txt(f.estado).toUpperCase();
-    const firmada=['FIRMADA','FIRMADO'].includes(e);
-    const proceso=['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e);
-    const textoFirma=firmada
-      ? 'Ver recomendación firmada ✓'
-      : (proceso ? 'Firma en proceso…' : 'Firmar recomendación');
-
-    const cancelar=(proceso && txt(f.id_solicitud))
-      ? `<button type="button" class="auro-rec-btn cancelar-firma" data-auro-rec-cancelar="${esc(id)}"><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>`
-      : '';
-
-    box.innerHTML=`<div class="auro-rec-saved-item">
-      <div class="auro-rec-saved-top">
-        <div>
-          <b>Recomendaciones médicas</b>
-          <div class="auro-rec-saved-meta">${esc(fechaVisual(r.actualizado_en||r.creado_en))} · ${esc(id)}</div>
-        </div>
+    box.innerHTML=registros.map(r=>{
+      const id=txt(r.id_recomendacion);
+      if(!id) return '';
+      const activa=seleccionado===id&&!state.modoNuevo;
+      const firmada=activa&&['FIRMADA','FIRMADO'].includes(e);
+      const proceso=activa&&['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e);
+      const label=firmada?'Ver recomendación firmada ✓':(proceso?'Firma en proceso…':(activa?'Firmar recomendación':'Abrir para firmar'));
+      return `<div class="auro-rec-saved-item${activa?' activo':''}">
+        <div class="auro-rec-saved-top"><div><b>Recomendaciones médicas${activa?' · Abierto ✓':''}</b>
+        <div class="auro-rec-saved-meta">${esc(fechaVisual(r.actualizado_en||r.creado_en))} · ${esc(id)}</div></div>
         <div class="auro-rec-saved-actions">
-          <button type="button" class="auro-rec-btn" data-auro-rec-abrir="${esc(id)}"><i class="bi bi-folder2-open me-1"></i> Abrir</button>
-          <button type="button" class="auro-rec-btn firma${firmada?' ok':(proceso?' proceso':'')}" data-auro-rec-firmar="${esc(id)}" ${proceso?'disabled aria-busy="true"':''}>${textoFirma}</button>
-          ${cancelar}
-        </div>
-      </div>
-    </div>`;
+          <button type="button" class="auro-rec-btn" data-auro-rec-abrir="${esc(id)}">${activa?'Abierto ✓':'Abrir'}</button>
+          <button type="button" class="auro-rec-btn firma${firmada?' ok':(proceso?' proceso':'')}" data-auro-rec-firmar="${esc(id)}" ${proceso?'disabled aria-busy="true"':''}>${label}</button>
+          ${activa&&proceso&&txt(f.id_solicitud)?`<button type="button" class="auro-rec-btn cancelar-firma" data-auro-rec-cancelar="${esc(id)}">Cancelar firma</button>`:''}
+        </div></div></div>`;
+    }).join('');
+    box.querySelectorAll('[data-auro-rec-abrir]').forEach(btn=>btn.addEventListener('click',async()=>{
+      if(await abrirDocumentoRecomendacion(btn.dataset.auroRecAbrir)){
+        document.getElementById('auroRecomendacionesApp')?.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+    }));
+    box.querySelectorAll('[data-auro-rec-firmar]').forEach(btn=>btn.addEventListener('click',async()=>{
+      const id=txt(btn.dataset.auroRecFirmar);
+      if(id!==txt(state.idRecomendacion)||state.modoNuevo){
+        if(!(await abrirDocumentoRecomendacion(id))) return;
+      }
+      return firmarRecomendacion();
+    }));
+    box.querySelectorAll('[data-auro-rec-cancelar]').forEach(btn=>btn.addEventListener('click',cancelarFirmaRecomendacion));
+  }
 
-    box.querySelector('[data-auro-rec-abrir]')?.addEventListener('click',()=>{
-      document.getElementById('auroRecomendacionesApp')?.scrollIntoView({behavior:'smooth',block:'start'});
-      setMsg('Recomendación guardada cargada para revisión.','ok');
+  function hayCambiosEnDocumento(){
+    if(!state.registro) return tieneContenido(detalleActual());
+    const anterior=parseDetalle(state.registro.detalle_json);
+    const actual=detalleActual();
+    const normalizar=(d)=>JSON.stringify({
+      seguimiento:{proxima_cita:txt(d?.seguimiento?.proxima_cita),motivo:txt(d?.seguimiento?.motivo)},
+      signos_alerta:{seleccionados:d?.signos_alerta?.seleccionados||[],otros:txt(d?.signos_alerta?.otros)},
+      signos_infeccion:{seleccionados:d?.signos_infeccion?.seleccionados||[],otros:txt(d?.signos_infeccion?.otros)},
+      dieta_cuidados:txt(d?.dieta_cuidados),recomendaciones_generales:txt(d?.recomendaciones_generales)
     });
-    box.querySelector('[data-auro-rec-firmar]')?.addEventListener('click',firmarRecomendacion);
-    box.querySelector('[data-auro-rec-cancelar]')?.addEventListener('click',cancelarFirmaRecomendacion);
+    return normalizar(actual)!==normalizar(anterior);
+  }
+
+  function confirmarCambioDocumento(){
+    return !hayCambiosEnDocumento()||window.confirm('Hay cambios sin guardar. Si continúa, se perderán. ¿Desea continuar?');
+  }
+
+  async function abrirDocumentoRecomendacion(id){
+    id=txt(id);
+    if(!id||state.guardando||state.cargando) return false;
+    const ctx=state.contexto||contextoAtencion();
+    const r=state.registros.find(x=>txt(x.id_recomendacion)===id);
+    if(!r||txt(r.id_atencion)!==txt(ctx.id)){
+      setMsg('El documento no pertenece a esta atención. Recargue el historial.','error');
+      return false;
+    }
+    if(state.idRecomendacion!==id&&!confirmarCambioDocumento()) return false;
+    ++state.firma.token; // Invalida consultas previas de firma
+    aplicarRegistro(r);
+    state.modoNuevo=false;
+    state.firma={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:state.firma.token};
+    aplicarModo();
+    await consultarFirmaPersistenteRecomendacion();
+    if(txt(state.idRecomendacion)!==id||txt((state.contexto||{}).id)!==txt(ctx.id)) return false;
+    aplicarModo();
+    renderRecomendacionGuardada();
+    setMsg('Documento '+id+' abierto para revisión.','ok');
+    return true;
+  }
+
+  function nuevaRecomendacion(){
+    const ctx=state.contexto||contextoAtencion();
+    if(!ctx.id||!ctx.editable||state.cargando||state.guardando){
+      setMsg('Seleccione una atención editable antes de crear una recomendación.','error');
+      return;
+    }
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(estadoFirma().estado).toUpperCase())){
+      setMsg('Hay una firma en proceso. Espere o cancele la solicitud antes de cambiar de documento.','error');
+      return;
+    }
+    if(!confirmarCambioDocumento()) return;
+    limpiar();
+    state.modoNuevo=true;
+    precargarSeguimientoDesdePlanSiVacio();
+    aplicarModo();
+    renderRecomendacionGuardada();
+    setMsg('Nueva recomendación independiente. Complete los campos y pulse Guardar. No se modificará ninguna anterior.','info');
   }
 
   /* ============================================================
@@ -1503,6 +1567,8 @@ ${recDocumentoHTML()}
 
     const agregarPlan=document.getElementById('auroRecBtnAgregarPlan');
     if(agregarPlan) agregarPlan.disabled=!editable || !ctx.id;
+    const nueva=document.getElementById('auroRecBtnNueva');
+    if(nueva) nueva.disabled=!ctx.editable || !ctx.id;
     document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{btn.disabled=!editable || !ctx.id;});
 
     const estado=document.getElementById('auroRecEstado');
@@ -1560,6 +1626,7 @@ ${recDocumentoHTML()}
     renderContexto();
 
     if(!ctx.id){
+      state.registros=[];
       limpiar();
       state.diagnosticos=[];
       renderDiagnosticos();
@@ -1572,8 +1639,8 @@ ${recDocumentoHTML()}
     setMsg('Cargando recomendaciones de esta atención...','info');
 
     try{
-      const [registro, contextoEnriquecido] = await Promise.all([
-        apiGet('buscarRecomendacionPorAtencion',{id_atencion:ctx.id}),
+      const [respuestaHistorial, contextoEnriquecido] = await Promise.all([
+        apiGet('listarRecomendacionesPorAtencion',{id_atencion:ctx.id}),
         enriquecerContextoDesdeServidor(ctx),
         cargarDiagnosticos(ctx.id),
         recCargarDatosImpresion()
@@ -1584,9 +1651,16 @@ ${recDocumentoHTML()}
       ctx=contextoEnriquecido || ctx;
       state.contexto=ctx;
 
+      const documentos=Array.isArray(respuestaHistorial)?respuestaHistorial:(Array.isArray(respuestaHistorial?.registros)?respuestaHistorial.registros:[]);
+      const docs= documentos.filter(x=>txt(x?.id_atencion)===txt(ctx.id)&&txt(x?.id_recomendacion));
+      const idAnterior=(txt(state.idAtencion)===txt(ctx.id))?txt(state.idRecomendacion):'';
+      const nuevoAnterior=(txt(state.idAtencion)===txt(ctx.id))&&state.modoNuevo;
+      const registro=docs.find(x=>txt(x.id_recomendacion)===idAnterior)||docs[0]||null;
       limpiar();
+      state.registros=docs;
+      if(nuevoAnterior){state.modoNuevo=true;}
 
-      if(registro && registro.id_recomendacion){
+      if(!nuevoAnterior && registro && registro.id_recomendacion){
         aplicarRegistro(registro);
         await consultarFirmaPersistenteRecomendacion();
         if(token !== state.tokenCarga) return null;
@@ -1605,7 +1679,7 @@ ${recDocumentoHTML()}
             : 'Recomendaciones históricas cargadas en modo solo lectura.',
           precargadasIndicaciones ? 'info' : 'ok'
         );
-      }else{
+      }else if(!nuevoAnterior){
         const precargadoSeguimiento = ctx.editable
           ? precargarSeguimientoDesdePlanSiVacio()
           : false;
@@ -1630,7 +1704,7 @@ ${recDocumentoHTML()}
       renderContexto();
       renderFirma();
       renderRecomendacionGuardada();
-      return registro || null;
+      return nuevoAnterior?null:(registro || null);
     }catch(e){
       console.error(MODULO+':',e);
       setMsg('No se pudieron cargar las recomendaciones: '+txt(e.message || e),'error');
@@ -1647,6 +1721,7 @@ ${recDocumentoHTML()}
 
     return {
       id_recomendacion:state.idRecomendacion || '',
+      ...(state.modoNuevo?{forzar_nueva_recomendacion:'SI'}:{}),
       id_atencion:ctx.id || '',
       id_cita:txt(a.id_cita),
       id_paciente:txt(a.id_paciente),
@@ -1701,6 +1776,7 @@ ${recDocumentoHTML()}
       }
 
       state.idRecomendacion=txt(r.id || r.id_recomendacion || data.id_recomendacion);
+      state.modoNuevo=false;
 
       /* ==========================================================
          AUROSANAX RECOMENDACIONES V1.3.2 — TARJETA INMEDIATA
@@ -2218,12 +2294,14 @@ html,body{background:#dfe3e8}
 
   function enlazar(){
     const guardarBtn=document.getElementById('auroRecBtnGuardar');
+    const nuevaBtn=document.getElementById('auroRecBtnNueva');
     const recargarBtn=document.getElementById('auroRecBtnRecargar');
     const vistaBtn=document.getElementById('auroRecBtnVista');
     const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
     const firmaBtn=document.getElementById('auroRecBtnFirma');
     const cancelarFirmaBtn=document.getElementById('auroRecBtnCancelarFirma');
 
+    if(nuevaBtn && nuevaBtn.dataset.auroRec!=='1'){nuevaBtn.dataset.auroRec='1';nuevaBtn.addEventListener('click',nuevaRecomendacion);}
     if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
       guardarBtn.dataset.auroRec='1';
       guardarBtn.addEventListener('click',guardar);
@@ -2277,6 +2355,8 @@ html,body{background:#dfe3e8}
     state.idAtencion='';
     state.idRecomendacion='';
     state.registro=null;
+    state.registros=[];
+    state.modoNuevo=false;
     state.diagnosticos=[];
     state.contexto={
       id:'',
@@ -2346,6 +2426,7 @@ html,body{background:#dfe3e8}
     inicializar:inicializar,
     cargar:function(){return cargar(true);},
     guardar:guardar,
+    nueva:nuevaRecomendacion,
     vistaPrevia:vistaPrevia,
     estado:state
   };
