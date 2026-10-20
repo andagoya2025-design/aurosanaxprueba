@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_8_ORDENES_DOCUMENTALES';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_9_ORDENES_SECCION_DOCUMENTAL';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -1730,18 +1730,16 @@
     });
     return tarjetas.length?'<div class="avi-subgroup avi-plan-block" data-avi-ordenes-formales><h5>Órdenes médicas emitidas · Exámenes y procedimientos</h5>'+tarjetas.join('')+'</div>':'';
   }
+  /* Documentos independientes: no se insertan dentro del resumen Plan. */
   function incluirOrdenesEnPlanVista(overlay,id){
     if(!overlay || texto(overlay.dataset.aviAtencion)!==id) return;
-    const html=overlay.__aviOrdenesFormalesHTML || '';
-    const slot=overlay.querySelector('[data-avi-plan="'+CSS.escape(id)+'"]');
-    if(!slot || !html) return;
-    let sec=slot.querySelector('.avi-section');
-    if(!sec){ slot.innerHTML=seccion('Plan','bi-list-check',html,true); return; }
-    const body=sec.querySelector('.avi-section-body');
-    if(!body) return;
-    body.querySelector('[data-avi-ordenes-formales]')?.remove();
-    body.insertAdjacentHTML('beforeend',html);
-    actualizarContadorPlanVistaIntegral(slot);
+    if(document.getElementById('auroVistaIntegralOverlay')!==overlay) return;
+    const activo=texto(typeof window.getIdAtencionActiva==='function' ? window.getIdAtencionActiva() : '');
+    if(activo!==id) return;
+    const slot=overlay.querySelector('[data-avi-ordenes-documentos="'+CSS.escape(id)+'"]');
+    if(!slot) return;
+    const html=overlay.__aviOrdenesFormalesHTML||'';
+    slot.innerHTML=html ? seccion('Órdenes médicas emitidas','bi-file-earmark-medical',html,true) : '';
   }
   async function completarOrdenesFormalesVista(idAtencion,atencion,overlayEsperado){
     const id=texto(idAtencion);
@@ -2632,7 +2630,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.5';
+    const CSS_VERSION = '1.24.6';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3221,6 +3219,9 @@
 
       /* Recomendaciones: lectura con jerarquía documental equivalente al visor oficial.
          Se limita a esta tarjeta y no modifica estilos de los demás apartados. */
+      .avi-ordenes-documentos-slot>.avi-section{overflow:visible}
+      .avi-ordenes-documentos-slot .avi-section-body{overflow:visible;max-height:none}
+      .avi-ordenes-documentos-slot [data-avi-ordenes-formales]{width:100%;max-width:100%}
       /* Órdenes médicas: documento íntegro de solo lectura, hoja flexible. */
       .avi-orden-documento{display:flex;flex-direction:column;box-sizing:border-box;
         width:100%;max-width:210mm;min-height:297mm;margin:14px auto 20px;
@@ -3646,6 +3647,7 @@
         .avi-body > .avi-section,
         .avi-body > .avi-line,
         .avi-body > .avi-plan-slot,
+        .avi-body > .avi-ordenes-documentos-slot,
         .avi-body > [data-avi-documentos]{
           width:min(1120px,calc(100% - 36px));
           margin-left:auto;
@@ -3977,6 +3979,8 @@
     const plan =
       '<div class="avi-plan-slot" data-avi-plan="'+esc(idAtencion)+'">'+planInicial+'</div>';
 
+    const ordenesDocumentos = '<div class="avi-ordenes-documentos-slot" data-avi-ordenes-documentos="'+esc(idAtencion)+'"></div>';
+
     const indicacionesLegacyInicial = seccion(
       'Indicaciones complementarias','bi-card-text',
       indicacionesHistoricasRecetaHTML(idAtencion,new Set()),false
@@ -4010,7 +4014,7 @@
         : '')+
       '<div data-avi-fuente-identidad style="font-size:11px;color:#64748b;padding:4px 12px"></div>'+
       '<div class="avi-clinical-divider"><span>Resumen clínico de la consulta</span></div>'+
-      anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+indicacionesLegacy+recetas+
+      anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+ordenesDocumentos+indicacionesLegacy+recetas+
       '<div data-avi-documentos="'+esc(idAtencion)+'"></div>';
 
     /*
@@ -4218,7 +4222,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.8-ordenes-documentales',
+    version:'1.22.9-ordenes-seccion-documental',
     abrir,
     cerrar,
     abrirReceta,
