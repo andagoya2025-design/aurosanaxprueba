@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_3_CONTADORES_Y_CABECERA';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_4_CERTIFICADO_VISUAL';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -2477,7 +2477,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.0';
+    const CSS_VERSION = '1.24.1';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3074,19 +3074,27 @@
         line-height:1.66;
       }
 
+      /* Certificado: proporciones de hoja y jerarquía del visor oficial (certificado.js).
+         SOLO visual; nunca transforma detalle_json ni cambia documentos emitidos. */
       .avi-cert-page{
         width:100%;
+        max-width:210mm;
+        min-height:297mm;
+        margin:0 auto;
+        display:flex;
+        flex-direction:column;
+        box-sizing:border-box;
         background:#fff;
         border:1px solid #dfe3e8;
-        border-radius:10px;
-        padding:26px 34px 30px;
+        border-radius:3px;
+        padding:15mm 17mm 17mm;
         color:#111827;
         box-shadow:0 8px 24px rgba(15,23,42,.05);
       }
       .avi-cert-official-head{
         display:grid;grid-template-columns:minmax(0,1fr) auto;
         gap:16px;align-items:center;padding-bottom:10px;
-        border-bottom:2px solid #8b1e5a;
+        border-bottom:2.5px solid #8b1e5a;
       }
       .avi-cert-official-head strong{
         display:block;color:#8b1e5a;font-size:17px;font-weight:950;
@@ -3098,7 +3106,7 @@
         text-align:right;font-size:10.5px;font-weight:800;color:#374151;
       }
       .avi-cert-official-title{
-        margin:22px 0 24px;text-align:center;
+        margin:22px 0 26px;text-align:center;
         color:#111827;font-size:18px;font-weight:950;letter-spacing:.04em;
       }
       .avi-cert-official-body p{
@@ -3106,9 +3114,19 @@
         text-align:justify;text-justify:inter-word;
       }
       .avi-cert-line{
-        margin:6px 0;font-size:12.1px;line-height:1.5;
+        margin:6px 0;
+        font-size:12.1px;
+        line-height:1.58;
+        text-align:justify;
+        text-justify:inter-word;
+        white-space:pre-line;
+        overflow-wrap:anywhere;
       }
       .avi-cert-line b{color:#2b1623}
+      .avi-cert-line>b:first-child{
+        display:inline-block;
+        min-width:150px;
+      }
       .avi-cert-dx{margin:15px 0 16px;font-size:12.1px;line-height:1.5}
       .avi-cert-dx>b{display:block;margin-bottom:5px}
       .avi-cert-dx-row{margin-top:2px}
@@ -3119,11 +3137,13 @@
       .avi-cert-footer{
         display:grid;
         grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-        gap:48px;
-        align-items:end;
-        margin-top:46px;
-        padding-top:10px;
+        gap:22mm;
+        align-items:start;
+        margin-top:auto;
+        padding-top:24mm;
         min-height:150px;
+        break-inside:avoid;
+        page-break-inside:avoid;
       }
       .avi-cert-center{
         align-self:end;
@@ -3159,7 +3179,12 @@
       @media(max-width:760px){
         .avi-document-grid{grid-template-columns:1fr}
         .avi-document-prose .avi-line p{text-align:left}
-        .avi-cert-page{padding:17px 14px 24px;border-radius:9px}
+        .avi-cert-page{
+          width:100%;max-width:100%;min-height:0;
+          padding:17px 14px 24px;border-radius:9px;
+        }
+        .avi-cert-line{text-align:left}
+        .avi-cert-line>b:first-child{min-width:0}
         .avi-cert-official-head{grid-template-columns:1fr;gap:5px}
         .avi-cert-official-head>div:last-child{text-align:left}
         .avi-cert-official-title{font-size:16px;margin:17px 0 18px}
@@ -3961,7 +3986,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.3-contadores-y-cabecera',
+    version:'1.22.4-certificado-visual',
     abrir,
     cerrar,
     abrirReceta,
