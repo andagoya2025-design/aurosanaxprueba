@@ -561,9 +561,13 @@ function solicitarJustificacion(titulo){
 }
 
 function catalogoOrdenesFormal(){
-  return Array.isArray(window.ORDENES_MEDICAS_IASYN_BASE)
-    ? window.ORDENES_MEDICAS_IASYN_BASE.map(itemOrdenNormalizado).filter(x=>x.orden)
-    : [];
+  // El formulario principal define ORDENES_MEDICAS_BASE como const en index.
+  // Una declaración global `const` no es propiedad de window.
+  const principal=(typeof ORDENES_MEDICAS_BASE!=='undefined' && Array.isArray(ORDENES_MEDICAS_BASE))
+    ? ORDENES_MEDICAS_BASE : null;
+  const respaldo=Array.isArray(window.ORDENES_MEDICAS_IASYN_BASE)
+    ? window.ORDENES_MEDICAS_IASYN_BASE : [];
+  return (principal||respaldo).map(itemOrdenNormalizado).filter(x=>x.orden);
 }
 function categoriasOrdenesFormal(extra=''){
   const set=new Set(catalogoOrdenesFormal().map(x=>txt(x.cat)).filter(Boolean));
