@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_1_IDENTIDAD_FASE1_ANTIRREGRESIVO';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_2_PLAN_ORDENES_INTERCONSULTA_VISUAL';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -226,7 +226,7 @@
     ].filter(Boolean).join(' · ');
     const chips=overlayEsperado.querySelector('[data-avi-contexto]');
     if(chips) chips.innerHTML=encabezadoContexto(a);
-    slot.textContent='Identidad y atención verificadas en registros persistidos.';
+    slot.textContent='';
   }
 
   function nombrePaciente(p){
@@ -1376,7 +1376,7 @@
         n.includes('plan de tratamiento') ||
         n.includes('plan tratamiento')
       ) grupos.planTerapeutico.push(p);
-      else if(n.includes('interconsulta')) grupos.interconsultas.push(p);
+      else if(n.includes('interconsulta')) { const items=interconsultasClinicasVista(p.valor); items.forEach(function(item){grupos.interconsultas.push({...p,valor:item});}); }
       else if(n.includes('evaluacion')) grupos.evaluaciones.push(p);
       else if(n.includes('proximo control') || n.includes('próximo control')) grupos.proximoControl.push(p);
       else if(n.includes('orden') || n.includes('examen')) grupos.ordenes.push(p);
@@ -1429,6 +1429,40 @@
       if(v !== undefined && v !== null && !esVacio(v)) return v;
     }
     return '';
+  }
+
+  /* Vista integral: contenido semántico de interconsulta; ignora valores por defecto. */
+  function interconsultasClinicasVista(valor){
+    let data=typeof valor==='string' ? parseJSON(valor,null) : valor;
+    if(data === null){
+      const literal=limpiarTextoClinico(valor);
+      return literal && !/^[\[{]/.test(literal) ? [literal] : [];
+    }
+    const elementos=Array.isArray(data) ? data : [data];
+    const salida=[];
+    elementos.forEach(function(x){
+      if(typeof x==='string'){
+        const t=limpiarTextoClinico(x);
+        if(t) salida.push(t);
+        return;
+      }
+      if(!x || typeof x!=='object') return;
+      const claves=['tipo','especialidad','profesional','motivo','observaciones'];
+      const relevantes=claves.map(function(k){return [k,limpiarTextoClinico(x[k])];})
+        .filter(function(kv){return !!kv[1];});
+      if(!relevantes.length) return;
+      const etiquetas={tipo:'Tipo',especialidad:'Especialidad',profesional:'Profesional',motivo:'Motivo',observaciones:'Observaciones'};
+      const extras=['prioridad','estado'].map(function(k){return [k,limpiarTextoClinico(x[k])];})
+        .filter(function(kv){return kv[1] && !['normal','pendiente'].includes(norm(kv[1]));});
+      salida.push(relevantes.concat(extras).map(function(kv){return (etiquetas[kv[0]]||kv[0])+': '+kv[1];}).join(' · '));
+    });
+    return [...new Set(salida)];
+  }
+  function bloqueInterconsultaVista(valor){
+    const items=interconsultasClinicasVista(valor);
+    if(!items.length) return '';
+    return '<div class="avi-subgroup avi-plan-block"><h5>Interconsulta</h5>'+ 
+      '<ul class="avi-clean-list">'+items.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>';
   }
 
   function bloquePlanPersistidoLista(titulo,valor,opciones){
@@ -1484,7 +1518,7 @@
       plan,'interconsulta','interconsultas','interconsulta_plan'
     );
     if(interconsulta){
-      bloques.push(bloquePlanPersistidoLista('Interconsulta',interconsulta));
+      bloques.push(bloqueInterconsultaVista(interconsulta));
     }
 
     const evaluaciones = valorPlanPersistido(
@@ -1589,6 +1623,58 @@
     return Boolean(texto(plan.id_plan) || idPlanAtencion);
   }
 
+  /* Documentos formales emitidos: fuente oficial ordenes_medicas, solo GET. */
+  function ordenesFormalesHTML(registros,atencion,id){
+    const vistos=new Set();
+    const tarjetas=[];
+    (Array.isArray(registros)?registros:[]).forEach(function(reg){
+      if(texto(reg?.id_atencion)!==id || !texto(reg?.id_orden)) return;
+      if(texto(reg?.id_paciente) && texto(atencion?.id_paciente) &&
+         texto(reg.id_paciente)!==texto(atencion.id_paciente)) return;
+      if(texto(reg?.id_historia) && texto(atencion?.id_historia) &&
+         texto(reg.id_historia)!==texto(atencion.id_historia)) return;
+      if(/anulad|reemplaz|eliminad/i.test(norm(reg.estado))) return;
+      const clave=texto(reg.id_orden);
+      if(vistos.has(clave)) return;
+      const det=parseJSON(reg.detalle_json,{}) || {};
+      const items=Array.isArray(det.items) ? det.items : [];
+      const lineas=items.map(function(item){
+        if(typeof item==='string') return limpiarTextoClinico(item);
+        if(!item || typeof item!=='object') return '';
+        return limpiarTextoClinico(item.orden || item.nombre || item.examen || item.procedimiento || item.descripcion || item.texto || item.nombre_examen || '');
+      }).filter(Boolean);
+      if(!lineas.length) return;
+      vistos.add(clave);
+      tarjetas.push('<div class="avi-plan-content"><p class="avi-plan-text"><b>Orden '+esc(clave)+'</b>'+ 
+        (reg.fecha_emision?' · '+esc(fechaVisual(reg.fecha_emision)):'')+'</p>'+ 
+        '<ul class="avi-clean-list">'+lineas.map(function(t){return '<li>'+esc(t)+'</li>';}).join('')+'</ul></div>');
+    });
+    return tarjetas.length ? '<div class="avi-subgroup avi-plan-block" data-avi-ordenes-formales><h5>Órdenes médicas emitidas</h5>'+tarjetas.join('')+'</div>' : '';
+  }
+  function incluirOrdenesEnPlanVista(overlay,id){
+    if(!overlay || texto(overlay.dataset.aviAtencion)!==id) return;
+    const html=overlay.__aviOrdenesFormalesHTML || '';
+    const slot=overlay.querySelector('[data-avi-plan="'+CSS.escape(id)+'"]');
+    if(!slot || !html) return;
+    let sec=slot.querySelector('.avi-section');
+    if(!sec){ slot.innerHTML=seccion('Plan','bi-list-check',html,true); return; }
+    const body=sec.querySelector('.avi-section-body');
+    if(!body) return;
+    body.querySelector('[data-avi-ordenes-formales]')?.remove();
+    body.insertAdjacentHTML('beforeend',html);
+  }
+  async function completarOrdenesFormalesVista(idAtencion,atencion,overlayEsperado){
+    const id=texto(idAtencion);
+    const resp=await getSoloLecturaVistaIntegral('listarOrdenesMedicasPorAtencion',{id_atencion:id});
+    if(!resp || document.getElementById('auroVistaIntegralOverlay')!==overlayEsperado ||
+       texto(overlayEsperado.dataset.aviAtencion)!==id) return;
+    const registros=Array.isArray(resp)?resp:Array.isArray(resp.registros)?resp.registros:
+      Array.isArray(resp.data)?resp.data:null;
+    if(!registros) return;
+    overlayEsperado.__aviOrdenesFormalesHTML=ordenesFormalesHTML(registros,atencion,id);
+    incluirOrdenesEnPlanVista(overlayEsperado,id);
+  }
+
   async function completarPlanVistaIntegral(idAtencion,atencion,hayRecetas){
     const id = texto(idAtencion);
     if(!id) return;
@@ -1640,6 +1726,7 @@
       slotPlan.innerHTML = seccion(
         'Plan','bi-list-check',htmlPlan,true
       );
+      incluirOrdenesEnPlanVista(overlay,id);
     }
 
     const slotLegacy = overlay.querySelector(
@@ -3616,7 +3703,7 @@
             '<div class="avi-data-grid" data-avi-datos-atencion>'+datosAtencion+'</div>'+
           '</section>'
         : '')+
-      '<div data-avi-fuente-identidad style="font-size:11px;color:#64748b;padding:4px 12px">Verificando identidad persistida…</div>'+
+      '<div data-avi-fuente-identidad style="font-size:11px;color:#64748b;padding:4px 12px"></div>'+
       '<div class="avi-clinical-divider"><span>Resumen clínico de la consulta</span></div>'+
       anamnesis+antecedentes+examen+obstetricia+diagnosticos+plan+indicacionesLegacy+recetas+
       '<div data-avi-documentos="'+esc(idAtencion)+'"></div>';
@@ -3637,6 +3724,7 @@
     );
 
     completarDocumentosVistaIntegral(idAtencion);
+    completarOrdenesFormalesVista(idAtencion,a,overlay).catch(function(e){console.warn(MODULO,'No se pudo mostrar órdenes formales.',e);});
 
     const contextBox = overlay.querySelector('[data-avi-contexto]');
     if(contextBox) contextBox.innerHTML = encabezadoContexto(a);
@@ -3823,7 +3911,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.1-identidad-consulta-fase1-antirregresivo',
+    version:'1.22.2-plan-ordenes-interconsulta-visual',
     abrir,
     cerrar,
     abrirReceta,
