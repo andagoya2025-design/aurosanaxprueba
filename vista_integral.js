@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_23_0_DOCUMENTOS_OFICIALES';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_23_1_DOCUMENTOS_EN_PAGINA';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -1710,7 +1710,7 @@
         ['ID orden',clave],['Versión',texto(reg.version||'1')]
       ];
       const dx=(Array.isArray(d.diagnosticos)?d.diagnosticos:[]).filter(x=>x&&(x.codigo_cie10||x.descripcion));
-      tarjetas.push('<article class="avi-orden-formal avi-orden-documento">'+
+      tarjetas.push('<article class="avi-orden-formal avi-orden-documento" data-avi-orden-documento="'+esc(clave)+'">'+
         '<header class="avi-orden-head"><strong>'+esc(nombreCentro)+'</strong><span>'+esc(fechaVisual(reg.fecha_emision||d.fecha_emision))+'</span></header>'+
         '<h4 class="avi-orden-title">ORDEN MÉDICA</h4>'+
         '<div class="avi-orden-acciones"><button type="button" class="avi-btn avi-btn-primary" data-avi-orden-oficial="'+esc(clave)+'"><i class="bi bi-file-earmark-medical"></i> Ver documento oficial / Imprimir</button></div>'+
@@ -1792,6 +1792,22 @@
     overlayEsperado.__aviOrdenesRegistros=registros;
     overlayEsperado.__aviOrdenesFormalesHTML=ordenesFormalesHTML(registros,atencion,id);
     incluirOrdenesEnPlanVista(overlayEsperado,id);
+    const api=window.IASYN_ORDENES_MEDICAS;
+    if(api&&typeof api.construirDocumento==='function'){
+      const originales=overlayEsperado.__aviOrdenesRegistros||[];
+      originales.forEach(function(reg){
+        const destino=Array.from(overlayEsperado.querySelectorAll('[data-avi-orden-documento]')).find(function(e){return e.getAttribute('data-avi-orden-documento')===texto(reg.id_orden);});
+        if(!destino) return;
+        try{
+          const detalle=parseJSON(reg.detalle_json,{})||{};
+          const documento=api.construirDocumento(Object.assign({},reg,{detalle_json:detalle}));
+          if(typeof documento==='string'&&documento.includes('aom-paper')){
+            destino.innerHTML=documento;
+            destino.classList.add('avi-orden-oficial-embebida');
+          }
+        }catch(error){console.warn(MODULO,'No se pudo integrar orden oficial; se conserva la vista de respaldo.',error);}
+      });
+    }
   }
 
   async function completarPlanVistaIntegral(idAtencion,atencion,hayRecetas){
@@ -2170,7 +2186,25 @@
         !indicacionesPlan.has(norm(indicacionReceta))
       ) ? indicacionesHTML(indicacionReceta) : '';
 
-      return '<article class="avi-rx-card">'+
+      const pacienteRx=r.paciente&&typeof r.paciente==='object'?r.paciente:{};
+      const medicoRx=r.medico&&typeof r.medico==='object'?r.medico:{};
+      const nombrePaciente=texto(r.nombre_paciente||pacienteRx.nombre||atencionPorId(idAtencion)?.nombre_paciente);
+      const nombreMedico=texto(r.nombre_medico||medicoRx.nombre);
+      const cedula=texto(r.numero_documento||pacienteRx.numero_documento||r.cedula);
+      const fechaRx=fechaVisual(r.fecha_receta||r.fecha);
+      const cfg=window.auroConfiguracionCentro||window.configuracionCentro||window.configCentro||window.CONFIG_CENTRO||{};
+      const centro=cfg.datos&&typeof cfg.datos==='object'?cfg.datos:cfg;
+      const nombreCentro=texto(centro.nombre_clinica||centro.nombre_comercial||centro.nombre||'AUROSANAX');
+      const contacto=[centro.direccion_clinica||centro.direccion,centro.ciudad_clinica||centro.ciudad,centro.telefono_clinica||centro.telefono,centro.email_clinica||centro.email].map(texto).filter(Boolean);
+      return '<article class="avi-rx-card avi-rx-documento">'+
+        '<div class="avi-rx-institucional"><strong>'+esc(nombreCentro)+'</strong><span>'+esc(fechaRx)+'</span></div>'+
+        '<h3 class="avi-rx-doc-titulo">RECETA MÉDICA</h3>'+
+        '<div class="avi-rx-identificacion">'+
+          (nombrePaciente?'<div><b>Paciente:</b> '+esc(nombrePaciente)+'</div>':'')+
+          (cedula?'<div><b>Identificación:</b> '+esc(cedula)+'</div>':'')+
+          '<div><b>Consulta:</b> '+esc(atencionPorId(idAtencion)?.numero_consulta||r.numero_consulta||'—')+'</div>'+
+          '<div><b>ID receta:</b> '+esc(r.id_receta||r.id||'—')+'</div>'+
+        '</div>'+
         '<div class="avi-rx-head">'+
           '<div class="avi-rx-heading">'+
             '<h4><i class="bi bi-prescription2"></i> Receta médica</h4>'+
@@ -2188,6 +2222,11 @@
         tablaMedicamentosRecetaHTML(r.medicamento || r.medicamentos)+
         diagnosticosRecetaHTML(r,idAtencion)+
         indicaciones+
+        '<footer class="avi-rx-documento-pie"><div class="avi-rx-doc-centro">'+contacto.map(function(v){return '<div>'+esc(v)+'</div>';}).join('')+'</div>'+
+          '<div class="avi-rx-doc-firma"><div class="avi-rx-doc-firma-line"></div>'+
+            (nombreMedico?'<strong>'+esc(nombreMedico)+'</strong>':'')+
+            (texto(medicoRx.especialidad||r.especialidad)?'<span>'+esc(medicoRx.especialidad||r.especialidad)+'</span>':'')+
+            '<small>Firma y sello</small></div></footer>'+
       '</article>';
     }).join('')+'</div>';
   }
@@ -2671,7 +2710,7 @@
   }
 
   function instalarEstilos(){
-    const CSS_VERSION = '1.24.6';
+    const CSS_VERSION = '1.24.7';
     const existente = document.getElementById('auroVistaIntegralCSS');
 
     /*
@@ -3127,6 +3166,34 @@
       }
 
       .avi-rx-list{display:grid;gap:11px}
+      /* Hoja documental visible dentro de Vista integral; sin escribir la receta. */
+      .avi-rx-documento{width:100%;max-width:210mm;min-height:297mm;box-sizing:border-box;
+        margin:14px auto 20px;padding:15mm 17mm 17mm!important;border-radius:3px!important;
+        display:flex;flex-direction:column;overflow:visible!important;background:#fff!important}
+      .avi-rx-institucional{display:flex;justify-content:space-between;align-items:center;
+        border-bottom:2px solid #8b1e5a;padding-bottom:12px;gap:12px;font-size:11px}
+      .avi-rx-institucional strong{font-size:21px;color:#8b1e5a;letter-spacing:.02em}
+      .avi-rx-doc-titulo{text-align:center;font-size:19px;letter-spacing:.055em;margin:22px 0}
+      .avi-rx-identificacion{display:grid;grid-template-columns:1fr 1fr;gap:9px 14px;
+        font-size:11.5px;overflow-wrap:anywhere;margin-bottom:18px}
+      .avi-rx-documento-pie{margin-top:auto;padding-top:23mm;display:grid;grid-template-columns:1fr 1fr;
+        gap:20mm;align-items:end;break-inside:avoid;page-break-inside:avoid}
+      .avi-rx-doc-centro{color:#475569;font-size:10px;line-height:1.6;overflow-wrap:anywhere}
+      .avi-rx-doc-firma{display:flex;flex-direction:column;text-align:center;font-size:11px}
+      .avi-rx-doc-firma-line{border-top:1px solid #111;margin-bottom:7px}
+      .avi-rx-doc-firma span,.avi-rx-doc-firma small{margin-top:4px}
+      .avi-orden-oficial-embebida{border:0!important;padding:0!important;display:block!important;
+        background:transparent!important;box-shadow:none!important}
+      .avi-orden-oficial-embebida>.aom-paper{box-sizing:border-box!important;position:relative;
+        width:100%!important;max-width:210mm!important;min-height:297mm!important;
+        margin:0 auto!important;padding:15mm 17mm 48mm!important;overflow:visible!important;
+        background:#fff!important;box-shadow:none!important}
+      @media(max-width:760px){
+        .avi-rx-documento{min-height:0;padding:17px 12px 24px!important}
+        .avi-rx-identificacion{grid-template-columns:1fr}
+        .avi-rx-documento-pie{grid-template-columns:1fr;gap:22px;padding-top:24px}
+        .avi-orden-oficial-embebida>.aom-paper{min-height:0!important;padding:17px 12px 24px!important}
+      }
       .avi-rx-card{
         border:1px solid #e4c7da;border-radius:18px;padding:14px;background:#fff;
         box-shadow:0 8px 22px rgba(122,23,79,.055);
