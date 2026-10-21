@@ -4136,6 +4136,23 @@
     const esMultidiagnosticoPaciente = !esAdministrativo && diagnosticosPaciente.length > 1;
     const ubicacion = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais].filter(Boolean).join(' · ');
     const contacto = [cfg.telefono, cfg.email, cfg.web].filter(Boolean).join(' · ');
+    // Pie de página de paciente: datos vivos de Configuración del Centro.
+    // SVG autónomos para que los íconos también aparezcan en el PDF impreso.
+    const iconoPie = (tipo) => {
+      const rutas = {
+        ubicacion: '<path d="M12 21s7-5.3 7-12a7 7 0 1 0-14 0c0 6.7 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/>',
+        correo: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+        telefono: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.1 10a16 16 0 0 0 6.9 6.9l1.6-1.9a2 2 0 0 1 1.7-.6l3 .5a2 2 0 0 1 1.7 2Z"/>'
+      };
+      return `<svg class="auro-rx-icono-contacto" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${rutas[tipo]}</svg>`;
+    };
+    const pieUbicacion = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais].filter(Boolean).join(' · ');
+    const pieContactoPaciente = [
+      pieUbicacion ? `<div class="auro-rx-contacto-fila">${iconoPie('ubicacion')}<span>${safe(pieUbicacion)}</span></div>` : '',
+      cfg.email ? `<div class="auro-rx-contacto-fila">${iconoPie('correo')}<span>${safe(cfg.email)}</span></div>` : '',
+      cfg.telefono ? `<div class="auro-rx-contacto-fila">${iconoPie('telefono')}<span>${safe(cfg.telefono)}</span></div>` : ''
+    ].filter(Boolean).join('');
+
     const registros = [
       medico.registro_msp ? `Registro MSP/ACESS: ${medico.registro_msp}` : '',
       medico.registro_senescyt ? `Registro SENESCYT: ${medico.registro_senescyt}` : ''
@@ -4240,7 +4257,7 @@
           <div class="auro-rx-cuadrante-diagnosticos">
             ${diagnosticoUnicoPaciente}
             ${diagnosticosMultiplesPaciente}
-            <div class="auro-centro-contacto">${ubicacion ? `<div>${safe(ubicacion)}</div>` : ''}${contacto ? `<div>${safe(contacto)}</div>` : ''}</div>
+            <div class="auro-centro-contacto auro-rx-contacto-iconos">${pieContactoPaciente}</div>
           </div>
           <div class="auro-rx-cuadrante-firma"><div class="auro-firma"><div class="auro-linea"></div><b>${safe(medico.nombre)}</b>${medico.especialidad ? `<br><span>${safe(medico.especialidad)}</span>` : ''}${registros.map(x=>`<br><span>${safe(x)}</span>`).join('')}<br><span>Firma y sello</span></div></div>
         </div>` : ''}
@@ -4412,12 +4429,12 @@
           font-size:9px!important;
         }
 
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-paciente{grid-column:1/4!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-cedula{grid-column:4/6!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-sexo{grid-column:6/7!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-edad{grid-column:7/8!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-fecha{grid-column:8/10!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-numero{grid-column:10/13!important;border-right:0!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-paciente{grid-column:1/5!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-cedula{grid-column:5/7!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-sexo{grid-column:7/8!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-edad{grid-column:8/9!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-fecha{grid-column:9/11!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-numero{grid-column:11/13!important;border-right:0!important}
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-especialidad{grid-column:1/5!important;border-top:1px solid #eef2f7!important;margin-top:1px!important;padding-top:3px!important}
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-medico{grid-column:5/9!important;border-top:1px solid #eef2f7!important;margin-top:1px!important;padding-top:3px!important}
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-registro{grid-column:9/13!important;border-top:1px solid #eef2f7!important;margin-top:1px!important;padding-top:3px!important;padding-left:9px!important;border-right:0!important}
@@ -4617,9 +4634,24 @@
           margin-top:auto!important;padding-top:4px!important;font-size:7.5px!important;
           overflow-wrap:anywhere!important;
         }
+        .auro-media-receta .auro-rx-contacto-iconos{
+          display:flex!important;flex-direction:column!important;gap:2px!important;
+          font-size:7.5px!important;line-height:1.12!important;
+        }
+        .auro-media-receta .auro-rx-contacto-fila{
+          display:flex!important;align-items:flex-start!important;gap:5px!important;
+          min-width:0!important;
+        }
+        .auro-media-receta .auro-rx-icono-contacto{
+          width:10px!important;height:10px!important;flex:0 0 10px!important;
+          color:#a32b75!important;
+        }
+        .auro-media-receta .auro-rx-contacto-fila span{
+          min-width:0!important;overflow-wrap:anywhere!important;
+        }
         .auro-media-receta .auro-rx-cuadrante-firma{
           min-width:0!important;display:flex!important;flex-direction:column!important;
-          justify-content:flex-end!important;align-items:center!important;padding:0 5px 8px!important;
+          justify-content:flex-end!important;align-items:center!important;padding:0 5px 0!important;
         }
         .auro-media-receta .auro-rx-cuadrante-firma .auro-firma{
           text-align:center!important;padding-top:12px!important;
