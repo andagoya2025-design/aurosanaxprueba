@@ -3492,6 +3492,17 @@
     return p;
   }
 
+  // Logo institucional: normalización local, sin consultas adicionales al ERP.
+  function auroRecetaUrlLogoInstitucional(cfg){
+    const valor = String(cfg.logo_url || cfg.logo_file_id || cfg.logo_drive_url || cfg.logo || '').trim();
+    if(!valor) return '';
+    const match = valor.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+      valor.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+      valor.match(/^([a-zA-Z0-9_-]{20,})$/);
+    if(match) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(match[1]) + '&sz=w400';
+    return /^(https?:\/\/|data:image\/(?:png|jpeg|webp|gif);base64,)/i.test(valor) ? valor : '';
+  }
+
   function auroRecetaConfigInstitucional(){
     const candidatos = [
       window.auroConfiguracionCentro,
@@ -3514,7 +3525,7 @@
       telefono: String(cfg.telefono_clinica || cfg.whatsapp_clinica || cfg.telefono || cfg.whatsapp || '').trim(),
       email: String(cfg.email_clinica || cfg.correo_clinica || cfg.email || cfg.correo || '').trim(),
       web: String(cfg.sitio_web_clinica || cfg.web_clinica || cfg.web || '').trim(),
-      logo: String(cfg.logo_url || cfg.logo_drive_url || cfg.logo || '').trim(),
+      logo: auroRecetaUrlLogoInstitucional(cfg),
       mostrarLogo: String(cfg.mostrar_logo_receta ?? cfg.mostrar_logo ?? 'SI').trim().toUpperCase() !== 'NO'
     };
   }
@@ -4162,8 +4173,9 @@
     const nombreProfesional = medico.nombre || 'Profesional tratante';
 
     const logo = cfg.mostrarLogo && cfg.logo
-      ? `<img class="auro-receta-logo" src="${safe(cfg.logo)}" alt="Logo institucional" onerror="this.style.display='none';this.parentElement.classList.add('sin-logo');">`
+      ? `<img class="auro-receta-logo" src="${safe(cfg.logo)}" alt="Logo institucional" onerror="this.onerror=null;this.closest('.auro-receta-header')?.classList.add('sin-logo');this.parentElement.remove();">`
       : '';
+    const hayLogo = Boolean(logo);
 
     const datosPaciente = esAdministrativo
       ? `
@@ -4189,7 +4201,7 @@
         <style>
           .auro-receta-documento{font-family:Arial,system-ui,sans-serif;color:#111827;line-height:1.32;max-width:900px;margin:auto;background:#fff;font-size:12.5px;}
           .auro-receta-header{border-bottom:3px solid #8b1e5a;padding:0 0 11px;margin-bottom:10px;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;}
-          .auro-receta-logo-wrap{width:76px;height:76px;display:grid;place-items:center;border:1px solid #ead5e2;border-radius:16px;background:#fff;overflow:hidden}.auro-receta-logo-wrap:empty,.auro-receta-logo-wrap.sin-logo{display:none}.auro-receta-logo{max-width:100%;max-height:100%;object-fit:contain;display:block}
+          .auro-receta-header.sin-logo{grid-template-columns:minmax(0,1fr) auto;gap:14px}.auro-receta-logo-wrap{width:76px;height:76px;display:grid;place-items:center;border:1px solid #ead5e2;border-radius:16px;background:#fff;overflow:hidden}.auro-receta-logo-wrap:empty,.auro-receta-logo-wrap.sin-logo{display:none}.auro-receta-logo{max-width:100%;max-height:100%;object-fit:contain;display:block}
           .auro-receta-brand h2{margin:0;color:#8b1e5a;font-weight:950;letter-spacing:.04em;font-size:22px;line-height:1.05}.auro-receta-brand small{color:#6b7280;font-weight:750;font-size:11px;line-height:1.3;display:block;margin-top:3px}
           .auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
           .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;overflow-wrap:anywhere;word-break:normal}
@@ -4245,8 +4257,8 @@
           }
         </style>
         ${esAdministrativo ? '<div class="auro-admin-alert">Vista administrativa interna: contiene identificadores y datos de auditoría. No entregar al paciente.</div>' : ''}
-        <div class="auro-receta-header">
-          <div class="auro-receta-logo-wrap">${logo}</div>
+        <div class="auro-receta-header ${hayLogo ? '' : 'sin-logo'}">
+          ${hayLogo ? `<div class="auro-receta-logo-wrap">${logo}</div>` : ''}
           <div class="auro-receta-brand"><h2>${safe(centro)}</h2>${cfg.subtitulo ? `<small>${safe(cfg.subtitulo)}</small>` : ''}${medico.especialidad ? `<small>${safe(medico.especialidad)}</small>` : ''}</div>
           <div class="auro-receta-title"><b>RECETA MÉDICA</b>${esAdministrativo ? `<span class="badge-auro ${estadoClass}">${safe(r.estado || 'Emitida')}</span>` : ''}</div>
         </div>
