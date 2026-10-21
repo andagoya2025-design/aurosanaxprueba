@@ -11,7 +11,7 @@
 (function(){
   'use strict';
 
-  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_22_9_ORDENES_SECCION_DOCUMENTAL';
+  const MODULO = 'AUROSANAX_VISTA_INTEGRAL_V1_23_0_DOCUMENTOS_OFICIALES';
   const STORAGE_ATENCIONES = 'aurosanax_atenciones_local_v1';
   const STORAGE_RECETAS = 'aurosanax_recetas_emitidas_v1';
 
@@ -1713,6 +1713,7 @@
       tarjetas.push('<article class="avi-orden-formal avi-orden-documento">'+
         '<header class="avi-orden-head"><strong>'+esc(nombreCentro)+'</strong><span>'+esc(fechaVisual(reg.fecha_emision||d.fecha_emision))+'</span></header>'+
         '<h4 class="avi-orden-title">ORDEN MÉDICA</h4>'+
+        '<div class="avi-orden-acciones"><button type="button" class="avi-btn avi-btn-primary" data-avi-orden-oficial="'+esc(clave)+'"><i class="bi bi-file-earmark-medical"></i> Ver documento oficial / Imprimir</button></div>'+
         '<div class="avi-orden-datos">'+datos.filter(x=>x[1]).map(function(x){return '<div><b>'+esc(x[0])+':</b> '+esc(x[1])+'</div>';}).join('')+'</div>'+
         (dx.length?'<div class="avi-orden-dx"><b>DIAGNÓSTICOS DE LA ATENCIÓN</b>'+dx.map(x=>'<div>'+esc([x.codigo_cie10,x.descripcion].filter(Boolean).join(' — '))+'</div>').join('')+'</div>':'')+
         '<div class="avi-orden-tabla-wrap"><table class="avi-orden-tabla"><thead><tr><th>N.º</th><th>Examen / procedimiento</th><th>Categoría</th><th>Observación</th></tr></thead><tbody>'+
@@ -1735,20 +1736,60 @@
     if(!overlay || texto(overlay.dataset.aviAtencion)!==id) return;
     if(document.getElementById('auroVistaIntegralOverlay')!==overlay) return;
     const activo=texto(typeof window.getIdAtencionActiva==='function' ? window.getIdAtencionActiva() : '');
-    if(activo!==id) return;
+    if(activo && activo!==id) return;
     const slot=overlay.querySelector('[data-avi-ordenes-documentos="'+CSS.escape(id)+'"]');
     if(!slot) return;
     const html=overlay.__aviOrdenesFormalesHTML||'';
     slot.innerHTML=html ? seccion('Órdenes médicas emitidas','bi-file-earmark-medical',html,true) : '';
   }
+  /* Vista Integral solo lee; el módulo de Órdenes sigue siendo propietario de su visor. */
+  function registroOrdenesParaVista(resp,id,atencion){
+    const remotos=Array.isArray(resp)?resp:Array.isArray(resp?.registros)?resp.registros:
+      Array.isArray(resp?.data)?resp.data:[];
+    const estado=window.IASYN_ORDENES_MEDICAS?.estado;
+    const memoria=Array.isArray(estado?.ordenesEmitidas)?estado.ordenesEmitidas:[];
+    const todos=[...remotos,...memoria];
+    const vistos=new Set();
+    return todos.filter(function(r){
+      if(!r || texto(r.id_atencion)!==id || !texto(r.id_orden)) return false;
+      if(texto(r.id_paciente)&&texto(atencion?.id_paciente) &&
+         texto(r.id_paciente)!==texto(atencion.id_paciente)) return false;
+      if(texto(r.id_historia)&&texto(atencion?.id_historia) &&
+         texto(r.id_historia)!==texto(atencion.id_historia)) return false;
+      const clave=texto(r.id_orden);
+      if(vistos.has(clave)) return false;
+      vistos.add(clave);
+      return true;
+    });
+  }
+  function verDocumentoOficialOrden(idOrden,overlay){
+    const id=texto(overlay?.dataset?.aviAtencion);
+    if(!id || document.getElementById('auroVistaIntegralOverlay')!==overlay) return;
+    const activo=texto(typeof window.getIdAtencionActiva==='function'?window.getIdAtencionActiva():'');
+    if(activo && activo!==id) return;
+    const reg=(overlay.__aviOrdenesRegistros||[]).find(function(r){
+      return texto(r.id_orden)===texto(idOrden)&&texto(r.id_atencion)===id;
+    });
+    if(!reg){alert('No se encontró esta orden médica emitida en la consulta seleccionada.');return;}
+    const api=window.IASYN_ORDENES_MEDICAS;
+    if(!api || typeof api.imprimir!=='function'){
+      alert('El visor oficial de Órdenes médicas no está disponible.');return;
+    }
+    try{
+      const detalle=parseJSON(reg.detalle_json,{})||{};
+      api.imprimir(Object.assign({},reg,{detalle_json:detalle}));
+    }catch(err){
+      console.error(MODULO,'No se pudo abrir el documento oficial de la orden.',err);
+      alert('No se pudo abrir el documento oficial. Revise la consola o el registro emitido.');
+    }
+  }
   async function completarOrdenesFormalesVista(idAtencion,atencion,overlayEsperado){
     const id=texto(idAtencion);
     const resp=await getSoloLecturaVistaIntegral('listarOrdenesMedicasPorAtencion',{id_atencion:id});
-    if(!resp || document.getElementById('auroVistaIntegralOverlay')!==overlayEsperado ||
-       texto(overlayEsperado.dataset.aviAtencion)!==id) return;
-    const registros=Array.isArray(resp)?resp:Array.isArray(resp.registros)?resp.registros:
-      Array.isArray(resp.data)?resp.data:null;
-    if(!registros) return;
+    if(document.getElementById('auroVistaIntegralOverlay')!==overlayEsperado ||
+       texto(overlayEsperado?.dataset?.aviAtencion)!==id) return;
+    const registros=registroOrdenesParaVista(resp,id,atencion);
+    overlayEsperado.__aviOrdenesRegistros=registros;
     overlayEsperado.__aviOrdenesFormalesHTML=ordenesFormalesHTML(registros,atencion,id);
     incluirOrdenesEnPlanVista(overlayEsperado,id);
   }
@@ -3231,6 +3272,7 @@
         padding-bottom:10px;border-bottom:2.5px solid #8b1e5a;font-size:11px}
       .avi-orden-head strong{color:#8b1e5a;font-size:18px}
       .avi-orden-title{text-align:center;font-size:19px;margin:22px 0 24px;letter-spacing:.04em}
+      .avi-orden-acciones{display:flex;justify-content:flex-end;margin:0 0 18px;gap:8px}
       .avi-orden-datos{display:grid;grid-template-columns:1fr 1fr;gap:9px 16px;font-size:12px;margin-bottom:16px}
       .avi-orden-dx{font-size:12px;line-height:1.5;margin:0 0 16px}
       .avi-orden-dx>b{display:block;margin-bottom:5px}
@@ -4077,6 +4119,14 @@
     const idTecnicoBox = overlay.querySelector('[data-avi-id-tecnico]');
     if(idTecnicoBox) idTecnicoBox.textContent = 'ID atención · ' + texto(a.id_atencion || idAtencion);
 
+    /* Delegación: las órdenes se insertan después del GET asíncrono. */
+    overlay.addEventListener('click',function(event){
+      const boton=event.target.closest('[data-avi-orden-oficial]');
+      if(!boton || !overlay.contains(boton)) return;
+      event.preventDefault();
+      verDocumentoOficialOrden(boton.getAttribute('data-avi-orden-oficial'),overlay);
+    });
+
     body.querySelectorAll('[data-avi-rx]').forEach(btn=>{
       btn.addEventListener('click',()=>{
         abrirReceta(btn.getAttribute('data-avi-rx'));
@@ -4222,7 +4272,7 @@
   }
 
   window.AurosanaxVistaIntegral = {
-    version:'1.22.9-ordenes-seccion-documental',
+    version:'1.23.0-documentos-oficiales',
     abrir,
     cerrar,
     abrirReceta,
