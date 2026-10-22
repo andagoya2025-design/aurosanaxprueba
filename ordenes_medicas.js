@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.3-IASYN-PIE-CONFIGURABLE-PAGINACION-SEGURA';
+const VERSION='1.4.4-IASYN-LOGO-EMBEBIDO-FIRMA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -1162,7 +1162,7 @@ function imprimirPorId(id){
   imprimirDocumento(datosDocumentoEmitido(reg),true);
 }
 
-function docHTML(data){
+function docHTML(data,opciones={}){
   const d=data.detalle_json||{};
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
@@ -1171,7 +1171,9 @@ function docHTML(data){
   // La preferencia del logo es actual, igual que en CERTIFICADOS.
   const actual=Object.assign({},configGlobal(),state.configuracion||{});
   const permitido=actual.mostrarLogo!==false && txt(actual.mostrar_logo_receta??actual.mostrar_logo).toUpperCase()!=='NO';
-  const logo=permitido?txt(auroOrdenUrlLogoInstitucional(actual)||state.logoInstitucionalDataUrl||auroOrdenUrlLogoInstitucional(centro)):'';
+  // El conversor HTML→PDF de firma no siempre puede descargar imágenes externas.
+  // Para firma se exige una imagen base64 incrustada, sin depender de Drive.
+  const logo=permitido?(opciones.paraFirma?txt(state.logoInstitucionalDataUrl):txt(auroOrdenUrlLogoInstitucional(actual)||state.logoInstitucionalDataUrl||auroOrdenUrlLogoInstitucional(centro))):'';
 
   // El pie usa Configuración del Centro actual; el snapshot sirve solo como respaldo.
   // Los PDF ya firmados se conservan en Drive y no se reconstruyen con esta vista.
@@ -1192,7 +1194,7 @@ function docHTML(data){
     ${diagnosticos.length?`<section class="aom-doc-diagnosticos"><strong>DIAGNÓSTICOS DE LA ATENCIÓN</strong>${diagnosticos.map(dx=>`<div class="aom-dx-line">${dx.codigo_cie10?`<b>${esc(codigoCie10VisualOrden(dx.codigo_cie10))}</b>${dx.descripcion?' — ':''}`:''}${esc(dx.descripcion)}</div>`).join('')}</section>`:''}
     <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
-    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoPie}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
+    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoPie}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}<br><span>Firma y sello</span></div></section>
   </article>`;
 }
 
@@ -1356,10 +1358,31 @@ async function esperarArchivoFirmadoOrden(reg){
   return null;
 }
 
+async function asegurarLogoEmbebidoParaFirma(){
+  const actual=Object.assign({},configGlobal(),state.configuracion||{});
+  const permitido=actual.mostrarLogo!==false && txt(actual.mostrar_logo_receta??actual.mostrar_logo).toUpperCase()!=='NO';
+  const configurado=!!(auroOrdenUrlLogoInstitucional(actual)||state.logoInstitucionalDataUrl);
+  if(!permitido||!configurado) return;
+  // Refrescar justo antes de firmar: el PDF firmado debe ser autónomo.
+  try{
+    const respuesta=await post('obtenerLogoInstitucionalFirma',{});
+    const imagen=txt(respuesta?.data_url||respuesta?.data?.data_url);
+    if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(imagen)){
+      state.logoInstitucionalDataUrl=imagen;
+    }
+  }catch(e){
+    // Un valor embebido previamente cargado sigue siendo válido.
+  }
+  if(!/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(txt(state.logoInstitucionalDataUrl))){
+    throw Error('No se pudo incorporar el logotipo al PDF de firma. No se envió la firma; verifique el servicio obtenerLogoInstitucionalFirma.');
+  }
+}
+
 async function solicitarFirmaOrden(id){
   id=txt(id);
   if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
   try{
+    await asegurarLogoEmbebidoParaFirma();
     const solicitud=prepararSolicitudFirmaOrden(id);
     if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
     // La consulta remota previa evita una firma duplicada tras recargar el navegador.
@@ -1447,7 +1470,7 @@ function prepararSolicitudFirmaOrden(id){
   if(ctx.idHistoria&&ctx.idHistoria!==d.id_historia) throw Error('La historia clínica no coincide con la atención.');
   if(ctx.idMedico&&ctx.idMedico!==d.id_medico) throw Error('El médico no coincide con la atención.');
   if(!itemsUnicos(d.detalle_json.items||[]).length) throw Error('La orden no contiene indicaciones.');
-  const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+docHTML(d)+'</body></html>';
+  const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+docHTML(d,{paraFirma:true})+'</body></html>';
   return Object.freeze({
     tipo_documento:'ORDEN_MEDICA',
     id_documento_origen:d.id_orden,
