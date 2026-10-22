@@ -3182,7 +3182,7 @@
       '</div>' +
       '<div class="auro-atencion-info-grid">' +
         auroAtencionDato('Fecha', fechaVisual(a.fecha_atencion)) +
-        auroAtencionDato('Hora', horaVisualAtencion(a.hora_atencion || '—')) +
+        auroAtencionDato(String(a.id_cita || '').trim() ? 'Hora programada' : 'Hora de apertura', horaVisualAtencion(a.hora_atencion || '—')) +
         auroAtencionDato('Tipo', a.tipo_atencion || '—') +
         auroAtencionDatoHTML('Médico', auroAtencionMedicoHTML(a)) +
         auroAtencionDato('Especialidad', auroAtencionResolverMedico(a).especialidad || '—') +
@@ -4295,4 +4295,3 @@
    - Permite vincular id_historia después de crear la atención
    - Bloquea atención de otro paciente
 ===================================================== */
-
