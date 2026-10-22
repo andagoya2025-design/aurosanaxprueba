@@ -270,6 +270,18 @@ function configGlobal(){
   return c;
 }
 
+// Mismo criterio de CERTIFICADOS AUROSANAX: logo_file_id o enlace de Drive.
+function auroOrdenUrlLogoInstitucional(c){
+  c=c||{};
+  const valor=txt(c.logo_url||c.logo_file_id||c.logo_drive_url||c.logo);
+  if(!valor) return '';
+  const match=valor.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)||
+    valor.match(/[?&]id=([a-zA-Z0-9_-]+)/)||
+    valor.match(/^([a-zA-Z0-9_-]{20,})$/);
+  if(match) return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(match[1])+'&sz=w400';
+  return /^(https?:\/\/|data:image\/(?:png|jpeg|webp|gif);base64,)/i.test(valor)?valor:'';
+}
+
 function normalizarConfig(c){
   c=c||{};
   if(c.datos&&typeof c.datos==='object') c=c.datos;
@@ -285,7 +297,9 @@ function normalizarConfig(c){
     telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
     email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
     web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
-    logo:txt(c.logo_url||c.logo_drive_url||c.logo),
+    logo:auroOrdenUrlLogoInstitucional(c),
+    logo_file_id:txt(c.logo_file_id),
+    mostrarLogo:!(c.mostrarLogo===false||txt(c.mostrar_logo_receta??c.mostrar_logo).toUpperCase()==='NO'),
     colorPrincipal:txt(c.color_principal)||'#8b1e5a'
   };
 }
@@ -296,7 +310,8 @@ async function cargarAuxiliares(ctx){
   let cfg=normalizarConfig(configGlobal());
   try{
     const remoto=await get('obtenerConfiguracion');
-    cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
+    const datos=remoto?.configuracion||remoto?.datos||remoto?.data||remoto||{};
+    cfg=normalizarConfig(Object.assign({},configGlobal(),datos));
   }catch(e){}
   state.configuracion=cfg;
   // Solo lectura: obtener el logotipo institucional en formato embebible.
@@ -1150,7 +1165,12 @@ function docHTML(data){
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
   const diagnosticos=diagnosticosUnicosOrden(d.diagnosticos||[]);
-  const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(state.logoInstitucionalDataUrl||centro.logo);
+  const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a';
+  // La preferencia del logo es actual, igual que en CERTIFICADOS.
+  const actual=Object.assign({},configGlobal(),state.configuracion||{});
+  const permitido=actual.mostrarLogo!==false && txt(actual.mostrar_logo_receta??actual.mostrar_logo).toUpperCase()!=='NO';
+  const logo=permitido?txt(auroOrdenUrlLogoInstitucional(actual)||state.logoInstitucionalDataUrl||auroOrdenUrlLogoInstitucional(centro)):'';
+
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
