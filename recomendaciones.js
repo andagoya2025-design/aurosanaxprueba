@@ -1840,6 +1840,19 @@ ${recDocumentoHTML()}
 
   /* FASE 1: fuente institucional equivalente a Certificados.
      No altera datos clínicos, guardado ni firmas existentes. */
+  // Logo institucional: URL de Configuracion Centro o enlace de Google Drive.
+  function recLogoUrlImpresion(valor){
+    const raw=String(valor||'').trim();
+    if(!raw) return '';
+    if(/^data:image\/(?:png|jpeg|jpg|gif|webp);base64,/i.test(raw)) return raw;
+    if(!/^https:\/\//i.test(raw)) return '';
+    if(/(?:drive|docs)\.google\.com/i.test(raw)){
+      const id=(raw.match(/\/d\/([a-zA-Z0-9_-]+)/)||raw.match(/[?&]id=([a-zA-Z0-9_-]+)/)||[])[1];
+      if(id) return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w400';
+    }
+    return raw;
+  }
+
   function recConfigInstitucional(){
     const candidatos=[
       state.configuracionImpresion,
@@ -1863,7 +1876,7 @@ ${recDocumentoHTML()}
       telefono:primerTexto(c.telefono_clinica,c.whatsapp_clinica,c.telefono,c.whatsapp),
       email:primerTexto(c.email_clinica,c.correo_clinica,c.email,c.correo),
       web:primerTexto(c.sitio_web_clinica,c.web_clinica,c.web),
-      logo:primerTexto(c.logo_url,c.logo_drive_url,c.logo),
+      logo:recLogoUrlImpresion(primerTexto(c.logo_url,c.logo_drive_url,c.logo)),
       colorPrincipal:primerTexto(c.color_principal,'#8b1e5a')
     };
   }
@@ -2066,7 +2079,7 @@ ${recDocumentoHTML()}
     ].filter(Boolean);
 
     const logo=cfg.logo
-      ? `<div class="ar-logo-wrap"><img class="ar-logo" src="${esc(cfg.logo)}" alt=""></div>`
+      ? `<div class="ar-logo-wrap"><img class="ar-logo" src="${esc(cfg.logo)}" alt="Logotipo institucional" onerror="this.closest('.ar-doc-head').classList.add('ar-doc-head-no-logo');this.parentElement.remove()"></div>`
       : '';
 
     const seguimiento=[
