@@ -1173,7 +1173,7 @@ function docHTML(data,opciones={}){
   const permitido=actual.mostrarLogo!==false && txt(actual.mostrar_logo_receta??actual.mostrar_logo).toUpperCase()!=='NO';
   // El conversor HTML→PDF de firma no siempre puede descargar imágenes externas.
   // Para firma se exige una imagen base64 incrustada, sin depender de Drive.
-  const logo=permitido?(opciones.paraFirma?txt(state.logoInstitucionalDataUrl):txt(auroOrdenUrlLogoInstitucional(actual)||state.logoInstitucionalDataUrl||auroOrdenUrlLogoInstitucional(centro))):'';
+  const logo=permitido?txt(state.logoInstitucionalDataUrl||auroOrdenUrlLogoInstitucional(actual)||auroOrdenUrlLogoInstitucional(centro)):'';
 
   // El pie usa Configuración del Centro actual; el snapshot sirve solo como respaldo.
   // Los PDF ya firmados se conservan en Drive y no se reconstruyen con esta vista.
@@ -1358,31 +1358,32 @@ async function esperarArchivoFirmadoOrden(reg){
   return null;
 }
 
-async function asegurarLogoEmbebidoParaFirma(){
-  const actual=Object.assign({},configGlobal(),state.configuracion||{});
-  const permitido=actual.mostrarLogo!==false && txt(actual.mostrar_logo_receta??actual.mostrar_logo).toUpperCase()!=='NO';
-  const configurado=!!(auroOrdenUrlLogoInstitucional(actual)||state.logoInstitucionalDataUrl);
-  if(!permitido||!configurado) return;
-  // Refrescar justo antes de firmar: el PDF firmado debe ser autónomo.
+async function intentarEmbebidoLogoOrden(){
+  // Intento opcional, solo desde el navegador. No requiere acciones nuevas del backend.
+  // Si el proveedor bloquea CORS, conserva la URL y nunca impide firmar.
+  const cfg=Object.assign({},configGlobal(),state.configuracion||{});
+  const src=auroOrdenUrlLogoInstitucional(cfg);
+  if(!src || /^data:image\//i.test(txt(state.logoInstitucionalDataUrl))) return;
   try{
-    const respuesta=await post('obtenerLogoInstitucionalFirma',{});
-    const imagen=txt(respuesta?.data_url||respuesta?.data?.data_url);
-    if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(imagen)){
-      state.logoInstitucionalDataUrl=imagen;
-    }
-  }catch(e){
-    // Un valor embebido previamente cargado sigue siendo válido.
-  }
-  if(!/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(txt(state.logoInstitucionalDataUrl))){
-    throw Error('No se pudo incorporar el logotipo al PDF de firma. No se envió la firma; verifique el servicio obtenerLogoInstitucionalFirma.');
-  }
+    const respuesta=await fetch(src,{mode:'cors',credentials:'omit',signal:AbortSignal.timeout(3500)});
+    if(!respuesta.ok) return;
+    const blob=await respuesta.blob();
+    if(!/^image\/(png|jpeg|webp|gif)$/i.test(blob.type) || blob.size>1500000) return;
+    const dataUrl=await new Promise((resolve,reject)=>{
+      const lector=new FileReader();
+      lector.onload=()=>resolve(lector.result);
+      lector.onerror=()=>reject(Error('No se pudo leer el logo'));
+      lector.readAsDataURL(blob);
+    });
+    if(/^data:image\/(png|jpeg|webp|gif);base64,/i.test(txt(dataUrl))) state.logoInstitucionalDataUrl=dataUrl;
+  }catch(e){ /* La URL institucional sigue disponible; no bloquear la firma. */ }
 }
 
 async function solicitarFirmaOrden(id){
   id=txt(id);
   if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
   try{
-    await asegurarLogoEmbebidoParaFirma();
+    await intentarEmbebidoLogoOrden();
     const solicitud=prepararSolicitudFirmaOrden(id);
     if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
     // La consulta remota previa evita una firma duplicada tras recargar el navegador.
