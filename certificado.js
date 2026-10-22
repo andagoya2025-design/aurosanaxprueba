@@ -1,1899 +1,2446 @@
 /***********************************************************************
  AUROSANAX ERP DEMO
- Archivo: certificado.js
- Módulo: Certificados médicos por atención
- Versión: 1.3.11 - UX premium de notificaciones + consulta persistente única por atención
+ Archivo: recomendaciones.js
+ Módulo: Recomendaciones clínicas por atención
+ Versión: 1.3.2
  Fecha: 2026-08-12
  -----------------------------------------------------------------------
- ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
- - Conserva endpoints existentes: listarCertificadosPorAtencion,
-   guardarCertificado, editarCertificado y listarDiagnosticosPorAtencion.
- - Conserva una fila por certificado y detalle_json.
- - NO modifica Recetas, Plan, Diagnóstico, Atenciones ni Apps Script.
- - Lee identidad institucional desde Configuración.
- - Resuelve paciente / historia / médico desde la atención seleccionada.
- - Conserva snapshot documental dentro de detalle_json.
- - PDF no se almacena: se reconstruye bajo demanda.
+ ARQUITECTURA
+ - Módulo funcional independiente.
+ - Una sola fila por id_atencion en la hoja recomendaciones.
+ - detalle_json compacto para contenido variable.
+ - Contexto clínico derivado desde la atención real.
+ - Diagnósticos solo se leen; NO se duplican ni se modifican.
+ - Consulta histórica: solo lectura.
+ - Atención activa: editable.
  - Responsive: escritorio, tablet, iPhone y Android.
+ - No modifica Plan, Recetas, Diagnóstico, Examen Físico ni Historia.
 ************************************************************************/
+
 (function(){
-'use strict';
+  'use strict';
 
-if(window.auroCertificados?.version) return;
+  if(window.auroRecomendaciones && window.auroRecomendaciones.version){
+    console.warn('AUROSANAX RECOMENDACIONES: módulo ya cargado.');
+    return;
+  }
 
-const VERSION='1.3.12-AUROSANAX-ABIERTO-VISUAL-LOGO-COMPAT';
-const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
+  const MODULO = 'AUROSANAX RECOMENDACIONES';
+  const VERSION = '1.3.6-MULTIPLES-ANTIRREGRESIVA-SOBRE-1.3.5';
+  const JSON_VERSION = 'AUROSANAX_RECOMENDACIONES_JSON_V1';
 
-const state={
-  idAtencion:'',
-  contexto:null,
-  diagnosticos:[],
-  certificados:[],
-  editandoId:'',
-  guardando:false,
-  token:0,
-  configuracion:{},
-  logoInstitucionalDataUri:'',
-  medicos:[],
-  paciente:null,
-  historia:null,
-  firmaCertificados:new Map()
-};
-
-const txt=v=>String(v??'').trim();
-const esc=v=>String(v??'')
-  .replace(/&/g,'&amp;')
-  .replace(/</g,'&lt;')
-  .replace(/>/g,'&gt;')
-  .replace(/"/g,'&quot;')
-  .replace(/'/g,'&#039;');
-
-const norm=v=>txt(v)
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g,'')
-  .toLowerCase()
-  .replace(/\s+/g,' ')
-  .trim();
-
-/*
-  CIE-10 VISUAL OFICIAL / ANTIRREGRESIÓN
-  - NO modifica ni migra el código interno guardado.
-  - Solo transforma la presentación en pantalla / documento.
-  - Conserva códigos oficiales de 3 caracteres sin decimal.
-  - Respeta el legado AUROSANAX N720 como visual oficial N72.
-*/
-function cie10Visual(codigo){
-  const raw=txt(codigo).toUpperCase();
-  if(!raw) return '';
-  if(raw==='N720') return 'N72';
-  if(raw.includes('.')) return raw;
-  if(/^[A-Z][0-9]{2}$/.test(raw)) return raw;
-  if(/^[A-Z][0-9]{3,}$/.test(raw)) return raw.slice(0,3)+'.'+raw.slice(3);
-  return raw;
-}
-
-function apiUrl(){
-  try{
-    if(typeof API_URL!=='undefined'&&API_URL) return txt(API_URL);
-  }catch(e){}
-  return txt(window.API_URL||document.getElementById('appsScriptUrl')?.value);
-}
-
-async function get(accion,p={}){
-  const b=apiUrl();
-  if(!b) throw Error('API_URL no está definida.');
-  const q=new URLSearchParams({accion,_:Date.now()});
-  Object.entries(p).forEach(([k,v])=>{ if(txt(v)) q.append(k,v); });
-  const r=await fetch(b+'?'+q.toString(),{cache:'no-store'});
-  if(!r.ok) throw Error('HTTP '+r.status);
-  return r.json();
-}
-
-async function post(accion,data){
-  const r=await fetch(apiUrl(),{
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({accion,data})
-  });
-  if(!r.ok) throw Error('HTTP '+r.status);
-  return r.json();
-}
-
-function arr(x){
-  return Array.isArray(x)?x:
-    Array.isArray(x?.registros)?x.registros:
-    Array.isArray(x?.data)?x.data:[];
-}
-
-function parse(v){
-  if(v&&typeof v==='object') return v;
-  try{return JSON.parse(txt(v)||'{}');}catch(e){return {};}
-}
-
-function activa(){
-  try{
-    const a=window.getAtencionActiva?.();
-    if(a?.id_atencion) return a;
-  }catch(e){}
-  try{
-    const a=window.obtenerContextoAtencionActual?.();
-    if(a?.id_atencion) return a;
-  }catch(e){}
-  return window.atencionesState?.atencionActual||window.currentAttention||window.atencionActual||null;
-}
-
-function idActiva(){
-  try{
-    const x=txt(window.getIdAtencionActiva?.());
-    if(x) return x;
-  }catch(e){}
-  const a=activa();
-  return txt(
-    a?.id_atencion||
-    window.planState?.atencionActual||
-    window.examenFisicoState?.atencionActual||
-    window.auroDiagnosticosState?.atencionActual
-  );
-}
-
-function contexto(){
-  const a=activa()||{};
-  const id=txt(a.id_atencion||idActiva());
-  const estado=norm(a.estado_atencion||a.estado||a.estado_consulta);
-  const bloqueada=/(anulad|cancelad|archivad)/.test(estado);
-
-  return {
-    id,
-    atencion:a,
-    bloqueada,
-    editable:!!id&&!bloqueada,
-    numeroConsulta:txt(a.numero_consulta||a.numero_atencion||a.numero),
-    idPaciente:txt(a.id_paciente),
-    idHistoria:txt(a.id_historia),
-    idMedico:txt(a.id_medico),
-    fechaAtencion:txt(a.fecha_atencion||a.fecha_consulta),
-    horaAtencion:txt(a.hora_atencion||a.hora_consulta)
+  const state = {
+    idAtencion: '',
+    idRecomendacion: '',
+    contexto: null,
+    diagnosticos: [],
+    configuracionImpresion: null,
+    medicosImpresion: [],
+    registro: null,
+    registros: [],
+    modoNuevo: false,
+    cargando: false,
+    guardando: false,
+    inicializado: false,
+    tokenCarga: 0,
+    firma:{
+      estado:'SIN_FIRMA',
+      id_solicitud:'',
+      documento:null,
+      error:'',
+      token:0
+    }
   };
-}
 
-function hoy(){
-  const p=new Intl.DateTimeFormat('en-CA',{
-    timeZone:'America/Guayaquil',
-    year:'numeric',month:'2-digit',day:'2-digit'
-  }).formatToParts(new Date()).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
-  return `${p.year}-${p.month}-${p.day}`;
-}
+  const ALERTAS = [
+    ['fiebre','Fiebre que no cede'],
+    ['dolor','Dolor intenso o que no cede'],
+    ['sangrado','Sangrado anormal o abundante'],
+    ['dificultad_respiratoria','Dificultad respiratoria'],
+    ['vomito','Vómitos persistentes'],
+    ['diarrea','Diarrea persistente'],
+    ['mareo_desmayo','Mareo intenso o desmayo'],
+    ['deterioro_general','Deterioro del estado general']
+  ];
 
-function sumarDias(f,dias){
-  const m=txt(f).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(!m) return '';
-  const x=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));
-  x.setUTCDate(x.getUTCDate()+Math.max(0,Number(dias||0)-1));
-  return x.toISOString().slice(0,10);
-}
+  const INFECCION = [
+    ['fiebre_infeccion','Fiebre o escalofríos'],
+    ['dolor_local','Dolor local en aumento'],
+    ['enrojecimiento','Enrojecimiento progresivo'],
+    ['inflamacion','Inflamación importante'],
+    ['secrecion','Secreción anormal o purulenta'],
+    ['mal_olor','Mal olor'],
+    ['calor_local','Aumento de calor local']
+  ];
 
-function fechaVisual(v){
-  const m=txt(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m?`${m[3]}/${m[2]}/${m[1]}`:(txt(v)||'—');
-}
+  function txt(v){ return String(v === null || v === undefined ? '' : v).trim(); }
 
-function nombreCompleto(obj){
-  obj=obj||{};
-  return txt(
-    obj.nombre_completo||
-    obj.nombre||
-    [obj.nombres,obj.apellidos].filter(Boolean).join(' ')
-  ).replace(/\s+/g,' ').trim();
-}
+  function norm(v){
+    return txt(v)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase()
+      .replace(/\s+/g,' ')
+      .trim();
+  }
 
-function resolverPaciente(ctx){
-  const a=ctx?.atencion||{};
-  const id=txt(ctx?.idPaciente||a.id_paciente);
+  function esc(v){
+    return String(v || '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
 
-  try{
-    if(typeof window.getPacienteActivo==='function'){
-      const p=window.getPacienteActivo();
-      if(p){
-        const pid=txt(p.id_paciente||p.id);
-        if(!id||!pid||pid===id) return p;
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return txt(API_URL);
+    }catch(e){}
+    return txt(window.API_URL || document.getElementById('appsScriptUrl')?.value);
+  }
+
+  async function apiGet(accion, params){
+    const base = apiUrl();
+    if(!base) throw new Error('API_URL no está definida.');
+
+    const q = new URLSearchParams({accion:accion, _:String(Date.now())});
+    Object.keys(params || {}).forEach(k=>{
+      const v = params[k];
+      if(v !== undefined && v !== null && txt(v)) q.append(k, v);
+    });
+
+    const r = await fetch(base + '?' + q.toString(), {
+      method:'GET',
+      cache:'no-store'
+    });
+
+    if(!r.ok) throw new Error('Error HTTP ' + r.status + ' en ' + accion);
+    return await r.json();
+  }
+
+  async function apiPost(accion, data){
+    const base = apiUrl();
+    if(!base) throw new Error('API_URL no está definida.');
+
+    const r = await fetch(base, {
+      method:'POST',
+      body:JSON.stringify({
+        accion:accion,
+        data:data || {}
+      })
+    });
+
+    if(!r.ok) throw new Error('Error HTTP ' + r.status + ' en ' + accion);
+    return await r.json();
+  }
+
+  function atencionActiva(){
+    try{
+      if(typeof window.getAtencionActiva === 'function'){
+        const a = window.getAtencionActiva();
+        if(a && txt(a.id_atencion)) return a;
+      }
+    }catch(e){}
+
+    try{
+      if(typeof window.obtenerContextoAtencionActual === 'function'){
+        const c = window.obtenerContextoAtencionActual();
+        if(c && txt(c.id_atencion)) return c;
+      }
+    }catch(e){}
+
+    return window.atencionesState?.atencionActual ||
+           window.currentAttention ||
+           window.atencionActual ||
+           null;
+  }
+
+  function idAtencionActiva(){
+    try{
+      if(typeof window.getIdAtencionActiva === 'function'){
+        const id = txt(window.getIdAtencionActiva());
+        if(id) return id;
+      }
+    }catch(e){}
+
+    const a = atencionActiva();
+    return txt(
+      a?.id_atencion ||
+      window.planState?.atencionActual ||
+      window.examenFisicoState?.atencionActual ||
+      window.auroDiagnosticosState?.atencionActual
+    );
+  }
+
+  function atencionesLocales(){
+    try{
+      const raw = localStorage.getItem('aurosanax_atenciones_local_v1');
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  function tiempoAtencion(a){
+    const raw = txt(
+      a?.fecha_atencion || a?.fecha_consulta || a?.fecha ||
+      a?.creado_en || a?.fecha_creacion || a?.actualizado_en
+    );
+    const n = raw ? new Date(raw).getTime() : 0;
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function contextoAtencion(){
+    const actual = atencionActiva() || {};
+    const id = txt(actual.id_atencion || idAtencionActiva());
+    if(!id) return {id:'', atencion:{}, editable:false, historica:false, cerrada:false};
+
+    /*
+      AUROSANAX FIX QUIRÚRGICO 2026-08-12:
+      La autoridad clínica es la atención seleccionada/activa del ERP.
+      localStorage se usa únicamente como respaldo descriptivo y NUNCA
+      para decidir que una atención abierta es histórica solo porque
+      otra fila local tenga fecha o número de consulta superior.
+      Este criterio replica el patrón estable del Plan: una atención
+      seleccionada es editable mientras no esté explícitamente cerrada.
+    */
+    const local = atencionesLocales();
+    const localRegistro = local.find(a=>txt(a?.id_atencion) === id) || {};
+    const registro = Object.assign({}, localRegistro, actual);
+
+    const idPaciente = txt(registro.id_paciente || actual.id_paciente);
+    const estado = norm(
+      actual.estado_atencion ||
+      actual.estado ||
+      actual.estado_consulta ||
+      registro.estado_atencion ||
+      registro.estado ||
+      registro.estado_consulta
+    );
+
+    /*
+      AUROSANAX RECOMENDACIONES 2026-08-12:
+      El cierre clínico de la atención NO equivale al cierre documental
+      de Recomendaciones. Una atención finalizada/cerrada/completada
+      puede todavía requerir emisión o corrección de recomendaciones.
+
+      Solo se bloquean estados que invalidan la atención como documento
+      clínico operativo: anulada, cancelada o archivada.
+    */
+    const finalizada = /(cerrad|finaliz|complet)/.test(estado);
+    const bloqueada = /(anulad|cancelad|archivad)/.test(estado);
+    const editable = !!id && !bloqueada;
+
+    return {
+      id:id,
+      atencion:registro,
+      idPaciente:idPaciente,
+      numeroConsulta:txt(
+        actual.numero_consulta ||
+        actual.numero_atencion ||
+        registro.numero_consulta ||
+        registro.numero_atencion
+      ),
+      estadoAtencion:estado,
+      finalizada:finalizada,
+      bloqueada:bloqueada,
+      editable:editable,
+      historica:!!id && bloqueada
+    };
+  }
+
+  function primerTexto(){
+    for(let i=0;i<arguments.length;i++){
+      const v=txt(arguments[i]);
+      if(v) return v;
+    }
+    return '';
+  }
+
+  function valorCampo(){
+    for(let i=0;i<arguments.length;i++){
+      const el=document.getElementById(arguments[i]);
+      if(!el) continue;
+
+      if(el.tagName === 'SELECT'){
+        const opcion=el.options?.[el.selectedIndex];
+        const t=txt(opcion?.textContent);
+        if(t && !/^seleccione/i.test(t)) return t;
+      }
+
+      const v=txt(el.value || el.textContent);
+      if(v) return v;
+    }
+    return '';
+  }
+
+  function nombreMedicoDesdeContexto(atencion){
+    const a=atencion || {};
+    const activa=atencionActiva() || {};
+
+    return primerTexto(
+      a.nombre_medico,
+      a.medico_nombre,
+      a.nombre_profesional,
+      a.profesional_nombre,
+      a.doctor_nombre,
+      activa.nombre_medico,
+      activa.medico_nombre,
+      activa.nombre_profesional,
+      activa.profesional_nombre,
+      activa.doctor_nombre,
+      window.currentAttention?.nombre_medico,
+      window.currentAttention?.medico_nombre,
+      window.atencionActual?.nombre_medico,
+      window.atencionActual?.medico_nombre,
+      valorCampo('hcProfesional','hcMedico','atencionProfesional','atencionMedico'),
+      document.querySelector('.doctor-pill strong')?.textContent,
+      document.querySelector('.doctor-pill b')?.textContent
+    );
+  }
+
+  function nombrePacienteDesdeContexto(atencion){
+    const a=atencion || {};
+    const activa=atencionActiva() || {};
+
+    return primerTexto(
+      a.nombre_paciente,
+      a.paciente_nombre,
+      activa.nombre_paciente,
+      activa.paciente_nombre,
+      window.currentAttention?.nombre_paciente,
+      window.atencionActual?.nombre_paciente,
+      valorCampo('hcPacienteNombre','hcNombrePaciente')
+    );
+  }
+
+  async function enriquecerContextoDesdeServidor(ctx){
+    if(!ctx || !ctx.id) return ctx;
+
+    const a=ctx.atencion || {};
+    const faltaMedico=!nombreMedicoDesdeContexto(a);
+    const faltaPaciente=!nombrePacienteDesdeContexto(a);
+    const faltaNumero=!txt(ctx.numeroConsulta);
+
+    if(!faltaMedico && !faltaPaciente && !faltaNumero) return ctx;
+
+    try{
+      const data=await apiGet('listarAtenciones');
+      const lista=Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.registros) ? data.registros : []);
+
+      const encontrada=lista.find(item=>txt(item?.id_atencion)===txt(ctx.id));
+      if(!encontrada) return ctx;
+
+      ctx.atencion=Object.assign({}, a, encontrada);
+      ctx.numeroConsulta=primerTexto(
+        encontrada.numero_consulta,
+        encontrada.numero_atencion,
+        ctx.numeroConsulta
+      );
+      return ctx;
+    }catch(error){
+      console.warn(MODULO+': no se pudo enriquecer el contexto descriptivo.',error);
+      return ctx;
+    }
+  }
+
+  function parseDetalle(valor){
+    if(valor && typeof valor === 'object') return valor;
+    const raw = txt(valor);
+    if(!raw) return {};
+    try{
+      const d = JSON.parse(raw);
+      return d && typeof d === 'object' ? d : {};
+    }catch(e){
+      return {};
+    }
+  }
+
+  function fechaVisual(valor){
+    const raw = txt(valor);
+    if(!raw) return '—';
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
+    if(m){
+      return `${m[3]}/${m[2]}/${m[1]}${m[4] ? ' · '+m[4]+':'+m[5] : ''}`;
+    }
+    const d = new Date(raw);
+    if(!Number.isNaN(d.getTime())){
+      return d.toLocaleString('es-EC',{
+        day:'2-digit',month:'2-digit',year:'numeric',
+        hour:'2-digit',minute:'2-digit',hour12:false
+      });
+    }
+    return raw;
+  }
+
+  /*
+    AUROSANAX RECOMENDACIONES V1.1.4 — PRESENTACIÓN VISUAL
+    -------------------------------------------------------
+    - El decimal CIE-10 se aplica SOLO al mostrar el código.
+    - Fecha atención compone fecha_atencion + hora_atencion.
+    - No modifica persistencia, payloads, endpoints ni otros módulos.
+  */
+  function cie10Visual(valor){
+    const raw=txt(valor);
+    if(!raw) return '';
+
+    const limpio=raw.toUpperCase().replace(/\s+/g,'');
+    if(/^([A-Z]\d{2})\.([0-9A-Z]{1,4})$/.test(limpio)) return limpio;
+    if(/^([A-Z]\d{2})$/.test(limpio)) return limpio;
+
+    const m=limpio.match(/^([A-Z]\d{2})([0-9A-Z]{1,4})$/);
+    return m ? `${m[1]}.${m[2]}` : raw;
+  }
+
+  function fechaAtencionVisual(fecha, hora){
+    const rawFecha=txt(fecha);
+    if(!rawFecha) return '—';
+
+    const mFecha=rawFecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    let fechaBase='';
+
+    if(mFecha){
+      fechaBase=`${mFecha[3]}/${mFecha[2]}/${mFecha[1]}`;
+    }else{
+      const d=new Date(rawFecha);
+      if(!Number.isNaN(d.getTime())){
+        fechaBase=d.toLocaleDateString('es-EC',{
+          day:'2-digit',month:'2-digit',year:'numeric'
+        });
+      }else{
+        fechaBase=rawFecha;
       }
     }
-  }catch(e){}
 
-  const listas=[window.patients,window.pacientes,window.listaPacientes].filter(Array.isArray);
-  for(const lista of listas){
-    const p=lista.find(x=>txt(x.id_paciente||x.id)===id);
-    if(p) return p;
+    const rawHora=txt(hora);
+    if(!rawHora) return fechaBase;
+
+    const mHora=rawHora.match(/(?:^|[ T])(\d{1,2}):(\d{2})(?::\d{2})?$/) ||
+                rawHora.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+
+    if(!mHora) return fechaBase;
+
+    const hh=String(mHora[1]).padStart(2,'0');
+    const mm=mHora[2];
+    return `${fechaBase} · ${hh}:${mm}`;
   }
 
-  return {
-    id_paciente:id,
-    nombre:a.nombre_paciente||a.paciente_nombre||'',
-    numero_documento:a.numero_documento||a.cedula||a.identificacion||'',
-    telefono:a.telefono||a.whatsapp||'',
-    direccion:a.direccion||''
-  };
-}
-
-function resolverHistoria(ctx){
-  const id=txt(ctx?.idHistoria);
-  const listas=[window.historiasClinicas,window.historias,window.listaHistorias].filter(Array.isArray);
-  for(const lista of listas){
-    const h=lista.find(x=>txt(x.id_historia||x.id)===id);
-    if(h) return h;
-  }
-  try{
-    if(window.historiaActual && txt(window.historiaActual.id_historia||window.historiaActual.id)===id){
-      return window.historiaActual;
-    }
-  }catch(e){}
-  try{
-    if(window.currentHistoria && txt(window.currentHistoria.id_historia||window.currentHistoria.id)===id){
-      return window.currentHistoria;
-    }
-  }catch(e){}
-  return {id_historia:id};
-}
-
-function resolverMedico(ctx){
-  const a=ctx?.atencion||{};
-  const id=txt(ctx?.idMedico||a.id_medico);
-
-  const listas=[
-    state.medicos,
-    window.medicos,
-    window.medicosActivos,
-    window.listaMedicos,
-    window.configuracionMedicos,
-    window.medicosConfiguracion
-  ].filter(Array.isArray);
-
-  let m=null;
-  for(const lista of listas){
-    m=lista.find(x=>txt(x.id_medico||x.id||x.codigo)===id)||null;
-    if(m) break;
+  function setMsg(texto, tipo){
+    const el = document.getElementById('auroRecMensaje');
+    if(!el) return;
+    el.className = 'auro-rec-msg ' + (tipo || 'info');
+    el.innerHTML = texto ? esc(texto) : '';
+    el.hidden = !texto;
   }
 
-  const nombre=nombreCompleto(m)||txt(a.nombre_medico||a.medico_nombre)||'Profesional tratante';
+  function instalarEstilos(){
+    if(document.getElementById('auroRecomendacionesStyles')) return;
 
-  return {
-    id_medico:id,
-    nombre,
-    especialidad:txt(
-      m?.especialidad_principal||
-      m?.especialidad||
-      m?.especialidad_medica||
-      a.especialidad||
-      a.medico_especialidad
-    ),
-    registro_msp:txt(m?.registro_msp||m?.msp||m?.registro_profesional),
-    registro_senescyt:txt(m?.registro_senescyt||m?.senescyt),
-    email:txt(m?.email||m?.correo),
-    telefono:txt(m?.telefono||m?.whatsapp)
-  };
-}
+    const style=document.createElement('style');
+    style.id='auroRecomendacionesStyles';
+    style.textContent=`
+      #auroRecomendacionesApp{width:100%;max-width:1180px;margin:0 auto;color:#1f2937}
+      #auroRecomendacionesApp *{box-sizing:border-box}
+      .auro-rec-shell{display:grid;gap:16px}
+      .auro-rec-hero{border:1px solid #ead7e2;border-radius:22px;background:linear-gradient(135deg,#fff,#fff7fb);box-shadow:0 12px 34px rgba(139,30,90,.07);overflow:hidden}
+      .auro-rec-hero-main{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:17px 18px}
+      .auro-rec-icon{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;font-size:22px;box-shadow:0 9px 20px rgba(139,30,90,.2)}
+      .auro-rec-kicker{font-size:10px;letter-spacing:.08em;font-weight:950;color:#8b1e5a;text-transform:uppercase}
+      .auro-rec-title{font-size:20px;font-weight:950;line-height:1.2;margin-top:2px;color:#111827}
+      .auro-rec-sub{font-size:12px;color:#64748b;font-weight:700;margin-top:4px;overflow-wrap:anywhere}
+      .auro-rec-state{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:8px 11px;font-size:11px;font-weight:900;white-space:nowrap}
+      .auro-rec-state.edit{background:#dcfce7;color:#166534}
+      .auro-rec-state.read{background:#f1f5f9;color:#475569}
+      .auro-rec-context{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid #f0e1e9;background:rgba(255,255,255,.72)}
+      .auro-rec-context-item{padding:11px 14px;border-right:1px solid #f0e1e9;min-width:0}
+      .auro-rec-context-item:last-child{border-right:0}
+      .auro-rec-context-item span{display:block;color:#8b7280;font-size:10px;text-transform:uppercase;font-weight:900;letter-spacing:.05em}
+      .auro-rec-context-item b{display:block;margin-top:3px;font-size:12px;overflow-wrap:anywhere}
+      .auro-rec-card{border:1px solid #e5e7eb;border-radius:20px;background:#fff;overflow:hidden;box-shadow:0 8px 25px rgba(15,23,42,.04)}
+      .auro-rec-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:13px 15px;background:#2f1f3a;color:#fff}
+      .auro-rec-card-head b{font-size:13px}
+      .auro-rec-card-head small{display:block;opacity:.8;font-size:11px;margin-top:2px;line-height:1.35}
+      .auro-rec-card-body{padding:15px}
+      .auro-rec-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .auro-rec-field label{display:block;font-size:12px;font-weight:850;color:#374151;margin-bottom:6px}
+      .auro-rec-field input,.auro-rec-field textarea,.auro-rec-field select{width:100%;border:1px solid #dbe1e8;border-radius:13px;padding:10px 11px;font:inherit;color:#111827;background:#fff}
+      .auro-rec-field textarea{min-height:110px;resize:vertical;line-height:1.55}
+      #auroRecDieta,#auroRecGenerales{text-align:justify;white-space:pre-wrap}
+      .auro-rec-expand-row{display:flex;justify-content:flex-end;margin:6px 0 7px}
+      .auro-rec-expand-btn{border:1px solid #e5b7d0;background:#fff7fb;color:#8b1e5a;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:800;cursor:pointer}
+      .auro-rec-expand-btn:disabled{opacity:.5;cursor:not-allowed}
+      .auro-rec-expand-dialog{width:min(1000px,96vw);max-height:94vh;padding:0;border:0;border-radius:18px;box-shadow:0 20px 70px #0005}
+      .auro-rec-expand-dialog::backdrop{background:rgba(17,24,39,.65)}
+      .auro-rec-expand-panel{padding:18px;display:grid;gap:11px;background:#fff}
+      .auro-rec-expand-panel h3{margin:0;font-size:18px;color:#374151}
+      .auro-rec-expand-help{font-size:12px;color:#64748b}
+      .auro-rec-expand-text{width:100%;min-height:52vh;max-height:69vh;resize:vertical;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font:15px/1.62 Arial,sans-serif;text-align:justify;white-space:pre-wrap;color:#111827}
+      .auro-rec-expand-actions{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+      .auro-rec-expand-actions button{border:1px solid #ded5dd;border-radius:10px;padding:9px 16px;background:#fff;color:#475569;font-weight:800;cursor:pointer}
+      .auro-rec-expand-actions .aplicar{background:linear-gradient(135deg,#8b1e5a,#c23b83);border-color:#8b1e5a;color:#fff}
+      @media(max-width:640px){.auro-rec-expand-panel{padding:12px}.auro-rec-expand-text{min-height:55vh;font-size:16px}}
 
-function configGlobal(){
-  const candidatos=[
-    window.auroConfiguracionCentro,
-    window.configuracionCentro,
-    window.configCentro,
-    window.CONFIG_CENTRO,
-    window.configuracionInstitucional
-  ];
-  let c=candidatos.find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
-  if(c.datos&&typeof c.datos==='object') c=c.datos;
-  return c;
-}
-
-/* Logo institucional: lectura compatible con Configuración Centro y Drive.
-   No modifica el archivo, su configuración ni los documentos persistidos. */
-function urlLogoInstitucional(c){
-  const valor=txt(c?.logo_url||c?.logo_file_id||c?.logo_drive_url||c?.logo);
-  if(!valor) return '';
-  if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(valor)) return valor;
-  const match=valor.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)||
-    valor.match(/[?&]id=([a-zA-Z0-9_-]+)/)||
-    valor.match(/^([a-zA-Z0-9_-]{20,})$/);
-  if(match) return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(match[1])+'&sz=w400';
-  return /^https?:\/\//i.test(valor)?valor:'';
-}
-
-/* IASYN-2: soporte opcional de imagen incrustada, cuando el backend lo expone.
-   SCRIB 71 de referencia NO incluye la acción: una respuesta no compatible
-   nunca bloquea certificados ni reemplaza la URL visual existente. */
-function extraerLogoDataUri(respuesta){
-  const r=respuesta?.data||respuesta?.datos||respuesta||{};
-  const valor=txt(r.logo_base64||r.logoBase64||r.data_uri||r.dataUri||r.logo_data_uri||r.logoDataUri||r.base64||r.logo);
-  if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(valor)) return valor;
-  if(/^[A-Za-z0-9+/=\s]{100,}$/.test(valor)){
-    const mime=txt(r.mime_type||r.mimeType||r.mime)||'image/png';
-    if(/^image\/(?:png|jpeg|webp|gif)$/i.test(mime)) return 'data:'+mime+';base64,'+valor.replace(/\s+/g,'');
+      .auro-rec-field input:focus,.auro-rec-field textarea:focus,.auro-rec-field select:focus{outline:none;border-color:#c23b83;box-shadow:0 0 0 3px rgba(194,59,131,.12)}
+      .auro-rec-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+      .auro-rec-check{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid #edf0f3;border-radius:13px;background:#fff;min-height:44px;font-size:13px;font-weight:650;line-height:1.3}
+      .auro-rec-check input{width:17px;height:17px;accent-color:#8b1e5a;flex:0 0 auto;margin-top:1px}
+      .auro-rec-dx-list{display:grid;gap:8px}
+      .auro-rec-dx{display:grid;grid-template-columns:86px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
+      .auro-rec-dx-code{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 8px;border-radius:10px;background:#fff0f7;border:1px solid #f3c7df;font-size:12px;font-weight:950;color:#8b1e5a;text-align:center;white-space:nowrap}
+      .auro-rec-dx-name{min-width:0;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
+      .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
+      .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
+      .auro-rec-saved{display:grid;gap:8px}
+      .auro-rec-saved-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;background:#fff}
+      .auro-rec-saved-item.activo{border-color:#c23b83;background:#fff8fc}
+      .auro-rec-btn.nuevo{border-color:#c23b83;color:#8b1e5a;background:#fff7fb}
+      .auro-rec-saved-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
+      .auro-rec-saved-meta{font-size:12px;color:#6b7280;margin-top:4px;overflow-wrap:anywhere}
+      .auro-rec-saved-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+      .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
+      .auro-rec-btn.firma{background:#6c1d52;color:#fff;border-color:#6c1d52}
+      .auro-rec-btn.firma.ok{background:#166534;color:#fff;border-color:#166534}
+      .auro-rec-btn.firma.proceso{background:#7c3aed;color:#fff;border-color:#7c3aed}
+      .auro-rec-btn.cancelar-firma{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+      .auro-rec-btn{border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:13px;padding:10px 13px;font-weight:850;cursor:pointer}
+      .auro-rec-btn.primary{border:0;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
+      .auro-rec-btn:disabled{opacity:.5;cursor:not-allowed}
+      .auro-rec-msg{padding:10px 12px;border-radius:13px;font-size:12px;font-weight:750}
+      .auro-rec-msg.info{background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe}
+      .auro-rec-msg.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+      .auro-rec-msg.error{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}
+      .auro-rec-readonly input,.auro-rec-readonly textarea,.auro-rec-readonly select{background:#f8fafc!important;color:#475569!important}
+      @media(max-width:900px){
+        .auro-rec-context{grid-template-columns:repeat(2,minmax(0,1fr))}
+        .auro-rec-context-item{border-bottom:1px solid #f0e1e9}
+        .auro-rec-context-item:nth-child(2n){border-right:0}
+      }
+      @media(max-width:640px){
+        html,body{max-width:100%;overflow-x:hidden}
+        #hc_recomendaciones,#auroRecomendacionesMount,#auroRecomendacionesApp{width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:hidden!important}
+        .auro-rec-shell{gap:11px}
+        .auro-rec-hero{border-radius:17px}
+        .auro-rec-hero-main{grid-template-columns:auto minmax(0,1fr);padding:13px;gap:10px}
+        .auro-rec-icon{width:42px;height:42px;border-radius:13px}
+        .auro-rec-title{font-size:18px}
+        .auro-rec-state{grid-column:1/-1;width:100%;justify-content:center;white-space:normal;text-align:center}
+        .auro-rec-context{grid-template-columns:1fr}
+        .auro-rec-context-item{border-right:0;border-bottom:1px solid #f0e1e9;padding:9px 12px}
+        .auro-rec-grid-2,.auro-rec-check-grid{grid-template-columns:1fr}
+        .auro-rec-card{border-radius:16px}
+        .auro-rec-card-head{padding:11px 12px}
+        .auro-rec-card-body{padding:12px}
+        .auro-rec-field input,.auro-rec-field textarea,.auro-rec-field select{font-size:16px;min-height:44px}
+        .auro-rec-field textarea{min-height:135px}
+        .auro-rec-check{min-height:48px;font-size:13px;padding:10px}
+        .auro-rec-actions{display:grid;grid-template-columns:1fr;bottom:6px;padding:9px}
+        .auro-rec-btn{width:100%;min-height:46px;font-size:14px}
+        .auro-rec-dx{grid-template-columns:78px minmax(0,1fr);align-items:start}
+        .auro-rec-dx-code{width:78px}
+        .auro-rec-dx-tag{grid-column:2;width:max-content;max-width:100%;margin-top:-2px}
+        .auro-rec-saved-top{display:grid;grid-template-columns:1fr}
+        .auro-rec-saved-actions{display:grid;grid-template-columns:1fr;width:100%}
+      }
+    `;
+    document.head.appendChild(style);
   }
-  return '';
-}
 
-async function cargarLogoInstitucionalCompatible(){
-  try{
-    const r=await post('obtenerLogoInstitucionalFirma',{});
-    return extraerLogoDataUri(r);
-  }catch(_e){return '';}
-}
-
-function normalizarConfig(c){
-  c=c||{};
-  if(c.datos&&typeof c.datos==='object') c=c.datos;
-  return {
-    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'AUROSANAX',
-    subtitulo:txt(c.subtitulo_clinica||c.descripcion_clinica||c.eslogan_clinica),
-    razon_social:txt(c.razon_social),
-    ruc:txt(c.ruc),
-    direccion:txt(c.direccion_clinica||c.direccion),
-    ciudad:txt(c.ciudad_clinica||c.ciudad),
-    provincia:txt(c.provincia_clinica||c.provincia),
-    pais:txt(c.pais_clinica||c.pais),
-    telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
-    email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
-    web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
-    logo:urlLogoInstitucional(c),
-    colorPrincipal:txt(c.color_principal)||'#8b1e5a'
-  };
-}
-
-async function cargarContextoAuxiliar(ctx){
-  state.paciente=resolverPaciente(ctx);
-  state.historia=resolverHistoria(ctx);
-
-  let cfg=normalizarConfig(configGlobal());
-  try{
-    const remoto=await get('obtenerConfiguracion');
-    cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
-  }catch(e){}
-  state.configuracion=cfg;
-  // La URL es la alternativa segura si SCRIB no devuelve una imagen incrustada.
-  state.logoInstitucionalDataUri=await cargarLogoInstitucionalCompatible();
-
-  try{
-    const r=await get('listarMedicosActivos');
-    state.medicos=arr(r);
-  }catch(e){
-    state.medicos=[];
+  function checksHtml(lista, prefijo){
+    return lista.map(([key,label])=>`
+      <label class="auro-rec-check">
+        <input type="checkbox" data-auro-rec-check="${esc(prefijo)}" value="${esc(key)}">
+        <span>${esc(label)}</span>
+      </label>
+    `).join('');
   }
-}
 
-const UN=[
-  'CERO','UNO','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE','DIEZ',
-  'ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO',
-  'DIECINUEVE','VEINTE','VEINTIUNO','VEINTIDÓS','VEINTITRÉS','VEINTICUATRO',
-  'VEINTICINCO','VEINTISÉIS','VEINTISIETE','VEINTIOCHO','VEINTINUEVE','TREINTA'
-];
-
-function numeroLetras(n){
-  n=Number(n||0);
-  if(n>=0&&n<=30) return UN[n];
-  if(n<100){
-    const d=['','','','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA'][Math.floor(n/10)];
-    return n%10?d+' Y '+UN[n%10]:d;
-  }
-  if(n===100) return 'CIEN';
-  if(n<200) return 'CIENTO '+numeroLetras(n-100);
-  if(n<1000){
-    const c=['','','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS'][Math.floor(n/100)];
-    return c+(n%100?' '+numeroLetras(n%100):'');
-  }
-  if(n<2000) return 'MIL'+(n%1000?' '+numeroLetras(n%1000):'');
-  if(n<1000000){
-    const miles=Math.floor(n/1000),resto=n%1000;
-    return numeroLetras(miles)+' MIL'+(resto?' '+numeroLetras(resto):'');
-  }
-  return String(n);
-}
-
-function fechaLetras(v){
-  const m=txt(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(!m) return txt(v).toUpperCase();
-  const meses=['','ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-  return `${numeroLetras(+m[3])} DE ${meses[+m[2]]} DEL ${numeroLetras(+m[1])}`;
-}
-
-function instalarCSS(){
-  if(document.getElementById('auroCertCSS')) return;
-  const s=document.createElement('style');
-  s.id='auroCertCSS';
-  s.textContent=`
-#auroCertificadosApp{font-family:inherit;color:#1f2937}
-#auroCertificadosApp *{box-sizing:border-box}
-.ac-shell{display:grid;gap:16px;max-width:100%;overflow:hidden}
-.ac-hero{padding:18px;border:1px solid #ead7e2;border-radius:20px;background:linear-gradient(135deg,#fff,#fff7fb);display:flex;justify-content:space-between;gap:14px;align-items:center}
-.ac-hero h3{margin:0;color:#6c1d52;font-weight:900}
-.ac-hero p{margin:4px 0 0;color:#6b7280}
-.ac-pill{padding:8px 11px;border-radius:999px;background:#fdf2f8;color:#8b1e5a;font-size:12px;font-weight:850}
-.ac-context-card{border:1px solid #f0d9e6;background:#fff;border-radius:18px;padding:12px}
-.ac-context-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.ac-context-item{border:1px solid #edf0f3;border-radius:12px;padding:8px 10px;min-width:0;background:#fff}
-.ac-context-item span{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:#8b1e5a;font-weight:900;margin-bottom:2px}
-.ac-context-item b{display:block;font-size:12.5px;overflow-wrap:anywhere}
-.ac-grid{display:grid;grid-template-columns:1fr;gap:16px}
-.ac-card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;overflow:hidden}
-.ac-head{padding:13px 15px;background:#fafafa;border-bottom:1px solid #eee;font-weight:850}
-.ac-body{padding:15px}
-.ac-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.ac-field.full{grid-column:1/-1}
-.ac-field label{display:block;font-size:12px;font-weight:800;color:#4b5563;margin-bottom:5px}
-.ac-field input,.ac-field select,.ac-field textarea{width:100%;border:1px solid #d1d5db;border-radius:12px;padding:10px 11px;font:inherit}
-.ac-field textarea{min-height:92px;resize:vertical}
-.ac-editor-toolbar{display:flex;justify-content:flex-end;margin-top:6px}
-.ac-expand-btn{border:1px solid #d9c6df;border-radius:9px;background:#fff;color:#854b91;padding:6px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
-.ac-expand-btn:hover{background:#faf3fc}
-.ac-expand-backdrop{position:fixed;inset:0;z-index:2147483000;background:rgba(31,24,39,.58);display:flex;align-items:center;justify-content:center;padding:20px}
-.ac-expand-dialog{width:min(850px,96vw);max-height:94vh;display:flex;flex-direction:column;background:#fff;border-radius:18px;padding:22px;box-shadow:0 22px 75px #0004}
-.ac-expand-dialog h3{margin:0;color:#514258;font-size:19px}
-.ac-expand-hint{margin:5px 0 12px;color:#777;font-size:12px}
-.ac-expand-textarea{width:100%;min-height:250px;height:min(62vh,640px);resize:vertical;box-sizing:border-box;border:1px solid #b9a9c3;border-radius:12px;padding:16px;font:16px/1.65 inherit;text-align:justify;white-space:pre-wrap}
-.ac-expand-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:15px}
-.ac-expand-actions button{border-radius:10px;padding:10px 18px;cursor:pointer;font:inherit;border:1px solid #d5c7db;background:#fff}
-.ac-expand-actions .ac-expand-apply{background:#9554a1;color:#fff;border-color:#9554a1;font-weight:700}
-@media(max-width:700px){.ac-expand-dialog{padding:14px}.ac-expand-backdrop{padding:8px}.ac-expand-textarea{height:60vh}}
-@media print{.ac-expand-backdrop{display:none!important}}
-.ac-dx{display:grid;gap:8px}
-.ac-dx label{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #ead7e2;border-radius:12px;background:linear-gradient(135deg,#fff,#fff9fc);min-height:46px;cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
-.ac-dx label:hover{border-color:#d9a7c3;box-shadow:0 5px 14px rgba(139,30,90,.06)}
-.ac-dx label:has(input:checked){border-color:#d79ab9;background:#fff7fb;box-shadow:0 5px 14px rgba(139,30,90,.07)}
-.ac-dx input[type="checkbox"]{width:18px;height:18px;flex:0 0 auto;margin:0;accent-color:#8b1e5a}
-.ac-dx span{display:flex;align-items:center;gap:9px;min-width:0;flex:1;color:#374151;font-size:13px;line-height:1.35;overflow-wrap:anywhere}
-.ac-dx span b{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:58px;padding:4px 8px;border-radius:999px;background:#fdf2f8;border:1px solid #f3c8df;color:#8b1e5a;font-size:11.5px;font-weight:900;letter-spacing:.025em;line-height:1.1}
-@media(max-width:700px){.ac-dx label{padding:10px}.ac-dx span{font-size:12.5px;gap:8px}.ac-dx span b{min-width:54px;font-size:11px;padding:4px 7px}}
-.ac-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.ac-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:850;cursor:pointer}
-.ac-btn[disabled]{opacity:.72;cursor:wait}
-.ac-firma-preparando{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}
-.ac-firma-proceso{background:#eff6ff!important;color:#1d4ed8!important;border:1px solid #bfdbfe!important}
-.ac-firma-firmada{background:#ecfdf5!important;color:#166534!important;border:1px solid #bbf7d0!important}
-.ac-firma-cancelar{background:#fff1f2!important;color:#be123c!important;border:1px solid #fecdd3!important}
-.ac-primary{background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
-.ac-soft{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8}
-/* Selección visual del certificado: independiente de firma, PDF y persistencia. */
-#acHistorial .ac-btn.ac-abierto{background:#8b1e5a;color:#fff;border:1px solid #8b1e5a;box-shadow:0 3px 10px rgba(139,30,90,.16)}
-.ac-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;margin-bottom:8px}
-.ac-item:last-child{margin-bottom:0}
-.ac-item-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
-.ac-meta{font-size:12px;color:#6b7280;margin-top:4px}
-.ac-empty{padding:20px;text-align:center;color:#6b7280;border:1px dashed #d1d5db;border-radius:12px}
-.ac-msg{padding:10px 12px;border-radius:12px;font-size:13px}
-.ac-ok{background:#ecfdf5;color:#166534}
-.ac-error{background:#fef2f2;color:#991b1b}
-.ac-warn{background:#fffbeb;color:#92400e}
-.ac-preview{margin-top:14px;overflow:auto;background:#eef1f4;border-radius:16px;padding:18px}
-.ac-paper{width:210mm;min-height:297mm;display:flex;flex-direction:column;background:#fff;margin:auto;padding:15mm 17mm 17mm;box-shadow:0 8px 28px rgba(0,0,0,.12);transform-origin:top center;position:relative}
-.ac-doc-head{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ac-color,#8b1e5a);padding-bottom:10px}
-.ac-logo-wrap{width:60px;height:60px;display:grid;place-items:center;border-radius:12px;overflow:hidden}
-.ac-logo-wrap:empty{display:none}
-.ac-doc-head:not(:has(.ac-logo-wrap)){grid-template-columns:minmax(0,1fr) auto}
-.ac-logo{max-width:100%;max-height:100%;object-fit:contain}
-.ac-brand{font-size:19px;font-weight:950;color:var(--ac-color,#8b1e5a);letter-spacing:.035em}
-.ac-brand-sub{font-size:10.5px;color:#667085;margin-top:2px}
-.ac-doc-date{text-align:right;font-size:11.5px;font-weight:750}
-.ac-paper h1{text-align:center;font-size:19px;margin:22px 0 26px;letter-spacing:.045em}
-.ac-paper p{font-size:12.3px;line-height:1.62;text-align:justify;margin:0 0 12px}
-.ac-cert-line{white-space:pre-line;overflow-wrap:anywhere}
-.ac-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.62}
-.ac-cert-lines{display:grid;gap:6px;margin:14px 0}
-.ac-cert-line{font-size:12.1px;line-height:1.42;text-align:justify}
-.ac-cert-line b:first-child{display:inline-block;min-width:150px}
-.ac-dx-doc{margin:14px 0 16px}
-.ac-dx-doc-title{font-size:12.1px;font-weight:900;margin-bottom:5px}
-.ac-dx-doc-row{font-size:12.1px;line-height:1.45}
-.ac-reposo{margin-top:16px;break-inside:avoid;page-break-inside:avoid}
-.ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
-.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:start;margin-top:auto;padding-top:24mm;break-inside:avoid;page-break-inside:avoid}
-.ac-centro-contacto{position:relative;top:0;padding-top:8px;font-size:10.5px;color:#475569;line-height:1.45}
-.ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
-.ac-contact-row span{flex:1;min-width:0}
-.ac-contact-icon{display:block;width:12px!important;height:12px!important;min-width:12px;max-width:12px;min-height:12px;max-height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
-.ac-sign{text-align:center;font-size:11.5px}
-.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:0}
-.ac-sign-details{padding-top:0}
-.ac-sign b{font-size:12.5px}
-
-.ac-toast-zone{
-  position:fixed;top:18px;right:18px;z-index:2147483000;
-  width:min(390px,calc(100vw - 28px));display:grid;gap:10px;
-  pointer-events:none
-}
-.ac-toast{
-  display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;
-  padding:13px 15px;border-radius:16px;color:#fff;
-  box-shadow:0 18px 45px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.14);
-  border:1px solid rgba(255,255,255,.22);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  animation:acToastIn .22s ease-out both
-}
-.ac-toast-icon{
-  width:42px;height:42px;border-radius:13px;display:grid;place-items:center;
-  background:rgba(255,255,255,.17);font-size:22px;font-weight:950
-}
-.ac-toast-title{font-size:13.5px;font-weight:950;letter-spacing:.01em;line-height:1.2}
-.ac-toast-text{font-size:12px;line-height:1.35;margin-top:3px;color:rgba(255,255,255,.92)}
-.ac-toast-ok{background:linear-gradient(135deg,#047857,#059669)}
-.ac-toast-warn{background:linear-gradient(135deg,#9a6700,#b7791f)}
-.ac-toast-info{background:linear-gradient(135deg,#6c1749,#8b1e5a)}
-.ac-toast-error{background:linear-gradient(135deg,#8f1d18,#b42318)}
-.ac-toast-out{animation:acToastOut .2s ease-in both}
-@keyframes acToastIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
-@keyframes acToastOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.98)}}
-@media(prefers-reduced-motion:reduce){.ac-toast,.ac-toast-out{animation:none}}
-@media(max-width:700px){
-  .ac-toast-zone{top:10px;right:10px;width:calc(100vw - 20px)}
-  .ac-toast{padding:12px 13px;border-radius:14px}
-}
-
-@media(max-width:1000px){
-  .ac-context-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .ac-preview{padding:10px}
-  .ac-paper{transform:scale(.78);margin-bottom:-64mm}
-}
-@media(max-width:700px){
-  html,body{max-width:100%;overflow-x:hidden}
-  #hc_certificados,#auroCertificadosMount,#auroCertificadosApp{max-width:100%!important;min-width:0!important;overflow-x:hidden!important}
-  .ac-hero{display:block;padding:14px}
-  .ac-pill{display:inline-block;margin-top:10px}
-  .ac-context-grid{grid-template-columns:1fr}
-  .ac-form{grid-template-columns:1fr}
-  .ac-field.full{grid-column:auto}
-  .ac-body{padding:12px}
-  .ac-field input,.ac-field select,.ac-field textarea{font-size:16px}
-  .ac-actions{display:grid;grid-template-columns:1fr}
-  .ac-btn{min-height:46px;width:100%}
-  .ac-item-top{align-items:flex-start}
-  .ac-preview{padding:6px;overflow:hidden}
-  .ac-paper{transform:scale(.45);margin-left:50%;translate:-50% 0;margin-bottom:-162mm}
-}
-`;
-  document.head.appendChild(s);
-}
-
-function html(){
-  return `<div class="ac-shell">
-    <div class="ac-hero">
-      <div>
-        <h3><i class="bi bi-file-earmark-medical"></i> Certificados</h3>
-        <p>Emisión documental vinculada a la atención seleccionada.</p>
-      </div>
-      <div class="ac-pill" id="acContexto">Sin atención</div>
-    </div>
-
-    <div id="acContextoClinico" class="ac-context-card" style="display:none"></div>
-    <div id="acMsg"></div>
-
-    <div class="ac-grid">
-      <div class="ac-card">
-        <div class="ac-head">Emisión de certificado</div>
-        <div class="ac-body">
-          <div class="ac-form">
-            <div class="ac-field">
-              <label>Tipo de certificado</label>
-              <select id="acTipo">
-                <option>Certificado médico</option>
-                <option>Certificado de asistencia por consulta</option>
-                <option>Certificado prequirúrgico</option>
-              </select>
+  function appHtml(){
+    return `
+      <div id="auroRecomendacionesApp">
+        <div class="auro-rec-shell">
+          <section class="auro-rec-hero">
+            <div class="auro-rec-hero-main">
+              <div class="auro-rec-icon"><i class="bi bi-heart-pulse"></i></div>
+              <div>
+                <div class="auro-rec-kicker">Recomendaciones clínicas</div>
+                <div class="auro-rec-title" id="auroRecPaciente">Sin atención seleccionada</div>
+                <div class="auro-rec-sub" id="auroRecAtencion">Seleccione una atención para trabajar sus recomendaciones.</div>
+              </div>
+              <div class="auro-rec-state read" id="auroRecEstado"><i class="bi bi-lock"></i> Sin atención</div>
             </div>
-            <div class="ac-field"><label>Fecha de emisión</label><input id="acFecha" type="date"></div>
-            <div class="ac-field"><label>Días de reposo</label><input id="acDias" type="number" min="0" max="365" value="0"></div>
-            <div class="ac-field"><label>Tipo de contingencia</label>
-              <select id="acContingencia">
-                <option value="">Seleccione...</option>
-                <option>Enfermedad general</option>
-                <option>Accidente común</option>
-                <option>Enfermedad profesional</option>
-                <option>Accidente de trabajo</option>
-                <option>Maternidad</option>
-                <option>Otra</option>
-              </select>
+            <div class="auro-rec-context">
+              <div class="auro-rec-context-item"><span>Consulta</span><b id="auroRecConsulta">—</b></div>
+              <div class="auro-rec-context-item"><span>Médico</span><b id="auroRecMedico">—</b></div>
+              <div class="auro-rec-context-item"><span>Fecha atención</span><b id="auroRecFecha">—</b></div>
+              <div class="auro-rec-context-item"><span>Última actualización</span><b id="auroRecActualizado">—</b></div>
             </div>
-            <div class="ac-field"><label>Reposo desde</label><input id="acDesde" type="date"></div>
-            <div class="ac-field"><label>Reposo hasta</label><input id="acHasta" type="date" readonly></div>
+          </section>
 
-            <div class="ac-field full">
-              <label>Diagnósticos de esta atención</label>
-              <div id="acDx" class="ac-dx"></div>
+          <div id="auroRecMensaje" class="auro-rec-msg info" hidden></div>
+
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Diagnósticos de esta atención</b><small>Lectura automática. Recomendaciones no modifica el módulo Diagnóstico.</small></div>
             </div>
+            <div class="auro-rec-card-body">
+              <div id="auroRecDiagnosticos" class="auro-rec-dx-list">
+                <div class="auro-rec-empty">Sin diagnósticos cargados.</div>
+              </div>
+            </div>
+          </section>
 
-            <div class="ac-field"><label>Número de contacto</label><input id="acContacto" inputmode="tel"></div>
-            <div class="ac-field"><label>Institución / Empresa</label><input id="acEmpresa"></div>
-            <div class="ac-field full"><label>Resumen clínico</label><textarea id="acResumen"></textarea><div class="ac-editor-toolbar"><button type="button" class="ac-expand-btn" data-ac-expand="acResumen">⛶ Ampliar editor</button></div></div>
-            <div class="ac-field"><label>Actividad laboral</label><input id="acActividad"></div>
-            <div class="ac-field"><label>Dirección de trabajo</label><input id="acDireccionTrabajo"></div>
-            <div class="ac-field full"><label>Observaciones / extensión de reposo</label><textarea id="acObservaciones"></textarea><div class="ac-editor-toolbar"><button type="button" class="ac-expand-btn" data-ac-expand="acObservaciones">⛶ Ampliar editor</button></div></div>
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Seguimiento</b><small>Próxima revisión y motivo del control.</small></div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div class="auro-rec-grid-2">
+                <div class="auro-rec-field">
+                  <label for="auroRecProximaCita">Próxima cita / control</label>
+                  <input id="auroRecProximaCita" type="date">
+                </div>
+                <div class="auro-rec-field">
+                  <label for="auroRecMotivoControl">Motivo de próxima cita</label>
+                  <input id="auroRecMotivoControl" type="text" placeholder="Ej.: control de resultados, revisión, procedimiento...">
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Signos de alerta</b><small>Marque las opciones aplicables. Use “Otros signos / observaciones” para escribir indicaciones adicionales.</small></div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div class="auro-rec-check-grid">${checksHtml(ALERTAS,'alerta')}</div>
+              <div class="auro-rec-field" style="margin-top:12px">
+                <label for="auroRecAlertaOtros">Otros signos / observaciones</label>
+                <textarea id="auroRecAlertaOtros" placeholder="Otros signos de alarma o aclaraciones específicas."></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Signos de infección</b><small>Marque las opciones aplicables y escriba aclaraciones libres en el campo de observaciones.</small></div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div class="auro-rec-check-grid">${checksHtml(INFECCION,'infeccion')}</div>
+              <div class="auro-rec-field" style="margin-top:12px">
+                <label for="auroRecInfeccionOtros">Otros signos / observaciones</label>
+                <textarea id="auroRecInfeccionOtros" placeholder="Observaciones relacionadas con infección o cuidados locales."></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Dieta y cuidados</b><small>Indicaciones dietéticas, actividad, higiene y cuidados domiciliarios.</small></div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div class="auro-rec-field">
+                <label for="auroRecDieta">Dieta / cuidados recomendados</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecDieta">⛶ Ampliar editor</button></div>
+                <textarea id="auroRecDieta" placeholder="Ej.: hidratación, dieta, reposo relativo, higiene, cuidados del procedimiento..."></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Recomendaciones generales</b><small>Texto final entregable al paciente. Debe ser revisado por el profesional.</small></div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div class="auro-rec-field">
+                <label for="auroRecGenerales">Recomendaciones para el paciente</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecGenerales">⛶ Ampliar editor</button></div>
+                <textarea id="auroRecGenerales" style="min-height:180px" placeholder="Escriba las recomendaciones finales de esta atención."></textarea>
+                <div style="margin-top:10px;display:flex;justify-content:flex-end">
+                  <button type="button" class="auro-rec-btn" id="auroRecBtnAgregarPlan">
+                    <i class="bi bi-plus-circle me-1"></i> Añadir indicaciones del Plan
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="auro-rec-card">
+            <div class="auro-rec-card-head">
+              <div><b>Recomendaciones guardadas</b><small>Historial de documentos independientes de la atención seleccionada.</small></div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div id="auroRecGuardadas" class="auro-rec-saved">
+                <div class="auro-rec-empty">No existen recomendaciones guardadas para esta atención.</div>
+              </div>
+            </div>
+          </section>
+
+          <div class="auro-rec-actions">
+            <button type="button" class="auro-rec-btn nuevo" id="auroRecBtnNueva"><i class="bi bi-plus-circle me-1"></i> Nueva recomendación</button>
+             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
+            <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
+            <button type="button" class="auro-rec-btn cancelar-firma" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
+            <!-- V1.3.1 ANTIRREGRESIÓN:
+                 Control técnico original conservado en DOM para no alterar
+                 el contrato de firma V1.2.0. Se oculta visualmente porque la
+                 acción de firma se presenta en "Recomendaciones guardadas". -->
+            <button type="button" class="auro-rec-btn firma" id="auroRecBtnFirma" disabled hidden aria-hidden="true" tabindex="-1"><i class="bi bi-pen me-1"></i> Firmar recomendación</button>
+            <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
           </div>
-
-          <div class="ac-actions">
-            <button class="ac-btn ac-primary" id="acGuardar">Emitir / Guardar certificado</button>
-            <button class="ac-btn ac-soft" id="acVista">Vista previa</button>
-            <button class="ac-btn ac-soft" id="acImprimir">Imprimir / PDF</button>
-            <button class="ac-btn ac-soft" id="acNuevo">Nuevo certificado</button>
-          </div>
-
-          <div id="acPreview" class="ac-preview" style="display:none"></div>
         </div>
       </div>
-
-      <div class="ac-card">
-        <div class="ac-head">Certificados emitidos</div>
-        <div class="ac-body" id="acHistorial"></div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function mount(){
-  instalarCSS();
-  let p=document.getElementById('hc_certificados');
-  if(!p) return null;
-  let m=document.getElementById('auroCertificadosMount');
-  if(!m){
-    m=document.createElement('div');
-    m.id='auroCertificadosMount';
-    p.appendChild(m);
-  }
-  if(!document.getElementById('auroCertificadosApp')){
-    m.innerHTML='<div id="auroCertificadosApp">'+html()+'</div>';
-    eventos();
-  }
-  return m;
-}
-
-
-let acToastTimer=null;
-
-function toastPremium(tipo,texto){
-  const textoLimpio=txt(texto);
-  if(!textoLimpio) return;
-
-  let zona=document.getElementById('acToastZone');
-  if(!zona){
-    zona=document.createElement('div');
-    zona.id='acToastZone';
-    zona.className='ac-toast-zone';
-    zona.setAttribute('aria-live','polite');
-    zona.setAttribute('aria-atomic','true');
-    document.body.appendChild(zona);
+    `;
   }
 
-  if(acToastTimer){
-    clearTimeout(acToastTimer);
-    acToastTimer=null;
-  }
-
-  const mapa={
-    ok:{clase:'ok',icono:'✓',titulo:'Operación completada'},
-    warn:{clase:'warn',icono:'!',titulo:'Firma electrónica'},
-    info:{clase:'info',icono:'•',titulo:'AUROSANAX'},
-    error:{clase:'error',icono:'×',titulo:'Atención requerida'}
-  };
-  const cfg=mapa[tipo]||mapa.info;
-
-  zona.innerHTML=`<div class="ac-toast ac-toast-${cfg.clase}" role="status">
-    <div class="ac-toast-icon">${cfg.icono}</div>
-    <div>
-      <div class="ac-toast-title">${esc(cfg.titulo)}</div>
-      <div class="ac-toast-text">${esc(textoLimpio)}</div>
-    </div>
-  </div>`;
-
-  const tarjeta=zona.firstElementChild;
-  acToastTimer=setTimeout(()=>{
-    if(!tarjeta||!tarjeta.isConnected) return;
-    tarjeta.classList.add('ac-toast-out');
-    setTimeout(()=>{
-      if(tarjeta.isConnected) tarjeta.remove();
-      if(zona && !zona.children.length) zona.remove();
-    },220);
-  },3600);
-}
-
-function msg(t,s){
-  const e=document.getElementById('acMsg');
-  if(e) e.innerHTML=s?`<div class="ac-msg ac-${t}">${esc(s)}</div>`:'';
-}
-
-function v(id){return txt(document.getElementById(id)?.value);}
-function sv(id,x){const e=document.getElementById(id);if(e)e.value=x??'';}
-
-function abrirEditorAmpliado(id){
-  const origen=document.getElementById(id);
-  if(!origen || document.getElementById('acExpandBackdrop')) return;
-  const titulo=id==='acResumen'?'Resumen clínico':'Observaciones / extensión de reposo';
-  const backdrop=document.createElement('div');
-  backdrop.id='acExpandBackdrop';
-  backdrop.className='ac-expand-backdrop';
-  backdrop.innerHTML=`<div class="ac-expand-dialog" role="dialog" aria-modal="true" aria-labelledby="acExpandTitle">
-    <h3 id="acExpandTitle">${titulo}</h3>
-    <p class="ac-expand-hint">Edición ampliada · el texto se aplica al editor original solo al confirmar.</p>
-    <textarea id="acExpandText" class="ac-expand-textarea" aria-label="${titulo}"></textarea>
-    <div class="ac-expand-actions"><button type="button" data-ac-cancel>Cancelar</button><button type="button" class="ac-expand-apply" data-ac-apply>Aplicar texto</button></div>
-  </div>`;
-  document.body.appendChild(backdrop);
-  const editor=backdrop.querySelector('#acExpandText');
-  editor.value=origen.value;
-  const cerrar=()=>{document.removeEventListener('keydown',tecla);backdrop.remove();origen.focus();};
-  const tecla=e=>{if(e.key==='Escape'){e.preventDefault();cerrar();}};
-  document.addEventListener('keydown',tecla);
-  backdrop.querySelector('[data-ac-cancel]').addEventListener('click',cerrar);
-  backdrop.querySelector('[data-ac-apply]').addEventListener('click',()=>{
-    origen.value=editor.value;
-    origen.dispatchEvent(new Event('input',{bubbles:true}));
-    cerrar();
-  });
-  backdrop.addEventListener('click',e=>{if(e.target===backdrop)cerrar();});
-  editor.focus();
-}
-
-function eventos(){
-  document.getElementById('acDias')?.addEventListener('input',()=>{
-    const d=Number(v('acDias')||0);
-    if(d>0 && !v('acDesde')) sv('acDesde',v('acFecha')||hoy());
-    calcularHasta();
-  });
-  document.getElementById('acDesde')?.addEventListener('change',calcularHasta);
-  document.getElementById('acFecha')?.addEventListener('change',()=>{
-    if(Number(v('acDias')||0)>0){
-      sv('acDesde',v('acFecha')||hoy());
-      calcularHasta();
+  function asegurarMount(){
+    const mount = document.getElementById('auroRecomendacionesMount');
+    if(!mount) return null;
+    if(!document.getElementById('auroRecomendacionesApp')){
+      mount.innerHTML = appHtml();
     }
-  });
-  document.getElementById('acGuardar')?.addEventListener('click',guardar);
-  document.getElementById('acVista')?.addEventListener('click',()=>vista(false));
-  document.getElementById('acImprimir')?.addEventListener('click',()=>vista(true));
-  document.getElementById('acNuevo')?.addEventListener('click',nuevo);
-  document.querySelectorAll('#auroCertificadosApp [data-ac-expand]').forEach(btn=>{btn.addEventListener('click',()=>abrirEditorAmpliado(btn.getAttribute('data-ac-expand')));});
-}
-
-function calcularHasta(){
-  const d=Number(v('acDias')||0);
-  const f=v('acDesde')||v('acFecha')||hoy();
-  if(d>0){
-    if(!v('acDesde')) sv('acDesde',f);
-    sv('acHasta',sumarDias(f,d));
-  }else{
-    sv('acHasta','');
+    return mount;
   }
-}
 
-async function cargarDx(id, token){
-  let diagnosticos=[];
-  try{
-    const r=await get('listarDiagnosticosPorAtencion',{id_atencion:id});
-    diagnosticos=arr(r);
-  }catch(e){
+  function setText(id, valor){
+    const el=document.getElementById(id);
+    if(el) el.textContent=valor;
+  }
+
+  function setValue(id, valor){
+    const el=document.getElementById(id);
+    if(el) el.value=valor || '';
+  }
+
+  function getValue(id){
+    return txt(document.getElementById(id)?.value);
+  }
+
+  /* V1.3.5 — Edición ampliada estrictamente local, sin persistencia automática.
+     La atención y el estado de firma se revalidan al aplicar. */
+  function ampliarEditorRecomendaciones(id){
+    if(!['auroRecDieta','auroRecGenerales'].includes(id)) return;
+    const origen=document.getElementById(id);
+    const contextoInicial=state.contexto||contextoAtencion();
+    const idInicial=txt(contextoInicial?.id);
+    const firmado=['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase());
+    if(!origen || origen.disabled || !contextoInicial?.editable || firmado || !idInicial) return;
+    const titulo=id==='auroRecDieta'?'Dieta / cuidados recomendados':'Recomendaciones para el paciente';
+    const dialog=document.createElement('dialog');
+    dialog.className='auro-rec-expand-dialog';
+    const panel=document.createElement('div');
+    panel.className='auro-rec-expand-panel';
+    const encabezado=document.createElement('h3');
+    encabezado.textContent=titulo;
+    const ayuda=document.createElement('div');
+    ayuda.className='auro-rec-expand-help';
+    ayuda.textContent='Edición ampliada · el texto se aplica al editor original solo al confirmar. Aplicar no guarda en el servidor.';
+    const campo=document.createElement('textarea');
+    campo.className='auro-rec-expand-text';
+    campo.value=origen.value;
+    campo.setAttribute('aria-label',titulo);
+    const acciones=document.createElement('div');
+    acciones.className='auro-rec-expand-actions';
+    const cancelar=document.createElement('button');
+    cancelar.type='button'; cancelar.textContent='Cancelar';
+    const aplicar=document.createElement('button');
+    aplicar.type='button'; aplicar.className='aplicar'; aplicar.textContent='Aplicar texto';
+    acciones.append(cancelar,aplicar);
+    panel.append(encabezado,ayuda,campo,acciones);
+    dialog.append(panel);
+    document.body.append(dialog);
+    const cerrar=()=>{ if(dialog.open && typeof dialog.close==='function') dialog.close(); else dialog.remove(); };
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    cancelar.addEventListener('click',cerrar);
+    aplicar.addEventListener('click',()=>{
+      const contextoActual=contextoAtencion();
+      if(txt(contextoActual.id)!==idInicial || !contextoActual.editable ||
+         ['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase()) || origen.disabled){
+        cerrar();
+        setMsg('La atención o el estado de firma cambió. No se aplicó el texto.','error');
+        return;
+      }
+      origen.value=campo.value;
+      origen.dispatchEvent(new Event('input',{bubbles:true}));
+      cerrar();
+      origen.focus();
+    });
+    if(typeof dialog.showModal==='function') dialog.showModal();
+    else {dialog.setAttribute('open','');campo.focus();}
+  }
+
+  function checksSeleccionados(tipo){
+    return Array.from(document.querySelectorAll(`[data-auro-rec-check="${tipo}"]:checked`))
+      .map(el=>txt(el.value))
+      .filter(Boolean);
+  }
+
+  function aplicarChecks(tipo, valores){
+    const set=new Set(Array.isArray(valores) ? valores.map(txt) : []);
+    document.querySelectorAll(`[data-auro-rec-check="${tipo}"]`).forEach(el=>{
+      el.checked=set.has(txt(el.value));
+    });
+  }
+
+  function limpiar(){
+    state.idRecomendacion='';
+    state.registro=null;
+    state.modoNuevo=false;
+    state.firma={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:(state.firma?.token||0)+1};
+    setValue('auroRecProximaCita','');
+    setValue('auroRecMotivoControl','');
+    setValue('auroRecAlertaOtros','');
+    setValue('auroRecInfeccionOtros','');
+    setValue('auroRecDieta','');
+    setValue('auroRecGenerales','');
+    aplicarChecks('alerta',[]);
+    aplicarChecks('infeccion',[]);
+    setText('auroRecActualizado','Sin guardar aún');
+    renderRecomendacionGuardada();
+  }
+
+  function renderDiagnosticos(){
+    const box=document.getElementById('auroRecDiagnosticos');
+    if(!box) return;
+
+    if(!state.diagnosticos.length){
+      box.innerHTML='<div class="auro-rec-empty">Sin diagnósticos registrados para esta atención.</div>';
+      return;
+    }
+
+    box.innerHTML=state.diagnosticos.map((d,i)=>{
+      const codigo=cie10Visual(d.codigo_cie10 || d.codigo || d.cie10);
+      const nombre=txt(d.descripcion || d.nombre || d.diagnostico);
+      const principal = d.principal === true || ['si','sí','true','1'].includes(norm(d.principal)) || i===0;
+      return `<div class="auro-rec-dx">
+        <div class="auro-rec-dx-code">${esc(codigo || '—')}</div>
+        <div class="auro-rec-dx-name">${esc(nombre || 'Diagnóstico sin descripción')}</div>
+        <div class="auro-rec-dx-tag">${principal ? 'Principal' : esc(txt(d.tipo_diagnostico || d.tipo || 'Asociado'))}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function precargarSeguimientoDesdePlanSiVacio(){
+    if(state.idRecomendacion) return false;
+    if(getValue('auroRecMotivoControl')) return false;
+
+    const candidatos = [
+      'hcProximoControl',
+      'hcControl',
+      'hcSeguimiento'
+    ];
+
+    for(const id of candidatos){
+      const el=document.getElementById(id);
+      const valor=txt(el?.value || el?.textContent);
+      if(!valor) continue;
+
+      setValue('auroRecMotivoControl',valor);
+      return true;
+    }
+
+    return false;
+  }
+
+  /*
+    AUROSANAX RECOMENDACIONES V1.1.3 — PLAN → RECOMENDACIONES
+    ----------------------------------------------------------
+    Integración quirúrgica y antirregresiva.
+
+    REGLAS:
+    - La autoridad de contexto siempre es la MISMA id_atencion.
+    - Si Recomendaciones generales está vacío, puede precargarse desde Plan.
+    - Si ya existe texto, nunca se modifica automáticamente.
+    - "Añadir indicaciones del Plan" agrega solo líneas nuevas.
+    - Nada se persiste hasta que el profesional pulse Guardar recomendaciones.
+    - Nunca modifica Plan, Apps Script, Sheets ni otros módulos.
+  */
+
+  function valorClinicoPlanATexto(valor){
+    if(valor === null || valor === undefined) return '';
+
+    if(Array.isArray(valor)){
+      return valor.map(item=>{
+        if(typeof item === 'string') return txt(item);
+        if(item && typeof item === 'object'){
+          return txt(
+            item.texto ||
+            item.descripcion ||
+            item.indicacion ||
+            item.recomendacion ||
+            ''
+          );
+        }
+        return '';
+      }).filter(Boolean).join('\n');
+    }
+
+    if(typeof valor === 'object'){
+      return txt(
+        valor.texto ||
+        valor.descripcion ||
+        valor.indicacion ||
+        valor.recomendacion ||
+        ''
+      );
+    }
+
+    const raw=txt(valor);
+    if(!raw) return '';
+
+    if(raw.startsWith('[') || raw.startsWith('{')){
+      try{
+        return valorClinicoPlanATexto(JSON.parse(raw));
+      }catch(e){
+        /* Compatibilidad histórica: conservar texto si no es JSON válido. */
+      }
+    }
+
+    return raw;
+  }
+
+  function lineasClinicasUnicas(texto){
+    const vistas=new Set();
+    const salida=[];
+
+    String(texto || '')
+      .split(/\r?\n+/)
+      .map(x=>txt(x))
+      .filter(Boolean)
+      .forEach(linea=>{
+        const clave=norm(linea);
+        if(!clave || vistas.has(clave)) return;
+        vistas.add(clave);
+        salida.push(linea);
+      });
+
+    return salida;
+  }
+
+  async function obtenerIndicacionesPlanMismaAtencion(idAtencionEsperada){
+    const idEsperada=txt(idAtencionEsperada);
+    if(!idEsperada) return '';
+
+    const ctxInicial=state.contexto || contextoAtencion();
+    const idInicial=txt(ctxInicial?.id || state.idAtencion);
+
+    if(!idInicial || idInicial !== idEsperada) return '';
+
+    /*
+      Camino principal: función pública ya existente del Plan.
+      Respaldo: mismo endpoint GET ya existente, sin escritura.
+    */
+    let plan=null;
+
     try{
-      const r=await get('listarDiagnosticos');
-      diagnosticos=arr(r).filter(x=>txt(x.id_atencion)===id);
-    }catch(_){
-      diagnosticos=[];
+      if(typeof window.buscarPlanClinicoPorAtencionDesdeSheets === 'function'){
+        plan=await window.buscarPlanClinicoPorAtencionDesdeSheets(idEsperada);
+      }else{
+        plan=await apiGet('buscarPlanPorAtencion',{id_atencion:idEsperada});
+      }
+    }catch(error){
+      console.warn(MODULO+': no se pudieron leer indicaciones del Plan.',error);
+      return '';
     }
+
+    /*
+      Revalidación posterior al await:
+      una respuesta tardía jamás puede aplicarse sobre otra atención.
+    */
+    const ctxActual=state.contexto || contextoAtencion();
+    const idActual=txt(ctxActual?.id || state.idAtencion);
+    if(!idActual || idActual !== idEsperada) return '';
+
+    const valor=valorClinicoPlanATexto(
+      plan?.indicaciones_paciente ??
+      plan?.indicaciones ??
+      plan?.indicacionesPaciente ??
+      ''
+    );
+
+    if(valor) return valor;
+
+    /*
+      Respaldo visual únicamente si Plan visible pertenece exactamente
+      a la misma atención.
+    */
+    const idPlanVisible=txt(window.planState?.atencionActual);
+    if(idPlanVisible !== idEsperada) return '';
+
+    const campoPlan=document.getElementById('hcIndicacionesPaciente');
+    return txt(campoPlan?.value || campoPlan?.textContent);
   }
 
-  // ANTIRREGRESIÓN: una respuesta atrasada de otra atención no puede repintar esta tarjeta.
-  if(token!==state.token || txt(state.idAtencion)!==txt(id)) return;
+  async function precargarIndicacionesDesdePlanSiVacio(idAtencionEsperada){
+    if(getValue('auroRecGenerales')) return false;
 
-  state.diagnosticos=diagnosticos;
-  renderDx();
-}
+    const idEsperada=txt(idAtencionEsperada);
+    const ctx=state.contexto || contextoAtencion();
+    const idRec=txt(ctx?.id || state.idAtencion);
 
-function renderDx(){
-  const b=document.getElementById('acDx');
-  if(!b) return;
-  if(!state.diagnosticos.length){
-    b.innerHTML='<div class="ac-empty">Sin diagnósticos registrados para esta atención.</div>';
-    return;
-  }
-  b.innerHTML=state.diagnosticos.map((d,i)=>`
-    <label>
-      <input type="checkbox" data-acdx="${i}" checked>
-      <span><b>${esc(cie10Visual(d.codigo_cie10||d.codigo)||'S/C')}</b> · ${esc(d.descripcion||d.diagnostico||'')}</span>
-    </label>`).join('');
-}
+    if(!idEsperada || !idRec || idEsperada !== idRec) return false;
 
-async function cargarHistorial(id, token){
-  let certificados=[];
-  try{
-    const r=await get('listarCertificadosPorAtencion',{id_atencion:id});
-    certificados=arr(r);
-  }catch(e){
-    certificados=[];
+    const valor=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
+
+    /*
+      Revalidación final y protección contra escritura del usuario
+      mientras la lectura del Plan estaba pendiente.
+    */
+    const ctxFinal=state.contexto || contextoAtencion();
+    const idFinal=txt(ctxFinal?.id || state.idAtencion);
+
+    if(idFinal !== idEsperada) return false;
+    if(getValue('auroRecGenerales')) return false;
+    if(!valor) return false;
+
+    setValue('auroRecGenerales',valor);
+    return true;
   }
 
-  // ANTIRREGRESIÓN: solo la atención que inició esta carga puede actualizar el historial.
-  if(token!==state.token || txt(state.idAtencion)!==txt(id)) return;
+  async function agregarIndicacionesPlanManualmente(){
+    const ctx=state.contexto || contextoAtencion();
 
-  state.certificados=certificados;
-  renderHistorial();
+    if(!ctx?.id){
+      setMsg('Seleccione una atención antes de añadir indicaciones del Plan.','error');
+      return false;
+    }
 
-  // AUROSANAX 1.3.10 — CONSULTA PERSISTENTE ÚNICA POR ATENCIÓN
-  // -----------------------------------------------------------
-  // En histórica NO se lanza una consulta de red por cada certificado.
-  // Se consulta documentos_firmados una sola vez por id_atencion y se
-  // cruza el resultado localmente. Es no bloqueante y conserva como
-  // autoridad final la persistencia del motor de Firma Electrónica.
-  consultarFirmasPersistentesAtencion(id,token)
-    .then(()=>{
-      if(token===state.token && txt(state.idAtencion)===txt(id)) renderHistorial();
-    })
-    .catch(()=>{});
-}
+    if(!ctx.editable){
+      setMsg('La atención seleccionada está protegida contra edición.','error');
+      return false;
+    }
 
-function estadoFirmaCertificado(id){
-  return state.firmaCertificados.get(txt(id))||{estado:'SIN_FIRMA',documento:null,error:''};
-}
+    const idEsperada=txt(ctx.id);
+    const valorPlan=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
 
-function fijarEstadoFirmaCertificado(id,estado,extra={}){
-  const key=txt(id);
-  if(!key) return;
-  state.firmaCertificados.set(key,Object.assign({},estadoFirmaCertificado(key),extra,{estado:txt(estado).toUpperCase()}));
-  renderHistorial();
-}
+    const ctxActual=state.contexto || contextoAtencion();
+    if(txt(ctxActual?.id) !== idEsperada) return false;
 
-/* Se actualiza únicamente el botón Abrir, sin reconstruir ni consultar el historial. */
-function actualizarBotonesCertificadoAbierto(){
-  const elegido=txt(state.editandoId);
-  document.querySelectorAll('#acHistorial [data-aceditar]').forEach(b=>{
-    const activo=!!elegido && txt(b.dataset.aceditar)===elegido;
-    b.classList.toggle('ac-abierto',activo);
-    b.textContent=activo?'Abierto ✓':'Abrir';
-    b.setAttribute('aria-pressed',activo?'true':'false');
-  });
-}
+    if(!valorPlan){
+      setMsg('El Plan de esta atención no tiene indicaciones para paciente disponibles.','info');
+      return false;
+    }
 
-function renderHistorial(){
-  const b=document.getElementById('acHistorial');
-  if(!b) return;
+    const actuales=getValue('auroRecGenerales');
+    const lineasActuales=lineasClinicasUnicas(actuales);
+    const clavesActuales=new Set(lineasActuales.map(norm));
 
-  if(!state.certificados.length){
-    b.innerHTML='<div class="ac-empty">No existen certificados emitidos para esta atención.</div>';
-    return;
+    const nuevas=lineasClinicasUnicas(valorPlan)
+      .filter(linea=>!clavesActuales.has(norm(linea)));
+
+    if(!nuevas.length){
+      setMsg('Las indicaciones disponibles en Plan ya están incluidas en Recomendaciones generales.','info');
+      return false;
+    }
+
+    const combinado=[
+      actuales,
+      nuevas.join('\n')
+    ].filter(Boolean).join(actuales ? '\n' : '');
+
+    setValue('auroRecGenerales',combinado);
+
+    setMsg(
+      'Se añadieron únicamente indicaciones nuevas del Plan. Revise el texto antes de guardar recomendaciones.',
+      'info'
+    );
+    return true;
   }
 
-  b.innerHTML=[...state.certificados].reverse().map(c=>{
-    const d=parse(c.detalle_json);
-    const ef=estadoFirmaCertificado(c.id_certificado);
-    const firmada=ef.estado==='FIRMADA';
-    const preparando=ef.estado==='PREPARANDO';
-    const proceso=ef.estado==='PROCESO';
-    const clase=firmada?' ac-firma-firmada':(preparando?' ac-firma-preparando':(proceso?' ac-firma-proceso':''));
-    const textoBoton=firmada?'Ver certificado firmado ✓':(preparando?'Preparando firma…':(proceso?'Firma en proceso…':'Firmar certificado'));
-    const botonCancelar=(preparando||proceso)
-      ? `<button class="ac-btn ac-firma-cancelar" data-accancelarfirma="${esc(c.id_certificado)}">Cancelar firma</button>`
-      : '';
-    return `<div class="ac-item">
-      <div class="ac-item-top">
-        <div>
-          <b>${esc(c.tipo_certificado||d.tipo_certificado||'Certificado')}</b>
-          <div class="ac-meta">${esc(fechaVisual(c.fecha_emision||d.fecha_emision))} · ${esc(c.id_certificado)}</div>
-        </div>
-        <div class="ac-actions" style="margin-top:0">
-          <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
-          <button class="ac-btn ac-soft${clase}" data-acfirmar="${esc(c.id_certificado)}" ${preparando||proceso?'disabled aria-busy="true"':''}>${textoBoton}</button>
-          ${botonCancelar}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  function detalleActual(){
+    return {
+      version:JSON_VERSION,
+      seguimiento:{
+        proxima_cita:getValue('auroRecProximaCita'),
+        motivo:getValue('auroRecMotivoControl')
+      },
+      signos_alerta:{
+        seleccionados:checksSeleccionados('alerta'),
+        otros:getValue('auroRecAlertaOtros')
+      },
+      signos_infeccion:{
+        seleccionados:checksSeleccionados('infeccion'),
+        otros:getValue('auroRecInfeccionOtros')
+      },
+      dieta_cuidados:getValue('auroRecDieta'),
+      recomendaciones_generales:getValue('auroRecGenerales')
+    };
+  }
 
-  actualizarBotonesCertificadoAbierto();
-  b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
-  b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>accionFirmaCertificado(x.dataset.acfirmar));
-  b.querySelectorAll('[data-accancelarfirma]').forEach(x=>x.onclick=()=>cancelarFirmaCertificado(x.dataset.accancelarfirma));
-}
+  function tieneContenido(detalle){
+    const d=detalle || {};
+    return !!(
+      txt(d?.seguimiento?.proxima_cita) ||
+      txt(d?.seguimiento?.motivo) ||
+      (Array.isArray(d?.signos_alerta?.seleccionados) && d.signos_alerta.seleccionados.length) ||
+      txt(d?.signos_alerta?.otros) ||
+      (Array.isArray(d?.signos_infeccion?.seleccionados) && d.signos_infeccion.seleccionados.length) ||
+      txt(d?.signos_infeccion?.otros) ||
+      txt(d?.dieta_cuidados) ||
+      txt(d?.recomendaciones_generales)
+    );
+  }
 
-/*
-  FIRMA CERTIFICADO — CONTRATO FUNCIONAL DEL MÓDULO
-  -------------------------------------------------
-  - El certificado guardado es la única fuente del documento a firmar.
-  - Identidad: CERTIFICADO + id_documento_origen/id_certificado + id_atencion.
-  - Nunca convierte id_certificado en id_receta.
-  - Certificados NO escribe Drive/Sheets: delega al motor de Firma Electrónica.
-  - El estado FIRMADA solo se representa cuando existe confirmación del motor
-    o persistencia; un error devuelve el botón a estado utilizable.
-*/
-function documentoFirmableCertificado(id){
-  const registro=state.certificados.find(x=>txt(x.id_certificado)===txt(id));
-  if(!registro) return {success:false,message:'No se encontró el certificado guardado seleccionado.'};
+  function aplicarRegistro(registro){
+    state.registro=registro || null;
+    state.idRecomendacion=txt(registro?.id_recomendacion);
 
-  const idCertificado=txt(registro.id_certificado);
-  const idAtencion=txt(registro.id_atencion);
-  const idAtencionActual=txt(state.idAtencion||state.contexto?.id);
-  if(!idCertificado||!idAtencion) return {success:false,message:'El certificado no contiene los identificadores requeridos para firma.'};
-  if(!idAtencionActual||idAtencion!==idAtencionActual) return {success:false,message:'El certificado no pertenece a la atención actualmente seleccionada.'};
+    const d=parseDetalle(registro?.detalle_json);
+    setValue('auroRecProximaCita',d?.seguimiento?.proxima_cita);
+    setValue('auroRecMotivoControl',d?.seguimiento?.motivo);
+    aplicarChecks('alerta',d?.signos_alerta?.seleccionados);
+    setValue('auroRecAlertaOtros',d?.signos_alerta?.otros);
+    aplicarChecks('infeccion',d?.signos_infeccion?.seleccionados);
+    setValue('auroRecInfeccionOtros',d?.signos_infeccion?.otros);
+    setValue('auroRecDieta',d?.dieta_cuidados);
+    setValue('auroRecGenerales',d?.recomendaciones_generales);
 
-  const detalle=parse(registro.detalle_json);
-  const paciente=detalle.paciente||{};
-  const historia=detalle.historia||{};
-  const medico=detalle.medico||{};
-  return {
-    success:true,
-    tipo_documento:'CERTIFICADO',
-    id_documento_origen:idCertificado,
-    id_documento_clinico:idCertificado,
-    id_certificado:idCertificado,
-    id_receta:'',
-    id_atencion:idAtencion,
-    numero_consulta:txt(registro.numero_consulta||state.contexto?.numeroConsulta),
-    id_paciente:txt(registro.id_paciente||paciente.id_paciente),
-    nombre_paciente:txt(registro.nombre_paciente||paciente.nombre),
-    id_historia:txt(registro.id_historia||historia.id_historia),
-    id_medico:txt(registro.id_medico||medico.id_medico),
-    nombre_medico:txt(registro.nombre_medico||medico.nombre),
-    tipo_certificado:txt(registro.tipo_certificado||detalle.tipo_certificado),
-    fecha_emision:txt(registro.fecha_emision||detalle.fecha_emision),
-    nombre_archivo:'CERTIFICADO_'+idCertificado+'_FIRMADO.pdf',
-    registro,
-    detalle,
-    html_documento:documentoHTMLFirmaCertificado(registro)
-  };
-}
+    setText(
+      'auroRecActualizado',
+      fechaVisual(registro?.actualizado_en || registro?.creado_en)
+    );
+    renderRecomendacionGuardada();
+  }
 
 
-/*
-  CERTIFICADO — DOCUMENTO ORIGINAL PARA FIRMA
-  -------------------------------------------
-  Usa exactamente el mismo docHTML() y estilosImpresion() que el flujo
-  Imprimir / PDF. El motor local recibe un HTML A4 autocontenido y no una
-  representación visual parcial dependiente del CSS de la pantalla ERP.
-*/
-function documentoHTMLFirmaCertificado(registro){
-  return `<!DOCTYPE html>
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES V1.3.1 — SIN DUPLICIDAD DE FIRMA
+     ------------------------------------------------------------
+     CORRECCIÓN QUIRÚRGICA / ANTIRREGRESIVA:
+     - La firma queda visible únicamente en "Recomendaciones guardadas".
+     - El botón técnico V1.2.0 se conserva oculto en el DOM para mantener
+       intactas renderFirma(), firmarRecomendacion() y cancelarFirmaRecomendacion().
+     - NO modifica motor, Apps Script, BD, PDF ni paginación A4.
+     ============================================================ */
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES V1.3.0 — TARJETA GUARDADA
+     ADHESIÓN ANTIRREGRESIVA SOBRE FIRMA V1.2.0
+     ------------------------------------------------------------
+     - NO altera el contrato de firma V1.2.0.
+     - NO altera motor, Apps Script, Sheets ni paginación A4 V1.1.5.
+     - La hoja actual conserva una sola fila por id_atencion.
+     - Representa esa fila guardada como tarjeta documental, siguiendo
+       el patrón funcional validado de "Certificados emitidos".
+     ============================================================ */
+
+  /* V1.3.6: historial independiente. La firma se muestra con su estado
+     comprobado únicamente para el documento seleccionado; nunca se presupone
+     la firma de otros registros. La UI heredada permanece intacta. */
+  function renderRecomendacionGuardada(){
+    const box=document.getElementById('auroRecGuardadas');
+    if(!box) return;
+    const registros=Array.isArray(state.registros)?state.registros:[];
+    const seleccionado=txt(state.idRecomendacion);
+    if(!registros.length){
+      box.innerHTML='<div class="auro-rec-empty">No existen recomendaciones guardadas para esta atención.</div>';
+      return;
+    }
+    const f=estadoFirma();
+    const e=txt(f.estado).toUpperCase();
+    box.innerHTML=registros.map(r=>{
+      const id=txt(r.id_recomendacion);
+      if(!id) return '';
+      const activa=seleccionado===id&&!state.modoNuevo;
+      const firmada=activa&&['FIRMADA','FIRMADO'].includes(e);
+      const proceso=activa&&['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e);
+      const label=firmada?'Ver recomendación firmada ✓':(proceso?'Firma en proceso…':(activa?'Firmar recomendación':'Abrir para firmar'));
+      return `<div class="auro-rec-saved-item${activa?' activo':''}">
+        <div class="auro-rec-saved-top"><div><b>Recomendaciones médicas${activa?' · Abierto ✓':''}</b>
+        <div class="auro-rec-saved-meta">${esc(fechaVisual(r.actualizado_en||r.creado_en))} · ${esc(id)}</div></div>
+        <div class="auro-rec-saved-actions">
+          <button type="button" class="auro-rec-btn" data-auro-rec-abrir="${esc(id)}">${activa?'Abierto ✓':'Abrir'}</button>
+          <button type="button" class="auro-rec-btn firma${firmada?' ok':(proceso?' proceso':'')}" data-auro-rec-firmar="${esc(id)}" ${proceso?'disabled aria-busy="true"':''}>${label}</button>
+          ${activa&&proceso&&txt(f.id_solicitud)?`<button type="button" class="auro-rec-btn cancelar-firma" data-auro-rec-cancelar="${esc(id)}">Cancelar firma</button>`:''}
+        </div></div></div>`;
+    }).join('');
+    box.querySelectorAll('[data-auro-rec-abrir]').forEach(btn=>btn.addEventListener('click',async()=>{
+      if(await abrirDocumentoRecomendacion(btn.dataset.auroRecAbrir)){
+        document.getElementById('auroRecomendacionesApp')?.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+    }));
+    box.querySelectorAll('[data-auro-rec-firmar]').forEach(btn=>btn.addEventListener('click',async()=>{
+      const id=txt(btn.dataset.auroRecFirmar);
+      if(id!==txt(state.idRecomendacion)||state.modoNuevo){
+        if(!(await abrirDocumentoRecomendacion(id))) return;
+      }
+      return firmarRecomendacion();
+    }));
+    box.querySelectorAll('[data-auro-rec-cancelar]').forEach(btn=>btn.addEventListener('click',cancelarFirmaRecomendacion));
+  }
+
+  function hayCambiosEnDocumento(){
+    if(!state.registro) return tieneContenido(detalleActual());
+    const anterior=parseDetalle(state.registro.detalle_json);
+    const actual=detalleActual();
+    const normalizar=(d)=>JSON.stringify({
+      seguimiento:{proxima_cita:txt(d?.seguimiento?.proxima_cita),motivo:txt(d?.seguimiento?.motivo)},
+      signos_alerta:{seleccionados:d?.signos_alerta?.seleccionados||[],otros:txt(d?.signos_alerta?.otros)},
+      signos_infeccion:{seleccionados:d?.signos_infeccion?.seleccionados||[],otros:txt(d?.signos_infeccion?.otros)},
+      dieta_cuidados:txt(d?.dieta_cuidados),recomendaciones_generales:txt(d?.recomendaciones_generales)
+    });
+    return normalizar(actual)!==normalizar(anterior);
+  }
+
+  function confirmarCambioDocumento(){
+    return !hayCambiosEnDocumento()||window.confirm('Hay cambios sin guardar. Si continúa, se perderán. ¿Desea continuar?');
+  }
+
+  async function abrirDocumentoRecomendacion(id){
+    id=txt(id);
+    if(!id||state.guardando||state.cargando) return false;
+    const ctx=state.contexto||contextoAtencion();
+    const r=state.registros.find(x=>txt(x.id_recomendacion)===id);
+    if(!r||txt(r.id_atencion)!==txt(ctx.id)){
+      setMsg('El documento no pertenece a esta atención. Recargue el historial.','error');
+      return false;
+    }
+    if(state.idRecomendacion!==id&&!confirmarCambioDocumento()) return false;
+    ++state.firma.token; // Invalida consultas previas de firma
+    aplicarRegistro(r);
+    state.modoNuevo=false;
+    state.firma={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:state.firma.token};
+    aplicarModo();
+    await consultarFirmaPersistenteRecomendacion();
+    if(txt(state.idRecomendacion)!==id||txt((state.contexto||{}).id)!==txt(ctx.id)) return false;
+    aplicarModo();
+    renderRecomendacionGuardada();
+    setMsg('Documento '+id+' abierto para revisión.','ok');
+    return true;
+  }
+
+  function nuevaRecomendacion(){
+    const ctx=state.contexto||contextoAtencion();
+    if(!ctx.id||!ctx.editable||state.cargando||state.guardando){
+      setMsg('Seleccione una atención editable antes de crear una recomendación.','error');
+      return;
+    }
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(estadoFirma().estado).toUpperCase())){
+      setMsg('Hay una firma en proceso. Espere o cancele la solicitud antes de cambiar de documento.','error');
+      return;
+    }
+    if(!confirmarCambioDocumento()) return;
+    limpiar();
+    state.modoNuevo=true;
+    precargarSeguimientoDesdePlanSiVacio();
+    aplicarModo();
+    renderRecomendacionGuardada();
+    setMsg('Nueva recomendación independiente. Complete los campos y pulse Guardar. No se modificará ninguna anterior.','info');
+  }
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES V1.2.0 — FIRMA ELECTRÓNICA
+     ADHESIÓN ANTIRREGRESIVA
+     ------------------------------------------------------------
+     - Autoridad documental: id_recomendacion + id_atencion exactos.
+     - Usa el mismo backend/cola/motor/documentos_firmados.
+     - No modifica detalle_json ni el contrato de guardado.
+     - El HTML firmado usa EXACTAMENTE recDocumentoHTML() +
+       recEstilosImpresion(), es decir, el A4 V1.1.5 ya validado.
+     - Un documento confirmado como FIRMADO queda protegido contra
+       edición para impedir que el contenido vivo diverja del PDF firmado.
+     ============================================================ */
+
+  function tokenSesionFirma(){
+    try{return txt(sessionStorage.getItem('aurosanax_seguridad_token'));}catch(e){return '';}
+  }
+
+  async function postFirma(accion,data){
+    const base=apiUrl();
+    if(!base) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
+    const payload=Object.assign({},data||{},{token:tokenSesionFirma()});
+    const r=await fetch(base,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion,data:payload}),
+      cache:'no-store'
+    });
+    if(!r.ok) throw new Error('El servidor de firma respondió HTTP '+r.status+'.');
+    const j=await r.json();
+    if(!j||j.success!==true) throw new Error(txt(j?.message)||'El servidor no confirmó la operación de firma.');
+    return j;
+  }
+
+  function estadoFirma(){
+    return state.firma||{estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:0};
+  }
+
+  function fijarFirma(estado,extra){
+    state.firma=Object.assign({},estadoFirma(),extra||{},{estado:estado||'SIN_FIRMA'});
+    renderFirma();
+    renderRecomendacionGuardada();
+  }
+
+  function recomendacionFirmable(){
+    const ctx=state.contexto||contextoAtencion();
+    const r=state.registro||{};
+    const id=txt(state.idRecomendacion||r.id_recomendacion);
+    const idAtencion=txt(r.id_atencion||ctx.id);
+
+    if(!id) return {success:false,message:'Guarde las recomendaciones antes de firmarlas electrónicamente.'};
+    if(!idAtencion||idAtencion!==txt(ctx.id)) return {success:false,message:'La recomendación no pertenece a la atención actualmente seleccionada.'};
+    if(!tieneContenido(detalleActual())) return {success:false,message:'No existen recomendaciones clínicas para firmar.'};
+
+    const a=ctx.atencion||{};
+    return {
+      success:true,
+      tipo_documento:'RECOMENDACION',
+      id_documento_origen:id,
+      id_documento_clinico:id,
+      id_recomendacion:id,
+      id_receta:'',
+      id_certificado:'',
+      id_atencion:idAtencion,
+      numero_consulta:txt(r.numero_consulta||ctx.numeroConsulta),
+      id_paciente:txt(r.id_paciente||ctx.idPaciente||a.id_paciente),
+      nombre_paciente:txt(r.nombre_paciente||nombrePacienteDesdeContexto(a)),
+      id_historia:txt(r.id_historia||ctx.idHistoria||a.id_historia),
+      id_medico:txt(r.id_medico||ctx.idMedico||a.id_medico),
+      nombre_medico:txt(r.nombre_medico||nombreMedicoDesdeContexto(a)),
+      nombre_archivo:'RECOMENDACION_'+id+'_FIRMADO.pdf',
+      html_documento:`<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Certificado médico AUROSANAX</title>
+<title>Recomendaciones médicas AUROSANAX</title>
 <style>
-${estilosImpresion()}
+${recEstilosImpresion()}
 </style>
 </head>
 <body>
-${docHTML(registro)}
+${recDocumentoHTML()}
 </body>
-</html>`;
-}
-
-/*
-  CANCELACIÓN CERTIFICADO
-  -----------------------
-  Cancela únicamente la solicitud asociada al certificado exacto.
-  La autoridad de cancelación sigue siendo Firma Electrónica / ERP.
-*/
-async function cancelarFirmaCertificado(id){
-  const doc=documentoFirmableCertificado(id);
-  if(!doc.success) return msg('warn',doc.message);
-
-  const motor=window.auroFirmaElectronica;
-  if(!motor) return msg('error','El motor de Firma Electrónica no está disponible.');
-
-  const estadoLocal=estadoFirmaCertificado(id);
-  const idSolicitud=txt(
-    estadoLocal?.id_solicitud||
-    estadoLocal?.solicitud?.id_solicitud||
-    estadoLocal?.documento?.id_solicitud
-  );
-
-  const payload={
-    tipo_documento:'CERTIFICADO',
-    id_documento_origen:doc.id_certificado,
-    id_certificado:doc.id_certificado,
-    id_atencion:doc.id_atencion,
-    id_receta:'',
-    id_solicitud:idSolicitud
-  };
-
-  const cancelar=
-    (typeof motor.cancelarFirmaElectronica==='function' && motor.cancelarFirmaElectronica.bind(motor)) ||
-    (typeof motor.cancelarFirma==='function' && motor.cancelarFirma.bind(motor)) ||
-    (typeof motor.cancelarDocumento==='function' && motor.cancelarDocumento.bind(motor));
-
-  if(!cancelar){
-    return msg('error','La versión instalada de Firma Electrónica no expone el contrato de cancelación.');
+</html>`
+    };
   }
 
-  try{
-    msg('warn','Cancelando firma del certificado…');
-    toastPremium('info','Cancelando firma del certificado…');
-    const r=await cancelar(payload);
-    const estado=txt(r?.estado_firma||r?.estado).toUpperCase();
-    if(r?.success===false) throw new Error(r.message||'No se pudo cancelar la firma.');
-    if(estado && !['CANCELADA','CANCELADO'].includes(estado)){
-      throw new Error('El motor no confirmó la cancelación del certificado.');
+  function renderFirma(){
+    const f=estadoFirma();
+    const btn=document.getElementById('auroRecBtnFirma');
+    const cancelar=document.getElementById('auroRecBtnCancelarFirma');
+    const ctx=state.contexto||contextoAtencion();
+    const guardada=!!txt(state.idRecomendacion);
+    const e=txt(f.estado).toUpperCase();
+
+    if(btn){
+      btn.classList.remove('ok','proceso');
+      btn.disabled=!ctx.id||!guardada||['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e);
+      if(e==='FIRMADA'||e==='FIRMADO'){
+        btn.disabled=false;
+        btn.classList.add('ok');
+        btn.innerHTML='<i class="bi bi-file-earmark-check me-1"></i> Ver recomendación firmada ✓';
+      }else if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e)){
+        btn.classList.add('proceso');
+        btn.innerHTML='<i class="bi bi-hourglass-split me-1"></i> Firma en proceso…';
+      }else{
+        btn.innerHTML='<i class="bi bi-pen me-1"></i> Firmar recomendación';
+      }
     }
 
-    fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{
-      documento:null,
-      solicitud:null,
-      id_solicitud:'',
-      error:''
-    });
-    msg('warn','Firma del certificado cancelada.');
-    toastPremium('warn','Firma cancelada correctamente. El certificado está disponible nuevamente.');
-    return r;
-  }catch(e){
-    msg('error',e?.message||'No se pudo cancelar la firma del certificado.');
-    toastPremium('error',e?.message||'No se pudo cancelar la firma del certificado.');
+    if(cancelar){
+      cancelar.hidden=!(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e)&&!!txt(f.id_solicitud));
+      cancelar.disabled=cancelar.hidden;
+    }
+
+    /* Protección documental: si existe PDF firmado persistente, el contenido
+       clínico firmado no puede sobrescribirse con el mismo id_recomendacion. */
+    const firmado=e==='FIRMADA'||e==='FIRMADO';
+    if(firmado){
+      document.querySelectorAll(
+        '#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select'
+      ).forEach(el=>{el.disabled=true;});
+      const guardar=document.getElementById('auroRecBtnGuardar');
+      const agregar=document.getElementById('auroRecBtnAgregarPlan');
+      if(guardar) guardar.disabled=true;
+      if(agregar) agregar.disabled=true;
+    }
+  }
+
+  async function consultarFirmaPersistenteRecomendacion(){
+    const ctx=state.contexto||contextoAtencion();
+    const id=txt(state.idRecomendacion||state.registro?.id_recomendacion);
+    const idAtencion=txt(state.registro?.id_atencion||ctx.id);
+    if(!id||!idAtencion||idAtencion!==txt(ctx.id)) return null;
+    const token=++state.firma.token;
+    try{
+      const r=await postFirma('consultarDocumentosFirmados',{
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:id,
+        id_recomendacion:id,
+        id_atencion:idAtencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      if(token!==state.firma.token) return null;
+      const docs=Array.isArray(r?.documentos)?r.documentos:[];
+      const encontrado=docs.find(x=>
+        txt(x?.tipo_documento).toUpperCase()==='RECOMENDACION' &&
+        txt(x?.id_documento_origen||x?.id_recomendacion)===id &&
+        txt(x?.id_atencion)===idAtencion &&
+        txt(x?.estado_firma).toUpperCase()==='FIRMADO'
+      )||null;
+      if(encontrado){
+        fijarFirma('FIRMADA',{documento:encontrado,id_solicitud:txt(encontrado.id_solicitud),error:''});
+        return encontrado;
+      }
+      fijarFirma('SIN_FIRMA',{documento:null,id_solicitud:'',error:''});
+    }catch(e){
+      console.warn(MODULO+': no se pudo consultar la firma persistente de Recomendaciones.',e);
+      renderFirma();
+    }
     return null;
   }
-}
 
+  async function abrirRecomendacionFirmada(){
+    const doc=recomendacionFirmable();
+    if(!doc.success){setMsg(doc.message,'error');return null;}
+    const ventana=window.open('','_blank');
+    if(!ventana){
+      setMsg('Habilite ventanas emergentes para ver la recomendación firmada.','error');
+      return null;
+    }
+    try{
+      ventana.document.title='Cargando recomendación firmada…';
+      ventana.document.body.innerHTML='<p style="font-family:Arial,sans-serif;padding:20px">Cargando recomendación firmada…</p>';
+      const r=await postFirma('obtenerPdfFirmadoPersistente',{
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:doc.id_recomendacion,
+        id_recomendacion:doc.id_recomendacion,
+        id_atencion:doc.id_atencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      const b64=txt(r?.pdf_firmado_base64||r?.archivo_base64).replace(/^data:application\/pdf;base64,/i,'');
+      if(!b64) throw new Error('El servidor no devolvió el PDF firmado de la recomendación.');
+      const bin=atob(b64);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+      ventana.location.replace(url);
+      setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
+      return r;
+    }catch(e){
+      try{ventana.close();}catch(_e){}
+      setMsg(txt(e.message||e),'error');
+      return null;
+    }
+  }
 
-/*
-  AUROSANAX 1.3.10 — FIRMA PERSISTENTE AGRUPADA POR ATENCIÓN
-  ----------------------------------------------------------
-  - Una sola llamada de red para todos los certificados de la atención.
-  - No bloquea cargarHistorial() ni el botón Firmar certificado.
-  - No modifica firma, cancelación, PDF, Receta, Plan ni Apps Script.
-  - Filtra estrictamente CERTIFICADO + id_atencion + estado FIRMADO.
-  - Solo marca IDs que pertenecen al historial actualmente cargado.
-  - El token evita que una respuesta atrasada de otra atención repinte
-    la atención actual.
-*/
-async function consultarFirmasPersistentesAtencion(idAtencion,token){
-  const id=txt(idAtencion);
-  if(!id) return [];
+  async function esperarFirmaRecomendacion(idSolicitud,doc,tokenOperacion){
+    while(tokenOperacion===state.firma.token){
+      const r=await postFirma('obtenerEstadoFirmaElectronica',{
+        id_solicitud:idSolicitud,
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:doc.id_recomendacion,
+        id_recomendacion:doc.id_recomendacion,
+        id_atencion:doc.id_atencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      const e=txt(r?.estado_firma).toUpperCase();
+      if(e==='FIRMADO') return r;
+      if(e==='CANCELADA'||e==='CANCELADO') return r;
+      if(e==='ERROR') throw new Error(txt(r?.error)||'El motor local informó un error al firmar la recomendación.');
+      if(e==='EXPIRADA') throw new Error(txt(r?.error)||'La solicitud de firma expiró.');
+      if(!['PENDIENTE','TOMADA'].includes(e)) throw new Error('El servidor devolvió un estado de firma no reconocido.');
+      fijarFirma(e,{id_solicitud:idSolicitud,error:''});
+      await new Promise(resolve=>setTimeout(resolve,2500));
+    }
+    return null;
+  }
 
-  const motor=window.auroFirmaElectronica;
-  if(!motor||typeof motor.consultarDocumentosFirmados!=='function') return [];
+  async function firmarRecomendacion(){
+    const f=estadoFirma();
+    if(['FIRMADA','FIRMADO'].includes(txt(f.estado).toUpperCase())) return abrirRecomendacionFirmada();
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(f.estado).toUpperCase())) return;
 
-  try{
-    const r=await motor.consultarDocumentosFirmados({
-      tipo_documento:'CERTIFICADO',
-      id_atencion:id,
-      id_receta:''
+    const doc=recomendacionFirmable();
+    if(!doc.success){setMsg(doc.message,'error');return null;}
+
+    const tokenOperacion=++state.firma.token;
+    fijarFirma('PREPARANDO',{id_solicitud:'',documento:null,error:''});
+    setMsg('Preparando recomendación para firma electrónica…','info');
+
+    try{
+      const motor=await postFirma('obtenerEstadoFirmaElectronica',{});
+      if(motor?.disponible!==true){
+        throw new Error(
+          motor?.agente_online===false
+            ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
+            : 'La firma electrónica no está disponible en este momento.'
+        );
+      }
+
+      const creada=await postFirma('firmarDocumento',doc);
+      if(tokenOperacion!==state.firma.token) return null;
+
+      const idSolicitud=txt(creada?.id_solicitud);
+      const inicial=txt(creada?.estado_firma).toUpperCase();
+
+      if(inicial==='FIRMADO'){
+        fijarFirma('FIRMADA',{id_solicitud,documento:creada,error:''});
+        setMsg('Recomendación firmada electrónicamente.','ok');
+        return creada;
+      }
+
+      if(inicial!=='PENDIENTE'||!idSolicitud) throw new Error('El servidor no creó correctamente la solicitud de firma.');
+
+      fijarFirma('PENDIENTE',{id_solicitud,error:''});
+      setMsg('Recomendación enviada al motor de firma.','info');
+
+      const resultado=await esperarFirmaRecomendacion(idSolicitud,doc,tokenOperacion);
+      if(!resultado) return null;
+      const estado=txt(resultado?.estado_firma).toUpperCase();
+
+      if(estado==='FIRMADO'){
+        const persistido=await consultarFirmaPersistenteRecomendacion();
+        if(!persistido) fijarFirma('FIRMADA',{id_solicitud,documento:resultado,error:''});
+        setMsg('Recomendación firmada electrónicamente.','ok');
+        return resultado;
+      }
+
+      if(['CANCELADA','CANCELADO'].includes(estado)){
+        fijarFirma('SIN_FIRMA',{id_solicitud:'',documento:null,error:''});
+        setMsg('Firma de la recomendación cancelada.','info');
+        return resultado;
+      }
+
+      throw new Error('El servidor no confirmó la firma de la recomendación.');
+    }catch(e){
+      if(tokenOperacion===state.firma.token){
+        fijarFirma('SIN_FIRMA',{id_solicitud:'',documento:null,error:txt(e.message||e)});
+        setMsg('No se pudo firmar: '+txt(e.message||e),'error');
+      }
+      return null;
+    }
+  }
+
+  async function cancelarFirmaRecomendacion(){
+    const f=estadoFirma();
+    const idSolicitud=txt(f.id_solicitud);
+    const doc=recomendacionFirmable();
+    if(!doc.success){setMsg(doc.message,'error');return null;}
+    if(!idSolicitud){setMsg('No existe una solicitud de firma pendiente para cancelar.','error');return null;}
+
+    try{
+      const r=await postFirma('firmarDocumento',{
+        operacion_frontend:'CANCELAR',
+        id_solicitud:idSolicitud,
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:doc.id_recomendacion,
+        id_recomendacion:doc.id_recomendacion,
+        id_atencion:doc.id_atencion,
+        id_receta:'',
+        id_certificado:''
+      });
+      const e=txt(r?.estado_firma).toUpperCase();
+      if(!['CANCELADA','CANCELADO'].includes(e)) throw new Error('El servidor no confirmó la cancelación de la recomendación.');
+      state.firma.token++;
+      fijarFirma('SIN_FIRMA',{id_solicitud:'',documento:null,error:''});
+      setMsg('Firma de la recomendación cancelada.','info');
+      return r;
+    }catch(e){
+      setMsg('No se pudo cancelar la firma: '+txt(e.message||e),'error');
+      return null;
+    }
+  }
+
+  function aplicarModo(){
+    const ctx=state.contexto || contextoAtencion();
+    const editable=ctx.editable === true && !['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase());
+    const app=document.getElementById('auroRecomendacionesApp');
+    if(app) app.classList.toggle('auro-rec-readonly',!editable);
+
+    document.querySelectorAll(
+      '#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select'
+    ).forEach(el=>{
+      el.disabled=!editable;
     });
 
-    // ANTIRREGRESIÓN: una respuesta atrasada nunca altera otra atención.
-    if(token!==state.token || txt(state.idAtencion)!==id) return [];
+    const guardar=document.getElementById('auroRecBtnGuardar');
+    if(guardar) guardar.disabled=!editable || !ctx.id;
 
-    const docs=Array.isArray(r?.documentos)?r.documentos:[];
-    const idsValidos=new Set(
-      state.certificados
-        .filter(c=>txt(c.id_atencion)===id)
-        .map(c=>txt(c.id_certificado))
-        .filter(Boolean)
+    const agregarPlan=document.getElementById('auroRecBtnAgregarPlan');
+    if(agregarPlan) agregarPlan.disabled=!editable || !ctx.id;
+    const nueva=document.getElementById('auroRecBtnNueva');
+    if(nueva) nueva.disabled=!ctx.editable || !ctx.id;
+    document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{btn.disabled=!editable || !ctx.id;});
+
+    const estado=document.getElementById('auroRecEstado');
+    if(estado){
+      estado.className='auro-rec-state ' + (editable ? 'edit' : 'read');
+
+      if(!ctx.id){
+        estado.innerHTML='<i class="bi bi-lock"></i> Sin atención';
+      }else if(ctx.bloqueada){
+        estado.innerHTML='<i class="bi bi-lock"></i> Atención anulada/cancelada · Solo lectura';
+      }else if(ctx.finalizada){
+        estado.innerHTML='<i class="bi bi-check2-circle"></i> Atención finalizada · Recomendaciones editables';
+      }else{
+        estado.innerHTML='<i class="bi bi-pencil-square"></i> Atención activa · Editable';
+      }
+    }
+      renderFirma();
+  }
+
+  function renderContexto(){
+    const ctx=state.contexto || contextoAtencion();
+    const a=ctx.atencion || {};
+
+    setText('auroRecPaciente',nombrePacienteDesdeContexto(a) || 'Paciente de la atención');
+    setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
+    setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
+    setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
+    setText(
+      'auroRecFecha',
+      fechaAtencionVisual(
+        a.fecha_atencion || a.fecha_consulta || a.creado_en,
+        a.hora_atencion || a.hora_consulta || ''
+      )
     );
 
-    const encontrados=[];
-    docs.forEach(x=>{
-      const tipo=txt(x?.tipo_documento).toUpperCase();
-      const estado=txt(x?.estado_firma).toUpperCase();
-      const idDoc=txt(x?.id_documento_origen||x?.id_certificado);
-      const idDocAtencion=txt(x?.id_atencion);
-
-      if(
-        tipo==='CERTIFICADO' &&
-        estado==='FIRMADO' &&
-        idDocAtencion===id &&
-        idsValidos.has(idDoc)
-      ){
-        state.firmaCertificados.set(idDoc,{
-          estado:'FIRMADA',
-          documento:x,
-          error:''
-        });
-        encontrados.push(x);
-      }
-    });
-
-    return encontrados;
-  }catch(_e){
-    // La consulta histórica es auxiliar: una falla de red no debe impedir
-    // abrir la atención ni utilizar el flujo normal de firma.
-    return [];
+    aplicarModo();
   }
-}
 
-async function consultarFirmaPersistenteCertificado(id){
-  const doc=documentoFirmableCertificado(id);
-  if(!doc.success) return null;
-  const motor=window.auroFirmaElectronica;
-  if(!motor||typeof motor.consultarDocumentosFirmados!=='function') return null;
-  try{
-    const r=await motor.consultarDocumentosFirmados({
-      tipo_documento:'CERTIFICADO',
-      id_documento_origen:doc.id_certificado,
-      id_certificado:doc.id_certificado,
-      id_atencion:doc.id_atencion,
-      id_receta:''
-    });
-    const docs=Array.isArray(r?.documentos)?r.documentos:[];
-    const encontrado=docs.find(x=>
-      txt(x?.tipo_documento).toUpperCase()==='CERTIFICADO' &&
-      txt(x?.id_documento_origen||x?.id_certificado)===doc.id_certificado &&
-      txt(x?.id_atencion)===doc.id_atencion &&
-      txt(x?.estado_firma).toUpperCase()==='FIRMADO'
-    )||null;
-    if(encontrado){
-      state.firmaCertificados.set(doc.id_certificado,{estado:'FIRMADA',documento:encontrado,error:''});
-      return encontrado;
+  async function cargarDiagnosticos(id){
+    try{
+      const data=await apiGet('listarDiagnosticosPorAtencion',{id_atencion:id});
+      state.diagnosticos=Array.isArray(data) ? data : (Array.isArray(data?.registros) ? data.registros : []);
+    }catch(e){
+      console.warn(MODULO+': no se pudieron cargar diagnósticos.',e);
+      state.diagnosticos=[];
     }
-  }catch(_e){}
-  return null;
-}
+    renderDiagnosticos();
+  }
 
-async function verCertificadoFirmado(id){
-  const doc=documentoFirmableCertificado(id);
-  if(!doc.success) return msg('warn',doc.message);
-  const motor=window.auroFirmaElectronica;
-  if(!motor) return msg('error','El motor de Firma Electrónica no está disponible.');
-  try{
-    if(typeof motor.abrirPdfFirmadoPersistente==='function'){
-      await motor.abrirPdfFirmadoPersistente({
-        tipo_documento:'CERTIFICADO',
-        id_documento_origen:doc.id_certificado,
-        id_certificado:doc.id_certificado,
-        id_atencion:doc.id_atencion,
-        id_receta:''
-      });
+  async function cargar(forzar){
+    if(state.cargando) return null;
+    let ctx=contextoAtencion();
+
+    state.contexto=ctx;
+    renderContexto();
+
+    if(!ctx.id){
+      state.registros=[];
+      limpiar();
+      state.diagnosticos=[];
+      renderDiagnosticos();
+      setMsg('Seleccione una atención antes de trabajar Recomendaciones.','info');
+      return null;
+    }
+
+    const token=++state.tokenCarga;
+    state.cargando=true;
+    setMsg('Cargando recomendaciones de esta atención...','info');
+
+    try{
+      const [respuestaHistorial, contextoEnriquecido] = await Promise.all([
+        apiGet('listarRecomendacionesPorAtencion',{id_atencion:ctx.id}),
+        enriquecerContextoDesdeServidor(ctx),
+        cargarDiagnosticos(ctx.id),
+        recCargarDatosImpresion()
+      ]).then(resultados => [resultados[0], resultados[1]]);
+
+      if(token !== state.tokenCarga) return null;
+
+      ctx=contextoEnriquecido || ctx;
+      state.contexto=ctx;
+
+      const documentos=Array.isArray(respuestaHistorial)?respuestaHistorial:(Array.isArray(respuestaHistorial?.registros)?respuestaHistorial.registros:[]);
+      const docs= documentos.filter(x=>txt(x?.id_atencion)===txt(ctx.id)&&txt(x?.id_recomendacion));
+      const idAnterior=(txt(state.idAtencion)===txt(ctx.id))?txt(state.idRecomendacion):'';
+      const nuevoAnterior=(txt(state.idAtencion)===txt(ctx.id))&&state.modoNuevo;
+      const registro=docs.find(x=>txt(x.id_recomendacion)===idAnterior)||docs[0]||null;
+      limpiar();
+      state.registros=docs;
+      if(nuevoAnterior){state.modoNuevo=true;}
+
+      if(!nuevoAnterior && registro && registro.id_recomendacion){
+        aplicarRegistro(registro);
+        await consultarFirmaPersistenteRecomendacion();
+        if(token !== state.tokenCarga) return null;
+
+        let precargadasIndicaciones=false;
+        if(ctx.editable && !getValue('auroRecGenerales')){
+          precargadasIndicaciones=await precargarIndicacionesDesdePlanSiVacio(ctx.id);
+          if(token !== state.tokenCarga) return null;
+        }
+
+        setMsg(
+          ctx.editable
+            ? (precargadasIndicaciones
+                ? 'Recomendaciones cargadas. El campo general estaba vacío y se precargaron indicaciones del Plan para revisión.'
+                : 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.')
+            : 'Recomendaciones históricas cargadas en modo solo lectura.',
+          precargadasIndicaciones ? 'info' : 'ok'
+        );
+      }else if(!nuevoAnterior){
+        const precargadoSeguimiento = ctx.editable
+          ? precargarSeguimientoDesdePlanSiVacio()
+          : false;
+
+        const precargadasIndicaciones = ctx.editable
+          ? await precargarIndicacionesDesdePlanSiVacio(ctx.id)
+          : false;
+
+        if(token !== state.tokenCarga) return null;
+
+        setMsg(
+          ctx.editable
+            ? ((precargadoSeguimiento || precargadasIndicaciones)
+                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó información disponible en Plan para revisión y edición.'
+                : 'Esta atención todavía no tiene recomendaciones guardadas.')
+            : 'Esta atención está bloqueada y no tiene recomendaciones registradas.',
+          'info'
+        );
+      }
+
+      state.idAtencion=ctx.id;
+      renderContexto();
+      renderFirma();
+      renderRecomendacionGuardada();
+      return nuevoAnterior?null:(registro || null);
+    }catch(e){
+      console.error(MODULO+':',e);
+      setMsg('No se pudieron cargar las recomendaciones: '+txt(e.message || e),'error');
+      return null;
+    }finally{
+      state.cargando=false;
+    }
+  }
+
+  function datosGuardar(){
+    const ctx=state.contexto || contextoAtencion();
+    const a=ctx.atencion || {};
+    const detalle=detalleActual();
+
+    return {
+      id_recomendacion:state.idRecomendacion || '',
+      ...(state.modoNuevo?{forzar_nueva_recomendacion:'SI'}:{}),
+      id_atencion:ctx.id || '',
+      id_cita:txt(a.id_cita),
+      id_paciente:txt(a.id_paciente),
+      id_historia:txt(a.id_historia),
+      id_medico:txt(a.id_medico),
+      fecha_atencion:a.fecha_atencion || '',
+      detalle_json:JSON.stringify(detalle),
+      estado:'Activo'
+    };
+  }
+
+  async function guardar(){
+    if(state.guardando) return;
+
+    const ctx=contextoAtencion();
+    state.contexto=ctx;
+
+    if(!ctx.id){
+      setMsg('No existe una atención activa para guardar recomendaciones.','error');
       return;
     }
-    if(typeof motor.abrirPdfFirmado==='function' && estadoFirmaCertificado(id).documento){
-      if(motor.abrirPdfFirmado(estadoFirmaCertificado(id).documento,doc.nombre_archivo)) return;
+
+    if(['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase())){
+      setMsg('La recomendación ya está firmada y no se puede sobrescribir.','error');
+      return;
     }
-    throw new Error('No está disponible la apertura persistente del certificado firmado.');
-  }catch(e){
-    msg('error',e.message||'No se pudo abrir el certificado firmado.');
-  }
-}
 
-async function accionFirmaCertificado(id){
-  const actual=estadoFirmaCertificado(id);
-  if(actual.estado==='FIRMADA') return verCertificadoFirmado(id);
-  if(actual.estado==='PREPARANDO'||actual.estado==='PROCESO') return;
+    if(!ctx.editable){
+      setMsg('La consulta seleccionada es histórica y está protegida contra edición.','error');
+      return;
+    }
 
-  const doc=documentoFirmableCertificado(id);
-  if(!doc.success) return msg('warn',doc.message||'No se pudo preparar el certificado para firma.');
-  const motor=window.auroFirmaElectronica;
-  if(!motor||typeof motor.firmarDocumento!=='function') return msg('error','El motor de Firma Electrónica no está disponible.');
+    const detalle=detalleActual();
+    if(!tieneContenido(detalle)){
+      setMsg('Ingrese al menos una recomendación, seguimiento, signo de alerta o cuidado antes de guardar.','error');
+      return;
+    }
 
-  fijarEstadoFirmaCertificado(id,'PREPARANDO',{error:''});
-  msg('ok','Preparando certificado para firma electrónica…');
-  toastPremium('info','Certificado enviado a firma. Abriendo Adobe…');
+    const btn=document.getElementById('auroRecBtnGuardar');
+    state.guardando=true;
+    if(btn){
+      btn.disabled=true;
+      btn.innerHTML='<i class="bi bi-hourglass-split me-1"></i> Guardando...';
+    }
 
-  try{
-    await new Promise(resolve=>requestAnimationFrame(resolve));
-    fijarEstadoFirmaCertificado(id,'PROCESO');
-    const resultado=await motor.firmarDocumento(doc);
-    const idSolicitud=txt(resultado?.id_solicitud||resultado?.solicitud?.id_solicitud);
-    if(idSolicitud){
-      const previo=estadoFirmaCertificado(id);
-      state.firmaCertificados.set(txt(id),Object.assign({},previo,{
-        id_solicitud:idSolicitud,
-        solicitud:resultado?.solicitud||previo.solicitud||null
+    try{
+      const data=datosGuardar();
+      const r=await apiPost('guardarRecomendacion',data);
+
+      if(!r || r.success === false){
+        throw new Error(txt(r?.message || 'No se pudo guardar Recomendaciones.'));
+      }
+
+      state.idRecomendacion=txt(r.id || r.id_recomendacion || data.id_recomendacion);
+      state.modoNuevo=false;
+
+      /* ==========================================================
+         AUROSANAX RECOMENDACIONES V1.3.2 — TARJETA INMEDIATA
+         ----------------------------------------------------------
+         UX QUIRÚRGICA / ANTIRREGRESIVA:
+         - El servidor ya confirmó el guardado antes de llegar aquí.
+         - Refleja inmediatamente ESA MISMA recomendación confirmada
+           en "Recomendaciones guardadas" sin esperar una segunda
+           lectura de Sheets.
+         - cargar(true) se conserva intacto como verificación y fuente
+           autoritativa posterior.
+         - No inventa IDs: solo actúa si el backend devolvió/conservó
+           un id_recomendacion real.
+         ========================================================== */
+      if(state.idRecomendacion){
+        const ahora=new Date().toISOString();
+        const registroInmediato=Object.assign({},state.registro||{},data,{
+          id_recomendacion:state.idRecomendacion,
+          id_atencion:ctx.id,
+          numero_consulta:txt(state.registro?.numero_consulta || ctx.numeroConsulta),
+          actualizado_en:txt(r.actualizado_en || r.fecha_actualizacion || ahora),
+          creado_en:txt(state.registro?.creado_en || r.creado_en || ahora)
+        });
+        aplicarRegistro(registroInmediato);
+      }
+
+      setMsg(r.actualizado ? 'Recomendaciones actualizadas correctamente.' : 'Recomendaciones guardadas correctamente.','ok');
+
+      window.dispatchEvent(new CustomEvent('aurosanax:recomendaciones-guardadas',{
+        detail:{id_atencion:ctx.id,id_recomendacion:state.idRecomendacion}
       }));
+
+      /* Confirmación autoritativa: conserva el comportamiento previo. */
+      await cargar(true);
+    }catch(e){
+      console.error(MODULO+':',e);
+      setMsg('No se pudo guardar: '+txt(e.message || e),'error');
+    }finally{
+      state.guardando=false;
+      if(btn){
+        const ctxActual=contextoAtencion();
+        btn.disabled=!(ctxActual.editable && ctxActual.id) || ['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase());
+        btn.innerHTML='<i class="bi bi-save2 me-1"></i> Guardar recomendaciones';
+      }
     }
-    const estado=txt(resultado?.estado_firma).toUpperCase();
+  }
 
-    if(estado==='FIRMADO'){
-      fijarEstadoFirmaCertificado(id,'FIRMADA',{documento:resultado,error:''});
-      msg('ok','Certificado firmado electrónicamente.');
-      toastPremium('ok','Certificado firmado correctamente.');
-      return resultado;
+
+  /* ============================================================
+     AUROSANAX RECOMENDACIONES 1.1.0
+     IMPRESIÓN A4 BASADA EN EL DOCUMENTO MAESTRO DE CERTIFICADOS
+     ----------------------------------------------------------------
+     ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
+     - Sustituye ÚNICAMENTE la representación de vista/impresión.
+     - Conserva guardado, detalle_json, carga, diagnósticos, atención,
+       eventos, endpoints, Google Sheets, Plan y demás módulos.
+     - Mantiene una sola geometría documental A4.
+     - Escritorio, tablet, iPhone y Android solo escalan el visor.
+     - La impresión real no hereda el zoom visual del dispositivo.
+     ============================================================ */
+
+  /* FASE 1: fuente institucional equivalente a Certificados.
+     No altera datos clínicos, guardado ni firmas existentes. */
+  // Logo institucional: URL de Configuracion Centro o enlace de Google Drive.
+  function recLogoUrlImpresion(valor){
+    const raw=String(valor||'').trim();
+    if(!raw) return '';
+    if(/^data:image\/(?:png|jpeg|jpg|gif|webp);base64,/i.test(raw)) return raw;
+    if(!/^https:\/\//i.test(raw)) return '';
+    if(/(?:drive|docs)\.google\.com/i.test(raw)){
+      const id=(raw.match(/\/d\/([a-zA-Z0-9_-]+)/)||raw.match(/[?&]id=([a-zA-Z0-9_-]+)/)||[])[1];
+      if(id) return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w400';
     }
-    if(estado==='CANCELADA'){
-      fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:''});
-      msg('warn','Firma del certificado cancelada.');
-      toastPremium('warn','Firma cancelada correctamente. El certificado está disponible nuevamente.');
-      return resultado;
+    return raw;
+  }
+
+  function recConfigInstitucional(){
+    const candidatos=[
+      state.configuracionImpresion,
+      window.auroConfiguracionCentro,
+      window.configuracionCentro,
+      window.configCentro,
+      window.CONFIG_CENTRO,
+      window.configuracionInstitucional
+    ];
+    let c=candidatos.find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
+    if(c.datos&&typeof c.datos==='object') c=c.datos;
+    return {
+      nombre:primerTexto(c.nombre_clinica,c.nombre_centro,c.nombre_comercial,c.razon_social,'AUROSANAX'),
+      subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica),
+      razon_social:txt(c.razon_social),
+      ruc:txt(c.ruc),
+      direccion:primerTexto(c.direccion_clinica,c.direccion),
+      ciudad:primerTexto(c.ciudad_clinica,c.ciudad),
+      provincia:primerTexto(c.provincia_clinica,c.provincia),
+      pais:primerTexto(c.pais_clinica,c.pais),
+      telefono:primerTexto(c.telefono_clinica,c.whatsapp_clinica,c.telefono,c.whatsapp),
+      email:primerTexto(c.email_clinica,c.correo_clinica,c.email,c.correo),
+      web:primerTexto(c.sitio_web_clinica,c.web_clinica,c.web),
+      logo:recLogoUrlImpresion(primerTexto(c.logo_url,c.logo_drive_url,c.logo)),
+      colorPrincipal:primerTexto(c.color_principal,'#8b1e5a')
+    };
+  }
+
+  async function recCargarDatosImpresion(){
+    // Mismo origen que Certificados: obtenerConfiguracion + listarMedicosActivos.
+    // Una falla no debe bloquear la consulta clínica ni la firma.
+    const [config,medicos]=await Promise.allSettled([
+      apiGet('obtenerConfiguracion'),
+      apiGet('listarMedicosActivos')
+    ]);
+    if(config.status==='fulfilled' && config.value && typeof config.value==='object'){
+      const c=config.value;
+      const datos=(c.datos&&typeof c.datos==='object')?c.datos:c;
+      const globales=[window.auroConfiguracionCentro,window.configuracionCentro,window.configCentro,window.CONFIG_CENTRO,window.configuracionInstitucional]
+        .find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
+      state.configuracionImpresion=Object.assign({},globales,datos);
     }
-    throw new Error('El motor no confirmó la firma del certificado.');
-  }catch(e){
-    fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:txt(e?.message)});
-    msg('error',e?.message||'No se pudo completar la firma electrónica del certificado.');
-    toastPremium('error',e?.message||'No se pudo completar la firma electrónica del certificado.');
-    throw e;
-  }
-}
-
-function prepararFirmaCertificado(id){
-  return accionFirmaCertificado(id);
-}
-
-function dxSeleccionados(){
-  return [...document.querySelectorAll('[data-acdx]:checked')]
-    .map(x=>state.diagnosticos[Number(x.dataset.acdx)])
-    .filter(Boolean)
-    .map(d=>({
-      id_diagnostico:txt(d.id_diagnostico),
-      codigo_cie10:txt(d.codigo_cie10||d.codigo),
-      descripcion:txt(d.descripcion||d.diagnostico),
-      principal:d.principal===true||['si','true'].includes(norm(d.principal)),
-      tipo_diagnostico:txt(d.tipo_diagnostico||d.tipo)
-    }));
-}
-
-function snapshotPaciente(ctx){
-  const p=state.paciente||resolverPaciente(ctx)||{};
-  return {
-    id_paciente:txt(p.id_paciente||p.id||ctx.idPaciente),
-    nombre:nombreCompleto(p)||txt(ctx.atencion?.nombre_paciente||ctx.atencion?.paciente_nombre),
-    numero_documento:txt(p.numero_documento||p.cedula||p.documento||p.identificacion),
-    telefono:txt(p.telefono||p.whatsapp),
-    direccion:txt(p.direccion||p.domicilio),
-    fecha_nacimiento:txt(p.fecha_nacimiento||p.nacimiento)
-  };
-}
-
-function snapshotHistoria(ctx){
-  const h=state.historia||resolverHistoria(ctx)||{};
-  return {
-    id_historia:txt(h.id_historia||h.id||ctx.idHistoria),
-    numero_historia:txt(h.numero_historia||h.historia_clinica||h.numero_hc||h.id_historia||ctx.idHistoria)
-  };
-}
-
-function datos(){
-  const c=state.contexto||contexto();
-  const a=c.atencion||{};
-  const fecha=v('acFecha')||hoy();
-  const dias=Number(v('acDias')||0);
-  const desde=v('acDesde')||(dias?fecha:'');
-  const hasta=v('acHasta')||(dias?sumarDias(desde,dias):'');
-
-  const paciente=snapshotPaciente(c);
-  const historia=snapshotHistoria(c);
-  const medico=resolverMedico(c);
-  const centro=state.configuracion&&state.configuracion.nombre
-    ? state.configuracion
-    : normalizarConfig(configGlobal());
-
-  const detalle={
-    version:JSON_VERSION,
-    tipo_certificado:v('acTipo'),
-    fecha_emision:fecha,
-    fecha_atencion:c.fechaAtencion,
-    hora_atencion:c.horaAtencion,
-    dias_reposo:dias,
-    contingencia:v('acContingencia'),
-    reposo_desde:desde,
-    reposo_hasta:hasta,
-    diagnosticos:dxSeleccionados(),
-    contacto:v('acContacto'),
-    institucion_empresa:v('acEmpresa'),
-    resumen_clinico:v('acResumen'),
-    actividad_laboral:v('acActividad'),
-    direccion_trabajo:v('acDireccionTrabajo'),
-    observaciones:v('acObservaciones'),
-    paciente,
-    historia,
-    medico,
-    centro
-  };
-
-  return {
-    id_certificado:state.editandoId||undefined,
-    id_atencion:c.id,
-    id_cita:txt(a.id_cita),
-    numero_consulta:c.numeroConsulta,
-    id_paciente:paciente.id_paciente,
-    nombre_paciente:paciente.nombre,
-    numero_documento:paciente.numero_documento,
-    id_historia:historia.id_historia,
-    id_medico:medico.id_medico,
-    nombre_medico:medico.nombre,
-    especialidad:medico.especialidad,
-    tipo_certificado:v('acTipo'),
-    fecha_emision:fecha,
-    detalle_json:JSON.stringify(detalle),
-    estado:'Activo',
-    version:VERSION
-  };
-}
-
-async function guardar(){
-  if(state.guardando) return;
-
-  const c=state.contexto||contexto();
-  if(!c.id) return msg('warn','Seleccione una atención antes de emitir el certificado.');
-  if(c.bloqueada) return msg('warn','La atención está anulada, cancelada o archivada.');
-
-  const data=datos();
-  if(!data.nombre_paciente) return msg('warn','No se pudo identificar al paciente de la atención.');
-  if(!data.id_medico) return msg('warn','La atención seleccionada no tiene un médico responsable identificado.');
-
-  state.guardando=true;
-  const b=document.getElementById('acGuardar');
-  if(b) b.disabled=true;
-
-  try{
-    const r=await post(state.editandoId?'editarCertificado':'guardarCertificado',data);
-    if(r?.success===false) throw Error(r.message||'No se pudo guardar.');
-    state.editandoId=txt(r.id||r.id_certificado||data.id_certificado);
-    msg('ok','Certificado guardado correctamente.');
-    await cargarHistorial(c.id,state.token);
-  }catch(e){
-    msg('error',e.message||'Error al guardar el certificado.');
-  }finally{
-    state.guardando=false;
-    if(b) b.disabled=false;
-  }
-}
-
-function abrir(id){
-  const c=state.certificados.find(x=>txt(x.id_certificado)===txt(id));
-  if(!c) return;
-
-  const d=parse(c.detalle_json);
-  state.editandoId=txt(c.id_certificado);
-  actualizarBotonesCertificadoAbierto();
-
-  sv('acTipo',c.tipo_certificado||d.tipo_certificado);
-  sv('acFecha',c.fecha_emision||d.fecha_emision);
-  sv('acDias',d.dias_reposo??0);
-  sv('acContingencia',d.contingencia);
-  sv('acDesde',d.reposo_desde);
-  sv('acHasta',d.reposo_hasta);
-  sv('acContacto',d.contacto);
-  sv('acEmpresa',d.institucion_empresa);
-  sv('acResumen',d.resumen_clinico);
-  sv('acActividad',d.actividad_laboral);
-  sv('acDireccionTrabajo',d.direccion_trabajo);
-  sv('acObservaciones',d.observaciones);
-
-  const idAbierto=state.editandoId;
-  setTimeout(()=>{
-    if(state.editandoId!==idAbierto) return;
-    const cod=new Set((d.diagnosticos||[]).map(x=>txt(x.codigo_cie10)));
-    document.querySelectorAll('[data-acdx]').forEach(x=>{
-      const dx=state.diagnosticos[Number(x.dataset.acdx)];
-      x.checked=cod.has(txt(dx?.codigo_cie10||dx?.codigo));
-    });
-  },0);
-
-  // ANTIRREGRESIÓN: el documento abierto se dibuja desde el registro
-  // persistido, nunca desde datos() (que reconstruye médico/centro actuales).
-  // Esto no altera el documento firmado ni el contrato de firma electrónica.
-  const preview=document.getElementById('acPreview');
-  if(preview){
-    preview.innerHTML=docHTML(c);
-    preview.style.display='block';
-    preview.scrollIntoView({behavior:'smooth',block:'start'});
-  }
-  msg('ok','Certificado cargado y vista preliminar actualizada.');
-}
-
-function nuevo(){
-  state.editandoId='';
-  actualizarBotonesCertificadoAbierto();
-  ['acEmpresa','acResumen','acActividad','acDireccionTrabajo','acObservaciones'].forEach(x=>sv(x,''));
-
-  const p=state.paciente||{};
-  sv('acContacto',txt(p.telefono||p.whatsapp));
-
-  sv('acTipo','Certificado médico');
-  sv('acFecha',hoy());
-  sv('acDias','0');
-  sv('acContingencia','');
-  sv('acDesde','');
-  sv('acHasta','');
-
-  document.querySelectorAll('[data-acdx]').forEach(x=>x.checked=true);
-
-  const preview=document.getElementById('acPreview');
-  if(preview){ preview.innerHTML=''; preview.style.display='none'; }
-
-  msg('','');
-}
-
-function renderContextoClinico(){
-  const box=document.getElementById('acContextoClinico');
-  if(!box) return;
-
-  const c=state.contexto||contexto();
-  if(!c.id){
-    box.style.display='none';
-    box.innerHTML='';
-    return;
+    if(medicos.status==='fulfilled'){
+      const r=medicos.value;
+      const lista=Array.isArray(r)?r:(Array.isArray(r?.data)?r.data:(Array.isArray(r?.medicos)?r.medicos:(Array.isArray(r?.registros)?r.registros:[])));
+      if(lista.length) state.medicosImpresion=lista;
+    }
   }
 
-  const p=snapshotPaciente(c);
-  const h=snapshotHistoria(c);
-  const m=resolverMedico(c);
+  function recNombreCompleto(obj){
+    obj=obj||{};
+    return primerTexto(
+      obj.nombre_completo,
+      obj.nombre,
+      [obj.nombres,obj.apellidos].filter(Boolean).join(' ')
+    ).replace(/\s+/g,' ').trim();
+  }
 
-  box.style.display='block';
-  box.innerHTML=`<div class="ac-context-grid">
-    <div class="ac-context-item"><span>Paciente</span><b>${esc(p.nombre||'—')}</b></div>
-    <div class="ac-context-item"><span>Cédula / documento</span><b>${esc(p.numero_documento||'—')}</b></div>
-    <div class="ac-context-item"><span>Historia clínica</span><b>${esc(h.numero_historia||h.id_historia||'—')}</b></div>
-    <div class="ac-context-item"><span>Consulta</span><b>#${esc(c.numeroConsulta||'—')}</b></div>
-    <div class="ac-context-item"><span>Fecha de atención</span><b>${esc(fechaVisual(c.fechaAtencion)||'—')}</b></div>
-    <div class="ac-context-item"><span>Médico responsable</span><b>${esc(m.nombre||'—')}</b></div>
-    <div class="ac-context-item"><span>Especialidad</span><b>${esc(m.especialidad||'—')}</b></div>
-    <div class="ac-context-item"><span>ID atención</span><b>${esc(c.id)}</b></div>
-  </div>`;
-}
+  function recPacienteImpresion(ctx){
+    const a=ctx?.atencion||{};
+    const id=txt(ctx?.idPaciente||a.id_paciente);
+    let p=null;
 
-function docHTML(data){
-  const d=parse(data.detalle_json);
-  const dx=d.diagnosticos||[];
-  const dias=Number(d.dias_reposo||0);
+    try{
+      if(typeof window.getPacienteActivo==='function'){
+        const x=window.getPacienteActivo();
+        const xid=txt(x?.id_paciente||x?.id);
+        if(x && (!id || !xid || xid===id)) p=x;
+      }
+    }catch(e){}
 
-  const pac=d.paciente||{
-    nombre:data.nombre_paciente,
-    numero_documento:data.numero_documento
-  };
+    if(!p){
+      const listas=[window.patients,window.pacientes,window.listaPacientes].filter(Array.isArray);
+      for(const lista of listas){
+        p=lista.find(x=>txt(x?.id_paciente||x?.id)===id)||null;
+        if(p) break;
+      }
+    }
 
-  const hist=d.historia||{id_historia:data.id_historia,numero_historia:data.id_historia};
-  const med=d.medico||{
-    nombre:data.nombre_medico,
-    especialidad:data.especialidad,
-    id_medico:data.id_medico
-  };
+    p=p||{};
+    return {
+      nombre:recNombreCompleto(p)||nombrePacienteDesdeContexto(a)||'Paciente',
+      documento:primerTexto(p.numero_documento,p.cedula,p.documento,p.identificacion,a.numero_documento,a.cedula,a.identificacion),
+      telefono:primerTexto(p.telefono,p.whatsapp,a.telefono,a.whatsapp)
+    };
+  }
 
-  const cfg=Object.assign(
-    {},
-    normalizarConfig(configGlobal()),
-    state.configuracion||{},
-    d.centro||{}
-  );
+  function recMedicoImpresion(ctx){
+    const a=ctx?.atencion||{};
+    const id=txt(ctx?.idMedico||a.id_medico);
+    const listas=[
+      state.medicosImpresion,
+      window.medicos,
+      window.medicosActivos,
+      window.listaMedicos,
+      window.configuracionMedicos,
+      window.medicosConfiguracion
+    ].filter(Array.isArray);
+    let m=null;
+    for(const lista of listas){
+      m=lista.find(x=>txt(x?.id_medico||x?.id||x?.codigo)===id)||null;
+      if(m) break;
+    }
+    m=m||{};
+    return {
+      nombre:recNombreCompleto(m)||nombreMedicoDesdeContexto(a)||'Profesional tratante',
+      especialidad:primerTexto(m.especialidad_principal,m.especialidad,m.especialidad_medica,a.especialidad,a.medico_especialidad),
+      registro_msp:primerTexto(m.registro_msp,m.msp,m.registro_profesional),
+      registro_senescyt:primerTexto(m.registro_senescyt,m.senescyt),
+      email:primerTexto(m.email,m.correo)
+    };
+  }
 
-  const centro=txt(cfg.nombre)||'AUROSANAX';
-  const color=txt(cfg.colorPrincipal)||'#8b1e5a';
-  const ciudad=txt(cfg.ciudad);
-  const tipo=txt(data.tipo_certificado||d.tipo_certificado||'Certificado médico').toUpperCase();
-  const fecha=d.fecha_emision||data.fecha_emision||hoy();
+  function recFechaDocumento(v){
+    const raw=txt(v);
+    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m?`${m[3]}/${m[2]}/${m[1]}`:(raw||'—');
+  }
 
-  const ubicacion=[cfg.direccion,cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(' · ');
-  // Iconos decorativos sin dependencias externas; los datos se leen de la configuración existente.
-  const iconoContacto=(tipo)=>{
+  function recListaHTML(items){
+    const arr=(items||[]).filter(Boolean);
+    return arr.length
+      ? `<ul class="ar-doc-list">${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
+      : '';
+  }
+
+  function recRecomendacionesHTML(texto){
+    const raw=txt(texto);
+    if(!raw) return '';
+    // Preservar párrafos; solo convertir en viñetas las líneas que ya las contienen.
+    return raw.split(/\n\s*\n/).map(parrafo=>{
+      const lineas=parrafo.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+      if(!lineas.length) return '';
+      const lista=lineas.every(x=>/^(?:[-*•]|\d+[.)])\s+/.test(x));
+      return lista
+        ? `<ul class="ar-doc-list ar-rec-list">${lineas.map(x=>`<li>${esc(x.replace(/^(?:[-*•]|\d+[.)])\s+/,''))}</li>`).join('')}</ul>`
+        : `<p class="ar-rec-text">${lineas.map(esc).join('<br>')}</p>`;
+    }).join('');
+  }
+
+  // SVG autónomos: la impresión y el motor de firma no dependen de Bootstrap Icons.
+  function recIconoContacto(tipo){
     const rutas={
       ubicacion:'<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
       telefono:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.8L7.1 10a16 16 0 0 0 6.9 6.9l1.5-1.9a2 2 0 0 1 1.8-.6l3 .5a2 2 0 0 1 1.7 2Z"/>',
       correo:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/>',
       web:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>'
     };
-    return `<svg class="ac-contact-icon" aria-hidden="true" width="12" height="12" style="display:block;width:12px!important;height:12px!important;min-width:12px;max-width:12px;flex:0 0 12px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${rutas[tipo]||''}</svg>`;
-  };
-  const lineaContacto=(tipo,valor)=>valor?`<div class="ac-contact-row">${iconoContacto(tipo)}<span>${esc(valor)}</span></div>`:'';
+    return `<svg class="ar-contact-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${rutas[tipo]||''}</svg>`;
+  }
+  function recLineaContacto(tipo,valor){
+    return valor ? `<div class="ar-contact-row">${recIconoContacto(tipo)}<span>${esc(valor)}</span></div>` : '';
+  }
 
-  const logoSrc=state.logoInstitucionalDataUri||urlLogoInstitucional(cfg);
-  const logo=logoSrc
-    ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(logoSrc)}" alt="Logo institucional" onerror="this.parentElement.style.display='none'"></div>`
-    : '';
+  /* V1.3.5 — Medición real en un documento A4 aislado.
+     Una sola hoja: se devuelve HTML sin modificar. Cuando el contenido
+     natural supera 273 mm, se habilita paginación fluida para hojas 2+.
+     Sin persistencia, red ni modificaciones del motor de firma. */
+  function recPaginacionInteligente(html){
+    let marco=null;
+    try{
+      marco=document.createElement('iframe');
+      marco.setAttribute('aria-hidden','true');
+      marco.setAttribute('tabindex','-1');
+      marco.style.cssText='position:fixed;left:-10000px;top:0;width:180mm;height:273mm;visibility:hidden;pointer-events:none;border:0';
+      document.body.appendChild(marco);
+      const d=marco.contentDocument;
+      if(!d) return html;
+      // Medir sin min-height ni desplazamiento automático del pie.
+      const css=recEstilosImpresion();
+      d.open();
+      d.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'+css+
+        '.ar-paper{display:block!important;min-height:0!important}.ar-firma-area{margin-top:0!important}'+
+        '</style></head><body>'+html+'</body></html>');
+      d.close();
+      const papel=d.querySelector('.ar-paper');
+      if(!papel) return html;
+      const regla=d.createElement('div');
+      regla.style.cssText='position:absolute;width:1mm;height:1mm;visibility:hidden';
+      d.body.appendChild(regla);
+      const pxmm=regla.getBoundingClientRect().height||3.779527559;
+      const altura=papel.getBoundingClientRect().height;
+      // Margen pequeño de seguridad ante diferencias de redondeo de impresión.
+      const variasPaginas=altura>(273-2)*pxmm;
+      return variasPaginas
+        ? html.replace('<article class="ar-paper"','<article class="ar-paper ar-multipagina"')
+        : html;
+    }catch(error){
+      console.warn(MODULO+': medición A4 no disponible; se conserva impresión original.',error);
+      return html;
+    }finally{if(marco) marco.remove();}
+  }
 
-  const dxHtml=dx.length
-    ? dx.map(x=>`<div class="ac-dx-doc-row"><b>${esc(cie10Visual(x.codigo_cie10||''))}</b>${x.descripcion?' '+esc(x.descripcion):''}</div>`).join('')
-    : '<div class="ac-dx-doc-row">Sin diagnóstico seleccionado para este documento.</div>';
+  function recDocumentoHTML(){
+    const ctx=state.contexto||contextoAtencion();
+    const a=ctx.atencion||{};
+    const d=detalleActual();
+    const cfg=recConfigInstitucional();
+    const paciente=recPacienteImpresion(ctx);
+    const medico=recMedicoImpresion(ctx);
 
-  const registros=[
-    med.registro_msp?`Registro MSP/ACESS: ${med.registro_msp}`:'',
-    med.registro_senescyt?`Registro SENESCYT: ${med.registro_senescyt}`:''
-  ].filter(Boolean);
+    const alertas=ALERTAS
+      .filter(([k])=>(d.signos_alerta?.seleccionados||[]).includes(k))
+      .map(([,l])=>l);
 
-  const reposo=dias>0
-    ? `<div class="ac-reposo">
-        <p>Por lo que amerita reposo por <b>${dias} (${esc(numeroLetras(dias))}) ${dias===1?'DÍA':'DÍAS'}</b>:</p>
-        <div class="ac-reposo-row"><b>DESDE:</b> ${esc(fechaVisual(d.reposo_desde))} (${esc(fechaLetras(d.reposo_desde))}).</div>
-        <div class="ac-reposo-row"><b>HASTA:</b> ${esc(fechaVisual(d.reposo_hasta))} (${esc(fechaLetras(d.reposo_hasta))}).</div>
-      </div>`
-    : '';
+    const infeccion=INFECCION
+      .filter(([k])=>(d.signos_infeccion?.seleccionados||[]).includes(k))
+      .map(([,l])=>l);
 
-  return `<div class="ac-paper" style="--ac-color:${esc(color)}">
-    <div class="ac-doc-head">
-      ${logo}
-      <div>
-        <div class="ac-brand">${esc(centro)}</div>
-        ${(med.especialidad||cfg.subtitulo)?`<div class="ac-brand-sub">${esc(med.especialidad||cfg.subtitulo)}</div>`:''}
+    const dx=state.diagnosticos.map(x=>({
+      codigo:cie10Visual(x.codigo_cie10||x.codigo||x.cie10),
+      nombre:txt(x.descripcion||x.nombre||x.diagnostico)
+    })).filter(x=>x.codigo||x.nombre);
+
+    const fecha=recFechaDocumento(
+      a.fecha_atencion||a.fecha_consulta||a.creado_en||new Date().toISOString().slice(0,10)
+    );
+
+    const ubicacion=[cfg.direccion,[cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(', ')]
+      .filter(Boolean).join(' · ');
+    const registros=[
+      medico.registro_msp ? 'MSP: '+medico.registro_msp : '',
+      medico.registro_senescyt ? 'SENESCYT: '+medico.registro_senescyt : ''
+    ].filter(Boolean);
+
+    const logo=cfg.logo
+      ? `<div class="ar-logo-wrap"><img class="ar-logo" src="${esc(cfg.logo)}" alt="Logotipo institucional" onerror="this.closest('.ar-doc-head').classList.add('ar-doc-head-no-logo');this.parentElement.remove()"></div>`
+      : '';
+
+    const seguimiento=[
+      d.seguimiento?.proxima_cita ? `<div class="ar-line"><b>PRÓXIMO CONTROL:</b> ${esc(recFechaDocumento(d.seguimiento.proxima_cita))}</div>` : '',
+      d.seguimiento?.motivo ? `<div class="ar-line"><b>MOTIVO DEL CONTROL:</b> ${esc(d.seguimiento.motivo)}</div>` : ''
+    ].filter(Boolean).join('');
+
+    const bloques=[
+      (alertas.length||txt(d.signos_alerta?.otros)) ? `
+        <section class="ar-section">
+          <h3>SIGNOS DE ALERTA</h3>
+          ${recListaHTML(alertas)}
+          ${d.signos_alerta?.otros?`<p>${esc(d.signos_alerta.otros)}</p>`:''}
+        </section>` : '',
+      (infeccion.length||txt(d.signos_infeccion?.otros)) ? `
+        <section class="ar-section">
+          <h3>SIGNOS DE INFECCIÓN</h3>
+          ${recListaHTML(infeccion)}
+          ${d.signos_infeccion?.otros?`<p>${esc(d.signos_infeccion.otros)}</p>`:''}
+        </section>` : '',
+      txt(d.dieta_cuidados) ? `
+        <section class="ar-section ar-section-dieta">
+          <h3>DIETA Y CUIDADOS</h3>
+          ${recRecomendacionesHTML(d.dieta_cuidados)}
+        </section>` : '',
+      txt(d.recomendaciones_generales) ? `
+        <section class="ar-section ar-section-recomendaciones">
+          <h3>RECOMENDACIONES GENERALES</h3>
+          ${recRecomendacionesHTML(d.recomendaciones_generales)}
+        </section>` : ''
+    ].filter(Boolean).join('');
+
+    return recPaginacionInteligente(`<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
+      <header class="ar-doc-head${logo ? '' : ' ar-doc-head-no-logo'}">
+        ${logo}
+        <div>
+          <div class="ar-brand">${esc(cfg.nombre)}</div>
+          ${cfg.subtitulo?`<div class="ar-brand-sub">${esc(cfg.subtitulo)}</div>`:''}
+        </div>
+        <div class="ar-doc-date">${esc(cfg.ciudad)}, ${esc(fecha)}</div>
+      </header>
+
+      <h1>RECOMENDACIONES MÉDICAS</h1>
+
+      <p class="ar-intro">Se emiten las siguientes recomendaciones para <b>${esc(paciente.nombre)}</b>${paciente.documento?`, con documento de identidad <b>${esc(paciente.documento)}</b>`:''}, correspondientes a la ${ctx.numeroConsulta?`consulta #${esc(ctx.numeroConsulta)}`:'atención clínica seleccionada'}, atendida por <b>${esc(medico.nombre)}</b>.</p>
+
+      <div class="ar-lines">
+        ${medico.especialidad?`<div class="ar-line"><b>ESPECIALIDAD:</b> ${esc(medico.especialidad)}</div>`:''}
+        ${seguimiento}
       </div>
-      <div class="ac-doc-date">${ciudad?`${esc(ciudad)}, `:''}${esc(fechaVisual(fecha))}</div>
-    </div>
 
-    <h1>${esc(tipo)}</h1>
+      ${dx.length?`
+        <section class="ar-dx">
+          <h3>DIAGNÓSTICO(S) CIE-10:</h3>
+          ${dx.map(x=>`<div class="ar-dx-row">${x.codigo?`<b>${esc(x.codigo)}</b>${x.nombre?' · ':''}`:''}${esc(x.nombre)}</div>`).join('')}
+        </section>`:''}
 
-    <p>
-      Por medio del presente certifico haber atendido al/la paciente
-      <b>${esc(pac.nombre||'Paciente')}</b>, con documento de identidad
-      <b>${esc(pac.numero_documento||'—')}</b>, número de historia clínica
-      <b>${esc(hist.numero_historia||hist.id_historia||'—')}</b>, en la consulta
-      <b>#${esc(data.numero_consulta||'—')}</b>, atendida por
-      <b>${esc(med.nombre||'Profesional tratante')}</b>.
-    </p>
+      ${bloques||'<p>No se registraron recomendaciones clínicas para imprimir.</p>'}
 
-    <div class="ac-cert-lines">
-      ${med.especialidad?`<div class="ac-cert-line"><b>ESPECIALIDAD:</b> ${esc(med.especialidad)}</div>`:''}
-      ${d.resumen_clinico?`<div class="ac-cert-line"><b>RESUMEN CLÍNICO:</b> ${esc(d.resumen_clinico)}</div>`:''}
-      ${d.actividad_laboral?`<div class="ac-cert-line"><b>ACTIVIDAD LABORAL:</b> ${esc(d.actividad_laboral)}</div>`:''}
-      ${d.contacto?`<div class="ac-cert-line"><b>NÚMERO DE CONTACTO:</b> ${esc(d.contacto)}</div>`:''}
-      ${d.institucion_empresa?`<div class="ac-cert-line"><b>INSTITUCIÓN / EMPRESA:</b> ${esc(d.institucion_empresa)}</div>`:''}
-      ${d.direccion_trabajo?`<div class="ac-cert-line"><b>DIRECCIÓN DE TRABAJO:</b> ${esc(d.direccion_trabajo)}</div>`:''}
-    </div>
-
-    <div class="ac-dx-doc">
-      <div class="ac-dx-doc-title">DIAGNÓSTICO(S) CIE-10:</div>
-      ${dxHtml}
-    </div>
-
-    ${d.contingencia?`<div class="ac-cert-line"><b>TIPO DE CONTINGENCIA:</b> ${esc(d.contingencia.toUpperCase())}</div>`:''}
-
-    ${reposo}
-
-    ${d.observaciones?`<p class="ac-observaciones" style="margin-top:16px"><b>OBSERVACIONES:</b> ${esc(d.observaciones)}</p>`:''}
-
-    <div class="ac-firma-area">
-      <div class="ac-centro-contacto">
-        ${lineaContacto('ubicacion',ubicacion)}
-        ${lineaContacto('correo',cfg.email)}
-        ${lineaContacto('telefono',cfg.telefono)}
-        ${lineaContacto('web',cfg.web)}
-        ${cfg.razon_social?`<div>${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
-      </div>
-
-      <div class="ac-sign">
-        <div class="ac-sign-line"></div>
-        <div class="ac-sign-details">
-          <b>${esc(med.nombre||'Profesional tratante')}</b>
-          ${med.especialidad?`<br><span>${esc(med.especialidad)}</span>`:''}
+      <footer class="ar-firma-area">
+        <div class="ar-centro-contacto">
+          ${recLineaContacto('ubicacion',ubicacion)}
+          ${recLineaContacto('correo',cfg.email)}
+          ${recLineaContacto('telefono',cfg.telefono)}
+          ${recLineaContacto('web',cfg.web)}
+          ${cfg.razon_social?`<div class="ar-contact-legal">${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
+        </div>
+        <div class="ar-sign">
+          <div class="ar-sign-line"></div>
+          <b>${esc(medico.nombre)}</b>
+          ${medico.especialidad?`<br><span>${esc(medico.especialidad)}</span>`:''}
           ${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}
-          ${med.email?`<br><span>${esc(med.email)}</span>`:''}
+          ${medico.email?`<br><span>${esc(medico.email)}</span>`:''}
           <br><span>Firma y sello</span>
         </div>
-      </div>
-    </div>
-  </div>`;
-}
+      </footer>
+    </article>`);
+  }
 
-function estilosImpresion(){
-  return `
+  /*
+    AUROSANAX RECOMENDACIONES V1.1.5 — PAGINACIÓN A4 ANTIRREGRESIVA
+    ----------------------------------------------------------------
+    - Corrige el espacio vacío artificial antes de Recomendaciones Generales.
+    - El bloque largo de recomendaciones puede continuar entre páginas.
+    - La firma permanece unida y pasa al flujo natural al final del documento.
+    - No modifica guardado, detalle_json, endpoints, Plan, Diagnósticos ni Sheets.
+  */
+  function recEstilosImpresion(){
+    return `
 @page{size:A4 portrait;margin:12mm 15mm}
 *{box-sizing:border-box}
-html,body{
-  margin:0;
-  padding:0;
-  max-width:100%;
-  background:#fff;
-  color:#111;
-  font-family:Arial,Helvetica,sans-serif;
-}
+html,body{margin:0;padding:0;max-width:100%;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
 body{overflow-x:hidden}
-.ac-paper{
-  width:100%;
-  max-width:100%;
-  min-width:0;
-  min-height:273mm;
-  display:flex;
-  flex-direction:column;
-  margin:0;
-  padding:0;
-  background:#fff;
-  overflow:visible;
-  position:relative;
-}
-.ac-paper,.ac-paper *{min-width:0}
-.ac-paper p,.ac-paper span,.ac-paper b,.ac-paper div{
-  overflow-wrap:anywhere;
-  word-break:normal;
-}
-.ac-doc-head{
-  break-inside:avoid;
-  page-break-inside:avoid;
-  display:grid;
-  grid-template-columns:auto minmax(0,1fr) auto;
-  gap:12px;
-  align-items:center;
-  border-bottom:2.5px solid var(--ac-color,#8b1e5a);
-  padding-bottom:9px;
-}
-.ac-logo-wrap{width:55px;height:55px;display:grid;place-items:center;overflow:hidden}
-.ac-doc-head:not(:has(.ac-logo-wrap)){grid-template-columns:minmax(0,1fr) auto}
-.ac-logo{max-width:100%;max-height:100%;object-fit:contain}
-.ac-brand{font-size:19px;font-weight:950;color:var(--ac-color,#8b1e5a);letter-spacing:.035em;overflow-wrap:anywhere}
-.ac-brand-sub{font-size:10px;color:#667085;margin-top:2px;overflow-wrap:anywhere}
-.ac-doc-date{text-align:right;font-size:11px;font-weight:750;white-space:normal}
-h1{text-align:center;font-size:19px;margin:24px 0 27px;letter-spacing:.045em}
-p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
-.ac-cert-lines{display:grid;gap:6px;margin:14px 0}
-.ac-cert-line{font-size:12px;line-height:1.6;white-space:pre-line;text-align:justify;margin-bottom:7px}
-.ac-observaciones{white-space:pre-line;overflow-wrap:anywhere;text-align:justify;line-height:1.6}
-.ac-cert-line b:first-child{display:inline-block;min-width:150px}
-.ac-dx-doc{margin:14px 0 16px}
-.ac-dx-doc-title{font-size:12px;font-weight:900;margin-bottom:5px}
-.ac-dx-doc-row{font-size:12px;line-height:1.55;break-inside:avoid}
-.ac-reposo{margin-top:16px;break-inside:avoid;page-break-inside:avoid}
-.ac-reposo-row{font-size:12.1px;line-height:1.5;margin-top:4px}
-.ac-firma-area{
-  position:relative;
-  display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:22mm;
-  align-items:start;
-  margin-top:auto;
-  padding-top:24mm;
-  break-inside:avoid;
-  page-break-inside:avoid;
-}
-.ac-centro-contacto{position:relative;top:0;padding-top:8px;font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
-.ac-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
-.ac-contact-row span{flex:1;min-width:0}
-.ac-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--ac-color,#8b1e5a);margin-top:1px}
-.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
-.ac-sign-line{border-top:1px solid #111;margin-bottom:6px;position:relative;top:0}
-.ac-sign-details{padding-top:0}
-.ac-sign b{font-size:12.4px}
-
-/*
-  DOCUMENTO MAESTRO A4:
-  La geometría interna NO se remaqueta por ancho de pantalla.
-  iPhone / Android reciben el mismo documento; solo cambia la escala del visor.
-*/
-
-/* Impresión: el área útil la define @page. No se vuelve a forzar 210 mm en html/body. */
+.ar-paper{width:100%;max-width:100%;min-width:0;min-height:273mm;display:flex;flex-direction:column;margin:0;padding:0;background:#fff;position:relative}
+.ar-paper,.ar-paper *{min-width:0}
+.ar-paper p,.ar-paper span,.ar-paper b,.ar-paper div{overflow-wrap:anywhere;word-break:normal}
+.ar-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ar-color,#8b1e5a);padding-bottom:9px}
+.ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto}
+.ar-logo-wrap{width:55px;height:55px;display:grid;place-items:center;border-radius:10px;overflow:hidden}
+.ar-logo{max-width:100%;max-height:100%;object-fit:contain}
+.ar-brand{font-size:18.5px;font-weight:950;color:var(--ar-color,#8b1e5a);letter-spacing:.035em}
+.ar-brand-sub{font-size:10.5px;color:#667085;margin-top:2px}
+.ar-doc-date{text-align:right;font-size:11px;font-weight:700;white-space:nowrap}
+.ar-paper h1{text-align:center;font-size:18px;margin:21px 0 23px;letter-spacing:.05em}
+.ar-paper p{font-size:12.1px;line-height:1.58;text-align:justify;margin:0 0 10px;white-space:pre-wrap}
+.ar-intro{margin-bottom:14px!important}
+.ar-lines{display:grid;gap:5px;margin:12px 0}
+.ar-line{font-size:12px;line-height:1.42}
+.ar-line b{display:inline-block;min-width:120px}
+.ar-section,.ar-dx{margin:14px 0;break-inside:avoid;page-break-inside:avoid}
+.ar-section-recomendaciones{break-inside:auto;page-break-inside:auto}
+.ar-section-recomendaciones h3{break-after:avoid;page-break-after:avoid}
+.ar-section-recomendaciones .ar-rec-list{break-inside:auto;page-break-inside:auto}
+.ar-section-recomendaciones .ar-rec-list li{break-inside:avoid;page-break-inside:avoid}
+.ar-section h3,.ar-dx h3{font-size:12px;margin:0 0 6px;font-weight:900}
+.ar-dx-row{font-size:12px;line-height:1.45;margin:2px 0}
+.ar-doc-list{margin:4px 0 7px 18px;padding:0}
+.ar-doc-list li{font-size:12px;line-height:1.48;margin:2px 0}
+.ar-rec-list{margin-top:6px}
+.ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
+.ar-rec-text{line-height:1.62!important;text-align:justify;orphans:3;widows:3}
+/* Solo multipágina: liberar la fragmentación, nunca el diseño A4 de una hoja. */
+.ar-paper.ar-multipagina{display:block;min-height:0}
+.ar-paper.ar-multipagina .ar-section-dieta,
+.ar-paper.ar-multipagina .ar-section-recomendaciones{break-inside:auto;page-break-inside:auto}
+.ar-paper.ar-multipagina .ar-section-dieta h3,
+.ar-paper.ar-multipagina .ar-section-recomendaciones h3{break-after:avoid-page;page-break-after:avoid}
+.ar-paper.ar-multipagina .ar-firma-area{margin-top:10mm;padding-top:9mm;break-inside:avoid;page-break-inside:avoid}
+.ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:start;margin-top:auto;padding-top:24mm;break-inside:avoid;page-break-inside:avoid}
+.ar-centro-contacto{padding-top:8px;font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ar-contact-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
+.ar-contact-row span{flex:1;min-width:0}
+.ar-contact-icon{display:block;width:12px;height:12px;flex:0 0 12px;color:var(--ar-color,#8b1e5a);margin-top:1px}
+.ar-contact-legal{margin-top:4px}
+.ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
+.ar-sign-line{border-top:1px solid #111;margin-bottom:6px}
+.ar-sign b{font-size:12.4px}
 @media print{
-  html,body{
-    width:auto!important;
-    max-width:none!important;
-    min-width:0!important;
-    min-height:0!important;
-    margin:0!important;
-    padding:0!important;
-    overflow:visible!important;
-    -webkit-print-color-adjust:exact!important;
-    print-color-adjust:exact!important;
-  }
-  .ac-paper{
-    width:100%!important;
-    max-width:100%!important;
-    min-width:0!important;
-    min-height:273mm!important;
-    margin:0!important;
-    padding:0!important;
-    overflow:visible!important;
-    position:relative!important;
-    transform:none!important;
-    translate:none!important;
-    page-break-inside:auto!important;
-    break-inside:auto!important;
-  }
-  .ac-doc-head:has(.ac-logo-wrap){grid-template-columns:auto minmax(0,1fr) auto!important}
-  .ac-doc-head:not(:has(.ac-logo-wrap)){grid-template-columns:minmax(0,1fr) auto!important}
-  .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
+  html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important;break-inside:auto!important;page-break-inside:auto!important}
+  .ar-paper.ar-multipagina{display:block!important;min-height:0!important}
+  .ar-paper.ar-multipagina .ar-firma-area{margin-top:10mm!important;padding-top:9mm!important}
+  .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
+  .ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto!important}
+  .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
 }`;
-}
-
-function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
-  const data=dataOpcional||datos();
-  const htmlDoc=docHTML(data);
-  const ventana=window.open('','_blank');
-
-  if(!ventana){
-    msg('warn','El navegador bloqueó la vista previa. Permita ventanas emergentes para este sitio.');
-    return;
   }
 
-  ventana.document.open();
-  ventana.document.write(`<!DOCTYPE html>
+  function vistaPrevia(){
+    const ctx=state.contexto||contextoAtencion();
+    if(!ctx.id){
+      setMsg('Seleccione una atención antes de imprimir recomendaciones.','error');
+      return;
+    }
+
+    const d=detalleActual();
+    if(!tieneContenido(d)){
+      setMsg('No existen recomendaciones registradas para mostrar en el documento.','error');
+      return;
+    }
+
+    const htmlDoc=recDocumentoHTML();
+    const w=window.open('','_blank');
+
+    if(!w){
+      setMsg('El navegador bloqueó la vista de impresión. Permita ventanas emergentes para este sitio.','error');
+      return;
+    }
+
+    w.document.open();
+    w.document.write(`<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vista previa de certificado médico AUROSANAX</title>
+<title>Recomendaciones médicas AUROSANAX</title>
 <style>
-${estilosImpresion()}
+${recEstilosImpresion()}
 html,body{background:#dfe3e8}
-.auro-cert-preview-toolbar{
-  position:sticky;top:0;z-index:9999;display:flex;justify-content:space-between;
-  align-items:center;gap:12px;padding:12px 18px;background:#fff;
-  border-bottom:1px solid #d1d5db;box-shadow:0 3px 14px rgba(15,23,42,.14)
+.auro-rec-print-toolbar{position:sticky;top:0;z-index:9999;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;background:#fff;border-bottom:1px solid #d1d5db;box-shadow:0 3px 14px rgba(15,23,42,.14)}
+.auro-rec-print-toolbar strong{color:#7a174f;font-size:15px}
+.auro-rec-print-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.auro-rec-print-btn{border:0;border-radius:10px;padding:9px 14px;font-weight:850;cursor:pointer;background:#8b1e5a;color:#fff}
+.auro-rec-print-btn.secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+.auro-rec-print-stage{padding:20px;display:flex;justify-content:center;align-items:flex-start;min-height:calc(100vh - 58px);overflow-x:hidden}
+.auro-rec-print-sheet{width:210mm;min-width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 18px 45px rgba(15,23,42,.18);transform-origin:top center}
+@media(max-width:1000px){
+  .auro-rec-print-stage{padding:12px 0 20px}
+  .auro-rec-print-sheet{transform:scale(.78);margin-bottom:-64mm}
 }
-.auro-cert-preview-toolbar strong{color:#7a174f;font-size:15px}
-.auro-cert-preview-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.auro-cert-preview-btn{border:0;border-radius:10px;padding:9px 14px;font-weight:850;cursor:pointer;background:#8b1e5a;color:#fff}
-.auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
-.auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
-.auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:273mm!important}
-@media(max-width:980px){
-  .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
-  .auro-cert-preview-sheet{transform-origin:top center}
-}
-@media(max-width:760px){
-  .auro-cert-preview-toolbar{
-    position:sticky;top:0;
-    align-items:center;flex-direction:row;
-    gap:8px;padding:8px 10px
-  }
-  .auro-cert-preview-toolbar strong{display:none}
-  .auro-cert-preview-actions{
-    display:grid;grid-template-columns:minmax(0,1fr) auto;
-    width:100%;gap:8px;align-items:center
-  }
-  .auro-cert-preview-btn{
-    width:100%;min-height:40px;padding:8px 10px;
-    border-radius:8px;font-size:14px;line-height:1.15
-  }
-  .auro-cert-preview-btn.secondary{width:auto;min-width:74px}
-  .auro-cert-preview-stage{
-    display:flex;justify-content:center;min-height:calc(100vh - 58px);
-    padding:10px 0 18px;overflow-x:hidden
-  }
-  .auro-cert-preview-sheet{
-    width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;
-    flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;
-    transform-origin:top center!important;
-    box-shadow:0 8px 24px rgba(15,23,42,.18)
-  }
+@media(max-width:700px){
+  .auro-rec-print-toolbar{padding:8px 10px}
+  .auro-rec-print-toolbar strong{display:none}
+  .auro-rec-print-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:8px}
+  .auro-rec-print-btn{width:100%;min-height:40px;padding:8px 10px}
+  .auro-rec-print-btn.secondary{width:auto;min-width:74px}
+  .auro-rec-print-stage{padding:10px 0 18px;overflow-x:hidden}
+  .auro-rec-print-sheet{width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;transform-origin:top center!important}
 }
 @media print{
-  @page{size:A4 portrait;margin:12mm 15mm}
-  html,body{background:#fff!important;width:auto!important;min-width:0!important;max-width:none!important;margin:0!important;padding:0!important;overflow:visible!important}
-  .auro-cert-preview-toolbar{display:none!important}
-  .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
-  .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:273mm!important;margin:0!important;padding:0 0!important;position:relative!important;transform:none!important}
+  html,body{background:#fff!important;margin:0!important;padding:0!important;overflow:visible!important}
+  .auro-rec-print-toolbar{display:none!important}
+  .auro-rec-print-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
+  .auro-rec-print-sheet{width:auto!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
 }
 </style>
 </head>
 <body>
-  <div class="auro-cert-preview-toolbar">
-    <strong>Vista previa A4 · Certificado médico</strong>
-    <div class="auro-cert-preview-actions">
-      <button type="button" class="auro-cert-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
-      <button type="button" class="auro-cert-preview-btn secondary" onclick="window.close()">Cerrar</button>
+  <div class="auro-rec-print-toolbar">
+    <strong>Vista previa A4 · Recomendaciones médicas</strong>
+    <div class="auro-rec-print-actions">
+      <button type="button" class="auro-rec-print-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      <button type="button" class="auro-rec-print-btn secondary" onclick="window.close()">Cerrar</button>
     </div>
   </div>
-  <main class="auro-cert-preview-stage">
-    <div class="auro-cert-preview-sheet" id="auroCertPreviewSheet">${htmlDoc}</div>
+  <main class="auro-rec-print-stage">
+    <div class="auro-rec-print-sheet">${htmlDoc}</div>
   </main>
-<script>
-(function(){
-  function ajustar(){
-    var hoja=document.getElementById('auroCertPreviewSheet');
-    if(!hoja) return;
-
-    var anchoVentana=window.innerWidth||document.documentElement.clientWidth||794;
-    var anchoHoja=hoja.offsetWidth||794;
-    var altoHoja=hoja.offsetHeight||1123;
-    var margen=anchoVentana<=760?16:28;
-    var disponible=Math.max(220,anchoVentana-margen);
-    var escala=anchoVentana>980?1:Math.min(1,disponible/anchoHoja);
-
-    hoja.style.transform=escala<1?'scale('+escala+')':'none';
-    hoja.style.marginBottom=escala<1?(-altoHoja*(1-escala))+'px':'0';
-  }
-  window.addEventListener('resize',ajustar);
-  ajustar();
-})();
-<\/script>
 </body>
 </html>`);
-  ventana.document.close();
-  ventana.focus();
-}
+    w.document.close();
+    w.focus();
+  }
 
-function vista(imprimir){
-  const data=datos();
-  const htmlDoc=docHTML(data);
-  const p=document.getElementById('acPreview');
 
-  if(!imprimir){
-    if(p){
-      p.innerHTML=htmlDoc;
-      p.style.display='block';
-      p.scrollIntoView({behavior:'smooth',block:'start'});
+  function enlazar(){
+    const guardarBtn=document.getElementById('auroRecBtnGuardar');
+    const nuevaBtn=document.getElementById('auroRecBtnNueva');
+    const recargarBtn=document.getElementById('auroRecBtnRecargar');
+    const vistaBtn=document.getElementById('auroRecBtnVista');
+    const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
+    const firmaBtn=document.getElementById('auroRecBtnFirma');
+    const cancelarFirmaBtn=document.getElementById('auroRecBtnCancelarFirma');
+
+    if(nuevaBtn && nuevaBtn.dataset.auroRec!=='1'){nuevaBtn.dataset.auroRec='1';nuevaBtn.addEventListener('click',nuevaRecomendacion);}
+    if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
+      guardarBtn.dataset.auroRec='1';
+      guardarBtn.addEventListener('click',guardar);
     }
-    return;
+    if(recargarBtn && recargarBtn.dataset.auroRec!=='1'){
+      recargarBtn.dataset.auroRec='1';
+      recargarBtn.addEventListener('click',()=>cargar(true));
+    }
+    if(vistaBtn && vistaBtn.dataset.auroRec!=='1'){
+      vistaBtn.dataset.auroRec='1';
+      vistaBtn.addEventListener('click',vistaPrevia);
+    }
+    if(firmaBtn && firmaBtn.dataset.auroRec!=='1'){
+      firmaBtn.dataset.auroRec='1';
+      firmaBtn.addEventListener('click',firmarRecomendacion);
+    }
+    if(cancelarFirmaBtn && cancelarFirmaBtn.dataset.auroRec!=='1'){
+      cancelarFirmaBtn.dataset.auroRec='1';
+      cancelarFirmaBtn.addEventListener('click',cancelarFirmaRecomendacion);
+    }
+    document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{
+      if(btn.dataset.auroRecExpandBound==='1') return;
+      btn.dataset.auroRecExpandBound='1';
+      btn.addEventListener('click',()=>ampliarEditorRecomendaciones(btn.dataset.auroRecExpand));
+    });
+
+    if(agregarPlanBtn && agregarPlanBtn.dataset.auroRec!=='1'){
+      agregarPlanBtn.dataset.auroRec='1';
+      agregarPlanBtn.addEventListener('click',agregarIndicacionesPlanManualmente);
+    }
   }
 
-  return auroGenerarVistaImpresionCertificadoUnificada(data);
-}
-
-function auroInstalarMotorImpresionCertificadoUnificado(){
-  window.__auroCertificadosConstruirPDFSeguro=function(data){
-    return auroGenerarVistaImpresionCertificadoUnificada(data||datos());
-  };
-}
-
-auroInstalarMotorImpresionCertificadoUnificado();
-
-async function inicializar(){
-  mount();
-
-  const token=++state.token;
-  const c=contexto();
-
-  state.contexto=c;
-  state.idAtencion=c.id;
-
-  const badge=document.getElementById('acContexto');
-  if(badge){
-    badge.textContent=c.id
-      ? (c.numeroConsulta?'Consulta #'+c.numeroConsulta:'Atención seleccionada')
-      : 'Sin atención seleccionada';
+  async function inicializar(){
+    instalarEstilos();
+    const mount=asegurarMount();
+    if(!mount) return false;
+    enlazar();
+    state.inicializado=true;
+    await cargar(false);
+    return true;
   }
 
-  if(!c.id){
+  /*
+    AUROSANAX RECOMENDACIONES V1.1.1 — FIX QUIRÚRGICO ANTIRREGRESIVO
+    Limpia SOLO cuando Atenciones declara canónicamente la atención limpiada.
+    No usa eventos genéricos de paciente/historia y no interfiere con "Ver".
+    No persiste, no elimina datos y no selecciona otra atención.
+  */
+  function onAtencionLimpiada(){
+    state.tokenCarga++;
+    state.idAtencion='';
+    state.idRecomendacion='';
+    state.registro=null;
+    state.registros=[];
+    state.modoNuevo=false;
     state.diagnosticos=[];
-    state.certificados=[];
-    state.paciente=null;
-    state.historia=null;
-    renderDx();
-    renderHistorial();
-    renderContextoClinico();
-    nuevo();
-    return;
+    state.contexto={
+      id:'',
+      atencion:{},
+      idPaciente:'',
+      numeroConsulta:'',
+      estadoAtencion:'',
+      finalizada:false,
+      bloqueada:false,
+      editable:false,
+      historica:false
+    };
+    limpiar();
+    renderDiagnosticos();
+    renderContexto();
+    setMsg('Seleccione una atención antes de trabajar Recomendaciones.','info');
   }
 
-  // La información propia de la atención comienza a cargarse inmediatamente.
-  // Configuración/médicos se mantienen en paralelo y no bloquean la tarjeta de certificados.
-  const cargaAuxiliar=cargarContextoAuxiliar(c);
-  const cargaClinica=Promise.all([
-    cargarDx(c.id,token),
-    cargarHistorial(c.id,token)
-  ]);
+  function onAtencionCambio(){
+    const id=idAtencionActiva();
+    if(id !== state.idAtencion){
+      state.tokenCarga++;
+      state.idAtencion=id;
+      setTimeout(()=>cargar(true),50);
+    }else{
+      state.contexto=contextoAtencion();
+      renderContexto();
+    }
+  }
 
-  await cargaAuxiliar;
-  if(token!==state.token || txt(state.idAtencion)!==txt(c.id)) return;
-  renderContextoClinico();
+  window.addEventListener('aurosanax:atencion-cambiada',onAtencionCambio);
+  window.addEventListener('aurosanax:atencion-seleccionada',onAtencionCambio);
+  window.addEventListener('aurosanax:atencion-actualizada',onAtencionCambio);
+  window.addEventListener('aurosanax:atencion-limpiada',onAtencionLimpiada);
 
-  await cargaClinica;
-  if(token!==state.token || txt(state.idAtencion)!==txt(c.id)) return;
+  /*
+    V1.1.2:
+    Si Plan termina de cargar después que Recomendaciones, se intenta la
+    misma precarga segura. Solo actúa si coinciden las id_atencion y el
+    campo continúa vacío; nunca sobrescribe.
+  */
+  window.addEventListener('aurosanax:plan-cargado',async (evento)=>{
+    const idEvento=txt(evento?.detail?.id_atencion);
+    const ctx=state.contexto || contextoAtencion();
 
-  nuevo();
-}
+    if(!idEvento || !ctx?.id || idEvento !== txt(ctx.id)) return;
+    if(getValue('auroRecGenerales')) return;
 
-window.addEventListener('aurosanax:firma-electronica-completada',function(ev){
-  const d=ev?.detail||{};
-  if(txt(d.tipo_documento).toUpperCase()!=='CERTIFICADO') return;
-  const id=txt(d.id_certificado||d.id_documento_origen);
-  if(!id) return;
-  fijarEstadoFirmaCertificado(id,'FIRMADA',{documento:d,error:''});
-});
-
-window.addEventListener('aurosanax:firma-electronica-cancelada',function(ev){
-  const d=ev?.detail||{};
-  if(txt(d.tipo_documento).toUpperCase()!=='CERTIFICADO') return;
-  const id=txt(d.id_certificado||d.id_documento_origen);
-  if(id) fijarEstadoFirmaCertificado(id,'SIN_FIRMA',{documento:null,error:''});
-});
-
-window.auroCertificados={
-  version:VERSION,
-  inicializar,
-  estado:state,
-  vistaPrevia:()=>vista(false),
-  imprimir:()=>vista(true),
-  obtenerDatos:datos,
-  construirDocumento:docHTML,
-  obtenerDocumentoFirmable:(id)=>documentoFirmableCertificado(id),
-  prepararFirma:(id)=>prepararFirmaCertificado(id),
-  firmarCertificado:(id)=>accionFirmaCertificado(id),
-  cancelarFirmaCertificado:(id)=>cancelarFirmaCertificado(id),
-  verCertificadoFirmado:(id)=>verCertificadoFirmado(id),
-  consultarFirmaPersistente:(id)=>consultarFirmaPersistenteCertificado(id)
-};
-
-/*
-  AUROSANAX FIX QUIRÚRGICO — CAMBIO DE ATENCIÓN CON CERTIFICADOS VISIBLE
-  ---------------------------------------------------------------------
-  Atenciones ya emite 'aurosanax:atencion-seleccionada' después de fijar
-  el nuevo id_atencion como contexto maestro. Certificados escucha ese
-  contrato existente y se reinicializa únicamente cuando su panel está
-  visible. No modifica Atenciones, Index, persistencia ni otros módulos.
-*/
-function auroCertificadosAlCambiarAtencion(){
-  const panel=document.getElementById('hc_certificados');
-  if(!panel || panel.offsetParent===null) return;
-
-  Promise.resolve(inicializar()).catch(error=>{
-    console.warn('AUROSANAX CERTIFICADOS: no se pudo refrescar la atención seleccionada.',error);
+    if(await precargarIndicacionesDesdePlanSiVacio(idEvento)){
+      setMsg(
+        'Se precargaron las indicaciones para paciente del Plan en Recomendaciones generales. Puede revisarlas y editarlas antes de guardar.',
+        'info'
+      );
+    }
   });
-}
 
-window.addEventListener('aurosanax:atencion-seleccionada',auroCertificadosAlCambiarAtencion);
+  window.addEventListener('aurosanax:diagnosticos-actualizados',()=>{
+    if(state.idAtencion) cargarDiagnosticos(state.idAtencion);
+  });
 
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',()=>{mount();},{once:true});
-}else{
-  mount();
-}
+  document.addEventListener('DOMContentLoaded',()=>{
+    if(document.getElementById('auroRecomendacionesMount')) inicializar();
+  });
 
-window.addEventListener('load',()=>{
-  auroInstalarMotorImpresionCertificadoUnificado();
-});
-
+  window.auroRecomendaciones={
+    version:VERSION,
+    inicializar:inicializar,
+    cargar:function(){return cargar(true);},
+    guardar:guardar,
+    nueva:nuevaRecomendacion,
+    vistaPrevia:vistaPrevia,
+    estado:state
+  };
 })();
