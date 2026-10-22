@@ -285,6 +285,19 @@ function configGlobal(){
   return c;
 }
 
+// Logo institucional: misma normalización local usada en RECETAS.
+// Sin llamadas adicionales, sin modificar la configuración persistida.
+function auroCertificadoUrlLogoInstitucional(c){
+  c=c||{};
+  const valor=txt(c.logo_url||c.logo_file_id||c.logo_drive_url||c.logo);
+  if(!valor) return '';
+  const match=valor.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)||
+    valor.match(/[?&]id=([a-zA-Z0-9_-]+)/)||
+    valor.match(/^([a-zA-Z0-9_-]{20,})$/);
+  if(match) return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(match[1])+'&sz=w400';
+  return /^(https?:\/\/|data:image\/(?:png|jpeg|webp|gif);base64,)/i.test(valor)?valor:'';
+}
+
 function normalizarConfig(c){
   c=c||{};
   if(c.datos&&typeof c.datos==='object') c=c.datos;
@@ -300,7 +313,8 @@ function normalizarConfig(c){
     telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
     email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
     web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
-    logo:txt(c.logo_url||c.logo_drive_url||c.logo),
+    logo:auroCertificadoUrlLogoInstitucional(c),
+    mostrarLogo:txt(c.mostrar_logo_receta??c.mostrar_logo??'SI').toUpperCase()!=='NO',
     colorPrincipal:txt(c.color_principal)||'#8b1e5a'
   };
 }
@@ -1395,6 +1409,13 @@ function docHTML(data){
     d.centro||{}
   );
 
+  // El logo y su visibilidad son preferencias actuales de Configuración Centro;
+  // los demás datos del certificado conservan su snapshot histórico.
+  const cfgLogoActual=Object.assign({},configGlobal(),state.configuracion||{});
+  const logoActual=auroCertificadoUrlLogoInstitucional({logo:cfgLogoActual.logo||cfgLogoActual.logo_url||cfgLogoActual.logo_file_id});
+  if(logoActual) cfg.logo=logoActual;
+  if(cfgLogoActual.mostrarLogo===false||txt(cfgLogoActual.mostrar_logo_receta??cfgLogoActual.mostrar_logo).toUpperCase()==='NO') cfg.mostrarLogo=false;
+
   const centro=txt(cfg.nombre)||'AUROSANAX';
   const color=txt(cfg.colorPrincipal)||'#8b1e5a';
   const ciudad=txt(cfg.ciudad);
@@ -1414,9 +1435,13 @@ function docHTML(data){
   };
   const lineaContacto=(tipo,valor)=>valor?`<div class="ac-contact-row">${iconoContacto(tipo)}<span>${esc(valor)}</span></div>`:'';
 
-  const logo=cfg.logo
-    ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(cfg.logo)}" alt="Logo institucional" onerror="this.parentElement.style.display='none'"></div>`
-    : '<div></div>';
+  // Normalizar nuevamente el snapshot legado: los certificados ya emitidos
+  // pueden contener enlaces Drive sin transformar.
+  const logoUrl=auroCertificadoUrlLogoInstitucional({logo:cfg.logo});
+  const mostrarLogo=cfg.mostrarLogo!==false;
+  const logo=(mostrarLogo&&logoUrl)
+    ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(logoUrl)}" alt="Logo institucional" onerror="this.parentElement.style.display='none';this.closest('.ac-doc-head').style.gridTemplateColumns='minmax(0,1fr) auto'"></div>`
+    : '';
 
   const dxHtml=dx.length
     ? dx.map(x=>`<div class="ac-dx-doc-row"><b>${esc(cie10Visual(x.codigo_cie10||''))}</b>${x.descripcion?' '+esc(x.descripcion):''}</div>`).join('')
@@ -1436,7 +1461,7 @@ function docHTML(data){
     : '';
 
   return `<div class="ac-paper" style="--ac-color:${esc(color)}">
-    <div class="ac-doc-head">
+    <div class="ac-doc-head"${logo?'':' style="grid-template-columns:minmax(0,1fr) auto"'}>
       ${logo}
       <div>
         <div class="ac-brand">${esc(centro)}</div>
@@ -1609,7 +1634,6 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
-  .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
