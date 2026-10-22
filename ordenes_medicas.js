@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.6-IASYN-MARGEN-SUPERIOR-MULTIPAGINA';
+const VERSION='1.4.7-IASYN-PIE-ADAPTATIVO';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -695,7 +695,7 @@ function instalarCSS(){
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
 .aom-doc-table th{background:#f8fafc;text-align:left}
  .aom-doc-table thead{display:table-header-group}.aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
-.aom-doc-bottom{position:static;margin-top:12mm;padding-top:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}.aom-contact-line{display:flex;align-items:flex-start;gap:6px;margin:2px 0;break-inside:avoid}.aom-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-paper-breve{display:flex;flex-direction:column;min-height:267mm}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important;padding-top:12mm}.aom-doc-bottom{position:static;margin-top:12mm;padding-top:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}.aom-contact-line{display:flex;align-items:flex-start;gap:6px;margin:2px 0;break-inside:avoid}.aom-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -1187,7 +1187,12 @@ function docHTML(data,opciones={}){
   const contactoPie=lineaPie('ubicacion',ubicacion)+lineaPie('correo',cfgPie.email)+lineaPie('telefono',cfgPie.telefono);
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
   const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional" onerror="this.parentElement.remove();this.closest('.aom-doc-head')?.classList.add('no-logo')"></div>`:'';
-  return `<article class="aom-paper" style="--aom-color:${esc(color)}">
+  // Para órdenes breves el cierre se ancla al fondo de la primera hoja A4.
+  // Para órdenes largas se usa flujo normal paginado, sin estirar las tablas.
+  const contenidoBreve=items.length<=7 && diagnosticos.length<=5 &&
+    items.every(o=>(txt(o.orden).length+txt(o.obs).length)<115) &&
+    txt(d.observaciones_generales).length<180;
+  return `<article class="aom-paper${contenidoBreve?' aom-paper-breve':''}" style="--aom-color:${esc(color)}">
     <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
@@ -1208,7 +1213,7 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:0!important;position:relative!important;padding:0 17mm!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:0!important;position:relative!important;padding:0 17mm!important}.aom-paper-breve{display:flex!important;flex-direction:column!important;min-height:267mm!important}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}}
   `;
 }
 
