@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.5-IASYN-CIERRE-UNIDO';
+const VERSION='1.4.6-IASYN-MARGEN-SUPERIOR-MULTIPAGINA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -683,7 +683,7 @@ function instalarCSS(){
 .aom-editor-remove{grid-column:1/-1;justify-self:end}
 .aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}.aom-editor-search{position:relative;min-width:0}.aom-editor-sugerencias{position:absolute;z-index:15;top:100%;left:0;right:0;max-height:220px;overflow:auto;background:#fff;border:1px solid #d1d5db;border-radius:10px;box-shadow:0 12px 25px rgba(15,23,42,.16)}.aom-editor-sugerencias[hidden]{display:none!important}.aom-editor-sugerencia{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #f1f5f9;background:#fff;padding:9px 11px;font:inherit;color:#111827;cursor:pointer}.aom-editor-sugerencia:hover,.aom-editor-sugerencia:focus{background:#fdf2f8}.aom-editor-sugerencia small{display:block;font-size:11px;color:#64748b;margin-top:2px}.aom-editor-sugerencias-vacio{padding:9px 11px;font-size:12px;color:#64748b}
 .aom-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
-.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 15mm;margin:0 auto;font-family:Arial,sans-serif;position:relative;display:flex;flex-direction:column}
+.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 15mm;margin:0 auto;font-family:Arial,sans-serif;position:relative;display:block}
 .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--aom-color,#8b1e5a);padding-bottom:10px;margin-bottom:18px}.aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}.aom-logo-wrap{width:60px;height:60px;display:grid;place-items:center;overflow:hidden}.aom-logo{max-width:100%;max-height:100%;object-fit:contain}.aom-doc-date{text-align:right;font-size:11.5px;font-weight:750}
 .aom-doc-brand{font-size:20px;font-weight:950;color:var(--aom-color,#8b1e5a);letter-spacing:.035em}
 .aom-doc-sub{font-size:10.5px;color:#4b5563;line-height:1.45;margin-top:4px}
@@ -695,7 +695,7 @@ function instalarCSS(){
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
 .aom-doc-table th{background:#f8fafc;text-align:left}
  .aom-doc-table thead{display:table-header-group}.aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
-.aom-doc-bottom{position:static;flex-shrink:0;margin-top:auto;padding-top:12mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}.aom-contact-line{display:flex;align-items:flex-start;gap:6px;margin:2px 0;break-inside:avoid}.aom-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-doc-bottom{position:static;margin-top:12mm;padding-top:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}.aom-contact-line{display:flex;align-items:flex-start;gap:6px;margin:2px 0;break-inside:avoid}.aom-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -1192,13 +1192,15 @@ function docHTML(data,opciones={}){
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
     ${diagnosticos.length?`<section class="aom-doc-diagnosticos"><strong>DIAGNÓSTICOS DE LA ATENCIÓN</strong>${diagnosticos.map(dx=>`<div class="aom-dx-line">${dx.codigo_cie10?`<b>${esc(codigoCie10VisualOrden(dx.codigo_cie10))}</b>${dx.descripcion?' — ':''}`:''}${esc(dx.descripcion)}</div>`).join('')}</section>`:''}
-    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.slice(0,-1).map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}<tr class="aom-cierre-unido"><td colspan="4" style="padding:0;border:0"><table class="aom-ultimo-item"><tbody>${items.length?`<tr><td style="width:40px">${items.length}</td><td><strong>${esc(items[items.length-1].orden)}</strong></td><td style="width:34mm">${esc(items[items.length-1].cat||'OTROS')}</td><td>${esc(items[items.length-1].obs||'')}</td></tr>`:''}</tbody></table>${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}<section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoPie}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}<br><span>Firma y sello</span></div></section></td></tr></tbody></table>
+    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
+    ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
+    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoPie}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}<br><span>Firma y sello</span></div></section>
   </article>`;
 }
 
 function estilosImpresion(){
   return `
-  @page{size:A4 portrait;margin:0}
+  @page{size:A4 portrait;margin:15mm 0 15mm 0}
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#eef2f7;font-family:Arial,sans-serif;color:#111827}
   .aom-print-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:center;gap:8px;padding:10px;background:#fff;border-bottom:1px solid #e5e7eb}
@@ -1206,7 +1208,7 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:0!important;position:relative!important;padding:0 17mm!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}}
   `;
 }
 
