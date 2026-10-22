@@ -497,7 +497,7 @@ function datosDocumentoEmitido(reg){
     numero_consulta:txt(reg?.numero_consulta||d.numero_consulta),
     id_paciente:txt(reg?.id_paciente||d.paciente?.id_paciente),
     nombre_paciente:txt(reg?.nombre_paciente||d.paciente?.nombre),
-    numero_documento:txt(reg?.numero_documento||d.paciente?.numero_documento),
+    numero_documento:txt((/^0\d+$/.test(txt(d.paciente?.numero_documento)) && txt(reg?.numero_documento)===txt(d.paciente?.numero_documento).replace(/^0+/,''))?d.paciente.numero_documento:(reg?.numero_documento||d.paciente?.numero_documento)),
     id_historia:txt(reg?.id_historia||d.historia?.id_historia),
     id_medico:txt(reg?.id_medico||d.medico?.id_medico),
     nombre_medico:txt(reg?.nombre_medico||d.medico?.nombre),
