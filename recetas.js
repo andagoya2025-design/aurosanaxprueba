@@ -5359,7 +5359,7 @@
     actualizarBotonGuardarReceta();
     auroRecetaActualizarCabeceraClinicaPremium();
     auroRecetaEditorRenderDesdeCampo(true);
-    mostrarMensajeReceta('<i class="bi bi-pencil-square me-1"></i> Editando receta. Los cambios se aplican solo a Recetas y no modifican el Plan de la historia clínica.', '');
+    mostrarMensajeReceta('<i class="bi bi-pencil-square me-1"></i> Editando receta. Al guardar, los medicamentos se sincronizarán con el PLAN de esta misma atención si el servidor confirma la operación.', '');
     vistaPreviaReceta();
   }
 
@@ -5538,8 +5538,18 @@
       recetasPaginaActual = 1;
       renderHistorialRecetas();
 
-      if(resultado && resultado.success){
-        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente. Ya fue asociada a la consulta activa.`, 'ok');
+      // Una respuesta parcial significa que RECETAS sí quedó guardada en Sheets.
+      // Nunca revertir la copia local ni reintentar automáticamente: podría duplicar recetas.
+      const guardadoParcialPlan = !!(resultado && (resultado.guardado_parcial === true || resultado.receta_guardada === true));
+      if(resultado && resultado.success && resultado.plan_sincronizado === true){
+        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} y medicamentos sincronizados con el PLAN de esta atención.`, 'ok');
+      }else if(guardadoParcialPlan){
+        const avisoParcial = resultado.message || 'La receta quedó guardada, pero no se sincronizaron los medicamentos con PLAN. Solicite conciliación antes de volver a guardar.';
+        mostrarMensajeReceta(`<i class="bi bi-exclamation-triangle me-1"></i> ${safe(avisoParcial)}`, '');
+        alert(avisoParcial + '\nNo presione Guardar nuevamente hasta verificar la atención.');
+      }else if(resultado && resultado.success){
+        // Compatibilidad con backend anterior: no atribuirle sincronización no confirmada.
+        mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta guardada. El servidor no confirmó sincronización de medicamentos con PLAN.`, 'ok');
       }else{
         /* El backend es la autoridad. Si bloquea una corrección o falla el POST,
            se revierte únicamente la copia local recién escrita para no mostrar
@@ -5562,7 +5572,7 @@
         vistaPreviaReceta();
       }
 
-      if(resultado && resultado.success){
+      if(resultado && (resultado.success || guardadoParcialPlan)){
         /*
           La corrección ya quedó persistida: sale del modo de edición temporal.
           A partir de aquí la firma evalúa únicamente la versión GUARDADA.
