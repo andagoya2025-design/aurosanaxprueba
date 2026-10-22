@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.12-AUROSANAX-ABIERTO-VISUAL';
+const VERSION='1.3.12-AUROSANAX-ABIERTO-VISUAL-LOGO-COMPAT';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -33,6 +33,7 @@ const state={
   guardando:false,
   token:0,
   configuracion:{},
+  logoInstitucionalDataUri:'',
   medicos:[],
   paciente:null,
   historia:null,
@@ -285,17 +286,38 @@ function configGlobal(){
   return c;
 }
 
-// Logo institucional: misma normalización local usada en RECETAS.
-// Sin llamadas adicionales, sin modificar la configuración persistida.
-function auroCertificadoUrlLogoInstitucional(c){
-  c=c||{};
-  const valor=txt(c.logo_url||c.logo_file_id||c.logo_drive_url||c.logo);
+/* Logo institucional: lectura compatible con Configuración Centro y Drive.
+   No modifica el archivo, su configuración ni los documentos persistidos. */
+function urlLogoInstitucional(c){
+  const valor=txt(c?.logo_url||c?.logo_file_id||c?.logo_drive_url||c?.logo);
   if(!valor) return '';
+  if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(valor)) return valor;
   const match=valor.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)||
     valor.match(/[?&]id=([a-zA-Z0-9_-]+)/)||
     valor.match(/^([a-zA-Z0-9_-]{20,})$/);
   if(match) return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(match[1])+'&sz=w400';
-  return /^(https?:\/\/|data:image\/(?:png|jpeg|webp|gif);base64,)/i.test(valor)?valor:'';
+  return /^https?:\/\//i.test(valor)?valor:'';
+}
+
+/* IASYN-2: soporte opcional de imagen incrustada, cuando el backend lo expone.
+   SCRIB 71 de referencia NO incluye la acción: una respuesta no compatible
+   nunca bloquea certificados ni reemplaza la URL visual existente. */
+function extraerLogoDataUri(respuesta){
+  const r=respuesta?.data||respuesta?.datos||respuesta||{};
+  const valor=txt(r.logo_base64||r.logoBase64||r.data_uri||r.dataUri||r.logo_data_uri||r.logoDataUri||r.base64||r.logo);
+  if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(valor)) return valor;
+  if(/^[A-Za-z0-9+/=\s]{100,}$/.test(valor)){
+    const mime=txt(r.mime_type||r.mimeType||r.mime)||'image/png';
+    if(/^image\/(?:png|jpeg|webp|gif)$/i.test(mime)) return 'data:'+mime+';base64,'+valor.replace(/\s+/g,'');
+  }
+  return '';
+}
+
+async function cargarLogoInstitucionalCompatible(){
+  try{
+    const r=await post('obtenerLogoInstitucionalFirma',{});
+    return extraerLogoDataUri(r);
+  }catch(_e){return '';}
 }
 
 function normalizarConfig(c){
@@ -313,8 +335,7 @@ function normalizarConfig(c){
     telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
     email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
     web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
-    logo:auroCertificadoUrlLogoInstitucional(c),
-    mostrarLogo:txt(c.mostrar_logo_receta??c.mostrar_logo??'SI').toUpperCase()!=='NO',
+    logo:urlLogoInstitucional(c),
     colorPrincipal:txt(c.color_principal)||'#8b1e5a'
   };
 }
@@ -329,6 +350,8 @@ async function cargarContextoAuxiliar(ctx){
     cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
   }catch(e){}
   state.configuracion=cfg;
+  // La URL es la alternativa segura si SCRIB no devuelve una imagen incrustada.
+  state.logoInstitucionalDataUri=await cargarLogoInstitucionalCompatible();
 
   try{
     const r=await get('listarMedicosActivos');
@@ -445,6 +468,7 @@ function instalarCSS(){
 .ac-doc-head{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ac-color,#8b1e5a);padding-bottom:10px}
 .ac-logo-wrap{width:60px;height:60px;display:grid;place-items:center;border-radius:12px;overflow:hidden}
 .ac-logo-wrap:empty{display:none}
+.ac-doc-head:not(:has(.ac-logo-wrap)){grid-template-columns:minmax(0,1fr) auto}
 .ac-logo{max-width:100%;max-height:100%;object-fit:contain}
 .ac-brand{font-size:19px;font-weight:950;color:var(--ac-color,#8b1e5a);letter-spacing:.035em}
 .ac-brand-sub{font-size:10.5px;color:#667085;margin-top:2px}
@@ -1409,13 +1433,6 @@ function docHTML(data){
     d.centro||{}
   );
 
-  // El logo y su visibilidad son preferencias actuales de Configuración Centro;
-  // los demás datos del certificado conservan su snapshot histórico.
-  const cfgLogoActual=Object.assign({},configGlobal(),state.configuracion||{});
-  const logoActual=auroCertificadoUrlLogoInstitucional({logo:cfgLogoActual.logo||cfgLogoActual.logo_url||cfgLogoActual.logo_file_id});
-  if(logoActual) cfg.logo=logoActual;
-  if(cfgLogoActual.mostrarLogo===false||txt(cfgLogoActual.mostrar_logo_receta??cfgLogoActual.mostrar_logo).toUpperCase()==='NO') cfg.mostrarLogo=false;
-
   const centro=txt(cfg.nombre)||'AUROSANAX';
   const color=txt(cfg.colorPrincipal)||'#8b1e5a';
   const ciudad=txt(cfg.ciudad);
@@ -1435,12 +1452,9 @@ function docHTML(data){
   };
   const lineaContacto=(tipo,valor)=>valor?`<div class="ac-contact-row">${iconoContacto(tipo)}<span>${esc(valor)}</span></div>`:'';
 
-  // Normalizar nuevamente el snapshot legado: los certificados ya emitidos
-  // pueden contener enlaces Drive sin transformar.
-  const logoUrl=auroCertificadoUrlLogoInstitucional({logo:cfg.logo});
-  const mostrarLogo=cfg.mostrarLogo!==false;
-  const logo=(mostrarLogo&&logoUrl)
-    ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(logoUrl)}" alt="Logo institucional" onerror="this.parentElement.style.display='none';this.closest('.ac-doc-head').style.gridTemplateColumns='minmax(0,1fr) auto'"></div>`
+  const logoSrc=state.logoInstitucionalDataUri||urlLogoInstitucional(cfg);
+  const logo=logoSrc
+    ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(logoSrc)}" alt="Logo institucional" onerror="this.parentElement.style.display='none'"></div>`
     : '';
 
   const dxHtml=dx.length
@@ -1461,7 +1475,7 @@ function docHTML(data){
     : '';
 
   return `<div class="ac-paper" style="--ac-color:${esc(color)}">
-    <div class="ac-doc-head"${logo?'':' style="grid-template-columns:minmax(0,1fr) auto"'}>
+    <div class="ac-doc-head">
       ${logo}
       <div>
         <div class="ac-brand">${esc(centro)}</div>
@@ -1566,6 +1580,7 @@ body{overflow-x:hidden}
   padding-bottom:9px;
 }
 .ac-logo-wrap{width:55px;height:55px;display:grid;place-items:center;overflow:hidden}
+.ac-doc-head:not(:has(.ac-logo-wrap)){grid-template-columns:minmax(0,1fr) auto}
 .ac-logo{max-width:100%;max-height:100%;object-fit:contain}
 .ac-brand{font-size:19px;font-weight:950;color:var(--ac-color,#8b1e5a);letter-spacing:.035em;overflow-wrap:anywhere}
 .ac-brand-sub{font-size:10px;color:#667085;margin-top:2px;overflow-wrap:anywhere}
@@ -1634,6 +1649,8 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
+  .ac-doc-head:has(.ac-logo-wrap){grid-template-columns:auto minmax(0,1fr) auto!important}
+  .ac-doc-head:not(:has(.ac-logo-wrap)){grid-template-columns:minmax(0,1fr) auto!important}
   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
