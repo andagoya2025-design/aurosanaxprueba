@@ -38,6 +38,7 @@ const state={
   guardando:false,
   token:0,
   configuracion:{},
+  logoInstitucionalDataUrl:'',
   medicos:[],
   paciente:null,
   historia:null,
@@ -298,6 +299,18 @@ async function cargarAuxiliares(ctx){
     cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
   }catch(e){}
   state.configuracion=cfg;
+  // Solo lectura: obtener el logotipo institucional en formato embebible.
+  // No interviene en Diagnósticos, el contrato de firma ni la paginación.
+  state.logoInstitucionalDataUrl='';
+  try{
+    const respuesta=await post('obtenerLogoInstitucionalFirma',{});
+    const imagen=txt(respuesta?.data_url||respuesta?.data?.data_url);
+    if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(imagen)){
+      state.logoInstitucionalDataUrl=imagen;
+    }
+  }catch(e){
+    // Backend sin este servicio: mantener el comportamiento previo.
+  }
   try{
     state.medicos=arr(await get('listarMedicosActivos'));
   }catch(e){
@@ -1137,7 +1150,7 @@ function docHTML(data){
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
   const diagnosticos=diagnosticosUnicosOrden(d.diagnosticos||[]);
-  const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
+  const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(state.logoInstitucionalDataUrl||centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
