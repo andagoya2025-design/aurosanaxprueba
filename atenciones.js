@@ -3578,6 +3578,16 @@
     window[nombre] = nueva;
   }
 
+  window.addEventListener('aurosanax:tipo-atencion-confirmado', function(evento){
+    const id = String(evento?.detail?.id_atencion || '').trim();
+    if(!id) return;
+    cargarAtencionesDesdeSheets(true).then(function(){
+      renderAtencionesPaciente();
+    }).catch(function(error){
+      console.warn('AUROSANAX: historial pendiente de actualización visual', error);
+    });
+  });
+
   document.addEventListener('DOMContentLoaded', function(){
     setTimeout(function(){
       iniciarModulo();
