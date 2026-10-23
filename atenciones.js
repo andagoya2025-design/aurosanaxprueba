@@ -414,6 +414,45 @@
         margin-top:14px;
       }
 
+
+      /* V2 premium: estilos limitados a las dos tablas; sin cambiar eventos ni datos. */
+      #auroAtencionesBox .auro-recetas-atencion-desktop .table-responsive,
+      #auroAtencionesBox .auro-atenciones-desktop .table-responsive{overflow-x:hidden;max-width:100%;}
+      #auroAtencionesBox .auro-premium-recetas-tabla,
+      #auroAtencionesBox .auro-premium-historial-tabla{width:100%;min-width:0!important;max-width:100%;table-layout:fixed;border-collapse:collapse;}
+      #auroAtencionesBox .auro-premium-recetas-tabla th,
+      #auroAtencionesBox .auro-premium-recetas-tabla td,
+      #auroAtencionesBox .auro-premium-historial-tabla th,
+      #auroAtencionesBox .auro-premium-historial-tabla td{box-sizing:border-box;min-width:0!important;overflow-wrap:anywhere;word-break:normal;vertical-align:middle;padding:9px 5px;font-size:clamp(10px,.85vw,13px);}
+      #auroAtencionesBox .auro-premium-recetas-tabla th,
+      #auroAtencionesBox .auro-premium-historial-tabla th{font-weight:800;text-align:center;line-height:1.25;}
+      #auroAtencionesBox .auro-premium-recetas-tabla th:nth-child(1){width:13%;}
+      #auroAtencionesBox .auro-premium-recetas-tabla th:nth-child(2){width:20%;}
+      #auroAtencionesBox .auro-premium-recetas-tabla th:nth-child(3){width:12%;}
+      #auroAtencionesBox .auro-premium-recetas-tabla th:nth-child(4){width:29%;}
+      #auroAtencionesBox .auro-premium-recetas-tabla th:nth-child(5){width:11%;}
+      #auroAtencionesBox .auro-premium-recetas-tabla th:nth-child(6){width:15%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(1){width:5%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(2){width:18%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(3){width:12%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(4){width:8%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(5){width:12%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(6){width:19%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(7){width:11%;}
+      #auroAtencionesBox .auro-premium-historial-tabla th:nth-child(8){width:15%;}
+      #auroAtencionesBox .auro-premium-recetas-tabla td:nth-last-child(-n+2),
+      #auroAtencionesBox .auro-premium-historial-tabla td:nth-last-child(-n+2){text-align:center;}
+      #auroAtencionesBox .auro-premium-recetas-tabla .btn-action,
+      #auroAtencionesBox .auro-premium-historial-tabla .btn-action{width:100%;max-width:100%;white-space:normal;overflow-wrap:anywhere;font-size:clamp(10px,.8vw,12px);padding:6px 3px;}
+      #auroAtencionesBox .auro-premium-recetas-tabla .auro-receta-resumen-box{min-width:0;max-width:100%;}
+      #auroAtencionesBox .auro-premium-historial-tabla .auro-premium-acciones>div{min-width:0;}
+      @media (min-width:769px) and (max-width:1050px){
+        #auroAtencionesBox .auro-premium-recetas-tabla th,
+        #auroAtencionesBox .auro-premium-recetas-tabla td,
+        #auroAtencionesBox .auro-premium-historial-tabla th,
+        #auroAtencionesBox .auro-premium-historial-tabla td{font-size:10px;padding:7px 3px;}
+      }
+
       @media (max-width: 768px){
         #auroAtencionesBox{
           padding:12px!important;
@@ -3120,7 +3159,6 @@
           '<td>' + safe(r.id_receta || '—') + '</td>' +
           '<td>' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</td>' +
           '<td>' + auroAtencionMedicamentoResumenHTML(r.medicamento || r.medicamentos || '') + '</td>' +
-          '<td><div class="auro-receta-indicacion-resumen">' + safe(resumenTexto(r.indicaciones || '', 120)) + '</div></td>' +
           '<td><span class="badge-auro badge-ok">' + safe(r.estado || 'Emitida') + '</span></td>' +
           '<td><button type="button" class="btn-action primary" data-receta-ver-id="' + safe(r.id_receta || '') + '"><i class="bi bi-eye me-1"></i> Ver receta</button></td>' +
         '</tr>';
@@ -3148,8 +3186,8 @@
           '<div class="auro-recetas-atencion-title"><b><i class="bi bi-prescription2 me-1"></i> Recetas asociadas a esta atención</b><span class="badge-auro badge-blue">' + recetas.length + ' receta' + (recetas.length === 1 ? '' : 's') + '</span></div>' +
           '<div class="auro-recetas-atencion-desktop">' +
             '<div class="table-responsive">' +
-              '<table class="table table-modern align-middle mb-0">' +
-                '<thead><tr><th>Fecha</th><th>ID receta</th><th>CIE-10</th><th>Medicamento</th><th>Indicaciones</th><th>Estado</th><th>Acción</th></tr></thead>' +
+              '<table class="table table-modern align-middle mb-0 auro-premium-recetas-tabla">' +
+                '<thead><tr><th>FECHA</th><th>ID DE RECETA</th><th>CIE-10</th><th>MEDICAMENTO(S)</th><th>ESTADO</th><th>ACCIÓN</th></tr></thead>' +
                 '<tbody>' + filasRecetasDesktop + '</tbody>' +
               '</table>' +
             '</div>' +
@@ -3181,7 +3219,7 @@
         '</div>' +
       '</div>' +
       '<div class="auro-atencion-info-grid">' +
-        auroAtencionDato('Fecha', fechaVisual(a.fecha_atencion)) +
+        auroAtencionDato('Fecha de atención', fechaVisual(a.fecha_atencion)) +
         auroAtencionDato(String(a.id_cita || '').trim() ? 'Hora programada' : 'Hora de apertura', horaVisualAtencion(a.hora_atencion || '—')) +
         auroAtencionDato('Tipo', a.tipo_atencion || '—') +
         auroAtencionDatoHTML('Médico', auroAtencionMedicoHTML(a)) +
@@ -3447,13 +3485,14 @@
     const filasTabla = arrPagina.map(a => {
       const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
       return '<tr>' +
-        '<td><b>#' + safe(a.numero_consulta) + '</b><br><small class="text-muted">' + safe(a.id_atencion || '—') + '</small></td>' +
+        '<td><b>#' + safe(a.numero_consulta) + '</b></td>' +
+        '<td class="auro-premium-id">' + safe(a.id_atencion || '—') + '</td>' +
         '<td>' + safe(fechaVisual(a.fecha_atencion)) + '</td>' +
         '<td>' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</td>' +
         '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
         '<td>' + auroAtencionEspecialidadMedicoHTML(a) + '</td>' +
         '<td><span class="badge-auro ' + badge + '">' + safe(a.estado_atencion || '—') + '</span></td>' +
-        '<td style="min-width:150px">' +
+        '<td class="auro-premium-acciones">' +
           '<div style="display:grid;grid-template-columns:1fr;gap:6px">' +
             '<button type="button" class="btn-action primary" data-atencion-id="' + safe(a.id_atencion) + '" style="width:100%">Ver</button>' +
             '<button type="button" class="btn-action soft" data-atencion-integral-id="' + safe(a.id_atencion) + '" style="width:100%;border:1px solid #8b1e5a;background:#fff7fb;color:#8b1e5a;font-weight:900">' +
@@ -3494,8 +3533,8 @@
     lista.innerHTML =
       '<div class="auro-atenciones-desktop">' +
         '<div class="table-responsive">' +
-          '<table class="table table-modern align-middle mb-0">' +
-            '<thead><tr><th>Consulta</th><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Especialidad / médico</th><th>Estado</th><th>Acción</th></tr></thead>' +
+          '<table class="table table-modern align-middle mb-0 auro-premium-historial-tabla">' +
+            '<thead><tr><th>#</th><th>ID DE ATENCIÓN</th><th>FECHA DE ATENCIÓN</th><th>HORA</th><th>TIPO</th><th>ESPECIALIDAD / MÉDICO</th><th>ESTADO</th><th>ACCIÓN</th></tr></thead>' +
             '<tbody>' + filasTabla + '</tbody>' +
           '</table>' +
         '</div>' +
@@ -3577,16 +3616,6 @@
     nueva.__auroAtencionesWrapped = true;
     window[nombre] = nueva;
   }
-
-  window.addEventListener('aurosanax:tipo-atencion-confirmado', function(evento){
-    const id = String(evento?.detail?.id_atencion || '').trim();
-    if(!id) return;
-    cargarAtencionesDesdeSheets(true).then(function(){
-      renderAtencionesPaciente();
-    }).catch(function(error){
-      console.warn('AUROSANAX: historial pendiente de actualización visual', error);
-    });
-  });
 
   document.addEventListener('DOMContentLoaded', function(){
     setTimeout(function(){
