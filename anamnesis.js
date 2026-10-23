@@ -2838,6 +2838,51 @@ Función:
     return proceso;
   }
 
+
+  /* AUROSANAX: el tipo de atención se propaga SOLO tras Guardar Anamnesis.
+     El guardado automático nunca activa esta sincronización. */
+  const auroTiposPendientesManual = Object.create(null);
+  function auroTipoCabeceraActual() {
+    const control = auroBuscarControlCabeceraAnamnesis('tipo');
+    return control ? texto(control.value) : '';
+  }
+  async function auroSincronizarTipoManual(idAtencion, tipo) {
+    const api = obtenerApiUrl();
+    if (!api || !idAtencion || !AURO_TIPOS_ATENCION.includes(tipo)) return false;
+    try {
+      await fetch(api, {
+        method:'POST', mode:'no-cors',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({accion:'actualizarTipoDesdeAnamnesis',
+          data:{id_atencion:idAtencion, tipo_atencion:tipo}})
+      });
+      /* no-cors es opaco: solo la lectura posterior confirma la escritura. */
+      for (const espera of [200,500,1000,1600]) {
+        await new Promise(resolve => setTimeout(resolve, espera));
+        const remoto = await consultarAccion('listarAtenciones', {_:Date.now()});
+        const filas = Array.isArray(remoto) ? remoto :
+          (Array.isArray(remoto?.data) ? remoto.data : []);
+        const encontrada = filas.find(f => texto(f.id_atencion) === idAtencion);
+        if (encontrada && texto(encontrada.tipo_atencion) === tipo) {
+          window.dispatchEvent(new CustomEvent('aurosanax:tipo-atencion-confirmado',
+            {detail:{id_atencion:idAtencion,tipo_atencion:tipo}}));
+          return true;
+        }
+      }
+    } catch (error) {
+      console.warn('AUROSANAX: sincronización del tipo pendiente.',error);
+    }
+    estado('Anamnesis guardada; no se confirmó el tipo en Atenciones.', 'warn');
+    return false;
+  }
+  window.addEventListener('aurosanax:anamnesis-confirmada', function(evento) {
+    const id = texto(evento?.detail?.id_atencion);
+    const tipo = auroTiposPendientesManual[id];
+    if (!tipo) return;
+    delete auroTiposPendientesManual[id];
+    auroSincronizarTipoManual(id,tipo);
+  });
+
   async function guardarAnamnesisPorAtencion() {
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = null;
@@ -2860,6 +2905,11 @@ Función:
     data.id_paciente = texto(token.id_paciente);
     data.id_historia = texto(token.id_historia);
 
+    const tipoManual = auroTipoCabeceraActual();
+    if (AURO_TIPOS_ATENCION.includes(tipoManual)) {
+      auroTiposPendientesManual[idAtencion] = tipoManual;
+    }
+
     const firmaActual = auroFirmaAnamnesis(data);
     const firmaPersistida = texto(state.firmaPersistidaPorAtencion[idAtencion]);
     const firmaEnCurso = texto(state.firmaRemotaEnCursoPorAtencion[idAtencion]);
@@ -2871,6 +2921,11 @@ Función:
     if (firmaPersistida && firmaActual === firmaPersistida) {
       state.cambiosUsuarioPorAtencion[idAtencion] = false;
       estado('No hay cambios nuevos en Anamnesis.', 'ok');
+      if (auroTiposPendientesManual[idAtencion]) {
+        const tipo = auroTiposPendientesManual[idAtencion];
+        delete auroTiposPendientesManual[idAtencion];
+        auroSincronizarTipoManual(idAtencion,tipo);
+      }
       return {
         success: true, confirmado: true, sin_cambios: true, omitido: true, id_atencion: idAtencion
       };
