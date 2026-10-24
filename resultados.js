@@ -130,6 +130,7 @@
   function aplicarRegistros(lista, c) {
     state.registros = normalizarRegistros(lista, c);
     const ids = new Set(state.registros.map(r => r.id_documento));
+    if ([...state.seleccion].some(id => !ids.has(id))) invalidarEnlace();
     for (const id of state.seleccion) {
       if (!ids.has(id)) state.seleccion.delete(id);
     }
@@ -186,10 +187,62 @@
     return state.registros.filter(r => state.seleccion.has(r.id_documento))
       .map(r => r.id_documento);
   }
+  // Identidad: solo datos de la misma ficha de paciente vinculada a la atención.
+  function pacienteVinculado(c) {
+    const id = txt(c?.idPaciente);
+    if (!id || !valido(c)) return null;
+    const listas = [];
+    try { if (Array.isArray(window.patients)) listas.push(window.patients); } catch (_) {}
+    try { if (typeof patients !== 'undefined' && Array.isArray(patients)) listas.push(patients); } catch (_) {}
+    for (const lista of listas) {
+      const p = lista.find(x => txt(x?.id_paciente || x?.id) === id);
+      if (p) return p;
+    }
+    return null;
+  }
+  function nombreDestinatario(c) {
+    const a = c?.atencion || {};
+    const n = txt(a.nombre_paciente || a.paciente_nombre);
+    if (n) return n;
+    const p = pacienteVinculado(c);
+    return txt(p?.nombre_completo || [p?.nombre || p?.nombres, p?.apellido || p?.apellidos].filter(Boolean).join(' '));
+  }
+  function telefonoDestinatario(c) {
+    const p = pacienteVinculado(c);
+    return txt(p?.telefono || p?.whatsapp || p?.celular || p?.telefono_paciente);
+  }
+  function invalidarEnlace() {
+    if (!state.enlace) return;
+    const anterior = state.enlace;
+    state.enlace = '';
+    if (state.mensajePersonalizado !== null) {
+      state.mensajePersonalizado = state.mensajePersonalizado.split(anterior).join('[PENDIENTE DE GENERACIÓN]');
+    }
+    aviso('Cambió la configuración de entrega. Genere un nuevo enlace antes de enviar por WhatsApp.');
+  }
+  function abrirWhatsAppResultados() {
+    const c = comprobarCambio();
+    if (!valido(c) || !state.enlace || state.emitiendo) {
+      aviso('Genere un enlace privado válido para la atención activa antes de enviar.');
+      render(); return;
+    }
+    const telefono = telefonoDestinatario(c);
+    if (!telefono) { aviso('El paciente de esta atención no tiene teléfono registrado.'); return; }
+    const mensaje = state.mensajePersonalizado === null ? mensajePredeterminado() : state.mensajePersonalizado;
+    if (!mensaje.includes(state.enlace) || mensaje.includes('[PENDIENTE DE GENERACIÓN]')) {
+      aviso('El mensaje no contiene el enlace privado actual. Restablezca el mensaje y genere un enlace nuevo.');
+      return;
+    }
+    if (typeof window.abrirWhatsApp !== 'function') {
+      aviso('El módulo WhatsApp de Pacientes no está disponible.'); return;
+    }
+    window.abrirWhatsApp(telefono, mensaje);
+  }
   function mensajePredeterminado() {
     const c = contexto();
-    const nombre = txt(c?.atencion?.nombre_paciente) || 'paciente';
-    return `Hola, ${nombre}.\n\nAUROSANAX le informa que sus resultados médicos estarán disponibles mediante un enlace seguro.\n\nEnlace: [PENDIENTE DE GENERACIÓN]\nVigencia: ${state.dias} día(s).\n\nPor su privacidad, no comparta el enlace con terceros.\n\nAUROSANAX — Atención médica.`;
+    const nombre = nombreDestinatario(c);
+    const saludo = nombre ? `Estimada/o ${nombre}:` : 'Estimado/a paciente:';
+    return `🌸 *AUROSANAX | Resultados médicos*\n\n${saludo}\n\n✨ Sus resultados médicos se encuentran disponibles mediante un enlace privado.\n\n🔐 *Acceso seguro a sus resultados*\n🔗 [PENDIENTE DE GENERACIÓN]\n\n⏳ *Vigencia del enlace:* ${state.dias} día(s).\n🔢 *Máximo de accesos:* ${state.limite}.\n\n🛡️ Por su privacidad, no comparta este enlace con terceros.\n\n💗 Gracias por confiar en AUROSANAX.\n*Su bienestar es nuestra prioridad.*`;
   }
   function instalarCSS() {
     if (document.getElementById('auroResultadosCSS')) return;
@@ -206,6 +259,7 @@
 .ar-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ar-btn{border:1px solid #e6c9d8;border-radius:11px;background:#fff;color:#782d59;padding:9px 12px;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 3px 9px #782d5912}
 .ar-btn:disabled{opacity:.5;cursor:not-allowed}.ar-btn:focus-visible,.ar-check:focus-visible,.ar-input:focus-visible,.ar-textarea:focus-visible{outline:3px solid #e69dc3;outline-offset:2px}
 .ar-btn.primary{background:linear-gradient(135deg,#842758,#bb4382);border:0;color:#fff;box-shadow:0 7px 16px #84275830}
+ .ar-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ar-actions .ar-btn{width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;gap:7px;text-align:center}.ar-btn.whatsapp{background:linear-gradient(135deg,#168a4d,#20b763);border:0;color:#fff;box-shadow:0 7px 16px #168a4d30}
 .ar-group{border:1px solid #eddde6;border-radius:15px;background:#fff;overflow:hidden;box-shadow:0 4px 13px #2f1f3a09}
 .ar-group-head{padding:10px 13px;background:#fdf5f9;font-size:12px;font-weight:900;color:#743051;display:flex;justify-content:space-between;gap:8px}
 .ar-file{display:flex;align-items:flex-start;gap:10px;padding:10px 13px;border-top:1px solid #f6edf2;cursor:pointer}.ar-file:hover{background:#fff9fc}
@@ -217,7 +271,7 @@
 .ar-note{font-size:11px;line-height:1.5;color:#756775}.ar-status{padding:10px 12px;border-radius:11px;background:#fff;border:1px solid #efd8e4;font-size:11px;color:#6e3555}
 .ar-footer{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.ar-count{font-size:12px;font-weight:850;color:#732b51}
 .ar-empty{padding:17px;background:#fff;border:1px dashed #e7bfd3;border-radius:12px;color:#75546a;font-size:12px}
-@media(max-width:640px){.ar-card{border-radius:16px}.ar-head{padding:15px}.ar-body{padding:13px}.ar-fields{grid-template-columns:1fr}.ar-footer .ar-btn{width:100%}}
+@media(max-width:640px){.ar-card{border-radius:16px}.ar-head{padding:15px}.ar-body{padding:13px}.ar-fields{grid-template-columns:1fr}.ar-footer .ar-btn{width:100%}}@media(max-width:370px){.ar-actions{grid-template-columns:1fr}}
 `;
     document.head.appendChild(css);
   }
@@ -227,6 +281,7 @@
     const c = comprobarCambioSinRender();
     const a = c?.atencion || {};
     const habilitado = valido(c);
+    const nombreVisible = nombreDestinatario(c);
     const grupos = CATEGORIAS.map(grupo => {
       const lista = state.registros.filter(r => r.categoria_documento === grupo.id);
       if (!lista.length) return '';
@@ -248,7 +303,7 @@
           <div><h3>Entrega segura de resultados</h3><p>Seleccione exactamente qué archivos podrá recibir el paciente</p></div></div>
         <div class="ar-body">
           <div class="ar-meta">
-            <span class="ar-pill">Paciente: ${seguro(a.nombre_paciente || '—')}</span>
+            <span class="ar-pill">Paciente: ${seguro(nombreVisible || '—')}</span>
             <span class="ar-pill">Consulta: ${seguro(c?.numeroConsulta || '—')}</span>
             <span class="ar-pill">Atención: ${seguro(c?.id || '—')}</span>
           </div>
@@ -267,9 +322,10 @@
           </div>
           <div class="ar-subtitle">Mensaje predeterminado de WhatsApp</div>
           <textarea class="ar-textarea" data-res-mensaje-texto aria-label="Mensaje para WhatsApp">${seguro(mensaje)}</textarea>
-          <div class="ar-toolbar">
-            <button type="button" class="ar-btn" data-res-restablecer>Restablecer mensaje</button>
-            <button type="button" class="ar-btn primary" data-res-generar ${state.emitiendo ? 'disabled' : ''}>Generar enlace privado</button>
+          <div class="ar-toolbar"><button type="button" class="ar-btn" data-res-restablecer>Restablecer mensaje</button></div>
+          <div class="ar-actions">
+            <button type="button" class="ar-btn primary" data-res-generar ${!habilitado || state.emitiendo ? 'disabled' : ''}>Generar enlace privado</button>
+            <button type="button" class="ar-btn whatsapp" data-res-whatsapp ${!habilitado || !state.enlace || state.emitiendo ? 'disabled' : ''}><i class="bi bi-whatsapp" aria-hidden="true"></i> Enviar por WhatsApp</button>
           </div>
           <div class="ar-status" data-res-mensaje role="status">${seguro(state.aviso || 'Seleccione los documentos y genere un enlace privado.')}</div>
           <div class="ar-note">Un enlace podrá contener varios archivos individuales. No se fusionan PDF ni se publican enlaces directos de Drive.</div>
@@ -283,7 +339,8 @@
       render(); return;
     }
     if (input.checked && state.seleccion.size >= 30) { aviso('Máximo permitido: 30 documentos por entrega.'); render(); return; }
-     if (input.checked) state.seleccion.add(id);
+     if (input.checked !== state.seleccion.has(id)) invalidarEnlace();
+    if (input.checked) state.seleccion.add(id);
     else state.seleccion.delete(id);
     render();
   }
@@ -338,7 +395,10 @@
     try { url = endpointResultados(); sesion = tokenAdministrador(); }
     catch (e) { aviso(e.message); return; }
     const atencion = txt(c.id), paciente = txt(c.idPaciente);
+    const historia = txt(c.idHistoria), diasEmitidos = state.dias, limiteEmitido = state.limite;
+    const idsEmitidos = ids.join('\u001f');
     state.emitiendo = true;
+    invalidarEnlace();
     state.enlace = '';
     aviso('Generando enlace privado...');
     render();
@@ -357,7 +417,9 @@
         throw new Error(txt(r?.message) || 'El servidor no confirmó un enlace válido.');
       }
       const actual = comprobarCambio();
-      if (!valido(actual) || txt(actual.id) !== atencion || txt(actual.idPaciente) !== paciente) {
+      if (!valido(actual) || txt(actual.id) !== atencion || txt(actual.idPaciente) !== paciente ||
+          txt(actual.idHistoria) !== historia || state.dias !== diasEmitidos ||
+          state.limite !== limiteEmitido || seleccionActual().join('\u001f') !== idsEmitidos) {
         aviso('Enlace emitido, pero cambió la atención. No se muestra por seguridad.');
         return;
       }
@@ -380,16 +442,21 @@
       if (event.target.closest('[data-res-recargar]')) { cargar(); return; }
       if (event.target.closest('[data-res-todos]')) {
         if (!valido(comprobarCambio())) return;
+        if (state.registros.slice(0, 30).some(r => !state.seleccion.has(r.id_documento))) invalidarEnlace();
         state.registros.slice(0, 30).forEach(r => state.seleccion.add(r.id_documento));
          if (state.registros.length > 30) aviso('Máximo permitido: 30 documentos por entrega.');
         render(); return;
       }
       if (event.target.closest('[data-res-limpiar]')) {
+        if (state.seleccion.size) invalidarEnlace();
         state.seleccion.clear(); render(); return;
       }
       if (event.target.closest('[data-res-generar]')) { emitirEnlace(); return; }
+      if (event.target.closest('[data-res-whatsapp]')) { abrirWhatsAppResultados(); return; }
       if (event.target.closest('[data-res-restablecer]')) {
-        state.mensajePersonalizado = null; render();
+        state.mensajePersonalizado = null;
+        if (state.enlace) state.mensajePersonalizado = mensajePredeterminado().replace('[PENDIENTE DE GENERACIÓN]', state.enlace);
+        render();
       }
     });
     el.addEventListener('change', event => {
@@ -397,12 +464,16 @@
       if (checkbox) { cambiarSeleccion(checkbox); return; }
       const dias = event.target.closest('[data-res-dias]');
       if (dias) {
-        state.dias = Math.max(1, Math.min(30, parseInt(dias.value, 10) || 7));
+        const nuevo = Math.max(1, Math.min(30, parseInt(dias.value, 10) || 7));
+        if (nuevo !== state.dias) { invalidarEnlace(); state.mensajePersonalizado = null; }
+        state.dias = nuevo;
         render(); return;
       }
       const limite = event.target.closest('[data-res-limite]');
       if (limite) {
-        state.limite = Math.max(1, Math.min(20, parseInt(limite.value, 10) || 5));
+        const nuevo = Math.max(1, Math.min(20, parseInt(limite.value, 10) || 5));
+        if (nuevo !== state.limite) { invalidarEnlace(); state.mensajePersonalizado = null; }
+        state.limite = nuevo;
         render();
       }
     });
