@@ -51,44 +51,23 @@
 </div>
 <script>
 (function(){'use strict';
- document.getElementById('year').textContent=String(new Date().getFullYear());
- var token=new URLSearchParams(location.search).get('token')||'';
- // Configure ONLY the published /exec URL here. Never insert passwords or session tokens.
- // No colocar tokens administrativos, claves o datos de pacientes aquí.
- // El endpoint solo debe habilitarse tras validar CORS, autenticación y descargas.
- // API servida bajo el mismo dominio por un intermediario HTTPS.
- // REEMPLAZAR únicamente esta URL con la URL pública de tu Worker (workers.dev).
- var API_RESULTADOS='https://REEMPLAZAR-CON-TU-WORKER.workers.dev';
- function solicitar(accion,id){
-   return fetch(API_RESULTADOS,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',headers:{'Content-Type':'application/json'},body:JSON.stringify({operacion:accion==='auroEntregaConsultarEnlace'?'consultar':'descargar',token:token,id_documento:id||''})})
-     .then(function(r){if(!r.ok)throw new Error('Servicio temporalmente no disponible ('+r.status+').');return r.json();});
- }
- var title=document.getElementById('state-title'),msg=document.getElementById('state-message'),area=document.getElementById('results'),list=document.getElementById('doc-list');
- if(token){try{history.replaceState(null,'',location.pathname+'?portal=resultados');}catch(e){}}
- function status(t,m){title.textContent=t;msg.textContent=m;}
- function error(e){status('Acceso no disponible',String((e&&e.message)||e||'No se pudo consultar el enlace.'));area.classList.remove('visible');}
- function render(res){if(!res||!res.success){error(res&&res.message);return;}
-  status('Documentos autorizados','Descargas restantes: '+res.restantes+'. Cada archivo descargado consume un acceso.');
-  list.textContent='';res.documentos.forEach(function(d){
-    var wrap=document.createElement('div');wrap.className='doc';
-    var content=document.createElement('div');var name=document.createElement('div');name.className='doc-name';name.textContent=d.nombre||'Documento médico';
-    var meta=document.createElement('div');meta.className='doc-meta';meta.textContent=d.mime||'Archivo';content.append(name,meta);
-    var btn=document.createElement('button');btn.textContent='Descargar';btn.addEventListener('click',function(){
-      btn.disabled=true;btn.textContent='Preparando…';
-      solicitar('auroEntregaDescargarDocumento',d.id_documento).then(function(file){
-        btn.disabled=false;btn.textContent='Descargar';
-        if(!file||!file.success){error(file&&file.message);return;}
-        try{var raw=atob(file.contenido_base64),arr=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
-          var url=URL.createObjectURL(new Blob([arr],{type:file.mime}));var link=document.createElement('a');link.href=url;link.download=file.nombre||'resultado';document.body.appendChild(link);link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(url);},10000);
-          status('Documento preparado','Descargas restantes: '+file.restantes+'.');if(file.restantes<=0){area.classList.remove('visible');status('Límite alcanzado','Se agotaron las descargas permitidas para este enlace.');}
-        }catch(e){error('No se pudo preparar la descarga en este navegador.');}
-      }).catch(function(e){btn.disabled=false;btn.textContent='Descargar';error(e);});
-    });wrap.append(content,btn);list.appendChild(wrap);
-  });area.classList.add('visible');
- }
- if(!token||!/^[A-Za-z0-9_-]{40,64}$/.test(token)){error('Enlace ausente o inválido.');return;}
- status('Validando acceso…','Comprobando la vigencia y los permisos de tu enlace.');
- solicitar('auroEntregaConsultarEnlace').then(render).catch(error);
+  document.getElementById('year').textContent=String(new Date().getFullYear());
+  var token=new URLSearchParams(location.search).get('token')||'';
+  var title=document.getElementById('state-title');
+  var msg=document.getElementById('state-message');
+  var url='https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec';
+  if(!/^[A-Za-z0-9_-]{40,64}$/.test(token)){
+    title.textContent='Enlace no disponible';
+    msg.textContent='Para consultar resultados, abre el enlace individual enviado por AUROSANAX.';
+    return;
+  }
+  title.textContent='Acceso listo';
+  msg.textContent='Presiona el botón para abrir tus documentos en el portal seguro de AUROSANAX.';
+  var btn=document.createElement('button');
+  btn.type='button';btn.textContent='Consultar mis resultados';
+  btn.style.cssText='margin-top:16px;padding:14px 22px;background:#c12872;color:#fff;border:0;border-radius:12px;font-weight:750;cursor:pointer';
+  btn.onclick=function(){location.assign(url+'?portal=resultados&token='+encodeURIComponent(token));};
+  msg.parentNode.appendChild(btn);
 })();
 </script>
 </body>
