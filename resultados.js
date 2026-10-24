@@ -1,5 +1,5 @@
 /* ============================================================================
- * AUROSANAX ERP | resultados.js | V1.3.0 - INTERFAZ PREMIUM PREINTEGRACIÓN
+ * AUROSANAX ERP | resultados.js | V1.3.2 - COMPATIBILIDAD ANTIRREGRESIVA
  * Basado en resultados.js V1.0.0, sin modificar documentos.js.
  * SOLO LECTURA: no crea enlaces, no escribe en Sheets/Drive, no envía mensajes.
  * Requiere documentos.js con resultadosBridge V1.0.0 y carga del script en index.
@@ -12,7 +12,7 @@
     return;
   }
 
-  const VERSION = '1.3.0-PREINTEGRACION';
+  const VERSION = '1.3.1-VALIDACION-SEGURA';
   const CATEGORIAS = Object.freeze([
     { id: 'LABORATORIO', nombre: 'Laboratorios', icono: 'bi-droplet-half' },
     { id: 'ECOGRAFIA_IMAGEN', nombre: 'Ecografías / imágenes', icono: 'bi-image' },
@@ -261,13 +261,13 @@
           <div class="ar-footer"><span class="ar-count">${state.seleccion.size} de ${state.registros.length} archivo(s) seleccionado(s)</span></div>
           <div class="ar-fields">
             <label class="ar-field">Vigencia del enlace (días)<input class="ar-input" type="number" min="1" max="30" step="1" data-res-dias value="${state.dias}"></label>
-            <label class="ar-field">Máximo de accesos<input class="ar-input" type="number" min="1" max="50" step="1" data-res-limite value="${state.limite}"></label>
+            <label class="ar-field">Máximo de accesos<input class="ar-input" type="number" min="1" max="20" step="1" data-res-limite value="${state.limite}"></label>
           </div>
           <div class="ar-subtitle">Mensaje predeterminado de WhatsApp</div>
           <textarea class="ar-textarea" data-res-mensaje-texto aria-label="Mensaje para WhatsApp">${seguro(mensaje)}</textarea>
           <div class="ar-toolbar">
             <button type="button" class="ar-btn" data-res-restablecer>Restablecer mensaje</button>
-            <button type="button" class="ar-btn primary" data-res-generar disabled title="Requiere backend seguro">Generar enlace seguro (pendiente)</button>
+            <button type="button" class="ar-btn primary" data-res-generar disabled title="Requiere backend seguro">Generar enlace seguro (no habilitado)</button>
           </div>
           <div class="ar-status" data-res-mensaje role="status">${seguro(state.aviso || 'Modo preparación: todavía no genera enlaces ni envía WhatsApp.')}</div>
           <div class="ar-note">Un enlace podrá contener varios archivos individuales. No se fusionan PDF ni se publican enlaces directos de Drive.</div>
@@ -280,7 +280,8 @@
     if (!valido(c) || !state.registros.some(r => r.id_documento === id)) {
       render(); return;
     }
-    if (input.checked) state.seleccion.add(id);
+    if (input.checked && state.seleccion.size >= 30) { aviso('Máximo permitido: 30 documentos por entrega.'); render(); return; }
+     if (input.checked) state.seleccion.add(id);
     else state.seleccion.delete(id);
     render();
   }
@@ -289,7 +290,8 @@
       if (event.target.closest('[data-res-recargar]')) { cargar(); return; }
       if (event.target.closest('[data-res-todos]')) {
         if (!valido(comprobarCambio())) return;
-        state.registros.forEach(r => state.seleccion.add(r.id_documento));
+        state.registros.slice(0, 30).forEach(r => state.seleccion.add(r.id_documento));
+         if (state.registros.length > 30) aviso('Máximo permitido: 30 documentos por entrega.');
         render(); return;
       }
       if (event.target.closest('[data-res-limpiar]')) {
@@ -309,7 +311,7 @@
       }
       const limite = event.target.closest('[data-res-limite]');
       if (limite) {
-        state.limite = Math.max(1, Math.min(50, parseInt(limite.value, 10) || 5));
+        state.limite = Math.max(1, Math.min(20, parseInt(limite.value, 10) || 5));
         render();
       }
     });
