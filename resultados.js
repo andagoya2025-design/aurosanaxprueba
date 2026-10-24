@@ -12,7 +12,7 @@
     return;
   }
 
-  const VERSION = '1.3.3-PREVALIDACION-LOCAL';
+  const VERSION = '2.0.0-EMISION-PRIVADA';
   const CATEGORIAS = Object.freeze([
     { id: 'LABORATORIO', nombre: 'Laboratorios', icono: 'bi-droplet-half' },
     { id: 'ECOGRAFIA_IMAGEN', nombre: 'Ecografías / imágenes', icono: 'bi-image' },
@@ -28,7 +28,7 @@
     idAtencion: '', idPaciente: '', idHistoria: '',
     seleccion: new Set(), registros: [], tokenCarga: 0,
     cargando: false, contenedor: null, dias: 7, limite: 5,
-    mensajePersonalizado: null, aviso: '', montado: false
+    mensajePersonalizado: null, aviso: '', montado: false, emitiendo: false, enlace: ''
   };
   const txt = v => String(v == null ? '' : v).trim();
   const seguro = v => txt(v).replace(/[&<>"']/g, c => ({
@@ -80,6 +80,7 @@
       state.idHistoria = clave?.[2] || '';
       state.mensajePersonalizado = null;
       state.aviso = '';
+      state.enlace = '';
     }
     return c;
   }
@@ -98,6 +99,7 @@
     state.idHistoria = '';
     state.mensajePersonalizado = null;
     state.aviso = '';
+    state.enlace = '';
     render();
   }
   function leerPuente(c) {
@@ -267,9 +269,9 @@
           <textarea class="ar-textarea" data-res-mensaje-texto aria-label="Mensaje para WhatsApp">${seguro(mensaje)}</textarea>
           <div class="ar-toolbar">
             <button type="button" class="ar-btn" data-res-restablecer>Restablecer mensaje</button>
-            <button type="button" class="ar-btn primary" data-res-generar>Comprobar selección</button>
+            <button type="button" class="ar-btn primary" data-res-generar ${state.emitiendo ? 'disabled' : ''}>Generar enlace privado</button>
           </div>
-          <div class="ar-status" data-res-mensaje role="status">${seguro(state.aviso || 'Compruebe la selección antes de habilitar la emisión segura de enlaces.')}</div>
+          <div class="ar-status" data-res-mensaje role="status">${seguro(state.aviso || 'Seleccione los documentos y genere un enlace privado.')}</div>
           <div class="ar-note">Un enlace podrá contener varios archivos individuales. No se fusionan PDF ni se publican enlaces directos de Drive.</div>
         </div>
       </section>`;
@@ -285,6 +287,64 @@
     else state.seleccion.delete(id);
     render();
   }
+  function endpointResultados() {
+    const base = txt(window.API_URL || window.AUROSANAX_APPS_SCRIPT_URL ||
+      document.getElementById('appsScriptUrl')?.value);
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/(exec|dev)(?:[?#]|$)/.test(base)) {
+      throw new Error('La URL de Apps Script no está configurada.');
+    }
+    return base;
+  }
+  function tokenAdministrador() {
+    const token = txt(sessionStorage.getItem('aurosanax_seguridad_token'));
+    const expira = Number(sessionStorage.getItem('aurosanax_seguridad_expira_en') || 0);
+    if (!token || (expira && Date.now() >= expira)) throw new Error('Sesión vencida. Inicie sesión nuevamente.');
+    return token;
+  }
+  async function emitirEnlace() {
+    if (state.emitiendo) return;
+    const c = comprobarCambio();
+    if (!valido(c)) { aviso('Seleccione una atención clínica válida.'); return; }
+    const ids = seleccionActual();
+    if (!ids.length || ids.length > 30) { aviso('Seleccione entre 1 y 30 documentos.'); return; }
+    if (!Number.isInteger(state.dias) || state.dias < 1 || state.dias > 30 ||
+        !Number.isInteger(state.limite) || state.limite < 1 || state.limite > 20) {
+      aviso('Revise los límites de vigencia y accesos.'); return;
+    }
+    let url, sesion;
+    try { url = endpointResultados(); sesion = tokenAdministrador(); }
+    catch (e) { aviso(e.message); return; }
+    const atencion = txt(c.id), paciente = txt(c.idPaciente);
+    state.emitiendo = true;
+    state.enlace = '';
+    aviso('Generando enlace privado...');
+    render();
+    try {
+      const respuesta = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({accion:'auroEntregaGenerarResultados',data:{
+          session_token:sesion, id_atencion:atencion, id_paciente:paciente,
+          ids_documentos:ids, dias_vigencia:state.dias, limite_accesos:state.limite
+        }})
+      });
+      if (!respuesta.ok) throw new Error('El servidor respondió HTTP ' + respuesta.status);
+      const r = await respuesta.json();
+      if (!r || r.success !== true || !/^https:\/\/script\.google\.com\//.test(txt(r.enlace))) {
+        throw new Error(txt(r?.message) || 'El servidor no confirmó un enlace válido.');
+      }
+      const actual = comprobarCambio();
+      if (!valido(actual) || txt(actual.id) !== atencion || txt(actual.idPaciente) !== paciente) {
+        aviso('Enlace emitido, pero cambió la atención. No se muestra por seguridad.');
+        return;
+      }
+      state.enlace = r.enlace;
+      const mensaje = state.mensajePersonalizado === null ? mensajePredeterminado() : state.mensajePersonalizado;
+      state.mensajePersonalizado = mensaje.replace(/\[PENDIENTE DE GENERACIÓN\]/g, r.enlace);
+      aviso('Enlace privado generado. Cópielo del mensaje de WhatsApp. Caduca: ' + txt(r.vence_en));
+    } catch (e) { aviso('No se pudo emitir el enlace: ' + txt(e.message || e)); }
+    finally { state.emitiendo = false; render(); }
+  }
   function instalarEventos(el) {
     el.addEventListener('click', event => {
       if (event.target.closest('[data-res-recargar]')) { cargar(); return; }
@@ -297,20 +357,7 @@
       if (event.target.closest('[data-res-limpiar]')) {
         state.seleccion.clear(); render(); return;
       }
-      if (event.target.closest('[data-res-generar]')) {
-        const c = comprobarCambio();
-        if (!valido(c)) { aviso('Seleccione una atención clínica válida.'); return; }
-        if (!state.seleccion.size) { aviso('Seleccione al menos un documento.'); return; }
-        if (state.seleccion.size > 30) { aviso('Máximo 30 documentos.'); return; }
-        if (!Number.isInteger(state.dias) || state.dias < 1 || state.dias > 30 ||
-            !Number.isInteger(state.limite) || state.limite < 1 || state.limite > 20) {
-          aviso('Revise los límites de vigencia y accesos.'); return;
-        }
-        aviso('Selección local comprobada: ' + state.seleccion.size +
-          ' documento(s), ' + state.dias + ' día(s), ' + state.limite +
-          ' acceso(s). No se ha generado un enlace: falta activar el servicio seguro del servidor.');
-        return;
-      }
+      if (event.target.closest('[data-res-generar]')) { emitirEnlace(); return; }
       if (event.target.closest('[data-res-restablecer]')) {
         state.mensajePersonalizado = null; render();
       }
@@ -346,7 +393,7 @@
     }
     render();
     cargar();
-    return { version: VERSION, listo: true, integrado: false };
+    return { version: VERSION, listo: true, integrado: true };
   }
   function iniciarAutomatico() {
     if (!puente()) return;
@@ -386,7 +433,7 @@
     estado: () => ({
       id_atencion: state.idAtencion, id_paciente: state.idPaciente,
       seleccionados: state.seleccion.size, documentos: state.registros.length,
-      modo: 'SOLO_LECTURA'
+      modo: 'EMISION_PRIVADA'
     })
   });
 })();
