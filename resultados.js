@@ -12,7 +12,7 @@
     return;
   }
 
-  const VERSION = '1.3.1-VALIDACION-SEGURA';
+  const VERSION = '1.3.3-PREVALIDACION-LOCAL';
   const CATEGORIAS = Object.freeze([
     { id: 'LABORATORIO', nombre: 'Laboratorios', icono: 'bi-droplet-half' },
     { id: 'ECOGRAFIA_IMAGEN', nombre: 'Ecografías / imágenes', icono: 'bi-image' },
@@ -267,9 +267,9 @@
           <textarea class="ar-textarea" data-res-mensaje-texto aria-label="Mensaje para WhatsApp">${seguro(mensaje)}</textarea>
           <div class="ar-toolbar">
             <button type="button" class="ar-btn" data-res-restablecer>Restablecer mensaje</button>
-            <button type="button" class="ar-btn primary" data-res-generar disabled title="Requiere backend seguro">Generar enlace seguro (no habilitado)</button>
+            <button type="button" class="ar-btn primary" data-res-generar>Comprobar selección</button>
           </div>
-          <div class="ar-status" data-res-mensaje role="status">${seguro(state.aviso || 'Modo preparación: todavía no genera enlaces ni envía WhatsApp.')}</div>
+          <div class="ar-status" data-res-mensaje role="status">${seguro(state.aviso || 'Compruebe la selección antes de habilitar la emisión segura de enlaces.')}</div>
           <div class="ar-note">Un enlace podrá contener varios archivos individuales. No se fusionan PDF ni se publican enlaces directos de Drive.</div>
         </div>
       </section>`;
@@ -296,6 +296,20 @@
       }
       if (event.target.closest('[data-res-limpiar]')) {
         state.seleccion.clear(); render(); return;
+      }
+      if (event.target.closest('[data-res-generar]')) {
+        const c = comprobarCambio();
+        if (!valido(c)) { aviso('Seleccione una atención clínica válida.'); return; }
+        if (!state.seleccion.size) { aviso('Seleccione al menos un documento.'); return; }
+        if (state.seleccion.size > 30) { aviso('Máximo 30 documentos.'); return; }
+        if (!Number.isInteger(state.dias) || state.dias < 1 || state.dias > 30 ||
+            !Number.isInteger(state.limite) || state.limite < 1 || state.limite > 20) {
+          aviso('Revise los límites de vigencia y accesos.'); return;
+        }
+        aviso('Selección local comprobada: ' + state.seleccion.size +
+          ' documento(s), ' + state.dias + ' día(s), ' + state.limite +
+          ' acceso(s). No se ha generado un enlace: falta activar el servicio seguro del servidor.');
+        return;
       }
       if (event.target.closest('[data-res-restablecer]')) {
         state.mensajePersonalizado = null; render();
