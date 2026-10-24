@@ -295,6 +295,29 @@
     }
     return base;
   }
+  // Presentación del enlace: no cambia el token ni los permisos del servidor.
+  function enlacePublicoResultados(enlaceServidor) {
+    let url;
+    try { url = new URL(txt(enlaceServidor)); }
+    catch (_) { throw new Error('El servidor devolvió un enlace inválido.'); }
+
+    if (url.protocol !== 'https:') throw new Error('El enlace no es HTTPS.');
+    if (url.hostname === 'iasyn.fyi' && url.pathname === '/resultados.html') {
+      const token = url.searchParams.get('token') || '';
+      if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
+        throw new Error('El enlace público no contiene un token válido.');
+      return 'https://iasyn.fyi/resultados.html?token=' + encodeURIComponent(token);
+    }
+    if (url.hostname === 'script.google.com' &&
+        /^\/macros\/s\/[^/]+\/(exec|dev)$/.test(url.pathname) &&
+        url.searchParams.get('portal') === 'resultados') {
+      const token = url.searchParams.get('token') || '';
+      if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
+        throw new Error('No se encontró un token compatible para el portal público.');
+      return 'https://iasyn.fyi/resultados.html?token=' + encodeURIComponent(token);
+    }
+    throw new Error('El servidor no devolvió un enlace compatible con el portal público.');
+  }
   function tokenAdministrador() {
     const token = txt(sessionStorage.getItem('aurosanax_seguridad_token'));
     const expira = Number(sessionStorage.getItem('aurosanax_seguridad_expira_en') || 0);
@@ -338,9 +361,16 @@
         aviso('Enlace emitido, pero cambió la atención. No se muestra por seguridad.');
         return;
       }
-      state.enlace = r.enlace;
-      const mensaje = state.mensajePersonalizado === null ? mensajePredeterminado() : state.mensajePersonalizado;
-      state.mensajePersonalizado = mensaje.replace(/\[PENDIENTE DE GENERACIÓN\]/g, r.enlace);
+      const enlacePublico = enlacePublicoResultados(r.enlace);
+      state.enlace = enlacePublico;
+      // Reemplaza el enlace anterior al emitir de nuevo, sin dejar un token obsoleto.
+      let mensaje = state.mensajePersonalizado === null ? mensajePredeterminado() : state.mensajePersonalizado;
+      if (!mensaje.includes('[PENDIENTE DE GENERACIÓN]')) {
+        mensaje = mensaje.replace(/https:\/\/(?:iasyn\.fyi\/resultados\.html\?token=[A-Za-z0-9_-]+|script\.google\.com\/macros\/s\/[^\s]+?\?[^\s]*portal=resultados[^\s]*)/g,
+          '[PENDIENTE DE GENERACIÓN]');
+      }
+      if (!mensaje.includes('[PENDIENTE DE GENERACIÓN]')) mensaje = mensajePredeterminado();
+      state.mensajePersonalizado = mensaje.replace(/\[PENDIENTE DE GENERACIÓN\]/g, enlacePublico);
       aviso('Enlace privado generado. Cópielo del mensaje de WhatsApp. Caduca: ' + txt(r.vence_en));
     } catch (e) { aviso('No se pudo emitir el enlace: ' + txt(e.message || e)); }
     finally { state.emitiendo = false; render(); }
