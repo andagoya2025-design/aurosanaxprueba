@@ -45,6 +45,9 @@
   const MODULO = 'AUROSANAX DOCUMENTOS';
   const VERSION = '1.4.4';
   const JSON_VERSION = 'AUROSANAX_DOCUMENTOS_JSON_V1';
+  // Resultados V1: interfaz aislada, sin escrituras ni generación de enlaces.
+  const resultadosSeleccion = new Set();
+  let resultadosIdentidad = '';
 
   /*
     CONTRATOS DE BACKEND ESPERADOS
@@ -678,6 +681,35 @@
 .auro-doc-progress-bar{height:7px;background:#f1f5f9;border-radius:999px;overflow:hidden;margin-top:7px}
 .auro-doc-progress-fill{height:100%;width:0;background:linear-gradient(135deg,#8b1e5a,#c23b83);transition:width .2s}
 .auro-doc-note{font-size:11px;color:#64748b;line-height:1.45;margin-top:8px}
+
+/* ===============================================================
+   AUROSANAX RESULTADOS — INICIO ESTILOS AISLADOS V1.0
+   No altera clases existentes de Documentos ni acciones Drive/correo.
+   =============================================================== */
+#auroResultadosCard.auro-res-card{border:1px solid #ebbad4;background:linear-gradient(145deg,#fff 0%,#fff8fc 55%,#fff 100%);box-shadow:0 16px 34px rgba(117,26,76,.12),0 3px 8px rgba(117,26,76,.06);position:relative}
+#auroResultadosCard .auro-res-head{background:linear-gradient(120deg,#542043,#92265f 60%,#c44b91);padding:16px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+#auroResultadosCard .auro-res-head b{font-size:15px;letter-spacing:.01em}
+#auroResultadosCard .auro-res-head small{font-size:11px;opacity:.93}
+#auroResultadosCard .auro-res-body{display:grid;gap:13px;padding:17px}
+#auroResultadosCard .auro-res-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;min-width:0}
+#auroResultadosCard .auro-res-item{display:flex;align-items:flex-start;gap:11px;min-width:0;border:1px solid #ecdce5;border-radius:14px;background:#fff;padding:12px;cursor:pointer;box-shadow:0 5px 12px rgba(75,20,54,.04);overflow-wrap:anywhere}
+#auroResultadosCard .auro-res-item:focus-within{outline:2px solid #a92c74;outline-offset:2px}
+#auroResultadosCard .auro-res-item input{width:18px;height:18px;flex:0 0 18px;margin:2px 0 0;accent-color:#a92c74}
+#auroResultadosCard .auro-res-item span{min-width:0}
+#auroResultadosCard .auro-res-item b{font-size:12px;color:#342035;line-height:1.4}
+#auroResultadosCard .auro-res-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#auroResultadosCard .auro-res-action{border:0;border-radius:12px;padding:11px 16px;min-height:42px;background:linear-gradient(135deg,#8b1e5a,#c23b83);box-shadow:0 8px 16px rgba(139,30,90,.16);font-size:12px;font-weight:900;color:#fff}
+#auroResultadosCard .auro-res-action:disabled{opacity:.56;cursor:not-allowed;box-shadow:none}
+#auroResultadosCard .auro-res-controls .auro-doc-clear-btn{min-height:42px}
+@media(max-width:640px){
+  #auroResultadosCard .auro-res-head{padding:13px 12px}
+  #auroResultadosCard .auro-res-body{padding:12px;gap:10px}
+  #auroResultadosCard .auro-res-grid{grid-template-columns:minmax(0,1fr)}
+  #auroResultadosCard .auro-res-controls{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+  #auroResultadosCard .auro-res-controls button{width:100%}
+}
+/* AUROSANAX RESULTADOS — FIN ESTILOS AISLADOS V1.0 */
+
 .auro-doc-hidden-input{display:none!important}
 @media(max-width:960px){
   .auro-doc-categories{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -839,6 +871,25 @@
               </div>
             </div>
           </section>
+
+          <!-- RESULTADOS V1: interfaz independiente, lectura del índice ya cargado. -->
+          <section class="auro-doc-card auro-res-card" id="auroResultadosCard">
+            <div class="auro-doc-card-head auro-res-head">
+              <div><b><i class="bi bi-shield-lock me-1"></i> Entrega segura de resultados</b>
+                <small>Seleccione documentos de esta atención para preparar un enlace temporal.</small></div>
+            </div>
+            <div class="auro-doc-card-body auro-res-body">
+              <div class="auro-doc-note" id="auroResAviso">Seleccione una atención clínica para preparar la entrega.</div>
+              <div id="auroResLista" class="auro-res-grid"></div>
+              <div class="auro-res-controls">
+                <button type="button" class="auro-doc-clear-btn" id="auroResLimpiar">Limpiar selección</button>
+                <button type="button" class="auro-res-action" id="auroResGenerar" disabled title="Pendiente de conectar con Apps Script">Generar enlace seguro (pendiente)</button>
+                <span class="auro-doc-count" id="auroResContador">0 seleccionados</span>
+              </div>
+              <div class="auro-doc-note">Preparación visual únicamente. No crea enlaces, no comparte archivos y no modifica Drive ni Sheets.</div>
+            </div>
+          </section>
+
         </div>
       </div>
     `;
@@ -993,6 +1044,7 @@
     }
 
     renderTodasLasColas();
+    renderResultados();
   }
 
   function registrosActivos(){
@@ -1019,7 +1071,40 @@
     return 'bi-file-earmark-medical';
   }
 
+  function resultadosClave(ctx){
+    return [txt(ctx?.id),txt(ctx?.idPaciente),txt(ctx?.idHistoria)].join('|');
+  }
+
+  function renderResultados(){
+    const box = document.getElementById('auroResLista');
+    if(!box) return;
+    const ctx = state.contexto || {};
+    const clave = resultadosClave(ctx);
+    if(clave !== resultadosIdentidad){
+      resultadosSeleccion.clear();
+      resultadosIdentidad = clave;
+    }
+    const disponibles = (ctx.id && ctx.valido !== false ? registrosActivos() : []).filter(r=>
+      txt(r.id_atencion) === txt(ctx.id) &&
+      txt(r.id_paciente) === txt(ctx.idPaciente) &&
+      !!txt(r.id_documento) &&
+      (/^application\/pdf$/i.test(txt(r.mime_type)) || txt(r.extension).toLowerCase() === 'pdf')
+    );
+    const ids = new Set(disponibles.map(r=>txt(r.id_documento)));
+    for(const id of resultadosSeleccion){if(!ids.has(id)) resultadosSeleccion.delete(id);}
+    box.innerHTML = disponibles.length ? disponibles.map(r=>{
+      const id = txt(r.id_documento);
+      return `<label class="auro-res-item"><input type="checkbox" data-auro-res-id="${esc(id)}" ${resultadosSeleccion.has(id)?'checked':''}>
+        <span><b>${esc(r.nombre_documento || 'Documento PDF')}</b><span class="auro-doc-file-meta" style="display:block">${esc(normalizarCategoria(r.categoria_documento || r.tipo_documento))} · PDF</span></span></label>`;
+    }).join('') : '<div class="auro-doc-empty">No hay PDF elegibles de esta atención, o todavía no se han cargado sus documentos.</div>';
+    setText('auroResContador',resultadosSeleccion.size+' seleccionado(s)');
+    setText('auroResAviso',ctx.id && ctx.valido !== false
+      ? 'Solo se muestran PDF activos vinculados al mismo paciente y atención. La selección no modifica los originales.'
+      : 'Seleccione una atención clínica válida para preparar la entrega.');
+  }
+
   function renderLista(){
+    renderResultados();
     const box = document.getElementById('auroDocLista');
     if(!box) return;
 
@@ -1981,6 +2066,11 @@
     app.dataset.auroEventos = '1';
 
     app.addEventListener('click',e=>{
+      if(e.target.closest('#auroResLimpiar')){
+        resultadosSeleccion.clear();
+        renderResultados();
+        return;
+      }
       const upload = e.target.closest('[data-auro-doc-upload]');
       if(upload){
         const categoria = txt(upload.dataset.auroDocUpload);
@@ -2056,6 +2146,19 @@
     });
 
     app.addEventListener('change',e=>{
+      const resultado = e.target.closest('[data-auro-res-id]');
+      if(resultado){
+        const id = txt(resultado.dataset.auroResId);
+        const ctx = contextoAtencion();
+        const valido = ctx.valido !== false && resultadosClave(ctx) === resultadosIdentidad &&
+          registrosActivos().some(r=>txt(r.id_documento)===id && txt(r.id_atencion)===ctx.id &&
+            txt(r.id_paciente)===ctx.idPaciente &&
+            (/^application\/pdf$/i.test(txt(r.mime_type)) || txt(r.extension).toLowerCase()==='pdf'));
+        if(valido && resultado.checked) resultadosSeleccion.add(id);
+        else resultadosSeleccion.delete(id);
+        renderResultados();
+        return;
+      }
       const input = e.target.closest('[data-auro-doc-input]');
       if(!input) return;
 
@@ -2110,6 +2213,8 @@
     atención seleccionada/cambiada, normalmente después de pulsar "Ver".
   */
   function onAtencionLimpiada(){
+    resultadosSeleccion.clear();
+    resultadosIdentidad = '';
     state.tokenCarga++;
     state.recargaPendiente = false;
     state.idAtencionPendiente = '';
@@ -2156,6 +2261,8 @@
     );
 
     if(cambioContexto){
+      resultadosSeleccion.clear();
+      resultadosIdentidad = '';
       const teniaPendientes = CATEGORIAS.some(c=>colaCategoria(c.key).files.length > 0);
 
       state.tokenCarga++;
@@ -2275,7 +2382,15 @@
     endpoints:ENDPOINTS,
     obtenerContexto:contextoAtencion,
     resolverMedico,
-    cargarMedicosActivos
+    cargarMedicosActivos,
+    resultadosSeleccionActual: function(){
+      const ctx = contextoAtencion();
+      if(ctx.valido === false || resultadosClave(ctx) !== resultadosIdentidad) return [];
+      return registrosActivos().filter(r=>resultadosSeleccion.has(txt(r.id_documento)) &&
+        txt(r.id_atencion)===ctx.id && txt(r.id_paciente)===ctx.idPaciente &&
+        (/^application\/pdf$/i.test(txt(r.mime_type)) || txt(r.extension).toLowerCase()==='pdf'))
+        .map(r=>({id_documento:txt(r.id_documento),id_atencion:ctx.id,id_paciente:ctx.idPaciente,nombre_documento:txt(r.nombre_documento)}));
+    }
   };
 
 })();
