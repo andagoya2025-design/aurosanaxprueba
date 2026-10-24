@@ -186,10 +186,44 @@
     return state.registros.filter(r => state.seleccion.has(r.id_documento))
       .map(r => r.id_documento);
   }
+  // Identidad institucional: reutiliza la configuración cargada por index.
+  // No consulta backend ni modifica la configuración del centro.
+  function nombreCentroResultados() {
+    const cfg = window.auroConfiguracionCentro;
+    const nombre = cfg && typeof cfg === 'object' && !Array.isArray(cfg)
+      ? txt(cfg.nombre_clinica || cfg.nombre_centro || cfg.nombre_comercial || cfg.razon_social)
+      : '';
+    return nombre || txt(window.auroNombreCentro) || 'Centro médico';
+  }
   function mensajePredeterminado() {
     const c = contexto();
     const nombre = txt(c?.atencion?.nombre_paciente) || 'paciente';
-    return `Hola, ${nombre}.\n\nAUROSANAX le informa que sus resultados médicos estarán disponibles mediante un enlace seguro.\n\nEnlace: [PENDIENTE DE GENERACIÓN]\nVigencia: ${state.dias} día(s).\n\nPor su privacidad, no comparta el enlace con terceros.\n\nAUROSANAX — Atención médica.`;
+    const centro = nombreCentroResultados();
+    return `🏥 ${centro}
+━━━━━━━━━━━━━━━━━━━━
+
+👋 Estimada/o ${nombre}:
+
+💗 Reciba un cordial saludo.
+
+Nos complace informarle que sus resultados médicos ya se encuentran disponibles para su consulta y descarga de manera segura.
+
+📋 RESULTADOS MÉDICOS
+
+🔗 [PENDIENTE DE GENERACIÓN]
+
+🔐 INFORMACIÓN DE ACCESO
+
+📅 Vigencia del enlace: ${state.dias} días
+📥 Accesos permitidos: ${state.limite}
+🛡️ Acceso privado y confidencial
+
+🔒 SU PRIVACIDAD ES IMPORTANTE
+
+Este enlace es personal y exclusivo para usted. Por seguridad, le recomendamos no compartirlo con terceros.
+
+━━━━━━━━━━━━━━━━━━━━
+💗 Comprometidos con su salud y bienestar.`;
   }
   function instalarCSS() {
     if (document.getElementById('auroResultadosCSS')) return;
