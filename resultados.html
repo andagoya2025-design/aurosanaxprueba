@@ -53,6 +53,16 @@
 (function(){'use strict';
  document.getElementById('year').textContent=String(new Date().getFullYear());
  var token=new URLSearchParams(location.search).get('token')||'';
+ // Configure ONLY the published /exec URL here. Never insert passwords or session tokens.
+ var API_RESULTADOS='CONFIGURAR_URL_APPS_SCRIPT_EXEC';
+ function solicitar(accion,id){
+   if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(API_RESULTADOS))
+     return Promise.reject(new Error('Conexión segura no configurada.'));
+   var u=new URL(API_RESULTADOS);u.searchParams.set('accion',accion);u.searchParams.set('token',token);
+   if(id)u.searchParams.set('id_documento',id);
+   return fetch(u.toString(),{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer'})
+     .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
+ }
  var title=document.getElementById('state-title'),msg=document.getElementById('state-message'),area=document.getElementById('results'),list=document.getElementById('doc-list');
  if(token){try{history.replaceState(null,'',location.pathname+'?portal=resultados');}catch(e){}}
  function status(t,m){title.textContent=t;msg.textContent=m;}
@@ -65,21 +75,20 @@
     var meta=document.createElement('div');meta.className='doc-meta';meta.textContent=d.mime||'Archivo';content.append(name,meta);
     var btn=document.createElement('button');btn.textContent='Descargar';btn.addEventListener('click',function(){
       btn.disabled=true;btn.textContent='Preparando…';
-      google.script.run.withSuccessHandler(function(file){
+      solicitar('auroEntregaDescargarDocumento',d.id_documento).then(function(file){
         btn.disabled=false;btn.textContent='Descargar';
         if(!file||!file.success){error(file&&file.message);return;}
         try{var raw=atob(file.contenido_base64),arr=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
           var url=URL.createObjectURL(new Blob([arr],{type:file.mime}));var link=document.createElement('a');link.href=url;link.download=file.nombre||'resultado';document.body.appendChild(link);link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(url);},10000);
           status('Documento preparado','Descargas restantes: '+file.restantes+'.');if(file.restantes<=0){area.classList.remove('visible');status('Límite alcanzado','Se agotaron las descargas permitidas para este enlace.');}
         }catch(e){error('No se pudo preparar la descarga en este navegador.');}
-      }).withFailureHandler(function(e){btn.disabled=false;btn.textContent='Descargar';error(e);}).auroEntregaDescargarDocumento(token,d.id_documento);
+      }).catch(function(e){btn.disabled=false;btn.textContent='Descargar';error(e);});
     });wrap.append(content,btn);list.appendChild(wrap);
   });area.classList.add('visible');
  }
  if(!token||!/^[A-Za-z0-9_-]{40,64}$/.test(token)){error('Enlace ausente o inválido.');return;}
- if(!(window.google&&google.script&&google.script.run)){error('Este portal debe abrirse desde la aplicación web oficial de AUROSANAX.');return;}
  status('Validando acceso…','Comprobando la vigencia y los permisos de tu enlace.');
- google.script.run.withSuccessHandler(render).withFailureHandler(error).auroEntregaConsultarEnlace(token);
+ solicitar('auroEntregaConsultarEnlace').then(render).catch(error);
 })();
 </script>
 </body>
