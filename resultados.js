@@ -330,7 +330,7 @@
       });
       if (!respuesta.ok) throw new Error('El servidor respondió HTTP ' + respuesta.status);
       const r = await respuesta.json();
-      if (!r || r.success !== true || !/^https:\/\/script\.google\.com\//.test(txt(r.enlace))) {
+      if (!r || r.success !== true || !/^https:\/\/(?:script\.google\.com\/|iasyn\.fyi\/resultados\.html\?token=)/.test(txt(r.enlace))) {
         throw new Error(txt(r?.message) || 'El servidor no confirmó un enlace válido.');
       }
       const actual = comprobarCambio();
