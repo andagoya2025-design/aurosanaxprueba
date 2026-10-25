@@ -26,7 +26,7 @@
 <!-- MÓDULO AISLADO: ENTREGA DE RESULTADOS · NO MODIFICA EL ERP -->
 <div class="shell">
 <header class="top" aria-label="Cabecera AUROSANAX">
-  <div class="brand" aria-label="AUROSANAX MEDIC"><span class="au">AURO</span><span class="sa">SANAx</span> <span class="au">MEDIC</span></div>
+  <div class="brand" id="auro-clinic-brand" aria-label="AUROSANAX MEDIC"><span class="au">AURO</span><span class="sa">SANAx</span> <span class="au">MEDIC</span></div>
   <div class="top-label"><span class="dot" aria-hidden="true"></span> Portal privado de pacientes</div>
 </header>
 <main class="main" id="contenido">
@@ -51,7 +51,7 @@
 <aside class="panel" aria-label="Información de seguridad"><div class="aside-title"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg><strong>Tu privacidad importa</strong></div><div class="security-points"><div class="security-point"><div class="num">01</div><p><strong>Acceso individual.</strong> Solo se podrán consultar los archivos que AUROSANAX autorice para esa entrega.</p></div><div class="security-point"><div class="num">02</div><p><strong>Enlace temporal.</strong> La vigencia y el número de accesos serán controlados por el sistema seguro.</p></div><div class="security-point"><div class="num">03</div><p><strong>Documentos protegidos.</strong> Los archivos no se publicarán mediante enlaces abiertos de Google Drive.</p></div></div><div class="help"><strong>¿Necesitas ayuda?</strong><p>Contacta directamente a AUROSANAX por los canales habituales de atención.</p></div></aside>
 </div>
 </main>
-<footer class="footer"><span><strong>AUROSANAx MEDIC</strong> · Atención médica</span><span>Privacidad, cuidado y confianza · © <span id="year"></span></span></footer>
+<footer class="footer"><span><strong id="auro-clinic-footer">AUROSANAx MEDIC</strong> · Atención médica</span><span>Privacidad, cuidado y confianza · © <span id="year"></span></span></footer>
 </div>
 <script>
 (function(){'use strict';
@@ -72,6 +72,21 @@
  frame.setAttribute('referrerpolicy','no-referrer');
  frame.setAttribute('loading','eager');
  frame.setAttribute('allow','');
+
+ // Nombre institucional público enviado exclusivamente por el portal de Apps Script.
+ window.addEventListener('message',function(ev){
+   if(ev.source!==frame.contentWindow)return;
+   var hostname='';try{hostname=new URL(ev.origin).hostname.toLowerCase();}catch(e){return;}
+   if(hostname!=='script.google.com'&&hostname!=='script.googleusercontent.com'&&!hostname.endsWith('.googleusercontent.com'))return;
+   var data=ev.data;
+   if(!data||data.type!=='auro-clinic-name-v1'||typeof data.name!=='string')return;
+   var name=data.name.trim();if(!name||name.length>120)return;
+   document.title='Entrega de resultados | '+name;
+   var brand=document.getElementById('auro-clinic-brand');brand.textContent=name;brand.setAttribute('aria-label',name);
+   document.getElementById('auro-clinic-footer').textContent=name;
+   frame.title='Documentos médicos autorizados '+name;
+   msg.textContent='Consulta y descarga tus documentos en el panel de '+name+'.';
+ });
  frame.src='https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec?portal=resultados&token='+encodeURIComponent(token);
  host.appendChild(frame);
  msg.closest('.state').insertAdjacentElement('afterend',host);
