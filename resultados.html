@@ -76,8 +76,8 @@
  // Nombre institucional público enviado exclusivamente por el portal de Apps Script.
  window.addEventListener('message',function(ev){
    if(ev.source!==frame.contentWindow)return;
-   var hostname='';try{hostname=new URL(ev.origin).hostname.toLowerCase();}catch(e){return;}
-   if(hostname!=='script.google.com'&&hostname!=='script.googleusercontent.com'&&!hostname.endsWith('.googleusercontent.com'))return;
+   var hostname='';if(ev.origin!=='null'){try{hostname=new URL(ev.origin).hostname.toLowerCase();}catch(e){return;}}
+   if(ev.origin!=='null'&&hostname!=='script.google.com'&&hostname!=='script.googleusercontent.com'&&!hostname.endsWith('.googleusercontent.com'))return;
    var data=ev.data;
    if(!data||data.type!=='auro-clinic-name-v1'||typeof data.name!=='string')return;
    var name=data.name.trim();if(!name||name.length>120)return;
