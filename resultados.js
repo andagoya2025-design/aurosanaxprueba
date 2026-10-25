@@ -1,557 +1,81 @@
-/* ============================================================================
- * AUROSANAX ERP | resultados.js | V1.3.2 - COMPATIBILIDAD ANTIRREGRESIVA
- * Basado en resultados.js V1.0.0, sin modificar documentos.js.
- * SOLO LECTURA: no crea enlaces, no escribe en Sheets/Drive, no envía mensajes.
- * Requiere documentos.js con resultadosBridge V1.0.0 y carga del script en index.
- * Los controles de vigencia y accesos son PREPARACIÓN, no seguridad aplicada.
- * ========================================================================== */
-(function () {
-  'use strict';
-  if (window.auroResultados) {
-    console.warn('AUROSANAX RESULTADOS: módulo ya cargado.');
-    return;
-  }
-
-  const VERSION = '2.0.0-EMISION-PRIVADA';
-  const CATEGORIAS = Object.freeze([
-    { id: 'LABORATORIO', nombre: 'Laboratorios', icono: 'bi-droplet-half' },
-    { id: 'ECOGRAFIA_IMAGEN', nombre: 'Ecografías / imágenes', icono: 'bi-image' },
-    { id: 'FOTOGRAFIA_CLINICA', nombre: 'Fotografías clínicas', icono: 'bi-camera' },
-    { id: 'PATOLOGIA', nombre: 'Patología', icono: 'bi-file-earmark-medical' },
-    { id: 'OTRO', nombre: 'Otros documentos', icono: 'bi-folder2-open' }
-  ]);
-  const FORMATOS = Object.freeze({
-    'application/pdf': 'PDF', 'image/jpeg': 'JPG', 'image/png': 'PNG',
-    'image/webp': 'WEBP', 'image/heic': 'HEIC', 'image/heif': 'HEIF'
-  });
-  const state = {
-    idAtencion: '', idPaciente: '', idHistoria: '',
-    seleccion: new Set(), registros: [], tokenCarga: 0,
-    cargando: false, contenedor: null, dias: 7, limite: 5,
-    mensajePersonalizado: null, aviso: '', montado: false, emitiendo: false, enlace: ''
-  };
-  const txt = v => String(v == null ? '' : v).trim();
-  const seguro = v => txt(v).replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-  const documentos = () => window.auroDocumentos || null;
-  const puente = () => documentos()?.resultadosBridge || null;
-
-  function contexto() {
-    try { return documentos()?.obtenerContexto?.() || null; }
-    catch (error) { console.warn('RESULTADOS: contexto no disponible.', error); return null; }
-  }
-  function valido(c) {
-    return Boolean(c && txt(c.id) && c.valido === true &&
-      txt(c.idPaciente) && !c.bloqueada);
-  }
-  function activos(r) {
-    return !/(anulad|eliminad|inactiv)/i.test(txt(r.estado || 'Activo'));
-  }
-  function tipo(r) {
-    const mime = txt(r.mime_type).toLowerCase();
-    if (FORMATOS[mime]) return FORMATOS[mime];
-    const ext = txt(r.extension || txt(r.nombre_documento).split('.').pop()).toLowerCase();
-    return ({pdf:'PDF', jpg:'JPG', jpeg:'JPG', png:'PNG', webp:'WEBP',
-      heic:'HEIC', heif:'HEIF'})[ext] || '';
-  }
-  function categoria(r) {
-    const raw = txt(r.categoria_documento || r.tipo_documento).toUpperCase();
-    if (CATEGORIAS.some(c => c.id === raw)) return raw;
-    if (/LABOR/.test(raw)) return 'LABORATORIO';
-    if (/PATOLOG|BIOPS|HISTOPAT/.test(raw)) return 'PATOLOGIA';
-    if (/ECO|IMAGEN|RADIO/.test(raw)) return 'ECOGRAFIA_IMAGEN';
-    if (/FOTO/.test(raw)) return 'FOTOGRAFIA_CLINICA';
-    return 'OTRO';
-  }
-  function claveContexto(c) {
-    return valido(c) ? [txt(c.id), txt(c.idPaciente), txt(c.idHistoria)] : null;
-  }
-  function comprobarCambio() {
-    const c = contexto();
-    const clave = claveContexto(c);
-    if (!clave || clave[0] !== state.idAtencion ||
-        clave[1] !== state.idPaciente || clave[2] !== state.idHistoria) {
-      state.tokenCarga++;
-      state.seleccion.clear();
-      state.registros = [];
-      state.idAtencion = clave?.[0] || '';
-      state.idPaciente = clave?.[1] || '';
-      state.idHistoria = clave?.[2] || '';
-      state.mensajePersonalizado = null;
-      state.aviso = '';
-      state.enlace = '';
-    }
-    return c;
-  }
-  function comprobarCambioSinRender() { return comprobarCambio(); }
-  function aviso(mensaje) {
-    state.aviso = txt(mensaje);
-    const nodo = state.contenedor?.querySelector('[data-res-mensaje]');
-    if (nodo) nodo.textContent = state.aviso;
-  }
-  function limpiar() {
-    state.tokenCarga++;
-    state.seleccion.clear();
-    state.registros = [];
-    state.idAtencion = '';
-    state.idPaciente = '';
-    state.idHistoria = '';
-    state.mensajePersonalizado = null;
-    state.aviso = '';
-    state.enlace = '';
-    render();
-  }
-  function leerPuente(c) {
-    const b = puente();
-    if (!b || typeof b.obtenerSnapshot !== 'function') return null;
-    const snapshot = b.obtenerSnapshot();
-    if (!snapshot?.listo || txt(snapshot.id_atencion) !== txt(c.id) ||
-        txt(snapshot.id_paciente) !== txt(c.idPaciente)) return null;
-    return Array.isArray(snapshot.documentos) ? snapshot.documentos : [];
-  }
-  function normalizarRegistros(lista, c) {
-    const vistos = new Set();
-    return lista.filter(r => {
-      const id = txt(r.id_documento);
-      if (!id || vistos.has(id) || !tipo(r) || !activos(r)) return false;
-      if (txt(r.id_atencion) && txt(r.id_atencion) !== txt(c.id)) return false;
-      if (txt(r.id_paciente) && txt(r.id_paciente) !== txt(c.idPaciente)) return false;
-      vistos.add(id);
-      return true;
-    }).map(r => ({
-      id_documento: txt(r.id_documento),
-      nombre_documento: txt(r.nombre_documento) || 'Documento clínico',
-      categoria_documento: categoria(r),
-      mime_type: txt(r.mime_type), extension: txt(r.extension),
-      tamano_bytes: Number(r.tamano_bytes) || 0
-    }));
-  }
-  function aplicarRegistros(lista, c) {
-    state.registros = normalizarRegistros(lista, c);
-    const ids = new Set(state.registros.map(r => r.id_documento));
-    if ([...state.seleccion].some(id => !ids.has(id))) invalidarEnlace();
-    for (const id of state.seleccion) {
-      if (!ids.has(id)) state.seleccion.delete(id);
-    }
-  }
-  async function cargar() {
-    const c = comprobarCambio();
-    if (!valido(c)) { render(); return []; }
-    const id = txt(c.id), paciente = txt(c.idPaciente), historia = txt(c.idHistoria);
-    const token = ++state.tokenCarga;
-    state.cargando = true;
-    render();
-    aviso('Consultando índice de documentos de la atención activa...');
-    try {
-      let lista = leerPuente(c);
-      if (!lista) {
-        // Conserva la lectura asíncrona original. No se abre ni descarga Drive.
-        const modulo = documentos();
-        if (typeof modulo?.cargar !== 'function') {
-          throw new Error('El módulo Documentos no está disponible.');
-        }
-        await modulo.cargar();
-        if (token !== state.tokenCarga) return [];
-        const actual = contexto();
-        if (!valido(actual) || txt(actual.id) !== id ||
-            txt(actual.idPaciente) !== paciente || txt(actual.idHistoria) !== historia) {
-          comprobarCambio(); render(); return [];
-        }
-        lista = leerPuente(actual);
-        if (!lista) {
-          throw new Error('El índice seguro todavía no está listo. Recargue Documentos.');
-        }
-      }
-      if (token !== state.tokenCarga) return [];
-      aplicarRegistros(lista, c);
-      aviso(`${state.registros.length} archivo(s) disponibles. Ningún enlace ha sido generado.`);
-      return state.registros.map(r => ({...r}));
-    } catch (error) {
-      if (token === state.tokenCarga) {
-        state.registros = [];
-        state.seleccion.clear();
-        aviso('No se pudieron consultar los documentos: ' + txt(error.message || error));
-      }
-      return [];
-    } finally {
-      if (token === state.tokenCarga) {
-        state.cargando = false;
-        render();
-      }
-    }
-  }
-  function seleccionActual() {
-    const c = comprobarCambio();
-    if (!valido(c)) return [];
-    return state.registros.filter(r => state.seleccion.has(r.id_documento))
-      .map(r => r.id_documento);
-  }
-  // Identidad: solo datos de la misma ficha de paciente vinculada a la atención.
-  function pacienteVinculado(c) {
-    const id = txt(c?.idPaciente);
-    if (!id || !valido(c)) return null;
-    const listas = [];
-    try { if (Array.isArray(window.patients)) listas.push(window.patients); } catch (_) {}
-    try { if (typeof patients !== 'undefined' && Array.isArray(patients)) listas.push(patients); } catch (_) {}
-    for (const lista of listas) {
-      const p = lista.find(x => txt(x?.id_paciente || x?.id) === id);
-      if (p) return p;
-    }
-    return null;
-  }
-  // La ficha vinculada por ID es la fuente principal. Nunca concatenar
-  // p.nombre (que puede estar completo) con p.apellidos.
-  function nombreDestinatario(c) {
-    const p = pacienteVinculado(c);
-    if (p) {
-      const nombres = txt(p.nombres || p.primer_nombre);
-      const apellidos = txt(p.apellidos || p.apellido || p.primer_apellido);
-      if (nombres && apellidos) return [nombres, apellidos].join(' ').replace(/\s+/g, ' ').trim();
-      const completo = txt(p.nombre_completo || p.nombre || p.nombres_apellidos);
-      if (completo) return completo.replace(/\s+/g, ' ').trim();
-      if (nombres || apellidos) return [nombres, apellidos].filter(Boolean).join(' ');
-    }
-    const a = c?.atencion || {};
-    return txt(a.nombre_paciente || a.paciente_nombre).replace(/\s+/g, ' ').trim();
-  }
-  // Identidad institucional: misma configuración de lectura usada por
-  // Historia Clínica; no modifica la configuración ni el backend.
-  function nombreInstitucionalResultados() {
-    const cfg = window.auroConfiguracionCentro;
-    if (cfg && typeof cfg === 'object' && !Array.isArray(cfg)) {
-      return txt(cfg.nombre_clinica || cfg.nombre_centro || cfg.nombre_comercial || cfg.razon_social) || 'AUROSANAX MEDIC';
-    }
-    return 'AUROSANAX MEDIC';
-  }
-  function telefonoDestinatario(c) {
-    const p = pacienteVinculado(c);
-    return txt(p?.telefono || p?.whatsapp || p?.celular || p?.telefono_paciente);
-  }
-  function invalidarEnlace() {
-    if (!state.enlace) return;
-    const anterior = state.enlace;
-    state.enlace = '';
-    if (state.mensajePersonalizado !== null) {
-      state.mensajePersonalizado = state.mensajePersonalizado.split(anterior).join('[PENDIENTE DE GENERACIÓN]');
-    }
-    aviso('Cambió la configuración de entrega. Genere un nuevo enlace antes de enviar por WhatsApp.');
-  }
-  function abrirWhatsAppResultados() {
-    const c = comprobarCambio();
-    if (!valido(c) || !state.enlace || state.emitiendo) {
-      aviso('Genere un enlace privado válido para la atención activa antes de enviar.');
-      render(); return;
-    }
-    const telefono = telefonoDestinatario(c);
-    if (!telefono) { aviso('El paciente de esta atención no tiene teléfono registrado.'); return; }
-    const mensaje = state.mensajePersonalizado === null ? mensajePredeterminado() : state.mensajePersonalizado;
-    if (!mensaje.includes(state.enlace) || mensaje.includes('[PENDIENTE DE GENERACIÓN]')) {
-      aviso('El mensaje no contiene el enlace privado actual. Restablezca el mensaje y genere un enlace nuevo.');
-      return;
-    }
-    if (typeof window.abrirWhatsApp !== 'function') {
-      aviso('El módulo WhatsApp de Pacientes no está disponible.'); return;
-    }
-    window.abrirWhatsApp(telefono, mensaje);
-  }
-  function mensajePredeterminado() {
-    const c = contexto();
-    const nombre = nombreDestinatario(c);
-    const saludo = nombre ? `Estimada/o ${nombre}:` : 'Estimado/a paciente:';
-    return `🌸 *${nombreInstitucionalResultados()} | Resultados médicos*\n\n${saludo}\n\n✨ Sus resultados médicos se encuentran disponibles mediante un enlace privado.\n\n🔐 *Acceso seguro a sus resultados*\n🔗 [PENDIENTE DE GENERACIÓN]\n\n⏳ *Vigencia del enlace:* ${state.dias} día(s).\n🔢 *Máximo de accesos:* ${state.limite}.\n\n🛡️ Por su privacidad, no comparta este enlace con terceros.\n\n💗 Gracias por confiar en ${nombreInstitucionalResultados()}.\n*Su bienestar es nuestra prioridad.*`;
-  }
-  function instalarCSS() {
-    if (document.getElementById('auroResultadosCSS')) return;
-    const css = document.createElement('style');
-    css.id = 'auroResultadosCSS';
-    css.textContent = `
-#auroResultadosMount{width:100%;min-width:0}#auroResultadosMount *{box-sizing:border-box}
-.ar-card{background:linear-gradient(155deg,#fff 0%,#fff9fc 55%,#fdf0f7 100%);border:1px solid #ebc9dc;border-radius:22px;box-shadow:0 16px 38px rgba(115,28,80,.11),0 3px 7px rgba(115,28,80,.05);overflow:hidden;color:#292333}
-.ar-head{padding:19px 21px;background:linear-gradient(125deg,#54203f,#902c68 65%,#bc568b);color:#fff;display:flex;align-items:center;gap:13px}
-.ar-emblem{height:43px;width:43px;display:grid;place-items:center;border-radius:14px;background:#ffffff2a;border:1px solid #ffffff55;font-size:21px}
-.ar-head h3{margin:0;font-size:18px;font-weight:900}.ar-head p{margin:4px 0 0;font-size:11px;opacity:.91}
-.ar-body{padding:18px 20px;display:grid;gap:15px}.ar-meta{display:flex;gap:8px;flex-wrap:wrap}
-.ar-pill{border-radius:999px;padding:6px 10px;background:#fff;border:1px solid #f0dbe6;font-size:11px;color:#75455e;font-weight:750;overflow-wrap:anywhere}
-.ar-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ar-btn{border:1px solid #e6c9d8;border-radius:11px;background:#fff;color:#782d59;padding:9px 12px;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 3px 9px #782d5912}
-.ar-btn:disabled{opacity:.5;cursor:not-allowed}.ar-btn:focus-visible,.ar-check:focus-visible,.ar-input:focus-visible,.ar-textarea:focus-visible{outline:3px solid #e69dc3;outline-offset:2px}
-.ar-btn.primary{background:linear-gradient(135deg,#842758,#bb4382);border:0;color:#fff;box-shadow:0 7px 16px #84275830}
- .ar-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ar-actions .ar-btn{width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;gap:7px;text-align:center}.ar-btn.whatsapp{background:linear-gradient(135deg,#168a4d,#20b763);border:0;color:#fff;box-shadow:0 7px 16px #168a4d30}
-.ar-group{border:1px solid #eddde6;border-radius:15px;background:#fff;overflow:hidden;box-shadow:0 4px 13px #2f1f3a09}
-.ar-group-head{padding:10px 13px;background:#fdf5f9;font-size:12px;font-weight:900;color:#743051;display:flex;justify-content:space-between;gap:8px}
-.ar-file{display:flex;align-items:flex-start;gap:10px;padding:10px 13px;border-top:1px solid #f6edf2;cursor:pointer}.ar-file:hover{background:#fff9fc}
-.ar-file-name{font-size:12px;font-weight:800;overflow-wrap:anywhere}.ar-file-meta{font-size:10px;color:#796b78;margin-top:3px}
-.ar-check{accent-color:#a52c70;width:17px;height:17px;flex:none;margin-top:2px}
-.ar-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.ar-field{display:grid;gap:5px;font-size:11px;font-weight:850;color:#6c3451}
-.ar-input,.ar-textarea{width:100%;border:1px solid #e9ccdb;border-radius:11px;padding:10px 11px;font:inherit;font-size:12px;color:#302735;background:#fff}
-.ar-textarea{min-height:124px;resize:vertical;line-height:1.5}.ar-subtitle{font-size:12px;font-weight:900;color:#6f294f}
-.ar-note{font-size:11px;line-height:1.5;color:#756775}.ar-status{padding:10px 12px;border-radius:11px;background:#fff;border:1px solid #efd8e4;font-size:11px;color:#6e3555}
-.ar-footer{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.ar-count{font-size:12px;font-weight:850;color:#732b51}
-.ar-empty{padding:17px;background:#fff;border:1px dashed #e7bfd3;border-radius:12px;color:#75546a;font-size:12px}
-@media(max-width:640px){.ar-card{border-radius:16px}.ar-head{padding:15px}.ar-body{padding:13px}.ar-fields{grid-template-columns:1fr}.ar-footer .ar-btn{width:100%}}@media(max-width:370px){.ar-actions{grid-template-columns:1fr}}
-`;
-    document.head.appendChild(css);
-  }
-  function render() {
-    const el = state.contenedor;
-    if (!el) return;
-    const c = comprobarCambioSinRender();
-    const a = c?.atencion || {};
-    const habilitado = valido(c);
-    const nombreVisible = nombreDestinatario(c);
-    const grupos = CATEGORIAS.map(grupo => {
-      const lista = state.registros.filter(r => r.categoria_documento === grupo.id);
-      if (!lista.length) return '';
-      const archivos = lista.map(r => `
-        <label class="ar-file">
-          <input class="ar-check" type="checkbox" data-res-id="${seguro(r.id_documento)}"
-            ${state.seleccion.has(r.id_documento) ? 'checked' : ''}>
-          <span style="min-width:0">
-            <span class="ar-file-name">${seguro(r.nombre_documento)}</span>
-            <span class="ar-file-meta" style="display:block">${seguro(tipo(r))} · ${r.tamano_bytes ? seguro((r.tamano_bytes / 1024).toFixed(1)) + ' KB' : 'Tamaño no disponible'}</span>
-          </span>
-        </label>`).join('');
-      return `<div class="ar-group"><div class="ar-group-head"><span><i class="bi ${grupo.icono} me-1"></i>${seguro(grupo.nombre)}</span><span>${lista.length} archivo(s)</span></div>${archivos}</div>`;
-    }).join('');
-    const mensaje = state.mensajePersonalizado === null ? mensajePredeterminado() : state.mensajePersonalizado;
-    el.innerHTML = `
-      <section class="ar-card" aria-label="Entrega segura de resultados">
-        <div class="ar-head"><div class="ar-emblem"><i class="bi bi-shield-lock"></i></div>
-          <div><h3>Entrega segura de resultados</h3><p>Seleccione exactamente qué archivos podrá recibir el paciente</p></div></div>
-        <div class="ar-body">
-          <div class="ar-meta">
-            <span class="ar-pill">Paciente: ${seguro(nombreVisible || '—')}</span>
-            <span class="ar-pill">Consulta: ${seguro(c?.numeroConsulta || '—')}</span>
-            <span class="ar-pill">Atención: ${seguro(c?.id || '—')}</span>
-          </div>
-          <div class="ar-toolbar">
-            <button type="button" class="ar-btn" data-res-recargar ${!habilitado || state.cargando ? 'disabled' : ''}>Actualizar lista</button>
-            <button type="button" class="ar-btn" data-res-todos ${!habilitado || !state.registros.length ? 'disabled' : ''}>Seleccionar todos</button>
-            <button type="button" class="ar-btn" data-res-limpiar ${!state.seleccion.size ? 'disabled' : ''}>Limpiar selección</button>
-          </div>
-          <div class="ar-subtitle">Documentos disponibles por categoría</div>
-          ${!habilitado ? '<div class="ar-empty">Seleccione una atención clínica válida.</div>' :
-            state.registros.length ? grupos : '<div class="ar-empty">No hay archivos disponibles. Pulse Actualizar lista.</div>'}
-          <div class="ar-footer"><span class="ar-count">${state.seleccion.size} de ${state.registros.length} archivo(s) seleccionado(s)</span></div>
-          <div class="ar-fields">
-            <label class="ar-field">Vigencia del enlace (días)<input class="ar-input" type="number" min="1" max="30" step="1" data-res-dias value="${state.dias}"></label>
-            <label class="ar-field">Máximo de accesos<input class="ar-input" type="number" min="1" max="20" step="1" data-res-limite value="${state.limite}"></label>
-          </div>
-          <div class="ar-subtitle">Mensaje predeterminado de WhatsApp</div>
-          <textarea class="ar-textarea" data-res-mensaje-texto aria-label="Mensaje para WhatsApp">${seguro(mensaje)}</textarea>
-          <div class="ar-toolbar"><button type="button" class="ar-btn" data-res-restablecer>Restablecer mensaje</button></div>
-          <div class="ar-actions">
-            <button type="button" class="ar-btn primary" data-res-generar ${!habilitado || state.emitiendo ? 'disabled' : ''}>Generar enlace privado</button>
-            <button type="button" class="ar-btn whatsapp" data-res-whatsapp ${!habilitado || !state.enlace || state.emitiendo ? 'disabled' : ''}><i class="bi bi-whatsapp" aria-hidden="true"></i> Enviar por WhatsApp</button>
-          </div>
-          <div class="ar-status" data-res-mensaje role="status">${seguro(state.aviso || 'Seleccione los documentos y genere un enlace privado.')}</div>
-          <div class="ar-note">Un enlace podrá contener varios archivos individuales. No se fusionan PDF ni se publican enlaces directos de Drive.</div>
-        </div>
-      </section>`;
-  }
-  function cambiarSeleccion(input) {
-    const c = comprobarCambio();
-    const id = txt(input.dataset.resId);
-    if (!valido(c) || !state.registros.some(r => r.id_documento === id)) {
-      render(); return;
-    }
-    if (input.checked && state.seleccion.size >= 30) { aviso('Máximo permitido: 30 documentos por entrega.'); render(); return; }
-     if (input.checked !== state.seleccion.has(id)) invalidarEnlace();
-    if (input.checked) state.seleccion.add(id);
-    else state.seleccion.delete(id);
-    render();
-  }
-  function endpointResultados() {
-    const base = txt(window.API_URL || window.AUROSANAX_APPS_SCRIPT_URL ||
-      document.getElementById('appsScriptUrl')?.value);
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/(exec|dev)(?:[?#]|$)/.test(base)) {
-      throw new Error('La URL de Apps Script no está configurada.');
-    }
-    return base;
-  }
-  // Presentación del enlace: no cambia el token ni los permisos del servidor.
-  function enlacePublicoResultados(enlaceServidor) {
-    let url;
-    try { url = new URL(txt(enlaceServidor)); }
-    catch (_) { throw new Error('El servidor devolvió un enlace inválido.'); }
-
-    if (url.protocol !== 'https:') throw new Error('El enlace no es HTTPS.');
-    if (url.hostname === 'iasyn.fyi' && url.pathname === '/resultados.html') {
-      const token = url.searchParams.get('token') || '';
-      if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
-        throw new Error('El enlace público no contiene un token válido.');
-      return 'https://iasyn.fyi/resultados.html?token=' + encodeURIComponent(token);
-    }
-    if (url.hostname === 'script.google.com' &&
-        /^\/macros\/s\/[^/]+\/(exec|dev)$/.test(url.pathname) &&
-        url.searchParams.get('portal') === 'resultados') {
-      const token = url.searchParams.get('token') || '';
-      if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
-        throw new Error('No se encontró un token compatible para el portal público.');
-      return 'https://iasyn.fyi/resultados.html?token=' + encodeURIComponent(token);
-    }
-    throw new Error('El servidor no devolvió un enlace compatible con el portal público.');
-  }
-  function tokenAdministrador() {
-    const token = txt(sessionStorage.getItem('aurosanax_seguridad_token'));
-    const expira = Number(sessionStorage.getItem('aurosanax_seguridad_expira_en') || 0);
-    if (!token || (expira && Date.now() >= expira)) throw new Error('Sesión vencida. Inicie sesión nuevamente.');
-    return token;
-  }
-  async function emitirEnlace() {
-    if (state.emitiendo) return;
-    const c = comprobarCambio();
-    if (!valido(c)) { aviso('Seleccione una atención clínica válida.'); return; }
-    const ids = seleccionActual();
-    if (!ids.length || ids.length > 30) { aviso('Seleccione entre 1 y 30 documentos.'); return; }
-    if (!Number.isInteger(state.dias) || state.dias < 1 || state.dias > 30 ||
-        !Number.isInteger(state.limite) || state.limite < 1 || state.limite > 20) {
-      aviso('Revise los límites de vigencia y accesos.'); return;
-    }
-    let url, sesion;
-    try { url = endpointResultados(); sesion = tokenAdministrador(); }
-    catch (e) { aviso(e.message); return; }
-    const atencion = txt(c.id), paciente = txt(c.idPaciente);
-    const historia = txt(c.idHistoria), diasEmitidos = state.dias, limiteEmitido = state.limite;
-    const idsEmitidos = ids.join('\u001f');
-    state.emitiendo = true;
-    invalidarEnlace();
-    state.enlace = '';
-    aviso('Generando enlace privado...');
-    render();
-    try {
-      const respuesta = await fetch(url, {
-        method: 'POST',
-        headers: {'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({accion:'auroEntregaGenerarResultados',data:{
-          session_token:sesion, id_atencion:atencion, id_paciente:paciente,
-          ids_documentos:ids, dias_vigencia:state.dias, limite_accesos:state.limite
-        }})
-      });
-      if (!respuesta.ok) throw new Error('El servidor respondió HTTP ' + respuesta.status);
-      const r = await respuesta.json();
-      if (!r || r.success !== true || !/^https:\/\/(?:script\.google\.com\/|iasyn\.fyi\/resultados\.html\?token=)/.test(txt(r.enlace))) {
-        throw new Error(txt(r?.message) || 'El servidor no confirmó un enlace válido.');
-      }
-      const actual = comprobarCambio();
-      if (!valido(actual) || txt(actual.id) !== atencion || txt(actual.idPaciente) !== paciente ||
-          txt(actual.idHistoria) !== historia || state.dias !== diasEmitidos ||
-          state.limite !== limiteEmitido || seleccionActual().join('\u001f') !== idsEmitidos) {
-        aviso('Enlace emitido, pero cambió la atención. No se muestra por seguridad.');
-        return;
-      }
-      const enlacePublico = enlacePublicoResultados(r.enlace);
-      state.enlace = enlacePublico;
-      // Reemplaza el enlace anterior al emitir de nuevo, sin dejar un token obsoleto.
-      let mensaje = state.mensajePersonalizado === null ? mensajePredeterminado() : state.mensajePersonalizado;
-      if (!mensaje.includes('[PENDIENTE DE GENERACIÓN]')) {
-        mensaje = mensaje.replace(/https:\/\/(?:iasyn\.fyi\/resultados\.html\?token=[A-Za-z0-9_-]+|script\.google\.com\/macros\/s\/[^\s]+?\?[^\s]*portal=resultados[^\s]*)/g,
-          '[PENDIENTE DE GENERACIÓN]');
-      }
-      if (!mensaje.includes('[PENDIENTE DE GENERACIÓN]')) mensaje = mensajePredeterminado();
-      state.mensajePersonalizado = mensaje.replace(/\[PENDIENTE DE GENERACIÓN\]/g, enlacePublico);
-      aviso('Enlace privado generado. Cópielo del mensaje de WhatsApp. Caduca: ' + txt(r.vence_en));
-    } catch (e) { aviso('No se pudo emitir el enlace: ' + txt(e.message || e)); }
-    finally { state.emitiendo = false; render(); }
-  }
-  function instalarEventos(el) {
-    el.addEventListener('click', event => {
-      if (event.target.closest('[data-res-recargar]')) { cargar(); return; }
-      if (event.target.closest('[data-res-todos]')) {
-        if (!valido(comprobarCambio())) return;
-        if (state.registros.slice(0, 30).some(r => !state.seleccion.has(r.id_documento))) invalidarEnlace();
-        state.registros.slice(0, 30).forEach(r => state.seleccion.add(r.id_documento));
-         if (state.registros.length > 30) aviso('Máximo permitido: 30 documentos por entrega.');
-        render(); return;
-      }
-      if (event.target.closest('[data-res-limpiar]')) {
-        if (state.seleccion.size) invalidarEnlace();
-        state.seleccion.clear(); render(); return;
-      }
-      if (event.target.closest('[data-res-generar]')) { emitirEnlace(); return; }
-      if (event.target.closest('[data-res-whatsapp]')) { abrirWhatsAppResultados(); return; }
-      if (event.target.closest('[data-res-restablecer]')) {
-        state.mensajePersonalizado = null;
-        if (state.enlace) state.mensajePersonalizado = mensajePredeterminado().replace('[PENDIENTE DE GENERACIÓN]', state.enlace);
-        render();
-      }
-    });
-    el.addEventListener('change', event => {
-      const checkbox = event.target.closest('input[data-res-id]');
-      if (checkbox) { cambiarSeleccion(checkbox); return; }
-      const dias = event.target.closest('[data-res-dias]');
-      if (dias) {
-        const nuevo = Math.max(1, Math.min(30, parseInt(dias.value, 10) || 7));
-        if (nuevo !== state.dias) { invalidarEnlace(); state.mensajePersonalizado = null; }
-        state.dias = nuevo;
-        render(); return;
-      }
-      const limite = event.target.closest('[data-res-limite]');
-      if (limite) {
-        const nuevo = Math.max(1, Math.min(20, parseInt(limite.value, 10) || 5));
-        if (nuevo !== state.limite) { invalidarEnlace(); state.mensajePersonalizado = null; }
-        state.limite = nuevo;
-        render();
-      }
-    });
-    el.addEventListener('input', event => {
-      if (event.target.matches('[data-res-mensaje-texto]')) {
-        state.mensajePersonalizado = event.target.value;
-      }
-    });
-  }
-  function inicializar(opciones) {
-    const id = txt(opciones?.contenedor) || 'auroResultadosMount';
-    const el = document.getElementById(id) || puente()?.asegurarContenedor?.();
-    if (!el) throw new Error('No se encontró el contenedor de Resultados.');
-    instalarCSS();
-    if (state.contenedor !== el) {
-      state.contenedor = el;
-      instalarEventos(el);
-    }
-    render();
-    cargar();
-    return { version: VERSION, listo: true, integrado: true };
-  }
-  function iniciarAutomatico() {
-    if (!puente()) return;
-    try { inicializar({contenedor: 'auroResultadosMount'}); }
-    catch (error) { console.warn('RESULTADOS: esperando contenedor.', error.message); }
-  }
-  function refrescarSiMontado() {
-    if (state.contenedor) cargar();
-    else iniciarAutomatico();
-  }
-  window.addEventListener('aurosanax:documentos-actualizados', event => {
-    const c = comprobarCambio();
-    if (valido(c) && txt(event.detail?.id_atencion) === txt(c.id)) refrescarSiMontado();
-  });
-  ['aurosanax:atencion-cambiada', 'aurosanax:atencion-seleccionada',
-   'aurosanax:atencion-actualizada', 'aurosanax:atencion-limpiada',
-   'aurosanax:paciente-cambiado', 'aurosanax:paciente-seleccionado',
-   'aurosanax:historia-nueva'].forEach(nombre => {
-    window.addEventListener(nombre, () => {
-      comprobarCambio();
-      refrescarSiMontado();
-    });
-  });
-  document.addEventListener('click', event => {
-    const boton = event.target?.closest?.('.clinical-tabs button');
-    if (boton?.getAttribute('onclick')?.includes('hc_docs')) {
-      setTimeout(iniciarAutomatico, 130);
-    }
-  });
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', iniciarAutomatico);
-  } else {
-    iniciarAutomatico();
-  }
-  window.auroResultados = Object.freeze({
-    version: VERSION, inicializar, cargar, limpiar, seleccionActual,
-    estado: () => ({
-      id_atencion: state.idAtencion, id_paciente: state.idPaciente,
-      seleccionados: state.seleccion.size, documentos: state.registros.length,
-      modo: 'EMISION_PRIVADA'
-    })
-  });
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<title>Entrega de resultados | AUROSANAX MEDIC</title>
+<style>
+/* =====================================================================
+ AUROSANAX · ENTREGA DE RESULTADOS · PORTAL PREMIUM V2
+ Archivo: resultados.html (entregado en TXT para copiar íntegramente)
+ Independiente, responsive, sin bibliotecas ni imágenes externas.
+ Seguridad: estado cerrado hasta conexión a backend verificado.
+ ===================================================================== */
+:root{--ink:#35343d;--muted:#75727e;--pink:#c12872;--pink2:#e45b9a;--blush:#fff1f7;--line:#f0e3ea;--white:#fff;--shadow:0 25px 75px rgba(78,34,56,.10);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#fdfafd}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100vh;background:radial-gradient(circle at 90% 0%,#ffe8f2 0,transparent 32%),radial-gradient(circle at 0% 75%,#fff0f6 0,transparent 35%),#fdfafd}button{font:inherit}a{color:inherit}.shell{max-width:1150px;margin:auto;padding:0 30px}.top{height:92px;display:flex;align-items:center;justify-content:space-between;gap:15px}.brand{font-size:clamp(23px,3vw,31px);font-weight:850;letter-spacing:.015em;white-space:nowrap}.brand .au{color:#51515a}.brand .sa{color:var(--pink)}.top-label{font-size:12px;font-weight:750;color:#a44b76;border:1px solid #f0d2e0;background:#fff7fa;border-radius:999px;padding:10px 15px;display:flex;align-items:center;gap:8px}.dot{width:7px;height:7px;border-radius:50%;background:#d84786}.main{padding:18px 0 50px}.hero{display:grid;grid-template-columns:1.07fr .93fr;min-height:420px;overflow:hidden;border-radius:30px;background:linear-gradient(125deg,#fff 0%,#fff 50%,#fff2f8 100%);border:1px solid #f4e6ed;box-shadow:var(--shadow)}.hero-copy{padding:clamp(32px,5vw,66px);display:flex;flex-direction:column;justify-content:center}.eyebrow{font-size:11px;font-weight:850;letter-spacing:.2em;color:var(--pink);text-transform:uppercase;display:flex;align-items:center;gap:11px}.eyebrow:before{content:"";width:27px;height:2px;background:var(--pink)}h1{font-size:clamp(35px,4.5vw,56px);line-height:1.07;letter-spacing:-.05em;margin:22px 0 20px;font-weight:820;max-width:540px}h1 em{font-style:normal;color:var(--pink)}.lead{font-size:16px;line-height:1.85;color:#6e6b76;max-width:500px;margin:0}.hero-art{position:relative;min-height:390px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 54% 48%,#ffd3e6 0%,#ffeaf3 38%,transparent 70%)}.hero-art svg{width:min(95%,520px);height:auto;filter:drop-shadow(0 20px 25px rgba(153,48,102,.11))}.spark{position:absolute;border-radius:50%;background:#fff;box-shadow:0 5px 22px #c1287222}.spark.a{width:13px;height:13px;left:14%;top:20%}.spark.b{width:9px;height:9px;right:13%;bottom:21%}.section{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(255px,.75fr);gap:24px;margin-top:26px}.panel{border:1px solid var(--line);border-radius:24px;background:var(--white);box-shadow:0 12px 40px rgba(81,32,58,.045);padding:30px}.panel h2{font-size:23px;letter-spacing:-.035em;margin:0 0 12px}.panel p{font-size:14px;line-height:1.8;color:var(--muted);margin:0}.state{margin-top:23px;display:flex;gap:15px;align-items:flex-start;padding:20px;border-radius:17px;border:1px solid #f2dce7;background:#fff7fa}.state-icon{flex:0 0 42px;height:42px;border-radius:13px;background:#fbe3ee;display:grid;place-items:center;color:#ae276a}.state strong{display:block;font-size:14px;margin-bottom:6px}.state p{font-size:13px;line-height:1.65}.results{display:none;margin-top:22px}.results.visible{display:block}.doc-list{display:grid;gap:11px;margin-top:15px}.doc{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:14px}.doc-icon{width:44px;height:44px;display:grid;place-items:center;background:#fff0f7;border-radius:12px;color:var(--pink)}.doc-name{font-weight:750;font-size:14px;overflow-wrap:anywhere}.doc-meta{color:var(--muted);font-size:12px;margin-top:4px}.doc button{margin-left:auto;border:0;background:var(--pink);color:#fff;border-radius:10px;padding:10px 12px;font-weight:750;cursor:pointer}.doc button:disabled{opacity:.5;cursor:not-allowed}.aside-title{display:flex;align-items:center;gap:11px;margin-bottom:16px}.aside-title svg{color:var(--pink)}.aside-title strong{font-size:16px}.security-points{display:grid;gap:16px}.security-point{display:flex;gap:12px;align-items:flex-start}.security-point .num{flex:0 0 28px;height:28px;border:1px solid #f4d6e4;border-radius:50%;display:grid;place-items:center;color:var(--pink);font-weight:850;font-size:12px}.security-point p{font-size:13px;line-height:1.65}.help{margin-top:22px;padding:18px;border-radius:15px;background:#faf8fa;border:1px solid #f2ebf0}.help strong{display:block;font-size:13px;margin-bottom:5px}.help p{font-size:12px}.footer{border-top:1px solid #f0e6ec;margin-top:25px;padding:25px 0 38px;display:flex;justify-content:space-between;gap:15px;align-items:center;color:#96909a;font-size:12px}.footer strong{color:#6c6570}.fine{font-size:11px!important;color:#9b939d!important;margin-top:14px!important}@media(max-width:850px){.hero{grid-template-columns:1fr}.hero-copy{padding:42px 35px 20px}.hero-art{min-height:290px}.hero-art svg{max-width:420px}.section{grid-template-columns:1fr}}@media(max-width:560px){.shell{padding:0 15px}.top{height:75px}.top-label{font-size:10px;padding:8px 10px}.hero{border-radius:22px}.hero-copy{padding:33px 24px 10px}h1{font-size:37px}.lead{font-size:14px}.hero-art{min-height:250px}.hero-art svg{max-width:340px}.panel{padding:23px 19px;border-radius:20px}.section{gap:15px;margin-top:16px}.footer{flex-direction:column;text-align:center;line-height:1.5}.doc{flex-wrap:wrap}.doc button{width:100%;margin:6px 0 0}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+/* Prueba visual: recorte superior ajustable; puede variar según Google */
+.portal-frame-host{margin-top:20px;height:1600px;overflow:hidden;border:1px solid #f0e3ea;border-radius:16px;background:#fff}
+.portal-frame-host iframe{display:block;width:100%;height:1660px;margin-top:-60px;border:0;background:#fff}
+@media(max-width:560px){.portal-frame-host{height:1900px}.portal-frame-host iframe{height:1960px}}
+</style>
+</head>
+<body>
+<!-- MÓDULO AISLADO: ENTREGA DE RESULTADOS · NO MODIFICA EL ERP -->
+<div class="shell">
+<header class="top" aria-label="Cabecera AUROSANAX">
+  <div class="brand" aria-label="AUROSANAX MEDIC"><span class="au">AURO</span><span class="sa">SANAX</span> <span class="au">MEDIC</span></div>
+  <div class="top-label"><span class="dot" aria-hidden="true"></span> Portal privado de pacientes</div>
+</header>
+<main class="main" id="contenido">
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-copy"><div class="eyebrow">Bienestar con confianza</div><h1 id="hero-title">Tus resultados, <em>en buenas manos.</em></h1><p class="lead">Un espacio pensado para consultar tus documentos médicos de forma privada, clara y sencilla, desde donde estés.</p></div>
+  <div class="hero-art" role="img" aria-label="Ilustración premium de un expediente médico protegido con un escudo de seguridad">
+  <span class="spark a"></span><span class="spark b"></span>
+  <svg viewBox="0 0 520 410" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+   <defs><linearGradient id="paper" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#fff9fc"/></linearGradient><linearGradient id="shield" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#e66aa6"/><stop offset="1" stop-color="#b91f6a"/></linearGradient><linearGradient id="petal" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#f8a6cb"/><stop offset="1" stop-color="#e86aa5"/></linearGradient></defs>
+   <circle cx="265" cy="198" r="173" fill="#ffe3f0"/><circle cx="265" cy="198" r="139" fill="#ffedf5" stroke="#f6cddd" stroke-width="1.5"/>
+   <g transform="translate(118 48) rotate(-8 145 160)"><rect x="36" y="23" width="250" height="323" rx="23" fill="#f5c9dc" opacity=".55"/><rect x="20" y="12" width="250" height="323" rx="23" fill="url(#paper)" stroke="#efdce5" stroke-width="2"/><rect x="46" y="43" width="88" height="9" rx="4.5" fill="#f4d1e2"/><rect x="46" y="67" width="151" height="8" rx="4" fill="#e8e5eb"/><rect x="46" y="88" width="115" height="8" rx="4" fill="#efebef"/><rect x="46" y="130" width="190" height="102" rx="16" fill="#fff2f8"/><path d="M64 192h31l16-24 19 43 19-32 14 13h48" fill="none" stroke="#d13e83" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><rect x="46" y="258" width="190" height="8" rx="4" fill="#e8e4e9"/><rect x="46" y="280" width="150" height="8" rx="4" fill="#eee8ed"/></g>
+   <g transform="translate(292 210)"><circle cx="62" cy="61" r="84" fill="#f4b7d3" opacity=".42"/><path d="M62 -7c26 21 52 20 62 24v57c0 44-34 70-62 84C34 144 0 118 0 74V17C10 13 36 14 62-7Z" fill="url(#shield)" stroke="#fff" stroke-width="8"/><path d="M35 72l18 18 39-42" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></g>
+   <circle cx="116" cy="103" r="10" fill="#ed9fc4"/><circle cx="402" cy="84" r="7" fill="#f5b8d4"/><path d="M420 152v22m-11-11h22" stroke="#dc72a5" stroke-width="4" stroke-linecap="round"/><path d="M95 274v18m-9-9h18" stroke="#e89dc1" stroke-width="4" stroke-linecap="round"/>
+  </svg>
+  </div>
+</section>
+<div class="section">
+<section class="panel" aria-labelledby="documents-title"><h2 id="documents-title">Entrega de resultados</h2><p>Accede exclusivamente a los documentos autorizados para tu atención médica. El enlace de entrega tiene una vigencia limitada.</p>
+<div class="state" role="status" aria-live="polite"><div class="state-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1"/></svg></div><div><strong id="state-title">Acceso protegido</strong><p id="state-message">Este portal requiere un enlace de acceso validado por AUROSANAX. Por seguridad, todavía no está habilitada la consulta en línea.</p></div></div>
+<div id="results" class="results" aria-label="Documentos médicos autorizados"><div id="doc-list" class="doc-list"></div></div>
+<p class="fine">Tu información clínica es confidencial. No compartas tu enlace de acceso con terceros.</p></section>
+<aside class="panel" aria-label="Información de seguridad"><div class="aside-title"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg><strong>Tu privacidad importa</strong></div><div class="security-points"><div class="security-point"><div class="num">01</div><p><strong>Acceso individual.</strong> Solo se podrán consultar los archivos que AUROSANAX autorice para esa entrega.</p></div><div class="security-point"><div class="num">02</div><p><strong>Enlace temporal.</strong> La vigencia y el número de accesos serán controlados por el sistema seguro.</p></div><div class="security-point"><div class="num">03</div><p><strong>Documentos protegidos.</strong> Los archivos no se publicarán mediante enlaces abiertos de Google Drive.</p></div></div><div class="help"><strong>¿Necesitas ayuda?</strong><p>Contacta directamente a AUROSANAX por los canales habituales de atención.</p></div></aside>
+</div>
+</main>
+<footer class="footer"><span><strong>AUROSANAX MEDIC</strong> · Atención médica</span><span>Privacidad, cuidado y confianza · © <span id="year"></span></span></footer>
+</div>
+<script>
+(function(){'use strict';
+ document.getElementById('year').textContent=String(new Date().getFullYear());
+ var token=new URLSearchParams(location.search).get('token')||'';
+ var title=document.getElementById('state-title');
+ var msg=document.getElementById('state-message');
+ if(!/^[A-Za-z0-9_-]{40,64}$/.test(token)){
+   title.textContent='Enlace no disponible';
+   msg.textContent='Abre el enlace individual enviado por AUROSANAX.';
+   return;
+ }
+ title.textContent='Resultados autorizados';
+ msg.textContent='Consulta y descarga tus documentos en el panel de AUROSANAX MEDIC.';
+ var host=document.createElement('div');host.className='portal-frame-host';
+ var frame=document.createElement('iframe');
+ frame.title='Documentos médicos autorizados AUROSANAX MEDIC';
+ frame.setAttribute('referrerpolicy','no-referrer');
+ frame.setAttribute('loading','eager');
+ frame.setAttribute('allow','');
+ frame.src='https://script.google.com/macros/s/AKfycbxaB6gz0bXnLnCKOBwEU8jGhRGqrql2o83OeG5_xc6ijnnEoG9L9_v9sMgK5OphMs7mow/exec?portal=resultados&token='+encodeURIComponent(token);
+ host.appendChild(frame);
+ msg.closest('.state').insertAdjacentElement('afterend',host);
 })();
+</script>
+</body>
+</html>
