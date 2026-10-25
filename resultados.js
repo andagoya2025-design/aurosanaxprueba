@@ -200,12 +200,29 @@
     }
     return null;
   }
+  // La ficha vinculada por ID es la fuente principal. Nunca concatenar
+  // p.nombre (que puede estar completo) con p.apellidos.
   function nombreDestinatario(c) {
-    const a = c?.atencion || {};
-    const n = txt(a.nombre_paciente || a.paciente_nombre);
-    if (n) return n;
     const p = pacienteVinculado(c);
-    return txt(p?.nombre_completo || [p?.nombre || p?.nombres, p?.apellido || p?.apellidos].filter(Boolean).join(' '));
+    if (p) {
+      const nombres = txt(p.nombres || p.primer_nombre);
+      const apellidos = txt(p.apellidos || p.apellido || p.primer_apellido);
+      if (nombres && apellidos) return [nombres, apellidos].join(' ').replace(/\s+/g, ' ').trim();
+      const completo = txt(p.nombre_completo || p.nombre || p.nombres_apellidos);
+      if (completo) return completo.replace(/\s+/g, ' ').trim();
+      if (nombres || apellidos) return [nombres, apellidos].filter(Boolean).join(' ');
+    }
+    const a = c?.atencion || {};
+    return txt(a.nombre_paciente || a.paciente_nombre).replace(/\s+/g, ' ').trim();
+  }
+  // Identidad institucional: misma configuración de lectura usada por
+  // Historia Clínica; no modifica la configuración ni el backend.
+  function nombreInstitucionalResultados() {
+    const cfg = window.auroConfiguracionCentro;
+    if (cfg && typeof cfg === 'object' && !Array.isArray(cfg)) {
+      return txt(cfg.nombre_clinica || cfg.nombre_centro || cfg.nombre_comercial || cfg.razon_social) || 'AUROSANAX MEDIC';
+    }
+    return 'AUROSANAX MEDIC';
   }
   function telefonoDestinatario(c) {
     const p = pacienteVinculado(c);
@@ -242,7 +259,7 @@
     const c = contexto();
     const nombre = nombreDestinatario(c);
     const saludo = nombre ? `Estimada/o ${nombre}:` : 'Estimado/a paciente:';
-    return `🌸 *AUROSANAX | Resultados médicos*\n\n${saludo}\n\n✨ Sus resultados médicos se encuentran disponibles mediante un enlace privado.\n\n🔐 *Acceso seguro a sus resultados*\n🔗 [PENDIENTE DE GENERACIÓN]\n\n⏳ *Vigencia del enlace:* ${state.dias} día(s).\n🔢 *Máximo de accesos:* ${state.limite}.\n\n🛡️ Por su privacidad, no comparta este enlace con terceros.\n\n💗 Gracias por confiar en AUROSANAX.\n*Su bienestar es nuestra prioridad.*`;
+    return `🌸 *${nombreInstitucionalResultados()} | Resultados médicos*\n\n${saludo}\n\n✨ Sus resultados médicos se encuentran disponibles mediante un enlace privado.\n\n🔐 *Acceso seguro a sus resultados*\n🔗 [PENDIENTE DE GENERACIÓN]\n\n⏳ *Vigencia del enlace:* ${state.dias} día(s).\n🔢 *Máximo de accesos:* ${state.limite}.\n\n🛡️ Por su privacidad, no comparta este enlace con terceros.\n\n💗 Gracias por confiar en ${nombreInstitucionalResultados()}.\n*Su bienestar es nuestra prioridad.*`;
   }
   function instalarCSS() {
     if (document.getElementById('auroResultadosCSS')) return;
