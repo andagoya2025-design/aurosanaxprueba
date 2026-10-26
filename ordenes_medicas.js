@@ -1384,6 +1384,20 @@ async function intentarEmbebidoLogoOrden(){
   }catch(e){ /* La URL institucional sigue disponible; no bloquear la firma. */ }
 }
 
+/* FASE 1 — Enrutamiento local exclusivo de órdenes médicas.
+ * Lee el identificador real del motor local; nunca inventa un equipo.
+ * Ante motor no disponible, bloquea el envío para evitar firma en otra PC.
+ */
+async function obtenerEquipoLocalOrden_(){
+  const servicio=window.auroFirmaElectronica;
+  if(!servicio || typeof servicio.obtenerEquipoLocal!=='function'){
+    throw Error('No está disponible la identificación del motor de firma local.');
+  }
+  const equipo=txt(await servicio.obtenerEquipoLocal());
+  if(!equipo) throw Error('No se identificó esta computadora. Verifique el motor de firma local.');
+  return equipo;
+}
+
 async function solicitarFirmaOrden(id){
   id=txt(id);
   if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
@@ -1404,7 +1418,12 @@ async function solicitarFirmaOrden(id){
     state.firmaProcesos.set(id,proceso);
     render();
     aviso('Enviando orden médica para una firma electrónica…');
-    const r=await postFirmaOrden('firmarDocumento',solicitud);
+    const equipoLocal=await obtenerEquipoLocalOrden_();
+    const solicitudEnrutada=Object.assign({},solicitud,{
+      id_equipo_destino:equipoLocal,
+      id_equipo_origen:equipoLocal
+    });
+    const r=await postFirmaOrden('firmarDocumento',solicitudEnrutada);
     if(txt(r.estado_firma).toUpperCase()==='FIRMADO'){
       const firmada=await esperarArchivoFirmadoOrden(reg);
       if(!firmada) throw Error('El servidor indicó FIRMADO, pero el archivo sigue pendiente de confirmación. No vuelva a firmar; recargue el historial.');
