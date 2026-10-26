@@ -665,7 +665,10 @@ function instalarCSS(){
 .aom-row-main{min-width:0}
 .aom-row-main strong{display:block;font-size:13px;overflow-wrap:anywhere}
 .aom-row-main small{display:block;color:#6b7280;margin-top:2px}
-.aom-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.aom-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start}
+.aom-firma-grupo{display:flex;flex-direction:column;gap:5px;align-items:stretch;min-width:145px}
+.aom-firma-grupo .aom-btn{width:100%;white-space:nowrap}
+@media(max-width:850px){.aom-row{grid-template-columns:minmax(0,1fr)}.aom-actions{justify-content:flex-start}.aom-row-main strong{overflow-wrap:normal;word-break:break-word}}
 .aom-btn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:6px 9px;font-size:12px;font-weight:750}
 .aom-btn:hover{background:#f9fafb}
 .aom-btn.ver-firmado{border-color:#15803d;background:#15803d;color:#fff}.aom-btn.ver-firmado:hover{background:#166534;color:#fff}
@@ -826,8 +829,7 @@ function filaHistorial(r){
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
       ${firmado?`<button type="button" class="aom-btn ver-firmado" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Ver firmado</button>`:''}
-      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar'}</button>`:''}
-      ${!noEditable&&!firmado&&firmando?`<button type="button" class="aom-btn danger" data-aom-cancelar-firma="${esc(id)}" ${!txt(proceso.id_solicitud)||proceso.cancelando?'disabled':''}><i class="bi bi-x-circle"></i> ${proceso.cancelando?'Cancelando firma…':'Cancelar firma'}</button>`:''}
+      ${!noEditable&&!firmado?`<div class="aom-firma-grupo"><button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar'}</button>${firmando?`<button type="button" class="aom-btn danger" data-aom-cancelar-firma="${esc(id)}" ${!txt(proceso.id_solicitud)||proceso.cancelando?'disabled':''}><i class="bi bi-x-circle"></i> ${proceso.cancelando?'Cancelando firma…':'Cancelar firma'}</button>`:''}</div>`:''}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
   </div>`;
@@ -1420,7 +1422,7 @@ async function cancelarFirmaOrden(id){
     const cancelar=(typeof motor?.cancelarFirmaElectronica==='function'&&motor.cancelarFirmaElectronica.bind(motor))||
       (typeof motor?.cancelarFirma==='function'&&motor.cancelarFirma.bind(motor))||
       (typeof motor?.cancelarDocumento==='function'&&motor.cancelarDocumento.bind(motor));
-    if(!cancelar) throw Error('El motor compartido no ofrece cancelación. No se modificó la solicitud.');
+    if(!cancelar) throw Error('El motor de firma instalado no dispone de una función de cancelación. La solicitud continúa activa; se requiere conectar la operación de cancelación del servidor.');
     const payload={tipo_documento:'ORDEN_MEDICA',id_documento_origen:id,id_orden:id,id_orden_medica:id,
       id_atencion:txt(reg.id_atencion),version_documento:datosDocumentoEmitido(reg).version,id_solicitud:proceso.id_solicitud};
     const respuesta=await cancelar(payload);
