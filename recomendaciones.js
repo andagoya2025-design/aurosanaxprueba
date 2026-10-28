@@ -558,7 +558,7 @@
       .auro-rec-saved-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
       .auro-rec-saved-meta{font-size:12px;color:#6b7280;margin-top:4px;overflow-wrap:anywhere}
       .auro-rec-saved-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-      .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
+      .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:static;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
       .auro-rec-btn.firma{background:#6c1d52;color:#fff;border-color:#6c1d52}
       .auro-rec-btn.firma.ok{background:#166534;color:#fff;border-color:#166534}
       .auro-rec-btn.firma.proceso{background:#7c3aed;color:#fff;border-color:#7c3aed}
@@ -594,7 +594,7 @@
         .auro-rec-field input,.auro-rec-field textarea,.auro-rec-field select{font-size:16px;min-height:44px}
         .auro-rec-field textarea{min-height:135px}
         .auro-rec-check{min-height:48px;font-size:13px;padding:10px}
-        .auro-rec-actions{display:grid;grid-template-columns:1fr;bottom:6px;padding:9px}
+        .auro-rec-actions{display:grid;grid-template-columns:1fr;padding:9px}
         .auro-rec-btn{width:100%;min-height:46px;font-size:14px}
         .auro-rec-dx{grid-template-columns:78px minmax(0,1fr);align-items:start}
         .auro-rec-dx-code{width:78px}
