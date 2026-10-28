@@ -431,12 +431,52 @@
     return `${fechaBase} · ${hh}:${mm}`;
   }
 
+  // Notificaciones premium: capa visual aislada, sin llamadas al servidor.
+  let auroRecToastTimer=null;
+  function toastPremiumRecomendacion(tipo,texto){
+    const contenido=txt(texto);
+    if(!contenido) return;
+    let zona=document.getElementById('auroRecToastZone');
+    if(!zona){
+      zona=document.createElement('div');
+      zona.id='auroRecToastZone';
+      zona.className='auro-rec-toast-zone';
+      zona.setAttribute('aria-live','polite');
+      zona.setAttribute('aria-atomic','true');
+      document.body.appendChild(zona);
+    }
+    if(auroRecToastTimer){clearTimeout(auroRecToastTimer);auroRecToastTimer=null;}
+    const tipos={
+      ok:{clase:'ok',icono:'✓',titulo:'Operación completada'},
+      warn:{clase:'warn',icono:'!',titulo:'Firma electrónica'},
+      info:{clase:'info',icono:'•',titulo:'AUROSANAX'},
+      error:{clase:'error',icono:'×',titulo:'Atención requerida'}
+    };
+    const cfg=tipos[tipo]||tipos.info;
+    zona.innerHTML=`<div class="auro-rec-toast auro-rec-toast-${cfg.clase}" role="status">
+      <div class="auro-rec-toast-icon">${cfg.icono}</div>
+      <div><div class="auro-rec-toast-title">${esc(cfg.titulo)}</div>
+      <div class="auro-rec-toast-text">${esc(contenido)}</div></div></div>`;
+    const tarjeta=zona.firstElementChild;
+    auroRecToastTimer=setTimeout(()=>{
+      if(!tarjeta||!tarjeta.isConnected) return;
+      tarjeta.classList.add('auro-rec-toast-out');
+      setTimeout(()=>{
+        if(tarjeta.isConnected) tarjeta.remove();
+        if(zona && !zona.children.length) zona.remove();
+      },220);
+    },3600);
+  }
+
   function setMsg(texto, tipo){
     const el = document.getElementById('auroRecMensaje');
-    if(!el) return;
-    el.className = 'auro-rec-msg ' + (tipo || 'info');
-    el.innerHTML = texto ? esc(texto) : '';
-    el.hidden = !texto;
+    if(el){
+      el.className = 'auro-rec-msg ' + (tipo || 'info');
+      el.innerHTML = texto ? esc(texto) : '';
+      el.hidden = !texto;
+    }
+    // Mantiene el aviso original y agrega su equivalente flotante.
+    if(texto) toastPremiumRecomendacion(tipo,texto);
   }
 
   function instalarEstilos(){
@@ -445,6 +485,20 @@
     const style=document.createElement('style');
     style.id='auroRecomendacionesStyles';
     style.textContent=`
+      .auro-rec-toast-zone{position:fixed;top:18px;right:18px;z-index:2147483000;width:min(390px,calc(100vw - 28px));display:grid;gap:10px;pointer-events:none}
+      .auro-rec-toast{display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;padding:13px 15px;border-radius:16px;color:#fff;box-shadow:0 18px 45px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.14);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:auroRecToastIn .22s ease-out both}
+      .auro-rec-toast-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:rgba(255,255,255,.17);font-size:22px;font-weight:950}
+      .auro-rec-toast-title{font-size:13.5px;font-weight:950;letter-spacing:.01em;line-height:1.2}
+      .auro-rec-toast-text{font-size:12px;line-height:1.35;margin-top:3px;color:rgba(255,255,255,.92);overflow-wrap:anywhere}
+      .auro-rec-toast-ok{background:linear-gradient(135deg,#047857,#059669)}
+      .auro-rec-toast-warn{background:linear-gradient(135deg,#9a6700,#b7791f)}
+      .auro-rec-toast-info{background:linear-gradient(135deg,#6c1749,#8b1e5a)}
+      .auro-rec-toast-error{background:linear-gradient(135deg,#8f1d18,#b42318)}
+      .auro-rec-toast-out{animation:auroRecToastOut .2s ease-in both}
+      @keyframes auroRecToastIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+      @keyframes auroRecToastOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.98)}}
+      @media(prefers-reduced-motion:reduce){.auro-rec-toast,.auro-rec-toast-out{animation:none}}
+      @media(max-width:700px){.auro-rec-toast-zone{top:10px;right:10px;width:calc(100vw - 20px)}.auro-rec-toast{padding:12px 13px;border-radius:14px}}
       #auroRecomendacionesApp{width:100%;max-width:1180px;margin:0 auto;color:#1f2937}
       #auroRecomendacionesApp *{box-sizing:border-box}
       .auro-rec-shell{display:grid;gap:16px}
