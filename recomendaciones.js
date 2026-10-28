@@ -45,7 +45,6 @@
     tokenCarga: 0,
     // Estados confirmados por el servidor, asociados al ID exacto del documento.
     firmasPorDocumento: Object.create(null),
-    firmaConsultaPendiente:false,
     firma:{
       estado:'SIN_FIRMA',
       id_solicitud:'',
@@ -1159,15 +1158,14 @@
       const estadoVerificado=state.firmasPorDocumento[id];
       const firmada=(activa&&['FIRMADA','FIRMADO'].includes(e)) || estadoVerificado==='FIRMADA';
       const proceso=activa&&['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(e);
-      const sinVerificar=estadoVerificado!=='FIRMADA'&&estadoVerificado!=='SIN_FIRMA';
-      const label=firmada?'Ver recomendación firmada ✓':(proceso?'Firma en proceso…':(sinVerificar?'Verificando firma…':(activa?'Firmar recomendación':'Abrir para firmar')));
+      const label=firmada?'Ver recomendación firmada ✓':(proceso?'Firma en proceso…':(activa?'Firmar recomendación':'Abrir para firmar'));
       const indicador=firmada?'Firmada ✓':(proceso?'Firma en proceso…':(estadoVerificado==='SIN_FIRMA'?'Sin firma':'Firma sin verificar'));
       return `<div class="auro-rec-saved-item${activa?' activo':''}">
         <div class="auro-rec-saved-top"><div><b>Recomendaciones médicas${activa?' · Abierto ✓':''}</b>
         <div class="auro-rec-saved-meta">${esc(fechaVisual(r.actualizado_en||r.creado_en))} · ${esc(id)} · <strong>${esc(indicador)}</strong></div></div>
         <div class="auro-rec-saved-actions">
           <button type="button" class="auro-rec-btn" data-auro-rec-abrir="${esc(id)}">${activa?'Abierto ✓':'Abrir'}</button>
-          <button type="button" class="auro-rec-btn firma${firmada?' ok':(proceso?' proceso':'')}" data-auro-rec-firmar="${esc(id)}" ${(proceso||sinVerificar)?'disabled aria-busy="true"':''}>${label}</button>
+          <button type="button" class="auro-rec-btn firma${firmada?' ok':(proceso?' proceso':'')}" data-auro-rec-firmar="${esc(id)}" ${proceso?'disabled aria-busy="true"':''}>${label}</button>
           ${activa&&proceso&&txt(f.id_solicitud)?`<button type="button" class="auro-rec-btn cancelar-firma" data-auro-rec-cancelar="${esc(id)}">Cancelar firma</button>`:''}
         </div></div></div>`;
     }).join('');
@@ -1213,10 +1211,6 @@
         );
         if(txt((state.contexto||{}).id)!==atencion) return;
         state.firmasPorDocumento[id]=firmado?'FIRMADA':'SIN_FIRMA';
-        if(firmado && txt(state.idRecomendacion)===id && !state.modoNuevo){
-          fijarFirma('FIRMADA',{error:''});
-          aplicarModo();
-        }
         if(txt((state.contexto||{}).id)===atencion) renderRecomendacionGuardada();
       }).catch(error=>{
         // Una falla de red no significa que el documento esté sin firmar.
@@ -1245,10 +1239,6 @@
   async function abrirDocumentoRecomendacion(id){
     id=txt(id);
     if(!id||state.guardando||state.cargando) return false;
-    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(estadoFirma().estado).toUpperCase())){
-      setMsg('Hay una firma en proceso. Espere o cancele antes de abrir otra recomendación.','error');
-      return false;
-    }
     const ctx=state.contexto||contextoAtencion();
     const r=state.registros.find(x=>txt(x.id_recomendacion)===id);
     if(!r||txt(r.id_atencion)!==txt(ctx.id)){
@@ -1259,7 +1249,7 @@
     ++state.firma.token; // Invalida consultas previas de firma
     aplicarRegistro(r);
     state.modoNuevo=false;
-    state.firma={estado:'VERIFICANDO',id_solicitud:'',documento:null,error:'',token:state.firma.token};
+    state.firma={estado:'SIN_FIRMA',id_solicitud:'',documento:null,error:'',token:state.firma.token};
     aplicarModo();
     await consultarFirmaPersistenteRecomendacion();
     if(txt(state.idRecomendacion)!==id||txt((state.contexto||{}).id)!==txt(ctx.id)) return false;
@@ -1406,8 +1396,7 @@ ${recDocumentoHTML()}
     /* Protección documental: si existe PDF firmado persistente, el contenido
        clínico firmado no puede sobrescribirse con el mismo id_recomendacion. */
     const firmado=e==='FIRMADA'||e==='FIRMADO';
-    const pendienteVerificacion=e==='VERIFICANDO'||e==='ERROR_VERIFICACION';
-    if(firmado||pendienteVerificacion){
+    if(firmado){
       document.querySelectorAll(
         '#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select'
       ).forEach(el=>{el.disabled=true;});
@@ -1424,8 +1413,6 @@ ${recDocumentoHTML()}
     const idAtencion=txt(state.registro?.id_atencion||ctx.id);
     if(!id||!idAtencion||idAtencion!==txt(ctx.id)) return null;
     const token=++state.firma.token;
-    fijarFirma('VERIFICANDO',{error:''});
-    aplicarModo();
     try{
       const r=await postFirma('consultarDocumentosFirmados',{
         tipo_documento:'RECOMENDACION',
@@ -1435,7 +1422,7 @@ ${recDocumentoHTML()}
         id_receta:'',
         id_certificado:''
       });
-      if(token!==state.firma.token || txt(state.idRecomendacion)!==id || txt((state.contexto||{}).id)!==idAtencion) return null;
+      if(token!==state.firma.token) return null;
       if(!Array.isArray(r?.documentos)) throw new Error('Respuesta de firma no verificable');
       const docs=r.documentos;
       const encontrado=docs.find(x=>
@@ -1453,11 +1440,7 @@ ${recDocumentoHTML()}
       fijarFirma('SIN_FIRMA',{documento:null,id_solicitud:'',error:''});
     }catch(e){
       console.warn(MODULO+': no se pudo consultar la firma persistente de Recomendaciones.',e);
-      if(token===state.firma.token && txt(state.idRecomendacion)===id){
-        fijarFirma('ERROR_VERIFICACION',{error:txt(e.message||e)});
-        aplicarModo();
-        setMsg('No se pudo verificar la firma. Edición y firma bloqueadas hasta recargar o verificar nuevamente.','error');
-      }
+      renderFirma();
     }
     return null;
   }
@@ -1523,24 +1506,11 @@ ${recDocumentoHTML()}
   async function firmarRecomendacion(){
     const f=estadoFirma();
     if(['FIRMADA','FIRMADO'].includes(txt(f.estado).toUpperCase())) return abrirRecomendacionFirmada();
-    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO','VERIFICANDO','ERROR_VERIFICACION'].includes(txt(f.estado).toUpperCase())) return;
-    if(state.registro && hayCambiosEnDocumento()){
-      setMsg('Hay cambios sin guardar. Guarde la recomendación antes de firmarla.','error');
-      return null;
-    }
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(f.estado).toUpperCase())) return;
 
     const doc=recomendacionFirmable();
     if(!doc.success){setMsg(doc.message,'error');return null;}
 
-    // Revalidación persistente inmediatamente antes de solicitar una nueva firma.
-    await consultarFirmaPersistenteRecomendacion();
-    const estadoVerificado=txt(estadoFirma().estado).toUpperCase();
-    if(estadoVerificado==='FIRMADA'||estadoVerificado==='FIRMADO') return abrirRecomendacionFirmada();
-    if(estadoVerificado!=='SIN_FIRMA') return null;
-    if(state.registro && hayCambiosEnDocumento()){
-      setMsg('Guarde los cambios antes de firmar.','error');
-      return null;
-    }
     const tokenOperacion=++state.firma.token;
     fijarFirma('PREPARANDO',{id_solicitud:'',documento:null,error:''});
     setMsg('Preparando recomendación para firma electrónica…','info');
@@ -1633,7 +1603,7 @@ ${recDocumentoHTML()}
 
   function aplicarModo(){
     const ctx=state.contexto || contextoAtencion();
-    const editable=ctx.editable === true && !['FIRMADA','FIRMADO','VERIFICANDO','ERROR_VERIFICACION'].includes(txt(estadoFirma().estado).toUpperCase());
+    const editable=ctx.editable === true && !['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase());
     const app=document.getElementById('auroRecomendacionesApp');
     if(app) app.classList.toggle('auro-rec-readonly',!editable);
 
@@ -1743,8 +1713,6 @@ ${recDocumentoHTML()}
 
       if(!nuevoAnterior && registro && registro.id_recomendacion){
         aplicarRegistro(registro);
-        fijarFirma('VERIFICANDO',{error:''});
-        aplicarModo();
         await consultarFirmaPersistenteRecomendacion();
         if(token !== state.tokenCarga) return null;
 
@@ -1827,8 +1795,8 @@ ${recDocumentoHTML()}
       return;
     }
 
-    if(['FIRMADA','FIRMADO','VERIFICANDO','ERROR_VERIFICACION'].includes(txt(estadoFirma().estado).toUpperCase())){
-      setMsg('La recomendación está firmada o su firma no ha sido verificada. No se permite sobrescribir.','error');
+    if(['FIRMADA','FIRMADO'].includes(txt(estadoFirma().estado).toUpperCase())){
+      setMsg('La recomendación ya está firmada y no se puede sobrescribir.','error');
       return;
     }
 
