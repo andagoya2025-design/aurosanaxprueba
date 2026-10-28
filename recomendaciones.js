@@ -1239,6 +1239,12 @@
   async function abrirDocumentoRecomendacion(id){
     id=txt(id);
     if(!id||state.guardando||state.cargando) return false;
+    // Protección: una firma pendiente no puede cambiar de documento ni perder su token.
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(estadoFirma().estado).toUpperCase())){
+      if(id===txt(state.idRecomendacion) && !state.modoNuevo) return true;
+      setMsg('Hay una firma en proceso. Espere o cancele antes de abrir otra recomendación.','error');
+      return false;
+    }
     const ctx=state.contexto||contextoAtencion();
     const r=state.registros.find(x=>txt(x.id_recomendacion)===id);
     if(!r||txt(r.id_atencion)!==txt(ctx.id)){
@@ -1510,6 +1516,11 @@ ${recDocumentoHTML()}
 
     const doc=recomendacionFirmable();
     if(!doc.success){setMsg(doc.message,'error');return null;}
+    // El PDF firmado debe corresponder al último contenido guardado.
+    if(hayCambiosEnDocumento()){
+      setMsg('Existen cambios sin guardar. Guarde la recomendación antes de firmarla.','error');
+      return null;
+    }
 
     const tokenOperacion=++state.firma.token;
     fijarFirma('PREPARANDO',{id_solicitud:'',documento:null,error:''});
