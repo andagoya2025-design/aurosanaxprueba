@@ -2234,7 +2234,7 @@ ${recDocumentoHTML()}
         ${logo}
         <div>
           <div class="ar-brand">${esc(cfg.nombre)}</div>
-          ${cfg.subtitulo?`<div class="ar-brand-sub">${esc(cfg.subtitulo)}</div>`:''}
+          ${(medico.especialidad||cfg.subtitulo)?`<div class="ar-brand-sub">${esc(medico.especialidad||cfg.subtitulo)}</div>`:''}
         </div>
         <div class="ar-doc-date">${cfg.ciudad ? `${esc(cfg.ciudad)}, ` : ''}${esc(fecha)}</div>
       </header>
