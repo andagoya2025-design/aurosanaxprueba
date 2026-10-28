@@ -1483,14 +1483,14 @@ ${recDocumentoHTML()}
       const inicial=txt(creada?.estado_firma).toUpperCase();
 
       if(inicial==='FIRMADO'){
-        fijarFirma('FIRMADA',{id_solicitud,documento:creada,error:''});
+        fijarFirma('FIRMADA',{id_solicitud:idSolicitud,documento:creada,error:''});
         setMsg('Recomendación firmada electrónicamente.','ok');
         return creada;
       }
 
       if(inicial!=='PENDIENTE'||!idSolicitud) throw new Error('El servidor no creó correctamente la solicitud de firma.');
 
-      fijarFirma('PENDIENTE',{id_solicitud,error:''});
+      fijarFirma('PENDIENTE',{id_solicitud:idSolicitud,error:''});
       setMsg('Recomendación enviada al motor de firma.','info');
 
       const resultado=await esperarFirmaRecomendacion(idSolicitud,doc,tokenOperacion);
@@ -1499,7 +1499,7 @@ ${recDocumentoHTML()}
 
       if(estado==='FIRMADO'){
         const persistido=await consultarFirmaPersistenteRecomendacion();
-        if(!persistido) fijarFirma('FIRMADA',{id_solicitud,documento:resultado,error:''});
+        if(!persistido) fijarFirma('FIRMADA',{id_solicitud:idSolicitud,documento:resultado,error:''});
         setMsg('Recomendación firmada electrónicamente.','ok');
         return resultado;
       }
@@ -2119,7 +2119,7 @@ ${recDocumentoHTML()}
           <div class="ar-brand">${esc(cfg.nombre)}</div>
           ${cfg.subtitulo?`<div class="ar-brand-sub">${esc(cfg.subtitulo)}</div>`:''}
         </div>
-        <div class="ar-doc-date">${esc(cfg.ciudad)}, ${esc(fecha)}</div>
+        <div class="ar-doc-date">${cfg.ciudad ? `${esc(cfg.ciudad)}, ` : ''}${esc(fecha)}</div>
       </header>
 
       <h1>RECOMENDACIONES MÉDICAS</h1>
