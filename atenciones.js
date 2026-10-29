@@ -2267,10 +2267,16 @@
       */
       const btnIniciar = $('btnIniciarAtencion');
       if(btnIniciar){
-        btnIniciar.disabled = false;
-        btnIniciar.style.opacity = '1';
-        btnIniciar.style.cursor = 'pointer';
-        btnIniciar.innerHTML = '<i class="bi bi-play-circle me-1"></i> Iniciar';
+        // Mantener el estado según la atención real del paciente visible.
+        const idPacienteActual = idPacienteActivo();
+        const tieneAbierta = !!idPacienteActual && atencionesAbiertasPaciente(idPacienteActual).length > 0;
+        const permiteIniciar = !!idPacienteActual && !tieneAbierta;
+        btnIniciar.disabled = !permiteIniciar;
+        btnIniciar.style.opacity = permiteIniciar ? '1' : '0.55';
+        btnIniciar.style.cursor = permiteIniciar ? 'pointer' : 'not-allowed';
+        btnIniciar.innerHTML = tieneAbierta
+          ? '<i class="bi bi-lock me-1"></i> Atención abierta'
+          : '<i class="bi bi-play-circle me-1"></i> Iniciar';
       }
 
       auroActualizarBotonesProcesoAtencion();
