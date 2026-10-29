@@ -242,6 +242,9 @@ function accionesPacientePremiumHTML(idPaciente){
         <i class="bi bi-three-dots-vertical"></i> Acciones
       </button>
       <div class="auro-patient-actions-menu">
+        <button type="button" class="auro-patient-actions-item" onclick="auroAgendarCitaPaciente('${encodeURIComponent(id)}')">
+          <i class="bi bi-calendar-plus"></i> Agendar cita
+        </button>
         <button type="button" class="auro-patient-actions-item" onclick="abrirHistoriaPaciente('${id}')">
           <i class="bi bi-file-medical"></i> Historia clínica
         </button>
@@ -255,6 +258,55 @@ function accionesPacientePremiumHTML(idPaciente){
       </div>
     </div>
   `;
+}
+
+
+/* AUROSANAX - puente aislado Pacientes -> Formulario (sin escrituras). */
+function auroAgendarCitaPaciente(idPacienteCodificado){
+  let id = '';
+  try{ id = decodeURIComponent(String(idPacienteCodificado || '')).trim(); }
+  catch(_e){ alert('Identificador de paciente no válido.'); return false; }
+  const coincidencias = (Array.isArray(patients) ? patients : []).filter(p =>
+    String(p?.id_paciente || '').trim() === id
+  );
+  if(!id || coincidencias.length !== 1){
+    alert('No fue posible identificar un único paciente. Actualice el listado.');
+    return false;
+  }
+  const p = coincidencias[0];
+  let telefono = String(p.telefono || p.whatsapp || '').replace(/\D/g, '');
+  if(/^5939\d{8}$/.test(telefono)) telefono = '0' + telefono.slice(3);
+  else if(/^9\d{8}$/.test(telefono)) telefono = '0' + telefono;
+  const contexto = {
+    version: 1, origen: 'pacientes', creado_en: Date.now(),
+    paciente: {
+      id_paciente: id,
+      numero_documento: String(p.cedula || p.numero_documento || '').trim(),
+      nombres: String(p.nombres || '').trim(),
+      apellidos: String(p.apellidos || '').trim(),
+      whatsapp: telefono,
+      email: String(p.email || p.correo || '').trim()
+    }
+  };
+  const clave = 'aurosanax_cita_paciente_desde_erp_v1';
+  try{
+    sessionStorage.removeItem(clave);
+    sessionStorage.setItem(clave, JSON.stringify(contexto));
+  }catch(error){
+    console.warn('AUROSANAX: transferencia temporal no disponible.', error);
+    alert('No se pudo preparar el formulario de forma segura.');
+    return false;
+  }
+  try{
+    // Confirmar que el despliegue real use esta ruta y el MISMO origen.
+    window.location.assign('formulariocitas.html');
+    return true;
+  }catch(error){
+    try{ sessionStorage.removeItem(clave); }catch(_e){}
+    console.warn('AUROSANAX: error al abrir formulario.', error);
+    alert('No se pudo abrir el formulario de citas.');
+    return false;
+  }
 }
 
 function normalizarEstadoAgenda(estado){
@@ -578,6 +630,7 @@ function renderPatients(){
       <div class="line"><span>Servicio</span><span>${p.servicio}</span></div>
       <div class="line"><span>Última atención</span><span>${p.ultima_atencion_real ? formatearFechaVisual(p.ultima_atencion_real) : '—'}</span></div>
       <div class="d-grid gap-2 mt-2">
+        <button class="btn-soft w-100" onclick="auroAgendarCitaPaciente('${encodeURIComponent(p.id_paciente || '')}')"><i class="bi bi-calendar-plus me-1"></i> Agendar cita</button>
         <button class="btn-auro w-100" onclick="abrirHistoriaPaciente('${p.id_paciente || ''}')">Ver historia clínica</button>
         <button class="btn-soft w-100" onclick="abrirWhatsAppPaciente('${p.id_paciente || ''}')"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
         <button class="btn-soft w-100" onclick="editarPacienteModal('${p.id_paciente || ''}')"><i class="bi bi-pencil-square me-1"></i> Editar paciente</button>
