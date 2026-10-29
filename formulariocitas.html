@@ -330,6 +330,7 @@
               <div>
                 <h5>Datos del paciente</h5>
                 <p>Complete sus datos para que Secretaría pueda confirmar la cita.</p>
+                 <p id="auroAvisoPacientePrecargado" class="micro-help" role="status" hidden>Datos del paciente cargados desde AUROSANAX ERP. Revise la información antes de reservar.</p>
               </div>
             </div>
 
@@ -425,7 +426,40 @@
     const miniMonthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const miniDayNames = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 
-    async function apiGet(accion, params){
+         /* AUROSANAX - receptor de un solo uso, sin API ni guardado. */
+     function auroRecibirPacienteDesdeERP(){
+       const clave = 'aurosanax_cita_paciente_desde_erp_v1';
+       let raw = '';
+       try{
+         raw = sessionStorage.getItem(clave) || '';
+         sessionStorage.removeItem(clave);
+       }catch(_e){ return false; }
+       if(!raw) return false;
+       let contexto;
+       try{ contexto = JSON.parse(raw); }catch(_e){ return false; }
+       if(!contexto || contexto.version !== 1 || contexto.origen !== 'pacientes' ||
+          !Number.isFinite(contexto.creado_en) || contexto.creado_en > Date.now() ||
+          Date.now() - contexto.creado_en > 10 * 60 * 1000 ||
+          !String(contexto.paciente?.id_paciente || '').trim()) return false;
+       const p = contexto.paciente;
+       const campos = {
+         numero_documento: String(p.numero_documento || '').trim(),
+         nombres: String(p.nombres || '').trim(),
+         apellidos: String(p.apellidos || '').trim(),
+         whatsapp: String(p.whatsapp || '').trim(),
+         email: String(p.email || '').trim()
+       };
+       // Solo controles administrativos; no se toca médico, horario, consentimiento o envío.
+       for(const [id, valor] of Object.entries(campos)){
+         const el = document.getElementById(id);
+         if(el) el.value = valor;
+       }
+       const aviso = document.getElementById('auroAvisoPacientePrecargado');
+       if(aviso) aviso.hidden = false;
+       return true;
+     }
+
+async function apiGet(accion, params){
       const query = new URLSearchParams({accion: accion, t: Date.now()});
       if(params && typeof params === 'object'){
         Object.keys(params).forEach(k => {
@@ -1695,7 +1729,9 @@
       document.getElementById('fecha_cita').value = fechaISO(hoy);
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
-      // Configuración institucional y datos del formulario comienzan juntos.
+      auroRecibirPacienteDesdeERP();
+
+       // Configuración institucional y datos del formulario comienzan juntos.
       // Ninguna carga bloquea innecesariamente el inicio de la otra.
       const cargaConfiguracion = cargarConfiguracionCentroFormulario();
       const cargaFormulario = cargarDatosIniciales();
