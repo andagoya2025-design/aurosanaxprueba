@@ -372,6 +372,13 @@ function auroPuedeIniciarConsultaAgenda(c){
   return estado === 'confirmada' || estado === 'pendiente';
 }
 
+/* AUROSANAX - BLOQUEO ANTIRREGRESIVO POR ESTADO DE CADA CITA.
+   No altera citas pendientes/confirmadas ni la vinculación del paciente. */
+function auroCitaBloqueadaParaAccionClinicaAgenda(c){
+  const estado = normalizarEstadoAgenda(auroEstadoAgenda(c));
+  return estado === 'anulada' || estado === 'atendida' || estado === 'no asistio';
+}
+
 function auroActualizarFiltroMedicosAgenda(){
   const select = document.getElementById('agendaMedico');
   if(!select) return;
@@ -458,6 +465,11 @@ function abrirCrearPacienteDesdeAgenda(index){
     return;
   }
 
+  if(auroCitaBloqueadaParaAccionClinicaAgenda(c)){
+    alert('Esta cita no permite acciones clínicas por su estado.');
+    return;
+  }
+
   if(auroPacienteVinculadoAgenda(c)){
     renderAgendaWeb();
     alert('La cita ya tiene un paciente registrado vinculado.');
@@ -510,6 +522,12 @@ function abrirCrearPacienteDesdeAgenda(index){
 }
 
 function auroAccionClinicaAgendaHTML(c, modoMovil){
+  if(auroCitaBloqueadaParaAccionClinicaAgenda(c)){
+    return modoMovil
+      ? '<div class="auro-agenda-estado-cerrado"><i class="bi bi-check2-circle"></i> Consulta no disponible en este estado</div>'
+      : '<span class="auro-agenda-estado-cerrado"><i class="bi bi-check2-circle"></i> Sin acción clínica</span>';
+  }
+
   if(!auroPacienteVinculadoAgenda(c)){
     return modoMovil
       ? `<button class="btn-auro w-100" onclick="abrirCrearPacienteDesdeAgenda(${c.originalIndex})"><i class="bi bi-person-plus me-1"></i> Crear paciente</button>`
@@ -740,6 +758,11 @@ function abrirHistoriaDesdeAgenda(index){
   const c = citasAgendaWeb[index];
   if(!c){
     alert('No se encontró la cita seleccionada.');
+    return;
+  }
+
+  if(auroCitaBloqueadaParaAccionClinicaAgenda(c)){
+    alert('Esta cita no permite acciones clínicas por su estado.');
     return;
   }
 
