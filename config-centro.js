@@ -335,6 +335,17 @@
       document.getElementById('cfgWhatsappClinica').value = valorConfigCentro('whatsapp_clinica', '');
       document.getElementById('cfgEmailClinica').value = valorConfigCentro('email_clinica', '');
       document.getElementById('cfgDireccionClinica').value = valorConfigCentro('direccion_clinica', '');
+      /* AUROSANAX CIUDAD V2: se habilita solo después de cargar la configuración. */
+      const campoCiudad = document.getElementById('cfgCiudadClinica');
+      if(campoCiudad){
+        campoCiudad.value = valorConfigCentro('ciudad_clinica', '');
+        campoCiudad.disabled = false;
+        const ayudaCiudad = document.getElementById('cfgCiudadAyuda');
+        if(ayudaCiudad) ayudaCiudad.textContent = 'Ciudad institucional para el encabezado de certificados. Se guarda por separado de la dirección.';
+        else if(campoCiudad.nextElementSibling && campoCiudad.nextElementSibling.classList.contains('text-muted')){
+          campoCiudad.nextElementSibling.textContent = 'Ciudad institucional para el encabezado de certificados. Se guarda por separado de la dirección.';
+        }
+      }
       const logoUrlGuardado = valorConfigCentro('logo_url', '');
       const logoFileIdGuardado = valorConfigCentro('logo_file_id', '');
       document.getElementById('cfgLogoUrl').value = logoUrlGuardado || (logoFileIdGuardado ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(logoFileIdGuardado) + '&sz=w400' : '');
@@ -373,6 +384,9 @@
         await subirLogoCentroSiExiste();
       }
 
+      /* Ciudad opcional para compatibilidad con HTML anterior; no toca otros campos. */
+      const campoCiudad = document.getElementById('cfgCiudadClinica');
+
       const datosSeguros = {
         nombre_clinica: document.getElementById('cfgNombreClinica').value.trim(),
         whatsapp_clinica: document.getElementById('cfgWhatsappClinica').value.trim(),
@@ -380,6 +394,9 @@
         direccion_clinica: document.getElementById('cfgDireccionClinica').value.trim(),
         logo_url: document.getElementById('cfgLogoUrl').value.trim()
       };
+      if(campoCiudad && !campoCiudad.disabled){
+        datosSeguros.ciudad_clinica = campoCiudad.value.trim();
+      }
 
       for(const [clave, valor] of Object.entries(datosSeguros)){
         const r = await apiPost('editarConfiguracion', {clave, valor});
