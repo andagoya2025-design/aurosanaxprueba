@@ -3681,6 +3681,32 @@
     return [...new Set(partes)].join(' · ');
   }
 
+  /* AUROSANAX - Cantidad numérica expresada en letras: SOLO impresión.
+     No transforma el JSON de Plan/Recetas ni altera la persistencia.
+     Una cantidad no entera, vacía o fuera de rango se conserva tal como fue indicada. */
+  function auroRecetaCantidadEnLetras(valor){
+    const texto = String(valor ?? '').trim();
+    if(!/^\d{1,3}$/.test(texto)) return '';
+    const numero = Number(texto);
+    if(!Number.isSafeInteger(numero) || numero < 0 || numero > 999) return '';
+    const unidades = ['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve'];
+    const especiales = ['diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve'];
+    const decenas = ['','','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+    const centenas = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
+    function menorCien(n){
+      if(n < 10) return unidades[n];
+      if(n < 20) return especiales[n-10];
+      if(n === 20) return 'veinte';
+      if(n < 30) return 'veinti' + ({2:'dós',3:'trés',6:'séis'}[n-20] || unidades[n-20]);
+      const d = Math.floor(n/10), u = n%10;
+      return decenas[d] + (u ? ' y ' + unidades[u] : '');
+    }
+    if(numero === 100) return 'cien';
+    if(numero < 100) return menorCien(numero);
+    const c = Math.floor(numero/100), resto = numero%100;
+    return centenas[c] + (resto ? ' ' + menorCien(resto) : '');
+  }
+
   function auroRecetaMedicamentosPacienteHTML(valor){
     const txt = String(valor || '').trim();
     if(!txt){
@@ -3724,13 +3750,16 @@
       const presentacion = String(m.pres || '').trim();
       const cantidad = String(m.cantidad || '').trim();
       const indicaciones = auroRecetaIndicacionesTabla(m);
+      const cantidadLetras = auroRecetaCantidadEnLetras(cantidad);
 
       return `
         <tr>
           <td class="auro-rx-col-num">${index + 1}</td>
           <td class="auro-rx-col-med"><strong>${safe(nombre)}</strong></td>
           <td class="auro-rx-col-pres">${presentacion ? safe(presentacion) : '<span class="auro-rx-vacio">—</span>'}</td>
-          <td class="auro-rx-col-cant">${cantidad ? safe(cantidad) : '<span class="auro-rx-vacio">—</span>'}</td>
+          <td class="auro-rx-col-cant">${cantidad ? (cantidadLetras
+            ? `<span class="auro-rx-cantidad-inline"><span class="auro-rx-cantidad-num">${safe(cantidad)}</span> <span class="auro-rx-cantidad-letras">(${safe(cantidadLetras)})</span></span>`
+            : safe(cantidad)) : '<span class="auro-rx-vacio">—</span>'}</td>
           <td class="auro-rx-col-ind">${indicaciones ? safe(indicaciones) : '<span class="auro-rx-vacio">—</span>'}</td>
         </tr>`;
     }).join('');
@@ -4224,6 +4253,13 @@
           .auro-rx-alergias-linea{display:inline-grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:8px;max-width:100%;width:fit-content;box-sizing:border-box;margin:0 0 7px;padding:5px 9px;border:1px solid #efd8e6;border-left:3px solid #8b1e5a;border-radius:8px;background:#fffafb}
           .auro-rx-alergias-linea span{color:#8b1e5a;font-size:7.8px;font-weight:900;text-transform:uppercase;letter-spacing:.025em;white-space:nowrap}
           .auro-rx-alergias-linea b{color:#1f2937;font-size:9.5px;line-height:1.25;font-weight:800;overflow-wrap:anywhere}
+          .modo-paciente .auro-rx-alergias-linea{display:grid;grid-template-columns:auto minmax(0,1fr) auto;width:100%;align-items:center}
+          .modo-paciente .auro-rx-vigencia{border-left:1px solid #efd8e6;padding-left:7px;font-size:8.3px;color:#374151;white-space:nowrap}
+          .modo-paciente .auro-rx-vigencia strong{color:#8b1e5a;font-weight:750}
+          .auro-rx-cantidad-inline{display:inline;white-space:normal}
+          .auro-rx-cantidad-num{font-weight:650}
+          .auro-rx-cantidad-letras{font-weight:400}
+
           .auro-rx-diagnosticos-lista{display:grid;gap:2px;margin-top:1px}
           .auro-rx-diagnostico-linea{display:block;padding:0!important;border:0!important;background:transparent!important;min-height:0!important}
           .auro-rx-diagnostico-linea b{font-size:10.5px!important;line-height:1.18!important;font-weight:800!important}
@@ -4250,6 +4286,8 @@
             .modo-paciente .auro-receta-grid .auro-rx-registro{grid-column:1/-1!important;border-right:0}
             .modo-paciente .auro-receta-grid .auro-rx-registro{padding-left:7px}
             .auro-rx-alergias-linea{display:grid;grid-template-columns:1fr;width:100%;gap:2px}
+            .modo-paciente .auro-rx-alergias-linea{grid-template-columns:1fr}
+            .modo-paciente .auro-rx-vigencia{border-left:0;padding-left:0;white-space:normal}
             .auro-receta-footer{grid-template-columns:1fr}
             .auro-rx-diagnosticos-grid{grid-template-columns:1fr!important}
             .auro-rx-table-wrap{overflow-x:auto}
@@ -4263,7 +4301,7 @@
           <div class="auro-receta-title"><b>RECETA MÉDICA</b>${esAdministrativo ? `<span class="badge-auro ${estadoClass}">${safe(r.estado || 'Emitida')}</span>` : ''}</div>
         </div>
         <div class="auro-receta-grid">${datosPaciente}</div>
-        ${!esAdministrativo ? `<div class="auro-rx-alergias-linea"><span>Antecedentes de alergias</span><b>${safe(alergias)}</b></div>` : ''}
+        ${!esAdministrativo ? `<div class="auro-rx-alergias-linea"><span>Antecedentes de alergias</span><b>${safe(alergias)}</b><div class="auro-rx-vigencia"><strong>Vigencia para dispensación:</strong> 3 días desde la prescripción</div></div>` : ''}
         <div class="auro-receta-section auro-rx-tratamiento-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box">${auroRecetaMedicamentosPacienteHTML(r.medicamento)}</div></div>
         ${!esAdministrativo ? `<div class="auro-rx-cuadrantes-inferiores">
           <div class="auro-rx-cuadrante-diagnosticos">
@@ -4342,7 +4380,7 @@
           height:142.5mm;
           min-height:142.5mm;
           max-height:142.5mm;
-          padding:2mm 0 8mm;
+          padding:2mm 0 6.5mm;
           overflow:hidden;
           box-sizing:border-box;
           background:#fff;
@@ -4582,7 +4620,7 @@
         }
 
         .auro-media-receta .auro-rx-table td{
-          padding:2px 3px!important;
+          padding:1px 3px!important;
           line-height:1.10!important;
           overflow-wrap:anywhere!important;
           word-break:normal!important;
@@ -4607,10 +4645,17 @@
         }
 
         .auro-media-receta .auro-rx-w-num{width:5%!important}
-        .auro-media-receta .auro-rx-w-med{width:21%!important}
-        .auro-media-receta .auro-rx-w-pres{width:23%!important}
-        .auro-media-receta .auro-rx-w-cant{width:9%!important}
-        .auro-media-receta .auro-rx-w-ind{width:42%!important}
+        .auro-media-receta .auro-rx-w-med{width:19%!important}
+        .auro-media-receta .auro-rx-w-pres{width:21%!important}
+        .auro-media-receta .auro-rx-w-cant{width:15%!important}
+        .auro-media-receta .auro-rx-w-ind{width:40%!important}
+        /* Números a la izquierda y equivalencia en letras sin negrita pesada. */
+        .auro-media-receta .auro-rx-col-cant{text-align:left!important;font-weight:600!important}
+        .auro-media-receta .auro-rx-cantidad-num{font-weight:600!important}
+        .auro-media-receta .auro-rx-cantidad-letras{font-size:9.2px!important;font-weight:400!important}
+        .auro-media-receta .auro-rx-vigencia{font-size:8px!important;line-height:1.10!important}
+        .auro-media-receta .auro-rx-alergias-linea{width:100%!important;display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important}
+        .auro-media-receta .auro-rx-alergias-linea .auro-rx-vigencia{white-space:nowrap!important}
 
         /* IASYN2: cuadrantes inferiores, solo presentación; sin alterar motor de firma */
         .auro-media-receta .auro-rx-cuadrantes-inferiores{
@@ -5084,7 +5129,7 @@
               <button type="button" onclick="auroCambiarZoom(10)" title="Aumentar zoom">+</button>
               <button type="button" class="auro-preview-fit" onclick="auroAjustarZoom()" title="Ajustar a la ventana">Ajustar</button>
             </div>
-            <button type="button" class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+            <button type="button" class="auro-preview-btn" onclick="auroImprimirRecetaValidada()">Imprimir / Guardar PDF</button>
             <button type="button" class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
           </div>
         </div>
@@ -5115,6 +5160,24 @@
                 etiqueta.textContent = auroZoomActual + '%';
               }
             }
+
+            // Inspección DOM únicamente al imprimir: evita ocultar firma o diagnósticos
+            // cuando el tratamiento excede la capacidad física de media hoja.
+            window.auroImprimirRecetaValidada = function(){
+              const ejemplares = document.querySelectorAll('.auro-media-receta');
+              const excede = Array.from(ejemplares).some(function(ejemplar){
+                const contenido = ejemplar.querySelector('.auro-ejemplar-contenido');
+                const inferior = ejemplar.querySelector('.auro-rx-cuadrantes-inferiores');
+                if(!contenido || !inferior) return true;
+                const limite = contenido.getBoundingClientRect().bottom;
+                return inferior.getBoundingClientRect().bottom > limite + 1;
+              });
+              if(excede){
+                window.alert('La receta contiene más texto del que cabe completo en ORIGINAL y COPIA en una hoja A4. Para evitar recortar diagnósticos o firma, revise y prepare una versión con páginas adicionales antes de imprimir. No se han modificado los medicamentos.');
+                return;
+              }
+              window.print();
+            };
 
             window.auroCambiarZoom = function(cambio){
               auroZoomActual = Math.max(
