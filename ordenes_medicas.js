@@ -54,6 +54,7 @@ const state={
   diagnosticosTarjetaId:'',
   diagnosticosTarjetaCargados:false,
   diagnosticosTarjetaCargando:false,
+  diagnosticosTarjetaOculta:false,
   diagnosticosTarjetaToken:0
 };
 
@@ -434,6 +435,7 @@ function reiniciarDiagnosticosTarjeta(id){
   state.diagnosticosMarcados=new Set();
   state.diagnosticosTarjetaCargados=false;
   state.diagnosticosTarjetaCargando=false;
+  state.diagnosticosTarjetaOculta=false;
 }
 
 async function cargarTarjetaDiagnosticos(){
@@ -475,9 +477,14 @@ function tarjetaDiagnosticosHTML(){
     <div class="aom-dx-card-head"><div><strong>Diagnósticos de esta atención</strong><small>Elija los diagnósticos que aparecerán en la próxima orden médica. No cambia la historia clínica.</small></div>
       ${listo?`<span class="aom-dx-count">${seleccionados} de ${state.diagnosticosTarjeta.length}</span>`:''}
     </div>
-    ${!listo?`<button type="button" class="aom-btn" data-aom-cargar-dx="1" ${state.diagnosticosTarjetaCargando?'disabled':''}>${state.diagnosticosTarjetaCargando?'Cargando diagnósticos…':'Mostrar y seleccionar diagnósticos'}</button>`:
-      state.diagnosticosTarjeta.length?`<div class="aom-dx-options">${state.diagnosticosTarjeta.map((d,i)=>`<label class="aom-dx-option"><input type="checkbox" data-aom-dx="${i}" ${state.diagnosticosMarcados.has(claveDiagnosticoTarjeta(d))?'checked':''}><span><b>${esc(codigoCie10VisualOrden(d.codigo_cie10)||'S/C')}</b> ${esc(d.descripcion)}${d.principal?' · Principal':''}${d.tipo_diagnostico?' · '+esc(d.tipo_diagnostico):''}</span></label>`).join('')}</div>`:
-      '<div class="aom-empty">No hay diagnósticos registrados en esta atención.</div>'}
+    ${!listo
+      ? state.diagnosticosTarjetaCargando
+        ? '<div class="aom-empty">Cargando diagnósticos de la atención…</div>'
+        : '<button type="button" class="aom-btn" data-aom-cargar-dx="1">Reintentar carga de diagnósticos</button>'
+      : `<button type="button" class="aom-btn" data-aom-alternar-dx="1" aria-expanded="${!state.diagnosticosTarjetaOculta}">${state.diagnosticosTarjetaOculta?'Mostrar diagnósticos':'Ocultar diagnósticos'}</button>
+         ${state.diagnosticosTarjetaOculta?'':state.diagnosticosTarjeta.length
+           ? `<div class="aom-dx-options" style="margin-top:9px">${state.diagnosticosTarjeta.map((d,i)=>`<label class="aom-dx-option"><input type="checkbox" data-aom-dx="${i}" ${state.diagnosticosMarcados.has(claveDiagnosticoTarjeta(d))?'checked':''}><span><b>${esc(codigoCie10VisualOrden(d.codigo_cie10)||'S/C')}</b> ${esc(d.descripcion)}${d.principal?' · Principal':''}${d.tipo_diagnostico?' · '+esc(d.tipo_diagnostico):''}</span></label>`).join('')}</div>`
+           : '<div class="aom-empty">No hay diagnósticos registrados en esta atención.</div>'}`}
     </section>`;
 }
 
@@ -877,6 +884,10 @@ function render(){
 
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
   app.querySelector('[data-aom-cargar-dx]')?.addEventListener('click',cargarTarjetaDiagnosticos);
+  app.querySelector('[data-aom-alternar-dx]')?.addEventListener('click',()=>{
+    state.diagnosticosTarjetaOculta=!state.diagnosticosTarjetaOculta;
+    render();
+  });
   app.querySelectorAll('[data-aom-dx]').forEach(c=>c.addEventListener('change',()=>{
     const dx=state.diagnosticosTarjeta[Number(c.dataset.aomDx)];
     if(!dx)return;
@@ -1362,6 +1373,9 @@ async function cargar(){
     return [];
   }
 
+  // Carga paralela de la tarjeta: no bloquea historial, firma ni guardado.
+  // La propia función evita duplicados en la misma atención.
+  void cargarTarjetaDiagnosticos();
   const token=++state.token;
   try{
     await cargarAuxiliares(ctx);
@@ -1407,7 +1421,8 @@ function instalarEventos(){
   window.addEventListener('aurosanax:consulta-seleccionada',cargar);
 
   document.addEventListener('click',e=>{
-    if(e.target?.closest?.('#hc_plan')){
+    // Evitar que el redibujado de Plan destruya el checkbox durante el clic.
+    if(e.target?.closest?.('#hc_plan') && !e.target?.closest?.('#iasynOrdenMedicaFormalApp')){
       queueMicrotask(refrescarEstadoLocal);
     }
   });
