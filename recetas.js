@@ -4339,9 +4339,9 @@
 
         .auro-media-receta{
           position:relative;
-          height:140mm;
-          min-height:140mm;
-          max-height:140mm;
+          height:142.5mm;
+          min-height:142.5mm;
+          max-height:142.5mm;
           padding:2mm 0 8mm;
           overflow:hidden;
           box-sizing:border-box;
@@ -4354,7 +4354,7 @@
 
         .auro-media-copia{
           border-top:1px dashed #8b8f97;
-          margin-top:4mm;
+          margin-top:0mm;
           padding-top:4mm;
         }
 
