@@ -4649,8 +4649,8 @@
         .auro-media-receta .auro-rx-w-pres{width:21%!important}
         .auro-media-receta .auro-rx-w-cant{width:15%!important}
         .auro-media-receta .auro-rx-w-ind{width:40%!important}
-        /* Números a la izquierda y equivalencia en letras sin negrita pesada. */
-        .auro-media-receta .auro-rx-col-cant{text-align:left!important;font-weight:600!important}
+        /* Número y equivalencia en letras centrados como conjunto, sin negrita pesada. */
+        .auro-media-receta .auro-rx-col-cant{text-align:center!important;font-weight:600!important}
         .auro-media-receta .auro-rx-cantidad-num{font-weight:600!important}
         .auro-media-receta .auro-rx-cantidad-letras{font-size:9.2px!important;font-weight:400!important}
         .auro-media-receta .auro-rx-vigencia{font-size:8px!important;line-height:1.10!important}
