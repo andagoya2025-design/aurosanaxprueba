@@ -2133,6 +2133,12 @@ function showSecurityPanel(id,btn){
           <label class="form-label fw-bold">Registro MSP</label>
           <input id="medMsp" class="form-control" value="${safeText(m.registro_msp || '')}" placeholder="Opcional">
         </div>
+        <!-- AUROSANAX FIRMA QR ETAPA 1: dato profesional por médico; persistencia depende de scrib.gs. -->
+        <div class="col-12">
+          <label class="form-label fw-bold" for="medEntidadCertificadora">Entidad certificadora de firma electrónica</label>
+          <input id="medEntidadCertificadora" class="form-control" maxlength="160" autocomplete="off" value="${safeText(m.entidad_certificadora || '')}" placeholder="Ej. Nombre oficial de la entidad emisora del certificado">
+          <div class="text-muted small mt-1">Ingrese el nombre verificado de la entidad emisora del certificado de este médico. No introduzca contraseñas ni archivos de firma.</div>
+        </div>
         <div class="col-md-6">
           <label class="form-label fw-bold">Teléfono</label>
           <input id="medTelefono" class="form-control" value="${safeText(m.telefono || '')}" placeholder="0999999999">
@@ -2276,6 +2282,7 @@ function showSecurityPanel(id,btn){
       especialidad_principal: document.getElementById('medEspecialidad').value.trim(),
       registro_senescyt: document.getElementById('medSenescyt').value.trim(),
       registro_msp: document.getElementById('medMsp').value.trim(),
+      entidad_certificadora: document.getElementById('medEntidadCertificadora').value.trim(),
       telefono: document.getElementById('medTelefono').value.trim(),
       email: document.getElementById('medEmail').value.trim(),
       estado: document.getElementById('medEstado').value || 'Activo'
