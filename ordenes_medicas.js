@@ -1292,7 +1292,7 @@ function docHTML(data,opciones={}){
   // cada examen; en documentos históricos se conserva la presentación anterior.
   const codigosElegidos=new Set(diagnosticos.map(dx=>norm(codigoCie10VisualOrden(dx.codigo_cie10))));
   const permitirCieItem=o=>!Array.isArray(d.diagnosticos_disponibles)||codigosElegidos.has(norm(codigoCie10VisualOrden(o.codigo_cie10)));
-  const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a';
+  const ciudad=txt(state.configuracion?.ciudad)||txt(normalizarConfig(configGlobal()).ciudad)||txt(d.centro?.ciudad||d.centro?.ciudad_clinica); const color=txt(centro.colorPrincipal)||'#8b1e5a';
   // La preferencia del logo es actual, igual que en CERTIFICADOS.
   const actual=Object.assign({},configGlobal(),state.configuracion||{});
   const permitido=actual.mostrarLogo!==false && txt(actual.mostrar_logo_receta??actual.mostrar_logo).toUpperCase()!=='NO';
