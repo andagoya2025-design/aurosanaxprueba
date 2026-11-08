@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.8-IASYN-CANCELACION-CONTROLADA';
+const VERSION='1.4.9-SIM-ANTIRREGRESIVA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -312,33 +312,36 @@ function normalizarConfig(c){
   };
 }
 
-async function cargarAuxiliares(ctx){
-  state.paciente=resolverPaciente(ctx);
-  state.historia=resolverHistoria(ctx);
+async function cargarAuxiliares(ctx,tokenCarga){
+  // Construir todo localmente. Una petición de otra atención nunca puede
+  // sobrescribir los auxiliares de la atención vigente.
+  const paciente=resolverPaciente(ctx);
+  const historia=resolverHistoria(ctx);
   let cfg=normalizarConfig(configGlobal());
   try{
     const remoto=await get('obtenerConfiguracion');
     const datos=remoto?.configuracion||remoto?.datos||remoto?.data||remoto||{};
     cfg=normalizarConfig(Object.assign({},configGlobal(),datos));
   }catch(e){}
-  state.configuracion=cfg;
   // Solo lectura: obtener el logotipo institucional en formato embebible.
   // No interviene en Diagnósticos, el contrato de firma ni la paginación.
-  state.logoInstitucionalDataUrl='';
+  let logoInstitucionalDataUrl='';
   try{
     const respuesta=await post('obtenerLogoInstitucionalFirma',{});
     const imagen=txt(respuesta?.data_url||respuesta?.data?.data_url);
     if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(imagen)){
-      state.logoInstitucionalDataUrl=imagen;
+      logoInstitucionalDataUrl=imagen;
     }
   }catch(e){
     // Backend sin este servicio: mantener el comportamiento previo.
   }
+  let medicos=[];
   try{
-    state.medicos=arr(await get('listarMedicosActivos'));
-  }catch(e){
-    state.medicos=[];
-  }
+    medicos=arr(await get('listarMedicosActivos'));
+  }catch(e){ medicos=[]; }
+  if(tokenCarga!==state.token||txt(contexto().id)!==ctx.id) return false;
+  Object.assign(state,{paciente,historia,configuracion:cfg,logoInstitucionalDataUrl,medicos});
+  return true;
 }
 
 function itemOrdenNormalizado(o){
@@ -417,6 +420,17 @@ async function cargarDiagnosticosParaEmision(idAtencion){
     }
   }else{
     registros=registros.filter(d=>txt(d.id_atencion)===id);
+  }
+  // Un [] correcto y una respuesta incompleta parecen idénticos.
+  // Verificar vacío por vía alternativa antes de permitir emisión.
+  if(filtradoServidor && !registros.length){
+    let alternativa;
+    try{
+      const r=await get('listarDiagnosticos');
+      if(!Array.isArray(r)&&!Array.isArray(r?.registros)&&!Array.isArray(r?.data)) throw Error('Formato alternativo incorrecto');
+      alternativa=arr(r).filter(d=>txt(d.id_atencion)===id);
+    }catch(e){throw Error('No se pudo confirmar si esta atención tiene diagnósticos. Reintente.');}
+    registros=alternativa;
   }
   return diagnosticosUnicosOrden(registros);
 }
@@ -785,7 +799,7 @@ function instalarCSS(){
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
 .aom-doc-table th{background:#f8fafc;text-align:left}
  .aom-doc-table thead{display:table-header-group}.aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
-.aom-paper-breve{display:flex;flex-direction:column;min-height:267mm}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important;padding-top:12mm}.aom-doc-bottom{position:static;margin-top:12mm;padding-top:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}.aom-contact-line{display:flex;align-items:flex-start;gap:6px;margin:2px 0;break-inside:avoid}.aom-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-paper-breve{display:flex;flex-direction:column;min-height:267mm}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important;padding-top:12mm}.aom-paper.aom-multipagina{display:block;min-height:0}.aom-paper.aom-multipagina .aom-doc-bottom{margin-top:10mm!important;padding-top:9mm!important}.aom-doc-bottom{position:static;margin-top:12mm;padding-top:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}.aom-contact-line{display:flex;align-items:flex-start;gap:6px;margin:2px 0;break-inside:avoid}.aom-contact-icon{width:12px;height:12px;flex:0 0 12px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -857,6 +871,10 @@ function estadoPrimario(){
 function render(){
   const app=document.getElementById('iasynOrdenMedicaFormalApp');
   if(!app) return;
+  if(txt(contexto().id)!==txt(state.idAtencion)){
+    app.innerHTML='<div class="aom-shell"><div class="aom-empty">Actualizando la atención seleccionada…</div></div>';
+    return;
+  }
   const e=estadoPrimario();
   const emitidas=state.ordenesEmitidas.slice().sort((a,b)=>{
     const fecha=txt(b.actualizado_en||b.creado_en||b.fecha_emision).localeCompare(txt(a.actualizado_en||a.creado_en||a.fecha_emision));
@@ -874,6 +892,7 @@ function render(){
         <button type="button" id="iasynOrdenMedicaBtnPrincipal" class="aom-primary" ${e.disabled?'disabled':''}>
           <i class="bi ${esc(e.icono)}"></i> ${esc(e.texto)}
         </button>
+        ${!ordenActivaFormal() && !e.disabled?'<button type="button" class="aom-btn" id="iasynOrdenMedicaVistaBorrador">Vista previa sin guardar</button>':''}
       </div>
       <div id="iasynOrdenMedicaAviso" class="aom-notice ${e.disabled?'warn':''}">${esc(e.nota)}</div>
       <div class="aom-history">
@@ -883,6 +902,7 @@ function render(){
     </div>`;
 
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
+  document.getElementById('iasynOrdenMedicaVistaBorrador')?.addEventListener('click',vistaPreviaBorrador);
   app.querySelector('[data-aom-cargar-dx]')?.addEventListener('click',cargarTarjetaDiagnosticos);
   app.querySelector('[data-aom-alternar-dx]')?.addEventListener('click',()=>{
     state.diagnosticosTarjetaOculta=!state.diagnosticosTarjetaOculta;
@@ -964,6 +984,22 @@ async function accionPrincipal(){
   const activaFormal=activas[0]||null;
   if(activaFormal) return vistaPreviaPorId(activaFormal.id_orden);
   return emitir();
+}
+
+async function vistaPreviaBorrador(){
+  if(state.cargaFallida) return aviso('No se ha confirmado el historial de esta atención.','err');
+  const id=txt(contexto().id);
+  if(!id||txt(state.idAtencion)!==id) return aviso('Cambió la atención. Actualice la orden.','err');
+  if(!state.diagnosticosTarjetaCargados || state.diagnosticosTarjetaId!==id){
+    await cargarTarjetaDiagnosticos();
+    if(!state.diagnosticosTarjetaCargados || txt(contexto().id)!==id) return;
+  }
+  try{
+    const datos=datosDocumentoDesdePlan(diagnosticosElegidosTarjeta());
+    datos.id_orden='BORRADOR — NO EMITIDA';
+    datos.detalle_json.diagnosticos_disponibles=diagnosticosUnicosOrden(state.diagnosticosTarjeta);
+    imprimirDocumento(datos,false);
+  }catch(e){aviso('Vista previa: '+txt(e.message||e),'err');}
 }
 
 async function emitir(){
@@ -1152,7 +1188,7 @@ function agregarFilaEditorFormal(modal){
   const fila=tmp.firstElementChild; if(!fila) return; lista.appendChild(fila); conectarFilaEditorFormal(fila); fila.querySelector('[data-campo="orden"]')?.focus();
 }
 
-function editarFormal(id){
+async function editarFormal(id){
   const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id)); if(!reg) return;
   const ctx=contexto();
   if(txt(reg.id_atencion)!==txt(ctx.id)){ aviso('La orden solicitada no pertenece a la atención seleccionada.','err'); return; }
@@ -1160,7 +1196,16 @@ function editarFormal(id){
   if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)){ aviso('Esta versión es histórica y no puede editarse.','warn'); return; }
   cerrarEditorFormal(); state.editandoId=txt(reg.id_orden);
   const data=datosDocumentoEmitido(reg); const items=itemsUnicos(data.detalle_json.items||[]); const catalogo=catalogoOrdenesFormal();
-  const dxDisponibles=diagnosticosUnicosOrden(data.detalle_json.diagnosticos_disponibles||data.detalle_json.diagnosticos||[]);
+  // Combinar snapshot del documento con Diagnóstico actual de la MISMA atención.
+  // Mantener solamente los originales marcados; nunca alterar el diagnóstico clínico.
+  let dxActuales=[];
+  try{ dxActuales=await cargarDiagnosticosParaEmision(ctx.id); }
+  catch(e){ return aviso('No se pudo verificar Diagnóstico para editar: '+txt(e.message||e),'err'); }
+  if(txt(contexto().id)!==ctx.id||txt(state.idAtencion)!==ctx.id) return;
+  const dxDisponibles=diagnosticosUnicosOrden([
+    ...(data.detalle_json.diagnosticos_disponibles||[]),
+    ...(data.detalle_json.diagnosticos||[]),...dxActuales
+  ]);
   const dxElegidos=new Set(diagnosticosUnicosOrden(data.detalle_json.diagnosticos||[]).map(claveDiagnosticoTarjeta));
   const modal=document.createElement('div'); modal.id='iasynOrdenMedicaEditorModal'; modal.className='aom-modal';
   modal.innerHTML=`<div class="aom-modal-panel" role="dialog" aria-modal="true" aria-labelledby="aomEditorTitulo">
@@ -1280,6 +1325,7 @@ async function anular(id){
 function imprimirPorId(id){
   const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
   if(!reg) return;
+  if(txt(reg.id_atencion)!==txt(contexto().id)) return aviso('La orden no pertenece a la atención seleccionada.','err');
   imprimirDocumento(datosDocumentoEmitido(reg),true);
 }
 
@@ -1312,12 +1358,8 @@ function docHTML(data,opciones={}){
   const contactoPie=lineaPie('ubicacion',ubicacion)+lineaPie('correo',cfgPie.email)+lineaPie('telefono',cfgPie.telefono);
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
   const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional" onerror="this.parentElement.remove();this.closest('.aom-doc-head')?.classList.add('no-logo')"></div>`:'';
-  // Para órdenes breves el cierre se ancla al fondo de la primera hoja A4.
-  // Para órdenes largas se usa flujo normal paginado, sin estirar las tablas.
-  const contenidoBreve=items.length<=7 && diagnosticos.length<=5 &&
-    items.every(o=>(txt(o.orden).length+txt(o.obs).length)<115) &&
-    txt(d.observaciones_generales).length<180;
-  return `<article class="aom-paper${contenidoBreve?' aom-paper-breve':''}" style="--aom-color:${esc(color)}">
+  // La paginación usa geometría real medida, no número fijo de exámenes.
+  const doc=`<article class="aom-paper" style="--aom-color:${esc(color)}">
     <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ', ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
@@ -1326,6 +1368,37 @@ function docHTML(data,opciones={}){
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
     <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoPie}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}<br><span>Firma y sello</span></div></section>
   </article>`;
+  return paginacionInteligenteOrden(doc);
+}
+
+/* Simulación anti-regresión: medición aislada, sin guardar ni consultar backend.
+ * El navegador conserva el control final de fragmentación de tablas y firma. */
+function paginacionInteligenteOrden(html){
+  let marco;
+  try{
+    marco=document.createElement('iframe');
+    marco.setAttribute('aria-hidden','true');
+    marco.style.cssText='position:fixed;left:-10000px;top:0;width:210mm;height:267mm;visibility:hidden;pointer-events:none;border:0';
+    document.body.appendChild(marco);
+    const d=marco.contentDocument;
+    if(!d) return html.replace('class="aom-paper"','class="aom-paper aom-multipagina"');
+    d.open();
+    d.write('<!doctype html><html><head><meta charset="utf-8"><style>'+estilosImpresion()+
+      '.aom-paper{min-height:0!important;display:block!important}.aom-doc-bottom{margin-top:10mm!important;padding-top:9mm!important}'+
+      '</style></head><body>'+html+'</body></html>');
+    d.close();
+    const papel=d.querySelector('.aom-paper');
+    const alto=papel?.getBoundingClientRect().height||0;
+    const regla=d.createElement('div');
+    regla.style.cssText='height:1mm;visibility:hidden;position:absolute';
+    d.body.appendChild(regla);
+    const pxmm=regla.getBoundingClientRect().height||3.779527559;
+    const cabe=alto>0&&alto<=(267-2)*pxmm;
+    return html.replace('class="aom-paper"',cabe?'class="aom-paper aom-paper-breve"':'class="aom-paper aom-multipagina"');
+  }catch(e){
+    console.warn('AUROSANAX Órdenes: medición A4 no disponible; paginación fluida segura.',e);
+    return html.replace('class="aom-paper"','class="aom-paper aom-multipagina"');
+  }finally{if(marco) marco.remove();}
 }
 
 function estilosImpresion(){
@@ -1338,7 +1411,7 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:0!important;position:relative!important;padding:0 17mm!important}.aom-paper-breve{display:flex!important;flex-direction:column!important;min-height:267mm!important}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:0!important;position:relative!important;padding:0 17mm!important}.aom-paper-breve{display:flex!important;flex-direction:column!important;min-height:267mm!important}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important}.aom-paper.aom-multipagina{display:block!important;min-height:0!important}.aom-paper.aom-multipagina .aom-doc-bottom{margin-top:10mm!important;padding-top:9mm!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}}
   `;
 }
 
@@ -1359,12 +1432,25 @@ function imprimirDocumento(data,autoPrint=false){
 
 async function cargar(){
   const ctx=contexto();
-  if(state.diagnosticosTarjetaId!==ctx.id) reiniciarDiagnosticosTarjeta(ctx.id);
+  const token=++state.token;
+  const cambio=state.idAtencion!==ctx.id;
+  if(cambio){
+    // Limpieza inmediata: ni siquiera una respuesta vieja puede redibujar la orden.
+    state.ordenesEmitidas=[];
+    state.firmasPorDocumento={};
+    state.firmaConsultaToken++;
+    state.cargaFallida=true;
+    state.ultimoAviso=null;
+    cerrarEditorFormal();
+    reiniciarDiagnosticosTarjeta(ctx.id);
+  }else if(state.diagnosticosTarjetaId!==ctx.id){
+    reiniciarDiagnosticosTarjeta(ctx.id);
+  }
   state.contexto=ctx;
   state.idAtencion=ctx.id;
   state.editandoId='';
-
   if(!state.montado) montar();
+  if(cambio) render();
   if(!ctx.id){
     state.ordenesEmitidas=[];
     state.firmasPorDocumento={};
@@ -1376,11 +1462,10 @@ async function cargar(){
   // Carga paralela de la tarjeta: no bloquea historial, firma ni guardado.
   // La propia función evita duplicados en la misma atención.
   void cargarTarjetaDiagnosticos();
-  const token=++state.token;
   try{
-    await cargarAuxiliares(ctx);
+    if(!await cargarAuxiliares(ctx,token)) return [];
     const r=await get('listarOrdenesMedicasPorAtencion',{id_atencion:ctx.id});
-    if(token!==state.token) return [];
+    if(token!==state.token||txt(contexto().id)!==ctx.id) return [];
     if(!Array.isArray(r)&&!Array.isArray(r?.registros)&&!Array.isArray(r?.data)) throw Error('Respuesta del historial inválida o incompleta.');
     state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
     state.cargaFallida=false;
@@ -1392,14 +1477,14 @@ async function cargar(){
       return state.ordenesEmitidas;
     }
   }catch(e){
-    if(token!==state.token) return [];
+    if(token!==state.token||txt(contexto().id)!==ctx.id) return [];
     state.ordenesEmitidas=[];
     state.cargaFallida=true;
     render();
     aviso('El módulo está listo, pero el backend de órdenes médicas aún no respondió: '+(e.message||e),'warn');
     return [];
   }
-  render();
+  if(token===state.token&&txt(contexto().id)===ctx.id) render();
   return state.ordenesEmitidas;
 }
 
@@ -1413,7 +1498,7 @@ function instalarEventos(){
   window.__iasynOrdenesMedicasEventos=true;
 
   window.addEventListener('aurosanax:plan-cargado',()=>{
-    state.editandoId='';
+    cerrarEditorFormal();
     cargar();
   });
   window.addEventListener('aurosanax:atencion-seleccionada',cargar);
