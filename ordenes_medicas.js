@@ -141,30 +141,32 @@ function respuestaOk(r){
   return false;
 }
 
+/* AISLAMIENTO QUIRÚRGICO V1.4.9: la atención MAESTRA tiene prioridad.
+ * Abrir Historia NO activa Consulta. Un null oficial no autoriza reutilizar
+ * planState, Examen Físico, Diagnóstico ni globals residuales.
+ * El selector de paciente es una segunda barrera de identidad (solo lectura).
+ */
 function activa(){
-  try{
-    const a=window.getAtencionActiva?.();
-    if(a?.id_atencion) return a;
-  }catch(e){}
-  try{
-    const a=window.obtenerContextoAtencionActual?.();
-    if(a?.id_atencion) return a;
-  }catch(e){}
-  return window.atencionesState?.atencionActual||window.currentAttention||window.atencionActual||null;
+  let a=null;
+  if(typeof window.getAtencionActiva==='function'){
+    try{a=window.getAtencionActiva();}catch(e){return null;}
+  }else{
+    // Compatibilidad para integraciones antiguas sin fuente maestra.
+    try{a=window.obtenerContextoAtencionActual?.();}catch(e){}
+    if(!a?.id_atencion) a=window.atencionesState?.atencionActual||window.currentAttention||window.atencionActual||null;
+  }
+  if(!a?.id_atencion||!txt(a.id_paciente)) return null;
+  const selector=document.getElementById('hcPacienteSelect');
+  const pacienteVisible=txt(selector?selector.value:window.activePatientId);
+  if(!pacienteVisible||pacienteVisible!==txt(a.id_paciente)) return null;
+  const historiaVisible=txt(window.auroHistoriaSeleccionadaId||'');
+  if(historiaVisible&&txt(a.id_historia)&&historiaVisible!==txt(a.id_historia)) return null;
+  return a;
 }
 
 function idActiva(){
-  try{
-    const x=txt(window.getIdAtencionActiva?.());
-    if(x) return x;
-  }catch(e){}
-  const a=activa();
-  return txt(
-    a?.id_atencion||
-    window.planState?.atencionActual||
-    window.examenFisicoState?.atencionActual||
-    window.auroDiagnosticosState?.atencionActual
-  );
+  // Nunca recuperar un id_atencion desde Plan o cache clínico secundario.
+  return txt(activa()?.id_atencion);
 }
 
 function contexto(){
@@ -1504,6 +1506,11 @@ function instalarEventos(){
   window.addEventListener('aurosanax:atencion-seleccionada',cargar);
   window.addEventListener('aurosanax:atencion-cambiada',cargar);
   window.addEventListener('aurosanax:consulta-seleccionada',cargar);
+  // Atenciones emite esta invalidación cuando Historia deja la consulta SIN seleccionar.
+  // cargar() invalida tokens, cierra el editor y borra SOLO la tarjeta visual;
+  // no altera documentos persistidos ni solicitudes de firma existentes.
+  window.addEventListener('aurosanax:atencion-limpiada',cargar);
+  window.addEventListener('aurosanax:historia-nueva',cargar);
 
   document.addEventListener('click',e=>{
     // Evitar que el redibujado de Plan destruya el checkbox durante el clic.
