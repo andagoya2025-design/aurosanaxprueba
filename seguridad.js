@@ -126,6 +126,29 @@
 
   let enviandoLogin = false;
 
+  // Sesiones independientes por pestaña/equipo: renovar solo con actividad reciente.
+  const SEGURIDAD_VIGENCIA_SERVIDOR_SEGUNDOS = 21600; // Script 77: 6 h.
+  let ultimaActividadSesion_ = Date.now();
+  let revalidacionEnCurso_ = false;
+
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (evento) {
+    document.addEventListener(evento, function () { ultimaActividadSesion_ = Date.now(); }, { passive: true });
+  });
+
+  window.setInterval(function () {
+    if (document.hidden || document.getElementById('formLogin')) return;
+    if (Date.now() - ultimaActividadSesion_ > SEGURIDAD_CONFIG.intervaloRevalidacionMs) return;
+    if (!sessionStorage.getItem(SEGURIDAD_CONFIG.claveToken)) return;
+    if (requiereRevalidacionServidor_()) revalidarSesionEnSegundoPlano_();
+  }, 60000);
+
+  window.addEventListener('online', function () {
+    if (!document.hidden && !document.getElementById('formLogin') &&
+        sessionStorage.getItem(SEGURIDAD_CONFIG.claveToken)) {
+      revalidarSesionEnSegundoPlano_();
+    }
+  });
+
   /* ========================================================
      INICIALIZACIÓN
      ======================================================== */
@@ -495,7 +518,8 @@
       limpiarSesionLocal();
     } catch (error) {
       console.warn('No se pudo validar la sesión existente:', error);
-      limpiarSesionLocal();
+      // Conexión intermitente: conservar token local, sin conceder acceso nuevo.
+      mostrarError('No se pudo comprobar la conexión. Intente nuevamente.');
     } finally {
       establecerEstadoBoton(false, 'Iniciar sesión');
     }
@@ -562,9 +586,15 @@
       {};
 
     const sesion = Object.assign({}, sesionActual, {
-      token: obtenerTokenSesion(),
+      token: sessionStorage.getItem(SEGURIDAD_CONFIG.claveToken) || '',
       usuario: usuario
     });
+
+    // Script 77 renueva CacheService 21600 segundos al validar con éxito.
+    // Nunca extender la sesión en caso de error o respuesta negativa.
+    const expiraEn = Date.now() + SEGURIDAD_VIGENCIA_SERVIDOR_SEGUNDOS * 1000;
+    sesion.expira_en = expiraEn;
+    sessionStorage.setItem(SEGURIDAD_CONFIG.claveExpiracion, String(expiraEn));
 
     sessionStorage.setItem(
       SEGURIDAD_CONFIG.claveSesion,
@@ -654,25 +684,54 @@
   }
 
   async function revalidarSesionEnSegundoPlano_() {
+    if (revalidacionEnCurso_) return;
     const token = obtenerTokenSesion();
     if (!token) return;
+    revalidacionEnCurso_ = true;
 
     try {
       const respuesta = await apiGet('validarSesion', { token: token });
+      // Una respuesta antigua no puede afectar el inicio de sesión posterior.
+      if (sessionStorage.getItem(SEGURIDAD_CONFIG.claveToken) !== token) return;
 
       if (respuesta && respuesta.success === true) {
         actualizarSesionValidada(respuesta);
+        mostrarConexionSeguridad_('');
         return;
       }
 
+      // La respuesta 'Sesión dañada' puede incluir fallos internos del Script 77.
+      // No confundir con revocación, pero el backend debe revalidarse para operar.
+      if (respuesta && /sesión dañada/i.test(String(respuesta.message || ''))) {
+        mostrarConexionSeguridad_('No se pudo verificar la sesión. Reintentaremos.');
+        return;
+      }
+
+      // Una negativa explícita del servidor invalida el token.
       limpiarSesionLocal();
       window.location.replace(SEGURIDAD_CONFIG.paginaLogin);
     } catch (error) {
-      console.warn(
-        'No se pudo revalidar la sesión en segundo plano:',
-        error
-      );
+      console.warn('No se pudo revalidar la sesión en segundo plano:', error);
+      mostrarConexionSeguridad_('Conexión interrumpida. Los cambios deben confirmarse en el servidor.');
+    } finally {
+      revalidacionEnCurso_ = false;
     }
+  }
+
+  function mostrarConexionSeguridad_(mensaje) {
+    let aviso = document.getElementById('aurosanax-estado-conexion-seguridad');
+    if (!mensaje) {
+      if (aviso) aviso.remove();
+      return;
+    }
+    if (!aviso) {
+      aviso = document.createElement('div');
+      aviso.id = 'aurosanax-estado-conexion-seguridad';
+      aviso.setAttribute('role', 'status');
+      aviso.style.cssText = 'position:fixed;top:12px;right:12px;z-index:2147483647;max-width:300px;padding:9px 12px;border-radius:8px;background:#fff4dc;color:#6d4300;border:1px solid #e4c47c;font:13px Arial,sans-serif;box-shadow:0 2px 8px #0002';
+      document.body.appendChild(aviso);
+    }
+    aviso.textContent = mensaje;
   }
 
   /* ========================================================
@@ -1977,8 +2036,13 @@
         { token: sesionLocal.token }
       );
 
+      if (sessionStorage.getItem(SEGURIDAD_CONFIG.claveToken) !== sesionLocal.token) {
+        return { success: false, message: 'La sesión cambió durante la validación.' };
+      }
+
       if (respuesta && respuesta.success === true) {
         actualizarSesionValidada(respuesta);
+        mostrarConexionSeguridad_('');
         return respuesta;
       }
 
