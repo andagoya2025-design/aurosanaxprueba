@@ -6332,8 +6332,40 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     return txt.includes('guardar corrección') || txt.includes('guardando receta');
   }
 
+  /* PLAN 41.1: contexto visible de la firma, sin alterar la atención ni los datos. */
+  function contextoFirmaVigente(){
+    const a = typeof window.getAtencionActiva === 'function'
+      ? window.getAtencionActiva() : null;
+    const idAtencion = String(a?.id_atencion || '').trim();
+    const selector = document.getElementById('hcPacienteSelect');
+    const idPaciente = String(selector ? selector.value : (window.activePatientId || '')).trim();
+    return !!(idAtencion && idPaciente &&
+      String(a?.id_paciente || '').trim() === idPaciente);
+  }
+
+  function actualizarVisibilidadFirma(){
+    const b = btn();
+    if(!b) return false;
+    if(!contextoFirmaVigente()){
+      ++secuencia;
+      ocultarVisorHistorico();
+      cerrarMenuFirmaHistorica();
+      limpiarReintentoFirmado();
+      b.disabled = true;
+      b.style.display = 'none';
+      b.setAttribute('data-auro-firma-sin-atencion','1');
+      return false;
+    }
+    if(b.getAttribute('data-auro-firma-sin-atencion') === '1'){
+      b.style.removeProperty('display');
+      b.removeAttribute('data-auro-firma-sin-atencion');
+    }
+    return true;
+  }
+
   function obtenerDocumentoGuardadoActual(){
     try{
+      if(!contextoFirmaVigente()) return null;
       if(
         !window.auroRecetas ||
         typeof window.auroRecetas.obtenerDocumentoFirmableActual !== 'function'
@@ -6350,6 +6382,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
 
       if(
         !String(d.id_atencion || '').trim() ||
+        String(d.id_atencion || '').trim() !== String(window.getAtencionActiva()?.id_atencion || '').trim() ||
         !String(d.id_receta || '').trim() ||
         !String(d.html_documento || '').trim()
       ) return null;
@@ -6562,9 +6595,20 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     return window.auroFirmaElectronica.obtenerEstadoVersionDocumento(verificado);
   }
 
+  function pintarFirmaNoVerificada(){
+    const b = btn();
+    if(!b || operativo) return;
+    b.disabled = true;
+    b.setAttribute('data-auro-estado-documental','NO_VERIFICADO');
+    b.style.cursor = 'not-allowed';
+    b.title = 'No se pudo verificar el estado de la receta. Inténtelo nuevamente.';
+    b.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> Firma no verificada';
+  }
+
   async function sincronizar(){
     const miSecuencia = ++secuencia;
     if(operativo) return null;
+    if(!actualizarVisibilidadFirma()) return {success:true, estado:'SIN_ATENCION'};
 
     if(estaEditandoReceta()){
       ocultarVisorHistorico();
@@ -6581,14 +6625,19 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     try{
       const r = await obtenerEstadoPersistente();
       if(miSecuencia !== secuencia || operativo) return r;
+      if(!actualizarVisibilidadFirma()) return r;
       if(r && r.success){
         pintarDocumento(r.estado);
         pintarVisorHistorico(r);
       }else{
         ocultarVisorHistorico();
+        pintarFirmaNoVerificada();
       }
       return r;
     }catch(error){
+      if(miSecuencia === secuencia && !operativo && contextoFirmaVigente()){
+        pintarFirmaNoVerificada();
+      }
       console.warn('AUROSANAX PLAN 37.3: estado de firma no disponible', error);
       return null;
     }
@@ -6668,6 +6717,11 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   document.addEventListener('click', function(ev){
     const b = ev.target?.closest?.('#' + BTN_ID);
     if(!b) return;
+    if(!actualizarVisibilidadFirma()){
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      return;
+    }
 
     if(estaEditandoReceta()){
       ev.preventDefault();
@@ -6756,6 +6810,21 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   document.addEventListener('visibilitychange', function(){
     if(!document.hidden && !operativo) sincronizar();
   });
+
+  // Cambios reales de contexto y apertura desde Pacientes (sin sobrescribir funciones).
+  ['aurosanax:atencion-limpiada','aurosanax:atencion-seleccionada',
+   'aurosanax:historia-nueva','aurosanax:plan-cargado'].forEach(function(nombre){
+    window.addEventListener(nombre, function(){
+      if(!operativo) sincronizar();
+    });
+  });
+  document.addEventListener('change', function(ev){
+    if(ev.target?.id === 'hcPacienteSelect' && !operativo) sincronizar();
+  });
+  document.addEventListener('click', function(ev){
+    const accion = ev.target?.closest?.('[onclick*="abrirHistoriaPaciente("]');
+    if(accion) setTimeout(function(){ if(!operativo) sincronizar(); }, 0);
+  }, true);
 
   window.auroPlanSincronizarEstadoFirmaReceta = sincronizar;
 
