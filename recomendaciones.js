@@ -1564,6 +1564,18 @@ ${recDocumentoHTML()}
     return null;
   }
 
+  /* V1.3.7 MULTIEQUIPO — Lee el ID real del motor local (mismo servicio que Órdenes).
+     Nunca inventa un equipo: si el motor local no responde, bloquea el envío. */
+  async function obtenerEquipoLocalRecomendacion(){
+    const servicio=window.auroFirmaElectronica;
+    if(!servicio || typeof servicio.obtenerEquipoLocal!=='function'){
+      throw new Error('No está disponible la identificación del motor de firma local.');
+    }
+    const equipo=txt(await servicio.obtenerEquipoLocal());
+    if(!equipo) throw new Error('No se identificó esta computadora. Verifique el motor de firma local.');
+    return equipo;
+  }
+
   async function firmarRecomendacion(){
     const f=estadoFirma();
     if(['FIRMADA','FIRMADO'].includes(txt(f.estado).toUpperCase())) return abrirRecomendacionFirmada();
@@ -1591,7 +1603,13 @@ ${recDocumentoHTML()}
         );
       }
 
-      const creada=await postFirma('firmarDocumento',doc);
+      /* V1.3.7 MULTIEQUIPO: la firma se dirige SOLO al motor de ESTA computadora,
+         igual que Receta, Certificado y Orden médica. Sin equipo local no se envía. */
+      const equipoLocal=await obtenerEquipoLocalRecomendacion();
+      const creada=await postFirma('firmarDocumento',Object.assign({},doc,{
+        id_equipo_destino:equipoLocal,
+        id_equipo_origen:equipoLocal
+      }));
       if(tokenOperacion!==state.firma.token) return null;
 
       const idSolicitud=txt(creada?.id_solicitud);
