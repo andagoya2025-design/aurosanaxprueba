@@ -6857,18 +6857,23 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     const st = document.createElement('style');
     st.id = STYLE_ID;
     st.textContent = `
-      #${BAR_ID}{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px!important;align-items:stretch!important;}
+      #${BAR_ID}{display:flex!important;flex-wrap:wrap!important;gap:10px!important;align-items:stretch!important;}
       #${BAR_ID} > button,
-      #${BAR_ID} > .auro-plan-reset-inline-v25 > button{min-height:44px!important;padding:9px 14px!important;border-radius:13px!important;
-        font-size:13px!important;font-weight:800!important;line-height:1.2!important;text-align:center!important;
-        white-space:nowrap!important;margin:0!important;width:100%!important;}
-      #${BAR_ID} > .auro-plan-reset-inline-v25{display:flex!important;gap:10px!important;width:100%!important;margin:0!important;padding:0!important;}
-      #${BAR_ID} > .auro-plan-reset-inline-v25 > button{flex:1 1 0!important;}
-      #${BAR_ID} > #${BTN_ID}{background:#f8fafc!important;border:1px solid #cbd5e1!important;color:#334155!important;}
+      #${BAR_ID} > .auro-plan-reset-inline-v25 > button{min-height:44px!important;padding:9px 16px!important;border-radius:13px!important;
+        font-size:13px!important;font-weight:800!important;line-height:1.2!important;white-space:nowrap!important;margin:0!important;text-align:center!important;width:auto!important;}
+      #${BAR_ID} > button{flex:1 1 0!important;min-width:max-content!important;max-width:260px!important;}
+      #${BAR_ID} > .auro-plan-reset-inline-v25{display:flex!important;gap:10px!important;flex:1 1 0!important;min-width:max-content!important;max-width:260px!important;margin:0!important;padding:0!important;}
+      #${BAR_ID} > .auro-plan-reset-inline-v25 > button{flex:1 1 0!important;min-width:max-content!important;}
+      #${BAR_ID} > button.btn-soft{border:1px solid #f3c6dd!important;}
+      #${BAR_ID} > #${BTN_ID}{flex:0 0 auto!important;min-width:124px!important;padding:9px 14px!important;background:#f8fafc!important;border:1px solid #cbd5e1!important;color:#334155!important;}
       #${BAR_ID} > #${BTN_ID}:hover{background:#eef2f7!important;}
       #${BAR_ID} > #${BTN_ID}[aria-busy="true"]{opacity:.7!important;cursor:wait!important;}
-      @media(max-width:760px){#${BAR_ID}{grid-template-columns:1fr 1fr;}}
-      @media(max-width:420px){#${BAR_ID}{grid-template-columns:1fr;}}
+      @media(max-width:760px){
+        #${BAR_ID} > button,#${BAR_ID} > .auro-plan-reset-inline-v25,#${BAR_ID} > #${BTN_ID}{flex:1 1 calc(50% - 5px)!important;max-width:none!important;}
+      }
+      @media(max-width:420px){
+        #${BAR_ID} > button,#${BAR_ID} > .auro-plan-reset-inline-v25,#${BAR_ID} > #${BTN_ID}{flex:1 1 100%!important;max-width:none!important;}
+      }
     `;
     document.head.appendChild(st);
   }
