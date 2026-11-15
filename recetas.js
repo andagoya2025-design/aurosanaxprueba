@@ -4077,6 +4077,7 @@
               <div class="auro-receta-context-name">${safe(nombre)}</div>
             </div>
             <div class="auro-receta-context-actions">
+              <button type="button" class="btn-action soft" id="btnVerCambiosReceta" title="Trae recetas y firmas hechas en otra computadora" onclick="if(typeof window.auroRecetaVerCambios==='function') window.auroRecetaVerCambios()"><i class="bi bi-arrow-repeat me-1"></i> Ver cambios</button>
               <button type="button" class="btn-action soft" onclick="if(typeof showScreen==='function') showScreen('historia')"><i class="bi bi-journal-medical me-1"></i> Ver historia</button>
               <button type="button" class="btn-action success" onclick="if(typeof abrirWhatsAppHistoria==='function') abrirWhatsAppHistoria()"><i class="bi bi-whatsapp me-1"></i> WhatsApp</button>
             </div>
@@ -6442,7 +6443,6 @@
       actions.insertBefore(btn, actions.firstChild);
       auroRecetaActualizarBotonVistaPrevia();
     }
-    auroRecetaAgregarBotonActualizar(actions);
     auroRecetaAfinarInterfazPremium();
   }
 
@@ -6455,17 +6455,6 @@
      - Si el servidor aún no tiene la acción, no hace nada (comportamiento actual). */
   /* ACTUALIZAR SEGURO (manual): trae recetas y firmas del paciente hechas en otra PC.
      NO toca el formulario abierto; si la receta abierta cambió, solo avisa. */
-  function auroRecetaAgregarBotonActualizar(actions){
-    if(!actions || el('btnActualizarRecetas')) return;
-    const btn = document.createElement('button');
-    btn.id = 'btnActualizarRecetas';
-    btn.type = 'button';
-    btn.className = 'btn-soft';
-    btn.title = 'Trae recetas y firmas hechas en otra computadora';
-    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Actualizar';
-    btn.onclick = auroRecetaActualizarManual;
-    actions.insertBefore(btn, actions.firstChild);
-  }
   async function auroRecetaActualizarManual(){
     if(recetaGuardando){
       mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Espere: la receta se está guardando.', '');
@@ -6485,6 +6474,36 @@
     }
     return true;
   }
+
+  /* VER CAMBIOS desde Plan o Recetas: trae del servidor SOLO las recetas del paciente
+     abierto y refresca el estado de firma. No toca formularios ni guarda nada. */
+  async function auroRecetaTraerCambiosPaciente(){
+    if(recetaGuardando) return {success:false, motivo:'GUARDANDO'};
+    const paciente = obtenerPacienteActivoSeguro();
+    const idPaciente = String(paciente?.id_paciente || paciente?.id || '').trim();
+    if(!idPaciente || typeof API_URL === 'undefined' || !API_URL) return {success:false, motivo:'SIN_PACIENTE'};
+    try{
+      const res = await fetch(API_URL + '?accion=listarRecetasPorPaciente&id_paciente=' +
+        encodeURIComponent(idPaciente) + '&_=' + Date.now(), {method:'GET', cache:'no-store'});
+      if(res.ok){
+        const data = await res.json();
+        if(Array.isArray(data) && !recetaGuardando){
+          mezclarRecetasLocalesYSheets(data);
+          if(el('recetas') && el('recetas').classList.contains('active')){
+            renderHistorialRecetas();
+            actualizarBotonGuardarReceta();
+          }
+        }
+      }
+    }catch(_e){
+      /* Sin conexión: se conserva la copia local actual. */
+    }
+    auroRecetaFirmaPersistenteUltimoRefresco = 0;
+    auroRecetaRefrescarFirmasAlRetomar();
+    return {success:true};
+  }
+  window.auroRecetaTraerCambiosPaciente = auroRecetaTraerCambiosPaciente;
+  window.auroRecetaVerCambios = function(){ return auroRecetaActualizarManual(); };
 
   let auroRecetaRefrescoRemotoUltimo = 0;
   let auroRecetaRefrescoRemotoEnCurso = false;
