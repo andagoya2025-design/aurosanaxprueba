@@ -1541,17 +1541,42 @@ ${recDocumentoHTML()}
     }
   }
 
+  /* V1.3.8 VELOCIDAD + ESTABILIDAD (adhesión antirregresiva):
+     - Consulta cada 1 s, igual que Receta y Certificado (antes 2,5 s).
+     - Un corte breve de red NO reinicia a "Sin firma": reintenta y conserva
+       la solicitud, evitando que el médico cree una segunda firma.
+     - Límite de espera de 35 min, igual que Órdenes médicas. Al vencer, la
+       solicitud se conserva visible para Cancelar; no se crea otra. */
+  const REC_FIRMA_INTERVALO_MS=1000;
+  const REC_FIRMA_ESPERA_MAX_MS=35*60*1000;
+
+  function recErrorRedTransitorio(error){
+    if(error instanceof TypeError) return true; // fetch sin conexión
+    return /HTTP (408|425|429|5\d\d)\b/.test(txt(error&&error.message));
+  }
+
   async function esperarFirmaRecomendacion(idSolicitud,doc,tokenOperacion){
+    const inicio=Date.now();
     while(tokenOperacion===state.firma.token){
-      const r=await postFirma('obtenerEstadoFirmaElectronica',{
-        id_solicitud:idSolicitud,
-        tipo_documento:'RECOMENDACION',
-        id_documento_origen:doc.id_recomendacion,
-        id_recomendacion:doc.id_recomendacion,
-        id_atencion:doc.id_atencion,
-        id_receta:'',
-        id_certificado:''
-      });
+      if(Date.now()-inicio>REC_FIRMA_ESPERA_MAX_MS) return {estado_firma:'TIEMPO_AGOTADO'};
+      let r;
+      try{
+        r=await postFirma('obtenerEstadoFirmaElectronica',{
+          id_solicitud:idSolicitud,
+          tipo_documento:'RECOMENDACION',
+          id_documento_origen:doc.id_recomendacion,
+          id_recomendacion:doc.id_recomendacion,
+          id_atencion:doc.id_atencion,
+          id_receta:'',
+          id_certificado:''
+        });
+      }catch(error){
+        if(!recErrorRedTransitorio(error)) throw error;
+        console.warn(MODULO+': corte temporal al consultar la firma; se reintenta.',error);
+        await new Promise(resolve=>setTimeout(resolve,REC_FIRMA_INTERVALO_MS*2));
+        continue;
+      }
+      if(tokenOperacion!==state.firma.token) return null;
       const e=txt(r?.estado_firma).toUpperCase();
       if(e==='FIRMADO') return r;
       if(e==='CANCELADA'||e==='CANCELADO') return r;
@@ -1559,7 +1584,7 @@ ${recDocumentoHTML()}
       if(e==='EXPIRADA') throw new Error(txt(r?.error)||'La solicitud de firma expiró.');
       if(!['PENDIENTE','TOMADA'].includes(e)) throw new Error('El servidor devolvió un estado de firma no reconocido.');
       fijarFirma(e,{id_solicitud:idSolicitud,error:''});
-      await new Promise(resolve=>setTimeout(resolve,2500));
+      await new Promise(resolve=>setTimeout(resolve,REC_FIRMA_INTERVALO_MS));
     }
     return null;
   }
@@ -1594,14 +1619,8 @@ ${recDocumentoHTML()}
     setMsg('Preparando recomendación para firma electrónica…','info');
 
     try{
-      const motor=await postFirma('obtenerEstadoFirmaElectronica',{});
-      if(motor?.disponible!==true){
-        throw new Error(
-          motor?.agente_online===false
-            ? 'El motor de firma de Windows no está conectado. Inícielo y vuelva a intentar.'
-            : 'La firma electrónica no está disponible en este momento.'
-        );
-      }
+      /* V1.3.8: se elimina la consulta previa redundante, igual que Receta V2.6.
+         El servidor valida el motor al crear la solicitud y responde el mismo error. */
 
       /* V1.3.7 MULTIEQUIPO: la firma se dirige SOLO al motor de ESTA computadora,
          igual que Receta, Certificado y Orden médica. Sin equipo local no se envía. */
@@ -1630,6 +1649,13 @@ ${recDocumentoHTML()}
       const resultado=await esperarFirmaRecomendacion(idSolicitud,doc,tokenOperacion);
       if(!resultado) return null;
       const estado=txt(resultado?.estado_firma).toUpperCase();
+
+      if(estado==='TIEMPO_AGOTADO'){
+        // Se conserva la solicitud: el médico puede Cancelar; no se crea otra.
+        fijarFirma('PENDIENTE',{id_solicitud:idSolicitud,error:''});
+        setMsg('La firma sigue pendiente después de 35 minutos. Revise el motor de ESTA computadora o use "Cancelar firma". No se creará otra solicitud.','error');
+        return null;
+      }
 
       if(estado==='FIRMADO'){
         const persistido=await consultarFirmaPersistenteRecomendacion();
