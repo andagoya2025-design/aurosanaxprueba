@@ -895,6 +895,7 @@ function render(){
           <i class="bi ${esc(e.icono)}"></i> ${esc(e.texto)}
         </button>
         ${!ordenActivaFormal() && !e.disabled?'<button type="button" class="aom-btn" id="iasynOrdenMedicaVistaBorrador">Vista previa sin guardar</button>':''}
+        <button type="button" class="aom-btn" id="iasynOrdenMedicaBtnActualizar" title="Trae firmas y órdenes hechas en otra computadora"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
       </div>
       <div id="iasynOrdenMedicaAviso" class="aom-notice ${e.disabled?'warn':''}">${esc(e.nota)}</div>
       <div class="aom-history">
@@ -905,6 +906,7 @@ function render(){
 
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
   document.getElementById('iasynOrdenMedicaVistaBorrador')?.addEventListener('click',vistaPreviaBorrador);
+  document.getElementById('iasynOrdenMedicaBtnActualizar')?.addEventListener('click',actualizarOrdenesSeguro);
   app.querySelector('[data-aom-cargar-dx]')?.addEventListener('click',cargarTarjetaDiagnosticos);
   app.querySelector('[data-aom-alternar-dx]')?.addEventListener('click',()=>{
     state.diagnosticosTarjetaOculta=!state.diagnosticosTarjetaOculta;
@@ -965,6 +967,19 @@ function aviso(msg,tipo=''){
   if(!el) return;
   el.className='aom-notice'+(tipo?' '+tipo:'');
   el.textContent=msg;
+}
+
+/* ACTUALIZAR SEGURO (manual, nunca automático): recarga órdenes y firmas de la
+   atención abierta sin recargar la página ni cerrar la historia clínica.
+   No interrumpe guardado ni firma en proceso; si el editor está abierto, pregunta. */
+async function actualizarOrdenesSeguro(){
+  if(state.guardando){ aviso('Espere: se está guardando la orden.','warn'); return null; }
+  if(state.firmaProcesos && state.firmaProcesos.size){ aviso('Hay una firma en proceso. Espere a que termine antes de actualizar.','warn'); return null; }
+  if(document.getElementById('iasynOrdenMedicaEditorModal')){
+    if(!window.confirm('Tiene el editor de la orden abierto.\n\n¿Actualizar de todas formas? Se perderán los cambios sin guardar del editor.')) return null;
+    cerrarEditorFormal();
+  }
+  return cargar();
 }
 
 function setGuardando(v){

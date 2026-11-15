@@ -738,7 +738,7 @@
 
           <div class="auro-rec-actions">
             <button type="button" class="auro-rec-btn nuevo" id="auroRecBtnNueva"><i class="bi bi-plus-circle me-1"></i> Nueva recomendación</button>
-             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
+             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Actualizar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn cancelar-firma" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
             <!-- V1.3.1 ANTIRREGRESIÓN:
@@ -1865,6 +1865,7 @@ ${recDocumentoHTML()}
       renderContexto();
       renderFirma();
       renderRecomendacionGuardada();
+      state.recFotoFormulario=recFotoFormulario(); // V1.3.9: referencia para detectar cambios sin guardar
       return nuevoAnterior?null:(registro || null);
     }catch(e){
       console.error(MODULO+':',e);
@@ -1873,6 +1874,33 @@ ${recDocumentoHTML()}
     }finally{
       state.cargando=false;
     }
+  }
+
+  /* V1.3.9 ACTUALIZAR SEGURO (manual, nunca automático)
+     - No interrumpe un guardado, una carga ni una firma en proceso.
+     - Si hay cambios sin guardar, pregunta antes de recargar.
+     - Si no hay cambios, hace exactamente lo mismo que el botón Recargar anterior. */
+  function recFotoFormulario(){
+    try{ return JSON.stringify(detalleActual()); }catch(_e){ return ''; }
+  }
+  async function recActualizarSeguro(){
+    if(state.guardando||state.cargando){
+      setMsg('Espere: se está guardando o cargando la información.','info');
+      return null;
+    }
+    const estado=txt(estadoFirma().estado).toUpperCase();
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO','EN_PROCESO','PROCESANDO'].includes(estado)){
+      setMsg('Hay una firma en proceso. Espere a que termine antes de actualizar.','info');
+      return null;
+    }
+    const ctx=contextoAtencion();
+    const foto=txt(state.recFotoFormulario);
+    const cambios=!!(ctx.editable && foto && foto!==recFotoFormulario());
+    if(cambios && !window.confirm('Tiene cambios sin guardar en Recomendaciones.\n\n¿Actualizar de todas formas? Se perderán esos cambios.')){
+      setMsg('Actualización cancelada. Sus cambios siguen en pantalla.','info');
+      return null;
+    }
+    return cargar(true);
   }
 
   function datosGuardar(){
@@ -2482,7 +2510,7 @@ html,body{background:#dfe3e8}
     }
     if(recargarBtn && recargarBtn.dataset.auroRec!=='1'){
       recargarBtn.dataset.auroRec='1';
-      recargarBtn.addEventListener('click',()=>cargar(true));
+      recargarBtn.addEventListener('click',recActualizarSeguro); // V1.3.9: antes cargar(true) sin protección
     }
     if(vistaBtn && vistaBtn.dataset.auroRec!=='1'){
       vistaBtn.dataset.auroRec='1';
