@@ -6442,6 +6442,7 @@
       actions.insertBefore(btn, actions.firstChild);
       auroRecetaActualizarBotonVistaPrevia();
     }
+    auroRecetaAgregarBotonActualizar(actions);
     auroRecetaAfinarInterfazPremium();
   }
 
@@ -6452,6 +6453,39 @@
      - No toca el formulario en edición ni la limpieza por cambio de atención.
      - No corre mientras se guarda; máximo una consulta cada 5 s.
      - Si el servidor aún no tiene la acción, no hace nada (comportamiento actual). */
+  /* ACTUALIZAR SEGURO (manual): trae recetas y firmas del paciente hechas en otra PC.
+     NO toca el formulario abierto; si la receta abierta cambió, solo avisa. */
+  function auroRecetaAgregarBotonActualizar(actions){
+    if(!actions || el('btnActualizarRecetas')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btnActualizarRecetas';
+    btn.type = 'button';
+    btn.className = 'btn-soft';
+    btn.title = 'Trae recetas y firmas hechas en otra computadora';
+    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Actualizar';
+    btn.onclick = auroRecetaActualizarManual;
+    actions.insertBefore(btn, actions.firstChild);
+  }
+  async function auroRecetaActualizarManual(){
+    if(recetaGuardando){
+      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Espere: la receta se está guardando.', '');
+      return null;
+    }
+    const abierta = recetaEditandoId ? buscarRecetaPorId(recetaEditandoId) : null;
+    const versionAntes = abierta ? String(abierta.actualizado_en || abierta.creado_en || '') : '';
+    await auroRecetaRefrescarRemotoPaciente(true);
+    auroRecetaFirmaPersistenteUltimoRefresco = 0;
+    auroRecetaRefrescarFirmasAlRetomar();
+    const ahora = recetaEditandoId ? buscarRecetaPorId(recetaEditandoId) : null;
+    const versionAhora = ahora ? String(ahora.actualizado_en || ahora.creado_en || '') : '';
+    if(abierta && versionAhora && versionAhora !== versionAntes){
+      mostrarMensajeReceta('<i class="bi bi-info-circle me-1"></i> Esta receta fue modificada en otra computadora. Ábrala de nuevo desde el historial para ver la versión actual.', '');
+    }else{
+      mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Recetas y firmas actualizadas.', 'ok');
+    }
+    return true;
+  }
+
   let auroRecetaRefrescoRemotoUltimo = 0;
   let auroRecetaRefrescoRemotoEnCurso = false;
   async function auroRecetaRefrescarRemotoPaciente(forzar){

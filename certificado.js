@@ -619,7 +619,7 @@ function html(){
       </div>
 
       <div class="ac-card">
-        <div class="ac-head">Certificados emitidos</div>
+        <div class="ac-head">Certificados emitidos <button type="button" class="ac-btn ac-soft" id="acActualizar" style="float:right;padding:4px 10px" title="Trae firmas y certificados hechos en otra computadora">Actualizar</button></div>
         <div class="ac-body" id="acHistorial"></div>
       </div>
     </div>
@@ -692,6 +692,20 @@ function toastPremium(tipo,texto){
   },3600);
 }
 
+/* ACTUALIZAR SEGURO (manual): refresca SOLO la lista de certificados y sus firmas
+   de la atención abierta. No toca el formulario ni recarga la página. */
+async function actualizarCertificadosSeguro(){
+  const id=txt(state.idAtencion);
+  if(!id){ msg('info','Seleccione una atención.'); return null; }
+  if(state.guardando){ msg('info','Espere: se está guardando el certificado.'); return null; }
+  for(const f of state.firmaCertificados.values()){
+    if(['PREPARANDO','PENDIENTE','TOMADA','PROCESO','EN_PROCESO','PROCESANDO'].includes(txt(f&&f.estado).toUpperCase())){ msg('info','Hay una firma en proceso. Espere a que termine antes de actualizar.'); return null; }
+  }
+  await cargarHistorial(id,state.token);
+  msg('ok','Certificados y firmas actualizados.');
+  return true;
+}
+
 function msg(t,s){
   const e=document.getElementById('acMsg');
   if(e) e.innerHTML=s?`<div class="ac-msg ac-${t}">${esc(s)}</div>`:'';
@@ -746,6 +760,7 @@ function eventos(){
   document.getElementById('acVista')?.addEventListener('click',()=>vista(false));
   document.getElementById('acImprimir')?.addEventListener('click',()=>vista(true));
   document.getElementById('acNuevo')?.addEventListener('click',nuevo);
+  document.getElementById('acActualizar')?.addEventListener('click',actualizarCertificadosSeguro);
   document.querySelectorAll('#auroCertificadosApp [data-ac-expand]').forEach(btn=>{btn.addEventListener('click',()=>abrirEditorAmpliado(btn.getAttribute('data-ac-expand')));});
 }
 
