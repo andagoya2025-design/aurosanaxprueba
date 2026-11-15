@@ -3414,7 +3414,7 @@
   let idEquipoCache_ = '';
   let idEquipoCacheEn_ = 0;
   let promesaEquipo_ = null;
-  const TTL_EQUIPO_MS_ = 5 * 60 * 1000;
+  const TTL_EQUIPO_MS_ = 60 * 1000; // V3.9: 1 min (antes 5). /health es local; evita firmar con el motor ya cerrado.
 
   async function consultarEquipoLocal_(){
     const controlador = typeof AbortController !== 'undefined' ? new AbortController() : null;
