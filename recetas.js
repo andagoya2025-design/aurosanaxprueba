@@ -3016,6 +3016,27 @@
     });
   }
 
+  /* RECETA VELOCIDAD V1 (F1): antes de guardar, trae SOLO las recetas de esta
+     atención (listarRecetasPorAtencion) y las mezcla con la copia local, con la
+     misma regla de siempre. Si el servidor aún no tiene esa acción o falla,
+     vuelve al método anterior (descarga completa). Protección anti-duplicado intacta. */
+  async function auroRecetaSincronizarAtencion(idAtencion){
+    const id = String(idAtencion || '').trim();
+    if(!id || typeof API_URL === 'undefined' || !API_URL) return cargarRecetasDesdeSheets(true);
+    try{
+      const res = await fetch(API_URL + '?accion=listarRecetasPorAtencion&id_atencion=' +
+        encodeURIComponent(id) + '&_=' + Date.now(), {method:'GET', cache:'no-store'});
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if(!Array.isArray(data)) throw new Error('Respuesta no compatible');
+      mezclarRecetasLocalesYSheets(data); // ya guarda la copia local
+      return leerRecetasStorage();
+    }catch(error){
+      console.warn('AUROSANAX RECETAS: consulta por atención no disponible; se usa la descarga completa.', error);
+      return cargarRecetasDesdeSheets(true);
+    }
+  }
+
   function buscarRecetaActivaPorAtencion(idAtencion){
     const id = String(idAtencion || '').trim();
     if(!id) return null;
@@ -5472,7 +5493,7 @@
         - No modifica Plan, Atenciones, medicamentos, diagnóstico ni PDF.
       */
       if(!recetaEditandoId && !recetaNuevaForzada){
-        await cargarRecetasDesdeSheets(true);
+        await auroRecetaSincronizarAtencion(idAtencionGuardar);
         const existenteAtencion = buscarRecetaActivaPorAtencion(idAtencionGuardar);
         if(existenteAtencion && existenteAtencion.id_receta){
           recetaEditandoId = String(existenteAtencion.id_receta);
@@ -6425,6 +6446,40 @@
   }
 
 
+  /* RECETA VELOCIDAD V1 (F3): refresca el historial del paciente abierto desde el
+     servidor (solo sus recetas, liviano) al entrar a Recetas, al cambiar de atención
+     y al volver a la ventana. Así otra PC ve la receta nueva sin Ctrl+Shift+R.
+     - No toca el formulario en edición ni la limpieza por cambio de atención.
+     - No corre mientras se guarda; máximo una consulta cada 5 s.
+     - Si el servidor aún no tiene la acción, no hace nada (comportamiento actual). */
+  let auroRecetaRefrescoRemotoUltimo = 0;
+  let auroRecetaRefrescoRemotoEnCurso = false;
+  async function auroRecetaRefrescarRemotoPaciente(forzar){
+    if(recetaGuardando || auroRecetaRefrescoRemotoEnCurso) return;
+    if(!el('recetas') || !el('recetas').classList.contains('active')) return;
+    const ahora = Date.now();
+    if(!forzar && ahora - auroRecetaRefrescoRemotoUltimo < 5000) return;
+    const paciente = obtenerPacienteActivoSeguro();
+    const idPaciente = String(paciente?.id_paciente || paciente?.id || '').trim();
+    if(!idPaciente || typeof API_URL === 'undefined' || !API_URL) return;
+    auroRecetaRefrescoRemotoUltimo = ahora;
+    auroRecetaRefrescoRemotoEnCurso = true;
+    try{
+      const res = await fetch(API_URL + '?accion=listarRecetasPorPaciente&id_paciente=' +
+        encodeURIComponent(idPaciente) + '&_=' + Date.now(), {method:'GET', cache:'no-store'});
+      if(!res.ok) return;
+      const data = await res.json();
+      if(!Array.isArray(data) || recetaGuardando) return;
+      mezclarRecetasLocalesYSheets(data);
+      renderHistorialRecetas();
+      actualizarBotonGuardarReceta();
+    }catch(_e){
+      /* Sin conexión: se conserva el historial local actual. */
+    }finally{
+      auroRecetaRefrescoRemotoEnCurso = false;
+    }
+  }
+
   function refrescarRecetasAlEntrar(){
     setTimeout(function(){
       try{
@@ -6438,6 +6493,7 @@
           recetasPaginaActual = 1;
           auroRecetaSincronizarModoPrimeraReceta();
           renderHistorialRecetas();
+          auroRecetaRefrescarRemotoPaciente(false); // F3: historial actualizado desde otra PC
         }
       }catch(e){}
     }, 250);
@@ -7626,6 +7682,7 @@
     auroRecetaFirmaPersistenteUltimoRefresco = ahora;
     auroRecetaSincronizarFirmaPersistenteActual(true);
     auroRecetaSincronizarHistorialFirmasPersistentes(true);
+    auroRecetaRefrescarRemotoPaciente(false); // F3: al volver a la ventana
   }
 
   window.addEventListener('focus', auroRecetaRefrescarFirmasAlRetomar);
