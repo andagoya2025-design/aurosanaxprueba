@@ -1591,6 +1591,9 @@ async function intentarEmbebidoLogoOrden(){
   const cfg=Object.assign({},configGlobal(),state.configuracion||{});
   const src=auroOrdenUrlLogoInstitucional(cfg);
   if(!src || /^data:image\//i.test(txt(state.logoInstitucionalDataUrl))) return;
+  // V-VEL: si este mismo logo ya falló en esta sesión, no se reintenta en cada firma (hasta 3,5 s).
+  if(txt(state.logoInstitucionalIntentoFallido)===src) return;
+  state.logoInstitucionalIntentoFallido=src;
   try{
     const respuesta=await fetch(src,{mode:'cors',credentials:'omit',signal:AbortSignal.timeout(3500)});
     if(!respuesta.ok) return;
@@ -1711,7 +1714,7 @@ async function solicitarFirmaOrden(id){
         await new Promise(resolve=>setTimeout(resolve,350));
         continue;
       }
-      await new Promise(resolve=>setTimeout(resolve,2000));
+      await new Promise(resolve=>setTimeout(resolve,1000)); // V-VEL: 1 s, igual que Receta y Certificado (antes 2 s)
       if(proceso.cancelado){resultadoFinal=true;return;}
       if(proceso.cancelando) continue;
       const estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});
