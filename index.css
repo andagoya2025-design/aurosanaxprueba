@@ -1,0 +1,62 @@
+/* AUROSANAX index.css — PREMIUM V1 (15/11/2026): Plan + Recetas.
+ * SOLO ESTILO. Reglas de protección:
+ *  - Nunca display/visibility sobre botones (respeta d-none y botones ocultos).
+ *  - Nunca anchos menores que el texto (min-width:max-content): ningún texto cortado.
+ *  - No cambia ids, textos, eventos ni lógica. Para deshacer: quitar su <link> de index.html. */
+
+/* 1) Mismo ancho para todas las secciones del Plan (antes: 70% unas, ancho completo otras). */
+#historia #hc_plan .hc-plan-narrow{width:100% !important;max-width:none !important;}
+
+/* 2) Títulos de sección con acento de marca. */
+#historia #hc_plan .hc-plan-narrow > label.form-label.fw-bold{
+  display:flex;align-items:center;gap:6px;font-size:14.5px;color:#4a1235;letter-spacing:.01em;
+  padding-left:10px;border-left:3px solid #be3a8a;margin:6px 0 10px;}
+
+/* 3) Campos de medicamento alineados (antes: unos más altos que otros). */
+#historia #hc_plan .receta-medicamentos-box > .row.align-items-end{align-items:flex-start !important;}
+#historia #hc_plan .receta-medicamentos-box .form-label.small{min-height:18px;margin-bottom:6px;color:#475569;}
+
+/* 4) "Limpiar" de cada campo: discreto, como enlace (sigue siendo el mismo botón). */
+#historia #hc_plan .auro-plan-limpiar-rapido{
+  background:transparent !important;border:0 !important;box-shadow:none !important;
+  color:#94a3b8 !important;font-size:11.5px !important;font-weight:700 !important;
+  padding:3px 2px !important;margin-top:4px !important;min-height:0 !important;}
+#historia #hc_plan .auro-plan-limpiar-rapido::before{content:"\2715";font-size:9px;margin-right:3px;}
+#historia #hc_plan .auro-plan-limpiar-rapido:hover{color:#be185d !important;text-decoration:underline;}
+
+/* 5) "Otra vía" y "Ampliar": pastilla suave de marca. */
+#historia #hc_plan .auro-plan-via-libre-rapida,
+#historia #hc_plan .auro-plan-ampliar-indicaciones{
+  border:1px solid #f3c6dd !important;background:#fff7fb !important;color:#8b1e5a !important;
+  border-radius:999px !important;font-size:11.5px !important;font-weight:800 !important;padding:3px 10px !important;margin-top:4px !important;}
+
+/* 6) "Agregar" en color de marca (antes azul genérico). */
+#historia #hc_plan .receta-medicamentos-box .btn.btn-primary,
+#historia #hc_plan .ordenes-medicas-box .btn.btn-primary{
+  background:linear-gradient(135deg,#8b1e5a,#be3a8a) !important;border:0 !important;color:#fff !important;
+  border-radius:12px !important;font-weight:800 !important;box-shadow:0 6px 16px rgba(139,30,90,.20) !important;}
+#historia #hc_plan .receta-medicamentos-box .btn.btn-primary:hover,
+#historia #hc_plan .ordenes-medicas-box .btn.btn-primary:hover{filter:brightness(1.06);}
+#historia #hc_plan .receta-medicamentos-box .btn.btn-outline-secondary,
+#historia #hc_plan .ordenes-medicas-box .btn.btn-outline-secondary{border-radius:12px !important;}
+
+/* 7) Tarjetas y tablas con el mismo acabado. */
+#historia #hc_plan .receta-medicamentos-box,
+#historia #hc_plan .ordenes-medicas-box,
+#historia #hc_plan .interconsulta-box,
+#historia #hc_plan .evaluaciones-box{border-radius:18px !important;box-shadow:0 8px 24px rgba(139,30,90,.06) !important;}
+#historia #hc_plan .receta-table thead th,
+#historia #hc_plan .ordenes-table thead th{background:#fbeef5 !important;color:#6b1d47 !important;}
+#historia #hc_plan textarea.form-control{border-radius:14px;}
+
+/* ===== RECETAS (pantalla #recetas) — solo estilo ===== */
+/* 1) Botones del encabezado: mismo alto, anchos parejos, en una fila; nunca cortan texto. */
+#recetas .section-head > .auro-receta-main-actions{display:grid !important;grid-template-columns:repeat(auto-fit,minmax(172px,1fr)) !important;
+  flex:1 1 640px !important;max-width:760px !important;margin-left:auto !important;gap:10px !important;align-items:stretch !important;}
+#recetas .section-head > .auro-receta-main-actions > button{
+  min-height:44px !important;width:100% !important;padding:9px 12px !important;border-radius:13px !important;
+  font-size:13px !important;font-weight:800 !important;white-space:nowrap !important;margin:0 !important;}
+/* 2) Tratamiento prescrito e indicaciones a todo el ancho (antes la tabla quedaba cortada). */
+#recetas .hc-plan-narrow{width:100% !important;max-width:none !important;}
+#recetas .auro-rx-editor-shell{border-radius:18px !important;box-shadow:0 8px 24px rgba(139,30,90,.06) !important;}
+#recetas textarea.form-control{border-radius:14px;}
