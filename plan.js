@@ -6834,3 +6834,120 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     requestAnimationFrame(sincronizar);
   }
 })();
+
+
+/* ============================================================
+   AUROSANAX PLAN — VER CAMBIOS + SIMETRÍA DE BOTONES (15/11/2026)
+   Bloque ADITIVO. Manual: solo actúa al presionar el botón.
+   - "Ver cambios" trae la receta guardada y el estado de su firma
+     hechos en otra computadora (no toca medicamentos ni Plan en edición).
+   - No guarda nada, no interrumpe guardado ni firma, no recarga la página.
+   - Iguala alto, bordes y tipografía de los botones de la barra del Plan.
+============================================================ */
+(function auroPlanVerCambiosV1(){
+  'use strict';
+  const BAR_ID = 'auroPlanActionButtons';
+  const FIRMA_ID = 'btnFirmaElectronicaPlanReceta';
+  const BTN_ID = 'btnPlanVerCambios';
+  const STYLE_ID = 'auroPlanVerCambiosStyles';
+  let ocupado = false;
+
+  function estilos(){
+    if(document.getElementById(STYLE_ID)) return;
+    const st = document.createElement('style');
+    st.id = STYLE_ID;
+    st.textContent = `
+      #${BAR_ID}{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px!important;align-items:stretch!important;}
+      #${BAR_ID} > button,
+      #${BAR_ID} > .auro-plan-reset-inline-v25 > button{min-height:44px!important;padding:9px 14px!important;border-radius:13px!important;
+        font-size:13px!important;font-weight:800!important;line-height:1.2!important;text-align:center!important;
+        white-space:nowrap!important;margin:0!important;width:100%!important;}
+      #${BAR_ID} > .auro-plan-reset-inline-v25{display:flex!important;gap:10px!important;width:100%!important;margin:0!important;padding:0!important;}
+      #${BAR_ID} > .auro-plan-reset-inline-v25 > button{flex:1 1 0!important;}
+      #${BAR_ID} > #${BTN_ID}{background:#f8fafc!important;border:1px solid #cbd5e1!important;color:#334155!important;}
+      #${BAR_ID} > #${BTN_ID}:hover{background:#eef2f7!important;}
+      #${BAR_ID} > #${BTN_ID}[aria-busy="true"]{opacity:.7!important;cursor:wait!important;}
+      @media(max-width:760px){#${BAR_ID}{grid-template-columns:1fr 1fr;}}
+      @media(max-width:420px){#${BAR_ID}{grid-template-columns:1fr;}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function texto(el){ return String(el?.textContent || '').replace(/\s+/g,' ').trim().toLowerCase(); }
+
+  function bloqueado(){
+    const receta = document.querySelector('#'+BAR_ID+' [data-auro-receta-plan-btn="1"]');
+    const plan = document.querySelector('#'+BAR_ID+' [data-auro-plan-btn="1"]');
+    const firma = document.getElementById(FIRMA_ID);
+    if(/guardando/.test(texto(receta)) || /guardando/.test(texto(plan))) return 'Espere: se está guardando.';
+    if(firma && (firma.getAttribute('aria-busy') === 'true' || /preparando|en proceso|firmando|procesando/.test(texto(firma)))) return 'Hay una firma en proceso. Espere a que termine.';
+    return '';
+  }
+
+  function mostrar(btn, html, ms){
+    const original = btn.dataset.auroOriginal || btn.innerHTML;
+    btn.dataset.auroOriginal = original;
+    btn.innerHTML = html;
+    setTimeout(()=>{ if(btn.isConnected) btn.innerHTML = original; }, ms || 2200);
+  }
+
+  async function verCambios(ev){
+    const btn = ev?.currentTarget || document.getElementById(BTN_ID);
+    if(!btn || ocupado) return null;
+    const motivo = bloqueado();
+    if(motivo){ btn.title = motivo; mostrar(btn, '<i class="bi bi-hourglass-split me-1"></i> Espere…', 2000); return null; }
+    ocupado = true;
+    btn.setAttribute('aria-busy','true');
+    btn.disabled = true;
+    try{
+      if(typeof window.auroRecetaTraerCambiosPaciente === 'function'){
+        await window.auroRecetaTraerCambiosPaciente();
+      }
+      if(typeof window.auroPlanSincronizarEstadoFirmaReceta === 'function'){
+        await window.auroPlanSincronizarEstadoFirmaReceta();
+      }
+      if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+        try{ window.auroPlanActualizarMiniStatus(); }catch(_e){}
+      }
+      btn.title = 'Receta y firma al día';
+      mostrar(btn, '<i class="bi bi-check2-circle me-1"></i> Al día', 1800);
+    }catch(error){
+      console.warn('AUROSANAX PLAN - VER CAMBIOS', error);
+      mostrar(btn, '<i class="bi bi-wifi-off me-1"></i> Sin conexión', 2200);
+    }finally{
+      ocupado = false;
+      btn.removeAttribute('aria-busy');
+      btn.disabled = false;
+    }
+    return true;
+  }
+
+  function montar(){
+    const bar = document.getElementById(BAR_ID);
+    if(!bar) return false;
+    estilos();
+    if(document.getElementById(BTN_ID)) return true;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = BTN_ID;
+    b.className = 'btn-soft';
+    b.title = 'Trae la receta y la firma hechas en otra computadora';
+    b.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Ver cambios';
+    b.addEventListener('click', verCambios);
+    const firma = document.getElementById(FIRMA_ID);
+    if(firma && firma.parentNode === bar) firma.insertAdjacentElement('afterend', b);
+    else bar.appendChild(b);
+    return true;
+  }
+
+  // Reintentos ACOTADOS (sin intervalos permanentes), igual que los demás bloques del Plan.
+  let intentos = 0;
+  function intentar(){
+    if(montar()) return;
+    if(++intentos < 40) setTimeout(intentar, 500);
+  }
+  window.auroPlanVerCambios = verCambios;
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', intentar, {once:true});
+  else intentar();
+  ['aurosanax:atencion-seleccionada','aurosanax:plan-cargado','aurosanax:historia-nueva'].forEach(n=>window.addEventListener(n, ()=>setTimeout(montar, 300)));
+})();
