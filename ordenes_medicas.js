@@ -1385,7 +1385,7 @@ function docHTML(data,opciones={}){
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
     <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoPie}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}<br><span>Firma y sello</span></div></section>
   </article>`;
-  return paginacionInteligenteOrden(doc);
+  return paginarOrdenFirmaAnclada(doc);
 }
 
 /* Simulación anti-regresión: medición aislada, sin guardar ni consultar backend.
@@ -1418,6 +1418,131 @@ function paginacionInteligenteOrden(html){
   }finally{if(marco) marco.remove();}
 }
 
+/* V1.4.0 — FIRMA ANCLADA + REPARTO INTELIGENTE (patrón aprobado de IASYN 2).
+ * - Órdenes de UNA hoja: exactamente igual que antes (paginacionInteligenteOrden).
+ * - Órdenes de VARIAS hojas: hojas A4 reales; la tabla repite su encabezado;
+ *   la firma va SOLO al pie de la última hoja; la última hoja nunca queda con
+ *   una sola fila o línea suelta (se traen filas completas de la anterior).
+ * - Vista previa, impresión y motor de firma usan EXACTAMENTE este HTML.
+ * - Ante cualquier fallo de medición vuelve al comportamiento anterior. */
+function paginarOrdenFirmaAnclada(html){
+  const anterior=paginacionInteligenteOrden(html);
+  if(anterior.indexOf('aom-multipagina')<0) return anterior;
+  let marco;
+  try{
+    const esIOS=/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    const altoHoja=esIOS?246:263;
+    marco=document.createElement('iframe');
+    marco.setAttribute('aria-hidden','true');
+    marco.style.cssText='position:fixed;left:-10000px;top:0;width:210mm;height:267mm;visibility:hidden;pointer-events:none;border:0';
+    document.body.appendChild(marco);
+    const d=marco.contentDocument;
+    if(!d) return anterior;
+    d.open();
+    d.write('<!doctype html><html><head><meta charset="utf-8"><style>'+estilosImpresion()+
+      '.aom-paper{width:210mm!important;padding:0 17mm!important;margin:0!important;min-height:0!important;height:auto!important;display:block!important;box-shadow:none!important}.aom-page-main{display:flow-root}'+
+      '</style></head><body></body></html>');
+    d.close();
+    const plantilla=d.createElement('template');plantilla.innerHTML=html;
+    const origen=plantilla.content.querySelector('.aom-paper');
+    const pieOriginal=origen&&origen.querySelector(':scope > .aom-doc-bottom');
+    if(!origen||!pieOriginal) return anterior;
+    const raiz=d.createElement('div');raiz.className='aom-pages';d.body.appendChild(raiz);
+    const paginas=[];let cuerpo=null;
+    const nuevaPagina=()=>{
+      const p=d.createElement('article');p.className='aom-paper aom-page';p.style.cssText=origen.style.cssText;
+      cuerpo=d.createElement('div');cuerpo.className='aom-page-main';p.appendChild(cuerpo);
+      raiz.appendChild(p);paginas.push(p);return p;
+    };
+    nuevaPagina();
+    const regla=d.createElement('div');regla.style.cssText='height:1mm;width:1mm;position:absolute;visibility:hidden';d.body.appendChild(regla);
+    const pxmm=regla.getBoundingClientRect().height||3.779527559;regla.remove();
+    const pieTemp=pieOriginal.cloneNode(true);pieTemp.style.marginTop='0';pieTemp.style.paddingTop='12mm';
+    paginas[0].appendChild(pieTemp);const altoPie=pieTemp.getBoundingClientRect().height;pieTemp.remove();
+    const maximo=(altoHoja-4)*pxmm;
+    const maximaFinal=(altoHoja-8)*pxmm;
+    const alto=()=>cuerpo.getBoundingClientRect().height;
+    const cabe=()=>alto()<=maximo+0.5;
+    function tablaVacia(t){
+      const tb=d.createElement('table');tb.className=t.className;tb.setAttribute('style',t.getAttribute('style')||'');
+      if(t.tHead) tb.appendChild(t.tHead.cloneNode(true));
+      tb.appendChild(d.createElement('tbody'));return tb;
+    }
+    function agregarTabla(t){
+      let actual=tablaVacia(t);cuerpo.appendChild(actual);
+      Array.from(t.tBodies[0]?t.tBodies[0].rows:[]).forEach(fila=>{
+        actual.tBodies[0].appendChild(fila.cloneNode(true));
+        if(cabe()) return;
+        actual.tBodies[0].lastElementChild.remove();
+        if(!actual.tBodies[0].rows.length) actual.remove();
+        nuevaPagina();actual=tablaVacia(t);cuerpo.appendChild(actual);
+        actual.tBodies[0].appendChild(fila.cloneNode(true)); // una fila nunca se pierde
+      });
+      if(!actual.tBodies[0].rows.length) actual.remove();
+    }
+    function agregarNormal(n){
+      cuerpo.appendChild(n.cloneNode(true));
+      if(cabe()) return;
+      if(cuerpo.children.length>1){cuerpo.lastElementChild.remove();nuevaPagina();cuerpo.appendChild(n.cloneNode(true));}
+    }
+    Array.from(origen.children).forEach(n=>{
+      if(n===pieOriginal) return;
+      if(n.tagName==='TABLE') agregarTabla(n); else agregarNormal(n);
+    });
+    // Mueve la última pieza (fila de tabla o bloque) de la hoja anterior al
+    // inicio de la última hoja. Devuelve false si no se puede sin dañar.
+    function traerPieza(){
+      if(paginas.length<2) return false;
+      const ant=paginas[paginas.length-2].querySelector('.aom-page-main');
+      const ult=ant.lastElementChild;if(!ult) return false;
+      if(ult.tagName==='TABLE'){
+        const filas=ult.tBodies[0].rows;if(!filas.length) return false;
+        const fila=filas[filas.length-1];
+        if(filas.length===1&&ant.children.length===1) return false; // no vaciar la hoja anterior
+        let destino=cuerpo.firstElementChild;
+        if(!destino||destino.tagName!=='TABLE'){destino=tablaVacia(ult);cuerpo.prepend(destino);}
+        destino.tBodies[0].prepend(fila);
+        if(!ult.tBodies[0].rows.length) ult.remove();
+        return true;
+      }
+      if(ant.children.length===1) return false;
+      cuerpo.prepend(ult);return true;
+    }
+    function devolverPieza(){
+      const ant=paginas[paginas.length-2].querySelector('.aom-page-main');
+      const primero=cuerpo.firstElementChild;
+      if(primero&&primero.tagName==='TABLE'){
+        const fila=primero.tBodies[0].rows[0];
+        let t=ant.lastElementChild;
+        if(!t||t.tagName!=='TABLE'){t=tablaVacia(primero);ant.appendChild(t);}
+        t.tBodies[0].appendChild(fila);
+        if(!primero.tBodies[0].rows.length) primero.remove();
+      }else if(primero){ant.appendChild(primero);}
+    }
+    // Si la firma no cabe al final, nueva hoja con al menos una pieza.
+    if(alto()+altoPie>maximaFinal){
+      nuevaPagina();
+      if(!traerPieza()) throw new Error('Sin contenido para acompañar la firma');
+    }
+    // Reparto: la última hoja con al menos ~7 renglones de contenido.
+    const minimo=32*pxmm;let vueltas=0;
+    while(paginas.length>1&&alto()<minimo&&vueltas++<20){
+      if(!traerPieza()) break;
+      if(alto()+altoPie>maximaFinal+0.5){devolverPieza();break;}
+    }
+    if(alto()+altoPie>maximaFinal+0.5) throw new Error('La última hoja no cabe con la firma');
+    const pie=pieOriginal.cloneNode(true);paginas[paginas.length-1].appendChild(pie);
+    if(raiz.querySelectorAll('.aom-doc-bottom').length!==1) throw new Error('Firma no única');
+    if(paginas.some(p=>!p.querySelector('.aom-page-main').textContent.trim())) throw new Error('Hoja vacía');
+    const filasOrigen=origen.querySelectorAll('tbody tr').length;
+    if(raiz.querySelectorAll('tbody tr').length!==filasOrigen) throw new Error('Filas de examen no coinciden');
+    return raiz.outerHTML;
+  }catch(e){
+    console.warn('AUROSANAX Órdenes: firma anclada no disponible; se usa la paginación anterior.',e);
+    return anterior;
+  }finally{if(marco) marco.remove();}
+}
+
 function estilosImpresion(){
   return `
   @page{size:A4 portrait;margin:15mm 0 15mm 0}
@@ -1428,7 +1553,9 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:0!important;position:relative!important;padding:0 17mm!important}.aom-paper-breve{display:flex!important;flex-direction:column!important;min-height:267mm!important}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important}.aom-paper.aom-multipagina{display:block!important;min-height:0!important}.aom-paper.aom-multipagina .aom-doc-bottom{margin-top:10mm!important;padding-top:9mm!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:0!important;position:relative!important;padding:0 17mm!important}.aom-paper-breve{display:flex!important;flex-direction:column!important;min-height:267mm!important}.aom-paper-breve .aom-doc-bottom{margin-top:auto!important}.aom-paper.aom-multipagina{display:block!important;min-height:0!important}.aom-paper.aom-multipagina .aom-doc-bottom{margin-top:10mm!important;padding-top:9mm!important}.aom-doc-bottom{position:static!important;break-inside:avoid!important;page-break-inside:avoid!important}.aom-doc-table thead{display:table-header-group!important}.aom-doc-table tr{break-inside:avoid!important;page-break-inside:avoid!important}html.auro-ios .aom-paper{width:194mm!important;padding:0 9mm!important}html.auro-ios .aom-paper-breve{min-height:246mm!important}}
+  .aom-pages .aom-page{display:flex!important;flex-direction:column!important;height:297mm;min-height:297mm;margin:0 auto 14px}.aom-pages .aom-page-main{display:flow-root;flex:0 0 auto}.aom-pages .aom-page .aom-doc-bottom{margin-top:auto!important;padding-top:12mm!important}
+  @media print{.aom-pages .aom-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;margin:0!important;overflow:visible!important;break-after:page;page-break-after:always}.aom-pages .aom-page:last-child{break-after:auto;page-break-after:auto}html.auro-ios .aom-pages .aom-page{height:246mm!important;min-height:246mm!important;max-height:246mm!important}}
   `;
 }
 
@@ -1439,10 +1566,10 @@ function imprimirDocumento(data,autoPrint=false){
   if(!data) return;
   const w=window.open('','_blank');
   if(!w){alert('El navegador bloqueó la ventana de impresión.');return;}
-  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden Médica</title><style>${estilosImpresion()}</style></head><body>
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden Médica</title><script>(function(){var ios=/iPad|iPhone|iPod/.test(navigator.userAgent||"")||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);if(ios)document.documentElement.classList.add("auro-ios");})();<\/script><style>${estilosImpresion()}</style></head><body>
     <div class="aom-print-toolbar"><button class="primary" onclick="window.print()">Imprimir / Guardar PDF</button><button class="secondary" onclick="window.close()">Cerrar</button></div>
     <div class="aom-view" id="aomView"><div class="aom-stage" id="aomStage">${docHTML(data)}</div></div>
-    <script>(function(){var ancho=-1;function fit(force){var v=document.getElementById('aomView'),s=document.getElementById('aomStage'),p=s&&s.querySelector('.aom-paper');if(!v||!s||!p)return;var avail=Math.max(280,v.clientWidth-12);if(!force&&avail===ancho)return;ancho=avail;var mm=p.offsetWidth||794;var scale=Math.min(1,avail/mm);s.style.width=mm+'px';s.style.transform='scale('+scale+')';s.style.height=(p.offsetHeight*scale)+'px';}window.addEventListener('load',function(){fit(true);});window.addEventListener('resize',function(){fit(false);});setTimeout(function(){fit(true);},50);})();<\/script>
+    <script>(function(){var ancho=-1;function fit(force){var v=document.getElementById('aomView'),s=document.getElementById('aomStage'),p=s&&s.querySelector('.aom-paper');if(!v||!s||!p)return;var cs=getComputedStyle(v);var avail=Math.max(280,v.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0)-2);if(!force&&avail===ancho)return;ancho=avail;var mm=p.offsetWidth||794;var scale=Math.min(1,avail/mm);s.style.width=mm+'px';s.style.transform='scale('+scale+')';var c=s.firstElementChild||p;s.style.height=(c.offsetHeight*scale)+'px';}window.addEventListener('load',function(){fit(true);});window.addEventListener('resize',function(){fit(false);});setTimeout(function(){fit(true);},50);})();<\/script>
   </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
   if(autoPrint){
