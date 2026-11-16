@@ -1619,6 +1619,39 @@ ${recDocumentoHTML()}
     setMsg('Preparando recomendación para firma electrónica…','info');
 
     try{
+      /* V1.4.0 — NO FIRMAR DOS VECES: si esta recomendación aún no fue
+         verificada en el servidor (p. ej. se pulsó Firmar antes de que
+         terminara la consulta), se verifica ahora. Si ya está firmada, se
+         muestra como firmada y NO se crea otra solicitud. Si ya se verificó
+         "sin firma", no se repite la consulta (no se pierde velocidad). */
+      if(state.firmasPorDocumento[doc.id_recomendacion]!=='SIN_FIRMA'){
+        setMsg('Verificando que la recomendación no esté firmada…','info');
+        const previa=await postFirma('consultarDocumentosFirmados',{
+          tipo_documento:'RECOMENDACION',
+          id_documento_origen:doc.id_recomendacion,
+          id_recomendacion:doc.id_recomendacion,
+          id_atencion:doc.id_atencion,
+          id_receta:'',
+          id_certificado:''
+        });
+        if(tokenOperacion!==state.firma.token) return null;
+        if(!Array.isArray(previa?.documentos)) throw new Error('No se pudo verificar si la recomendación ya está firmada. Intente de nuevo.');
+        const yaFirmado=previa.documentos.find(x=>
+          txt(x?.tipo_documento).toUpperCase()==='RECOMENDACION' &&
+          txt(x?.id_documento_origen||x?.id_recomendacion)===doc.id_recomendacion &&
+          txt(x?.id_atencion)===doc.id_atencion &&
+          txt(x?.estado_firma).toUpperCase()==='FIRMADO'
+        )||null;
+        if(yaFirmado){
+          state.firmasPorDocumento[doc.id_recomendacion]='FIRMADA';
+          fijarFirma('FIRMADA',{documento:yaFirmado,id_solicitud:txt(yaFirmado.id_solicitud),error:''});
+          setMsg('Esta recomendación ya estaba firmada. Use "Ver recomendación firmada ✓".','ok');
+          return yaFirmado;
+        }
+        state.firmasPorDocumento[doc.id_recomendacion]='SIN_FIRMA';
+        setMsg('Preparando recomendación para firma electrónica…','info');
+      }
+
       /* V1.3.8: se elimina la consulta previa redundante, igual que Receta V2.6.
          El servidor valida el motor al crear la solicitud y responde el mismo error. */
 
@@ -2235,6 +2268,236 @@ ${recDocumentoHTML()}
     }finally{if(marco) marco.remove();}
   }
 
+  /* V1.4.0 — FIRMA ANCLADA (mismo patrón aprobado de IASYN 2 V1.5.2).
+     - Arma páginas A4 reales (cuerpo 263 mm) midiendo en un iframe aislado.
+     - Llena cada hoja; el pie de firma va SOLO en la última, anclado abajo.
+     - Si el final no cabe con la firma, pasa el último bloque a la hoja nueva.
+     - Vista previa, impresión y motor de firma usan EXACTAMENTE este HTML.
+     - Ante cualquier fallo de medición, vuelve al comportamiento anterior
+       (recPaginacionInteligente), sin perder texto ni tocar la firma. */
+  function recPaginarFirmaAnclada(html){
+    if(typeof document==='undefined'||!document.body||window.AUROSANAX_REC_PAGINACION_FLUIDA===true){
+      return recPaginacionInteligente(html);
+    }
+    let marco=null;
+    try{
+      marco=document.createElement('iframe');
+      marco.setAttribute('aria-hidden','true');marco.setAttribute('tabindex','-1');
+      marco.style.cssText='position:fixed;left:-10000px;top:0;width:180mm;height:273mm;visibility:hidden;pointer-events:none;border:0';
+      document.body.appendChild(marco);
+      const d=marco.contentDocument;
+      if(!d) return recPaginacionInteligente(html);
+      d.open();
+      d.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>'+recEstilosImpresion()+
+        '.ar-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
+        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:18mm!important;margin-top:auto!important}'+
+        '</style></head><body></body></html>');
+      d.close();
+      const plantilla=d.createElement('template');plantilla.innerHTML=html;
+      const origen=plantilla.content.querySelector('.ar-paper');
+      const footerOriginal=origen&&origen.querySelector(':scope > .ar-firma-area');
+      if(!origen||!footerOriginal) return recPaginacionInteligente(html);
+      const raiz=d.createElement('div');raiz.className='ar-paginas';d.body.appendChild(raiz);
+      let paginaActual=null,cuerpoActual=null,seccionActual=null;
+      const paginas=[];
+      const crearPagina=()=>{
+        paginaActual=d.createElement('article');paginaActual.className='ar-paper ar-page';
+        paginaActual.style.cssText=origen.style.cssText;
+        cuerpoActual=d.createElement('div');cuerpoActual.className='ar-page-main';
+        paginaActual.appendChild(cuerpoActual);raiz.appendChild(paginaActual);
+        paginas.push(paginaActual);seccionActual=null;return paginaActual;
+      };
+      crearPagina();
+      const mm=d.createElement('div');mm.style.cssText='height:1mm;width:1mm;position:absolute;visibility:hidden';d.body.appendChild(mm);
+      const pxmm=mm.getBoundingClientRect().height||3.779527559;mm.remove();
+      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='18mm';tempFooter.style.paddingBottom='8mm';
+      paginaActual.appendChild(tempFooter);
+      const altoFooter=tempFooter.getBoundingClientRect().height;
+      tempFooter.remove();
+      const maximo=(263*pxmm)-(4*pxmm); // 259 mm de texto clínico por hoja.
+      const cabe=()=>cuerpoActual.getBoundingClientRect().height<=maximo+0.5;
+      const intentar=(n,padre)=>{padre.appendChild(n);if(cabe()) return true;n.remove();return false;};
+      const moverPagina=()=>crearPagina();
+      function textoElemento(el){
+        return Array.from(el.childNodes).map(n=>n.nodeName==='BR'?'\n':(n.textContent||'')).join('');
+      }
+      function dividirTexto(elemento,padreNuevo){
+        const restante=textoElemento(elemento);
+        if(!restante) return '';
+        const partes=restante.split(/(\s+)/).filter(x=>x!=='');
+        let lo=1,hi=partes.length,mejor=0;
+        const candidato=elemento.cloneNode(false);
+        padreNuevo.appendChild(candidato);
+        while(lo<=hi){
+          const mid=(lo+hi)>>1;
+          candidato.textContent=partes.slice(0,mid).join('');
+          if(cabe()){mejor=mid;lo=mid+1;}else hi=mid-1;
+        }
+        candidato.remove();
+        if(!mejor) return restante;
+        // Sin líneas sueltas: al cortar un párrafo, quedan al menos ~2 renglones
+        // en cada hoja; si no se puede, el párrafo pasa completo a la siguiente.
+        const MIN_CARACTERES=170;
+        while(mejor>0&&partes.slice(mejor).join('').trim().length>0&&partes.slice(mejor).join('').trim().length<MIN_CARACTERES) mejor--;
+        if(!mejor||partes.slice(0,mejor).join('').trim().length<MIN_CARACTERES) return restante;
+        const pedazo=elemento.cloneNode(false);pedazo.textContent=partes.slice(0,mejor).join('');pedazo.classList.add('ar-parrafo-fragmento');
+        padreNuevo.appendChild(pedazo);
+        return partes.slice(mejor).join('');
+      }
+      function agregarNormal(node){
+        if(intentar(node.cloneNode(true),cuerpoActual)) return;
+        if(cuerpoActual.children.length) moverPagina();
+        if(intentar(node.cloneNode(true),cuerpoActual)) return;
+        if(node.tagName==='P'){
+          let restante=textoElemento(node),n=0;
+          while(restante){
+            if(++n>300) throw new Error('Párrafo excesivo para impresión');
+            const frag=node.cloneNode(false);frag.textContent=restante;
+            if(intentar(frag,cuerpoActual)) break;
+            const nuevo=dividirTexto(frag,cuerpoActual);
+            if(nuevo===restante){moverPagina();continue;}
+            restante=nuevo;if(restante) moverPagina();
+          }
+        }else{
+          cuerpoActual.appendChild(node.cloneNode(true));moverPagina();
+        }
+      }
+      function nuevaSeccion(template,continuacion){
+        const s=template.cloneNode(false);
+        if(!continuacion){const h=template.querySelector(':scope > h3');if(h) s.appendChild(h.cloneNode(true));}
+        cuerpoActual.appendChild(s);seccionActual=s;return s;
+      }
+      function agregarParrafoSeccion(node,seccionPlantilla){
+        if(intentar(node.cloneNode(true),seccionActual)) return;
+        const espacioRestante=maximo-cuerpoActual.getBoundingClientRect().height;
+        if(espacioRestante<65){
+          if(seccionActual.children.length<=1&&seccionActual.querySelector('h3')){
+            seccionActual.remove();moverPagina();nuevaSeccion(seccionPlantilla,false);
+          }else{moverPagina();nuevaSeccion(seccionPlantilla,true);}
+          if(intentar(node.cloneNode(true),seccionActual)) return;
+        }
+        let restante=textoElemento(node),n=0;
+        while(restante){
+          if(++n>300) throw new Error('Contenido excesivo para impresión');
+          const p=node.cloneNode(false);p.textContent=restante;
+          if(intentar(p,seccionActual)) break;
+          const nuevo=dividirTexto(p,seccionActual);
+          if(nuevo===restante){moverPagina();nuevaSeccion(seccionPlantilla,true);continue;}
+          restante=nuevo;
+          if(restante){moverPagina();nuevaSeccion(seccionPlantilla,true);}
+        }
+      }
+      function agregarLista(lista,template){
+        let grupo=null;
+        const abrir=()=>{grupo=lista.cloneNode(false);seccionActual.appendChild(grupo);};
+        abrir();
+        Array.from(lista.children).forEach(item=>{
+          if(intentar(item.cloneNode(true),grupo)) return;
+          if(!grupo.children.length) grupo.remove();
+          const encabezadoHuerfano=seccionActual.children.length===1&&seccionActual.firstElementChild.tagName==='H3';
+          if(encabezadoHuerfano) seccionActual.remove();
+          moverPagina();nuevaSeccion(template,!encabezadoHuerfano);abrir();
+          if(intentar(item.cloneNode(true),grupo)) return;
+          let resto=textoElemento(item),n=0;
+          while(resto){
+            if(++n>300) throw new Error('Lista excesiva para impresión');
+            const p=item.cloneNode(false);p.textContent=resto;
+            if(intentar(p,grupo)) break;
+            const nuevo=dividirTexto(p,grupo);
+            if(nuevo===resto){moverPagina();nuevaSeccion(template,true);abrir();continue;}
+            resto=nuevo;
+            if(resto){moverPagina();nuevaSeccion(template,true);abrir();}
+          }
+        });
+      }
+      Array.from(origen.children).forEach(node=>{
+        if(node===footerOriginal) return;
+        if(!node.classList.contains('ar-section')){agregarNormal(node);return;}
+        nuevaSeccion(node,false);
+        Array.from(node.children).filter(x=>x.tagName!=='H3').forEach(sub=>{
+          if(sub.tagName==='UL'||sub.tagName==='OL') agregarLista(sub,node);
+          else agregarParrafoSeccion(sub,node);
+        });
+      });
+      // Reserva del pie SOLO en la última hoja; si no cabe, el último bloque
+      // pasa a una hoja nueva junto con la firma (nunca firma sola ni cortada).
+      const maximaFinal=(263*pxmm)-(11*pxmm);
+      if(cuerpoActual.getBoundingClientRect().height+altoFooter>maximaFinal){
+        const anterior=cuerpoActual;
+        moverPagina();
+        const destino=cuerpoActual;
+        const ultimo=anterior.lastElementChild;
+        if(!ultimo) throw new Error('No hay contenido clínico para acompañar la firma');
+        if(ultimo.classList.contains('ar-section')&&ultimo.children.length>1){
+          const pieza=ultimo.lastElementChild;
+          const copia=ultimo.cloneNode(false);
+          if(ultimo.children.length===2&&ultimo.firstElementChild.tagName==='H3'){
+            copia.appendChild(ultimo.firstElementChild);
+          }
+          copia.appendChild(pieza);
+          destino.appendChild(copia);
+          if(!ultimo.children.length) ultimo.remove();
+          else if(ultimo.children.length===1&&ultimo.firstElementChild.tagName==='H3'){
+            copia.prepend(ultimo.firstElementChild);ultimo.remove();
+          }
+        }else{
+          destino.appendChild(ultimo);
+        }
+        if(!destino.textContent.trim()||destino.getBoundingClientRect().height+altoFooter>maximaFinal+0.5){
+          throw new Error('El último bloque no cabe junto a la firma; se usa el flujo anterior');
+        }
+      }
+      /* V1.4.0 — Reparto inteligente: la última hoja nunca queda con una o dos
+         líneas sueltas. Si tiene menos de ~7 renglones, se traen párrafos
+         completos de la hoja anterior (sin dejarla vacía ni con título
+         huérfano), siempre que quepan junto a la firma. */
+      const minimoUltima=32*pxmm;
+      let vueltas=0;
+      while(paginas.length>1&&cuerpoActual.getBoundingClientRect().height<minimoUltima&&vueltas++<12){
+        const ant=paginas[paginas.length-2].querySelector('.ar-page-main');
+        const ult=ant.lastElementChild;
+        if(!ult) break;
+        const esSeccion=ult.classList.contains('ar-section');
+        const pieza=esSeccion?ult.lastElementChild:ult;
+        if(!pieza||pieza.tagName==='H3') break;
+        let destino=null,creado=false;
+        if(esSeccion){
+          const primero=cuerpoActual.firstElementChild;
+          if(primero&&primero.className===ult.className&&!primero.querySelector(':scope > h3')) destino=primero;
+          else{destino=ult.cloneNode(false);cuerpoActual.prepend(destino);creado=true;}
+          destino.prepend(pieza);
+        }else{
+          cuerpoActual.prepend(pieza);
+        }
+        let titulo=null;
+        if(esSeccion&&ult.children.length===1&&ult.firstElementChild.tagName==='H3'){
+          titulo=ult.firstElementChild;destino.prepend(titulo);
+        }
+        const anteriorVacia=!ant.textContent.trim()||(esSeccion&&!ult.children.length&&ant.children.length===1);
+        if(anteriorVacia||cuerpoActual.getBoundingClientRect().height+altoFooter>maximaFinal+0.5){
+          // Revertir este paso: no cabe o vaciaría la hoja anterior.
+          if(titulo) ult.appendChild(titulo);
+          if(esSeccion){ult.appendChild(pieza);if(creado) destino.remove();}
+          else ant.appendChild(pieza);
+          break;
+        }
+        if(esSeccion&&!ult.children.length) ult.remove();
+      }
+      const pieFinal=footerOriginal.cloneNode(true);pieFinal.style.paddingBottom='8mm';paginaActual.appendChild(pieFinal);
+      // Validaciones: una sola firma, en la última hoja, sin hojas vacías.
+      if(raiz.querySelectorAll('.ar-firma-area').length!==1||!paginas[paginas.length-1].querySelector('.ar-firma-area')){
+        throw new Error('Firma no única o fuera de la última hoja');
+      }
+      if(paginas.some(p=>!p.querySelector('.ar-page-main').textContent.trim())){
+        throw new Error('Se generó una hoja sin contenido clínico');
+      }
+      return raiz.outerHTML;
+    }catch(e){
+      console.warn(MODULO+': firma anclada no disponible; se conserva la paginación anterior.',e);
+      return recPaginacionInteligente(html);
+    }finally{if(marco) marco.remove();}
+  }
+
   function recDocumentoHTML(){
     const ctx=state.contexto||contextoAtencion();
     const a=ctx.atencion||{};
@@ -2301,7 +2564,7 @@ ${recDocumentoHTML()}
         </section>` : ''
     ].filter(Boolean).join('');
 
-    return recPaginacionInteligente(`<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
+    return recPaginarFirmaAnclada(`<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
       <header class="ar-doc-head${logo ? '' : ' ar-doc-head-no-logo'}">
         ${logo}
         <div>
@@ -2406,6 +2669,13 @@ body{overflow-x:hidden}
 .ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ar-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ar-sign b{font-size:12.4px}
+/* V1.4.0 firma anclada (patrón IASYN 2): hojas A4 reales; firma al pie de la última. */
+.ar-parrafo-fragmento{margin-bottom:0!important}
+.ar-paginas{width:100%}
+.ar-paginas .ar-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
+.ar-paginas .ar-page:last-child{break-after:auto;page-break-after:auto}
+.ar-paginas .ar-page-main{display:flow-root;width:100%;flex:0 0 auto}
+.ar-paginas .ar-page .ar-firma-area{padding-top:18mm!important;padding-bottom:8mm!important;margin-top:auto!important}
 @media print{
   html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important;break-inside:auto!important;page-break-inside:auto!important}
@@ -2485,8 +2755,29 @@ html,body{background:#dfe3e8}
     </div>
   </div>
   <main class="auro-rec-print-stage">
-    <div class="auro-rec-print-sheet">${htmlDoc}</div>
+    <div class="auro-rec-print-sheet" id="auroRecPreviewSheet">${htmlDoc}</div>
   </main>
+<script>
+/* V iOS 15/11/2026 — mismo ajuste que Certificado (que se ve bien en el iPhone):
+   la hoja se achica al ancho real de la pantalla; varias páginas se ven completas.
+   No afecta la impresión (@media print usa transform:none). */
+(function(){
+  function ajustar(){
+    var hoja=document.getElementById('auroRecPreviewSheet');
+    if(!hoja) return;
+    var anchoVentana=window.innerWidth||document.documentElement.clientWidth||794;
+    var anchoHoja=hoja.offsetWidth||794;
+    var altoHoja=hoja.offsetHeight||1123;
+    var margen=anchoVentana<=760?16:28;
+    var disponible=Math.max(220,anchoVentana-margen);
+    var escala=anchoVentana>980?1:Math.min(1,disponible/anchoHoja);
+    hoja.style.transform=escala<1?'scale('+escala+')':'none';
+    hoja.style.marginBottom=escala<1?(-altoHoja*(1-escala))+'px':'0';
+  }
+  window.addEventListener('resize',ajustar);
+  ajustar();
+})();
+<\/script>
 </body>
 </html>`);
     w.document.close();
