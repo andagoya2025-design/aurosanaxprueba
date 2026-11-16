@@ -1432,6 +1432,9 @@ function estilosImpresion(){
   `;
 }
 
+/* V iOS 15/11/2026: el ajuste de tamaño mide el ancho REAL de la hoja (offsetWidth, sin el zoom aplicado)
+ * y solo se recalcula si cambia el ANCHO. En iPhone, al desplazar, Safari cambia el alto de la pantalla
+ * y antes se recalculaba con la medida ya achicada: la hoja crecía y se achicaba (temblaba). */
 function imprimirDocumento(data,autoPrint=false){
   if(!data) return;
   const w=window.open('','_blank');
@@ -1439,7 +1442,7 @@ function imprimirDocumento(data,autoPrint=false){
   const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden Médica</title><style>${estilosImpresion()}</style></head><body>
     <div class="aom-print-toolbar"><button class="primary" onclick="window.print()">Imprimir / Guardar PDF</button><button class="secondary" onclick="window.close()">Cerrar</button></div>
     <div class="aom-view" id="aomView"><div class="aom-stage" id="aomStage">${docHTML(data)}</div></div>
-    <script>(function(){function fit(){var v=document.getElementById('aomView'),s=document.getElementById('aomStage'),p=s&&s.querySelector('.aom-paper');if(!v||!s||!p)return;var mm=p.getBoundingClientRect().width||794;var avail=Math.max(280,v.clientWidth-12);var scale=Math.min(1,avail/mm);s.style.width=mm+'px';s.style.transform='scale('+scale+')';s.style.height=(p.scrollHeight*scale)+'px';}window.addEventListener('load',fit);window.addEventListener('resize',fit);setTimeout(fit,50);})();<\/script>
+    <script>(function(){var ancho=-1;function fit(force){var v=document.getElementById('aomView'),s=document.getElementById('aomStage'),p=s&&s.querySelector('.aom-paper');if(!v||!s||!p)return;var avail=Math.max(280,v.clientWidth-12);if(!force&&avail===ancho)return;ancho=avail;var mm=p.offsetWidth||794;var scale=Math.min(1,avail/mm);s.style.width=mm+'px';s.style.transform='scale('+scale+')';s.style.height=(p.offsetHeight*scale)+'px';}window.addEventListener('load',function(){fit(true);});window.addEventListener('resize',function(){fit(false);});setTimeout(function(){fit(true);},50);})();<\/script>
   </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
   if(autoPrint){
