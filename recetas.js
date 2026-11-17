@@ -5478,8 +5478,22 @@
     actualizarBotonGuardarReceta();
 
     try{
-      await auroRecetaResolverDiagnosticoEstructurado();
-      await cargarMedicosActivosReceta(false);
+      /*
+        RECETA VELOCIDAD V2 (16/11/2026):
+        las 3 consultas previas (diagnóstico, médicos activos y recetas de la
+        atención) no dependen entre sí: se lanzan a la vez en lugar de en fila.
+        Las validaciones, mensajes y resultados siguen en el mismo orden.
+      */
+      const idAtencionPrevioV2 = String(obtenerIdAtencionActivaSeguro() || '').trim();
+      const sincronizarPrevioV2 = !!(idAtencionPrevioV2 && !recetaEditandoId && !recetaNuevaForzada);
+      const consultasPreviasV2 = await Promise.allSettled([
+        auroRecetaResolverDiagnosticoEstructurado(),
+        cargarMedicosActivosReceta(false),
+        sincronizarPrevioV2 ? auroRecetaSincronizarAtencion(idAtencionPrevioV2) : Promise.resolve(null)
+      ]);
+      for(const consultaV2 of consultasPreviasV2){
+        if(consultaV2.status === 'rejected') throw consultaV2.reason;
+      }
 
       const idAtencionGuardar = String(obtenerIdAtencionActivaSeguro() || '').trim();
       if(!idAtencionGuardar){
@@ -5494,7 +5508,11 @@
         - No modifica Plan, Atenciones, medicamentos, diagnóstico ni PDF.
       */
       if(!recetaEditandoId && !recetaNuevaForzada){
-        await auroRecetaSincronizarAtencion(idAtencionGuardar);
+        /* Si la atención cambió durante la espera o no se sincronizó antes,
+           se sincroniza aquí en fila, exactamente como antes. */
+        if(!sincronizarPrevioV2 || idAtencionGuardar !== idAtencionPrevioV2){
+          await auroRecetaSincronizarAtencion(idAtencionGuardar);
+        }
         const existenteAtencion = buscarRecetaActivaPorAtencion(idAtencionGuardar);
         if(existenteAtencion && existenteAtencion.id_receta){
           recetaEditandoId = String(existenteAtencion.id_receta);
