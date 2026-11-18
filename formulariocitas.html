@@ -1333,6 +1333,19 @@ async function apiGet(accion, params){
       if(!validarAceptacionPrivacidad()) return;
       if(!validarFormularioAntesDeEnviar(data)) return;
 
+      // AUROSANAX CITA WEB V2: confirmación de cédula igual para todas las personas
+      // (no revela si la cédula o el nombre existen en el sistema).
+      if(!window.confirm(
+        'Antes de reservar, confirme que su número de cédula es correcto:\n\n' +
+        soloDigitos(data.numero_documento) + '\n\n' +
+        'Aceptar: es correcto, continuar.\nCancelar: quiero corregirlo.'
+      )){
+        marcarCampoError('numero_documento');
+        setStatus('info','<i class="bi bi-info-circle me-1"></i> Corrija su número de cédula y presione <b>Reservar cita</b> nuevamente.');
+        desplazarPrimerErrorFormulario();
+        return;
+      }
+
       const btn = this.querySelector('button[type="submit"]');
       enviandoCita = true;
       btn.disabled = true;
@@ -1371,7 +1384,8 @@ async function apiGet(accion, params){
 
         const estadoCita = r.estado_cita || 'Pendiente';
         const idCita = r.id_cita || r?.cita?.id_cita || r?.cita?.id || '';
-        const pacienteNombre = data.nombre_completo || 'Paciente';
+        // AUROSANAX CITA WEB V2: si el servidor reconoció el nombre en otro orden, usa el orden de la ficha.
+        const pacienteNombre = String(r.nombre_paciente || data.nombre_completo || 'Paciente');
         const cedulaPaciente = data.numero_documento || '';
         const whatsappPaciente = data.whatsapp || data.telefono || '';
         const codigoReserva = idCita || 'Pendiente de asignar';
