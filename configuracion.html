@@ -2,6 +2,43 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    /* AUROSANAX SEGURIDAD SESIÓN V1 (18/11/2026)
+       Agrega el pase de la sesión ya iniciada (misma pestaña) a cada pedido al
+       Apps Script. No cambia pantallas, botones, mensajes ni datos. No cierra la
+       sesión por errores de internet: solo agrega el pase y deja pasar el pedido. */
+    (function(){
+      if(window.__auroSegPaseV1) return;
+      window.__auroSegPaseV1 = true;
+      var fetchOriginal = window.fetch;
+      if(typeof fetchOriginal !== 'function') return;
+      var DESTINO = /^https:\/\/script\.google\.com\/macros\/s\//;
+      function pase(){
+        try{ return sessionStorage.getItem('aurosanax_seguridad_token') || ''; }catch(_e){ return ''; }
+      }
+      window.fetch = function(input, init){
+        try{
+          var token = pase();
+          var url = typeof input === 'string' ? input : (input && typeof input.href === 'string' ? input.href : '');
+          if(token && url && DESTINO.test(url)){
+            var metodo = String((init && init.method) || 'GET').toUpperCase();
+            if(metodo === 'GET'){
+              if(!/[?&]auro_sesion=/.test(url)){
+                input = url + (url.indexOf('?') === -1 ? '?' : '&') + 'auro_sesion=' + encodeURIComponent(token);
+              }
+            }else if(init && typeof init.body === 'string'){
+              var cuerpo = JSON.parse(init.body);
+              if(cuerpo && typeof cuerpo === 'object' && !Array.isArray(cuerpo) && !cuerpo.auro_sesion){
+                cuerpo.auro_sesion = token;
+                init = Object.assign({}, init, { body: JSON.stringify(cuerpo) });
+              }
+            }
+          }
+        }catch(_e){}
+        return fetchOriginal.call(window, input, init);
+      };
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AUROSANAX DEMO - Configuración v5.1 Plantillas Horario</title>
 
