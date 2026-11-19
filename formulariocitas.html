@@ -1248,14 +1248,8 @@ async function apiGet(accion, params){
       const estado = existente.estado || 'Pendiente';
       const medico = medicoNombre(existente.id_medico || '');
 
-      return window.confirm(
-        'Este paciente ya tiene una cita futura activa.\n\n' +
-        'Fecha: ' + (fecha || 'No registrada') + '\n' +
-        'Hora: ' + (hora || 'No registrada') + (fin ? ' - ' + fin : '') + '\n' +
-        'Médico: ' + medico + '\n' +
-        'Estado: ' + estado + '\n\n' +
-        '¿Desea continuar y reservar una nueva cita?'
-      );
+      /* AUROSANAX MENSAJES PREMIUM V1: ventana propia en lugar de la gris del navegador. */
+      return auroDialogoCitaFutura(fecha, (hora || '') + (fin ? ' - ' + fin : ''), medico, estado);
     }
 
     /* AUROSANAX CITA WEB V1: una sola llamada al servidor revisa y reserva.
@@ -1335,11 +1329,8 @@ async function apiGet(accion, params){
 
       // AUROSANAX CITA WEB V2: confirmación de cédula igual para todas las personas
       // (no revela si la cédula o el nombre existen en el sistema).
-      if(!window.confirm(
-        'Antes de reservar, confirme que su número de cédula es correcto:\n\n' +
-        soloDigitos(data.numero_documento) + '\n\n' +
-        'Aceptar: es correcto, continuar.\nCancelar: quiero corregirlo.'
-      )){
+      /* AUROSANAX MENSAJES PREMIUM V1: ventana propia en lugar de la gris del navegador. */
+      if(!(await auroDialogoConfirmarCedula(soloDigitos(data.numero_documento)))){
         marcarCampoError('numero_documento');
         setStatus('info','<i class="bi bi-info-circle me-1"></i> Corrija su número de cédula y presione <b>Reservar cita</b> nuevamente.');
         desplazarPrimerErrorFormulario();
@@ -1358,7 +1349,7 @@ async function apiGet(accion, params){
         let r = await reservarCitaServidor(data, false);
 
         if(r && r.requiere_confirmacion){
-          if(!confirmarNuevaReservaConCitaFutura(r.cita_futura)){
+          if(!(await confirmarNuevaReservaConCitaFutura(r.cita_futura))){
             setStatus('info','<i class="bi bi-info-circle me-1"></i> La nueva reserva fue cancelada. La cita futura existente se mantiene sin cambios.');
             return;
           }
@@ -1370,13 +1361,13 @@ async function apiGet(accion, params){
           marcarCampoError('numero_documento');
           marcarCampoError('nombres');
           marcarCampoError('apellidos');
-          setStatus('err','<i class="bi bi-person-x-fill me-1"></i> ' + escHtml(r.message));
+          setStatus('err', auroMensajeIdentidad());
           desplazarPrimerErrorFormulario();
           return;
         }
 
         if(r && r.motivo === 'paciente_dia'){
-          setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> No se pudo reservar la cita.<div class="mt-2">' + escHtml(r.message) + '</div>');
+          setStatus('err', auroMensajeMismoDia(r.message));
           return;
         }
 
@@ -1457,7 +1448,7 @@ async function apiGet(accion, params){
         activarModoReservaCompletada();
       }catch(err){
         console.error(err);
-        setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> ' + escHtml(err.message));
+        setStatus('err', auroMensajeError(err.message));
         await cargarDatosIniciales(true);
       }finally{
         enviandoCita = false;
@@ -1483,6 +1474,156 @@ async function apiGet(accion, params){
 
       await Promise.allSettled([cargaFormulario]);
     });
+  </script>
+  <!-- ============================================================
+       AUROSANAX FORMULARIO | MENSAJES PREMIUM V1
+       - Ventanas propias (cédula y cita futura) en lugar de las
+         ventanas grises del navegador.
+       - Mensajes de bloqueo con una salida clara: botón para escribir
+         a Secretaría por WhatsApp y botón para ver horarios.
+       - No cambia reglas, validaciones, envío, reserva, comprobante,
+         privacidad, bloqueo de doble clic ni el servidor.
+       - No muestra ningún dato de la ficha del paciente.
+       ============================================================ -->
+  <style>
+    .auro-dlg-fondo{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:99999;opacity:0;transition:opacity .18s ease}
+    .auro-dlg-fondo.show{opacity:1}
+    .auro-dlg{background:#fff;border-radius:22px;max-width:430px;width:100%;box-shadow:0 24px 60px rgba(139,30,90,.28);padding:26px 22px 20px;text-align:center;transform:translateY(10px) scale(.98);transition:transform .18s ease;border-top:5px solid var(--primary,#8b1e5a)}
+    .auro-dlg-fondo.show .auro-dlg{transform:none}
+    .auro-dlg-icono{width:58px;height:58px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:26px;background:var(--soft,#fdf2f8);color:var(--primary,#8b1e5a)}
+    .auro-dlg h3{font-size:1.18rem;font-weight:800;color:var(--text,#1f2937);margin:0 0 8px}
+    .auro-dlg p{color:var(--muted,#64748b);font-size:.95rem;margin:0 0 6px;line-height:1.45}
+    .auro-dlg-dato{font-size:1.55rem;font-weight:800;letter-spacing:2px;color:var(--primary,#8b1e5a);background:var(--soft,#fdf2f8);border-radius:14px;padding:10px 12px;margin:12px 0 6px}
+    .auro-dlg-tarjeta{background:var(--soft,#fdf2f8);border-radius:14px;padding:12px 14px;margin:12px 0 6px;text-align:left;font-size:.93rem;color:var(--text,#1f2937)}
+    .auro-dlg-tarjeta div{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+    .auro-dlg-tarjeta small{color:var(--muted,#64748b)}
+    .auro-dlg-botones{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+    .auro-dlg-botones button{flex:1 1 140px;border:0;border-radius:14px;padding:12px 14px;font-weight:700;font-size:.97rem;cursor:pointer}
+    .auro-dlg-si{background:linear-gradient(135deg,var(--primary,#8b1e5a),#c2185b);color:#fff}
+    .auro-dlg-no{background:#f1f5f9;color:var(--text,#1f2937)}
+    .auro-ayuda{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+    .auro-ayuda a,.auro-ayuda button{display:inline-flex;align-items:center;gap:6px;border-radius:12px;padding:8px 12px;font-weight:700;font-size:.9rem;text-decoration:none;border:0;cursor:pointer}
+    .auro-ayuda .wa{background:#25d366;color:#fff}
+    .auro-ayuda .ver{background:#fff;color:var(--primary,#8b1e5a);border:1px solid var(--primary,#8b1e5a)}
+    .auro-msg-titulo{font-weight:800;display:block;margin-bottom:4px}
+  </style>
+  <script>
+    /* Ventana premium. Devuelve una promesa: true = botón principal. */
+    function auroDialogoPremium(opciones){
+      return new Promise(function(resolver){
+        var o = opciones || {};
+        var fondo = document.createElement('div');
+        fondo.className = 'auro-dlg-fondo';
+        fondo.innerHTML =
+          '<div class="auro-dlg" role="dialog" aria-modal="true" aria-labelledby="auroDlgTitulo">' +
+            '<div class="auro-dlg-icono"><i class="bi ' + (o.icono || 'bi-info-circle') + '"></i></div>' +
+            '<h3 id="auroDlgTitulo">' + (o.titulo || '') + '</h3>' +
+            (o.html || '') +
+            '<div class="auro-dlg-botones">' +
+              '<button type="button" class="auro-dlg-no">' + (o.no || 'Cancelar') + '</button>' +
+              '<button type="button" class="auro-dlg-si">' + (o.si || 'Aceptar') + '</button>' +
+            '</div>' +
+          '</div>';
+        var cerrado = false;
+        function cerrar(valor){
+          if(cerrado) return;
+          cerrado = true;
+          document.removeEventListener('keydown', tecla, true);
+          fondo.classList.remove('show');
+          setTimeout(function(){ if(fondo.parentNode) fondo.parentNode.removeChild(fondo); }, 180);
+          resolver(valor);
+        }
+        function tecla(e){ if(e.key === 'Escape'){ e.preventDefault(); cerrar(false); } }
+        fondo.querySelector('.auro-dlg-si').addEventListener('click', function(){ cerrar(true); });
+        fondo.querySelector('.auro-dlg-no').addEventListener('click', function(){ cerrar(false); });
+        document.addEventListener('keydown', tecla, true);
+        document.body.appendChild(fondo);
+        requestAnimationFrame(function(){ fondo.classList.add('show'); });
+        setTimeout(function(){ var b = fondo.querySelector('.auro-dlg-si'); if(b) b.focus(); }, 60);
+      });
+    }
+
+    function auroDialogoConfirmarCedula(cedula){
+      return auroDialogoPremium({
+        icono: 'bi-person-vcard',
+        titulo: '¿Su cédula es correcta?',
+        html: '<p>Revise que el número sea el de su cédula antes de reservar.</p>' +
+              '<div class="auro-dlg-dato">' + escHtml(cedula) + '</div>',
+        si: 'Sí, es correcta',
+        no: 'Corregir'
+      });
+    }
+
+    function auroDialogoCitaFutura(fecha, hora, medico, estado){
+      return auroDialogoPremium({
+        icono: 'bi-calendar2-check',
+        titulo: 'Ya tiene una cita programada',
+        html: '<p>Encontramos una cita activa más adelante:</p>' +
+              '<div class="auro-dlg-tarjeta">' +
+                '<div><small>Fecha</small><b>' + escHtml(fecha || 'No registrada') + '</b></div>' +
+                '<div><small>Hora</small><b>' + escHtml(hora || 'No registrada') + '</b></div>' +
+                '<div><small>Médico</small><b>' + escHtml(medico || '') + '</b></div>' +
+                '<div><small>Estado</small><b>' + escHtml(estado || 'Pendiente') + '</b></div>' +
+              '</div>' +
+              '<p>¿Desea reservar <b>otra</b> cita adicional?</p>',
+        si: 'Reservar otra cita',
+        no: 'No, cancelar'
+      });
+    }
+
+    /* Enlace a WhatsApp de Secretaría (número de Configuración). */
+    function auroWhatsappSecretaria(texto){
+      var n = String(valorConfigFormulario('whatsapp_clinica', '593984567660') || '').replace(/\D/g, '');
+      if(n.length === 10 && n.charAt(0) === '0') n = '593' + n.substring(1);
+      if(!n) return '';
+      return 'https://wa.me/' + n + '?text=' + encodeURIComponent(texto || '');
+    }
+
+    function auroAyudaHtml(textoWhatsapp, conVerHorarios){
+      var wa = auroWhatsappSecretaria(textoWhatsapp);
+      var html = '<div class="auro-ayuda">';
+      if(wa) html += '<a class="wa" href="' + escHtml(wa) + '" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> Escribir a Secretaría</a>';
+      if(conVerHorarios) html += '<button type="button" class="ver" onclick="auroIrAHorarios()"><i class="bi bi-clock"></i> Ver horarios</button>';
+      return html + '</div>';
+    }
+
+    function auroIrAHorarios(){
+      var s = document.getElementById('slots');
+      if(s && s.scrollIntoView) s.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+
+    function auroCedulaEscrita(){
+      var c = document.getElementById('numero_documento');
+      return c ? String(c.value || '').replace(/\D/g, '') : '';
+    }
+
+    function auroMensajeIdentidad(){
+      return '<span class="auro-msg-titulo"><i class="bi bi-shield-lock me-1"></i> No pudimos confirmar sus datos</span>' +
+        'Escriba sus nombres y apellidos <b>tal como aparecen en su cédula</b>. ' +
+        'Puede usar solo su primer nombre y su primer apellido.' +
+        auroAyudaHtml('Hola, intenté agendar una cita en línea con la cédula ' + auroCedulaEscrita() +
+          ' y el sistema no pudo confirmar mis datos. ¿Me pueden ayudar?', false);
+    }
+
+    function auroMensajeMismoDia(mensajeServidor){
+      return '<span class="auro-msg-titulo"><i class="bi bi-calendar-x me-1"></i> Ya tiene una cita para este día</span>' +
+        escHtml(mensajeServidor || '') +
+        '<div class="mt-1">Si necesita cambiarla, escríbanos y Secretaría le ayuda.</div>' +
+        auroAyudaHtml('Hola, tengo una cita agendada y necesito ayuda para cambiarla. Mi cédula es ' + auroCedulaEscrita() + '.', false);
+    }
+
+    function auroMensajeError(mensaje){
+      var texto = String(mensaje || '');
+      var esHorario = /horario/i.test(texto) && /(reservad|disponible|ocupad)/i.test(texto);
+      if(esHorario){
+        return '<span class="auro-msg-titulo"><i class="bi bi-hourglass-bottom me-1"></i> Este horario acaba de ser tomado</span>' +
+          'Otra persona reservó este horario mientras usted llenaba el formulario. Por favor elija otro.' +
+          auroAyudaHtml('', true).replace(/<a class="wa"[\s\S]*?<\/a>/, '');
+      }
+      return '<i class="bi bi-exclamation-triangle me-1"></i> ' + escHtml(texto) +
+        '<div class="mt-1">Si el problema continúa, escríbanos y Secretaría le ayuda.</div>' +
+        auroAyudaHtml('Hola, intenté agendar una cita en línea y apareció este mensaje: ' + texto, false);
+    }
   </script>
 </body>
 </html>
