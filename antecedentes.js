@@ -6215,3 +6215,297 @@ function recopilarAntecedentesPersonalesCompletos(){
     'AUROSANAX antecedentes.js: BARRERA DE MODIFICACIÓN REAL V3 instalada.'
   );
 })();
+/* ============================================================
+   AUROSANAX - ANTECEDENTES: AISLAMIENTO COMPLETO ENTRE PACIENTES V4
+   ------------------------------------------------------------
+   Bloque agregado al final. No edita código anterior: solo envuelve.
+
+   CORRIGE:
+   1. La limpieza al cambiar de paciente ahora ocurre por CUALQUIER
+      camino (lista, Pacientes > Abrir historia, Historial > Ver,
+      restaurar pantalla), no solo al usar la lista desplegable.
+      Se ejecuta ANTES de que el sistema cargue al nuevo paciente.
+   2. Alergias: al quedar limpio el campo, la carga estable vuelve a
+      leer las alergias del paciente correcto.
+   3. Botones rápidos ("Niega…"): se borran sus marcas internas y su
+      memoria de "deshacer" al cambiar de paciente.
+   4. Caja "Antecedentes previos": se limpia con su nombre real.
+   5. Permite BORRAR un antecedente que la doctora quitó a mano
+      (antes la protección lo volvía a poner). Solo si:
+      - es edición de una historia existente,
+      - la doctora interactuó con Antecedentes (detector V3),
+      - ese campo SÍ se mostró con datos al cargar la historia.
+      Si la carga falló (campo nunca mostrado), la protección se mantiene.
+
+   NO MODIFICA: botones de guardar, doble clic, mensajes/alertas,
+   guardado, IDs, fechas, firma, QR, auditoría, index.html, Apps Script,
+   familiares/repetibles (solo usa sus funciones de limpieza),
+   mismo paciente / cambio de atención (no limpia).
+   ============================================================ */
+(function(){
+  'use strict';
+
+  if(window.__auroAntecedentesAislamientoV4) return;
+  window.__auroAntecedentesAislamientoV4 = true;
+
+  const CAMPOS = [
+    'antecedentes_personales',
+    'antecedentes_quirurgicos',
+    'antecedentes_gineco_obstetricos',
+    'antecedentes_familiares',
+    'medicacion_actual',
+    'alergias'
+  ];
+  const BANDERAS = [
+    'auroNiegaPatologicos',
+    'auroNiegaQuirurgicos',
+    'auroNiegaAlergias',
+    'auroNiegaFamiliares'
+  ];
+
+  let pacienteVisto = '';
+  let baselineCarga = null;
+
+  function texto_(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function selectorPaciente_(){
+    return document.getElementById('hcPacienteSelect');
+  }
+
+  function intentar_(fn){
+    try{ return fn(); }catch(error){
+      console.warn('AUROSANAX Antecedentes V4:', error);
+      return undefined;
+    }
+  }
+
+  /* ---------- Limpieza completa (silenciosa, sin guardar) ---------- */
+  function limpiarTodo_(){
+    const panel = document.getElementById('hc_antecedentes');
+
+    // a) Limpieza visual estable V1 (controles, filas repetibles, ayudas).
+    if(typeof window.auroLimpiarAntecedentesVisualesPaciente === 'function'){
+      intentar_(() => window.auroLimpiarAntecedentesVisualesPaciente());
+    }
+
+    // b) Limpiadores propios del módulo (también campos ocultos).
+    ['limpiarAntecedentesPersonalesEstructurados',
+     'limpiarAntecedentesQuirurgicosEstructurados',
+     'limpiarAlergiasEstructuradas',
+     'limpiarAntecedentesFamiliaresEstructurados'].forEach(nombre => {
+      if(typeof window[nombre] === 'function') intentar_(() => window[nombre]());
+    });
+
+    // c) Marcas internas de botones rápidos "Niega…".
+    if(panel){
+      BANDERAS.forEach(b => { delete panel.dataset[b]; });
+    }
+
+    // d) Memoria de "deshacer" de los botones rápidos.
+    intentar_(() => {
+      if(typeof AURO_V21_HELPER_SNAPSHOTS !== 'undefined' && AURO_V21_HELPER_SNAPSHOTS){
+        Object.keys(AURO_V21_HELPER_SNAPSHOTS).forEach(k => { delete AURO_V21_HELPER_SNAPSHOTS[k]; });
+      }
+    });
+
+    // e) Caja "Antecedentes previos" (nombre real del elemento).
+    const caja = document.getElementById('auroAntecedentesPreviosBox');
+    const contenido = document.getElementById('auroAntecedentesPreviosContent');
+    if(contenido) contenido.innerHTML = '';
+    if(caja){
+      caja.style.display = 'none';
+      caja.dataset.idHistoriaOrigen = '';
+    }
+
+    // f) Estado visual de ayudas y resumen clínico.
+    if(typeof window.auroV21SincronizarEstadosAyudas === 'function'){
+      intentar_(() => window.auroV21SincronizarEstadosAyudas());
+    }
+    if(typeof window.updateClinicalSummary === 'function'){
+      intentar_(() => window.updateClinicalSummary());
+    }
+
+    baselineCarga = null;
+  }
+
+  /* ---------- 1-4: cambio de paciente por cualquier camino ---------- */
+  function instalarCambioPaciente_(){
+    const actual = window.seleccionarPacienteHistoria;
+    if(typeof actual !== 'function') return false;
+    if(actual.__auroAislamientoV4 === true) return true;
+
+    const base = actual;
+    const envuelta = function(){
+      const nuevo = texto_(selectorPaciente_()?.value);
+
+      // Cambio real de paciente: limpiar ANTES de cargar al nuevo.
+      // Mismo paciente (refresco / cambio de atención): no se toca nada.
+      // Incluye quitar el paciente (nuevo vacío) para que no queden datos.
+      if(pacienteVisto && nuevo !== pacienteVisto){
+        limpiarTodo_();
+        console.log('AUROSANAX Antecedentes V4: limpieza completa por cambio de paciente.',
+          {anterior:pacienteVisto, nuevo:nuevo});
+      }
+
+      pacienteVisto = nuevo;
+      return base.apply(this, arguments);
+    };
+
+    Object.keys(base).forEach(k => { try{ envuelta[k] = base[k]; }catch(_e){} });
+    envuelta.__auroAislamientoV4 = true;
+    envuelta.__auroOriginalV4 = base;
+    window.seleccionarPacienteHistoria = envuelta;
+
+    pacienteVisto = texto_(selectorPaciente_()?.value);
+    return true;
+  }
+
+  /* ---------- 5: permitir borrar un antecedente editado ---------- */
+  const OCULTOS_ = ['hcAntecedentesPersonales','hcAntecedentesQuirurgicos',
+    'hcAntecedentesFamiliares','hcMedicacionActual','hcAlergias'];
+
+  /* Lee lo que se guardaría SIN dejar cambios en pantalla:
+     los recopiladores escriben campos ocultos, así que se restauran. */
+  function valoresActuales_(){
+    const respaldo = OCULTOS_.map(id => {
+      const e = document.getElementById(id);
+      return e ? [e, e.value] : null;
+    }).filter(Boolean);
+    try{
+      return valoresActualesSinRestaurar_();
+    }finally{
+      respaldo.forEach(([e, val]) => { if(e.value !== val) e.value = val; });
+    }
+  }
+
+  function valoresActualesSinRestaurar_(){
+    const v = {};
+    const leer = (fn, id) => {
+      if(typeof window[fn] === 'function'){
+        const r = intentar_(() => window[fn]());
+        if(r !== undefined) return texto_(r);
+      }
+      return texto_(document.getElementById(id)?.value);
+    };
+    v.antecedentes_personales = leer('recopilarAntecedentesPersonalesCompletos', 'hcAntecedentesPersonales');
+    v.antecedentes_quirurgicos = leer('recopilarAntecedentesQuirurgicosEstructurados', 'hcAntecedentesQuirurgicos');
+    v.antecedentes_gineco_obstetricos = leer('recopilarAntecedentesGinecoObstetricosCompletos', '');
+    v.antecedentes_familiares = leer('recopilarAntecedentesFamiliaresEstructurados', 'hcAntecedentesFamiliares');
+    v.medicacion_actual = texto_(document.getElementById('hcMedicacionActual')?.value);
+    v.alergias = leer('recopilarAlergiasEstructuradas', 'hcAlergias');
+    return v;
+  }
+
+  function instalarBaselineCarga_(){
+    const actual = window.auroCargarAntecedentesDesdeHistoria;
+    if(typeof actual !== 'function') return false;
+    if(actual.__auroAislamientoV4 === true) return true;
+
+    const base = actual;
+    const envuelta = function(h, modo){
+      const r = base.apply(this, arguments);
+      const idH = texto_(h?.id_historia || h?.id);
+      baselineCarga = idH
+        ? {id_historia:idH, id_paciente:texto_(h?.id_paciente), valores:valoresActuales_()}
+        : null;
+      return r;
+    };
+
+    Object.keys(base).forEach(k => { try{ envuelta[k] = base[k]; }catch(_e){} });
+    envuelta.__auroAislamientoV4 = true;
+    envuelta.__auroModificacionRealV3 = base.__auroModificacionRealV3 === true;
+    envuelta.__auroOriginalV4 = base;
+    window.auroCargarAntecedentesDesdeHistoria = envuelta;
+    return true;
+  }
+
+  function idHistoriaEdicion_(){
+    try{
+      if(typeof editingHistoryId !== 'undefined' && editingHistoryId) return texto_(editingHistoryId);
+    }catch(_e){}
+    return texto_(window.editingHistoryId);
+  }
+
+  function doctoraEditoAntecedentes_(){
+    if(typeof window.auroAntecedentesDebugModificacionRealV3 !== 'function') return false;
+    const e = intentar_(() => window.auroAntecedentesDebugModificacionRealV3()) || {};
+    return e.modificado === true && e.contexto_valido === true;
+  }
+
+  function instalarPermitirBorrar_(){
+    const actual = window.auroAplicarProteccionAntecedentesEdicion;
+    if(typeof actual !== 'function') return false;
+    if(actual.__auroAislamientoV4 === true) return true;
+
+    const base = actual;
+    const envuelta = function(data){
+      const antes = {};
+      if(data && typeof data === 'object'){
+        CAMPOS.forEach(c => { antes[c] = data[c]; });
+      }
+
+      const resultado = base.apply(this, arguments);
+      const destino = (resultado && typeof resultado === 'object') ? resultado : data;
+      if(!destino || typeof destino !== 'object') return resultado;
+
+      const idEdicion = idHistoriaEdicion_();
+      if(
+        !idEdicion ||
+        !baselineCarga ||
+        baselineCarga.id_historia !== idEdicion ||
+        !doctoraEditoAntecedentes_()
+      ){
+        return resultado;
+      }
+
+      CAMPOS.forEach(c => {
+        const quitadoPorDoctora =
+          texto_(antes[c]) === '' &&
+          texto_(baselineCarga.valores[c]) !== '' &&
+          texto_(destino[c]) !== '';
+        if(quitadoPorDoctora){
+          destino[c] = '';
+        }
+      });
+
+      return resultado;
+    };
+
+    envuelta.__auroAislamientoV4 = true;
+    envuelta.__auroOriginalV4 = base;
+    window.auroAplicarProteccionAntecedentesEdicion = envuelta;
+    return true;
+  }
+
+  /* ---------- Instalación con reintentos (después de V1-V3) ---------- */
+  function listoV3_(){
+    return typeof window.guardarHistoriaClinicaERP === 'function' &&
+      window.guardarHistoriaClinicaERP.__auroAntecedentesModificacionRealV3 === true;
+  }
+
+  let intentos = 0;
+  const timer = window.setInterval(function(){
+    intentos += 1;
+    if(!listoV3_() && intentos < 150) return;
+
+    const ok1 = instalarCambioPaciente_();
+    const ok2 = instalarBaselineCarga_();
+    const ok3 = instalarPermitirBorrar_();
+
+    if((ok1 && ok2 && ok3) || intentos >= 150){
+      window.clearInterval(timer);
+      console.log('AUROSANAX antecedentes.js: AISLAMIENTO COMPLETO V4 instalado.',
+        {cambio_paciente:ok1, base_carga:ok2, permitir_borrar:ok3});
+    }
+  }, 100);
+
+  window.auroAntecedentesDebugV4 = function(){
+    return {
+      paciente_visto:pacienteVisto,
+      baseline_historia:baselineCarga ? baselineCarga.id_historia : '',
+      doctora_edito:doctoraEditoAntecedentes_()
+    };
+  };
+})();
