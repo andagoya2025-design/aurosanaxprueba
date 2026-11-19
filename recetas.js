@@ -4660,6 +4660,18 @@
         .auro-media-receta .auro-rx-table td.auro-rx-col-ind{
           vertical-align:top!important;
         }
+        /* AUROSANAX RECETA 48 - ALINEACIÓN SUPERIOR UNIFORME (solo visual)
+           Todas las columnas de cada medicamento empiezan a la misma altura,
+           para que cada medicamento quede en la misma línea donde empiezan
+           sus indicaciones. La altura de la fila no cambia: firma, sello,
+           QR, datos, guardado, Plan y PDF ya firmados quedan iguales. */
+        .auro-media-receta .auro-rx-table td.auro-rx-col-num,
+        .auro-media-receta .auro-rx-table td.auro-rx-col-med,
+        .auro-media-receta .auro-rx-table td.auro-rx-col-pres,
+        .auro-media-receta .auro-rx-table td.auro-rx-col-cant,
+        .auro-media-receta .auro-rx-table td.auro-rx-col-ind{
+          vertical-align:top!important;
+        }
 
         .auro-media-receta .auro-rx-col-med strong{
           font-size:10.8px!important;
