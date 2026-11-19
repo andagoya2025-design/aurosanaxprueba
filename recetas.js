@@ -327,7 +327,7 @@
       cantidad: /^Cantidad:/i.test(partes[3] || '') ? (partes[3] || '').replace(/^Cantidad:\s*/i, '') : '',
       frec: /^Cantidad:/i.test(partes[3] || '') ? (partes[4] || '') : (partes[3] || ''),
       dur: (partes.find(x => /^por\s+/i.test(x)) || '').replace(/^por\s+/i, ''),
-      ind: partes.filter(x => !/^Cantidad:/i.test(x) && !/^por\s+/i.test(x)).slice(/^Cantidad:/i.test(partes[3] || '') ? 5 : 4).join(' - '),
+      ind: partes.filter(x => !/^Cantidad:/i.test(x) && !/^por\s+/i.test(x)).slice(4).filter((x, j, a) => !(j === a.length - 1 && /^tratamiento\s+continuo$/i.test(x))).join(' - '), /* RECETA 49: indicación correcta con cantidad; «Tratamiento continuo» final es la marca, no la indicación */
       continuo: /tratamiento\s+continuo/i.test(original) ? 'Sí' : 'No'
     };
   }
