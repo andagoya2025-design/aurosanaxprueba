@@ -6509,3 +6509,170 @@ function recopilarAntecedentesPersonalesCompletos(){
     };
   };
 })();
+
+/* ============================================================
+   AUROSANAX ANTECEDENTES - ALERGIAS ESCRITAS + AVISOS SIN CONGELAR V1
+   (20/11/2026) — Bloque agregado al FINAL. No edita funciones anteriores.
+   1) ALERGIAS: si la ficha del paciente trae una alergia escrita a mano
+      que no coincide con ninguna casilla (ej. "penicilina", "ibuprofeno",
+      "mariscos"), antes se ignoraba y podía perderse al guardar.
+      Ahora se marca la casilla que corresponde:
+        penicilina / amoxicilina…  → Penicilinas y derivados
+        ibuprofeno / diclofenaco…  → AINES y derivados
+        otro medicamento conocido  → Otros medicamentos
+        cualquier otra cosa        → Otros
+      con el texto original en el detalle. "No", "Ninguna", "No refiere",
+      "Niega"… no marcan nada.
+   2) AVISOS: los 4 avisos grises "Se registrará: Niega…" pasan a un aviso
+      corto que se va solo y no detiene la pantalla. Los demás avisos
+      quedan iguales.
+   NO TOCA: guardado, datos enviados, otras casillas, Aislamiento V4.
+============================================================ */
+(function auroAntAlergiasAvisosV1(){
+  'use strict';
+  if(window.__AURO_ANT_ALERGIAS_AVISOS_V1__) return;
+  window.__AURO_ANT_ALERGIAS_AVISOS_V1__ = true;
+
+  function norm(v){
+    return String(v == null ? '' : v)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /* ---------------- 1) Alergias escritas a mano ---------------- */
+
+  const SIN_ALERGIA = /^(no|ninguna?|ningun|nada|niega\b.*|no refiere\b.*|no conocid[ao]s?|no registrad[ao]s?|sin alergias?\b.*|desconoce\b.*|n\/?a|-+|\.+)\.?$/;
+
+  const DIRECTAS = [
+    { re: /penicil|amoxicil|ampicil|dicloxacil|oxacil|piperacil/, casilla: 'Penicilinas y derivados' },
+    { re: /\baines?\b|ibuprofen|diclofenac|naproxen|ketorolac|aspirin|acetilsalicil|ketoprofen|meloxicam|piroxicam|indometacin|nimesulid|celecoxib|etoricoxib/, casilla: 'AINES y derivados' },
+    { re: /\blana\b/, casilla: 'Lana' },
+    { re: /\bpolen\b/, casilla: 'Polen' },
+    { re: /\blatex\b/, casilla: 'Látex' },
+    { re: /citric|naranja|limon|mandarina|toronja/, casilla: 'Cítricos' },
+    { re: /lacteo|\bleche\b|lactosa/, casilla: 'Lácteos' }
+  ];
+
+  const MEDICAMENTO = /medicament|farmac|sulfa|cefal|ceftri|cefur|cefaz|quinolon|ciproflox|levoflox|moxiflox|azitro|claritro|eritro|tetracicl|doxicicl|clindami|metronidaz|vancomic|gentamic|metamizol|dipiron|paracetamol|acetaminof|tramadol|morfin|codein|contraste|yodo|insulin|anestes|lidoca|carbamazep|fenitoin|antibiot|anticonvuls|vacuna/;
+
+  function casillaPorNombre(nombre){
+    const lista = document.querySelectorAll('.hcAlergiaCheck');
+    for(let i = 0; i < lista.length; i++){
+      if(String(lista[i].dataset.alergia || '') === nombre) return lista[i];
+    }
+    return null;
+  }
+
+  function detallePorNombre(nombre){
+    const lista = document.querySelectorAll('.hcAlergiaDetalle');
+    for(let i = 0; i < lista.length; i++){
+      if(String(lista[i].dataset.alergia || '') === nombre) return lista[i];
+    }
+    return null;
+  }
+
+  function destinoDe(textoItem){
+    const n = norm(textoItem);
+    for(let i = 0; i < DIRECTAS.length; i++){
+      if(DIRECTAS[i].re.test(n)) return DIRECTAS[i].casilla;
+    }
+    return MEDICAMENTO.test(n) ? 'Otros medicamentos' : 'Otros';
+  }
+
+  function marcarNoReconocidas(valor){
+    const texto = String(valor || '').trim();
+    if(!texto || SIN_ALERGIA.test(norm(texto))) return 0;
+
+    let marcadas = 0;
+
+    texto.split(';').map(function(x){ return x.trim(); }).filter(Boolean).forEach(function(item){
+      if(SIN_ALERGIA.test(norm(item))) return;
+
+      const partes = item.split('|').map(function(x){ return x.trim(); });
+      const nombre = partes[0] || '';
+      if(!nombre) return;
+
+      /* Si la función original ya la reconoció, no se toca. */
+      if(typeof auroBuscarControlPorData === 'function' &&
+         auroBuscarControlPorData('.hcAlergiaCheck', 'alergia', nombre)) return;
+
+      const destino = destinoDe(item);
+      const chk = casillaPorNombre(destino);
+      if(!chk) return;
+
+      chk.checked = true;
+
+      const detalle = detallePorNombre(destino);
+      if(detalle){
+        const reaccion = partes.slice(1).join(' | ').replace(/^Reacción:\s*/i, '').trim();
+        const nuevo = reaccion ? nombre + ' (' + reaccion + ')' : nombre;
+        const actual = String(detalle.value || '').trim();
+        if(norm(actual).indexOf(norm(nuevo)) === -1){
+          detalle.value = actual ? actual + '; ' + nuevo : nuevo;
+        }
+      }
+      marcadas++;
+    });
+
+    if(marcadas){
+      try{ if(typeof updateClinicalSummary === 'function') updateClinicalSummary(); }catch(e){}
+    }
+    return marcadas;
+  }
+
+  window.auroAntAlergiasV1MarcarNoReconocidas = marcarNoReconocidas;
+
+  const cargarBase = window.cargarAlergiasEstructuradas;
+  if(typeof cargarBase === 'function' && !cargarBase.__auroAntAlergiasV1){
+    const cargarEnvuelta = function(valor){
+      const r = cargarBase.apply(this, arguments);
+      try{ marcarNoReconocidas(valor); }catch(e){
+        console.warn('AUROSANAX ALERGIAS V1: revisión omitida.', e);
+      }
+      return r;
+    };
+    cargarEnvuelta.__auroAntAlergiasV1 = true;
+    window.cargarAlergiasEstructuradas = cargarEnvuelta;
+  }
+
+  /* ---------------- 2) Avisos "Se registrará: Niega…" sin congelar ---------------- */
+
+  const PREFIJO = 'Se registrará: Niega';
+
+  function avisoCorto(mensaje){
+    try{
+      const previo = document.getElementById('auroAntAvisoCortoV1');
+      if(previo && previo.parentNode) previo.parentNode.removeChild(previo);
+
+      const div = document.createElement('div');
+      div.id = 'auroAntAvisoCortoV1';
+      div.setAttribute('role', 'status');
+      div.textContent = '✓ ' + mensaje;
+      div.style.cssText =
+        'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
+        'z-index:2147483000;background:#0f766e;color:#fff;padding:10px 16px;' +
+        'border-radius:12px;font-size:14px;font-weight:600;max-width:92vw;' +
+        'box-shadow:0 10px 30px rgba(0,0,0,.2);text-align:center;';
+      (document.body || document.documentElement).appendChild(div);
+
+      setTimeout(function(){
+        if(div.parentNode) div.parentNode.removeChild(div);
+      }, 2600);
+    }catch(e){}
+  }
+
+  const alertaBase = window.alert;
+  const alertaFiltrada = function(mensaje){
+    const m = String(mensaje == null ? '' : mensaje);
+    if(m.indexOf(PREFIJO) === 0){
+      avisoCorto(m);
+      return;
+    }
+    return alertaBase.apply(window, arguments);
+  };
+  alertaFiltrada.__auroAntAvisosV1 = true;
+  window.alert = alertaFiltrada;
+})();

@@ -7557,3 +7557,40 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarEnvuelto;
   window.guardarPlanClinicoConUX = guardarEnvuelto;
 })();
+
+/* ============================================================
+   AUROSANAX PLAN - PALABRAS ENTERAS EN LA TABLA V1 (20/11/2026)
+   Bloque agregado al FINAL. Solo estilo, sin lógica.
+   Antes: la regla "overflow-wrap:anywhere" dejaba partir el nombre del
+   medicamento en cualquier letra (ej. "Paracetam / ol").
+   Ahora: las palabras se mantienen enteras y solo se parten si una sola
+   palabra no cabe en la celda. Aplica también a la indicación.
+   NO TOCA: columnas, datos, botones, impresión ni la receta.
+============================================================ */
+(function auroPlanPalabrasEnterasV1(){
+  'use strict';
+  if(window.__AURO_PLAN_PALABRAS_ENTERAS_V1__) return;
+  window.__AURO_PLAN_PALABRAS_ENTERAS_V1__ = true;
+
+  function instalar(){
+    if(document.getElementById('auroPlanPalabrasEnterasV1')) return;
+    const style = document.createElement('style');
+    style.id = 'auroPlanPalabrasEnterasV1';
+    style.textContent =
+      '#hc_plan table.auro-plan-tabla-medicamentos th,' +
+      '#hc_plan table.auro-plan-tabla-medicamentos td,' +
+      '#hc_plan table.auro-plan-tabla-medicamentos .auro-plan-indicacion-tabla,' +
+      '#hc_plan div.auro-plan-indicacion-tabla{' +
+        'overflow-wrap:break-word!important;' +
+        'word-break:normal!important;' +
+        'hyphens:manual!important;' +
+      '}';
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', instalar);
+  }else{
+    instalar();
+  }
+})();

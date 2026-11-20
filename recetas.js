@@ -315,6 +315,7 @@
     if(!original) return null;
 
     const partes = original.split(' - ').map(x => x.trim()).filter(Boolean);
+    recetaUnirNombreConGuion50(partes); /* RECETA 50: nombres con « - » (ej. Amoxicilina - Ácido clavulánico) */
 
     if(partes.length < 3){
       return { texto: original };
@@ -330,6 +331,29 @@
       ind: partes.filter(x => !/^Cantidad:/i.test(x) && !/^por\s+/i.test(x)).slice(4).filter((x, j, a) => !(j === a.length - 1 && /^tratamiento\s+continuo$/i.test(x))).join(' - '), /* RECETA 49: indicación correcta con cantidad; «Tratamiento continuo» final es la marca, no la indicación */
       continuo: /tratamiento\s+continuo/i.test(original) ? 'Sí' : 'No'
     };
+  }
+
+  /* RECETA 50 (20/11/2026): el texto de un medicamento va como
+     «Nombre - Presentación - Vía - …». Si el NOMBRE trae « - », antes se
+     corría todo un lugar (la presentación quedaba como vía, etc.).
+     Se ubica la vía (VO, IM, Vía oral…) y todo lo anterior a la
+     presentación se vuelve a unir como nombre. Si no se reconoce una vía,
+     o ya está en su lugar, no cambia nada. */
+  function recetaUnirNombreConGuion50(partes){
+    if(!Array.isArray(partes) || partes.length < 4) return partes;
+    const esVia = function(x){
+      const k = String(x || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+      return /^(VIA )?(VO|IM|IV|SC|ORAL|INTRAMUSCULAR|INTRAVENOSA|SUBCUTANEA|VAGINAL|TOPICA|SUBLINGUAL|OFTALMICA|OTICA|INHALATORIA|RECTAL|NASAL)$/.test(k);
+    };
+    if(esVia(partes[2])) return partes;
+    for(let i = 3; i <= 4 && i < partes.length; i++){
+      if(esVia(partes[i])){
+        const nombre = partes.slice(0, i - 1).join(' - ');
+        partes.splice(0, i - 1, nombre);
+        return partes;
+      }
+    }
+    return partes;
   }
 
   function recetaMedicamentosListaEdicion(valor){

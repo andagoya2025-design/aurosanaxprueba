@@ -11904,7 +11904,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
   return false;
 }
 </script>
-  <script src="antecedentes.js?v=20260918_sync1"></script>
+  <script src="antecedentes.js?v=20261120_1"></script>
   <!-- AUROSANAX - Módulo Anamnesis inteligente -->
   <script src="anamnesis.js?v=20260918_sync1"></script>
 
@@ -11924,7 +11924,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
   <script src="consentimientos.js?v=20260918_sync1"></script>
   <!-- AUROSANAX - Motor frontend único de firma electrónica -->
 <script src="firma_electronica.js?v=20261114_2"></script>
-<script src="recetas.js?v=20261115_3"></script>
+<script src="recetas.js?v=20261120_1"></script>
 
 <script>
 /* =====================================================
@@ -12853,7 +12853,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 <script src="catalogo_medicamentos.js?v=20260918_sync1"></script>
 
 <!-- AUROSANAX - Módulo Plan clínico Fase 1 -->
-<script src="plan.js?v=20261115_4"></script>
+<script src="plan.js?v=20261120_2"></script>
 <script src="ordenes_medicas.js?v=20261115_3"></script>
 
 <!-- AUROSANAX - Módulo Atenciones -->
@@ -14816,6 +14816,96 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
         }
       });
   }, true);
+})();
+</script>
+
+<script>
+/* ============================================================
+   AUROSANAX | HISTORIA GUARDADO REAL V1 (20/11/2026) — BLOQUE AGREGADO
+   Problema: "Guardar historia" enviaba el pedido a ciegas (no-cors) y
+   siempre decía "guardado", aunque el servidor lo rechazara o fallara.
+   Ahora, SOLO para guardarHistoriaClinica y editarHistoriaClinica:
+   - el pedido se envía de forma que se pueda leer la respuesta real;
+   - si el servidor responde success:false (por ejemplo, historia de otro
+     paciente, SCRIB_84) o no confirma, el guardado se toma como fallido:
+     la pantalla muestra su aviso de error de siempre y una ventana con
+     el motivo real;
+   - si responde bien, todo sigue exactamente igual que antes.
+   NO TOCA: otros módulos y acciones, botones, doble clic, el pase de
+   sesión (se respeta, va encadenado), datos enviados, Apps Script.
+============================================================ */
+(function(){
+  'use strict';
+  if(window.__AURO_HC_GUARDADO_REAL_V1__) return;
+  window.__AURO_HC_GUARDADO_REAL_V1__ = true;
+
+  var fetchPrevio = window.fetch;
+  if(typeof fetchPrevio !== 'function') return;
+
+  var ACCIONES = { guardarHistoriaClinica: 1, editarHistoriaClinica: 1 };
+
+  function accionDelPedido(init){
+    try{
+      if(!init || typeof init.body !== 'string') return '';
+      var cuerpo = JSON.parse(init.body);
+      return cuerpo && typeof cuerpo === 'object' ? String(cuerpo.accion || '') : '';
+    }catch(e){
+      return '';
+    }
+  }
+
+  function avisar(motivo){
+    setTimeout(function(){
+      var modal = window.auroPlanRecetaV1MostrarModal;
+      if(typeof modal !== 'function') return;
+      modal({
+        icono: '❌', color: '#b91c1c',
+        titulo: 'La historia no se guardó',
+        texto: motivo,
+        botones: [{ texto: 'Entendido', valor: 'ok', principal: true }]
+      });
+    }, 0);
+  }
+
+  var fetchHistoria = async function(input, init){
+    var metodo = String((init && init.method) || 'GET').toUpperCase();
+    var accion = (metodo === 'POST' && init && init.mode === 'no-cors') ? accionDelPedido(init) : '';
+
+    if(!ACCIONES[accion]){
+      return fetchPrevio.apply(this, arguments);
+    }
+
+    var initLeible = Object.assign({}, init);
+    delete initLeible.mode;
+
+    var respuesta;
+    try{
+      respuesta = await fetchPrevio.call(window, input, initLeible);
+    }catch(errorRed){
+      avisar('No hubo conexión con el servidor. Revise el internet y vuelva a presionar «Guardar historia».');
+      throw errorRed;
+    }
+
+    var datos = null;
+    try{ datos = await respuesta.clone().json(); }catch(e){ datos = null; }
+
+    if(!datos || typeof datos !== 'object'){
+      var sinConfirmar = 'El servidor no confirmó el guardado. Vuelva a presionar «Guardar historia».';
+      avisar(sinConfirmar);
+      throw new Error(sinConfirmar);
+    }
+
+    if(datos.success === false){
+      var motivo = String(datos.message || 'El servidor no aceptó el guardado.');
+      avisar(motivo);
+      throw new Error(motivo);
+    }
+
+    return respuesta;
+  };
+
+  fetchHistoria.__auroHcGuardadoRealV1 = true;
+  window.fetch = fetchHistoria;
 })();
 </script>
 
