@@ -7075,3 +7075,485 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
   else intentar();
   ['aurosanax:atencion-seleccionada','aurosanax:plan-cargado','aurosanax:historia-nueva'].forEach(n=>window.addEventListener(n, ()=>setTimeout(montar, 300)));
 })();
+
+/* ============================================================
+   AUROSANAX PLAN - PLAN → RECETA + GUARDADO RÁPIDO V1 (20/11/2026)
+   Bloque agregado al FINAL. No edita funciones anteriores: las envuelve.
+   1) Al guardar el Plan con éxito, revisa (solo lectura) la receta de la
+      MISMA consulta:
+      - Iguales, sin receta o sin medicamentos en el Plan: no muestra nada.
+      - Distinta y sin firmar: ventana "¿Actualizar receta?".
+        "Sí" usa el botón existente auroRecetaAccionDesdePlan (abre la
+        receta para revisar; NO guarda sola). "Ahora no" no cambia nada.
+      - Distinta y firmada: aviso informativo; no toca la receta.
+      - Cualquier error en esta revisión: silencio; el Plan ya quedó guardado.
+   2) Si el Plan de esta consulta ya se encontró en esta sesión, el guardado
+      no vuelve a preguntar si existe (1 pedido menos). Si un guardado falla,
+      se borra esa memoria y el siguiente vuelve a preguntar como antes.
+   3) El aviso gris "No se pudo guardar el Plan clínico" se muestra como
+      ventana propia. Los demás avisos quedan iguales.
+   NO TOCA: botón y doble clic del Plan, guardado del Plan, recetas.js,
+   firma, QR, control de corrección clínica, auditoría, Apps Script.
+   Sin refresco automático ni intervalos.
+============================================================ */
+(function auroPlanRecetaGuardadoV1(){
+  'use strict';
+
+  if(window.__AURO_PLAN_RECETA_V1__) return;
+  window.__AURO_PLAN_RECETA_V1__ = true;
+
+  const LOG = 'AUROSANAX PLAN→RECETA V1:';
+  const memoriaIdPlan = new Map();      // id_atencion -> id_plan (solo esta pestaña)
+  const avisosDescartados = new Set();  // evita repetir la misma pregunta
+  let saltarBusquedaPara = '';          // id_atencion durante el guardado con botón
+  let revisionEnCurso = false;
+
+  function txt(v){ return String(v == null ? '' : v).trim(); }
+
+  function esc(v){
+    return String(v == null ? '' : v)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  function clave(v){
+    return String(v == null ? '' : v)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function idAtencionActiva(){
+    try{
+      if(typeof auroPlanObtenerIdAtencionActivaSeguro === 'function'){
+        return txt(auroPlanObtenerIdAtencionActivaSeguro());
+      }
+    }catch(e){}
+    return txt(window.planState && window.planState.atencionActual);
+  }
+
+  /* ---------------- 2) Guardado rápido: memoria de id_plan ---------------- */
+
+  const buscarBase = window.buscarPlanClinicoPorAtencionDesdeSheets;
+
+  if(typeof buscarBase === 'function' && !buscarBase.__auroPlanRecetaV1){
+    const buscarEnvuelta = async function(idAtencion){
+      const id = txt(idAtencion || (window.planState && window.planState.atencionActual));
+
+      if(id && saltarBusquedaPara === id && memoriaIdPlan.has(id)){
+        return { id_plan: memoriaIdPlan.get(id), id_atencion: id, __memoriaV1: true };
+      }
+
+      const resultado = await buscarBase.apply(this, arguments);
+
+      try{
+        if(id && resultado && txt(resultado.id_plan)){
+          const idAtnRes = txt(resultado.id_atencion);
+          if(!idAtnRes || idAtnRes === id){
+            memoriaIdPlan.set(id, txt(resultado.id_plan));
+          }
+        }
+      }catch(e){}
+
+      return resultado;
+    };
+    buscarEnvuelta.__auroPlanRecetaV1 = true;
+    buscarEnvuelta.__auroOriginalV1 = buscarBase;
+    window.buscarPlanClinicoPorAtencionDesdeSheets = buscarEnvuelta;
+  }
+
+  /* ---------------- Ventanas propias (sin window.confirm) ---------------- */
+
+  const MODAL_ID = 'auroPlanRecetaModalV1';
+
+  function cerrarModal(){
+    const m = document.getElementById(MODAL_ID);
+    if(m && m.parentNode) m.parentNode.removeChild(m);
+  }
+
+  /* opciones: {icono, color, titulo, texto, botones:[{texto, valor, principal}]} */
+  function mostrarModal(op){
+    return new Promise(function(resolve){
+      try{
+        cerrarModal();
+
+        const fondo = document.createElement('div');
+        fondo.id = MODAL_ID;
+        fondo.setAttribute('role', 'dialog');
+        fondo.setAttribute('aria-modal', 'true');
+        fondo.style.cssText =
+          'position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.45);' +
+          'display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const color = op.color || '#0f766e';
+        const botones = (op.botones || [{texto:'Entendido', valor:'ok', principal:true}])
+          .map(function(b, i){
+            const estilo = b.principal
+              ? 'background:' + color + ';color:#fff;border:1px solid ' + color + ';'
+              : 'background:#fff;color:#334155;border:1px solid #cbd5e1;';
+            return '<button type="button" data-auro-valor="' + esc(b.valor) + '" data-auro-i="' + i + '" ' +
+              'style="' + estilo + 'border-radius:10px;padding:10px 16px;font-size:15px;' +
+              'font-weight:600;cursor:pointer;min-width:120px;flex:1 1 auto;">' + esc(b.texto) + '</button>';
+          }).join('');
+
+        fondo.innerHTML =
+          '<div style="background:#fff;border-radius:16px;max-width:440px;width:100%;' +
+          'box-shadow:0 20px 50px rgba(0,0,0,.25);padding:22px 20px 18px;' +
+          'font-family:inherit;border-top:5px solid ' + color + ';">' +
+            '<div style="font-size:30px;line-height:1;margin-bottom:8px;">' + esc(op.icono || 'ℹ️') + '</div>' +
+            '<div style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">' + esc(op.titulo || '') + '</div>' +
+            '<div style="font-size:15px;color:#475569;line-height:1.45;white-space:pre-line;margin-bottom:16px;">' + esc(op.texto || '') + '</div>' +
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">' + botones + '</div>' +
+          '</div>';
+
+        let resuelto = false;
+        function terminar(valor){
+          if(resuelto) return;
+          resuelto = true;
+          cerrarModal();
+          resolve(valor);
+        }
+
+        fondo.addEventListener('click', function(ev){
+          const b = ev.target && ev.target.closest ? ev.target.closest('button[data-auro-valor]') : null;
+          if(b) terminar(b.getAttribute('data-auro-valor'));
+        });
+
+        document.body.appendChild(fondo);
+
+        try{
+          const principal = fondo.querySelector('button[data-auro-i]');
+          if(principal && principal.focus) principal.focus();
+        }catch(e){}
+      }catch(e){
+        console.warn(LOG, 'no se pudo mostrar la ventana.', e);
+        resolve(null);
+      }
+    });
+  }
+
+  window.auroPlanRecetaV1MostrarModal = mostrarModal;
+
+  /* ---------------- 1) Comparar Plan y receta ---------------- */
+
+  function normalizarMed(m){
+    m = m || {};
+    return {
+      med: m.med || m.medicamento || m.nombre || '',
+      pres: m.pres || m.presentacion || '',
+      via: m.via || '',
+      cantidad: m.cantidad || '',
+      frec: m.frec || m.frecuencia || '',
+      dur: m.dur || m.duracion || '',
+      ind: m.ind || m.indicaciones || '',
+      continuo: m.continuo || 'No'
+    };
+  }
+
+  function nombreVia(via){
+    try{
+      if(typeof auroPlanNombreViaCompleta === 'function') return auroPlanNombreViaCompleta(via) || via || '';
+    }catch(e){}
+    return via || '';
+  }
+
+  function lineaTexto(m, viaCompleta){
+    const linea = [
+      m.med || '',
+      m.pres || '',
+      viaCompleta ? nombreVia(m.via) : (m.via || ''),
+      m.cantidad ? 'Cantidad: ' + m.cantidad : '',
+      m.frec || '',
+      m.dur ? 'por ' + m.dur : '',
+      m.ind || ''
+    ].filter(Boolean).join(' - ');
+    return m.continuo === 'Sí' ? linea + ' - Tratamiento continuo' : linea;
+  }
+
+  function claveObjeto(m){
+    m = normalizarMed(m);
+    return [m.med, m.pres, clave(nombreVia(m.via)) || clave(m.via), m.cantidad, m.frec, m.dur, m.ind,
+            (m.continuo === 'Sí' ? 'si' : 'no')]
+      .map(clave).join('|');
+  }
+
+  function medsPlanActuales(){
+    const lista = Array.isArray(window.medicamentosPlanSeleccionados)
+      ? window.medicamentosPlanSeleccionados : [];
+    return lista.map(normalizarMed).filter(function(m){ return txt(m.med); });
+  }
+
+  /* Devuelve: 'iguales' | 'distintas' | 'desconocido' */
+  function compararMedicamentos(planMeds, valorReceta){
+    const bruto = txt(valorReceta);
+    let lista = null;
+
+    if(!bruto){
+      return planMeds.length ? 'distintas' : 'iguales';
+    }
+
+    if(bruto.charAt(0) === '[' || bruto.charAt(0) === '{'){
+      try{
+        let data = JSON.parse(bruto);
+        if(!Array.isArray(data)) data = [data];
+        lista = data;
+      }catch(e){
+        return 'desconocido';
+      }
+    }else{
+      lista = bruto.split(/\n+/).map(function(x){
+        return { texto: x.replace(/^\s*\d+\.\s*/, '').trim() };
+      }).filter(function(x){ return x.texto; });
+    }
+
+    lista = lista.filter(function(item){
+      if(typeof item === 'string') return txt(item);
+      return item && (txt(item.texto) || txt(item.med || item.medicamento || item.nombre));
+    });
+
+    if(lista.length !== planMeds.length) return 'distintas';
+
+    for(let i = 0; i < lista.length; i++){
+      const item = lista[i];
+      const p = planMeds[i];
+
+      if(typeof item === 'string' || (item && txt(item.texto) && !txt(item.med || item.medicamento || item.nombre))){
+        const t = clave(String(typeof item === 'string' ? item : item.texto).replace(/^\s*\d+\.\s*/, ''));
+        if(t !== clave(lineaTexto(p, true)) && t !== clave(lineaTexto(p, false))) return 'distintas';
+      }else if(claveObjeto(item) !== claveObjeto(p)){
+        return 'distintas';
+      }
+    }
+
+    return 'iguales';
+  }
+
+  function recetaActivaDeLista(lista, idAtencion){
+    return (Array.isArray(lista) ? lista : [])
+      .filter(function(r){
+        return r && txt(r.id_atencion) === idAtencion &&
+          !String(r.estado || '').toLowerCase().includes('anulada');
+      })
+      .sort(function(a, b){
+        return String(b.actualizado_en || b.creado_en || b.fecha_receta || '')
+          .localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || ''));
+      })[0] || null;
+  }
+
+  async function obtenerRecetaServidor(idAtencion){
+    if(typeof auroPlanApiGet !== 'function') return { ok:false };
+    const data = await auroPlanApiGet('listarRecetasPorAtencion', { id_atencion: idAtencion });
+    if(!Array.isArray(data)) return { ok:false };
+    return { ok:true, receta: recetaActivaDeLista(data, idAtencion) };
+  }
+
+  /* Devuelve true (firmada), false (sin firma) o null (no se pudo saber). */
+  async function recetaTieneFirma(idAtencion, idReceta){
+    const api = window.auroFirmaElectronica && window.auroFirmaElectronica.consultarDocumentosFirmados;
+    if(typeof api !== 'function' || !idReceta) return null;
+
+    const validos = function(resp){
+      const docs = Array.isArray(resp && resp.documentos) ? resp.documentos : [];
+      return docs.filter(function(doc){
+        if(!doc) return false;
+        const a = txt(doc.id_atencion);
+        const r = txt(doc.id_receta || doc.id_documento_origen);
+        if(a && a !== idAtencion) return false;
+        if(r && r !== idReceta) return false;
+        return txt(doc.estado_firma).toUpperCase() === 'FIRMADO';
+      });
+    };
+
+    let r1 = await api({ tipo_documento:'RECETA', id_atencion:idAtencion, id_receta:idReceta });
+    if(r1 && r1.success === false) return null;
+    if(validos(r1).length) return true;
+
+    let r2 = await api({ tipo_documento:'RECETA', id_atencion:idAtencion });
+    if(r2 && r2.success === false) return null;
+    if(validos(r2).length) return true;
+
+    let r3 = await api({ tipo_documento:'RECETA', id_receta:idReceta });
+    if(r3 && r3.success === false) return null;
+    return validos(r3).length > 0;
+  }
+
+  function recetaEnEdicion(idReceta){
+    try{
+      if(typeof window.__recetasAurosanaxDebug === 'function'){
+        const d = window.__recetasAurosanaxDebug() || {};
+        return !!(idReceta && txt(d.recetaEditandoId) === idReceta);
+      }
+    }catch(e){}
+    return false;
+  }
+
+  async function abrirRecetaParaRevisar(idAtencion, idReceta){
+    if(idAtencionActiva() !== idAtencion) return;
+
+    /* Si la receta ya está abierta para corrección, el botón existente la
+       GUARDARÍA en este clic. Para no guardar nada solo, se avisa y no se llama. */
+    if(recetaEnEdicion(idReceta)){
+      await mostrarModal({
+        icono:'📝', color:'#0f766e',
+        titulo:'La receta ya está abierta para corrección',
+        texto:'Revise los medicamentos de la receta y presione «Guardar receta» cuando esté conforme.',
+        botones:[{texto:'Entendido', valor:'ok', principal:true}]
+      });
+      return;
+    }
+
+    if(typeof window.auroRecetaAccionDesdePlan !== 'function'){
+      await mostrarModal({
+        icono:'⚠️', color:'#b45309',
+        titulo:'No se pudo abrir la receta',
+        texto:'Use el botón «Guardar receta» del Plan para revisarla.',
+        botones:[{texto:'Entendido', valor:'ok', principal:true}]
+      });
+      return;
+    }
+
+    try{
+      await window.auroRecetaAccionDesdePlan();
+      const btn = document.querySelector('[data-auro-receta-plan-btn]');
+      if(btn && btn.scrollIntoView) btn.scrollIntoView({ behavior:'smooth', block:'center' });
+    }catch(e){
+      console.warn(LOG, 'no se pudo abrir la receta.', e);
+    }
+  }
+
+  async function revisarRecetaDespuesDelPlan(idAtencion){
+    if(revisionEnCurso) return;
+    revisionEnCurso = true;
+
+    try{
+      if(!idAtencion || idAtencionActiva() !== idAtencion) return;
+      if(txt(window.planState && window.planState.atencionActual) &&
+         txt(window.planState.atencionActual) !== idAtencion) return;
+
+      const planMeds = medsPlanActuales();
+      if(!planMeds.length) return;
+
+      const firmaPlan = planMeds.map(claveObjeto).join('#');
+
+      const srv = await obtenerRecetaServidor(idAtencion);
+      if(!srv.ok || !srv.receta) return;
+
+      const receta = srv.receta;
+      const idReceta = txt(receta.id_receta || receta.id);
+      if(!idReceta) return;
+
+      const comparacion = compararMedicamentos(planMeds, receta.medicamento || receta.medicamentos);
+      if(comparacion !== 'distintas') return;
+
+      const marca = [idAtencion, idReceta, txt(receta.actualizado_en || receta.creado_en), firmaPlan].join('~');
+      if(avisosDescartados.has(marca)) return;
+
+      const firmada = await recetaTieneFirma(idAtencion, idReceta);
+      if(firmada === null) return;
+
+      /* La doctora pudo cambiar de consulta mientras se revisaba. */
+      if(idAtencionActiva() !== idAtencion) return;
+      if(medsPlanActuales().map(claveObjeto).join('#') !== firmaPlan) return;
+
+      avisosDescartados.add(marca);
+
+      if(firmada){
+        await mostrarModal({
+          icono:'⚠️', color:'#b45309',
+          titulo:'La receta firmada no coincide con el Plan',
+          texto:'La receta de esta consulta ya fue firmada y no se puede cambiar. ' +
+                'Si el cambio es correcto, genere una corrección de la receta.',
+          botones:[{texto:'Entendido', valor:'ok', principal:true}]
+        });
+        return;
+      }
+
+      const respuesta = await mostrarModal({
+        icono:'💊', color:'#0f766e',
+        titulo:'¿Actualizar receta?',
+        texto:'Los medicamentos del Plan cambiaron y la receta de esta consulta todavía tiene los anteriores.',
+        botones:[
+          {texto:'Ahora no', valor:'no'},
+          {texto:'Sí, actualizar receta', valor:'si', principal:true}
+        ]
+      });
+
+      if(respuesta === 'si'){
+        await abrirRecetaParaRevisar(idAtencion, idReceta);
+      }
+    }catch(e){
+      console.warn(LOG, 'revisión de receta omitida (el Plan ya quedó guardado).', e);
+    }finally{
+      revisionEnCurso = false;
+    }
+  }
+
+  window.auroPlanRecetaV1Revisar = revisarRecetaDespuesDelPlan;
+  window.auroPlanRecetaV1Comparar = compararMedicamentos;
+
+  /* ---------------- Envoltura del botón Guardar plan clínico ---------------- */
+
+  const guardarBase = window.auroPlanGuardarPlanClinicoConUXPlanJS ||
+    (typeof guardarPlanClinicoConUX === 'function' ? guardarPlanClinicoConUX : null);
+
+  if(typeof guardarBase !== 'function' || guardarBase.__auroPlanRecetaV1) return;
+
+  const PREFIJO_ERROR = 'No se pudo guardar el Plan clínico.';
+
+  const guardarEnvuelto = async function(btn){
+    const idAtencion = idAtencionActiva();
+    const alertaOriginal = window.alert;
+    let errorPendiente = '';
+
+    /* 3) Solo el aviso de error de ESTE guardado pasa a ventana propia. */
+    const alertaTemporal = function(mensaje){
+      const m = String(mensaje == null ? '' : mensaje);
+      if(!errorPendiente && m.indexOf(PREFIJO_ERROR) === 0){
+        errorPendiente = m.slice(PREFIJO_ERROR.length).trim() || 'Intente nuevamente.';
+        return;
+      }
+      return alertaOriginal.apply(window, arguments);
+    };
+
+    saltarBusquedaPara = idAtencion;
+    window.alert = alertaTemporal;
+
+    let resultado;
+    try{
+      resultado = await guardarBase.apply(this, arguments);
+    }finally{
+      saltarBusquedaPara = '';
+      if(window.alert === alertaTemporal) window.alert = alertaOriginal;
+    }
+
+    const exito = !!(resultado && resultado.success !== false);
+
+    if(!exito && idAtencion && !(resultado && resultado.message === 'Guardado en progreso')){
+      memoriaIdPlan.delete(idAtencion);
+    }
+
+    if(errorPendiente){
+      mostrarModal({
+        icono:'❌', color:'#b91c1c',
+        titulo:'No se pudo guardar el Plan',
+        texto:errorPendiente,
+        botones:[{texto:'Entendido', valor:'ok', principal:true}]
+      });
+    }
+
+    if(exito && idAtencion){
+      setTimeout(function(){ revisarRecetaDespuesDelPlan(idAtencion); }, 0);
+    }
+
+    return resultado;
+  };
+
+  guardarEnvuelto.__auroPlanRecetaV1 = true;
+  guardarEnvuelto.__auroOriginalV1 = guardarBase;
+
+  window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarEnvuelto;
+  window.guardarPlanClinicoConUX = guardarEnvuelto;
+})();
