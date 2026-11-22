@@ -267,7 +267,7 @@ function renderizar(){const sec=$('obstetricia');if(!sec){console.warn(MODULO,'N
 <div class="obs-panel"><div class="obs-panel-title"><i class="bi bi-clock-history"></i>Antecedentes obstétricos — solo lectura</div><div class="obs-read-grid"><div class="obs-read"><small>Gestas</small><b id="obsAntGestas">—</b></div><div class="obs-read"><small>Partos</small><b id="obsAntPartos">—</b></div><div class="obs-read"><small>Cesáreas</small><b id="obsAntCesareas">—</b></div><div class="obs-read"><small>Abortos</small><b id="obsAntAbortos">—</b></div><div class="obs-read"><small>Ectópicos</small><b id="obsAntEctopicos">—</b></div><div class="obs-read"><small>Mortinatos</small><b id="obsAntMortinatos">—</b></div><div class="obs-read"><small>Hijos vivos</small><b id="obsAntVivos">—</b></div><div class="obs-read"><small>Complicaciones</small><b id="obsAntComplicaciones">—</b></div></div></div>
 <div class="obs-panel"><div class="obs-panel-title"><i class="bi bi-calendar-heart"></i>Embarazo actual</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">FUM</label><input id="obsFum" type="date" class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">FPP</label><input id="obsFpp" type="date" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">EG semanas</label><input id="obsEgSemanas" type="number" min="0" max="45" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">EG días</label><input id="obsEgDias" type="number" min="0" max="6" class="form-control"></div><div class="col-md-2"><label class="form-label fw-bold">Tipo atención</label><select id="obsTipoAtencion" class="form-select"><option value="">Seleccionar</option><option>Primera consulta</option><option>Control prenatal</option><option>Urgencia obstétrica</option><option>Seguimiento</option><option>Teleconsulta</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Altura uterina (cm)</label><input id="obsAlturaUterina" type="number" step="0.1" class="form-control"></div><div class="col-md-6"><label class="form-label fw-bold">FCF (lpm)</label><input id="obsFcf" type="number" class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Embarazo</label><select id="obsTipoEmbarazo" class="form-select"><option value="">No registrado</option><option>Único</option><option>Múltiple</option></select></div><div class="col-md-2"><label class="form-label fw-bold">Número de fetos</label><input id="obsNumeroFetos" type="number" min="1" class="form-control"></div><div class="col-md-3"><label class="form-label fw-bold">Situación fetal</label><select id="obsSituacionFetal" class="form-select"><option value="">No registrada</option><option>Longitudinal</option><option>Transversa</option><option>Oblicua</option></select></div><div class="col-md-2"><label class="form-label fw-bold">Presentación</label><select id="obsPresentacionFetal" class="form-select"><option value="">No registrada</option><option>Cefálica</option><option>Podálica</option><option>Hombro</option></select></div><div class="col-md-2"><label class="form-label fw-bold">Posición fetal</label><input id="obsPosicionFetal" class="form-control"></div></div></div>
 <div class="obs-panel"><div class="obs-panel-title"><i class="bi bi-clipboard2-pulse"></i>Evaluación obstétrica</div><div class="row g-3"><div class="col-md-3"><label class="form-label fw-bold">Movimientos fetales</label><select id="obsMovimientosFetales" class="form-select"><option value="">No registrado</option><option>Presentes</option><option>Disminuidos</option><option>Ausentes</option><option>No aplica</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Actividad uterina</label><select id="obsActividadUterina" class="form-select"><option value="">No registrada</option><option>Ausente</option><option>Irregular</option><option>Regular</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Edema</label><select id="obsEdema" class="form-select"><option value="">No registrado</option><option>Ausente</option><option>Leve</option><option>Moderado</option><option>Severo</option></select></div><div class="col-md-3"><label class="form-label fw-bold">Membranas</label><select id="obsEstadoMembranas" class="form-select"><option value="">No registrado</option><option>Íntegras</option><option>Rotas</option><option>No evaluado</option></select></div><div class="col-md-12"><label class="form-label fw-bold">Hallazgos relevantes</label><textarea id="obsHallazgos" rows="3" class="form-control"></textarea></div></div></div>
-<div class="obs-panel"><div class="obs-panel-title"><i class="bi bi-shield-check"></i>Clasificación y seguimiento</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select id="obsRiesgoObstetrico" class="form-select"><option value="">No clasificado</option><option>Bajo</option><option>Moderado</option><option>Alto</option><option>Muy alto</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Próximo control</label><input id="obsProximoControl" type="date" class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Observaciones</label><textarea id="obsObservaciones" rows="3" class="form-control"></textarea></div></div></div></div>`;$('obsBtnGuardar')?.addEventListener('click',guardar);$('obsBtnGuardarInferior')?.addEventListener('click',guardar);const rec=()=>{if(confirm('¿Descartar cambios no guardados y recuperar la última versión guardada?'))cargar(true)};$('obsBtnRecargar')?.addEventListener('click',rec);$('obsBtnRecargarInferior')?.addEventListener('click',rec);$('obsFum')?.addEventListener('change',calcularFum);actualizarEstado();return true}
+<div class="obs-panel"><div class="obs-panel-title"><i class="bi bi-shield-check"></i>Clasificación y seguimiento</div><div class="row g-3"><div class="col-md-4"><label class="form-label fw-bold">Riesgo obstétrico</label><select id="obsRiesgoObstetrico" class="form-select"><option value="">No clasificado</option><option>Bajo</option><option>Moderado</option><option>Alto</option><option>Muy alto</option></select></div><div class="col-md-4"><label class="form-label fw-bold">Próximo control</label><input id="obsProximoControl" type="date" class="form-control"></div><div class="col-md-12"><label class="form-label fw-bold">Observaciones</label><textarea id="obsObservaciones" rows="3" class="form-control"></textarea></div></div></div></div>`;$('obsBtnGuardar')?.addEventListener('click',guardar);$('obsBtnGuardarInferior')?.addEventListener('click',guardar);const rec=async()=>{const m='¿Descartar cambios no guardados y recuperar la última versión guardada?';if(await (typeof window.auroConfirmarPremiumV1==='function'?window.auroConfirmarPremiumV1(m,{textoSi:'Descartar y recuperar',textoNo:'Seguir editando'}):Promise.resolve(confirm(m))))cargar(true)};$('obsBtnRecargar')?.addEventListener('click',rec);$('obsBtnRecargarInferior')?.addEventListener('click',rec);$('obsFum')?.addEventListener('change',calcularFum);actualizarEstado();return true}
 function calcularFum(){const v=getValue('obsFum');if(!v)return;const f=new Date(`${v}T12:00:00`);if(Number.isNaN(f.getTime()))return;const p=new Date(f);p.setDate(p.getDate()+280);setValue('obsFpp',p.toISOString().slice(0,10));const h=new Date();h.setHours(12,0,0,0);const d=Math.floor((h-f)/86400000);if(d>=0&&d<=315){setValue('obsEgSemanas',Math.floor(d/7));setValue('obsEgDias',d%7)}}
 function historiaLocal(c){const hs=[window.historiaActiva,window.historiaActual,window.currentHistoria,window.AURO_HISTORIA_ACTIVA].filter(Boolean);for(const h of hs)if((c.id_historia&&txt(h.id_historia||h.id)===c.id_historia)||(!c.id_historia&&c.id_paciente&&txt(h.id_paciente)===c.id_paciente))return h;for(const l of [window.historiasClinicas,window.historias,window.listaHistoriasClinicas,window.historiasData]){if(!Array.isArray(l))continue;const h=l.find(x=>(c.id_historia&&txt(x.id_historia||x.id)===c.id_historia)||(!c.id_historia&&c.id_paciente&&txt(x.id_paciente)===c.id_paciente));if(h)return h}return null}
 const ANT_GINECO_OBS_MARKER='AUROSANAX_ANT_GINECO_OBS_V1::';
@@ -831,3 +831,265 @@ function evento(ev){
 function inicializar(){if(!renderizar())return;auroInstalarDetectorCambiosObstetricia();interceptar();['aurosanax:atencion-activa','aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:paciente-seleccionado','aurosanax:historia-cargada','aurosanax:atencion-limpiada','aurosanax:paciente-limpiado'].forEach(n=>window.addEventListener(n,evento));setInterval(()=>{const a=resolverAtencion(),id=txt(a?.id_atencion||a?.id);if(id!==ultimoIdAtencion){contextoSeleccionado=a||null;cargar(true)}},1500);cargar(true);console.info(`${MODULO} cargado. ${VERSION}`)}
 window.AurosanaxObstetricia={version:VERSION,inicializar,cargar,guardar,limpiar,obtenerRegistroActual:()=>registroActual?{...registroActual}:null,obtenerContexto:contextoActual};window.inicializarObstetricia=inicializar;window.cargarObstetriciaPorAtencion=cargar;window.guardarObstetriciaERP=guardar;window.limpiarObstetriciaERP=limpiar;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inicializar);else inicializar();
 })();
+
+/* ============================================================
+   AUROSANAX | OBSTETRICIA GUARDADO REAL V1 (22/11/2026) — BLOQUE AGREGADO
+   Problema: «Guardar» en Obstetricia enviaba a ciegas (no-cors) y decía
+   «guardado correctamente» aunque el servidor fallara o lo rechazara.
+   Ahora, SOLO para guardarObstetricia y editarObstetricia:
+   - se lee la respuesta real del servidor (SCRIB_84 ya responde success);
+   - si no confirma o responde success:false, el módulo muestra su error de
+     siempre («Guardado local. Falló sincronización…», botón «Reintentar»)
+     y una ventana con el motivo real. La copia local se conserva.
+   - si confirma, todo sigue exactamente igual que antes.
+   También: la pregunta «¿Descartar cambios…?» usa ventana premium.
+   NO TOCA: datos enviados, botones, doble clic, detector de cambios,
+   cambio de atención, otros módulos, Apps Script.
+============================================================ */
+/* ---- Ventanas premium compartidas (se definen una sola vez) ----
+   auroAvisoPremiumV1(texto)      -> reemplaza a alert(), no congela.
+   auroConfirmarPremiumV1(texto)  -> reemplaza a confirm(), devuelve
+                                     una promesa con true / false.
+   Las ventanas salen una detrás de otra (en fila), nunca se pisan.
+   Si la página aún no tiene <body>, usa el aviso normal del navegador. */
+(function(){
+  'use strict';
+  if(typeof window.auroAvisoPremiumV1 === 'function' &&
+     typeof window.auroConfirmarPremiumV1 === 'function') return;
+
+  var ID = 'auroVentanaPremiumV1';
+  var cola = Promise.resolve();
+
+  function estiloPorTexto(texto){
+    var t = String(texto || '').toLowerCase();
+    if(/correctamente|confirmad[oa]|guardad[oa] y|vinculado/.test(t) && !/no se pudo|pero no/.test(t)){
+      return { icono:'✅', color:'#15803d', titulo:'Listo' };
+    }
+    if(/no se pudo|no fue posible|no se encontr|no hay |falló|fallo|error|rechaz|no se guard|no tiene|no es |no se activ|no confirm|pero no/.test(t)){
+      return { icono:'⚠️', color:'#b45309', titulo:'Atención' };
+    }
+    return { icono:'ℹ️', color:'#0f766e', titulo:'Aviso' };
+  }
+
+  function crearBoton(texto, principal, color){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texto;
+    b.style.cssText = (principal
+      ? 'background:' + color + ';color:#fff;border:1px solid ' + color + ';'
+      : 'background:#fff;color:#334155;border:1px solid #cbd5e1;') +
+      'border-radius:10px;padding:10px 16px;font-size:15px;font-weight:600;' +
+      'cursor:pointer;min-width:120px;flex:1 1 auto;';
+    return b;
+  }
+
+  function mostrar(op){
+    return new Promise(function(resolve){
+      try{
+        if(!document.body){
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+          return;
+        }
+        var previo = document.getElementById(ID);
+        if(previo && previo.parentNode) previo.parentNode.removeChild(previo);
+
+        var est = estiloPorTexto(op.texto);
+        var color = op.color || est.color;
+
+        var fondo = document.createElement('div');
+        fondo.id = ID;
+        fondo.setAttribute('role', 'dialog');
+        fondo.setAttribute('aria-modal', 'true');
+        fondo.style.cssText =
+          'position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.45);' +
+          'display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        var caja = document.createElement('div');
+        caja.style.cssText =
+          'background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow:auto;' +
+          'box-shadow:0 20px 50px rgba(0,0,0,.25);padding:22px 20px 18px;font-family:inherit;' +
+          'border-top:5px solid ' + color + ';';
+
+        var icono = document.createElement('div');
+        icono.style.cssText = 'font-size:30px;line-height:1;margin-bottom:8px;';
+        icono.textContent = op.icono || (op.tipo === 'confirmar' ? '❓' : est.icono);
+
+        var titulo = document.createElement('div');
+        titulo.style.cssText = 'font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;';
+        titulo.textContent = op.titulo || (op.tipo === 'confirmar' ? 'Confirme por favor' : est.titulo);
+
+        var cuerpo = document.createElement('div');
+        cuerpo.style.cssText = 'font-size:15px;color:#475569;line-height:1.45;white-space:pre-line;margin-bottom:16px;word-break:break-word;';
+        cuerpo.textContent = op.texto;
+
+        var fila = document.createElement('div');
+        fila.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;';
+
+        var terminado = false;
+        function terminar(valor){
+          if(terminado) return;
+          terminado = true;
+          document.removeEventListener('keydown', teclas, true);
+          if(fondo.parentNode) fondo.parentNode.removeChild(fondo);
+          resolve(valor);
+        }
+        function teclas(ev){
+          if(ev.key === 'Escape'){ ev.preventDefault(); terminar(op.tipo === 'confirmar' ? false : true); }
+        }
+
+        var principal;
+        if(op.tipo === 'confirmar'){
+          var no = crearBoton(op.textoNo || 'Cancelar', false, color);
+          principal = crearBoton(op.textoSi || 'Aceptar', true, color);
+          no.addEventListener('click', function(){ terminar(false); });
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(no);
+          fila.appendChild(principal);
+        }else{
+          principal = crearBoton('Entendido', true, color);
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(principal);
+        }
+
+        caja.appendChild(icono);
+        caja.appendChild(titulo);
+        caja.appendChild(cuerpo);
+        caja.appendChild(fila);
+        fondo.appendChild(caja);
+        document.body.appendChild(fondo);
+        document.addEventListener('keydown', teclas, true);
+        try{ principal.focus(); }catch(e){}
+      }catch(error){
+        console.warn('AUROSANAX VENTANAS PREMIUM V1:', error);
+        try{
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+        }catch(e){ resolve(op.tipo === 'confirmar' ? false : true); }
+      }
+    });
+  }
+
+  function enFila(op){
+    var p = cola.then(function(){ return mostrar(op); });
+    cola = p.catch(function(){});
+    return p;
+  }
+
+  window.auroAvisoPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'aviso', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color });
+  };
+
+  window.auroConfirmarPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'confirmar', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color, textoSi:op.textoSi, textoNo:op.textoNo });
+  };
+})();
+/* ---- Guardado real compartido (se define una sola vez) ----
+   auroGuardadoRealInstalarV1(nombre, opciones) envuelve window.fetch SOLO
+   para los pedidos POST con mode:'no-cors' cuyas acciones se indiquen.
+   - Quita el no-cors para poder leer la respuesta real del servidor.
+   - success:false  -> el guardado se toma como fallido (lanza error con el motivo).
+   - sin respuesta legible: modo estricto = fallido; modo suave = sigue igual que antes.
+   - Sin red: lanza el error, igual que antes.
+   - Cualquier otro pedido pasa sin tocar. Respeta los envoltorios previos
+     (pase de sesión, Historia guardado real): se encadena, no los reemplaza. */
+(function(){
+  'use strict';
+  if(typeof window.auroGuardadoRealInstalarV1 === 'function') return;
+
+  function leerCuerpo(init){
+    try{
+      if(!init || typeof init.body !== 'string') return null;
+      var cuerpo = JSON.parse(init.body);
+      return cuerpo && typeof cuerpo === 'object' ? cuerpo : null;
+    }catch(e){
+      return null;
+    }
+  }
+
+  window.auroGuardadoRealInstalarV1 = function(nombre, op){
+    op = op || {};
+    var marca = '__auroGuardadoRealV1_' + nombre;
+    if(window[marca]) return;
+    window[marca] = true;
+
+    var fetchPrevio = window.fetch;
+    if(typeof fetchPrevio !== 'function') return;
+
+    var acciones = op.acciones || {};
+
+    function avisar(motivo){
+      if(!op.tituloVentana || typeof window.auroAvisoPremiumV1 !== 'function') return;
+      try{
+        window.auroAvisoPremiumV1(motivo, { titulo: op.tituloVentana, icono:'❌', color:'#b91c1c' });
+      }catch(e){}
+    }
+
+    var envoltura = async function(input, init){
+      var metodo = String((init && init.method) || 'GET').toUpperCase();
+      var cuerpo = (metodo === 'POST' && init && init.mode === 'no-cors') ? leerCuerpo(init) : null;
+      var accion = cuerpo ? String(cuerpo.accion || '') : '';
+
+      if(!accion || !Object.prototype.hasOwnProperty.call(acciones, accion)){
+        return fetchPrevio.apply(this, arguments);
+      }
+
+      var initLeible = Object.assign({}, init);
+      delete initLeible.mode;
+
+      if(typeof op.ajustarCuerpo === 'function'){
+        try{
+          var ajustado = op.ajustarCuerpo(accion, cuerpo);
+          if(ajustado) initLeible.body = JSON.stringify(ajustado);
+        }catch(errorAjuste){
+          console.warn('AUROSANAX GUARDADO REAL V1 (' + nombre + '):', errorAjuste);
+        }
+      }
+
+      var respuesta;
+      try{
+        respuesta = await fetchPrevio.call(window, input, initLeible);
+      }catch(errorRed){
+        if(op.estricto) avisar('No hubo conexión con el servidor. Revise el internet y vuelva a intentar.');
+        throw errorRed;
+      }
+
+      var datos = null;
+      try{ datos = await respuesta.clone().json(); }catch(e){ datos = null; }
+
+      if(!datos || typeof datos !== 'object'){
+        if(!op.estricto) return respuesta;
+        var sinConfirmar = 'El servidor no confirmó el guardado. Vuelva a intentar.';
+        avisar(sinConfirmar);
+        throw new Error(sinConfirmar);
+      }
+
+      if(datos.success === false){
+        var motivo = String(datos.message || datos.error || 'El servidor no aceptó el guardado.');
+        avisar(motivo);
+        var error = new Error(motivo);
+        error.auroRespuestaServidor = datos;
+        throw error;
+      }
+
+      return respuesta;
+    };
+
+    envoltura[marca] = true;
+    window.fetch = envoltura;
+  };
+})();
+(function(){
+  'use strict';
+  if(typeof window.auroGuardadoRealInstalarV1 !== 'function') return;
+  window.auroGuardadoRealInstalarV1('obstetricia', {
+    acciones: { guardarObstetricia: 1, editarObstetricia: 1 },
+    estricto: true,
+    tituloVentana: 'Obstetricia no se guardó'
+  });
+})();
+/* FIN OBSTETRICIA GUARDADO REAL V1 */

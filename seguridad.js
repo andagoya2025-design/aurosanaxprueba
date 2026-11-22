@@ -2091,3 +2091,46 @@
   });
 
 })();
+
+/* ============================================================
+   AUROSANAX | LIMPIEZA AL CERRAR SESION V1 (22/11/2026) — BLOQUE AGREGADO
+   Al presionar «Cerrar sesión», antes de salir, se borran del navegador
+   las marcas de «paciente / historia / atención activa», para que el
+   siguiente usuario de la misma computadora no abra el paciente anterior.
+   A PROPÓSITO NO se borran las copias locales de Atenciones, Obstetricia,
+   Anamnesis ni Recetas: pueden tener datos aún no sincronizados. Eso se
+   revisa en la entrega de Recetas.
+   NO TOCA: inicio de sesión, token, validación, permisos, servidor.
+============================================================ */
+(function(){
+  'use strict';
+  var seguridad = window.AUROSANAX_SEGURIDAD;
+  if(!seguridad || typeof seguridad.cerrarSesion !== 'function' || seguridad.__auroLimpiezaCierreV1) return;
+
+  var MARCAS_ACTIVAS = [
+    'aurosanax_id_paciente_activo',
+    'aurosanax_id_historia_activa',
+    'aurosanax_id_atencion_activa',
+    'aurosanax_id_atencion_seleccionada',
+    'id_atencion_activa',
+    'selectedPatientId'
+  ];
+
+  function limpiarMarcasActivas(){
+    MARCAS_ACTIVAS.forEach(function(clave){
+      try{ localStorage.removeItem(clave); }catch(e){}
+      try{ sessionStorage.removeItem(clave); }catch(e){}
+    });
+  }
+
+  var cerrarOriginal = seguridad.cerrarSesion;
+  var nueva = Object.assign({}, seguridad, {
+    cerrarSesion: async function(){
+      limpiarMarcasActivas();
+      return cerrarOriginal.apply(this, arguments);
+    },
+    __auroLimpiezaCierreV1: true
+  });
+  window.AUROSANAX_SEGURIDAD = Object.freeze(nueva);
+})();
+/* FIN LIMPIEZA AL CERRAR SESION V1 */

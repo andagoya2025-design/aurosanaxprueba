@@ -2106,7 +2106,7 @@
           '\n  ID atención: ' + idAtencionAbierta;
       }).join('\n\n');
 
-      const continuar = confirm(
+      const continuar = await auroConfirmarAtencionesV1(
         'El médico seleccionado ya tiene ' + abiertasMismoMedico.length +
         ' atención' + (abiertasMismoMedico.length === 1 ? '' : 'es') +
         ' abierta' + (abiertasMismoMedico.length === 1 ? '' : 's') + '.\n\n' +
@@ -2311,7 +2311,7 @@
       return;
     }
 
-    if(!confirm('¿Finalizar la atención actual? Quedará registrada como consulta histórica.')) return;
+    if(!(await auroConfirmarAtencionesV1('¿Finalizar la atención actual? Quedará registrada como consulta histórica.'))) return;
 
     const lista = leerLocal();
     const idx = lista.findIndex(a => String(a.id_atencion) === String(abierta.id_atencion));
@@ -4330,6 +4330,34 @@
     };
   };
 
+
+  /* ============================================================
+     AUROSANAX | ATENCIONES MENSAJES V1 (22/11/2026) — DENTRO DEL MÓDULO
+     Los avisos alert() de este módulo pasan a ventana premium (no congelan
+     la pantalla). Solo afecta a este archivo: el alert del navegador del
+     resto del ERP sigue igual. Las 2 preguntas («¿Finalizar la atención?»
+     y «el médico ya tiene atenciones abiertas») usan
+     auroConfirmarAtencionesV1, que espera la respuesta igual que antes.
+  ============================================================ */
+  function alert(mensaje){
+    try{
+      if(typeof window.auroAvisoPremiumV1 === 'function'){
+        window.auroAvisoPremiumV1(mensaje);
+        return;
+      }
+    }catch(e){}
+    window.alert(mensaje);
+  }
+
+  function auroConfirmarAtencionesV1(mensaje){
+    try{
+      if(typeof window.auroConfirmarPremiumV1 === 'function'){
+        return window.auroConfirmarPremiumV1(mensaje);
+      }
+    }catch(e){}
+    return Promise.resolve(window.confirm(mensaje));
+  }
+  /* FIN ATENCIONES MENSAJES V1 */
 })();
 
 /* =====================================================
@@ -4340,3 +4368,263 @@
    - Permite vincular id_historia después de crear la atención
    - Bloquea atención de otro paciente
 ===================================================== */
+
+/* ============================================================
+   AUROSANAX | ATENCIONES GUARDADO REAL V1 (22/11/2026) — BLOQUE AGREGADO
+   Solo para guardarAtencion y editarAtencion (enviados desde este módulo):
+   - se lee la respuesta real; si el servidor responde success:false, el
+     envío se toma como fallido (ya no se cuenta como «enviada»).
+   - MODO SUAVE: si no hay respuesta legible, todo sigue igual que antes.
+   Iniciar y Finalizar atención NO cambian: siguen confirmando con su
+   lectura posterior de la hoja (verificarEstadoAtencionRemoto), como hoy.
+   Con esto se corrigen el vínculo atención–historia y «Sincronizar
+   atenciones locales», que antes contaban como enviadas las rechazadas.
+   NO TOCA: control de corrección clínica, auditoría, fechas, botones,
+   doble clic, otros módulos, Apps Script.
+============================================================ */
+/* ---- Ventanas premium compartidas (se definen una sola vez) ----
+   auroAvisoPremiumV1(texto)      -> reemplaza a alert(), no congela.
+   auroConfirmarPremiumV1(texto)  -> reemplaza a confirm(), devuelve
+                                     una promesa con true / false.
+   Las ventanas salen una detrás de otra (en fila), nunca se pisan.
+   Si la página aún no tiene <body>, usa el aviso normal del navegador. */
+(function(){
+  'use strict';
+  if(typeof window.auroAvisoPremiumV1 === 'function' &&
+     typeof window.auroConfirmarPremiumV1 === 'function') return;
+
+  var ID = 'auroVentanaPremiumV1';
+  var cola = Promise.resolve();
+
+  function estiloPorTexto(texto){
+    var t = String(texto || '').toLowerCase();
+    if(/correctamente|confirmad[oa]|guardad[oa] y|vinculado/.test(t) && !/no se pudo|pero no/.test(t)){
+      return { icono:'✅', color:'#15803d', titulo:'Listo' };
+    }
+    if(/no se pudo|no fue posible|no se encontr|no hay |falló|fallo|error|rechaz|no se guard|no tiene|no es |no se activ|no confirm|pero no/.test(t)){
+      return { icono:'⚠️', color:'#b45309', titulo:'Atención' };
+    }
+    return { icono:'ℹ️', color:'#0f766e', titulo:'Aviso' };
+  }
+
+  function crearBoton(texto, principal, color){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texto;
+    b.style.cssText = (principal
+      ? 'background:' + color + ';color:#fff;border:1px solid ' + color + ';'
+      : 'background:#fff;color:#334155;border:1px solid #cbd5e1;') +
+      'border-radius:10px;padding:10px 16px;font-size:15px;font-weight:600;' +
+      'cursor:pointer;min-width:120px;flex:1 1 auto;';
+    return b;
+  }
+
+  function mostrar(op){
+    return new Promise(function(resolve){
+      try{
+        if(!document.body){
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+          return;
+        }
+        var previo = document.getElementById(ID);
+        if(previo && previo.parentNode) previo.parentNode.removeChild(previo);
+
+        var est = estiloPorTexto(op.texto);
+        var color = op.color || est.color;
+
+        var fondo = document.createElement('div');
+        fondo.id = ID;
+        fondo.setAttribute('role', 'dialog');
+        fondo.setAttribute('aria-modal', 'true');
+        fondo.style.cssText =
+          'position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.45);' +
+          'display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        var caja = document.createElement('div');
+        caja.style.cssText =
+          'background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow:auto;' +
+          'box-shadow:0 20px 50px rgba(0,0,0,.25);padding:22px 20px 18px;font-family:inherit;' +
+          'border-top:5px solid ' + color + ';';
+
+        var icono = document.createElement('div');
+        icono.style.cssText = 'font-size:30px;line-height:1;margin-bottom:8px;';
+        icono.textContent = op.icono || (op.tipo === 'confirmar' ? '❓' : est.icono);
+
+        var titulo = document.createElement('div');
+        titulo.style.cssText = 'font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;';
+        titulo.textContent = op.titulo || (op.tipo === 'confirmar' ? 'Confirme por favor' : est.titulo);
+
+        var cuerpo = document.createElement('div');
+        cuerpo.style.cssText = 'font-size:15px;color:#475569;line-height:1.45;white-space:pre-line;margin-bottom:16px;word-break:break-word;';
+        cuerpo.textContent = op.texto;
+
+        var fila = document.createElement('div');
+        fila.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;';
+
+        var terminado = false;
+        function terminar(valor){
+          if(terminado) return;
+          terminado = true;
+          document.removeEventListener('keydown', teclas, true);
+          if(fondo.parentNode) fondo.parentNode.removeChild(fondo);
+          resolve(valor);
+        }
+        function teclas(ev){
+          if(ev.key === 'Escape'){ ev.preventDefault(); terminar(op.tipo === 'confirmar' ? false : true); }
+        }
+
+        var principal;
+        if(op.tipo === 'confirmar'){
+          var no = crearBoton(op.textoNo || 'Cancelar', false, color);
+          principal = crearBoton(op.textoSi || 'Aceptar', true, color);
+          no.addEventListener('click', function(){ terminar(false); });
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(no);
+          fila.appendChild(principal);
+        }else{
+          principal = crearBoton('Entendido', true, color);
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(principal);
+        }
+
+        caja.appendChild(icono);
+        caja.appendChild(titulo);
+        caja.appendChild(cuerpo);
+        caja.appendChild(fila);
+        fondo.appendChild(caja);
+        document.body.appendChild(fondo);
+        document.addEventListener('keydown', teclas, true);
+        try{ principal.focus(); }catch(e){}
+      }catch(error){
+        console.warn('AUROSANAX VENTANAS PREMIUM V1:', error);
+        try{
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+        }catch(e){ resolve(op.tipo === 'confirmar' ? false : true); }
+      }
+    });
+  }
+
+  function enFila(op){
+    var p = cola.then(function(){ return mostrar(op); });
+    cola = p.catch(function(){});
+    return p;
+  }
+
+  window.auroAvisoPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'aviso', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color });
+  };
+
+  window.auroConfirmarPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'confirmar', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color, textoSi:op.textoSi, textoNo:op.textoNo });
+  };
+})();
+/* ---- Guardado real compartido (se define una sola vez) ----
+   auroGuardadoRealInstalarV1(nombre, opciones) envuelve window.fetch SOLO
+   para los pedidos POST con mode:'no-cors' cuyas acciones se indiquen.
+   - Quita el no-cors para poder leer la respuesta real del servidor.
+   - success:false  -> el guardado se toma como fallido (lanza error con el motivo).
+   - sin respuesta legible: modo estricto = fallido; modo suave = sigue igual que antes.
+   - Sin red: lanza el error, igual que antes.
+   - Cualquier otro pedido pasa sin tocar. Respeta los envoltorios previos
+     (pase de sesión, Historia guardado real): se encadena, no los reemplaza. */
+(function(){
+  'use strict';
+  if(typeof window.auroGuardadoRealInstalarV1 === 'function') return;
+
+  function leerCuerpo(init){
+    try{
+      if(!init || typeof init.body !== 'string') return null;
+      var cuerpo = JSON.parse(init.body);
+      return cuerpo && typeof cuerpo === 'object' ? cuerpo : null;
+    }catch(e){
+      return null;
+    }
+  }
+
+  window.auroGuardadoRealInstalarV1 = function(nombre, op){
+    op = op || {};
+    var marca = '__auroGuardadoRealV1_' + nombre;
+    if(window[marca]) return;
+    window[marca] = true;
+
+    var fetchPrevio = window.fetch;
+    if(typeof fetchPrevio !== 'function') return;
+
+    var acciones = op.acciones || {};
+
+    function avisar(motivo){
+      if(!op.tituloVentana || typeof window.auroAvisoPremiumV1 !== 'function') return;
+      try{
+        window.auroAvisoPremiumV1(motivo, { titulo: op.tituloVentana, icono:'❌', color:'#b91c1c' });
+      }catch(e){}
+    }
+
+    var envoltura = async function(input, init){
+      var metodo = String((init && init.method) || 'GET').toUpperCase();
+      var cuerpo = (metodo === 'POST' && init && init.mode === 'no-cors') ? leerCuerpo(init) : null;
+      var accion = cuerpo ? String(cuerpo.accion || '') : '';
+
+      if(!accion || !Object.prototype.hasOwnProperty.call(acciones, accion)){
+        return fetchPrevio.apply(this, arguments);
+      }
+
+      var initLeible = Object.assign({}, init);
+      delete initLeible.mode;
+
+      if(typeof op.ajustarCuerpo === 'function'){
+        try{
+          var ajustado = op.ajustarCuerpo(accion, cuerpo);
+          if(ajustado) initLeible.body = JSON.stringify(ajustado);
+        }catch(errorAjuste){
+          console.warn('AUROSANAX GUARDADO REAL V1 (' + nombre + '):', errorAjuste);
+        }
+      }
+
+      var respuesta;
+      try{
+        respuesta = await fetchPrevio.call(window, input, initLeible);
+      }catch(errorRed){
+        if(op.estricto) avisar('No hubo conexión con el servidor. Revise el internet y vuelva a intentar.');
+        throw errorRed;
+      }
+
+      var datos = null;
+      try{ datos = await respuesta.clone().json(); }catch(e){ datos = null; }
+
+      if(!datos || typeof datos !== 'object'){
+        if(!op.estricto) return respuesta;
+        var sinConfirmar = 'El servidor no confirmó el guardado. Vuelva a intentar.';
+        avisar(sinConfirmar);
+        throw new Error(sinConfirmar);
+      }
+
+      if(datos.success === false){
+        var motivo = String(datos.message || datos.error || 'El servidor no aceptó el guardado.');
+        avisar(motivo);
+        var error = new Error(motivo);
+        error.auroRespuestaServidor = datos;
+        throw error;
+      }
+
+      return respuesta;
+    };
+
+    envoltura[marca] = true;
+    window.fetch = envoltura;
+  };
+})();
+(function(){
+  'use strict';
+  if(typeof window.auroGuardadoRealInstalarV1 !== 'function') return;
+  window.auroGuardadoRealInstalarV1('atenciones', {
+    acciones: { guardarAtencion: 1, editarAtencion: 1 },
+    estricto: false
+  });
+})();
+/* FIN ATENCIONES GUARDADO REAL V1 */

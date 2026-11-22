@@ -100,7 +100,7 @@ function renderModulePatientCards(){
 
 function validarPacienteModulo(){
   if(!getPacienteActivo()){
-    alert('Seleccione primero un paciente para trabajar este módulo.');
+    auroAvisoPacientesV1('Seleccione primero un paciente para trabajar este módulo.');
     showScreen('pacientes');
     return false;
   }
@@ -265,12 +265,12 @@ function accionesPacientePremiumHTML(idPaciente){
 function auroAgendarCitaPaciente(idPacienteCodificado){
   let id = '';
   try{ id = decodeURIComponent(String(idPacienteCodificado || '')).trim(); }
-  catch(_e){ alert('Identificador de paciente no válido.'); return false; }
+  catch(_e){ auroAvisoPacientesV1('Identificador de paciente no válido.'); return false; }
   const coincidencias = (Array.isArray(patients) ? patients : []).filter(p =>
     String(p?.id_paciente || '').trim() === id
   );
   if(!id || coincidencias.length !== 1){
-    alert('No fue posible identificar un único paciente. Actualice el listado.');
+    auroAvisoPacientesV1('No fue posible identificar un único paciente. Actualice el listado.');
     return false;
   }
   const p = coincidencias[0];
@@ -294,7 +294,7 @@ function auroAgendarCitaPaciente(idPacienteCodificado){
     sessionStorage.setItem(clave, JSON.stringify(contexto));
   }catch(error){
     console.warn('AUROSANAX: transferencia temporal no disponible.', error);
-    alert('No se pudo preparar el formulario de forma segura.');
+    auroAvisoPacientesV1('No se pudo preparar el formulario de forma segura.');
     return false;
   }
   try{
@@ -304,7 +304,7 @@ function auroAgendarCitaPaciente(idPacienteCodificado){
   }catch(error){
     try{ sessionStorage.removeItem(clave); }catch(_e){}
     console.warn('AUROSANAX: error al abrir formulario.', error);
-    alert('No se pudo abrir el formulario de citas.');
+    auroAvisoPacientesV1('No se pudo abrir el formulario de citas.');
     return false;
   }
 }
@@ -739,13 +739,13 @@ function auroValidarCedulaPacienteAntesDeGuardar(){
     }
 
     input.value = '';
-    alert('La cédula es obligatoria para registrar un paciente.');
+    auroAvisoPacientesV1('La cédula es obligatoria para registrar un paciente.');
     input.focus();
     return {ok:false, valor:''};
   }
 
   if(soloDigitos.length !== 10){
-    alert('La cédula debe contener exactamente 10 dígitos.');
+    auroAvisoPacientesV1('La cédula debe contener exactamente 10 dígitos.');
     input.focus();
     return {ok:false, valor:soloDigitos};
   }
@@ -861,12 +861,12 @@ function editarPacienteModal(idPaciente){
   auroConfigurarCampoCedulaPaciente();
 
   if(!idPaciente){
-    alert('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
+    auroAvisoPacientesV1('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
     return;
   }
   const p = patients.find(x => x.id_paciente === idPaciente);
   if(!p){
-    alert('No se encontró el paciente en la lista cargada.');
+    auroAvisoPacientesV1('No se encontró el paciente en la lista cargada.');
     return;
   }
   editingPatientId = idPaciente;
@@ -1129,12 +1129,12 @@ async function savePatient(){
     apellidos = String(campoApellidos?.value || '').replace(/\s+/g,' ').trim();
 
     if(!nombres){
-      alert('Ingrese los nombres del paciente');
+      auroAvisoPacientesV1('Ingrese los nombres del paciente');
       campoNombres?.focus();
       return;
     }
     if(!apellidos){
-      alert('Ingrese los apellidos del paciente');
+      auroAvisoPacientesV1('Ingrese los apellidos del paciente');
       campoApellidos?.focus();
       return;
     }
@@ -1145,7 +1145,7 @@ async function savePatient(){
      */
     const nombreCompletoLegacy = String(campoNombreLegacy?.value || '').replace(/\s+/g,' ').trim();
     if(!nombreCompletoLegacy){
-      alert('Ingrese nombres y apellidos del paciente');
+      auroAvisoPacientesV1('Ingrese nombres y apellidos del paciente');
       return;
     }
     const partesLegacy = nombreCompletoLegacy.split(/\s+/).filter(Boolean);
@@ -1177,7 +1177,7 @@ async function savePatient(){
       'otro paciente'
     ).trim();
 
-    alert(
+    auroAvisoPacientesV1(
       'La cédula ' + cedulaPaciente +
       ' ya pertenece al paciente ' + nombreExistente +
       '. No se creó un paciente duplicado.'
@@ -1317,20 +1317,20 @@ async function savePatient(){
           );
           if(vinculo.ok){
             auroLimpiarContextoPacienteDesdeAgenda();
-            alert('Paciente registrado y vinculado correctamente a la cita en la base de datos clínica AUROSANAX.');
+            auroAvisoPacientesV1('Paciente registrado y vinculado correctamente a la cita en la base de datos clínica AUROSANAX.');
           }else{
             console.warn('AUROSANAX PACIENTES: paciente guardado, vínculo de cita pendiente.', vinculo);
-            alert('El paciente fue guardado, pero no se pudo confirmar automáticamente el vínculo con la cita. Actualice Agenda antes de continuar.');
+            auroAvisoPacientesV1('El paciente fue guardado, pero no se pudo confirmar automáticamente el vínculo con la cita. Actualice Agenda antes de continuar.');
           }
         }catch(errorVinculo){
           console.error('AUROSANAX PACIENTES: error al vincular cita.', errorVinculo);
-          alert('El paciente fue guardado, pero no se pudo confirmar el vínculo con la cita. Actualice Agenda antes de continuar.');
+          auroAvisoPacientesV1('El paciente fue guardado, pero no se pudo confirmar el vínculo con la cita. Actualice Agenda antes de continuar.');
         }
       }
     }, 1200);
 
     if(!contextoAgenda && !(window.AurosanaxGuia && window.AurosanaxGuia.__auroGuiaMotor === true)){
-      alert(
+      auroAvisoPacientesV1(
         esEdicion
           ? 'Paciente actualizado correctamente en la base de datos clínica AUROSANAX.'
           : 'Paciente registrado correctamente en la base de datos clínica AUROSANAX.'
@@ -1338,7 +1338,7 @@ async function savePatient(){
     }
   }catch(error){
     console.error(error);
-    alert('No se pudo guardar en la base de datos clínica AUROSANAX. Revise la conexión e intente nuevamente.');
+    auroAvisoPacientesV1('No se pudo guardar en la base de datos clínica AUROSANAX.' + (error && error.auroRespuestaServidor && error.message ? '\nMotivo: ' + error.message : ' Revise la conexión e intente nuevamente.'));
   }
 }
 
@@ -1534,7 +1534,7 @@ function auroLimpiarHistoriaDeOtroPaciente(idPacienteNuevo){
 
 function abrirHistoriaPaciente(idPaciente, modoApertura){
   if(!idPaciente){
-    alert('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
+    auroAvisoPacientesV1('Este paciente todavía no tiene ID. Actualice la página y vuelva a intentar.');
     return;
   }
 
@@ -1733,7 +1733,7 @@ function normalizarTelefonoEcuador(numero){
 function abrirWhatsApp(numero, mensaje){
   const tel = normalizarTelefonoWhatsAppInternacional(numero);
   if(!tel){
-    alert('No hay número de WhatsApp registrado.');
+    auroAvisoPacientesV1('No hay número de WhatsApp registrado.');
     return;
   }
   const url = 'https://wa.me/' + tel + '?text=' + encodeURIComponent(mensaje || '');
@@ -1743,7 +1743,7 @@ function abrirWhatsApp(numero, mensaje){
 function abrirWhatsAppPaciente(idPaciente){
   const paciente = patients.find(p => p.id_paciente === idPaciente);
   if(!paciente){
-    alert('No se encontró el paciente seleccionado.');
+    auroAvisoPacientesV1('No se encontró el paciente seleccionado.');
     return;
   }
   const mensaje = `Hola ${paciente.nombre || ''},\n\nLe saluda AUROSANAX.\nQueremos realizar seguimiento a su atención médica.\n\nSi presenta alguna novedad o requiere agendar un control, estamos atentos para ayudarle.`;
@@ -1901,3 +1901,293 @@ function seleccionarPacienteHistoria(){
   guardarProtegido.__auroOriginal = guardarOriginal;
   window.guardarHistoriaClinicaERP = guardarProtegido;
 })();
+
+/* ============================================================
+   AUROSANAX | PACIENTES GUARDADO REAL Y FICHA V1 (22/11/2026) — BLOQUE AGREGADO
+   1) Guardado real: guardarPaciente, editarPaciente y el vínculo con la
+      cita (editarCita desde Pacientes) leen la respuesta real del servidor.
+      Si no confirma o responde success:false, la ventana del paciente NO
+      se cierra, no se agrega a la lista y sale el aviso de error con el
+      motivo (por ejemplo: «El número de documento ya pertenece a otro
+      paciente»). Si confirma, todo sigue igual que antes.
+   2) Ficha: al EDITAR ya no se envían «provincia: Guayas», «estado: Activo»
+      ni «creado_por: AUROSANAX ERP» (valores fijos que pisaban los reales).
+      Al crear un paciente nuevo se envían igual que antes.
+   3) Insignia: «Activo» (como se guarda en la hoja) se muestra como «Activa».
+   4) Avisos: los alert() de este archivo pasan a ventana premium (no congelan).
+   NO TOCA: validaciones, cédula, barrera de duplicados, Agenda, guía,
+   botones, doble clic, otros módulos, Apps Script.
+============================================================ */
+/* ---- Ventanas premium compartidas (se definen una sola vez) ----
+   auroAvisoPremiumV1(texto)      -> reemplaza a alert(), no congela.
+   auroConfirmarPremiumV1(texto)  -> reemplaza a confirm(), devuelve
+                                     una promesa con true / false.
+   Las ventanas salen una detrás de otra (en fila), nunca se pisan.
+   Si la página aún no tiene <body>, usa el aviso normal del navegador. */
+(function(){
+  'use strict';
+  if(typeof window.auroAvisoPremiumV1 === 'function' &&
+     typeof window.auroConfirmarPremiumV1 === 'function') return;
+
+  var ID = 'auroVentanaPremiumV1';
+  var cola = Promise.resolve();
+
+  function estiloPorTexto(texto){
+    var t = String(texto || '').toLowerCase();
+    if(/correctamente|confirmad[oa]|guardad[oa] y|vinculado/.test(t) && !/no se pudo|pero no/.test(t)){
+      return { icono:'✅', color:'#15803d', titulo:'Listo' };
+    }
+    if(/no se pudo|no fue posible|no se encontr|no hay |falló|fallo|error|rechaz|no se guard|no tiene|no es |no se activ|no confirm|pero no/.test(t)){
+      return { icono:'⚠️', color:'#b45309', titulo:'Atención' };
+    }
+    return { icono:'ℹ️', color:'#0f766e', titulo:'Aviso' };
+  }
+
+  function crearBoton(texto, principal, color){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texto;
+    b.style.cssText = (principal
+      ? 'background:' + color + ';color:#fff;border:1px solid ' + color + ';'
+      : 'background:#fff;color:#334155;border:1px solid #cbd5e1;') +
+      'border-radius:10px;padding:10px 16px;font-size:15px;font-weight:600;' +
+      'cursor:pointer;min-width:120px;flex:1 1 auto;';
+    return b;
+  }
+
+  function mostrar(op){
+    return new Promise(function(resolve){
+      try{
+        if(!document.body){
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+          return;
+        }
+        var previo = document.getElementById(ID);
+        if(previo && previo.parentNode) previo.parentNode.removeChild(previo);
+
+        var est = estiloPorTexto(op.texto);
+        var color = op.color || est.color;
+
+        var fondo = document.createElement('div');
+        fondo.id = ID;
+        fondo.setAttribute('role', 'dialog');
+        fondo.setAttribute('aria-modal', 'true');
+        fondo.style.cssText =
+          'position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.45);' +
+          'display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        var caja = document.createElement('div');
+        caja.style.cssText =
+          'background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow:auto;' +
+          'box-shadow:0 20px 50px rgba(0,0,0,.25);padding:22px 20px 18px;font-family:inherit;' +
+          'border-top:5px solid ' + color + ';';
+
+        var icono = document.createElement('div');
+        icono.style.cssText = 'font-size:30px;line-height:1;margin-bottom:8px;';
+        icono.textContent = op.icono || (op.tipo === 'confirmar' ? '❓' : est.icono);
+
+        var titulo = document.createElement('div');
+        titulo.style.cssText = 'font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;';
+        titulo.textContent = op.titulo || (op.tipo === 'confirmar' ? 'Confirme por favor' : est.titulo);
+
+        var cuerpo = document.createElement('div');
+        cuerpo.style.cssText = 'font-size:15px;color:#475569;line-height:1.45;white-space:pre-line;margin-bottom:16px;word-break:break-word;';
+        cuerpo.textContent = op.texto;
+
+        var fila = document.createElement('div');
+        fila.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;';
+
+        var terminado = false;
+        function terminar(valor){
+          if(terminado) return;
+          terminado = true;
+          document.removeEventListener('keydown', teclas, true);
+          if(fondo.parentNode) fondo.parentNode.removeChild(fondo);
+          resolve(valor);
+        }
+        function teclas(ev){
+          if(ev.key === 'Escape'){ ev.preventDefault(); terminar(op.tipo === 'confirmar' ? false : true); }
+        }
+
+        var principal;
+        if(op.tipo === 'confirmar'){
+          var no = crearBoton(op.textoNo || 'Cancelar', false, color);
+          principal = crearBoton(op.textoSi || 'Aceptar', true, color);
+          no.addEventListener('click', function(){ terminar(false); });
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(no);
+          fila.appendChild(principal);
+        }else{
+          principal = crearBoton('Entendido', true, color);
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(principal);
+        }
+
+        caja.appendChild(icono);
+        caja.appendChild(titulo);
+        caja.appendChild(cuerpo);
+        caja.appendChild(fila);
+        fondo.appendChild(caja);
+        document.body.appendChild(fondo);
+        document.addEventListener('keydown', teclas, true);
+        try{ principal.focus(); }catch(e){}
+      }catch(error){
+        console.warn('AUROSANAX VENTANAS PREMIUM V1:', error);
+        try{
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+        }catch(e){ resolve(op.tipo === 'confirmar' ? false : true); }
+      }
+    });
+  }
+
+  function enFila(op){
+    var p = cola.then(function(){ return mostrar(op); });
+    cola = p.catch(function(){});
+    return p;
+  }
+
+  window.auroAvisoPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'aviso', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color });
+  };
+
+  window.auroConfirmarPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'confirmar', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color, textoSi:op.textoSi, textoNo:op.textoNo });
+  };
+})();
+/* ---- Guardado real compartido (se define una sola vez) ----
+   auroGuardadoRealInstalarV1(nombre, opciones) envuelve window.fetch SOLO
+   para los pedidos POST con mode:'no-cors' cuyas acciones se indiquen.
+   - Quita el no-cors para poder leer la respuesta real del servidor.
+   - success:false  -> el guardado se toma como fallido (lanza error con el motivo).
+   - sin respuesta legible: modo estricto = fallido; modo suave = sigue igual que antes.
+   - Sin red: lanza el error, igual que antes.
+   - Cualquier otro pedido pasa sin tocar. Respeta los envoltorios previos
+     (pase de sesión, Historia guardado real): se encadena, no los reemplaza. */
+(function(){
+  'use strict';
+  if(typeof window.auroGuardadoRealInstalarV1 === 'function') return;
+
+  function leerCuerpo(init){
+    try{
+      if(!init || typeof init.body !== 'string') return null;
+      var cuerpo = JSON.parse(init.body);
+      return cuerpo && typeof cuerpo === 'object' ? cuerpo : null;
+    }catch(e){
+      return null;
+    }
+  }
+
+  window.auroGuardadoRealInstalarV1 = function(nombre, op){
+    op = op || {};
+    var marca = '__auroGuardadoRealV1_' + nombre;
+    if(window[marca]) return;
+    window[marca] = true;
+
+    var fetchPrevio = window.fetch;
+    if(typeof fetchPrevio !== 'function') return;
+
+    var acciones = op.acciones || {};
+
+    function avisar(motivo){
+      if(!op.tituloVentana || typeof window.auroAvisoPremiumV1 !== 'function') return;
+      try{
+        window.auroAvisoPremiumV1(motivo, { titulo: op.tituloVentana, icono:'❌', color:'#b91c1c' });
+      }catch(e){}
+    }
+
+    var envoltura = async function(input, init){
+      var metodo = String((init && init.method) || 'GET').toUpperCase();
+      var cuerpo = (metodo === 'POST' && init && init.mode === 'no-cors') ? leerCuerpo(init) : null;
+      var accion = cuerpo ? String(cuerpo.accion || '') : '';
+
+      if(!accion || !Object.prototype.hasOwnProperty.call(acciones, accion)){
+        return fetchPrevio.apply(this, arguments);
+      }
+
+      var initLeible = Object.assign({}, init);
+      delete initLeible.mode;
+
+      if(typeof op.ajustarCuerpo === 'function'){
+        try{
+          var ajustado = op.ajustarCuerpo(accion, cuerpo);
+          if(ajustado) initLeible.body = JSON.stringify(ajustado);
+        }catch(errorAjuste){
+          console.warn('AUROSANAX GUARDADO REAL V1 (' + nombre + '):', errorAjuste);
+        }
+      }
+
+      var respuesta;
+      try{
+        respuesta = await fetchPrevio.call(window, input, initLeible);
+      }catch(errorRed){
+        if(op.estricto) avisar('No hubo conexión con el servidor. Revise el internet y vuelva a intentar.');
+        throw errorRed;
+      }
+
+      var datos = null;
+      try{ datos = await respuesta.clone().json(); }catch(e){ datos = null; }
+
+      if(!datos || typeof datos !== 'object'){
+        if(!op.estricto) return respuesta;
+        var sinConfirmar = 'El servidor no confirmó el guardado. Vuelva a intentar.';
+        avisar(sinConfirmar);
+        throw new Error(sinConfirmar);
+      }
+
+      if(datos.success === false){
+        var motivo = String(datos.message || datos.error || 'El servidor no aceptó el guardado.');
+        avisar(motivo);
+        var error = new Error(motivo);
+        error.auroRespuestaServidor = datos;
+        throw error;
+      }
+
+      return respuesta;
+    };
+
+    envoltura[marca] = true;
+    window.fetch = envoltura;
+  };
+})();
+function auroAvisoPacientesV1(mensaje){
+  try{
+    if(typeof window.auroAvisoPremiumV1 === 'function') return window.auroAvisoPremiumV1(mensaje);
+  }catch(e){}
+  window.alert(mensaje);
+}
+
+(function(){
+  'use strict';
+  if(typeof window.auroGuardadoRealInstalarV1 !== 'function') return;
+  var CAMPOS_FIJOS_EDICION = ['provincia', 'estado', 'creado_por'];
+  window.auroGuardadoRealInstalarV1('pacientes', {
+    acciones: { guardarPaciente: 1, editarPaciente: 1, editarCita: 1 },
+    estricto: true,
+    ajustarCuerpo: function(accion, cuerpo){
+      if(accion !== 'editarPaciente' || !cuerpo || !cuerpo.data || typeof cuerpo.data !== 'object') return null;
+      var data = Object.assign({}, cuerpo.data);
+      CAMPOS_FIJOS_EDICION.forEach(function(campo){ delete data[campo]; });
+      return Object.assign({}, cuerpo, { data: data });
+    }
+  });
+})();
+
+(function(){
+  'use strict';
+  if(typeof badgeEstado !== 'function' || badgeEstado.__auroFichaV1) return;
+  var badgeEstadoOriginal = badgeEstado;
+  var badgeEstadoV1 = function(e){
+    var valor = String(e == null ? '' : e).trim();
+    if(/^activ[oa]$/i.test(valor)) return badgeEstadoOriginal('Activa');
+    return badgeEstadoOriginal(e);
+  };
+  badgeEstadoV1.__auroFichaV1 = true;
+  badgeEstado = badgeEstadoV1;
+})();
+/* FIN PACIENTES GUARDADO REAL Y FICHA V1 */

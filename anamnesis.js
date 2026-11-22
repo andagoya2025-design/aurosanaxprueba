@@ -1949,7 +1949,7 @@ Función:
       .trim();
   }
 
-  function generar() {
+  async function generar() {
     if (!state.plantillaActiva) {
       estado('Seleccione primero una plantilla.', 'warn');
       return;
@@ -1983,7 +1983,7 @@ Función:
     }
 
     if (texto(enfermedad.value) && texto(enfermedad.value) !== narrativa) {
-      const reemplazar = confirm('Enfermedad actual ya contiene información. ¿Desea reemplazarla?');
+      const reemplazar = await (typeof window.auroConfirmarPremiumV1 === 'function' ? window.auroConfirmarPremiumV1('Enfermedad actual ya contiene información. ¿Desea reemplazarla?', { textoSi: 'Reemplazar', textoNo: 'Conservar' }) : Promise.resolve(confirm('Enfermedad actual ya contiene información. ¿Desea reemplazarla?')));
       if (!reemplazar) {
         estado('Se conservó el texto existente.', 'warn');
         return;
@@ -3443,3 +3443,154 @@ Función:
     }, 300);
   }
 })();
+
+/* ============================================================
+   AUROSANAX | ANAMNESIS MENSAJES V1 (22/11/2026) — BLOQUE AGREGADO
+   La pregunta «Enfermedad actual ya contiene información. ¿Desea
+   reemplazarla?» usa ventana premium (no congela). El guardado de
+   Anamnesis NO cambia: ya confirma leyendo la hoja (4 intentos).
+   NO TOCA: guardado, tipo de atención, plantillas, narrativa, otros módulos.
+============================================================ */
+/* ---- Ventanas premium compartidas (se definen una sola vez) ----
+   auroAvisoPremiumV1(texto)      -> reemplaza a alert(), no congela.
+   auroConfirmarPremiumV1(texto)  -> reemplaza a confirm(), devuelve
+                                     una promesa con true / false.
+   Las ventanas salen una detrás de otra (en fila), nunca se pisan.
+   Si la página aún no tiene <body>, usa el aviso normal del navegador. */
+(function(){
+  'use strict';
+  if(typeof window.auroAvisoPremiumV1 === 'function' &&
+     typeof window.auroConfirmarPremiumV1 === 'function') return;
+
+  var ID = 'auroVentanaPremiumV1';
+  var cola = Promise.resolve();
+
+  function estiloPorTexto(texto){
+    var t = String(texto || '').toLowerCase();
+    if(/correctamente|confirmad[oa]|guardad[oa] y|vinculado/.test(t) && !/no se pudo|pero no/.test(t)){
+      return { icono:'✅', color:'#15803d', titulo:'Listo' };
+    }
+    if(/no se pudo|no fue posible|no se encontr|no hay |falló|fallo|error|rechaz|no se guard|no tiene|no es |no se activ|no confirm|pero no/.test(t)){
+      return { icono:'⚠️', color:'#b45309', titulo:'Atención' };
+    }
+    return { icono:'ℹ️', color:'#0f766e', titulo:'Aviso' };
+  }
+
+  function crearBoton(texto, principal, color){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texto;
+    b.style.cssText = (principal
+      ? 'background:' + color + ';color:#fff;border:1px solid ' + color + ';'
+      : 'background:#fff;color:#334155;border:1px solid #cbd5e1;') +
+      'border-radius:10px;padding:10px 16px;font-size:15px;font-weight:600;' +
+      'cursor:pointer;min-width:120px;flex:1 1 auto;';
+    return b;
+  }
+
+  function mostrar(op){
+    return new Promise(function(resolve){
+      try{
+        if(!document.body){
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+          return;
+        }
+        var previo = document.getElementById(ID);
+        if(previo && previo.parentNode) previo.parentNode.removeChild(previo);
+
+        var est = estiloPorTexto(op.texto);
+        var color = op.color || est.color;
+
+        var fondo = document.createElement('div');
+        fondo.id = ID;
+        fondo.setAttribute('role', 'dialog');
+        fondo.setAttribute('aria-modal', 'true');
+        fondo.style.cssText =
+          'position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.45);' +
+          'display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        var caja = document.createElement('div');
+        caja.style.cssText =
+          'background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow:auto;' +
+          'box-shadow:0 20px 50px rgba(0,0,0,.25);padding:22px 20px 18px;font-family:inherit;' +
+          'border-top:5px solid ' + color + ';';
+
+        var icono = document.createElement('div');
+        icono.style.cssText = 'font-size:30px;line-height:1;margin-bottom:8px;';
+        icono.textContent = op.icono || (op.tipo === 'confirmar' ? '❓' : est.icono);
+
+        var titulo = document.createElement('div');
+        titulo.style.cssText = 'font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;';
+        titulo.textContent = op.titulo || (op.tipo === 'confirmar' ? 'Confirme por favor' : est.titulo);
+
+        var cuerpo = document.createElement('div');
+        cuerpo.style.cssText = 'font-size:15px;color:#475569;line-height:1.45;white-space:pre-line;margin-bottom:16px;word-break:break-word;';
+        cuerpo.textContent = op.texto;
+
+        var fila = document.createElement('div');
+        fila.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;';
+
+        var terminado = false;
+        function terminar(valor){
+          if(terminado) return;
+          terminado = true;
+          document.removeEventListener('keydown', teclas, true);
+          if(fondo.parentNode) fondo.parentNode.removeChild(fondo);
+          resolve(valor);
+        }
+        function teclas(ev){
+          if(ev.key === 'Escape'){ ev.preventDefault(); terminar(op.tipo === 'confirmar' ? false : true); }
+        }
+
+        var principal;
+        if(op.tipo === 'confirmar'){
+          var no = crearBoton(op.textoNo || 'Cancelar', false, color);
+          principal = crearBoton(op.textoSi || 'Aceptar', true, color);
+          no.addEventListener('click', function(){ terminar(false); });
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(no);
+          fila.appendChild(principal);
+        }else{
+          principal = crearBoton('Entendido', true, color);
+          principal.addEventListener('click', function(){ terminar(true); });
+          fila.appendChild(principal);
+        }
+
+        caja.appendChild(icono);
+        caja.appendChild(titulo);
+        caja.appendChild(cuerpo);
+        caja.appendChild(fila);
+        fondo.appendChild(caja);
+        document.body.appendChild(fondo);
+        document.addEventListener('keydown', teclas, true);
+        try{ principal.focus(); }catch(e){}
+      }catch(error){
+        console.warn('AUROSANAX VENTANAS PREMIUM V1:', error);
+        try{
+          if(op.tipo === 'confirmar') resolve(window.confirm(op.texto));
+          else { window.alert(op.texto); resolve(true); }
+        }catch(e){ resolve(op.tipo === 'confirmar' ? false : true); }
+      }
+    });
+  }
+
+  function enFila(op){
+    var p = cola.then(function(){ return mostrar(op); });
+    cola = p.catch(function(){});
+    return p;
+  }
+
+  window.auroAvisoPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'aviso', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color });
+  };
+
+  window.auroConfirmarPremiumV1 = function(texto, op){
+    op = op || {};
+    return enFila({ tipo:'confirmar', texto:String(texto == null ? '' : texto),
+      titulo:op.titulo, icono:op.icono, color:op.color, textoSi:op.textoSi, textoNo:op.textoNo });
+  };
+})();
+/* FIN ANAMNESIS MENSAJES V1 */
