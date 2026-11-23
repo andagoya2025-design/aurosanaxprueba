@@ -2361,6 +2361,18 @@ ${recDocumentoHTML()}
             if(oracion) break;
           }
           if(oracion) mejor=oracion; else if(renglon) mejor=renglon;
+          else{
+            /* Corte a mitad de oración: que la hoja siguiente no empiece con
+               un pedacito suelto (p. ej. «y ecográficas.»): pasar al menos
+               ~1 renglón de esa oración. */
+            const resto=partes.slice(mejor).join('');
+            const fin=resto.search(/[.:;](\s|$)/);
+            if(fin>=0&&fin<80){
+              let k=mejor;
+              while(k>1&&partes.slice(k).join('').search(/[.:;](\s|$)/)<80) k--;
+              if(k<mejor&&valido(k)&&partes.slice(0,k).join('').length>=largoMejor*0.6) mejor=k;
+            }
+          }
         }
         const pedazo=elemento.cloneNode(false);pedazo.textContent=partes.slice(0,mejor).join('');pedazo.classList.add('ar-parrafo-fragmento');
         padreNuevo.appendChild(pedazo);
@@ -2513,6 +2525,14 @@ ${recDocumentoHTML()}
       if(paginas.some(p=>!p.querySelector('.ar-page-main').textContent.trim())){
         throw new Error('Se generó una hoja sin contenido clínico');
       }
+      /* REPARTO EQUILIBRADO V1: «Página X de N» abajo al centro, solo con 2+ hojas.
+         Posición absoluta: no cambia el reparto ni la posición de la firma. */
+      if(paginas.length>1){
+        paginas.forEach((pag,i)=>{
+          const num=d.createElement('div');num.className='ar-num-pagina';
+          num.textContent='Página '+(i+1)+' de '+paginas.length;pag.appendChild(num);
+        });
+      }
       if(info){
         info.ok=true;info.pxmm=pxmm;info.altoFooter=altoFooter;info.maximo=maximo;
         info.alturas=paginas.map(p=>p.querySelector('.ar-page-main').getBoundingClientRect().height);
@@ -2526,12 +2546,14 @@ ${recDocumentoHTML()}
 
   /* ============================================================
      AUROSANAX | RECOMENDACIONES REPARTO EQUILIBRADO V1 (22/11/2026)
-     Cuando el documento ocupa 2 o más hojas, reparte el texto para que
-     todas las hojas queden parejas (sin una hoja llena y otra casi vacía).
+     Cuando el documento ocupa 2 o más hojas, evita hojas con mucho blanco
+     (antes un bloque grande pasaba entero a la hoja de la firma).
      - Cada bloque queda en su lugar y en su orden; la firma sigue SOLO en
        la última hoja, anclada abajo; no se crean hojas extra.
      - Si sobra espacio, agranda un poco la letra y los espacios (máx. 1,22 =
-       ~11 pt) sin agregar hojas; luego reparte parejo entre las hojas.
+       ~11 pt) sin agregar hojas; luego llena primero las hojas (como Órdenes)
+       y a la última pasa solo el resto, con la firma (mín. ~7 renglones).
+     - «Página X de N» abajo al centro y, en la vista previa, hojas separadas.
      - Corta de preferencia tras un punto final o al final de un renglón.
      - Si nada mejora, devuelve EXACTAMENTE el reparto anterior.
      - Documentos de una sola hoja: sin cambios.
@@ -2544,42 +2566,37 @@ ${recDocumentoHTML()}
     try{
       if(!info0.ok||!Array.isArray(info0.alturas)||info0.alturas.length<2) return base;
       const N=info0.alturas.length,px=info0.pxmm||3.779527559,maximo=info0.maximo;
-      const llenado=inf=>inf.alturas.map((h,i)=>i===inf.alturas.length-1?h+inf.altoFooter:h);
-      const desequilibrio=inf=>{const l=llenado(inf);return Math.max.apply(null,l)-Math.min.apply(null,l);};
-      const vacio=inf=>llenado(inf).reduce((a,h)=>a+Math.max(0,maximo-h),0);
       const prueba=(limites,escala)=>{
         const inf={};const r=recPaginarFirmaAnclada(html,limites,inf,escala);
-        return (inf.ok&&Array.isArray(inf.alturas)&&inf.alturas.length===N)?{html:r,inf:inf,escala:escala||1}:null;
+        return (inf.ok&&Array.isArray(inf.alturas)&&inf.alturas.length===N)?{html:r,inf:inf}:null;
       };
-      /* 1) Letra: la mayor escala (hasta 1,22 = ~11 pt) que NO agrega hojas. */
-      let escala=1,conEscala=null;
+      /* Llenado de las hojas que NO son la última (fracción de la hoja). */
+      const llenadoMin=inf=>Math.min.apply(null,inf.alturas.slice(0,-1))/maximo;
+      const sumaPrevias=inf=>inf.alturas.slice(0,-1).reduce((a,b)=>a+b,0);
+      const minimoUltima=32*px; // la firma siempre acompañada (~7 renglones)
+      /* 1) Letra: la mayor escala (hasta 1,22 ≈ 11 pt) que NO agrega hojas. */
+      let escala=1,punto={html:base,inf:info0};
       for(const e of [1.22,1.18,1.14,1.10,1.06,1.03]){
         const r=prueba(null,e);
-        if(r){escala=e;conEscala=r;break;}
+        if(r){escala=e;punto=r;break;}
       }
-      /* 2) Reparto parejo de las hojas con esa letra. */
-      const punto=conEscala||{html:base,inf:info0,escala:1};
-      const total=punto.inf.alturas.reduce((a,b)=>a+b,0);
-      const objetivo=(total+punto.inf.altoFooter)/N;
-      let mejor=punto,mejorD=desequilibrio(punto.inf);
-      if(objetivo<maximo-3*px){
-        let validos=0;
-        for(let k=0;k<14&&validos<3;k++){
-          const T=Math.min(maximo,Math.max(60*px,objetivo+k*4*px));
-          const limites=[];for(let i=0;i<N-1;i++) limites.push(T);
-          const r=prueba(limites,escala>1?escala:undefined);
-          if(r){
-            validos++;
-            const d=desequilibrio(r.inf);
-            if(d<mejorD-2*px){mejor=r;mejorD=d;}
-          }
-          if(T>=maximo) break;
-        }
+      /* 2) Llenar primero: la penúltima hoja se llena lo más posible (corte
+            tras un punto final); a la última pasa solo el resto con la firma. */
+      let mejor=null;
+      const considerar=r=>{
+        if(!r||r.inf.alturas[N-1]<minimoUltima) return;
+        if(!mejor||sumaPrevias(r.inf)>sumaPrevias(mejor.inf)+0.5) mejor=r;
+      };
+      considerar(punto);
+      for(let T=maximo;T>=maximo*0.4;T-=5*px){
+        if(mejor&&T<mejor.inf.alturas[N-2]) break; // ya no puede quedar más llena
+        const limites=[];for(let i=0;i<N-1;i++) limites.push(i===N-2?T:maximo);
+        considerar(prueba(limites,escala>1?escala:undefined));
       }
-      /* 3) Solo se usa si mejora de verdad: más parejo o menos blanco. */
-      if(mejor===punto&&!conEscala) return base;
-      const dBase=desequilibrio(info0),vBase=vacio(info0);
-      if(desequilibrio(mejor.inf)<=dBase+1*px||vacio(mejor.inf)<vBase-5*px) return mejor.html;
+      if(!mejor) mejor=punto;
+      /* 3) Solo se usa si no deja las primeras hojas más vacías que antes. */
+      if(mejor===punto&&escala===1) return base;
+      if(llenadoMin(mejor.inf)>=llenadoMin(info0)-0.01) return mejor.html;
       return base;
     }catch(e){
       console.warn(MODULO+': reparto equilibrado no disponible; se conserva el reparto anterior.',e);
@@ -2777,6 +2794,7 @@ body{overflow-x:hidden}
 }
 /* REPARTO EQUILIBRADO V1: letra y espacios algo mayores SOLO cuando el reparto
    lo decide (.ar-paginas con --ar-e). Sin --ar-e no aplica nada. */
+.ar-paginas .ar-page .ar-num-pagina{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:9px;line-height:1;color:#64748b;letter-spacing:.02em}
 .ar-paginas[style*="--ar-e"] .ar-page-main p{font-size:calc(12.1px*var(--ar-e))}
 .ar-paginas[style*="--ar-e"] .ar-page-main .ar-line,.ar-paginas[style*="--ar-e"] .ar-page-main .ar-dx-row,.ar-paginas[style*="--ar-e"] .ar-page-main .ar-doc-list li,.ar-paginas[style*="--ar-e"] .ar-page-main h3{font-size:calc(12px*var(--ar-e))}
 .ar-paginas[style*="--ar-e"] .ar-page-main .ar-section,.ar-paginas[style*="--ar-e"] .ar-page-main .ar-dx{margin-top:calc(14px*var(--ar-e));margin-bottom:calc(14px*var(--ar-e))}`;
@@ -2832,6 +2850,11 @@ html,body{background:#dfe3e8}
   .auro-rec-print-btn.secondary{width:auto;min-width:74px}
   .auro-rec-print-stage{padding:10px 0 18px;overflow-x:hidden}
   .auro-rec-print-sheet{width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;transform-origin:top center!important}
+}
+/* REPARTO EQUILIBRADO V1: en pantalla, con 2+ hojas, cada hoja se ve como un papel aparte. */
+@media screen{
+  #auroRecPreviewSheet:has(.ar-paginas .ar-page + .ar-page){background:transparent;box-shadow:none;padding:0}
+  #auroRecPreviewSheet .ar-paginas:has(.ar-page + .ar-page) .ar-page{box-sizing:content-box!important;width:180mm!important;padding:12mm 15mm;background:#fff;box-shadow:0 18px 45px rgba(15,23,42,.18);margin:0 0 14mm}
 }
 @media print{
   html,body{background:#fff!important;margin:0!important;padding:0!important;overflow:visible!important}
