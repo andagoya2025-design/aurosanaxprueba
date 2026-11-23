@@ -946,6 +946,7 @@ function auroMostrarAntecedentesPrevios(h, modo){
 
 
 function auroCargarAntecedentesDesdeHistoria(h, modo){
+  if(typeof auroV21LimpiarEstadoBotonesManuales_==='function')auroV21LimpiarEstadoBotonesManuales_();
   if(!h) return;
 
   setValueIfExists('hcAntecedentesPersonales', h.antecedentes_personales || '');
@@ -1889,7 +1890,59 @@ function auroV21AgregarBoton(texto, icono, onClick, estadoKey){
   btn.innerHTML = `<i class="bi ${icono} me-1"></i>${texto}`;
   if(estadoKey) btn.dataset.auroHelperKey = estadoKey;
   btn.setAttribute('aria-pressed', 'false');
-  btn.addEventListener('click', onClick);
+  btn.addEventListener('click', function(event){
+    if(event.isTrusted!==true)return; // Prohibir activaciones sintéticas.
+    const key=estadoKey;
+    const activoAntes=!!(key&&auroV21BotonRapidoEstaActivo(key));
+    if(key&&!activoAntes){
+      const panel=document.getElementById('hc_antecedentes');
+      const marca={niega_patologicos:'auroNiegaPatologicos',niega_quirurgicos:'auroNiegaQuirurgicos',
+                   niega_alergias:'auroNiegaAlergias',niega_familiares:'auroNiegaFamiliares'}[key];
+      if(key==='niega_alergias'){
+        const ficha=auroV21Valor_('hcAlergiasPaciente');
+        if(ficha&&!/^(niega\b|no\b|ninguna\b|sin alergias\b|no refiere\b)/i.test(ficha)){
+          // Una alergia positiva no permite confirmar una negación contradictoria.
+          // Si la historia trae una negación antigua, permitir retirarla sin activar el botón.
+          if(panel?.dataset.auroNiegaAlergias==='1'){
+            if(window.confirm('La ficha del paciente registra una alergia. ¿Retirar la negación antigua de esta historia clínica?')){
+              delete panel.dataset.auroNiegaAlergias;
+              if(typeof recopilarAlergiasEstructuradas==='function')recopilarAlergiasEstructuradas();
+              if(typeof updateClinicalSummary==='function')updateClinicalSummary();
+            }
+          }else{
+            window.alert('La ficha del paciente registra una alergia. No se puede afirmar que niega alergias sin comprobarla clínicamente.');
+          }
+          return;
+        }
+      }
+      if(key==='vacunas_dia'&&
+        !window.confirm('Esta ayuda marcará dosis de cinco vacunas como aplicadas. Confirme que todas están verificadas clínicamente.'))return;
+      const sel={niega_patologicos:'.hcPatologicoCheck:checked,.hcPatologicoTiempo,.hcPatologicoMedicamento',
+        niega_quirurgicos:'.hcQuirurgicoCheck:checked,.hcQuirurgicoFecha,.hcQuirurgicoOtroNombre',
+        niega_alergias:'.hcAlergiaCheck:checked,.hcAlergiaDetalle',
+        niega_familiares:'.hcFamiliarPatParentesco,.hcFamiliarPatDetalle,.hcFamiliarPatOtroNombre,.hcFamiliarQxParentesco,.hcFamiliarQxDetalle,.hcFamiliarQxOtroNombre,#hcFamiliaresOtros'}[key];
+      if(sel&&[...document.querySelectorAll(sel)].some(el=>el.type==='checkbox'?el.checked:String(el.value||'').trim()!=='') &&
+         !window.confirm('Existen datos clínicos en esta sección. La ayuda los sustituirá temporalmente. ¿Continuar?'))return;
+      AURO_V21_ESTADO_ANTERIOR[key]={
+        negacion:!!(marca&&panel?.dataset[marca]==='1'),
+        sinMedicacion:auroV21Valor_('hcMedicacionActual')==='No usa medicación actual según refiere.',
+        vacunasPlantilla:auroV21VacunasPlantillaAnterior_(),
+        habitosPlantilla:auroV21HabitosPlantillaAnterior_()
+      };
+    }
+    onClick.call(this,event); // Preservar las funciones originales y sus snapshots.
+    if(key){
+      const activoDespues=auroV21BotonRapidoEstaActivo(key);
+      if(activoDespues)AURO_V21_CLICS_MANUALES.add(key);
+      else{
+        AURO_V21_CLICS_MANUALES.delete(key);
+        if(activoAntes){
+          auroV21RetirarPlantillaPrevia_(key,AURO_V21_ESTADO_ANTERIOR[key]);
+          delete AURO_V21_ESTADO_ANTERIOR[key];
+        }
+      }
+    }
+  });
   return btn;
 }
 
@@ -1917,6 +1970,91 @@ function auroV21BotonRapidoEstaActivo(estadoKey){
   lo que había antes de usar una ayuda rápida.
 */
 const AURO_V21_HELPER_SNAPSHOTS = Object.create(null);
+/* V5: únicamente un clic humano puede encender un botón rápido. */
+const AURO_V21_CLICS_MANUALES = new Set();
+const AURO_V21_ESTADO_ANTERIOR = Object.create(null);
+function auroV21Valor_(id){ return String(document.getElementById(id)?.value||'').trim(); }
+function auroV21VacunasPlantillaAnterior_(){
+  return ['Covid','Hpv','HepB','Influenza','Tdpa'].every(v=>{
+    const n=auroV21Valor_('hcVac'+v+'Nombre');
+    if(n && n!==(v==='Hpv'?'HPV / no recuerda marca':'No recuerda marca'))return false;
+    return [1,2,3,4].every(i=>{
+      const pref='hcVac'+v;
+      const ck=document.getElementById(pref+'Apl'+i),ob=document.getElementById(pref+'Obs'+i);
+      if(!ck)return true; // Algunas vacunas solo tienen 2 o 3 dosis.
+      return ck.checked && auroV21Valor_(pref+'Obs'+i)==='Al día según refiere' &&
+        !auroV21Valor_(pref+'Prog'+i) && !auroV21Valor_(pref+'Adm'+i);
+    });
+  });
+}
+function auroV21HabitosPlantillaAnterior_(){
+ return ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].every(h=>{
+   const no=document.querySelector('input[name="hcHabito'+h+'Ex"][value="No"]');
+   return !!no?.checked && auroV21Valor_('hcHabito'+h+'Tiempo')==='No aplica' &&
+      auroV21Valor_('hcHabito'+h+'Abstinencia')==='No aplica';
+ });
+}
+function auroV21RetirarPlantillaPrevia_(key,anterior){
+  const panel=document.getElementById('hc_antecedentes');
+  const marcas={niega_patologicos:'auroNiegaPatologicos',niega_quirurgicos:'auroNiegaQuirurgicos',
+   niega_alergias:'auroNiegaAlergias',niega_familiares:'auroNiegaFamiliares'};
+  if(marcas[key]){
+    // Retirar la afirmación rápida, sin borrar casillas positivas restauradas.
+    if(panel)delete panel.dataset[marcas[key]];
+    try{
+      if(key==='niega_patologicos'&&typeof recopilarAntecedentesPersonalesCompletos==='function')recopilarAntecedentesPersonalesCompletos();
+      if(key==='niega_quirurgicos'&&typeof recopilarAntecedentesQuirurgicosEstructurados==='function')recopilarAntecedentesQuirurgicosEstructurados();
+      if(key==='niega_alergias'&&typeof recopilarAlergiasEstructuradas==='function')recopilarAlergiasEstructuradas();
+      if(key==='niega_familiares'&&typeof window.recopilarAntecedentesFamiliaresEstructurados==='function')window.recopilarAntecedentesFamiliaresEstructurados();
+    }catch(e){console.warn('AUROSANAX: no se pudo recalcular la negación retirada.',e);}
+  }
+  if(key==='sin_medicacion'&&anterior?.sinMedicacion &&
+     auroV21Valor_('hcMedicacionActual')==='No usa medicación actual según refiere.'){
+    document.getElementById('hcMedicacionActual').value='';
+  }
+  if(key==='vacunas_dia'&&anterior?.vacunasPlantilla){
+    // Sólo se borra el patrón exacto de ayuda rápida, nunca dosis con fecha.
+    ['Covid','Hpv','HepB','Influenza','Tdpa'].forEach(v=>{
+      for(let i=1;i<=4;i++){
+        const p='hcVac'+v,ck=document.getElementById(p+'Apl'+i),ob=document.getElementById(p+'Obs'+i);
+        if(ck?.checked&&ob?.value?.trim()==='Al día según refiere'&&
+           !auroV21Valor_(p+'Prog'+i)&&!auroV21Valor_(p+'Adm'+i)){ck.checked=false;ob.value='';}
+      }
+      const n=document.getElementById('hcVac'+v+'Nombre');
+      const sugerido=v==='Hpv'?'HPV / no recuerda marca':'No recuerda marca';
+      if(n?.value?.trim()===sugerido){
+        const valores=[1,2,3,4].some(i=>{
+          const p='hcVac'+v;
+          return !!document.getElementById(p+'Apl'+i)?.checked ||
+            !!auroV21Valor_(p+'Prog'+i)||!!auroV21Valor_(p+'Adm'+i);
+        });
+        if(!valores)n.value='';
+      }
+    });
+    if(typeof recopilarAntecedentesPersonalesCompletos==='function')recopilarAntecedentesPersonalesCompletos();
+  }
+  if(key==='habitos_sin_consumo'&&anterior?.habitosPlantilla){
+    ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].forEach(h=>{
+      const no=document.querySelector('input[name="hcHabito'+h+'Ex"][value="No"]');
+      if(no)no.checked=false;
+      for(const t of ['Tiempo','Abstinencia']){
+        const el=document.getElementById('hcHabito'+h+t);
+        if(el?.value?.trim()==='No aplica')el.value='';
+      }
+    });
+    if(typeof recopilarAntecedentesPersonalesCompletos==='function')recopilarAntecedentesPersonalesCompletos();
+  }
+  try{if(typeof updateClinicalSummary==='function')updateClinicalSummary();}catch(_e){}
+}
+function auroV21LimpiarEstadoBotonesManuales_(){
+  AURO_V21_CLICS_MANUALES.clear();
+  Object.keys(AURO_V21_HELPER_SNAPSHOTS).forEach(k=>delete AURO_V21_HELPER_SNAPSHOTS[k]);
+  Object.keys(AURO_V21_ESTADO_ANTERIOR).forEach(k=>delete AURO_V21_ESTADO_ANTERIOR[k]);
+  for(const key of ['niega_patologicos','niega_quirurgicos','niega_alergias','sin_medicacion',
+                     'vacunas_dia','habitos_sin_consumo','niega_familiares']){
+    auroV21SetBotonRapidoActivo(key,false);
+  }
+}
 
 function auroV21CapturarControles(selectores){
   const mapa = new Map();
@@ -1965,54 +2103,19 @@ function auroV21RestaurarSnapshot(estadoKey, restaurarExtras){
 }
 
 function auroV21DesactivarBotonRapido(estadoKey, limpiarSnapshot = true){
+  AURO_V21_CLICS_MANUALES.delete(estadoKey);
+  delete AURO_V21_ESTADO_ANTERIOR[estadoKey];
   auroV21SetBotonRapidoActivo(estadoKey, false);
   if(limpiarSnapshot) delete AURO_V21_HELPER_SNAPSHOTS[estadoKey];
 }
 
 function auroV21SincronizarEstadosAyudas(){
-  const panel = document.getElementById('hc_antecedentes');
-  if(!panel) return;
-
-  auroV21SetBotonRapidoActivo(
-    'niega_patologicos',
-    panel.dataset.auroNiegaPatologicos === '1'
-  );
-
-  auroV21SetBotonRapidoActivo(
-    'niega_quirurgicos',
-    panel.dataset.auroNiegaQuirurgicos === '1'
-  );
-
-  auroV21SetBotonRapidoActivo(
-    'niega_alergias',
-    panel.dataset.auroNiegaAlergias === '1'
-  );
-
-  auroV21SetBotonRapidoActivo(
-    'niega_familiares',
-    panel.dataset.auroNiegaFamiliares === '1'
-  );
-
-  const med = String(document.getElementById('hcMedicacionActual')?.value || '').trim();
-  auroV21SetBotonRapidoActivo(
-    'sin_medicacion',
-    med === 'No usa medicación actual según refiere.'
-  );
-
-  const vacunasRapidas = ['Covid','Hpv','HepB','Influenza','Tdpa'];
-  const vacunasAlDia = vacunasRapidas.every(vacunaKey => {
-    const checks = [...document.querySelectorAll(`[id^="hcVac${vacunaKey}Apl"]`)];
-    return checks.length > 0 && checks.every(chk => chk.checked);
-  });
-  auroV21SetBotonRapidoActivo('vacunas_dia', vacunasAlDia);
-
-  const habitosSinConsumo = ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].every(habitoKey => {
-    const no = document.querySelector(`input[name="hcHabito${habitoKey}Ex"][value="No"]`);
-    const tiempo = String(document.getElementById('hcHabito' + habitoKey + 'Tiempo')?.value || '').trim();
-    const abst = String(document.getElementById('hcHabito' + habitoKey + 'Abstinencia')?.value || '').trim();
-    return !!no?.checked && tiempo === 'No aplica' && abst === 'No aplica';
-  });
-  auroV21SetBotonRapidoActivo('habitos_sin_consumo', habitosSinConsumo);
+  // Los datos guardados se cargan en sus controles clínicos, pero nunca
+  // vuelven a encender ayudas rápidas. Solamente el clic humano lo hace.
+  for(const key of ['niega_patologicos','niega_quirurgicos','niega_alergias',
+    'sin_medicacion','vacunas_dia','habitos_sin_consumo','niega_familiares']){
+    auroV21SetBotonRapidoActivo(key,AURO_V21_CLICS_MANUALES.has(key));
+  }
 }
 
 window.auroV21SincronizarEstadosAyudas = auroV21SincronizarEstadosAyudas;
@@ -6283,6 +6386,7 @@ function recopilarAntecedentesPersonalesCompletos(){
 
   /* ---------- Limpieza completa (silenciosa, sin guardar) ---------- */
   function limpiarTodo_(){
+    if(typeof auroV21LimpiarEstadoBotonesManuales_==='function')auroV21LimpiarEstadoBotonesManuales_();
     const panel = document.getElementById('hc_antecedentes');
 
     // a) Limpieza visual estable V1 (controles, filas repetibles, ayudas).
