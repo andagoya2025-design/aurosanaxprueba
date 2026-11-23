@@ -2275,7 +2275,7 @@ ${recDocumentoHTML()}
      - Vista previa, impresión y motor de firma usan EXACTAMENTE este HTML.
      - Ante cualquier fallo de medición, vuelve al comportamiento anterior
        (recPaginacionInteligente), sin perder texto ni tocar la firma. */
-  function recPaginarFirmaAnclada(html){
+  function recPaginarFirmaAnclada(html,limitesHoja,info,escala){
     if(typeof document==='undefined'||!document.body||window.AUROSANAX_REC_PAGINACION_FLUIDA===true){
       return recPaginacionInteligente(html);
     }
@@ -2298,6 +2298,8 @@ ${recDocumentoHTML()}
       const footerOriginal=origen&&origen.querySelector(':scope > .ar-firma-area');
       if(!origen||!footerOriginal) return recPaginacionInteligente(html);
       const raiz=d.createElement('div');raiz.className='ar-paginas';d.body.appendChild(raiz);
+      /* REPARTO EQUILIBRADO V1: escala opcional de letra (solo la pide recRepartoEquilibradoV1). */
+      if(typeof escala==='number'&&escala>1.001&&escala<=1.25) raiz.style.setProperty('--ar-e',escala.toFixed(3));
       let paginaActual=null,cuerpoActual=null,seccionActual=null;
       const paginas=[];
       const crearPagina=()=>{
@@ -2315,7 +2317,10 @@ ${recDocumentoHTML()}
       const altoFooter=tempFooter.getBoundingClientRect().height;
       tempFooter.remove();
       const maximo=(263*pxmm)-(4*pxmm); // 259 mm de texto clínico por hoja.
-      const cabe=()=>cuerpoActual.getBoundingClientRect().height<=maximo+0.5;
+      /* REPARTO EQUILIBRADO V1: límite opcional por hoja (solo lo usa
+         recRepartoEquilibradoV1). Sin límites = exactamente igual que antes. */
+      const limiteHoja=()=>{const v=limitesHoja&&limitesHoja[paginas.length-1];return (typeof v==='number'&&v>0&&v<maximo)?v:maximo;};
+      const cabe=()=>cuerpoActual.getBoundingClientRect().height<=limiteHoja()+0.5;
       const intentar=(n,padre)=>{padre.appendChild(n);if(cabe()) return true;n.remove();return false;};
       const moverPagina=()=>crearPagina();
       function textoElemento(el){
@@ -2340,6 +2345,23 @@ ${recDocumentoHTML()}
         const MIN_CARACTERES=170;
         while(mejor>0&&partes.slice(mejor).join('').trim().length>0&&partes.slice(mejor).join('').trim().length<MIN_CARACTERES) mejor--;
         if(!mejor||partes.slice(0,mejor).join('').trim().length<MIN_CARACTERES) return restante;
+        /* REPARTO EQUILIBRADO V1: en el reparto equilibrado se corta de
+           preferencia tras un punto final y, si no, al final de un renglón
+           (nunca a media palabra). El reparto normal corta igual que antes. */
+        if(limitesHoja||escala){
+          const largoMejor=partes.slice(0,mejor).join('').length;
+          const valido=k=>partes.slice(0,k).join('').trim().length>=MIN_CARACTERES&&partes.slice(k).join('').trim().length>=MIN_CARACTERES;
+          let oracion=0,renglon=0;
+          for(let k=mejor;k>1;k--){
+            if(partes.slice(0,k).join('').length<largoMejor*0.6) break;
+            if(!/^\s+$/.test(partes[k-1])) continue;
+            const previo=partes[k-2]||'';
+            if(!oracion&&/[.:;]$/.test(previo)&&valido(k)) oracion=k;
+            if(!renglon&&/\n/.test(partes[k-1])&&valido(k)) renglon=k;
+            if(oracion) break;
+          }
+          if(oracion) mejor=oracion; else if(renglon) mejor=renglon;
+        }
         const pedazo=elemento.cloneNode(false);pedazo.textContent=partes.slice(0,mejor).join('');pedazo.classList.add('ar-parrafo-fragmento');
         padreNuevo.appendChild(pedazo);
         return partes.slice(mejor).join('');
@@ -2369,7 +2391,7 @@ ${recDocumentoHTML()}
       }
       function agregarParrafoSeccion(node,seccionPlantilla){
         if(intentar(node.cloneNode(true),seccionActual)) return;
-        const espacioRestante=maximo-cuerpoActual.getBoundingClientRect().height;
+        const espacioRestante=limiteHoja()-cuerpoActual.getBoundingClientRect().height;
         if(espacioRestante<65){
           if(seccionActual.children.length<=1&&seccionActual.querySelector('h3')){
             seccionActual.remove();moverPagina();nuevaSeccion(seccionPlantilla,false);
@@ -2491,12 +2513,80 @@ ${recDocumentoHTML()}
       if(paginas.some(p=>!p.querySelector('.ar-page-main').textContent.trim())){
         throw new Error('Se generó una hoja sin contenido clínico');
       }
+      if(info){
+        info.ok=true;info.pxmm=pxmm;info.altoFooter=altoFooter;info.maximo=maximo;
+        info.alturas=paginas.map(p=>p.querySelector('.ar-page-main').getBoundingClientRect().height);
+      }
       return raiz.outerHTML;
     }catch(e){
       console.warn(MODULO+': firma anclada no disponible; se conserva la paginación anterior.',e);
       return recPaginacionInteligente(html);
     }finally{if(marco) marco.remove();}
   }
+
+  /* ============================================================
+     AUROSANAX | RECOMENDACIONES REPARTO EQUILIBRADO V1 (22/11/2026)
+     Cuando el documento ocupa 2 o más hojas, reparte el texto para que
+     todas las hojas queden parejas (sin una hoja llena y otra casi vacía).
+     - Cada bloque queda en su lugar y en su orden; la firma sigue SOLO en
+       la última hoja, anclada abajo; no se crean hojas extra.
+     - Si sobra espacio, agranda un poco la letra y los espacios (máx. 1,22 =
+       ~11 pt) sin agregar hojas; luego reparte parejo entre las hojas.
+     - Corta de preferencia tras un punto final o al final de un renglón.
+     - Si nada mejora, devuelve EXACTAMENTE el reparto anterior.
+     - Documentos de una sola hoja: sin cambios.
+     - Apagado de emergencia: window.AUROSANAX_REC_REPARTO_EQUILIBRADO = false
+  ============================================================ */
+  function recRepartoEquilibradoV1(html){
+    const info0={};
+    const base=recPaginarFirmaAnclada(html,null,info0);
+    if(window.AUROSANAX_REC_REPARTO_EQUILIBRADO===false) return base;
+    try{
+      if(!info0.ok||!Array.isArray(info0.alturas)||info0.alturas.length<2) return base;
+      const N=info0.alturas.length,px=info0.pxmm||3.779527559,maximo=info0.maximo;
+      const llenado=inf=>inf.alturas.map((h,i)=>i===inf.alturas.length-1?h+inf.altoFooter:h);
+      const desequilibrio=inf=>{const l=llenado(inf);return Math.max.apply(null,l)-Math.min.apply(null,l);};
+      const vacio=inf=>llenado(inf).reduce((a,h)=>a+Math.max(0,maximo-h),0);
+      const prueba=(limites,escala)=>{
+        const inf={};const r=recPaginarFirmaAnclada(html,limites,inf,escala);
+        return (inf.ok&&Array.isArray(inf.alturas)&&inf.alturas.length===N)?{html:r,inf:inf,escala:escala||1}:null;
+      };
+      /* 1) Letra: la mayor escala (hasta 1,22 = ~11 pt) que NO agrega hojas. */
+      let escala=1,conEscala=null;
+      for(const e of [1.22,1.18,1.14,1.10,1.06,1.03]){
+        const r=prueba(null,e);
+        if(r){escala=e;conEscala=r;break;}
+      }
+      /* 2) Reparto parejo de las hojas con esa letra. */
+      const punto=conEscala||{html:base,inf:info0,escala:1};
+      const total=punto.inf.alturas.reduce((a,b)=>a+b,0);
+      const objetivo=(total+punto.inf.altoFooter)/N;
+      let mejor=punto,mejorD=desequilibrio(punto.inf);
+      if(objetivo<maximo-3*px){
+        let validos=0;
+        for(let k=0;k<14&&validos<3;k++){
+          const T=Math.min(maximo,Math.max(60*px,objetivo+k*4*px));
+          const limites=[];for(let i=0;i<N-1;i++) limites.push(T);
+          const r=prueba(limites,escala>1?escala:undefined);
+          if(r){
+            validos++;
+            const d=desequilibrio(r.inf);
+            if(d<mejorD-2*px){mejor=r;mejorD=d;}
+          }
+          if(T>=maximo) break;
+        }
+      }
+      /* 3) Solo se usa si mejora de verdad: más parejo o menos blanco. */
+      if(mejor===punto&&!conEscala) return base;
+      const dBase=desequilibrio(info0),vBase=vacio(info0);
+      if(desequilibrio(mejor.inf)<=dBase+1*px||vacio(mejor.inf)<vBase-5*px) return mejor.html;
+      return base;
+    }catch(e){
+      console.warn(MODULO+': reparto equilibrado no disponible; se conserva el reparto anterior.',e);
+      return base;
+    }
+  }
+  /* FIN RECOMENDACIONES REPARTO EQUILIBRADO V1 */
 
   function recDocumentoHTML(){
     const ctx=state.contexto||contextoAtencion();
@@ -2564,7 +2654,7 @@ ${recDocumentoHTML()}
         </section>` : ''
     ].filter(Boolean).join('');
 
-    return recPaginarFirmaAnclada(`<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
+    return recRepartoEquilibradoV1(`<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
       <header class="ar-doc-head${logo ? '' : ' ar-doc-head-no-logo'}">
         ${logo}
         <div>
@@ -2684,7 +2774,12 @@ body{overflow-x:hidden}
   .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
   .ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto!important}
   .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
-}`;
+}
+/* REPARTO EQUILIBRADO V1: letra y espacios algo mayores SOLO cuando el reparto
+   lo decide (.ar-paginas con --ar-e). Sin --ar-e no aplica nada. */
+.ar-paginas[style*="--ar-e"] .ar-page-main p{font-size:calc(12.1px*var(--ar-e))}
+.ar-paginas[style*="--ar-e"] .ar-page-main .ar-line,.ar-paginas[style*="--ar-e"] .ar-page-main .ar-dx-row,.ar-paginas[style*="--ar-e"] .ar-page-main .ar-doc-list li,.ar-paginas[style*="--ar-e"] .ar-page-main h3{font-size:calc(12px*var(--ar-e))}
+.ar-paginas[style*="--ar-e"] .ar-page-main .ar-section,.ar-paginas[style*="--ar-e"] .ar-page-main .ar-dx{margin-top:calc(14px*var(--ar-e));margin-bottom:calc(14px*var(--ar-e))}`;
   }
 
   function vistaPrevia(){
