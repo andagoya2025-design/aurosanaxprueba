@@ -1908,6 +1908,9 @@ function auroV21AgregarBoton(texto, icono, onClick, estadoKey){
               delete panel.dataset.auroNiegaAlergias;
               if(typeof recopilarAlergiasEstructuradas==='function')recopilarAlergiasEstructuradas();
               if(typeof updateClinicalSummary==='function')updateClinicalSummary();
+              if(typeof window.auroAntecedentesRegistrarAyudaConfirmadaV8==='function'){
+                window.auroAntecedentesRegistrarAyudaConfirmadaV8(key);
+              }
             }
           }else{
             window.alert('La ficha del paciente registra una alergia. No se puede afirmar que niega alergias sin comprobarla clínicamente.');
@@ -1948,6 +1951,9 @@ function auroV21AgregarBoton(texto, icono, onClick, estadoKey){
     }
     onClick.call(this,event); // Preservar las funciones originales y sus snapshots.
     if(key){
+      if(typeof window.auroAntecedentesRegistrarAyudaConfirmadaV8==='function'){
+        window.auroAntecedentesRegistrarAyudaConfirmadaV8(key);
+      }
       const activoDespues=auroV21BotonRapidoEstaActivo(key);
       if(activoDespues)AURO_V21_CLICS_MANUALES.add(key);
       else{
@@ -2014,15 +2020,12 @@ function auroV21RetirarPlantillaPrevia_(key,anterior){
   const panel=document.getElementById('hc_antecedentes');
   const marcas={niega_patologicos:'auroNiegaPatologicos',niega_quirurgicos:'auroNiegaQuirurgicos',
    niega_alergias:'auroNiegaAlergias',niega_familiares:'auroNiegaFamiliares'};
-  if(marcas[key]){
-    // Retirar la afirmación rápida, sin borrar casillas positivas restauradas.
-    if(panel)delete panel.dataset[marcas[key]];
-    try{
-      if(key==='niega_patologicos'&&typeof recopilarAntecedentesPersonalesCompletos==='function')recopilarAntecedentesPersonalesCompletos();
-      if(key==='niega_quirurgicos'&&typeof recopilarAntecedentesQuirurgicosEstructurados==='function')recopilarAntecedentesQuirurgicosEstructurados();
-      if(key==='niega_alergias'&&typeof recopilarAlergiasEstructuradas==='function')recopilarAlergiasEstructuradas();
-      if(key==='niega_familiares'&&typeof window.recopilarAntecedentesFamiliaresEstructurados==='function')window.recopilarAntecedentesFamiliaresEstructurados();
-    }catch(e){console.warn('AUROSANAX: no se pudo recalcular la negación retirada.',e);}
+  if(marcas[key] && panel){
+    // V8: el snapshot ya restituyó los controles y valores ocultos originales.
+    // No borrar una negación que ya existía antes de pulsar el botón.
+    if(anterior?.negacion === true) panel.dataset[marcas[key]] = '1';
+    else delete panel.dataset[marcas[key]];
+    // No serializar de nuevo: podría sobrescribir texto/JSON clínico histórico.
   }
   // V7: la restauración del snapshot es la única operación de deshacer
   // para medicación, vacunas y hábitos. NO volver a limpiar después de restaurar:
@@ -2280,10 +2283,8 @@ function auroV21InsertarPanelAyudas(){
         else panel.dataset.auroNiegaFamiliares = extras.niega;
       });
 
-      if(typeof window.recopilarAntecedentesFamiliaresEstructurados === 'function'){
-        window.recopilarAntecedentesFamiliaresEstructurados();
-      }
-
+      // V8: la captura anterior restituyó también hcAntecedentesFamiliares.
+      // Evitar recálculo redundante que reescribe el historial al deshacer.
       auroV21SetBotonRapidoActivo(key, false);
       return;
     }
@@ -6021,6 +6022,11 @@ function recopilarAntecedentesPersonalesCompletos(){
     ESTADO.motivo = texto_(motivo) || 'interacción clínica';
   }
 
+  // V8: invocado únicamente DESPUÉS de una ayuda aceptada y aplicada.
+  window.auroAntecedentesRegistrarAyudaConfirmadaV8 = function(clave){
+    marcarModificado_('ayuda rápida confirmada: ' + texto_(clave));
+  };
+
   function marcarLimpioDesdeHistoria_(h){
     const idHistoria = texto_(h?.id_historia || h?.id);
     const idEdicion = idHistoriaEdicion_();
@@ -6087,8 +6093,9 @@ function recopilarAntecedentesPersonalesCompletos(){
   function esClickClinicoQueModifica_(target){
     if(!(target instanceof Element)) return false;
 
+    // V8: la ayuda rápida confirma sus cambios dentro del propio manejador.
+    // Ignorar su clic en captura: un botón bloqueado/cancelado no modificó datos.
     return !!target.closest(
-      '.auro-v21-helper-btn,' +
       '.auro-gine-repetible-agregar,' +
       '.auro-gine-repetible-eliminar'
     );
