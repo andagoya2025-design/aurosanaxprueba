@@ -1917,6 +1917,22 @@ function auroV21AgregarBoton(texto, icono, onClick, estadoKey){
       }
       if(key==='vacunas_dia'&&
         !window.confirm('Esta ayuda marcará dosis de cinco vacunas como aplicadas. Confirme que todas están verificadas clínicamente.'))return;
+      if(key==='sin_medicacion'){
+        const medicamentoPrevio=auroV21Valor_('hcMedicacionActual');
+        if(medicamentoPrevio && medicamentoPrevio!=='No usa medicación actual según refiere.' &&
+           !window.confirm('Ya existe medicación actual registrada. Esta ayuda la sustituirá provisionalmente. ¿La doctora confirma el cambio?'))return;
+      }
+      if(key==='habitos_sin_consumo'){
+        const tieneHabitoPrevio=['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].some(h=>{
+          const marcado=document.querySelector('input[name="hcHabito'+h+'Ex"]:checked');
+          const t=auroV21Valor_('hcHabito'+h+'Tiempo');
+          const a=auroV21Valor_('hcHabito'+h+'Abstinencia');
+          return (marcado&&marcado.value!=='No')||
+                 (t&&t!=='No aplica')||(a&&a!=='No aplica');
+        });
+        if(tieneHabitoPrevio &&
+           !window.confirm('Ya existen hábitos personales registrados. Esta ayuda los sustituirá provisionalmente. ¿La doctora confirma el cambio?'))return;
+      }
       const sel={niega_patologicos:'.hcPatologicoCheck:checked,.hcPatologicoTiempo,.hcPatologicoMedicamento',
         niega_quirurgicos:'.hcQuirurgicoCheck:checked,.hcQuirurgicoFecha,.hcQuirurgicoOtroNombre',
         niega_alergias:'.hcAlergiaCheck:checked,.hcAlergiaDetalle',
@@ -1970,7 +1986,7 @@ function auroV21BotonRapidoEstaActivo(estadoKey){
   lo que había antes de usar una ayuda rápida.
 */
 const AURO_V21_HELPER_SNAPSHOTS = Object.create(null);
-/* V5: únicamente un clic humano puede encender un botón rápido. */
+/* V7: únicamente un clic humano puede encender un botón rápido. */
 const AURO_V21_CLICS_MANUALES = new Set();
 const AURO_V21_ESTADO_ANTERIOR = Object.create(null);
 function auroV21Valor_(id){ return String(document.getElementById(id)?.value||'').trim(); }
@@ -2008,42 +2024,10 @@ function auroV21RetirarPlantillaPrevia_(key,anterior){
       if(key==='niega_familiares'&&typeof window.recopilarAntecedentesFamiliaresEstructurados==='function')window.recopilarAntecedentesFamiliaresEstructurados();
     }catch(e){console.warn('AUROSANAX: no se pudo recalcular la negación retirada.',e);}
   }
-  if(key==='sin_medicacion'&&anterior?.sinMedicacion &&
-     auroV21Valor_('hcMedicacionActual')==='No usa medicación actual según refiere.'){
-    document.getElementById('hcMedicacionActual').value='';
-  }
-  if(key==='vacunas_dia'&&anterior?.vacunasPlantilla){
-    // Sólo se borra el patrón exacto de ayuda rápida, nunca dosis con fecha.
-    ['Covid','Hpv','HepB','Influenza','Tdpa'].forEach(v=>{
-      for(let i=1;i<=4;i++){
-        const p='hcVac'+v,ck=document.getElementById(p+'Apl'+i),ob=document.getElementById(p+'Obs'+i);
-        if(ck?.checked&&ob?.value?.trim()==='Al día según refiere'&&
-           !auroV21Valor_(p+'Prog'+i)&&!auroV21Valor_(p+'Adm'+i)){ck.checked=false;ob.value='';}
-      }
-      const n=document.getElementById('hcVac'+v+'Nombre');
-      const sugerido=v==='Hpv'?'HPV / no recuerda marca':'No recuerda marca';
-      if(n?.value?.trim()===sugerido){
-        const valores=[1,2,3,4].some(i=>{
-          const p='hcVac'+v;
-          return !!document.getElementById(p+'Apl'+i)?.checked ||
-            !!auroV21Valor_(p+'Prog'+i)||!!auroV21Valor_(p+'Adm'+i);
-        });
-        if(!valores)n.value='';
-      }
-    });
-    if(typeof recopilarAntecedentesPersonalesCompletos==='function')recopilarAntecedentesPersonalesCompletos();
-  }
-  if(key==='habitos_sin_consumo'&&anterior?.habitosPlantilla){
-    ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].forEach(h=>{
-      const no=document.querySelector('input[name="hcHabito'+h+'Ex"][value="No"]');
-      if(no)no.checked=false;
-      for(const t of ['Tiempo','Abstinencia']){
-        const el=document.getElementById('hcHabito'+h+t);
-        if(el?.value?.trim()==='No aplica')el.value='';
-      }
-    });
-    if(typeof recopilarAntecedentesPersonalesCompletos==='function')recopilarAntecedentesPersonalesCompletos();
-  }
+  // V7: la restauración del snapshot es la única operación de deshacer
+  // para medicación, vacunas y hábitos. NO volver a limpiar después de restaurar:
+  // la ficha puede contener exactamente la misma plantilla desde una atención previa.
+  // Una eliminación de un registro antiguo requiere edición clínica explícita.
   try{if(typeof updateClinicalSummary==='function')updateClinicalSummary();}catch(_e){}
 }
 function auroV21LimpiarEstadoBotonesManuales_(){
