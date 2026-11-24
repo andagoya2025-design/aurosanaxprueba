@@ -1894,6 +1894,45 @@ function auroV21AgregarBoton(texto, icono, onClick, estadoKey){
     if(event.isTrusted!==true)return; // Prohibir activaciones sintéticas.
     const key=estadoKey;
     const activoAntes=!!(key&&auroV21BotonRapidoEstaActivo(key));
+    /* V10: si ya existe una negacion guardada (verde registrado, no clic manual),
+       el primer clic solicita corregirla. No confundir el estado guardado con
+       una ayuda temporal, ni borrar historiales al "deshacer" una ayuda. */
+    const negacionesV10={
+      niega_patologicos:{marca:'auroNiegaPatologicos',recopilar:'recopilarAntecedentesPersonalesEstructurados'},
+      niega_quirurgicos:{marca:'auroNiegaQuirurgicos',recopilar:'recopilarAntecedentesQuirurgicosEstructurados'},
+      niega_alergias:{marca:'auroNiegaAlergias',recopilar:'recopilarAlergiasEstructuradas'},
+      niega_familiares:{marca:'auroNiegaFamiliares',recopilar:'recopilarAntecedentesFamiliaresEstructurados'}
+    };
+    if(key && !activoAntes && negacionesV10[key] && auroV21AyudaRegistrada_(key)){
+      const mensaje='Esta negacion ya esta registrada en la historia clinica. '
+        +'¿Desea retirarla para corregir el antecedente? '
+        +'Los otros datos de la historia se conservaran. '
+        +'La correccion se aplicara al pulsar Actualizar.';
+      if(!window.confirm(mensaje))return;
+      const panel=document.getElementById('hc_antecedentes');
+      const config=negacionesV10[key];
+      if(!panel || panel.dataset[config.marca]!=='1')return;
+      // Eliminar SOLO la negacion, no listas, fechas, medicamentos ni otros campos.
+      delete panel.dataset[config.marca];
+      const fn=window[config.recopilar];
+      if(typeof fn==='function')fn();
+      else if(config.recopilar==='recopilarAntecedentesPersonalesEstructurados'){
+        recopilarAntecedentesPersonalesEstructurados();
+      }else if(config.recopilar==='recopilarAntecedentesQuirurgicosEstructurados'){
+        recopilarAntecedentesQuirurgicosEstructurados();
+      }else if(config.recopilar==='recopilarAlergiasEstructuradas'){
+        recopilarAlergiasEstructuradas();
+      }
+      AURO_V21_CLICS_MANUALES.delete(key);
+      delete AURO_V21_ESTADO_ANTERIOR[key];
+      delete AURO_V21_HELPER_SNAPSHOTS[key];
+      auroV21SetBotonRapidoActivo(key,false);
+      if(typeof updateClinicalSummary==='function')updateClinicalSummary();
+      if(typeof window.auroAntecedentesRegistrarAyudaConfirmadaV8==='function'){
+        window.auroAntecedentesRegistrarAyudaConfirmadaV8(key);
+      }
+      return;
+    }
     if(key&&!activoAntes){
       const panel=document.getElementById('hc_antecedentes');
       const marca={niega_patologicos:'auroNiegaPatologicos',niega_quirurgicos:'auroNiegaQuirurgicos',
