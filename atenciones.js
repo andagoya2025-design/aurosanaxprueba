@@ -48,6 +48,8 @@
 
   let recetasSheetsCargadas = false;
   let recetasSheetsCargando = false;
+  let recetasDetallePendiente = null;
+  let detalleAtencionRevision = 0;
   let consultasPaginaActual = 1;
   const CONSULTAS_POR_PAGINA = 10;
   const RECETAS_STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
@@ -1954,9 +1956,10 @@
       cargarRecetasDesdeSheetsAtenciones(true).then(function(){
         if(contextoAtencionEpoch !== epoch) return;
         if(String(atencionActivaId || '') !== idAtencion) return;
+        if(idPacienteActivo() !== idPaciente || $('auroAtencionActivaBox')?.style.display === 'none') return;
 
         const actual = leerLocal().find(function(item){
-          return String(item.id_atencion || '') === idAtencion;
+          return String(item.id_atencion || '') === idAtencion && String(item.id_paciente || '').trim() === idPaciente;
         }) || a;
 
         renderDetalleAtencion(normalizar(actual));
@@ -3179,6 +3182,7 @@
       Ocultar es únicamente una acción visual.
       NO invalida la atención clínica activa ni rompe el contexto maestro.
     */
+    detalleAtencionRevision += 1;
     const box = $('auroAtencionActivaBox');
     if(box){
       box.style.display = 'none';
@@ -3193,13 +3197,25 @@
     const recetas = recetasPorAtencion(a);
 
     let recetasHTML = '';
-    if(!recetas.length && !recetasSheetsCargadas && !recetasSheetsCargando){
-      cargarRecetasDesdeSheetsAtenciones(false).then(function(){
-        const actual = leerLocal().find(x => String(x.id_atencion || '') === String(a.id_atencion || ''));
+    const revisionDetalle = ++detalleAtencionRevision;
+    const epochDetalle = contextoAtencionEpoch;
+    const idDetalle = String(a.id_atencion || '').trim();
+    const pacienteDetalle = String(a.id_paciente || '').trim();
+    const leerTokenDetalle = () => typeof window.AUROSANAX_SEGURIDAD?.obtenerToken === 'function' ? String(window.AUROSANAX_SEGURIDAD.obtenerToken() || '') : null;
+    const tokenDetalle = leerTokenDetalle();
+    /* V38: compartir la carga existente sin repintar una selección obsoleta. */
+    if(!recetas.length && !recetasSheetsCargadas){
+      if(!recetasDetallePendiente && !recetasSheetsCargando){
+        recetasDetallePendiente = cargarRecetasDesdeSheetsAtenciones(false).finally(function(){ recetasDetallePendiente = null; });
+      }
+      if(recetasDetallePendiente) recetasDetallePendiente.then(function(){
+        if(!recetasSheetsCargadas || revisionDetalle !== detalleAtencionRevision || epochDetalle !== contextoAtencionEpoch || tokenDetalle !== leerTokenDetalle()) return;
+        if(!idDetalle || !pacienteDetalle || String(atencionActivaId || '').trim() !== idDetalle || idPacienteActivo() !== pacienteDetalle || $('auroAtencionActivaBox') !== box || box.style.display === 'none') return;
+        const actual = leerLocal().find(x => String(x.id_atencion || '').trim() === idDetalle && String(x.id_paciente || '').trim() === pacienteDetalle);
         if(actual){
           renderDetalleAtencion(normalizar(actual));
         }
-      });
+      }).catch(function(error){ console.warn(MODULO, 'No se pudo refrescar el detalle de recetas.', error); });
     }
 
     if(recetas.length){
@@ -3860,9 +3876,16 @@
       Los refuerzos son necesarios porque algunos módulos terminan de
       renderizarse de forma asíncrona después del cambio de paciente.
     */
+    /* V38: los refuerzos pertenecen exclusivamente a la historia nueva original. */
+    const epochHistoriaNueva = contextoAtencionEpoch;
+    const pacienteHistoriaNueva = idPacienteNuevo || idPacienteActivo();
+    const leerTokenHistoriaNueva = () => typeof window.AUROSANAX_SEGURIDAD?.obtenerToken === 'function' ? String(window.AUROSANAX_SEGURIDAD.obtenerToken() || '') : null;
+    const tokenHistoriaNueva = leerTokenHistoriaNueva();
+    const contextoHistoriaNuevaVigente = () => contextoAtencionEpoch === epochHistoriaNueva && !atencionActivaId && idPacienteActivo() === pacienteHistoriaNueva && tokenHistoriaNueva === leerTokenHistoriaNueva();
+    const reforzarLimpiezaHistoriaNueva = () => { if(contextoHistoriaNuevaVigente()) auroLimpiarCamposModulosConsultaNueva(); };
     auroLimpiarCamposModulosConsultaNueva();
-    setTimeout(auroLimpiarCamposModulosConsultaNueva, 180);
-    setTimeout(auroLimpiarCamposModulosConsultaNueva, 650);
+    setTimeout(reforzarLimpiezaHistoriaNueva, 180);
+    setTimeout(reforzarLimpiezaHistoriaNueva, 650);
 
     /*
       Se invocan únicamente limpiadores públicos ya existentes.
@@ -3911,7 +3934,7 @@
     }
 
     setTimeout(function(){
-      renderAtencionesPaciente();
+      if(contextoHistoriaNuevaVigente()) renderAtencionesPaciente();
     }, 220);
   }
 
