@@ -99,6 +99,12 @@
     const st = document.createElement('style');
     st.id = 'auroAtencionesResponsiveCSS';
     st.textContent = `
+      /* V37: solo apariencia de Finalizar inactivo; conserva el spinner y la logica. */
+      #auroAtencionesBox #btnFinalizarAtencion:disabled:not(:has(.spinner-border)){
+        background:var(--soft, #fdf2f8);
+        color:var(--primary, #8b1e5a);
+        box-shadow:inset 0 0 0 1px #fbcfe8;
+      }
       #auroAtencionesBox .auro-atenciones-actions{
         display:flex;
         gap:8px;
