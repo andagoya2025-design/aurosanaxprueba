@@ -1968,14 +1968,78 @@ function auroV21AgregarBoton(texto, icono, onClick, estadoKey){
   return btn;
 }
 
-function auroV21SetBotonRapidoActivo(estadoKey, activo){
+/* V9 VISUAL: leer si la declaracion esta registrada SIN activar una ayuda.
+   El estado guardado pinta el boton; el clic manual sigue siendo el unico
+   que crea un snapshot reversible. Ningun dato clinico se modifica aqui. */
+function auroV21AyudaRegistrada_(key){
+  const panel = document.getElementById('hc_antecedentes');
+  if(!panel) return false;
+  const marcas = {
+    niega_patologicos:'auroNiegaPatologicos',
+    niega_quirurgicos:'auroNiegaQuirurgicos',
+    niega_alergias:'auroNiegaAlergias',
+    niega_familiares:'auroNiegaFamiliares'
+  };
+  if(marcas[key]){
+    if(panel.dataset[marcas[key]] !== '1') return false;
+    if(key === 'niega_alergias'){
+      const ficha = auroV21Valor_('hcAlergiasPaciente');
+      // Una contradiccion con alergia positiva no se presenta como confirmada.
+      if(ficha && !/^(niega\b|no\b|ninguna\b|sin alergias\b|no refiere\b)/i.test(ficha))return false;
+    }
+    return true;
+  }
+  if(key === 'sin_medicacion'){
+    return auroV21Valor_('hcMedicacionActual') === 'No usa medicación actual según refiere.';
+  }
+  if(key === 'vacunas_dia'){
+    return ['Covid','Hpv','HepB','Influenza','Tdpa'].every(v=>{
+      const checks=[...document.querySelectorAll(`[id^="hcVac${v}Apl"]`)];
+      return checks.length>0 && checks.every(chk=>chk.checked);
+    });
+  }
+  if(key === 'habitos_sin_consumo'){
+    return ['Tabaco','Alcohol','Drogas','Cafe','Biomasa'].every(h=>{
+      const no=document.querySelector(`input[name="hcHabito${h}Ex"][value="No"]`);
+      return !!no?.checked &&
+        auroV21Valor_('hcHabito'+h+'Tiempo') === 'No aplica' &&
+        auroV21Valor_('hcHabito'+h+'Abstinencia') === 'No aplica';
+    });
+  }
+  return false;
+}
+
+/* El verde significa REGISTRADO; no equivale a clic manual. */
+function auroV21InstalarVerdeRegistradoV9_(){
+  if(document.getElementById('auroV21VerdeRegistradoV9'))return;
+  const estilo=document.createElement('style');
+  estilo.id='auroV21VerdeRegistradoV9';
+  estilo.textContent=`
+    #hc_antecedentes .auro-v21-helper-btn.auro-v21-helper-registrado{
+      background:linear-gradient(135deg,#15803d,#16a34a)!important;
+      border-color:transparent!important;
+      color:#fff!important;
+      box-shadow:0 7px 16px rgba(22,163,74,.22)!important;
+    }
+    #hc_antecedentes .auro-v21-helper-btn.auro-v21-helper-registrado i{color:#fff!important;}
+  `;
+  document.head.appendChild(estilo);
+}
+
+function auroV21SetBotonRapidoActivo(estadoKey, activo, mostrarRegistrado=true){
   if(!estadoKey) return;
   const btn = document.querySelector(
     `.auro-v21-helper-btn[data-auro-helper-key="${CSS.escape(String(estadoKey))}"]`
   );
   if(!btn) return;
+  auroV21InstalarVerdeRegistradoV9_();
+  const registrado=mostrarRegistrado && auroV21AyudaRegistrada_(estadoKey);
+  // Clase activa: SOLO clic manual. Clase registrado: lectura historica.
+  // El CSS del Index ya colorea [aria-pressed="true"] igual que antes.
   btn.classList.toggle('auro-v21-helper-active', !!activo);
-  btn.setAttribute('aria-pressed', activo ? 'true' : 'false');
+  btn.classList.toggle('auro-v21-helper-registrado', !!registrado);
+  btn.setAttribute('aria-pressed', (activo || registrado) ? 'true' : 'false');
+  btn.title = registrado ? 'Declaración ya registrada en antecedentes.' : '';
 }
 
 function auroV21BotonRapidoEstaActivo(estadoKey){
@@ -2039,7 +2103,8 @@ function auroV21LimpiarEstadoBotonesManuales_(){
   Object.keys(AURO_V21_ESTADO_ANTERIOR).forEach(k=>delete AURO_V21_ESTADO_ANTERIOR[k]);
   for(const key of ['niega_patologicos','niega_quirurgicos','niega_alergias','sin_medicacion',
                      'vacunas_dia','habitos_sin_consumo','niega_familiares']){
-    auroV21SetBotonRapidoActivo(key,false);
+    // Antes de cargar otro paciente, no mostrar estados del anterior.
+    auroV21SetBotonRapidoActivo(key,false,false);
   }
 }
 
@@ -2097,8 +2162,8 @@ function auroV21DesactivarBotonRapido(estadoKey, limpiarSnapshot = true){
 }
 
 function auroV21SincronizarEstadosAyudas(){
-  // Los datos guardados se cargan en sus controles clínicos, pero nunca
-  // vuelven a encender ayudas rápidas. Solamente el clic humano lo hace.
+  // V9: recuperar color de datos ya guardados SIN crear clics ni snapshots.
+  // La activación manual y su mecanismo de restauración no se alteran.
   for(const key of ['niega_patologicos','niega_quirurgicos','niega_alergias',
     'sin_medicacion','vacunas_dia','habitos_sin_consumo','niega_familiares']){
     auroV21SetBotonRapidoActivo(key,AURO_V21_CLICS_MANUALES.has(key));
