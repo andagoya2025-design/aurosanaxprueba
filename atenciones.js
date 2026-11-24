@@ -972,7 +972,7 @@
     }
   }
 
-  async function enviarAtencionGoogleSheets(atencion, accion){
+  async function enviarAtencionGoogleSheets(atencion, accion, contextoVigente){
     try{
       if(!atencion) return { success:false, message:'No hay atención para enviar' };
       if(typeof API_URL === 'undefined' || !API_URL){
@@ -1046,6 +1046,7 @@
         delete payload.data.hora_atencion;
       }
 
+      if(contextoVigente && !contextoVigente()) return {success:false,message:"El contexto cambió"};
       const res = await fetch(API_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -1989,6 +1990,12 @@
       2. Inicio manual con selector de médicos activos.
       Ya no se busca una cita atendida cualquiera ni se asigna Aurora por defecto.
     */
+    const epochInicio = contextoAtencionEpoch;
+    const activaInicio = atencionActivaId;
+    const leerTokenInicio = () => typeof window.AUROSANAX_SEGURIDAD?.obtenerToken === 'function' ? String(window.AUROSANAX_SEGURIDAD.obtenerToken() || '') : null;
+    const tokenInicio = leerTokenInicio();
+    const sesionInicioVigente = () => tokenInicio === leerTokenInicio() && tokenInicio !== '';
+    const contextoInicioVigente = () => sesionInicioVigente() && contextoAtencionEpoch === epochInicio && atencionActivaId === activaInicio && idPacienteActivo() === idPaciente;
     let cita = leerCitaSeleccionadaAgenda();
 
     if(cita && !citaAgendaCorrespondePaciente(cita, idPaciente)){
@@ -2119,6 +2126,7 @@
       if(!continuar) return null;
     }
 
+    if(!contextoInicioVigente()) return null;
     const num = siguienteConsulta(idPaciente);
 
     const nueva = normalizar({
@@ -2151,8 +2159,12 @@
     */
     const resultadoInicio = await enviarAtencionGoogleSheets(
       nueva,
-      'guardarAtencion'
+      'guardarAtencion', contextoInicioVigente
     );
+    if(!sesionInicioVigente()) {
+      atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
+      return null;
+    }
 
     if(!resultadoInicio || !resultadoInicio.success){
       const listaRollback = leerLocal().filter(function(item){
@@ -2179,6 +2191,10 @@
       nueva.id_atencion,
       'Abierta'
     );
+    if(!sesionInicioVigente()) {
+      atencionesPendientesPersistencia.delete(String(nueva.id_atencion || '').trim());
+      return null;
+    }
 
     if(!confirmacionInicio || !confirmacionInicio.success){
       const listaRollback = leerLocal().filter(function(item){
@@ -2224,6 +2240,12 @@
       - No se toca contextoAtencionEpoch ni los controles de paciente/atención.
       - Si por compatibilidad no existe el snapshot, se conserva el GET forzado anterior.
     */
+    if(!contextoInicioVigente()) {
+      const vigente = leerLocal();
+      const i = vigente.findIndex(x => String(x.id_atencion) === String(nueva.id_atencion) && String(x.id_paciente) === idPaciente);
+      if(i >= 0) { vigente[i] = nuevaConfirmada; guardarLocal(vigente); }
+      return null;
+    }
     if(Array.isArray(confirmacionInicio.atenciones_remotas)){
       mezclarAtencionesLocalesYSheets(confirmacionInicio.atenciones_remotas);
       atencionesSheetsCargadas = true;
@@ -2231,6 +2253,7 @@
       await cargarAtencionesDesdeSheets(true);
     }
 
+    if(!contextoInicioVigente()) return null;
     if(cita){
       limpiarCitaSeleccionadaAgenda();
     }
@@ -2311,7 +2334,14 @@
       return;
     }
 
+    const epochCierre = contextoAtencionEpoch;
+    const idCierre = String(abierta.id_atencion || '').trim();
+    const leerTokenCierre = () => typeof window.AUROSANAX_SEGURIDAD?.obtenerToken === 'function' ? String(window.AUROSANAX_SEGURIDAD.obtenerToken() || '') : null;
+    const tokenCierre = leerTokenCierre();
+    const sesionCierreVigente = () => tokenCierre === leerTokenCierre() && tokenCierre !== '';
+    const contextoCierreVigente = () => sesionCierreVigente() && contextoAtencionEpoch === epochCierre && String(idPacienteActivo() || '').trim() === idPaciente && String(atencionActivaId || '').trim() === idCierre;
     if(!(await auroConfirmarAtencionesV1('¿Finalizar la atención actual? Quedará registrada como consulta histórica.'))) return;
+    if(!contextoCierreVigente()) return;
 
     const lista = leerLocal();
     const idx = lista.findIndex(a => String(a.id_atencion) === String(abierta.id_atencion));
@@ -2330,7 +2360,8 @@
       No se altera localStorage ni se limpia el contexto clínico antes de que
       Google Sheets confirme que ESTE mismo id_atencion quedó Finalizada.
     */
-    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
+    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion', contextoCierreVigente);
+    if(!sesionCierreVigente()) return;
 
     if(!resultado || !resultado.success){
       alert(
@@ -2345,6 +2376,7 @@
       'Finalizada'
     );
 
+    if(!sesionCierreVigente()) return;
     if(!verificacion || !verificacion.success){
       const estadoRemoto = String(verificacion?.estado_remoto || '').trim();
       alert(
@@ -2355,6 +2387,11 @@
       return;
     }
 
+    const historiaConfirmada = String(verificacion.atencion?.id_historia || '').trim();
+    if(String(verificacion.atencion?.id_paciente || '').trim() !== idPaciente || !historiaConfirmada || auroEstadoPertenenciaHistoria(historiaConfirmada,idPaciente) === false || (String(atencionFinalizada.id_historia || '').trim() && String(atencionFinalizada.id_historia).trim() !== historiaConfirmada)){
+      if(contextoCierreVigente()) alert('El servidor devolvió una identidad clínica inconsistente. Revise la atención.');
+      return;
+    }
     const atencionConfirmada = Object.assign(
       {},
       baseFinalizacion,
@@ -2362,12 +2399,13 @@
       { estado_atencion:'Finalizada' }
     );
 
-    if(idx >= 0){
-      lista[idx] = atencionConfirmada;
-    }else{
-      lista.unshift(atencionConfirmada);
+    const listaVigente = leerLocal();
+    const idxVigente = listaVigente.findIndex(a => String(a.id_atencion) === idFinalizada && String(a.id_paciente) === idPaciente);
+    if(idxVigente >= 0) {
+      listaVigente[idxVigente] = atencionConfirmada;
+      guardarLocal(listaVigente);
     }
-    guardarLocal(lista);
+    if(!contextoCierreVigente()) return;
 
     auroInvalidarContextoAtencion({
       idAnterior:idFinalizada,
