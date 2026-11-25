@@ -711,8 +711,10 @@
       <button class="config-tab" data-config-target="centro" data-permiso="configuracion_centro" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
       <button class="config-tab" data-config-target="finanzas" data-permiso="configuracion_finanzas" onclick="showConfig('finanzas',this)"><i class="bi bi-cash-coin me-1"></i> Finanzas</button>
       <button class="config-tab" data-config-target="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad</button>
+      <button class="config-tab" data-config-target="auroNotificaciones" data-permiso="configuracion" onclick="showConfig('auroNotificaciones',this)"><i class="bi bi-bell me-1"></i> Notificaciones</button>
     </div>
 
+    <section class="screen" id="auroNotificaciones" data-permiso="configuracion"><div class="cardx p-4" id="auroNvConfig"></div></section>
     <section class="screen active" id="medicos" data-permiso="configuracion_medicos">
       <div class="cardx p-4">
         <div class="section-head"><div><h4>Gestión de médicos</h4><p>Profesionales que aparecerán en disponibilidad y formulario de citas.</p></div><button class="btn-auro" onclick="abrirModal('medico')"><i class="bi bi-plus-circle me-1"></i> Nuevo médico</button></div>
@@ -2623,6 +2625,7 @@ function showSecurityPanel(id,btn){
     const usuario = acceso.usuario;
 
     pintarSesionConfiguracion_(seguridad, usuario);
+    try{ if(seguridad.tienePermiso("configuracion",usuario)) window.AURO_NOTIFICACIONES?.activate("config",{panel:document.getElementById("auroNvConfig")}); }catch(_e){}
 
     if(seguridad.tienePermiso('configuracion_medicos', usuario)){
       await cargarMedicos();
@@ -2648,6 +2651,7 @@ function showSecurityPanel(id,btn){
 <script src="config-finanzas.js"></script>
 <script src="seguridad.js?v=1.4.0"></script>
 <script src="auditoria_clinica.js?v=2.0.0"></script>
+<script src="notificaciones_voz.js?v=20261125_rc2"></script>
 
 </body>
 </html>

@@ -103,6 +103,16 @@ No guarda datos, no usa Apps Script ni Google Sheets.
     }
 
     const r = new SpeechRecognition();
+    const nv = window.AURO_NOTIFICACIONES;
+    if(nv?.micBefore){
+      let permitido=false;
+      try{ permitido=nv.micBefore(r); }catch(_e){}
+      if(!permitido){
+        const status=boton.parentElement?.querySelector(".auro-dictado-status");
+        if(status) status.textContent="Audio de avisos detenido. Pulse Dictar nuevamente cuando termine el sonido.";
+        return;
+      }
+    }
     r.lang = 'es-EC';
     r.continuous = true;
     r.interimResults = false;
@@ -134,9 +144,9 @@ No guarda datos, no usa Apps Script ni Google Sheets.
       if(status) status.textContent = /not-allowed|service-not-allowed/.test(String(event?.error||'')) ? 'Permiso de micrófono bloqueado.' : 'Dictado detenido.';
     };
 
-    r.onend = limpiarEstado;
+    r.onend = () => { try{nv?.micEnd?.(r);}catch(_e){} limpiarEstado(); };
 
-    try{ r.start(); }catch(e){ console.warn('AUROSANAX Dictado Clínico:', e); limpiarEstado(); }
+    try{ r.start(); }catch(e){ try{nv?.micEnd?.(r);}catch(_e){} console.warn('AUROSANAX Dictado Clínico:', e); limpiarEstado(); }
   }
 
   function instalar(campo){

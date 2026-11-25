@@ -4355,6 +4355,7 @@
 
 
     <div class="auro-mobile-session" id="auroUsuarioMobile">
+      <div id="auroNvMobile"></div>
       <div class="auro-mobile-session-info">
         <b id="auroUsuarioNombreMobile">Usuario autorizado</b>
         <small class="text-muted" id="auroUsuarioRolMobile">Validando sesión…</small>
@@ -4386,6 +4387,7 @@
         <p id="screenSubtitle">Resumen general del centro médico AUROSANAX</p>
       </div>
       <div class="doctor-pill" id="auroUsuarioDesktop">
+        <div id="auroNvDesktop"></div>
         <div class="doctor-avatar" id="auroUsuarioAvatar">AU</div>
         <div class="auro-user-info">
           <b id="auroUsuarioNombre">Usuario autorizado</b>
@@ -13892,6 +13894,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
 
 <!-- AUROSANAX FASE 4: protección de acceso del ERP -->
 <script src="seguridad.js?v=20260918_sync1"></script>
+<script src="notificaciones_voz.js?v=20261125_rc2"></script>
 <script id="auro-seguridad-index-guard">
 (function(){
   'use strict';
@@ -14045,6 +14048,7 @@ function auroInstalarOrdenesMedicasLegacyIndex(){
         autenticación ni bloquear la navegación.
       */
       revelarErp();
+      try{ window.AURO_NOTIFICACIONES?.activate('main',{headers:[document.getElementById('auroNvDesktop'),document.getElementById('auroNvMobile')]}); }catch(_e){}
 
       if(typeof window.auroIniciarERPTrasSeguridad !== 'function'){
         throw new Error('No se encontró el inicializador seguro del ERP.');
