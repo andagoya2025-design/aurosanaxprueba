@@ -31,6 +31,8 @@
   let role='',active=false,owner='',sessionToken='',prefs=defaults(),items=[],seen=new Set(),origins=new Map(),retired=new Set();
   let generation=0,context='',epoch=null,starting=null,closing=null,queue=[],playing=null,armed=false,ac=null,tones=new Set(),mic=new Set(),timer=null,ui=null;
   let unsafeOrigins=false, anChain=Promise.resolve(), anJobs=0, quietUntil=0;
+  // Intención del usuario separada del desbloqueo temporal del navegador.
+  let manualMute=false, unlocked=false, audioUI=null;
   function identity(){
     try{const sec=w.AUROSANAX_SEGURIDAD,u=sec?.obtenerUsuario?.(),s=sec?.obtenerSesion?.(),t=sec?.obtenerToken?.();
       const id=clean(u?.id_usuario);if(!id||!s||!clean(t)||!sec.tienePermiso(role==='config'?'configuracion':'dashboard',u))return null;
@@ -47,7 +49,7 @@
     for(const node of tones){try{node.stop();}catch{}try{node.disconnect();}catch{}}tones.clear();
   }
   function retireOrigins(){for(const k of origins.keys()){if(retired.size>=256){unsafeOrigins=true;break;}retired.add(k);}origins.clear();}
-  function reset(){stopAudio();armed=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
+  function reset(){stopAudio();armed=false;manualMute=false;unlocked=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
   function sync(){
     if(!active)return false;const i=identity();
     if(!i||i.id!==owner||i.token!==sessionToken){reset();active=false;return false;}
@@ -56,7 +58,11 @@
   }
   function ticket(){return {generation,context,epoch,at:now()};}
   function valid(t){return !!t&&sync()&&t.generation===generation&&t.context===context&&t.epoch===epoch&&now()-t.at>=0&&now()-t.at<=300000;}
-  function arm(){if(!sync()||!focused())return false;armed=true;try{const C=w.AudioContext||w.webkitAudioContext;if(C){ac=ac||new C();if(ac.state==='suspended')ac.resume().catch(()=>{});}}catch{}return true;}
+  function enabled(){return active&&!manualMute&&prefs.mode!=='silencio'&&prefs.volume>0;}
+  function refreshAudioUI(){try{audioUI?.();}catch{}}
+  function arm(){if(!sync()||!focused()||!enabled())return false;armed=true;unlocked=true;try{const C=w.AudioContext||w.webkitAudioContext;if(C){ac=ac||new C();if(ac.state==='suspended')ac.resume().catch(()=>{});}}catch{}refreshAudioUI();return true;}
+  function resumeAudio(){if(role!=='main'||!unlocked||!enabled()||!focused()||!sync())return;armed=true;refreshAudioUI();}
+  function gestureAudio(e){if(role!=='main'||!e.isTrusted||!enabled()||armed||e.target?.closest?.('[data-auro-nv-sound],#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile'))return;arm();}
   function audible(q){return valid(q.ticket)&&armed&&focused()&&!mic.size&&prefs.mode!=='silencio'&&prefs.volume>0&&now()-q.at<=5000&&(q.mod==='prueba'||prefs.modules[q.mod]?.audio);}
   function chime(){
     if(!ac||ac.state!=='running')return false;
@@ -123,10 +129,10 @@
     stopAudio();if(busy||now()<quietUntil)return false;mic.add(r);return true;
   }
   function micEnd(r){mic.delete(r);}
-  function configure(raw){if(!sync())return false;stopAudio();prefs=normalized(raw);const ok=save();paint();return ok;}
-  function testAudio(){if(!arm()||mic.size||prefs.mode==='silencio'||!prefs.volume||queue.length>=8)return false;queue.push({mod:'prueba',text:messages.prueba,ticket:ticket(),at:now()});w.setTimeout(pump,0);return true;}
-  function suspend(){stopAudio();armed=false;}
-  function deactivate(){reset();active=false;}
+  function configure(raw){if(!sync())return false;stopAudio();prefs=normalized(raw);if(!enabled())armed=false;else resumeAudio();const ok=save();paint();refreshAudioUI();return ok;}
+  function testAudio(){if(!arm()||mic.size||queue.length>=8)return false;queue.push({mod:'prueba',text:messages.prueba,ticket:ticket(),at:now()});w.setTimeout(pump,0);return true;}
+  function suspend(){stopAudio();armed=false;refreshAudioUI();}
+  function deactivate(){reset();active=false;refreshAudioUI();}
   function paint(){
     if(!ui)return;
     try{
@@ -180,11 +186,12 @@
   function mainUI(hosts){
     nvMainStyles();const dialog=el('dialog','','auro-nv-dialog'),list=el('div','','auro-nv-list'),buttons=[],summary=el('div','','auro-nv-summary');let snapshot=null;
     dialog.setAttribute('aria-labelledby','auro-nv-title');
-    function updateSound(){for(const {sound} of buttons){sound.replaceChildren(nvIcon(armed?'sound':'mute'));sound.setAttribute('aria-label',armed?'Silenciar audio de esta pestaña':'Activar audio de esta pestaña');sound.setAttribute('aria-pressed',String(armed));sound.title=armed?'Silenciar audio':'Activar audio';}}
+    function updateSound(){for(const {sound} of buttons){const on=enabled();sound.replaceChildren(nvIcon(on?'sound':'mute'));sound.setAttribute('aria-label',on&&armed?'Silenciar audio de esta pestaña':'Activar audio de esta pestaña');sound.setAttribute('aria-pressed',String(on));sound.title=on?(armed?'Audio activo · pulsar para silenciar':'Audio habilitado · se activa al interactuar'):(prefs.mode==='silencio'||!prefs.volume?'Audio desactivado en preferencias':'Activar audio');}}
+    audioUI=updateSound;
     for(const host of hosts.filter(Boolean)){
       const bar=el('div','','auro-nv-controls'),count=el('span','0','auro-nv-count');
       const bell=button('',()=>{if(!sync())return;paint();if(typeof dialog.showModal==='function'&&!dialog.open)dialog.showModal();});bell.classList.add('auro-nv-icon');bell.title='Notificaciones';bell.append(nvIcon('bell'),count);
-      const sound=button('',()=>{if(!sync())return;if(armed)suspend();else arm();updateSound();});sound.classList.add('auro-nv-icon');
+      const sound=button('',()=>{if(!sync())return;if(prefs.mode==='silencio'||!prefs.volume){updateSound();return;}if(enabled()&&armed){manualMute=true;suspend();}else{manualMute=false;arm();}updateSound();});sound.classList.add('auro-nv-icon');sound.setAttribute('data-auro-nv-sound','1');
       bar.append(bell,sound);host.replaceChildren(bar);buttons.push({bell,count,sound});
     }
     const head=el('div','','auro-nv-head'),mark=el('span','','auro-nv-mark'),title=el('div','','auro-nv-copy'),h=el('h4','Notificaciones');h.id='auro-nv-title';mark.append(nvIcon('bell'));title.append(h,el('small','Centro de avisos · AUROSANAX'));
@@ -207,9 +214,12 @@
   }
   for(const [name,fn] of Object.entries(listeners))w.addEventListener(E+name,safe(fn));
   w.addEventListener('blur',suspend);w.addEventListener('pagehide',deactivate);
-  d.addEventListener('visibilitychange',()=>{if(d.hidden)suspend();});
-  w.addEventListener('storage',e=>{if(active&&e.key===PREFIX+owner){stopAudio();prefs=load();paint();}});
+  w.addEventListener('focus',resumeAudio);
+  d.addEventListener('visibilitychange',()=>{if(d.hidden)suspend();else resumeAudio();});
+  d.addEventListener('pointerdown',gestureAudio,true);d.addEventListener('keydown',gestureAudio,true);
+  d.addEventListener('click',gestureAudio,true);
+  w.addEventListener('storage',e=>{if(active&&e.key===PREFIX+owner){stopAudio();prefs=load();if(!enabled())armed=false;else resumeAudio();paint();refreshAudioUI();}});
   // El cierre de sesión conserva su propio procedimiento. Solo apagamos nuestro audio.
   d.addEventListener('click',e=>{if(e.target?.closest?.('#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile,#cfgCerrarSesion'))deactivate();},true);
-  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed})});
+  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused()})});
 });
