@@ -1,4 +1,4 @@
-/* AUROSANAX NOTIFICACIONES V1 RC5 — candidato local, no publicar sin autorización.
+/* AUROSANAX NOTIFICACIONES V1 RC2 — candidato integrado para pruebas controladas.
  * Observador de eventos: no ejecuta operaciones clínicas, no consulta el servidor,
  * no modifica PDF/QR, firma, formularios ni persistencia clínica.
  * Activar exclusivamente tras la validación de acceso del documento anfitrión.
@@ -13,13 +13,12 @@
   const modules={atenciones:'Atenciones',anamnesis:'Anamnesis',firma:'Firma electrónica',diagnosticos:'Diagnósticos',agenda:'Agenda',pacientes:'Pacientes',examen:'Examen físico',plan:'Plan clínico',recetas:'Recetas',documentos:'Documentos',resultados:'Resultados',obstetricia:'Obstetricia',estetica:'Estética',recomendaciones:'Recomendaciones'};
   // Firma y otros módulos se reservan: el evento por sí solo no vincula inequívocamente
   // el origen al inicio de cada solicitud. No se habilitan mediante preferencias antiguas.
-  const ready=new Set(['atenciones','anamnesis','agenda','diagnosticos']);
-  const defaultReady=new Set(['atenciones','anamnesis']);
-  const messages={inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.',agenda:'Agenda actualizada y verificada.',diagnosticos:'Diagnóstico guardado y confirmado.'};
+  const ready=new Set(['atenciones','anamnesis']);
+  const messages={inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
   const clean=x=>typeof x==='string'?x.trim():'';
   const now=()=>Date.now();
   const limit=(x,a,b,f)=>typeof x==='number'&&Number.isFinite(x)?Math.min(b,Math.max(a,x)):f;
-  const defaults=()=>({mode:'silencio',visual:true,volume:65,rate:1,voice:'',modules:Object.fromEntries(Object.keys(modules).map(k=>[k,{visual:defaultReady.has(k),audio:defaultReady.has(k)}]))});
+  const defaults=()=>({mode:'silencio',visual:true,volume:65,rate:1,voice:'',modules:Object.fromEntries(Object.keys(modules).map(k=>[k,{visual:ready.has(k),audio:ready.has(k)}]))});
   function normalized(raw){
     const p=defaults(); if(!raw||typeof raw!=='object')return p;
     if(['silencio','timbre','voz','ambos'].includes(raw.mode))p.mode=raw.mode;
@@ -34,7 +33,6 @@
   let unsafeOrigins=false, anChain=Promise.resolve(), anJobs=0, quietUntil=0;
   // Intención del usuario separada del desbloqueo temporal del navegador.
   let manualMute=false, unlocked=false, audioUI=null;
-  let agendaWatch=null,dxOrigin=null,observerSerial=0;
   function identity(){
     try{const sec=w.AUROSANAX_SEGURIDAD,u=sec?.obtenerUsuario?.(),s=sec?.obtenerSesion?.(),t=sec?.obtenerToken?.();
       const id=clean(u?.id_usuario);if(!id||!s||!clean(t)||!sec.tienePermiso(role==='config'?'configuracion':'dashboard',u))return null;
@@ -51,11 +49,11 @@
     for(const node of tones){try{node.stop();}catch{}try{node.disconnect();}catch{}}tones.clear();
   }
   function retireOrigins(){for(const k of origins.keys()){if(retired.size>=256){unsafeOrigins=true;break;}retired.add(k);}origins.clear();}
-  function reset(){clearObserved();stopAudio();armed=false;manualMute=false;unlocked=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
+  function reset(){stopAudio();armed=false;manualMute=false;unlocked=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
   function sync(){
     if(!active)return false;const i=identity();
     if(!i||i.id!==owner||i.token!==sessionToken){reset();active=false;return false;}
-    const c=current();if(c.id!==context||c.epoch!==epoch){clearObserved();stopAudio();if(anJobs>0)unsafeOrigins=true;retireOrigins();context=c.id;epoch=c.epoch;generation++;}
+    const c=current();if(c.id!==context||c.epoch!==epoch){stopAudio();if(anJobs>0)unsafeOrigins=true;retireOrigins();context=c.id;epoch=c.epoch;generation++;}
     return true;
   }
   function ticket(){return {generation,context,epoch,at:now()};}
@@ -65,7 +63,7 @@
   function arm(){if(!sync()||!focused()||!enabled())return false;armed=true;unlocked=true;try{const C=w.AudioContext||w.webkitAudioContext;if(C){ac=ac||new C();if(ac.state==='suspended')ac.resume().catch(()=>{});}}catch{}refreshAudioUI();return true;}
   function resumeAudio(){if(role!=='main'||!unlocked||!enabled()||!focused()||!sync())return;armed=true;refreshAudioUI();}
   function gestureAudio(e){if(role!=='main'||!e.isTrusted||!enabled()||armed||e.target?.closest?.('[data-auro-nv-sound],#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile'))return;arm();}
-  function audible(q){return valid(q.ticket)&&observedPermission(q.mod)&&armed&&focused()&&!mic.size&&prefs.mode!=='silencio'&&prefs.volume>0&&now()-q.at<=5000&&(q.mod==='prueba'||prefs.modules[q.mod]?.audio);}
+  function audible(q){return valid(q.ticket)&&armed&&focused()&&!mic.size&&prefs.mode!=='silencio'&&prefs.volume>0&&now()-q.at<=5000&&(q.mod==='prueba'||prefs.modules[q.mod]?.audio);}
   function chime(){
     if(!ac||ac.state!=='running')return false;
     try{const t=ac.currentTime;[660,880].forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain(),a=t+i*.16;o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,a);g.gain.linearRampToValueAtTime(.10*prefs.volume/100,a+.02);g.gain.exponentialRampToValueAtTime(.0001,a+.14);o.connect(g);g.connect(ac.destination);tones.add(o);o.onended=()=>{tones.delete(o);try{o.disconnect();g.disconnect();}catch{}};o.start(a);o.stop(a+.15);});return true;}catch{return false;}
@@ -95,63 +93,6 @@
     if(prefs.mode!=='silencio'&&prefs.modules[mod].audio&&armed&&focused()&&!mic.size&&queue.length<8){queue.push({text,mod,ticket:ticket(),at:now()});w.setTimeout(pump,0);}
     return true;
   }
-  // RC5: observar operaciones explícitas, sin llamar a módulos propietarios,
-  // ni leer filas clínicas, ni modificar DOM ajeno, ni interceptar fetch.
-  function observedPermission(mod){
-    if(mod!=='agenda'&&mod!=='diagnosticos')return true;
-    try{const sec=w.AUROSANAX_SEGURIDAD,u=sec?.obtenerUsuario?.();
-      return !!u&&sec.tienePermiso(mod==='agenda'?'agenda':'historia_clinica',u)===true;
-    }catch{return false;}
-  }
-  function clearAgenda(){if(agendaWatch){try{agendaWatch.observer.disconnect();}catch{}agendaWatch=null;}}
-  function clearDx(){if(dxOrigin){try{dxOrigin.observer?.disconnect();}catch{}dxOrigin=null;}}
-  function clearObserved(){clearAgenda();clearDx();}
-  function agendaSequence(){try{return typeof auroAgendaCargaSecuencia==='number'?auroAgendaCargaSecuencia:null;}catch{return null;}}
-  function agendaVerified(){try{return typeof citasAgendaWebCargadas!=='undefined'&&citasAgendaWebCargadas===true&&typeof auroAgendaVerificacionAtenciones!=='undefined'&&auroAgendaVerificacionAtenciones==='lista';}catch{return false;}}
-  function observeAgenda(btn){
-    clearAgenda();const before=agendaSequence();if(!Number.isSafeInteger(before)||typeof w.MutationObserver!=='function')return;
-    const t=ticket(),expected=before+1;
-    const check=()=>{try{
-      if(agendaWatch!==entry)return;
-      if(!valid(t)||!observedPermission('agenda')||agendaSequence()!==expected||d.getElementById('agendaRefreshBtn')!==btn){clearAgenda();return;}
-      if(btn.classList.contains('is-error')){clearAgenda();return;}
-      if(!btn.classList.contains('is-success'))return;
-      const ok=agendaVerified()&&btn.getAttribute('aria-busy')==='false';clearAgenda();
-      if(ok)publish('agenda','agenda','agenda:'+expected+':'+(++observerSerial));
-    }catch{clearAgenda();}};
-    const observer=new w.MutationObserver(check),entry={observer};agendaWatch=entry;
-    observer.observe(btn,{attributes:true,attributeFilter:['class','aria-busy']});
-    // El navegador puede procesar microtareas entre captura y onclick.
-    // Esperar cambios reales de atributos, no anticipar el manejador propietario.
-    w.setTimeout(()=>{if(agendaWatch===entry&&agendaSequence()!==expected)clearAgenda();},0);
-  }
-  function observeDx(btn){
-    clearDx();if(typeof w.MutationObserver!=='function')return;
-    const entry={t:ticket(),started:false,btn};dxOrigin=entry;
-    const check=()=>{try{if(dxOrigin!==entry)return;
-      if(!valid(entry.t)||!observedPermission('diagnosticos')||d.getElementById(btn.id)!==btn){clearDx();return;}
-      const busy=btn.classList.contains('auro-dx-saving')&&btn.getAttribute('aria-busy')==='true';
-      if(busy){entry.started=true;return;}
-      if(entry.started)clearDx();
-    }catch{clearDx();}};
-    entry.observer=new w.MutationObserver(check);
-    entry.observer.observe(btn,{attributes:true,attributeFilter:['class','aria-busy']});
-    w.setTimeout(()=>{if(dxOrigin===entry){check();if(dxOrigin===entry&&!entry.started)clearDx();}},0);
-  }
-  function observeClick(e){try{
-    if(role!=='main'||!e.isTrusted)return;
-    const btn=e.target?.closest?.('#agendaRefreshBtn,#auroDxGuardarCambiosAbiertosBtn');
-    if(!btn||btn.disabled||!sync()||d.getElementById(btn.id)!==btn)return;
-    if(btn.id==='agendaRefreshBtn'&&observedPermission('agenda'))observeAgenda(btn);
-    if(btn.id==='auroDxGuardarCambiosAbiertosBtn'&&context&&observedPermission('diagnosticos'))observeDx(btn);
-  }catch{/* Observador no altera el clic propietario. */}}
-  function observeDxConfirmed(e){try{
-    const entry=dxOrigin;if(role!=='main'||!entry?.started||e.target!==d)return;
-    clearDx();const x=e.detail;
-    if(d.getElementById(entry.btn.id)!==entry.btn||!entry.btn.classList.contains('auro-dx-saved'))return;
-    if(!valid(entry.t)||!observedPermission('diagnosticos')||!x||x.id_atencion!==context||x.sin_cambios!==false)return;
-    publish('diagnosticos','diagnosticos','dx:'+entry.t.generation+':'+(++observerSerial));
-  }catch{/* No propagar fallos al módulo propietario. */}}
   function anInput(x,kind){
     if(role!=='main'||!sync()||!context||x.id_atencion!==context||unsafeOrigins)return;
     if(anJobs>=16){unsafeOrigins=true;retireOrigins();return;}
@@ -277,8 +218,6 @@
   d.addEventListener('visibilitychange',()=>{if(d.hidden)suspend();else resumeAudio();});
   d.addEventListener('pointerdown',gestureAudio,true);d.addEventListener('keydown',gestureAudio,true);
   d.addEventListener('click',gestureAudio,true);
-  d.addEventListener('click',observeClick,true);
-  d.addEventListener(E+'diagnostico-abierto-guardado',observeDxConfirmed);
   w.addEventListener('storage',e=>{if(active&&e.key===PREFIX+owner){stopAudio();prefs=load();if(!enabled())armed=false;else resumeAudio();paint();refreshAudioUI();}});
   // El cierre de sesión conserva su propio procedimiento. Solo apagamos nuestro audio.
   d.addEventListener('click',e=>{if(e.target?.closest?.('#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile,#cfgCerrarSesion'))deactivate();},true);
