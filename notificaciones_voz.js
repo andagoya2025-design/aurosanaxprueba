@@ -1,4 +1,6 @@
-/* AUROSANAX NOTIFICACIONES V1 RC2 — candidato integrado para pruebas controladas.
+/* AUROSANAX NOTIFICACIONES V1 RC6 — candidato local: Diagnósticos sobre RC4.
+ * Base RC4: blob 013187a939dc758d5ab34f68d6235867be24ff83. No desplegado.
+ * RC6 añade un único evento post-confirmación, sin red ni observadores del DOM.
  * Observador de eventos: no ejecuta operaciones clínicas, no consulta el servidor,
  * no modifica PDF/QR, firma, formularios ni persistencia clínica.
  * Activar exclusivamente tras la validación de acceso del documento anfitrión.
@@ -13,19 +15,22 @@
   const modules={atenciones:'Atenciones',anamnesis:'Anamnesis',firma:'Firma electrónica',diagnosticos:'Diagnósticos',agenda:'Agenda',pacientes:'Pacientes',examen:'Examen físico',plan:'Plan clínico',recetas:'Recetas',documentos:'Documentos',resultados:'Resultados',obstetricia:'Obstetricia',estetica:'Estética',recomendaciones:'Recomendaciones'};
   // Firma y otros módulos se reservan: el evento por sí solo no vincula inequívocamente
   // el origen al inicio de cada solicitud. No se habilitan mediante preferencias antiguas.
-  const ready=new Set(['atenciones','anamnesis']);
+  const ready=new Set(['atenciones','anamnesis','diagnosticos']);
+  const legacyReady=new Set(['atenciones','anamnesis']);
   const messages={inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
   const clean=x=>typeof x==='string'?x.trim():'';
   const now=()=>Date.now();
   const limit=(x,a,b,f)=>typeof x==='number'&&Number.isFinite(x)?Math.min(b,Math.max(a,x)):f;
-  const defaults=()=>({mode:'silencio',visual:true,volume:65,rate:1,voice:'',modules:Object.fromEntries(Object.keys(modules).map(k=>[k,{visual:ready.has(k),audio:ready.has(k)}]))});
+  const defaults=()=>({mode:'silencio',visual:true,volume:65,rate:1,voice:'',modules:Object.fromEntries(Object.keys(modules).map(k=>[k,{visual:legacyReady.has(k),audio:legacyReady.has(k)}]))});
   function normalized(raw){
     const p=defaults(); if(!raw||typeof raw!=='object')return p;
     if(['silencio','timbre','voz','ambos'].includes(raw.mode))p.mode=raw.mode;
     if(typeof raw.visual==='boolean')p.visual=raw.visual;
     p.volume=limit(raw.volume,0,100,p.volume);p.rate=limit(raw.rate,.8,1.2,p.rate);
     p.voice=clean(raw.voice).slice(0,160);
-    for(const k of ready)for(const c of ['visual','audio'])if(typeof raw.modules?.[k]?.[c]==='boolean')p.modules[k][c]=raw.modules[k][c];
+    for(const k of legacyReady)for(const c of ['visual','audio'])if(typeof raw.modules?.[k]?.[c]==='boolean')p.modules[k][c]=raw.modules[k][c];
+    // No rescatar casillas antiguas de RC5. Solo aceptación expresa en RC6.
+    if(raw.rc6Diagnosticos===true){p.rc6Diagnosticos=true;for(const c of ['visual','audio'])if(typeof raw.modules?.diagnosticos?.[c]==='boolean')p.modules.diagnosticos[c]=raw.modules.diagnosticos[c];}
     return p;
   }
   let role='',active=false,owner='',sessionToken='',prefs=defaults(),items=[],seen=new Set(),origins=new Map(),retired=new Set();
@@ -33,6 +38,9 @@
   let unsafeOrigins=false, anChain=Promise.resolve(), anJobs=0, quietUntil=0;
   // Intención del usuario separada del desbloqueo temporal del navegador.
   let manualMute=false, unlocked=false, audioUI=null;
+  // Recursos separados del registro seen/origins de RC4. Una sola tarea pendiente.
+  let dxPending=null,dxTimer=null,dxEvents=new WeakSet();
+  let dxReleaseUntil=0;
   function identity(){
     try{const sec=w.AUROSANAX_SEGURIDAD,u=sec?.obtenerUsuario?.(),s=sec?.obtenerSesion?.(),t=sec?.obtenerToken?.();
       const id=clean(u?.id_usuario);if(!id||!s||!clean(t)||!sec.tienePermiso(role==='config'?'configuracion':'dashboard',u))return null;
@@ -49,7 +57,7 @@
     for(const node of tones){try{node.stop();}catch{}try{node.disconnect();}catch{}}tones.clear();
   }
   function retireOrigins(){for(const k of origins.keys()){if(retired.size>=256){unsafeOrigins=true;break;}retired.add(k);}origins.clear();}
-  function reset(){stopAudio();armed=false;manualMute=false;unlocked=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
+  function reset(){clearDxPending();dxEvents=new WeakSet();dxReleaseUntil=0;stopAudio();armed=false;manualMute=false;unlocked=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
   function sync(){
     if(!active)return false;const i=identity();
     if(!i||i.id!==owner||i.token!==sessionToken){reset();active=false;return false;}
@@ -81,7 +89,9 @@
     }catch{if(fallBack)fallback(q);else finish(q);}
   }
   function pump(){
-    if(playing)return;const q=queue.shift();if(!q)return;if(!audible(q)){w.setTimeout(pump,0);return;}playing=q;
+    if(playing)return;
+    if(dxReleaseUntil>now()&&queue.length){w.setTimeout(pump,Math.max(0,dxReleaseUntil-now()));return;}
+    const q=queue.shift();if(!q)return;if((q.rc6Extra&&!dxAllowed())||!audible(q)){w.setTimeout(pump,0);return;}playing=q;
     if(prefs.mode==='timbre'){chime();timer=w.setTimeout(()=>finish(q),340);}
     else if(prefs.mode==='ambos'){chime();timer=w.setTimeout(()=>{timer=null;speak(q,false);},400);}
     else speak(q,true);
@@ -89,8 +99,8 @@
   function publish(mod,msg,key){
     if(!sync()||!ready.has(mod)||!messages[msg]||!key||seen.has(key)||seen.size>=1024)return false;
     seen.add(key);const text=messages[msg];
-    if(prefs.visual&&prefs.modules[mod].visual){items.unshift({text,mod,at:now(),read:false});items=items.slice(0,80);paint();}
-    if(prefs.mode!=='silencio'&&prefs.modules[mod].audio&&armed&&focused()&&!mic.size&&queue.length<8){queue.push({text,mod,ticket:ticket(),at:now()});w.setTimeout(pump,0);}
+    if(prefs.visual&&prefs.modules[mod].visual){items.unshift({text,mod,at:now(),read:false});if(items.length>80){const dx=items.map(i=>i.mod).lastIndexOf('diagnosticos');if(dx>=0)items.splice(dx,1);else items=items.slice(0,80);}paint();}
+    if(prefs.mode!=='silencio'&&prefs.modules[mod].audio&&armed&&focused()&&!mic.size&&queue.length<8){preemptDxAudio();queue.push({text,mod,ticket:ticket(),at:now()});w.setTimeout(pump,0);}
     return true;
   }
   function anInput(x,kind){
@@ -166,7 +176,7 @@
     const voices=localVoices(),voice=select('Voz local en español',[['','Automática'],...voices.map(v=>[v.voiceURI,v.name+' ('+v.lang+')'])],prefs.voice);if(!voice.value)voice.value='';
     const visual=check('Mostrar centro de avisos visuales',prefs.visual,panel),fields={};
     for(const [k,title] of Object.entries(modules)){const f=el('fieldset'),legend=el('legend',title);f.append(legend);fields[k]={visual:check('Aviso visual',prefs.modules[k].visual,f,!ready.has(k)),audio:check('Audio',prefs.modules[k].audio,f,!ready.has(k))};if(!ready.has(k))f.append(el('small','Pendiente de validar el origen de la operación. No activo.'));panel.append(f);}
-    const status=el('p');status.setAttribute('role','status');const get=()=>({mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
+    const status=el('p');status.setAttribute('role','status');const get=()=>({rc6Diagnosticos:true,mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
     panel.append(button('Guardar preferencias',()=>{status.textContent=configure(get())?'Preferencias guardadas en este navegador.':'No fue posible persistir las preferencias.';}),button('Guardar y probar sonido',()=>{const ok=configure(get()),played=testAudio();status.textContent=(ok?'Preferencias guardadas. ':'Preferencias no persistidas. ')+(played?'Prueba solicitada.':'Audio no disponible o silenciado.');}),status);
     if(!voices.length)panel.append(el('small','No se detectó una voz local en español. Si está disponible, se utilizará el timbre.'));
     host.replaceChildren(panel);
@@ -213,6 +223,67 @@
       return true;}catch{deactivate();return false;}
   }
   for(const [name,fn] of Object.entries(listeners))w.addEventListener(E+name,safe(fn));
+  // RC6 — Diagnósticos: evento propietario tras POST y lectura comparada.
+  // No se escucha el clic ni el estado del botón. No se consulta ni modifica la base.
+  function clearDxPending(){
+    if(dxTimer!==null){w.clearTimeout(dxTimer);dxTimer=null;}
+    dxPending=null;
+  }
+  function preemptDxAudio(){
+    if(playing?.rc6Extra){
+      // Por contrato RC6 solo entra con cola vacía. No borrar avisos de RC4.
+      const legacyQueue=queue.filter(q=>!q.rc6Extra);
+      stopAudio();queue=legacyQueue;
+      // Breve margen para que el navegador libere la síntesis cancelada.
+      dxReleaseUntil=now()+250;
+    }else if(queue[0]?.rc6Extra){queue=queue.filter(q=>!q.rc6Extra);}
+  }
+  function dxAllowed(){
+    const opt=prefs.modules.diagnosticos;
+    if(role!=='main'||!active||!prefs.rc6Diagnosticos||!opt||(!opt.audio&&(!prefs.visual||!opt.visual)))return false;
+    const i=identity();if(!i||i.id!==owner||i.token!==sessionToken)return false;
+    const sec=w.AUROSANAX_SEGURIDAD,u=sec?.obtenerUsuario?.();
+    return !!u&&sec.tienePermiso('historia_clinica',u)===true;
+  }
+  function dxVisual(text){
+    if(!prefs.visual||!prefs.modules.diagnosticos.visual)return;
+    // El límite de 80 sigue intacto; los nuevos avisos no expulsan avisos de RC4.
+    const extra=items.filter(i=>i.mod==='diagnosticos').length;
+    if(extra>=20||items.length>=80){
+      const index=items.map(i=>i.mod).lastIndexOf('diagnosticos');
+      if(index<0)return;
+      items.splice(index,1);
+    }
+    items.unshift({text,mod:'diagnosticos',at:now(),read:false});paint();
+  }
+  function flushDx(){
+    const x=dxPending;dxPending=null;dxTimer=null;
+    try{
+      if(!x||!dxAllowed()||x.owner!==owner||x.token!==sessionToken||starting||closing)return;
+      const c=current();if(c.id!==x.id||c.epoch!==x.epoch||now()-x.at>5000)return;
+      const text='Diagnóstico guardado y confirmado.';
+      dxVisual(text);
+      // Prioridad absoluta de admisión para avisos originales y dictado.
+      // Si hay ocupación, solo queda el aviso visual (si el usuario lo habilitó).
+      if(!prefs.modules.diagnosticos.audio||!enabled()||!armed||!focused()||mic.size||playing||queue.length||anJobs||tones.size||now()<quietUntil)return;
+      if(c.id!==context||c.epoch!==epoch){if(!sync()||context!==c.id||epoch!==c.epoch)return;}
+      if(!dxAllowed())return;
+      queue.push({text,mod:'diagnosticos',ticket:ticket(),at:now(),rc6Extra:true});
+      w.setTimeout(pump,0);
+    }catch{/* RC6 no interrumpe ninguna operación propietaria. */}
+  }
+  function onDxConfirmed(e){
+    try{
+      if(e.target!==d||dxEvents.has(e)||!dxAllowed()||starting||closing)return;
+      const x=e.detail,c=current();
+      if(!x||x.sin_cambios!==false||!clean(x.id_atencion)||c.id!==x.id_atencion||c.epoch===null)return;
+      dxEvents.add(e);
+      // Un aviso por ráfaga; conservar solo identificadores transitorios de contexto.
+      dxPending={id:c.id,epoch:c.epoch,owner,token:sessionToken,at:now()};
+      if(dxTimer===null)dxTimer=w.setTimeout(flushDx,0);
+    }catch{/* Observador aislado. */}
+  }
+  d.addEventListener(E+'diagnostico-abierto-guardado',onDxConfirmed);
   w.addEventListener('blur',suspend);w.addEventListener('pagehide',deactivate);
   w.addEventListener('focus',resumeAudio);
   d.addEventListener('visibilitychange',()=>{if(d.hidden)suspend();else resumeAudio();});
