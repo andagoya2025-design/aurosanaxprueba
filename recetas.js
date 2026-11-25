@@ -5509,6 +5509,12 @@
     verificarCambioAtencionReceta();
 
     let estabaEditando = false;
+    // RC8-R1: origen del aviso; nunca participa en el guardado clínico.
+    const nvOrigenReceta = (()=>{try{return {
+      id:String(window.getIdAtencionActiva?.()||'').trim(),
+      epoch:window.getContextoAtencionEpoch?.(),
+      token:window.AUROSANAX_SEGURIDAD?.obtenerToken?.()
+    };}catch(_e){return null;}})();
 
     recetaGuardando = true;
     actualizarBotonGuardarReceta();
@@ -5667,6 +5673,22 @@
       mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Guardando receta y enviando a Google Sheets...', '');
 
       const resultado = await enviarRecetaGoogleSheets(r);
+
+      // RC8-R1: solo después de recibir la respuesta del servidor.
+      try{
+        const n=nvOrigenReceta;
+        if(n?.id&&n.token&&n.epoch!=null&&n.id===String(r.id_atencion||'').trim()&&
+           n.id===String(window.getIdAtencionActiva?.()||'').trim()&&
+           n.epoch===window.getContextoAtencionEpoch?.()&&n.token===window.AUROSANAX_SEGURIDAD?.obtenerToken?.()){
+          const completa=resultado?.success===true&&resultado.plan_sincronizado===true;
+          const parcial=resultado?.guardado_parcial===true||resultado?.receta_guardada===true;
+          const estado=completa?(estabaEditando?'edicion':'alta'):
+            (parcial||resultado?.success===true?'plan_pendiente':'no_confirmada');
+          document.dispatchEvent(new CustomEvent('aurosanax:receta-resultado-guardado',{
+            detail:{id_atencion:n.id,contexto_epoch:n.epoch,estado}
+          }));
+        }
+      }catch(_e){}
 
       /*
         CONTROL DEFINITIVO:

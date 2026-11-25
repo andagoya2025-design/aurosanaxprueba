@@ -15,8 +15,9 @@
   const modules={atenciones:'Atenciones',anamnesis:'Anamnesis',firma:'Firma electrónica',diagnosticos:'Diagnósticos',agenda:'Agenda',pacientes:'Pacientes',examen:'Examen físico',plan:'Plan clínico',recetas:'Recetas',documentos:'Documentos',resultados:'Resultados',obstetricia:'Obstetricia',estetica:'Estética',recomendaciones:'Recomendaciones'};
   // Firma y otros módulos se reservan: el evento por sí solo no vincula inequívocamente
   // el origen al inicio de cada solicitud. No se habilitan mediante preferencias antiguas.
-  const ready=new Set(['atenciones','anamnesis','diagnosticos','examen']);
+  const ready=new Set(['atenciones','anamnesis','diagnosticos','examen','recetas']);
   const extraModules=new Set(['diagnosticos','examen']);
+  const recetaMessages=Object.freeze({alta:'Receta médica guardada correctamente.',edicion:'Receta médica actualizada correctamente.',plan_pendiente:'Receta guardada. Sincronización con el Plan no confirmada.',no_confirmada:'No se pudo confirmar el guardado de la receta.'});
   const legacyReady=new Set(['atenciones','anamnesis']);
   const messages={inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
   const clean=x=>typeof x==='string'?x.trim():'';
@@ -34,6 +35,8 @@
     // RC7: nuevos módulos habilitados por defecto, conservar elecciones explícitas de RC6/RC7.
     for(const k of extraModules)if(raw.rc7Modulos===true||(k==='diagnosticos'&&raw.rc6Diagnosticos===true))for(const c of ['visual','audio'])if(typeof raw.modules?.[k]?.[c]==='boolean')p.modules[k][c]=raw.modules[k][c];
     p.rc7Modulos=true;
+    if(raw.rc8Recetas===true)for(const c of ['visual','audio'])if(typeof raw.modules?.recetas?.[c]==='boolean')p.modules.recetas[c]=raw.modules.recetas[c];
+    p.rc8Recetas=true;
     return p;
   }
   let role='',active=false,owner='',sessionToken='',prefs=defaults(),items=[],seen=new Set(),origins=new Map(),retired=new Set();
@@ -126,7 +129,7 @@
   function publish(mod,msg,key,operationValidated=false){
     if(!sync()||!ready.has(mod)||!messages[msg]||!key||(!operationValidated&&(seen.has(key)||seen.size>=1024)))return false;
     if(!operationValidated)seen.add(key);const text=messages[msg];
-    if(prefs.visual&&prefs.modules[mod].visual){items.unshift({text,mod,at:now(),read:false});if(items.length>80){const dx=items.map(i=>extraModules.has(i.mod)).lastIndexOf(true);if(dx>=0)items.splice(dx,1);else items=items.slice(0,80);}paint();}
+    if(prefs.visual&&prefs.modules[mod].visual){items.unshift({text,mod,at:now(),read:false});if(items.length>80){const rx=items.map(i=>i.mod==='recetas').lastIndexOf(true);const dx=rx>=0?rx:items.map(i=>extraModules.has(i.mod)).lastIndexOf(true);if(dx>=0)items.splice(dx,1);else items=items.slice(0,80);}paint();}
     if(prefs.mode!=='silencio'&&prefs.modules[mod].audio&&armed&&focused()&&!mic.size&&queue.length<8){blockedVoice=null;preemptDxAudio();queue.push({text,mod,ticket:ticket(),at:now()});w.setTimeout(pump,0);}
     return true;
   }
@@ -214,7 +217,7 @@
     const voices=localVoices(),voice=select('Voz local en español',[['','Automática'],...voices.map(v=>[v.voiceURI,v.name+' ('+v.lang+')'])],prefs.voice);if(!voice.value)voice.value='';
     const visual=check('Mostrar centro de avisos visuales',prefs.visual,panel),fields={};
     for(const [k,title] of Object.entries(modules)){const f=el('fieldset'),legend=el('legend',title);f.append(legend);fields[k]={visual:check('Aviso visual',prefs.modules[k].visual,f,!ready.has(k)),audio:check('Audio',prefs.modules[k].audio,f,!ready.has(k))};if(!ready.has(k))f.append(el('small','Pendiente de validar el origen de la operación. No activo.'));panel.append(f);}
-    const status=el('p');status.setAttribute('role','status');const get=()=>({rc6Diagnosticos:true,rc7Modulos:true,mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
+    const status=el('p');status.setAttribute('role','status');const get=()=>({rc6Diagnosticos:true,rc7Modulos:true,rc8Recetas:true,mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
     panel.append(button('Guardar preferencias',()=>{status.textContent=configure(get())?'Preferencias guardadas en este navegador.':'No fue posible persistir las preferencias.';}),button('Guardar y probar sonido',()=>{const ok=configure(get()),played=testAudio();status.textContent=(ok?'Preferencias guardadas. ':'Preferencias no persistidas. ')+(played?'Prueba solicitada.':'Audio no disponible o silenciado.');}),status);
     if(!voices.length)panel.append(el('small','No se detectó una voz local en español. Si está disponible, se utilizará el timbre.'));
     host.replaceChildren(panel);
@@ -278,7 +281,7 @@
   }
   function dxAllowed(mod){
     const opt=prefs.modules[mod];
-    if(role!=='main'||!active||!extraModules.has(mod)||!opt||(!opt.audio&&(!prefs.visual||!opt.visual)))return false;
+    if(role!=='main'||!active||(!extraModules.has(mod)&&mod!=='recetas')||!opt||(!opt.audio&&(!prefs.visual||!opt.visual)))return false;
     const i=identity();if(!i||i.id!==owner||i.token!==sessionToken)return false;
     const sec=w.AUROSANAX_SEGURIDAD,u=sec?.obtenerUsuario?.();
     return !!u&&sec.tienePermiso('historia_clinica',u)===true;
@@ -287,6 +290,7 @@
     if(!prefs.visual||!prefs.modules[mod].visual)return;
     // El límite de 80 sigue intacto; los nuevos avisos no expulsan avisos de RC4.
     const extra=items.filter(i=>extraModules.has(i.mod)).length;
+    if(extra<20&&items.length>=80){const rx=items.map(i=>i.mod==='recetas').lastIndexOf(true);if(rx>=0)items.splice(rx,1);}
     if(extra>=20||items.length>=80){
       const index=items.map(i=>extraModules.has(i.mod)).lastIndexOf(true);
       if(index<0)return;
@@ -295,14 +299,23 @@
     items.unshift({text,mod,at:now(),read:false});paint();
   }
   function flushDx(){
-    const pending=[...dxPending.values()];dxPending.clear();dxTimer=null;
+    const pending=[...dxPending.values()].sort((a,b)=>Number(a.mod==='recetas')-Number(b.mod==='recetas'));dxPending.clear();dxTimer=null;
     for(const x of pending)try{
       if(!dxAllowed(x.mod)||x.owner!==owner||x.token!==sessionToken||starting||closing)continue;
       const c=current();if(c.id!==x.id||c.epoch!==x.epoch||now()-x.at>5000)continue;
-      const text=x.mod==='examen'?'Examen físico guardado correctamente.':'Diagnóstico guardado y confirmado.';
-      dxVisual(x.mod,text);
+      const text=x.mod==='recetas'?recetaMessages[x.estado]:x.mod==='examen'?'Examen físico guardado correctamente.':'Diagnóstico guardado y confirmado.';
+      if(!text)continue;
+      if(x.mod==='recetas'){
+        // La ampliación no expulsa avisos anteriores de otros módulos.
+        if(prefs.visual&&prefs.modules.recetas.visual&&items.length<80&&items.filter(i=>i.mod==='recetas').length<10){
+          items.unshift({text,mod:x.mod,at:now(),read:false});paint();
+        }
+      }else dxVisual(x.mod,text);
       // Los avisos de nueva cobertura son subordinados a Atenciones y Anamnesis.
-      if(!prefs.modules[x.mod].audio||!enabled()||!armed||!focused()||mic.size||playing||queue.length||anJobs||anOps.size||tones.size||now()<quietUntil)continue;
+      // Los avisos existentes de RC7 tienen prioridad sobre Recetas.
+      const priorizarRC7=x.mod!=='recetas'&&(playing?.mod==='recetas'||(!playing&&queue[0]?.mod==='recetas'))&&prefs.modules[x.mod].audio&&enabled()&&armed&&focused()&&!mic.size&&!anJobs&&!anOps.size;
+      if(priorizarRC7)preemptDxAudio();
+      if(!prefs.modules[x.mod].audio||!enabled()||!armed||!focused()||mic.size||playing||queue.length||anJobs||anOps.size||tones.size||(!priorizarRC7&&now()<quietUntil))continue;
       if(c.id!==context||c.epoch!==epoch){if(!sync()||context!==c.id||epoch!==c.epoch)continue;}
       if(!dxAllowed(x.mod))continue;
       queue.push({text,mod:x.mod,ticket:ticket(),at:now(),rc6Extra:true});w.setTimeout(pump,0);
@@ -318,6 +331,15 @@
       if(dxTimer===null)dxTimer=w.setTimeout(flushDx,0);
     }catch{}
   }
+  d.addEventListener(E+'receta-resultado-guardado',e=>{
+    try{
+      if(e.target!==d||dxEvents.has(e)||!dxAllowed('recetas')||starting||closing)return;
+      const x=e.detail,c=current();
+      if(!x||!Object.prototype.hasOwnProperty.call(recetaMessages,x.estado)||!clean(x.id_atencion)||c.id!==x.id_atencion||c.epoch==null||x.contexto_epoch!==c.epoch)return;
+      dxEvents.add(e);dxPending.set('recetas',{mod:'recetas',id:c.id,epoch:c.epoch,owner,token:sessionToken,estado:x.estado,at:now()});
+      if(dxTimer===null)dxTimer=w.setTimeout(flushDx,0);
+    }catch{}
+  });
   d.addEventListener(E+'diagnostico-abierto-guardado',e=>onExtraConfirmed(e,'diagnosticos'));
   d.addEventListener(E+'examen-fisico-guardado',e=>onExtraConfirmed(e,'examen'));
   w.addEventListener('blur',suspend);w.addEventListener('pagehide',deactivate);
@@ -328,5 +350,5 @@
   w.addEventListener('storage',e=>{if(active&&e.key===PREFIX+owner){stopAudio();prefs=load();if(!enabled())armed=false;else resumeAudio();paint();refreshAudioUI();}});
   // El cierre de sesión conserva su propio procedimiento. Solo apagamos nuestro audio.
   d.addEventListener('click',e=>{if(e.target?.closest?.('#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile,#cfgCerrarSesion'))deactivate();},true);
-  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused(),version:'RC7',voicePrepared,voiceBlocked})});
+  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused(),version:'RC8-R1',voicePrepared,voiceBlocked})});
 });
