@@ -17,7 +17,7 @@
   // el origen al inicio de cada solicitud. No se habilitan mediante preferencias antiguas.
   const ready=new Set(['atenciones','anamnesis','diagnosticos','examen','recetas']);
   const extraModules=new Set(['diagnosticos','examen']);
-  const recetaMessages=Object.freeze({alta:'Receta médica guardada correctamente.',edicion:'Receta médica actualizada correctamente.',plan_pendiente:'Receta guardada. Sincronización con el Plan no confirmada.',no_confirmada:'No se pudo confirmar el guardado de la receta.',firmada:'Receta médica firmada electrónicamente.',cancelada:'Firma electrónica de receta cancelada.'});
+  const recetaMessages=Object.freeze({alta:'Receta médica guardada correctamente.',edicion:'Receta médica actualizada correctamente.',plan_pendiente:'Receta guardada. Sincronización con el Plan no confirmada.',no_confirmada:'No se pudo confirmar el guardado de la receta.'});
   const legacyReady=new Set(['atenciones','anamnesis']);
   const messages={inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
   const clean=x=>typeof x==='string'?x.trim():'';
@@ -340,17 +340,6 @@
       if(dxTimer===null)dxTimer=w.setTimeout(flushDx,0);
     }catch{}
   });
-  // RC8-R2: firma y guardado conservan orígenes independientes.
-  d.addEventListener(E+'receta-resultado-firma',e=>{
-    try{
-      if(e.target!==d||dxEvents.has(e)||!dxAllowed('recetas')||starting||closing)return;
-      const x=e.detail,c=current();
-      if(!x||!['firmada','cancelada'].includes(x.estado)||!clean(x.id_solicitud)||
-        !clean(x.id_atencion)||c.id!==x.id_atencion||c.epoch==null||x.contexto_epoch!==c.epoch)return;
-      dxEvents.add(e);dxPending.set('receta-firma',{mod:'recetas',id:c.id,epoch:c.epoch,owner,token:sessionToken,estado:x.estado,at:now()});
-      if(dxTimer===null)dxTimer=w.setTimeout(flushDx,0);
-    }catch{}
-  });
   d.addEventListener(E+'diagnostico-abierto-guardado',e=>onExtraConfirmed(e,'diagnosticos'));
   d.addEventListener(E+'examen-fisico-guardado',e=>onExtraConfirmed(e,'examen'));
   w.addEventListener('blur',suspend);w.addEventListener('pagehide',deactivate);
@@ -361,5 +350,5 @@
   w.addEventListener('storage',e=>{if(active&&e.key===PREFIX+owner){stopAudio();prefs=load();if(!enabled())armed=false;else resumeAudio();paint();refreshAudioUI();}});
   // El cierre de sesión conserva su propio procedimiento. Solo apagamos nuestro audio.
   d.addEventListener('click',e=>{if(e.target?.closest?.('#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile,#cfgCerrarSesion'))deactivate();},true);
-  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused(),version:'RC8-R2',voicePrepared,voiceBlocked})});
+  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused(),version:'RC8-R1',voicePrepared,voiceBlocked})});
 });
