@@ -902,7 +902,7 @@ function editarPacienteModal(idPaciente){
 
 async function cargarPacientesDesdeSheets(){
   try{
-    const res = await fetch(API_URL + '?accion=listarPacientes');
+    const res = await fetch(API_URL + '?accion=listarPacientes&t='+Date.now(),{cache:'no-store'});
     const data = await res.json();
 
     patients = data.map(p => ({
@@ -917,6 +917,7 @@ async function cargarPacientesDesdeSheets(){
       estado_civil: p.estado_civil || '',
       ocupacion: p.ocupacion || '',
       telefono: p.telefono || p.whatsapp || p.celular || '',
+      whatsapp: p.whatsapp || p.telefono || p.celular || '',
       email: p.email || '',
       direccion: p.direccion || '',
       ciudad: p.ciudad || '',
@@ -1223,6 +1224,7 @@ async function savePatient(){
     estado_civil: pacienteSheet.estado_civil,
     ocupacion: pacienteSheet.ocupacion,
     telefono: pacienteSheet.telefono,
+    whatsapp: pacienteSheet.whatsapp,
     email: pacienteSheet.email,
     direccion: pacienteSheet.direccion,
     ciudad: pacienteSheet.ciudad,
@@ -1262,6 +1264,7 @@ async function savePatient(){
       patients.unshift(pacienteLocal);
     }
 
+    if(typeof auroInvalidarContactosAgenda==='function') auroInvalidarContactosAgenda();
     limpiarFormularioPaciente();
     closePatientModal();
     renderPatients();
@@ -1740,14 +1743,46 @@ function abrirWhatsApp(numero, mensaje){
   window.open(url, '_blank');
 }
 
+// SINCPAC3: lectura de contacto con límite de espera y limpieza.
+async function auroLeerContactosSincronizados(){
+  const token=window.AUROSANAX_SEGURIDAD?.obtenerToken?.();
+  if(!token) throw new Error('Sesión no disponible.');
+  const controller=new AbortController();
+  let timer;
+  try{
+    const data=await Promise.race([
+      (async()=>{const r=await fetch(API_URL+'?accion=listarPacientes&t='+Date.now(),{cache:'no-store',signal:controller.signal});
+        if(!r.ok) throw new Error('No se pudo verificar el contacto.');
+        return await r.json();})(),
+      new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('Tiempo de espera agotado. Intente nuevamente.'));},10000);})
+    ]);
+    if(!Array.isArray(data)||window.AUROSANAX_SEGURIDAD?.obtenerToken?.()!==token) throw new Error('Sesión o respuesta no válida.');
+    return data;
+  }finally{clearTimeout(timer);}
+}
+async function auroAbrirContactoVigente(id,crearMensaje){
+  const token=window.AUROSANAX_SEGURIDAD?.obtenerToken?.();
+  if(!token) return auroAvisoPacientesV1('Sesión no disponible.');
+  const tab=window.open('about:blank','_blank');
+  if(!tab) return auroAvisoPacientesV1('Permita abrir ventanas para utilizar WhatsApp.');
+  try{
+    tab.opener=null;
+    const lista=await auroLeerContactosSincronizados();
+    const matches=lista.filter(p=>String(p.id_paciente||p.id||'').trim()===String(id||'').trim());
+    if(matches.length!==1||tab.closed||window.AUROSANAX_SEGURIDAD?.obtenerToken?.()!==token) throw new Error('No se pudo verificar el paciente vinculado.');
+    const p=matches[0],tel=normalizarTelefonoWhatsAppInternacional(p.whatsapp||p.telefono||p.celular||'');
+    if(!/^\d{7,15}$/.test(tel)) throw new Error('El paciente no tiene un WhatsApp válido.');
+    tab.location.replace('https://wa.me/'+tel+'?text='+encodeURIComponent(crearMensaje({...p,nombre:auroNombrePacienteLecturaSegura(p)})));
+  }catch(e){try{tab.close();}catch(_){}auroAvisoPacientesV1(e.message||'No se pudo verificar el contacto.');}
+}
 function abrirWhatsAppPaciente(idPaciente){
   const paciente = patients.find(p => p.id_paciente === idPaciente);
   if(!paciente){
     auroAvisoPacientesV1('No se encontró el paciente seleccionado.');
     return;
   }
-  const mensaje = `Hola ${paciente.nombre || ''},\n\nLe saluda AUROSANAX.\nQueremos realizar seguimiento a su atención médica.\n\nSi presenta alguna novedad o requiere agendar un control, estamos atentos para ayudarle.`;
-  abrirWhatsApp(paciente.telefono, mensaje);
+  const mensaje = p=> `Hola ${p.nombre || ''},\n\nLe saluda AUROSANAX.\nQueremos realizar seguimiento a su atención médica.\n\nSi presenta alguna novedad o requiere agendar un control, estamos atentos para ayudarle.`;
+  return auroAbrirContactoVigente(idPaciente,mensaje);
 }
 
 /*****************************************************************************************

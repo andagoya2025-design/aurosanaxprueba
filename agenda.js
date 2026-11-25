@@ -272,6 +272,7 @@ async function cargarCitasAgendaWeb(){
     auroAgendaVerificacionAtenciones = 'verificando';
     auroActualizarFiltroMedicosAgenda();
     renderAgendaWeb();
+    void auroRefrescarContactosAgenda(secuencia);
     auroAgendaEstadoBotonActualizar('loading','Verificando consultas…');
 
     const pacientesActivo = document.getElementById('pacientes')?.classList.contains('active');
@@ -565,6 +566,31 @@ function auroAccionClinicaAgendaHTML(c, modoMovil){
     : '<span class="auro-agenda-estado-cerrado"><i class="bi bi-check2-circle"></i> Sin acción clínica</span>';
 }
 
+let auroContactosAgendaRemotos=null,auroContactoAgendaRevision=0;
+function auroInvalidarContactosAgenda(){auroContactoAgendaRevision++;auroContactosAgendaRemotos=null;}
+function auroIndiceContactosAgenda(lista){
+  const mapa=new Map();
+  for(const p of (Array.isArray(lista)?lista:[])){
+    const id=String(p.id_paciente||p.id||'').trim();
+    if(id) mapa.set(id,mapa.has(id)?null:p);
+  }
+  return mapa;
+}
+async function auroRefrescarContactosAgenda(secuencia){
+  const revision=++auroContactoAgendaRevision;
+  try{
+    const lista=await auroLeerContactosSincronizados();
+    if(secuencia!==auroAgendaCargaSecuencia||revision!==auroContactoAgendaRevision) return;
+    auroContactosAgendaRemotos=auroIndiceContactosAgenda(lista);
+    if(document.getElementById('agenda')?.classList.contains('active')) renderAgendaWeb();
+  }catch(_){/* conservar la carga original; el envío verifica de nuevo */}
+}
+function auroProyectarContactoAgenda(c,indice){
+  const id=String(c?.id_paciente||'').trim();
+  if(!id) return c;
+  const p=indice.get(id);
+  return {...c,nombre:p?auroNombrePacienteLecturaSegura(p):c.nombre,whatsapp:p?String(p.whatsapp||p.telefono||p.celular||'').trim():''};
+}
 function renderAgendaWeb(){
   const q = (document.getElementById('agendaSearch')?.value || '').toLowerCase();
   const fecha = document.getElementById('agendaFecha')?.value || '';
@@ -577,7 +603,8 @@ function renderAgendaWeb(){
 
   const hoy = fechaHoyISO();
 
-  const rows = citasAgendaWeb.map((c, originalIndex) => ({...c, originalIndex})).filter(c => {
+  const indiceContactos=auroContactosAgendaRemotos||auroIndiceContactosAgenda(patients);
+  const rows = citasAgendaWeb.map((c, originalIndex) => ({...auroProyectarContactoAgenda(c,indiceContactos), originalIndex})).filter(c => {
     const estadoCita = normalizarEstadoAgenda(c.estado);
     const nombreMedico = String(c.medico_nombre || auroNombreMedicoAgenda(c) || '').trim();
     const idMedico = String(c.id_medico || c.medico_id || '').trim();
@@ -687,8 +714,9 @@ function abrirWhatsAppCitaAgenda(index){
     return;
   }
 
-  const mensaje = `Hola ${c.nombre || ''},\n\nLe saluda AUROSANAX.\nLe escribimos sobre su solicitud de cita para ${c.servicio || 'atención médica'} el ${formatearFechaVisual(c.fecha_deseada)} a las ${c.hora_deseada || ''}.\n\nPor favor, confirme si mantiene su disponibilidad.`;
-  abrirWhatsApp(c.whatsapp, mensaje);
+  const mensaje = nombre=> `Hola ${nombre || ''},\n\nLe saluda AUROSANAX.\nLe escribimos sobre su solicitud de cita para ${c.servicio || 'atención médica'} el ${formatearFechaVisual(c.fecha_deseada)} a las ${c.hora_deseada || ''}.\n\nPor favor, confirme si mantiene su disponibilidad.`;
+  if(String(c.id_paciente||'').trim()) return auroAbrirContactoVigente(c.id_paciente,p=>mensaje(p.nombre));
+  abrirWhatsApp(c.whatsapp, mensaje(c.nombre));
 }
 
 
