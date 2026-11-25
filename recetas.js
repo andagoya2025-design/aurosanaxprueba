@@ -7120,6 +7120,13 @@
       );
       return null;
     }
+    // RC8-R2: captura local de origen, sin participar en la firma clínica.
+    const nvOrigenFirma = (()=>{try{return {
+      id:String(window.getIdAtencionActiva?.()||'').trim(),
+      epoch:window.getContextoAtencionEpoch?.(),
+      token:window.AUROSANAX_SEGURIDAD?.obtenerToken?.(),
+      usuario:window.AUROSANAX_SEGURIDAD?.obtenerUsuario?.()?.id_usuario
+    };}catch(_e){return null;}})();
     auroRecetaPreparacionFirmaEnCurso = true;
     let documento;
     try{
@@ -7201,11 +7208,53 @@
     };
     auroRecetaPintarBotonFirmaEnCurso(btn);
 
+    // RC8-R2: observa únicamente confirmaciones nuevas de esta llamada.
+    let nvFirmada = null, nvCancelada = null;
+    const nvVigente = () => {
+      try{
+        const n=nvOrigenFirma,sec=window.AUROSANAX_SEGURIDAD;
+        return !!(n?.id&&n.token&&n.usuario&&n.epoch!=null&&
+          n.id===String(documento.id_atencion||'').trim()&&
+          n.id===String(window.getIdAtencionActiva?.()||'').trim()&&
+          n.epoch===window.getContextoAtencionEpoch?.()&&
+          n.token===sec?.obtenerToken?.()&&n.usuario===sec?.obtenerUsuario?.()?.id_usuario);
+      }catch(_e){return false;}
+    };
+    const nvEventoFirma = e => {
+      try{
+        const x=e.detail;
+        if(e.target!==window||!nvVigente()||x?.tipo_documento!=='RECETA'||
+          x.id_atencion!==String(documento.id_atencion||'').trim()||
+          x.id_receta!==String(documento.id_receta||'').trim()||!String(x.id_solicitud||'').trim())return;
+        if(e.type==='aurosanax:firma-electronica-completada'&&x.estado_firma==='FIRMADO'&&
+          x.pdf_disponible===true&&!x.origen_confirmacion&&String(x.sha256_pdf_firmado||'').trim())
+          nvFirmada={id:x.id_solicitud,hash:x.sha256_pdf_firmado};
+        if(e.type==='aurosanax:firma-electronica-cancelada'&&x.estado_firma==='CANCELADA')
+          nvCancelada={id:x.id_solicitud};
+      }catch(_e){}
+    };
+    const nvAvisarFirma = (estado,resultado) => {
+      try{
+        const ev=estado==='firmada'?nvFirmada:nvCancelada;
+        const id=String(resultado?.id_solicitud||'').trim();
+        if(!nvVigente()||!ev||!id||ev.id!==id)return;
+        if(estado==='firmada'&&(nvCancelada||ev.hash!==String(resultado.sha256_pdf_firmado||'').trim()))return;
+        document.dispatchEvent(new CustomEvent('aurosanax:receta-resultado-firma',{
+          detail:{id_atencion:nvOrigenFirma.id,contexto_epoch:nvOrigenFirma.epoch,estado,id_solicitud:id}
+        }));
+      }catch(_e){}
+    };
+    try{
+      window.addEventListener('aurosanax:firma-electronica-completada',nvEventoFirma);
+      window.addEventListener('aurosanax:firma-electronica-cancelada',nvEventoFirma);
+    }catch(_e){}
+
     try{
       const resultado = await window.auroFirmaElectronica.firmarDocumento(documento);
       const estado = String(resultado?.estado_firma || '').trim().toUpperCase();
 
       if(estado === 'CANCELADA'){
+        nvAvisarFirma('cancelada',resultado);
         mostrarMensajeReceta(
           '<i class="bi bi-check-circle me-1"></i> Firma cancelada. La receta se conserva sin cambios y puede iniciar una nueva firma.',
           'ok'
@@ -7247,6 +7296,7 @@
         Cache de sesión exclusivamente para la MISMA versión documental.
         No se persiste en localStorage ni modifica datos clínicos.
       */
+      nvAvisarFirma('firmada',resultado);
       auroRecetaFirmasSesion.set(clave, {
         id_atencion:String(documento.id_atencion || '').trim(),
         id_receta:String(documento.id_receta || '').trim(),
@@ -7274,6 +7324,8 @@
       return null;
 
     }finally{
+      try{window.removeEventListener('aurosanax:firma-electronica-completada',nvEventoFirma);}catch(_e){}
+      try{window.removeEventListener('aurosanax:firma-electronica-cancelada',nvEventoFirma);}catch(_e){}
       auroRecetaFirmaEnCurso = null;
 
       /*
