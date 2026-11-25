@@ -127,7 +127,26 @@
   function testAudio(){if(!arm()||mic.size||prefs.mode==='silencio'||!prefs.volume||queue.length>=8)return false;queue.push({mod:'prueba',text:messages.prueba,ticket:ticket(),at:now()});w.setTimeout(pump,0);return true;}
   function suspend(){stopAudio();armed=false;}
   function deactivate(){reset();active=false;}
-  function paint(){if(!ui)return;const {buttons,list}=ui;for(const {bell,count} of buttons){count.textContent=String(items.filter(x=>!x.read).length);bell.setAttribute('aria-label','Notificaciones: '+items.filter(x=>!x.read).length+' sin leer');}if(list){list.replaceChildren();for(const i of items){const p=d.createElement('p');p.textContent=i.text+' · '+new Date(i.at).toLocaleTimeString('es-EC');list.append(p);}if(!items.length)list.textContent='Sin avisos de esta sesión.';}}
+  function paint(){
+    if(!ui)return;
+    try{
+      const {buttons,list,summary,readAll,clearAll,confirm}=ui,unread=items.filter(x=>!x.read).length;
+      for(const {bell,count} of buttons){count.textContent=String(unread);count.hidden=!unread;bell.setAttribute('aria-label','Notificaciones: '+unread+' sin leer');}
+      summary.textContent=unread+' sin leer · '+items.length+' avisos';readAll.disabled=!unread;clearAll.disabled=!items.length;
+      if(!items.length)confirm.hidden=true;
+      const previous=d.activeElement,focusedRow=previous?.closest?.('.auro-nv-row'),idx=focusedRow?Array.from(list.children).indexOf(focusedRow):-1;
+      list.replaceChildren();
+      for(const item of items){
+        const row=el('div','','auro-nv-row'+(item.read?'':' auro-nv-unread')),mark=el('span','','auro-nv-mark'),body=el('div','','auro-nv-copy');
+        mark.append(nvIcon(item.mod==='anamnesis'?'clipboard':'check'));
+        body.append(el('strong',modules[item.mod]||'Aviso'),el('span',item.text),el('small',new Date(item.at).toLocaleTimeString('es-EC')));
+        const del=button('',()=>{if(!sync())return;items=items.filter(x=>x!==item);paint();});del.classList.add('auro-nv-icon','auro-nv-trash');del.setAttribute('aria-label','Eliminar aviso de '+(modules[item.mod]||'notificación')+' a las '+new Date(item.at).toLocaleTimeString('es-EC'));del.title='Eliminar aviso';del.append(nvIcon('trash'));
+        row.append(mark,body,del);list.append(row);
+      }
+      if(!items.length)list.append(el('div','No hay avisos en esta sesión.','auro-nv-empty'));
+      if(idx>=0&&ui.dialog.open)(list.children[Math.min(idx,items.length-1)]?.querySelector('button')||ui.close).focus({preventScroll:true});
+    }catch{/* El centro visual no puede interrumpir el motor. */}
+  }
   function el(tag,text,cls){const x=d.createElement(tag);if(text)x.textContent=text;if(cls)x.className=cls;return x;}
   function button(text,fn){const b=el('button',text,'auro-nv-btn');b.type='button';b.addEventListener('click',e=>{e.preventDefault();try{fn();}catch{}});return b;}
   function styles(){if(d.getElementById('auro-nv-css'))return;const s=el('style');s.id='auro-nv-css';s.textContent='.auro-nv-btn{border:1px solid #ead5e0;background:#fff;color:#78194e;border-radius:10px;padding:8px 12px;font:inherit;cursor:pointer}.auro-nv-panel{padding:16px;color:inherit;max-width:760px}.auro-nv-panel label{display:block;margin:8px 0}.auro-nv-panel select,.auro-nv-panel input[type=range]{max-width:100%;width:100%}.auro-nv-panel fieldset{margin:12px 0;padding:10px;border:1px solid #ead5e0;border-radius:8px}.auro-nv-panel small{display:block;margin:6px 0;color:#666}.auro-nv-dialog{max-width:min(94vw,520px);max-height:80vh;overflow:auto;border:1px solid #ead5e0;border-radius:12px;padding:16px}.auro-nv-dialog p{border-bottom:1px solid #eee;padding:8px}.auro-nv-count{font-size:.8em;margin-left:4px}.auro-nv-controls{display:flex;gap:4px;flex-wrap:wrap;align-items:center}.auro-nv-controls .auro-nv-btn{font-size:13px;line-height:1.2;padding:6px;white-space:nowrap}';d.head.append(s);}
@@ -146,16 +165,38 @@
     if(!voices.length)panel.append(el('small','No se detectó una voz local en español. Si está disponible, se utilizará el timbre.'));
     host.replaceChildren(panel);
   }
+  function nvIcon(name){
+    const paths={bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',sound:'M11 5 6 9H3v6h3l5 4V5M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12',mute:'M11 5 6 9H3v6h3l5 4V5M16 9l5 6M21 9l-5 6',trash:'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5',close:'M6 6l12 12M18 6 6 18',check:'m5 12 4 4L19 6',clipboard:'M9 4H6v17h12V4h-3M9 3h6v4H9zM9 14l2 2 4-5'};
+    const ns='http://www.w3.org/2000/svg',svg=d.createElementNS(ns,'svg'),p=d.createElementNS(ns,'path');
+    for(const [k,v] of Object.entries({viewBox:'0 0 24 24',width:'20',height:'20',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',focusable:'false'}))svg.setAttribute(k,v);
+    p.setAttribute('d',paths[name]);svg.append(p);return svg;
+  }
+  function nvMainStyles(){
+    if(d.getElementById('auro-nv-main-css'))return;const s=el('style');s.id='auro-nv-main-css';s.textContent=`
+    .auro-nv-controls{gap:6px;flex-wrap:nowrap}.auro-nv-controls .auro-nv-icon,.auro-nv-dialog .auro-nv-icon{display:inline-flex;align-items:center;justify-content:center;position:relative;width:36px;height:36px;padding:0;flex:none;border:1px solid #eadde5;border-radius:9px;background:#fff;color:#87365f;cursor:pointer}.auro-nv-controls .auro-nv-icon:hover,.auro-nv-dialog .auro-nv-icon:hover{background:#f7edf3}.auro-nv-controls .auro-nv-count{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 3px;margin:0;display:grid;place-items:center;box-sizing:border-box;border:1px solid white;border-radius:10px;background:#87365f;color:#fff;font-size:10px;font-weight:700}.auro-nv-controls .auro-nv-count[hidden],.auro-nv-dialog [hidden]{display:none!important}.auro-nv-controls [aria-pressed=false]{color:#77717a}
+    .auro-nv-dialog{box-sizing:border-box;width:min(460px,calc(100% - 24px));max-width:none;max-height:calc(100dvh - 24px);padding:0;margin:auto;border:1px solid #eadde5;border-radius:16px;background:#fff;color:#312632;box-shadow:0 14px 48px #33203126;overflow:auto}.auro-nv-dialog::backdrop{background:#30243055}.auro-nv-dialog .auro-nv-head{display:flex;gap:12px;align-items:center;padding:18px 18px 14px;border-bottom:1px solid #f0e6ec}.auro-nv-dialog .auro-nv-head h4{margin:0;color:#87365f;font-size:18px;font-weight:700;line-height:1.3}.auro-nv-dialog .auro-nv-head small,.auro-nv-dialog .auro-nv-note{font-size:12px;color:#746875}.auro-nv-dialog .auro-nv-head .auro-nv-copy{flex:1}.auro-nv-dialog .auro-nv-summary{margin:12px 18px 6px;font-size:12px;font-weight:600;color:#746875}.auro-nv-dialog .auro-nv-list{padding:0 14px;max-height: min(42vh,340px);overflow:auto}.auro-nv-dialog .auro-nv-row{display:flex;align-items:center;gap:10px;padding:11px 9px;margin:6px 0;border:1px solid #eee6eb;border-radius:10px;background:#fff}.auro-nv-dialog .auro-nv-unread{background:#faf5f8;border-left:3px solid #87365f}.auro-nv-dialog .auro-nv-mark{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:9px;background:#f3e8ef;color:#87365f}.auro-nv-dialog .auro-nv-copy{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;overflow-wrap:anywhere}.auro-nv-dialog .auro-nv-copy strong{font-size:13px}.auro-nv-dialog .auro-nv-copy span{font-size:13px;line-height:1.4}.auro-nv-dialog .auro-nv-copy small{font-size:11px;color:#746875}.auro-nv-dialog .auro-nv-trash{color:#796572;border-color:transparent;background:transparent}.auro-nv-dialog .auro-nv-trash:hover{color:#a22e43;background:#fdf0f1}.auro-nv-dialog .auro-nv-empty{padding:24px 8px;text-align:center;color:#746875;font-size:13px}.auro-nv-dialog .auro-nv-actions{display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px 8px}.auro-nv-dialog .auro-nv-actions button,.auro-nv-dialog .auro-nv-confirm button{display:inline-flex;align-items:center;justify-content:center;gap:5px;font-size:12px;min-height:36px}.auro-nv-dialog .auro-nv-actions button:disabled{opacity:.45;cursor:default}.auro-nv-dialog .auro-nv-danger{color:#a22e43}.auro-nv-dialog .auro-nv-close{flex:1 0 100%;background:#87365f;color:white;border-color:#87365f}.auro-nv-dialog .auro-nv-note{display:block;text-align:center;padding:0 12px 14px}.auro-nv-dialog .auro-nv-confirm{margin:8px 18px;padding:12px;background:#fff7f7;border:1px solid #f0d5db;border-radius:9px;font-size:13px}.auro-nv-dialog .auro-nv-confirm .auro-nv-actions{padding:8px 0 0}.auro-nv-dialog button:focus-visible,.auro-nv-controls button:focus-visible{outline:2px solid #87365f;outline-offset:2px}
+    `;d.head.append(s);
+  }
   function mainUI(hosts){
-    const dialog=el('dialog','','auro-nv-dialog'),list=el('div'),buttons=[];
-    function updateSound(){for(const {sound} of buttons){sound.textContent=armed?'🔊':'🔇';sound.setAttribute('aria-label',armed?'Silenciar audio de esta pestaña':'Activar audio de esta pestaña');}}
+    nvMainStyles();const dialog=el('dialog','','auro-nv-dialog'),list=el('div','','auro-nv-list'),buttons=[],summary=el('div','','auro-nv-summary');let snapshot=null;
+    dialog.setAttribute('aria-labelledby','auro-nv-title');
+    function updateSound(){for(const {sound} of buttons){sound.replaceChildren(nvIcon(armed?'sound':'mute'));sound.setAttribute('aria-label',armed?'Silenciar audio de esta pestaña':'Activar audio de esta pestaña');sound.setAttribute('aria-pressed',String(armed));sound.title=armed?'Silenciar audio':'Activar audio';}}
     for(const host of hosts.filter(Boolean)){
       const bar=el('div','','auro-nv-controls'),count=el('span','0','auro-nv-count');
-      const bell=button('🔔',()=>{if(!sync())return;paint();if(typeof dialog.showModal==='function'&&!dialog.open)dialog.showModal();});bell.append(count);
-      const sound=button('🔇',()=>{if(!sync())return;if(armed)suspend();else arm();updateSound();});
+      const bell=button('',()=>{if(!sync())return;paint();if(typeof dialog.showModal==='function'&&!dialog.open)dialog.showModal();});bell.classList.add('auro-nv-icon');bell.title='Notificaciones';bell.append(nvIcon('bell'),count);
+      const sound=button('',()=>{if(!sync())return;if(armed)suspend();else arm();updateSound();});sound.classList.add('auro-nv-icon');
       bar.append(bell,sound);host.replaceChildren(bar);buttons.push({bell,count,sound});
     }
-    dialog.append(el('h4','Notificaciones'),list,button('Marcar como leídas',()=>{if(!sync())return;items.forEach(x=>x.read=true);paint();}),button('Cerrar',()=>dialog.close()));d.body.append(dialog);ui={buttons,list};paint();updateSound();
+    const head=el('div','','auro-nv-head'),mark=el('span','','auro-nv-mark'),title=el('div','','auro-nv-copy'),h=el('h4','Notificaciones');h.id='auro-nv-title';mark.append(nvIcon('bell'));title.append(h,el('small','Centro de avisos · AUROSANAX'));
+    const x=button('',()=>dialog.close());x.classList.add('auro-nv-icon');x.setAttribute('aria-label','Cerrar ventana');x.append(nvIcon('close'));head.append(mark,title,x);
+    const confirm=el('div','','auro-nv-confirm');confirm.hidden=true;const question=el('div','¿Eliminar todos los avisos actuales? No se eliminan registros médicos ni se modifica el audio.');const confirmActions=el('div','','auro-nv-actions');
+    function dismiss(){snapshot=null;confirm.hidden=true;}
+    const yes=button('Sí, eliminar',()=>{if(!sync()){dismiss();return;}const selected=snapshot;dismiss();if(selected)items=items.filter(i=>!selected.has(i));paint();close.focus({preventScroll:true});});yes.classList.add('auro-nv-danger');
+    const no=button('Cancelar',()=>{dismiss();clearAll.focus({preventScroll:true});});confirmActions.append(yes,no);confirm.append(question,confirmActions);
+    const readAll=button('Marcar como leídas',()=>{if(!sync())return;items.forEach(x=>x.read=true);paint();});
+    const clearAll=button('Eliminar todas',()=>{if(!sync()||!items.length)return;snapshot=new Set(items);confirm.hidden=false;no.focus({preventScroll:true});});clearAll.classList.add('auro-nv-danger');
+    const close=button('Cerrar',()=>dialog.close());close.classList.add('auro-nv-close');const actions=el('div','','auro-nv-actions');actions.append(readAll,clearAll,close);
+    dialog.addEventListener('close',dismiss);dialog.append(head,summary,list,confirm,actions,el('small','Avisos temporales de esta sesión.','auro-nv-note'));d.body.append(dialog);ui={buttons,list,summary,readAll,clearAll,confirm,dialog,close};paint();updateSound();
     w.addEventListener('blur',updateSound);d.addEventListener('visibilitychange',updateSound);
   }
   function activate(which,hosts){
