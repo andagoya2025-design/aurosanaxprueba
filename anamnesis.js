@@ -2663,6 +2663,7 @@ Función:
     return null;
   }
 
+  let auroNvOperacionAnamnesis=0;
   async function auroProcesarGuardadoConfirmadoAnamnesis(idAtencion, mostrarEstado) {
     let ultimoResultado = { success: false, confirmado: false, id_atencion: idAtencion };
 
@@ -2682,6 +2683,7 @@ Función:
       }
 
       const firmaObjetivo = auroFirmaAnamnesis(data);
+      const nvOperacion = ++auroNvOperacionAnamnesis;
       state.firmaRemotaEnCursoPorAtencion[idAtencion] = firmaObjetivo;
 
       if (mostrarEstado) estado('Sincronizando anamnesis con Google Sheets…', 'info');
@@ -2697,6 +2699,7 @@ Función:
       try {
         window.dispatchEvent(new CustomEvent('aurosanax:anamnesis-sincronizando', {
           detail: {
+              id_operacion_nv: nvOperacion,
             id_atencion: idAtencion,
             id_paciente: texto(token.id_paciente),
             id_historia: texto(token.id_historia),
@@ -2747,6 +2750,7 @@ Función:
         try {
           window.dispatchEvent(new CustomEvent('aurosanax:anamnesis-confirmada', {
             detail: {
+              id_operacion_nv: nvOperacion,
               id_atencion: idAtencion,
               id_paciente: texto(token.id_paciente),
               id_historia: texto(token.id_historia),
@@ -2771,6 +2775,7 @@ Función:
         try {
           window.dispatchEvent(new CustomEvent('aurosanax:anamnesis-sincronizacion-pendiente', {
             detail: {
+              id_operacion_nv: nvOperacion,
               id_atencion: idAtencion,
               id_paciente: texto(token.id_paciente),
               id_historia: texto(token.id_historia),

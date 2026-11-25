@@ -3448,6 +3448,13 @@ async function auroCargarExamenFisicoDesdeSheetsPorAtencion(idAtencion){
 async function auroGuardarExamenFisicoSheets(){
   const API = auroExamenFisicoApiUrl();
   const payloadData = auroExamenFisicoPayload();
+  // RC7: instantánea solo para avisos; no participa en guardado, ni añade consultas.
+  let nvOrigen=null;
+  try{
+    const sec=window.AUROSANAX_SEGURIDAD;
+    const id=String(window.getIdAtencionActiva?.()||'').trim(),epoch=window.getContextoAtencionEpoch?.(),token=sec?.obtenerToken?.();
+    if(id&&id===String(payloadData?.id_atencion||'').trim()&&epoch!=null&&token)nvOrigen={id,epoch,token};
+  }catch(_e){}
 
   if(!API){
     console.warn('AUROSANAX EXAMEN: API_URL no definida. No se guardó examen físico.');
@@ -3494,7 +3501,16 @@ async function auroGuardarExamenFisicoSheets(){
       ).trim();
 
       if(idExamenGuardado && typeof auroGuardarDetalleExamenFisicoSheets === 'function'){
-        await auroGuardarDetalleExamenFisicoSheets(idExamenGuardado);
+        const nvDetalle=await auroGuardarDetalleExamenFisicoSheets(idExamenGuardado);
+        // Aviso únicamente cuando principal y detalle devuelven éxito y el contexto sigue vigente.
+        // Mantener exactamente el retorno y el flujo clínico originales, incluso ante un fallo parcial.
+        try{
+          if(resultado.success===true&&resultado.sin_cambios!==true&&nvDetalle?.success===true&&nvOrigen&&
+             String(window.getIdAtencionActiva?.()||'').trim()===nvOrigen.id&&window.getContextoAtencionEpoch?.()===nvOrigen.epoch&&
+             window.AUROSANAX_SEGURIDAD?.obtenerToken?.()===nvOrigen.token){
+            document.dispatchEvent(new CustomEvent('aurosanax:examen-fisico-guardado',{detail:{id_atencion:nvOrigen.id,contexto_epoch:nvOrigen.epoch,confirmado:true,sin_cambios:false}}));
+          }
+        }catch(_e){}
       }
 
       console.log('AUROSANAX EXAMEN: guardado en examenes_fisicos:', resultado);
