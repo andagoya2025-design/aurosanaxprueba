@@ -1950,12 +1950,22 @@
   }
 
   async function ejecutarFirma(solicitud, clave){
+    const operacionAviso = Object.freeze({});
+    const emitirAvisoVoz = (fase, idSolicitud) => {
+      try {
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-receta-aviso', {
+          detail:{fase, operacion:operacionAviso, id_atencion:solicitud.id_atencion, id_solicitud:idSolicitud}
+        }));
+      } catch (_errorAviso) {}
+    };
+    emitirAvisoVoz('inicio');
     // V2.6: se elimina el preflight redundante.
     // El backend valida disponibilidad/heartbeat del motor al crear la solicitud.
     const creada = await post('firmarDocumento', solicitud);
     const estadoInicial = texto(creada.estado_firma).toUpperCase();
 
     let resultado;
+    let activaAviso;
     if(estadoInicial === 'FIRMADO'){
       resultado = creada;
     }else{
@@ -1963,6 +1973,7 @@
         throw new Error('El servidor no creó correctamente la solicitud de firma.');
       }
       const activa = firmasEnCurso.get(clave);
+      activaAviso = activa;
       if(activa){
         activa.id_solicitud = texto(creada.id_solicitud);
         activa.solicitud = solicitud;
@@ -2008,6 +2019,12 @@
       'Documento firmado electrónicamente. El PDF firmado está listo para ver o descargar.',
       'ok'
     );
+
+    const idEsperado = texto(creada.id_solicitud);
+    const idConfirmado = texto(resultado.id_solicitud);
+    if(idEsperado && idConfirmado === idEsperado && !activaAviso?.cancelada){
+      emitirAvisoVoz('confirmada', idConfirmado);
+    }
 
     return resultado;
   }
@@ -3797,3 +3814,4 @@
     obtenerEstadoVersionDocumento:obtenerEstadoVersionDocumento
   }));
 })();
+

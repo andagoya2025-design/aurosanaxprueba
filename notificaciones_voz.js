@@ -13,17 +13,16 @@
   'use strict';
   const d=w.document, PREFIX='aurosanax.notificaciones.v1.', E='aurosanax:';
   const modules={atenciones:'Atenciones',anamnesis:'Anamnesis',firma:'Firma electrónica',diagnosticos:'Diagnósticos',agenda:'Agenda',pacientes:'Pacientes',examen:'Examen físico',plan:'Plan clínico',recetas:'Recetas',documentos:'Documentos',resultados:'Resultados',obstetricia:'Obstetricia',estetica:'Estética',recomendaciones:'Recomendaciones'};
-  // Firma y otros módulos se reservan: el evento por sí solo no vincula inequívocamente
-  // el origen al inicio de cada solicitud. No se habilitan mediante preferencias antiguas.
-  const ready=new Set(['atenciones','anamnesis','diagnosticos','examen','recetas']);
+  const ready=new Set(['atenciones','anamnesis','diagnosticos','examen','recetas','firma']);
   const extraModules=new Set(['diagnosticos','examen']);
   const recetaMessages=Object.freeze({alta:'Receta médica guardada correctamente.',edicion:'Receta médica actualizada correctamente.',plan_pendiente:'Receta guardada. Sincronización con el Plan no confirmada.',no_confirmada:'No se pudo confirmar el guardado de la receta.'});
   const legacyReady=new Set(['atenciones','anamnesis']);
-  const messages={inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
+  const messages={firma:'Documento firmado correctamente.',inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
   const clean=x=>typeof x==='string'?x.trim():'';
   const now=()=>Date.now();
   const limit=(x,a,b,f)=>typeof x==='number'&&Number.isFinite(x)?Math.min(b,Math.max(a,x)):f;
-  const defaults=()=>({mode:'silencio',visual:true,volume:65,rate:1,voice:'',modules:Object.fromEntries(Object.keys(modules).map(k=>[k,{visual:ready.has(k),audio:ready.has(k)}]))});
+  const defaultModule=k=>k!=='firma'&&ready.has(k);
+  const defaults=()=>({mode:'silencio',visual:true,volume:65,rate:1,voice:'',modules:Object.fromEntries(Object.keys(modules).map(k=>[k,{visual:defaultModule(k),audio:defaultModule(k)}]))});
   function normalized(raw){
     const p=defaults(); if(!raw||typeof raw!=='object')return p;
     if(['silencio','timbre','voz','ambos'].includes(raw.mode))p.mode=raw.mode;
@@ -37,6 +36,8 @@
     p.rc7Modulos=true;
     if(raw.rc8Recetas===true)for(const c of ['visual','audio'])if(typeof raw.modules?.recetas?.[c]==='boolean')p.modules.recetas[c]=raw.modules.recetas[c];
     p.rc8Recetas=true;
+    if(raw.firmaRecetaV1===true)for(const c of ['visual','audio'])if(typeof raw.modules?.firma?.[c]==='boolean')p.modules.firma[c]=raw.modules.firma[c];
+    p.firmaRecetaV1=true;
     return p;
   }
   let role='',active=false,owner='',sessionToken='',prefs=defaults(),items=[],seen=new Set(),origins=new Map(),retired=new Set();
@@ -65,11 +66,11 @@
     for(const node of tones){try{node.stop();}catch{}try{node.disconnect();}catch{}}tones.clear();
   }
   function retireOrigins(){for(const k of origins.keys()){if(retired.size>=256){unsafeOrigins=true;break;}retired.add(k);}origins.clear();}
-  function reset(){anOps.clear();anHigh=0;voiceBlocked=false;voicePrepared=false;clearDxPending();dxEvents=new WeakSet();dxReleaseUntil=0;stopAudio();armed=false;manualMute=false;unlocked=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
+  function reset(){recetaFirma=null;avisoFirmaPendiente=null;anOps.clear();anHigh=0;voiceBlocked=false;voicePrepared=false;clearDxPending();dxEvents=new WeakSet();dxReleaseUntil=0;stopAudio();armed=false;manualMute=false;unlocked=false;items=[];seen.clear();origins.clear();retired.clear();unsafeOrigins=false;starting=null;closing=null;generation++;context='';epoch=null;prefs=defaults();owner='';sessionToken='';paint();}
   function sync(){
     if(!active)return false;const i=identity();
     if(!i||i.id!==owner||i.token!==sessionToken){reset();active=false;return false;}
-    const c=current();if(c.id!==context||c.epoch!==epoch){anOps.clear();stopAudio();if(anJobs>0)unsafeOrigins=true;retireOrigins();context=c.id;epoch=c.epoch;generation++;}
+    const c=current();if(c.id!==context||c.epoch!==epoch){recetaFirma=null;avisoFirmaPendiente=null;anOps.clear();stopAudio();if(anJobs>0)unsafeOrigins=true;retireOrigins();context=c.id;epoch=c.epoch;generation++;}
     return true;
   }
   function ticket(){return {generation,context,epoch,at:now()};}
@@ -94,6 +95,7 @@
     if(blockedVoice&&!playing&&!prime&&!queue.length&&now()>=quietUntil){const q=blockedVoice;blockedVoice=null;if(audible(q)&&(!q.rc6Extra||dxAllowed(q.mod))){q.retried=true;playing=q;speak(q,prefs.mode==='voz');return;}}
     // Click/tecla real (no pointerdown táctil): la síntesis debe recibir el gesto directo.
     if(e.type==='click'||e.type==='keydown')prepareVoice();
+    entregarAvisoFirma();
   }
   function audible(q){return valid(q.ticket)&&armed&&focused()&&!mic.size&&prefs.mode!=='silencio'&&prefs.volume>0&&now()-q.at<=5000&&(q.mod==='prueba'||prefs.modules[q.mod]?.audio);}
   function chime(){
@@ -179,7 +181,7 @@
     const busy=!!playing||tones.size>0||(active&&armed&&prefs.mode!=='silencio'&&(!!w.speechSynthesis?.speaking||!!w.speechSynthesis?.pending));
     stopAudio();if(busy||now()<quietUntil)return false;mic.add(r);return true;
   }
-  function micEnd(r){mic.delete(r);}
+  function micEnd(r){mic.delete(r);entregarAvisoFirma();}
   function configure(raw){if(!sync())return false;stopAudio();prefs=normalized(raw);if(!enabled())armed=false;else resumeAudio();const ok=save();paint();refreshAudioUI();return ok;}
   function testAudio(){if(!arm()||mic.size||queue.length>=8)return false;stopPrime();queue.push({mod:'prueba',text:messages.prueba,ticket:ticket(),at:now()});pump();return true;}
   function suspend(){stopAudio();armed=false;refreshAudioUI();}
@@ -217,7 +219,7 @@
     const voices=localVoices(),voice=select('Voz local en español',[['','Automática'],...voices.map(v=>[v.voiceURI,v.name+' ('+v.lang+')'])],prefs.voice);if(!voice.value)voice.value='';
     const visual=check('Mostrar centro de avisos visuales',prefs.visual,panel),fields={};
     for(const [k,title] of Object.entries(modules)){const f=el('fieldset'),legend=el('legend',title);f.append(legend);fields[k]={visual:check('Aviso visual',prefs.modules[k].visual,f,!ready.has(k)),audio:check('Audio',prefs.modules[k].audio,f,!ready.has(k))};if(!ready.has(k))f.append(el('small','Pendiente de validar el origen de la operación. No activo.'));panel.append(f);}
-    const status=el('p');status.setAttribute('role','status');const get=()=>({rc6Diagnosticos:true,rc7Modulos:true,rc8Recetas:true,mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
+    const status=el('p');status.setAttribute('role','status');const get=()=>({rc6Diagnosticos:true,rc7Modulos:true,rc8Recetas:true,firmaRecetaV1:true,mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
     panel.append(button('Guardar preferencias',()=>{status.textContent=configure(get())?'Preferencias guardadas en este navegador.':'No fue posible persistir las preferencias.';}),button('Guardar y probar sonido',()=>{const ok=configure(get()),played=testAudio();status.textContent=(ok?'Preferencias guardadas. ':'Preferencias no persistidas. ')+(played?'Prueba solicitada.':'Audio no disponible o silenciado.');}),status);
     if(!voices.length)panel.append(el('small','No se detectó una voz local en español. Si está disponible, se utilizará el timbre.'));
     host.replaceChildren(panel);
@@ -264,6 +266,37 @@
       return true;}catch{deactivate();return false;}
   }
   for(const [name,fn] of Object.entries(listeners))w.addEventListener(E+name,safe(fn));
+  // La identidad opaca pertenece a una sola operación efectiva.
+  let recetaFirma=null, avisoFirmaPendiente=null;
+  function contextoFirmaVigente(origen){
+    return !!origen&&sync()&&origen.generation===generation&&origen.context===context&&origen.epoch===epoch;
+  }
+  function entregarAvisoFirma(){
+    const aviso=avisoFirmaPendiente;
+    if(!aviso)return;
+    if(!contextoFirmaVigente(aviso.origen)||now()-aviso.at>120000){
+      avisoFirmaPendiente=null;
+      return;
+    }
+    if(!focused())return;
+    if(enabled()&&prefs.modules.firma.audio&&(!armed||mic.size))return;
+    avisoFirmaPendiente=null;
+    publish('firma','firma','firma-receta:'+aviso.id);
+  }
+  w.addEventListener(E+'firma-receta-aviso',safe(x=>{
+    if(role!=='main'||!x||typeof x.operacion!=='object'||!x.operacion||!sync())return;
+    if(!context||x.id_atencion!==context)return;
+    if(x.fase==='inicio'){
+      recetaFirma={...ticket(),operacion:x.operacion};
+      return;
+    }
+    const origen=recetaFirma,id=clean(x.id_solicitud);
+    if(x.fase!=='confirmada'||!id||x.operacion!==origen?.operacion||!contextoFirmaVigente(origen))return;
+    recetaFirma=null;
+    if(seen.has('firma-receta:'+id))return;
+    avisoFirmaPendiente={origen,id,at:now()};
+    w.setTimeout(entregarAvisoFirma,0);
+  }));
   // RC6 — Diagnósticos: evento propietario tras POST y lectura comparada.
   // No se escucha el clic ni el estado del botón. No se consulta ni modifica la base.
   function clearDxPending(){
@@ -368,12 +401,13 @@
     if(i?.id!==saved.owner||i?.token!==saved.token)return;
     if(activate(saved.role)){paint();refreshAudioUI();}
   });
-  w.addEventListener('focus',resumeAudio);
-  d.addEventListener('visibilitychange',()=>{if(d.hidden)suspend();else resumeAudio();});
+  w.addEventListener('focus',()=>{resumeAudio();entregarAvisoFirma();});
+  d.addEventListener('visibilitychange',()=>{if(d.hidden)suspend();else{resumeAudio();entregarAvisoFirma();}});
   d.addEventListener('pointerdown',gestureAudio,true);d.addEventListener('keydown',gestureAudio,true);
   d.addEventListener('click',gestureAudio,true);
   w.addEventListener('storage',e=>{if(active&&e.key===PREFIX+owner){stopAudio();prefs=load();if(!enabled())armed=false;else resumeAudio();paint();refreshAudioUI();}});
   // El cierre de sesión conserva su propio procedimiento. Solo apagamos nuestro audio.
   d.addEventListener('click',e=>{if(e.target?.closest?.('#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile,#cfgCerrarSesion'))deactivate();},true);
-  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused(),version:'RC8-R1',voicePrepared,voiceBlocked})});
+  return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused(),version:'RC8-R1 + Voz firma de receta V2',voicePrepared,voiceBlocked})});
 });
+
