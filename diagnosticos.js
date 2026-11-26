@@ -698,6 +698,12 @@
     }
 
     const ctx = contextoAtencionSeleccionada();
+    // Contexto del aviso: no modifica la solicitud clínica.
+    let nvEpoch=null, nvToken='';
+    try{
+      nvEpoch=window.getContextoAtencionEpoch?.() ?? null;
+      nvToken=window.AUROSANAX_SEGURIDAD?.obtenerToken?.() || '';
+    }catch(_e){}
     const registros = auroDxDiagnosticosParaCorreccion();
     const idExamen = texto(
       (window.examenFisicoState?.atencionActual === ctx.id
@@ -774,6 +780,23 @@
       if(!resultado || resultado.success === false){
         throw new Error(resultado?.message || 'No se pudo guardar la corrección diagnóstica.');
       }
+
+      // Confirmación de corrección histórica para el motor existente.
+      try{
+        const id=texto(ctx.id);
+        if(resultado.success===true && resultado.sin_cambios!==true &&
+           resultado.guardado_diferido!==true && resultado.guardado_parcial!==true &&
+           (!resultado.id_atencion || texto(resultado.id_atencion)===id) &&
+           id && nvToken && nvEpoch!==null &&
+           nvToken===window.AUROSANAX_SEGURIDAD?.obtenerToken?.() &&
+           nvEpoch===window.getContextoAtencionEpoch?.() &&
+           id===texto(window.getIdAtencionActiva?.())){
+          document.dispatchEvent(new CustomEvent('aurosanax:diagnostico-abierto-guardado',{
+            detail:{id_atencion:id,contexto_epoch:nvEpoch,sin_cambios:false,
+                    confirmado:true,origen:'correccion_historica'}
+          }));
+        }
+      }catch(_e){}
 
       /*
         AUROSANAX UX PREMIUM 2026-08-20
