@@ -1992,7 +1992,22 @@
     }
 
     if(!obtenerBase64Firmado(resultado)){
-      throw new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+      const error = new Error('La firma fue procesada, pero el servidor no devolvió el PDF firmado.');
+      const idSolicitud = texto(creada.id_solicitud);
+      if(idSolicitud && texto(resultado.id_solicitud) === idSolicitud && !activaAviso?.cancelada){
+        const idArchivo = texto(resultado.archivo_final_drive_file_id);
+        Object.defineProperty(error, 'notificarFirmaRecetaPersistente', {
+          value: (idRecuperado, archivoRecuperado) => {
+            const mismaFirma = idRecuperado
+              ? idRecuperado === idSolicitud
+              : !!idArchivo && archivoRecuperado === idArchivo;
+            if(mismaFirma && !activaAviso?.cancelada){
+              emitirAvisoVoz('confirmada', idSolicitud);
+            }
+          }
+        });
+      }
+      throw error;
     }
 
     /* Se conserva el PDF firmado en memoria para acciones explícitas posteriores.
@@ -3659,6 +3674,13 @@
           }
         ));
       }catch(_e){}
+
+      const notificar = error.notificarFirmaRecetaPersistente;
+      const idRecuperado = texto(persistente.id_solicitud);
+      const archivoRecuperado = texto(persistente.drive_file_id);
+      if(typeof notificar === 'function' && (idRecuperado || archivoRecuperado)){
+        setTimeout(() => notificar(idRecuperado, archivoRecuperado), 0);
+      }
 
       return resultado;
     }
