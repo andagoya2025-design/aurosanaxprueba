@@ -13,11 +13,11 @@
   'use strict';
   const d=w.document, PREFIX='aurosanax.notificaciones.v1.', E='aurosanax:';
   const modules={atenciones:'Atenciones',anamnesis:'Anamnesis',firma:'Firma electrónica',diagnosticos:'Diagnósticos',agenda:'Agenda',pacientes:'Pacientes',examen:'Examen físico',plan:'Plan clínico',recetas:'Recetas',documentos:'Documentos',resultados:'Resultados',obstetricia:'Obstetricia',estetica:'Estética',recomendaciones:'Recomendaciones'};
-  const ready=new Set(['atenciones','anamnesis','diagnosticos','examen','recetas','firma']);
+  const ready=new Set(['atenciones','anamnesis','diagnosticos','examen','recetas','firma','recomendaciones']);
   const extraModules=new Set(['diagnosticos','examen']);
   const recetaMessages=Object.freeze({alta:'Receta médica guardada correctamente.',edicion:'Receta médica actualizada correctamente.',plan_pendiente:'Receta guardada. Sincronización con el Plan no confirmada.',no_confirmada:'No se pudo confirmar el guardado de la receta.'});
   const legacyReady=new Set(['atenciones','anamnesis']);
-  const messages={firma:'Documento firmado correctamente.',inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
+  const messages={recomendacion:'Recomendaciones guardadas correctamente.',firma:'Documento firmado correctamente.',inicio:'Atención iniciada y confirmada.',cierre:'Atención finalizada y confirmada.',anamnesis:'Anamnesis guardada y confirmada.',pendiente:'Atención: confirmación de guardado pendiente.',prueba:'Prueba de notificaciones de AUROSANAX.'};
   const clean=x=>typeof x==='string'?x.trim():'';
   const now=()=>Date.now();
   const limit=(x,a,b,f)=>typeof x==='number'&&Number.isFinite(x)?Math.min(b,Math.max(a,x)):f;
@@ -38,6 +38,8 @@
     p.rc8Recetas=true;
     if(raw.firmaRecetaV1===true)for(const c of ['visual','audio'])if(typeof raw.modules?.firma?.[c]==='boolean')p.modules.firma[c]=raw.modules.firma[c];
     p.firmaRecetaV1=true;
+    if(raw.recomendacionesV1===true)for(const c of ['visual','audio'])if(typeof raw.modules?.recomendaciones?.[c]==='boolean')p.modules.recomendaciones[c]=raw.modules.recomendaciones[c];
+    p.recomendacionesV1=true;
     return p;
   }
   let role='',active=false,owner='',sessionToken='',prefs=defaults(),items=[],seen=new Set(),origins=new Map(),retired=new Set();
@@ -131,8 +133,8 @@
   function publish(mod,msg,key,operationValidated=false){
     if(!sync()||!ready.has(mod)||!messages[msg]||!key||(!operationValidated&&(seen.has(key)||seen.size>=1024)))return false;
     if(!operationValidated)seen.add(key);const text=messages[msg];
-    if(prefs.visual&&prefs.modules[mod].visual){items.unshift({text,mod,at:now(),read:false});if(items.length>80){const rx=items.map(i=>i.mod==='recetas').lastIndexOf(true);const dx=rx>=0?rx:items.map(i=>extraModules.has(i.mod)).lastIndexOf(true);if(dx>=0)items.splice(dx,1);else items=items.slice(0,80);}paint();}
-    if(prefs.mode!=='silencio'&&prefs.modules[mod].audio&&armed&&focused()&&!mic.size&&queue.length<8){blockedVoice=null;preemptDxAudio();queue.push({text,mod,ticket:ticket(),at:now()});w.setTimeout(pump,0);}
+    if(prefs.visual&&prefs.modules[mod].visual&&(mod!=='recomendaciones'||items.length<80)){items.unshift({text,mod,at:now(),read:false});if(items.length>80){const rx=items.map(i=>i.mod==='recetas').lastIndexOf(true);const dx=rx>=0?rx:items.map(i=>extraModules.has(i.mod)).lastIndexOf(true);if(dx>=0)items.splice(dx,1);else items=items.slice(0,80);}paint();}
+    if(prefs.mode!=='silencio'&&prefs.modules[mod].audio&&armed&&focused()&&!mic.size&&queue.length<8){if(mod!=='recomendaciones'){blockedVoice=null;preemptDxAudio();}queue.push({text,mod,ticket:ticket(),at:now()});w.setTimeout(pump,0);}
     return true;
   }
   function anOperation(x,kind){
@@ -219,7 +221,7 @@
     const voices=localVoices(),voice=select('Voz local en español',[['','Automática'],...voices.map(v=>[v.voiceURI,v.name+' ('+v.lang+')'])],prefs.voice);if(!voice.value)voice.value='';
     const visual=check('Mostrar centro de avisos visuales',prefs.visual,panel),fields={};
     for(const [k,title] of Object.entries(modules)){const f=el('fieldset'),legend=el('legend',title);f.append(legend);fields[k]={visual:check('Aviso visual',prefs.modules[k].visual,f,!ready.has(k)),audio:check('Audio',prefs.modules[k].audio,f,!ready.has(k))};if(!ready.has(k))f.append(el('small','Pendiente de validar el origen de la operación. No activo.'));panel.append(f);}
-    const status=el('p');status.setAttribute('role','status');const get=()=>({rc6Diagnosticos:true,rc7Modulos:true,rc8Recetas:true,firmaRecetaV1:true,mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
+    const status=el('p');status.setAttribute('role','status');const get=()=>({rc6Diagnosticos:true,rc7Modulos:true,rc8Recetas:true,firmaRecetaV1:true,recomendacionesV1:true,mode:mode.value,volume:Number(vol.value),rate:Number(rate.value),voice:voice.value,visual:visual.checked,modules:Object.fromEntries(Object.entries(fields).map(([k,c])=>[k,{visual:c.visual.checked,audio:c.audio.checked}]))});
     panel.append(button('Guardar preferencias',()=>{status.textContent=configure(get())?'Preferencias guardadas en este navegador.':'No fue posible persistir las preferencias.';}),button('Guardar y probar sonido',()=>{const ok=configure(get()),played=testAudio();status.textContent=(ok?'Preferencias guardadas. ':'Preferencias no persistidas. ')+(played?'Prueba solicitada.':'Audio no disponible o silenciado.');}),status);
     if(!voices.length)panel.append(el('small','No se detectó una voz local en español. Si está disponible, se utilizará el timbre.'));
     host.replaceChildren(panel);
@@ -388,6 +390,23 @@
   });
   d.addEventListener(E+'diagnostico-abierto-guardado',e=>onExtraConfirmed(e,'diagnosticos'));
   d.addEventListener(E+'examen-fisico-guardado',e=>onExtraConfirmed(e,'examen'));
+  // Vincular el aviso al contexto del botón Guardar y consumirlo al confirmar.
+  let recomendacionEnCurso=null;
+  const avisosRecomendacionVistos=new WeakSet();
+  d.addEventListener('click',e=>{
+    if(!e.isTrusted||role!=='main'||!e.target?.closest?.('#auroRecBtnGuardar:not(:disabled)')||!sync()||!context)return;
+    recomendacionEnCurso=ticket();
+  },true);
+  w.addEventListener(E+'recomendaciones-guardadas',e=>{
+    if(avisosRecomendacionVistos.has(e))return;
+    safe(x=>{
+      const origen=recomendacionEnCurso;
+      if(!origen||!clean(x.id_recomendacion)||x.id_atencion!==origen.context||!valid(origen))return;
+      avisosRecomendacionVistos.add(e);
+      recomendacionEnCurso=null;
+      w.setTimeout(()=>{if(valid(origen))publish('recomendaciones','recomendacion','recomendacion-guardada',true);},0);
+    })(e);
+  });
   let cachedIdentity=null;
   w.addEventListener('blur',suspend);
   w.addEventListener('pagehide',e=>{
@@ -410,4 +429,3 @@
   d.addEventListener('click',e=>{if(e.target?.closest?.('#auroBtnCerrarSesion,#auroBtnCerrarSesionMobile,#cfgCerrarSesion'))deactivate();},true);
   return Object.freeze({activate,deactivate,micBefore,micEnd,configure,testAudio,inspect:()=>({active,mode:prefs.mode,items:items.map(i=>({text:i.text,mod:i.mod,read:i.read})),queued:queue.length,mic:mic.size,armed,enabled:enabled(),unlocked,manualMute,focused:focused(),version:'RC8-R1 + Voz firma de receta V2',voicePrepared,voiceBlocked})});
 });
-
