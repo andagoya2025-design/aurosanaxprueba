@@ -47,7 +47,7 @@
   let manualMute=false, unlocked=false, audioUI=null;
   // Recursos separados del registro seen/origins de RC4. Una sola tarea pendiente.
   let dxPending=new Map(),dxTimer=null,dxEvents=new WeakSet();
-  let dxReleaseUntil=0;
+  let dxReleaseUntil=0,dxRetryTimer=null;
   function identity(){
     try{const sec=w.AUROSANAX_SEGURIDAD,u=sec?.obtenerUsuario?.(),s=sec?.obtenerSesion?.(),t=sec?.obtenerToken?.();
       const id=clean(u?.id_usuario);if(!id||!s||!clean(t)||!sec.tienePermiso(role==='config'?'configuracion':'dashboard',u))return null;
@@ -59,7 +59,7 @@
   function localVoices(){try{return (w.speechSynthesis?.getVoices?.()||[]).filter(v=>v.localService===true&&/^es(?:[-_]|$)/i.test(v.lang));}catch{return [];}}
   function focused(){return !d.hidden&&(!d.hasFocus||d.hasFocus());}
   function stopAudio(){
-    blockedVoice=null;stopPrime();
+    cancelDxRetry();blockedVoice=null;stopPrime();
     queue=[];const old=playing;playing=null;if(old||tones.size)quietUntil=now()+250;if(timer!==null){w.clearTimeout(timer);timer=null;}
     if(old?.utterance)try{w.speechSynthesis.cancel();}catch{}
     for(const node of tones){try{node.stop();}catch{}try{node.disconnect();}catch{}}tones.clear();
@@ -298,6 +298,14 @@
     }
     items.unshift({text,mod,at:now(),read:false});paint();
   }
+  function cancelDxRetry(){if(dxRetryTimer!==null){w.clearTimeout(dxRetryTimer);dxRetryTimer=null;}}
+  function retryDxAudio(q){
+    if(!valid(q.ticket)||!dxAllowed('diagnosticos')||!enabled()||!armed||!focused()||mic.size||starting||closing||!prefs.modules.diagnosticos.audio||now()-q.at>=5000)return;
+    if(playing||prime||queue.length||anJobs||anOps.size||tones.size||now()<quietUntil){
+      dxRetryTimer=w.setTimeout(()=>{dxRetryTimer=null;retryDxAudio(q);},100);return;
+    }
+    queue.push(q);w.setTimeout(pump,0);
+  }
   function flushDx(){
     const pending=[...dxPending.values()].sort((a,b)=>Number(a.mod==='recetas')-Number(b.mod==='recetas'));dxPending.clear();dxTimer=null;
     for(const x of pending)try{
@@ -315,6 +323,10 @@
       // Los avisos existentes de RC7 tienen prioridad sobre Recetas.
       const priorizarRC7=x.mod!=='recetas'&&(playing?.mod==='recetas'||(!playing&&queue[0]?.mod==='recetas'))&&prefs.modules[x.mod].audio&&enabled()&&armed&&focused()&&!mic.size&&!anJobs&&!anOps.size;
       if(priorizarRC7)preemptDxAudio();
+      if(x.mod==='diagnosticos'&&prefs.modules[x.mod].audio&&enabled()&&armed&&focused()&&!mic.size&&(playing||queue.length||anJobs||anOps.size||tones.size||(!priorizarRC7&&now()<quietUntil))){
+        if(c.id!==context||c.epoch!==epoch)continue;
+        cancelDxRetry();retryDxAudio({text,mod:x.mod,ticket:ticket(),at:x.at,rc6Extra:true});continue;
+      }
       if(!prefs.modules[x.mod].audio||!enabled()||!armed||!focused()||mic.size||playing||queue.length||anJobs||anOps.size||tones.size||(!priorizarRC7&&now()<quietUntil))continue;
       if(c.id!==context||c.epoch!==epoch){if(!sync()||context!==c.id||epoch!==c.epoch)continue;}
       if(!dxAllowed(x.mod))continue;
@@ -327,6 +339,7 @@
       const x=e.detail,c=current();
       if(!x||x.sin_cambios!==false||!clean(x.id_atencion)||c.id!==x.id_atencion||c.epoch===null)return;
       if(mod==='examen'&&(x.confirmado!==true||x.contexto_epoch!==c.epoch))return;
+      if(mod==='diagnosticos')cancelDxRetry();
       dxEvents.add(e);dxPending.set(mod,{mod,id:c.id,epoch:c.epoch,owner,token:sessionToken,at:now()});
       if(dxTimer===null)dxTimer=w.setTimeout(flushDx,0);
     }catch{}
@@ -342,7 +355,19 @@
   });
   d.addEventListener(E+'diagnostico-abierto-guardado',e=>onExtraConfirmed(e,'diagnosticos'));
   d.addEventListener(E+'examen-fisico-guardado',e=>onExtraConfirmed(e,'examen'));
-  w.addEventListener('blur',suspend);w.addEventListener('pagehide',deactivate);
+  let cachedIdentity=null;
+  w.addEventListener('blur',suspend);
+  w.addEventListener('pagehide',e=>{
+    cachedIdentity=e.persisted&&active?{role,owner,token:sessionToken}:null;
+    deactivate();
+  });
+  w.addEventListener('pageshow',e=>{
+    const saved=cachedIdentity;cachedIdentity=null;
+    if(!e.persisted||!saved||active||role!==saved.role)return;
+    const i=identity();
+    if(i?.id!==saved.owner||i?.token!==saved.token)return;
+    if(activate(saved.role)){paint();refreshAudioUI();}
+  });
   w.addEventListener('focus',resumeAudio);
   d.addEventListener('visibilitychange',()=>{if(d.hidden)suspend();else resumeAudio();});
   d.addEventListener('pointerdown',gestureAudio,true);d.addEventListener('keydown',gestureAudio,true);
